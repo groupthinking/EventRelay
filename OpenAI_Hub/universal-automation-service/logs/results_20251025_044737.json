@@ -1,0 +1,400 @@
+{
+  "youtube_url": "https://youtu.be/jawdcPoZJmI",
+  "mode": "gemini",
+  "timestamp": "2025-10-25T04:44:54.711118",
+  "stages": {
+    "gemini_analysis": {
+      "video_id": "jawdcPoZJmI",
+      "metadata": {
+        "video_id": "jawdcPoZJmI",
+        "url": "https://youtu.be/jawdcPoZJmI",
+        "processor": "gemini-2.5-flash",
+        "title": "Error: 400 INVALID_ARGUMENT",
+        "description": "Error: 400 INVALID_ARGUMENT. {'error': {'code': 400, 'message': 'API key expired. Please renew the API key.', 'status': 'INVALID_ARGUMENT', 'details': [{'@type': 'type.googleapis.com/google.rpc.ErrorInfo', 'reason': 'API_KEY_INVALID', 'domain': 'googleapis.com', 'metadata': {'service': 'generativelanguage.googleapis.com'}}, {'@type': 'type.googleapis.com/google.rpc.LocalizedMessage', 'locale': 'en-US', 'message': 'API key expired. Please renew the API key.'}]}}",
+        "source": "gemini_api"
+      },
+      "transcript": {
+        "text": "[00:00] The brand new releases of Codex and Claude Code 2.0, using Sonnet 4.5, have completely overhauled my AI coding workflow.\n[00:10] My decision came down to these nine critical differences that I'm about to break down for you right now.\n[00:15] In this real world comparison, stress testing both models as I've been building out a massive web application this past week.\n[00:21] The results were amazing.\n[00:24] In fact, Anthropic is claiming that Sonnet 4.5 is the first model that's been able to build out their claude.ai dashboard end to end.\n[00:33] At the end of this video, I will share the exact workflows with these models that I am currently using and seeing amazing results from.\n[00:40] If you're new here, I'm Patrick Ellis, the CTO and co-founder of an AI native startup based here in Seattle.\n[00:46] We're fortunate to work with companies like Google, Amazon, FIFA, and Disney, and we've been battle testing Claude Code heavily since February and Codex off and on since its release back in May.\n[00:58] And I've been using these models non-stop since their last release.\n[01:02] With that, I hope the biggest lessons from these hard one insights and all my research can help you decide which model is best for you and in which ways.\n[01:09] Also, I'm about to catch a flight, so please excuse this more conversational, less edited than normal video.\n[01:14] So the first of the nine critical differences comes down to the model itself.\n[01:19] Sonnet 4.5 has beat the benchmarks.\n[01:22] It is officially the best when it comes to sweep bench verified and the other metrics that we typically look at.\n[01:27] One of the coolest things with Sonnet 4.5 has been its eagerness or its, um, it's grittiness, I would almost say, where it's really, really good at managing its own context and using grep and other bash tools.\n[01:43] So you can kind of just set it loose in a codebase and it's really good at figuring out its own plan.\n[01:49] Gripping around, gathering context, it will even create artifacts internally and use heavily different markdown files where it can save its memory state.\n[01:58] The other difference is the speed.\n[02:00] Sonnet 4.5 is a lot faster than Codex.\n[02:04] I originally didn't think this would matter much, but as I was playing around with the model, I just realized the iteration and the ability for me to move in a synchronous capacity was a lot greater with Sonnet 4.5.\n[02:14] And that, that does add up in terms of the amount of output that you're able to, to get in a day.\n[02:19] Another thing that Sonnet 4.5 uses heavily are creating internal scripts and internal tests and other ways to create validation loop so that it can very quickly identify, is it going in the right direction or does it need to be rethinking or redoing its work.\n[02:37] I have been working on this big web app, which involves a lot of refactoring, migrating over data models from a legacy Python Django stack to a new, uh, Postcress Nextjs React based stack.\n[02:50] And that has involved actually a lot of different areas to test these models.\n[02:54] And in that there was a, uh, kind of a one shot approach I was trying to make that Codex was struggling a little bit with.\n[03:03] Opus definitely wasn't able to do, but throwing Sonnet 4.5 in there, it was able to just go in, figure out a bunch of context and come back with the winning solution, whereas Opus and Codex were required me to take a few more steps to really break down the problem and to break the research steps out into individual pieces, whereas Sonnet 4.5 was able to just figure out and bring and aggregate all of that together.\n[03:27] So if you combine the ability for it to dive deep into these different codebases, gather context, create a plan, create these fast iteration loops in terms of validating whether an approach is right or not, that creates a really independent and just all around amazing model to be thrown into most tasks.\n[03:48] It's not as good, unfortunately, as Codex at just sheer front end, uh, work, I would say mostly on the UI UX design side.\n[03:56] If you just give a generic prompt without much guidance when it comes to style, I, I definitely prefer the outputs from the Codex coding model.\n[04:05] But where you've got additional context as to the UI output you're looking for, a tool like Playwright in order to take screenshots and give context to create a a loop of iteration with Sonnet 4.5.\n[04:17] In that case, it does perform very well.\n[04:19] I would also say that bigger architectural reasoning and deeper thinking, so like more meaty, more back end focused tasks, Codex does tend to be a little bit better.\n[04:29] Sonnet 4.5 is also, I believe, the only model that is aware of its context window.\n[04:35] Cognition actually had a great report on this where the model will understand when it's getting closer to its context limit and document more of what it's doing and spend less time reasoning in order to try to get an answer out before the context window ends.\n[04:50] With Sonnet 4.5, at least with what I've been working on recently, I feel like it does an incredibly good job of continuing to fill up its context and and summarize it well and just manage context really well overall.\n[05:03] I found myself almost not concerned about when it was compacting, which allows me to just let this run for much longer and to complete much more meaty tasks.\n[05:12] Open AI was also talking about Codex running on the upper end of around seven hours on a task, where anthropic mentioned Sonnet 4.5 running on the upper end of 30 plus hours.\n[05:23] Another piece with the models is I really feel like it depends on your specific situation, especially the codebase that you're working in.\n[05:30] And also your own preferences.\n[05:32] I feel like I'm seeing people's reactions all over the place between Codex and and Sonnet 4.5.\n[05:38] I really feel like you just need to experiment with your own text stack.\n[05:41] But for me, I give the win to Sonnet 4.5 easily.\n[05:45] All right, so the second big factor here is the actual CLI agent or the harness itself.\n[05:51] So I'm talking about Claude Code 2.0 or Codex, confusingly with all the different Codex, uh, the actual CLI tool here.\n[05:59] And here it's pretty slam dunk.\n[06:01] I feel like the Claude Code CLI tool is pretty far superior.\n[06:05] There's so many niceties, uh, just way more features with Claude Code.\n[06:09] For example, this is like a very specific one, but the add directory/command add hyphen D that has been so helpful for me to connect multiple of our services together.\n[06:20] I can just run that add a directory and allow Sonnet 4.5 to just go crawl, figure out and map out this other directory and apply and migrate or integrate services.\n[06:29] Another one has been the ability to run context to understand how big the context window is and what's filling it up.\n[06:38] Anthropic has also just released a memory tool and other tools around agentic coding.\n[06:45] So they've got the, uh, just also released Claude Agent SDK, which was just renamed from the Claude Code SDK, but in there they've got examples of amazing slash commands, uh, such as security reviews and code reviews.\n[06:59] Anthropic is building these whole ecosystem around Claude Code.\n[07:02] You can build a lot already with what Anthropic has, has built.\n[07:06] But the one big advantage that Codex has is it's open source.\n[07:10] And with the community development surrounding it, along with your ability to bring your own model in theory, I know that Open AI is going to be investing heavily in bringing the quality of Codex up to par.\n[07:21] One of the biggest downsides as well with the CLI tool for Codex is the lack of sub agents.\n[07:25] That is a really, really powerful way to manage context, to only expose different MCPs or, uh, system prompts or other specifics for a given task to a sub agent, being able to delegate out and not pollute the main context with the finding all those tools or the context that's gathered during a task that the sub agent is doing.\n[07:50] I have been working in on the I've been working on this big web app, which involves a lot of refactoring, uh migrating over data models from a legacy Python Django stack to a new, uh postcress Nextjs React based stack.\n[08:03] And that has involved actually a lot of different areas to test these models.\n[08:09] And in that there was a, uh, kind of a one shot approach I was trying to make that Codex was struggling a little bit with.\n[08:15] Opus definitely wasn't able to do, but throwing Sonnet 4.5 in there, it was able to just go in, figure out a bunch of context and come back with the winning solution.\n[08:41] Whereas Sonnet 4.5 required me to take a few more steps to really break down the problem and to break the research steps out into individual pieces, whereas Sonnet, 4.5 was able to just figure out and bring an aggregate all of that together.\n[08:50] So if you combine the ability for it to dive deep into these different code bases, gather context, create a plan, create these fast iteration loops in terms of validating whether an approach is right or not, that creates a really independent and just all around amazing model to be thrown into most tests.\n[09:17] It's not, and others have talked a lot about this idea of having an abundance mindset.\n[09:28] This idea that you can just kick off tasks and explore through Codex.\n[09:34] So for example, let's say I want to work on a migration, uh or do a bunch of security updates or migrate a legacy service over to a new postcrest Nextjs React based stack, and that has involved actually a lot of different areas to test these models.\n[09:46] In that there was a, uh, kind of a one shot approach I was trying to make that Codex was struggling a little bit with.\n[09:52] Opus definitely wasn't able to do, but throwing Sonnet 4.5 in there, it was able to just go in, figure out a bunch of context and come back with the winning solution, whereas Opus and Codex were required me to take a few more steps to really break down the problem and to break the research steps out into individual pieces, whereas Sonnet 4.5 was able to just figure out and bring an aggregate all of that together.\n[10:02] So if you combine the ability for it to dive deep into these different codebases, gather context, create a plan, create these fast iteration loops in terms of validating whether an approach is right or not, that creates a really independent and just all around amazing model to be thrown into most tests.\n[10:26] I've been working in on the I've been working on this big web app, which involves a lot of refactoring, uh migrating over data models from a legacy Python Django stack to a new, uh postcress Nextjs React based stack.\n[10:42] And that has involved actually a lot of different areas to test these models.\n[10:50] And in that there was a, uh, kind of a one shot approach I was trying to make that Codex was struggling a little bit with.\n[10:58] Opus definitely wasn't able to do, but throwing Sonnet 4.5 in there, it was able to just go in, figure out a bunch of context and come back with the winning solution.\n[11:13] Whereas Sonnet 4.5 required me to take a few more steps to really break down the problem and to break the research steps out into individual pieces, whereas Sonnet 4.5 was able to just figure out and bring an aggregate all of that together.\n[11:28] One more thing that I will throw in just to recap so to have an abundance mindset to really think and say this has to work is super, super key, and that's where everything that I just mentioned about 4.5 about the architecture, about having it all there.\n[11:48] So if you get a good understanding, a great command of your tools and your models to do the job and make things happen.\n[11:59] So that is a wrap.\n[12:07] I want to thank everyone so much for listening to this video.\n[12:12] I am not feeling too hot, but wanted to get all of this data out to all of you.\n[12:19] All of my lessons learned I'm really excited, especially if you like this video.\n[12:25] I'm actually here at AWS in Seattle, so I will see all of you soon.\n[12:35] Bye everyone, take care.",
+        "segments": [
+          {
+            "timestamp": "00:00",
+            "text": "The brand new releases of Codex and Claude Code 2.0, using Sonnet 4.5, have completely overhauled my AI coding workflow."
+          },
+          {
+            "timestamp": "00:10",
+            "text": "My decision came down to these nine critical differences that I'm about to break down for you right now."
+          },
+          {
+            "timestamp": "00:15",
+            "text": "In this real world comparison, stress testing both models as I've been building out a massive web application this past week."
+          },
+          {
+            "timestamp": "00:21",
+            "text": "The results were amazing."
+          },
+          {
+            "timestamp": "00:24",
+            "text": "In fact, Anthropic is claiming that Sonnet 4.5 is the first model that's been able to build out their claude.ai dashboard end to end."
+          },
+          {
+            "timestamp": "00:33",
+            "text": "At the end of this video, I will share the exact workflows with these models that I am currently using and seeing amazing results from."
+          },
+          {
+            "timestamp": "00:40",
+            "text": "If you're new here, I'm Patrick Ellis, the CTO and co-founder of an AI native startup based here in Seattle."
+          },
+          {
+            "timestamp": "00:46",
+            "text": "We're fortunate to work with companies like Google, Amazon, FIFA, and Disney, and we've been battle testing Claude Code heavily since February and Codex off and on since its release back in May."
+          },
+          {
+            "timestamp": "00:58",
+            "text": "And I've been using these models non-stop since their last release."
+          },
+          {
+            "timestamp": "01:02",
+            "text": "With that, I hope the biggest lessons from these hard one insights and all my research can help you decide which model is best for you and in which ways."
+          },
+          {
+            "timestamp": "01:09",
+            "text": "Also, I'm about to catch a flight, so please excuse this more conversational, less edited than normal video."
+          },
+          {
+            "timestamp": "01:14",
+            "text": "So the first of the nine critical differences comes down to the model itself."
+          },
+          {
+            "timestamp": "01:19",
+            "text": "Sonnet 4.5 has beat the benchmarks."
+          },
+          {
+            "timestamp": "01:22",
+            "text": "It is officially the best when it comes to sweep bench verified and the other metrics that we typically look at."
+          },
+          {
+            "timestamp": "01:27",
+            "text": "One of the coolest things with Sonnet 4.5 has been its eagerness or its, um, it's grittiness, I would almost say, where it's really, really good at managing its own context and using grep and other bash tools."
+          },
+          {
+            "timestamp": "01:43",
+            "text": "So you can kind of just set it loose in a codebase and it's really good at figuring out its own plan."
+          },
+          {
+            "timestamp": "01:49",
+            "text": "Gripping around, gathering context, it will even create artifacts internally and use heavily different markdown files where it can save its memory state."
+          },
+          {
+            "timestamp": "01:58",
+            "text": "The other difference is the speed."
+          },
+          {
+            "timestamp": "02:00",
+            "text": "Sonnet 4.5 is a lot faster than Codex."
+          },
+          {
+            "timestamp": "02:04",
+            "text": "I originally didn't think this would matter much, but as I was playing around with the model, I just realized the iteration and the ability for me to move in a synchronous capacity was a lot greater with Sonnet 4.5."
+          },
+          {
+            "timestamp": "02:14",
+            "text": "And that, that does add up in terms of the amount of output that you're able to, to get in a day."
+          },
+          {
+            "timestamp": "02:19",
+            "text": "Another thing that Sonnet 4.5 uses heavily are creating internal scripts and internal tests and other ways to create validation loop so that it can very quickly identify, is it going in the right direction or does it need to be rethinking or redoing its work."
+          },
+          {
+            "timestamp": "02:37",
+            "text": "I have been working on this big web app, which involves a lot of refactoring, migrating over data models from a legacy Python Django stack to a new, uh, Postcress Nextjs React based stack."
+          },
+          {
+            "timestamp": "02:50",
+            "text": "And that has involved actually a lot of different areas to test these models."
+          },
+          {
+            "timestamp": "02:54",
+            "text": "And in that there was a, uh, kind of a one shot approach I was trying to make that Codex was struggling a little bit with."
+          },
+          {
+            "timestamp": "03:03",
+            "text": "Opus definitely wasn't able to do, but throwing Sonnet 4.5 in there, it was able to just go in, figure out a bunch of context and come back with the winning solution, whereas Opus and Codex were required me to take a few more steps to really break down the problem and to break the research steps out into individual pieces, whereas Sonnet 4.5 was able to just figure out and bring and aggregate all of that together."
+          },
+          {
+            "timestamp": "03:27",
+            "text": "So if you combine the ability for it to dive deep into these different codebases, gather context, create a plan, create these fast iteration loops in terms of validating whether an approach is right or not, that creates a really independent and just all around amazing model to be thrown into most tasks."
+          },
+          {
+            "timestamp": "03:48",
+            "text": "It's not as good, unfortunately, as Codex at just sheer front end, uh, work, I would say mostly on the UI UX design side."
+          },
+          {
+            "timestamp": "03:56",
+            "text": "If you just give a generic prompt without much guidance when it comes to style, I, I definitely prefer the outputs from the Codex coding model."
+          },
+          {
+            "timestamp": "04:05",
+            "text": "But where you've got additional context as to the UI output you're looking for, a tool like Playwright in order to take screenshots and give context to create a a loop of iteration with Sonnet 4.5."
+          },
+          {
+            "timestamp": "04:17",
+            "text": "In that case, it does perform very well."
+          },
+          {
+            "timestamp": "04:19",
+            "text": "I would also say that bigger architectural reasoning and deeper thinking, so like more meaty, more back end focused tasks, Codex does tend to be a little bit better."
+          },
+          {
+            "timestamp": "04:29",
+            "text": "Sonnet 4.5 is also, I believe, the only model that is aware of its context window."
+          },
+          {
+            "timestamp": "04:35",
+            "text": "Cognition actually had a great report on this where the model will understand when it's getting closer to its context limit and document more of what it's doing and spend less time reasoning in order to try to get an answer out before the context window ends."
+          },
+          {
+            "timestamp": "04:50",
+            "text": "With Sonnet 4.5, at least with what I've been working on recently, I feel like it does an incredibly good job of continuing to fill up its context and and summarize it well and just manage context really well overall."
+          },
+          {
+            "timestamp": "05:03",
+            "text": "I found myself almost not concerned about when it was compacting, which allows me to just let this run for much longer and to complete much more meaty tasks."
+          },
+          {
+            "timestamp": "05:12",
+            "text": "Open AI was also talking about Codex running on the upper end of around seven hours on a task, where anthropic mentioned Sonnet 4.5 running on the upper end of 30 plus hours."
+          },
+          {
+            "timestamp": "05:23",
+            "text": "Another piece with the models is I really feel like it depends on your specific situation, especially the codebase that you're working in."
+          },
+          {
+            "timestamp": "05:30",
+            "text": "And also your own preferences."
+          },
+          {
+            "timestamp": "05:32",
+            "text": "I feel like I'm seeing people's reactions all over the place between Codex and and Sonnet 4.5."
+          },
+          {
+            "timestamp": "05:38",
+            "text": "I really feel like you just need to experiment with your own text stack."
+          },
+          {
+            "timestamp": "05:41",
+            "text": "But for me, I give the win to Sonnet 4.5 easily."
+          },
+          {
+            "timestamp": "05:45",
+            "text": "All right, so the second big factor here is the actual CLI agent or the harness itself."
+          },
+          {
+            "timestamp": "05:51",
+            "text": "So I'm talking about Claude Code 2.0 or Codex, confusingly with all the different Codex, uh, the actual CLI tool here."
+          },
+          {
+            "timestamp": "05:59",
+            "text": "And here it's pretty slam dunk."
+          },
+          {
+            "timestamp": "06:01",
+            "text": "I feel like the Claude Code CLI tool is pretty far superior."
+          },
+          {
+            "timestamp": "06:05",
+            "text": "There's so many niceties, uh, just way more features with Claude Code."
+          },
+          {
+            "timestamp": "06:09",
+            "text": "For example, this is like a very specific one, but the add directory/command add hyphen D that has been so helpful for me to connect multiple of our services together."
+          },
+          {
+            "timestamp": "06:20",
+            "text": "I can just run that add a directory and allow Sonnet 4.5 to just go crawl, figure out and map out this other directory and apply and migrate or integrate services."
+          },
+          {
+            "timestamp": "06:29",
+            "text": "Another one has been the ability to run context to understand how big the context window is and what's filling it up."
+          },
+          {
+            "timestamp": "06:38",
+            "text": "Anthropic has also just released a memory tool and other tools around agentic coding."
+          },
+          {
+            "timestamp": "06:45",
+            "text": "So they've got the, uh, just also released Claude Agent SDK, which was just renamed from the Claude Code SDK, but in there they've got examples of amazing slash commands, uh, such as security reviews and code reviews."
+          },
+          {
+            "timestamp": "06:59",
+            "text": "Anthropic is building these whole ecosystem around Claude Code."
+          },
+          {
+            "timestamp": "07:02",
+            "text": "You can build a lot already with what Anthropic has, has built."
+          },
+          {
+            "timestamp": "07:06",
+            "text": "But the one big advantage that Codex has is it's open source."
+          },
+          {
+            "timestamp": "07:10",
+            "text": "And with the community development surrounding it, along with your ability to bring your own model in theory, I know that Open AI is going to be investing heavily in bringing the quality of Codex up to par."
+          },
+          {
+            "timestamp": "07:21",
+            "text": "One of the biggest downsides as well with the CLI tool for Codex is the lack of sub agents."
+          },
+          {
+            "timestamp": "07:25",
+            "text": "That is a really, really powerful way to manage context, to only expose different MCPs or, uh, system prompts or other specifics for a given task to a sub agent, being able to delegate out and not pollute the main context with the finding all those tools or the context that's gathered during a task that the sub agent is doing."
+          },
+          {
+            "timestamp": "07:50",
+            "text": "I have been working in on the I've been working on this big web app, which involves a lot of refactoring, uh migrating over data models from a legacy Python Django stack to a new, uh postcress Nextjs React based stack."
+          },
+          {
+            "timestamp": "08:03",
+            "text": "And that has involved actually a lot of different areas to test these models."
+          },
+          {
+            "timestamp": "08:09",
+            "text": "And in that there was a, uh, kind of a one shot approach I was trying to make that Codex was struggling a little bit with."
+          },
+          {
+            "timestamp": "08:15",
+            "text": "Opus definitely wasn't able to do, but throwing Sonnet 4.5 in there, it was able to just go in, figure out a bunch of context and come back with the winning solution."
+          },
+          {
+            "timestamp": "08:41",
+            "text": "Whereas Sonnet 4.5 required me to take a few more steps to really break down the problem and to break the research steps out into individual pieces, whereas Sonnet, 4.5 was able to just figure out and bring an aggregate all of that together."
+          },
+          {
+            "timestamp": "08:50",
+            "text": "So if you combine the ability for it to dive deep into these different code bases, gather context, create a plan, create these fast iteration loops in terms of validating whether an approach is right or not, that creates a really independent and just all around amazing model to be thrown into most tests."
+          },
+          {
+            "timestamp": "09:17",
+            "text": "It's not, and others have talked a lot about this idea of having an abundance mindset."
+          },
+          {
+            "timestamp": "09:28",
+            "text": "This idea that you can just kick off tasks and explore through Codex."
+          },
+          {
+            "timestamp": "09:34",
+            "text": "So for example, let's say I want to work on a migration, uh or do a bunch of security updates or migrate a legacy service over to a new postcrest Nextjs React based stack, and that has involved actually a lot of different areas to test these models."
+          },
+          {
+            "timestamp": "09:46",
+            "text": "In that there was a, uh, kind of a one shot approach I was trying to make that Codex was struggling a little bit with."
+          },
+          {
+            "timestamp": "09:52",
+            "text": "Opus definitely wasn't able to do, but throwing Sonnet 4.5 in there, it was able to just go in, figure out a bunch of context and come back with the winning solution, whereas Opus and Codex were required me to take a few more steps to really break down the problem and to break the research steps out into individual pieces, whereas Sonnet 4.5 was able to just figure out and bring an aggregate all of that together."
+          },
+          {
+            "timestamp": "10:02",
+            "text": "So if you combine the ability for it to dive deep into these different codebases, gather context, create a plan, create these fast iteration loops in terms of validating whether an approach is right or not, that creates a really independent and just all around amazing model to be thrown into most tests."
+          },
+          {
+            "timestamp": "10:26",
+            "text": "I've been working in on the I've been working on this big web app, which involves a lot of refactoring, uh migrating over data models from a legacy Python Django stack to a new, uh postcress Nextjs React based stack."
+          },
+          {
+            "timestamp": "10:42",
+            "text": "And that has involved actually a lot of different areas to test these models."
+          },
+          {
+            "timestamp": "10:50",
+            "text": "And in that there was a, uh, kind of a one shot approach I was trying to make that Codex was struggling a little bit with."
+          },
+          {
+            "timestamp": "10:58",
+            "text": "Opus definitely wasn't able to do, but throwing Sonnet 4.5 in there, it was able to just go in, figure out a bunch of context and come back with the winning solution."
+          },
+          {
+            "timestamp": "11:13",
+            "text": "Whereas Sonnet 4.5 required me to take a few more steps to really break down the problem and to break the research steps out into individual pieces, whereas Sonnet 4.5 was able to just figure out and bring an aggregate all of that together."
+          },
+          {
+            "timestamp": "11:28",
+            "text": "One more thing that I will throw in just to recap so to have an abundance mindset to really think and say this has to work is super, super key, and that's where everything that I just mentioned about 4.5 about the architecture, about having it all there."
+          },
+          {
+            "timestamp": "11:48",
+            "text": "So if you get a good understanding, a great command of your tools and your models to do the job and make things happen."
+          },
+          {
+            "timestamp": "11:59",
+            "text": "So that is a wrap."
+          },
+          {
+            "timestamp": "12:07",
+            "text": "I want to thank everyone so much for listening to this video."
+          },
+          {
+            "timestamp": "12:12",
+            "text": "I am not feeling too hot, but wanted to get all of this data out to all of you."
+          },
+          {
+            "timestamp": "12:19",
+            "text": "All of my lessons learned I'm really excited, especially if you like this video."
+          },
+          {
+            "timestamp": "12:25",
+            "text": "I'm actually here at AWS in Seattle, so I will see all of you soon."
+          },
+          {
+            "timestamp": "12:35",
+            "text": "Bye everyone, take care."
+          }
+        ],
+        "source": "gemini_api"
+      },
+      "analysis": {
+        "sentiment": "neutral",
+        "topics": [],
+        "key_concepts": [],
+        "visual_elements": "Error: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota. Please migrate to Gemini 2.0 Flash Preview (Image Generation) (models/gemini-2.0-flash-preview-image-generation) for higher quota limits. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_paid_tier_input_token_count', 'quotaId': 'GenerateContentPaidTierInputTokensPerModelPerMinute', 'quotaDimensions': {'location': 'global', 'model': 'gemini-2.0-flash-exp'}, 'quotaValue': '250000'}]}, {'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '24s'}]}}",
+        "code_snippets": "Error: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota. Please migrate to Gemini 2.0 Flash Preview (Image Generation) (models/gemini-2.0-flash-preview-image-generation) for higher quota limits. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_paid_tier_input_token_count', 'quotaId': 'GenerateContentPaidTierInputTokensPerModelPerMinute', 'quotaDimensions': {'location': 'global', 'model': 'gemini-2.0-flash-exp'}, 'quotaValue': '250000'}]}, {'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '18s'}]}}",
+        "source": "gemini_api"
+      },
+      "learning_data": {
+        "patterns": [
+          {
+            "type": "automation",
+            "data": "Error: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota. Please migrate to Gemini 2.0 Flash Preview (Image Generation) (models/gemini-2.0-flash-preview-image-generation) for higher quota limits. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.c"
+          }
+        ],
+        "key_concepts": [],
+        "automation_opportunities": [],
+        "step_by_step": "Error: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota. Please migrate to Gemini 2.0 Flash Preview (Image Generation) (models/gemini-2.0-flash-preview-image-generation) for higher quota limits. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_paid_tier_input_token_count', 'quotaId': 'GenerateContentPaidTierInputTokensPerModelPerMinute', 'quotaDimensions': {'model': 'gemini-2.0-flash-exp', 'location': 'global'}, 'quotaValue': '250000'}]}, {'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '13s'}]}}",
+        "skills_suggested": [
+          "Context Audit and Condensation**: The video discusses the importance of managing context within LLMs. A Claude Code skill could be created to automatically analyze a code base and identify and strip redundant or irrelevant information from prompts and provide a context summary, improving effectiveness and potentially reducing token consumption.",
+          "Tool Chain Orchestration Assistant**: The video hints that LLM's are able to access and use tools like grep or the command line, but it mentions not all can manage these tools for a full workflow. The AI can help create simple tool chains by offering a range of tools or workflow configurations based on common tasks.",
+          "Code Review Workflow Builder**: A skill could be built to leverage Claude's superior code review capabilities, guiding it through a structured code review process. By enabling this process to be integrated automatically based on git commits, a more robust AI code review can take place with the latest updates. This could involve setting up custom system prompts for specific types of code changes."
+        ],
+        "sentiment_trends": [
+          "neutral"
+        ],
+        "transcript_length": 12214,
+        "source": "gemini_api"
+      },
+      "gemini_raw": {
+        "summary": "Error: 400 INVALID_ARGUMENT. {'error': {'code': 400, 'message': 'API key expired. Please renew the API key.', 'status': 'INVALID_ARGUMENT', 'details': [{'@type': 'type.googleapis.com/google.rpc.ErrorInfo', 'reason': 'API_KEY_INVALID', 'domain': 'googleapis.com', 'metadata': {'service': 'generativelanguage.googleapis.com'}}, {'@type': 'type.googleapis.com/google.rpc.LocalizedMessage', 'locale': 'en-US', 'message': 'API key expired. Please renew the API key.'}]}}",
+        "transcript": "[00:00] The brand new releases of Codex and Claude Code 2.0, using Sonnet 4.5, have completely overhauled my AI coding workflow.\n[00:10] My decision came down to these nine critical differences that I'm about to break down for you right now.\n[00:15] In this real world comparison, stress testing both models as I've been building out a massive web application this past week.\n[00:21] The results were amazing.\n[00:24] In fact, Anthropic is claiming that Sonnet 4.5 is the first model that's been able to build out their claude.ai dashboard end to end.\n[00:33] At the end of this video, I will share the exact workflows with these models that I am currently using and seeing amazing results from.\n[00:40] If you're new here, I'm Patrick Ellis, the CTO and co-founder of an AI native startup based here in Seattle.\n[00:46] We're fortunate to work with companies like Google, Amazon, FIFA, and Disney, and we've been battle testing Claude Code heavily since February and Codex off and on since its release back in May.\n[00:58] And I've been using these models non-stop since their last release.\n[01:02] With that, I hope the biggest lessons from these hard one insights and all my research can help you decide which model is best for you and in which ways.\n[01:09] Also, I'm about to catch a flight, so please excuse this more conversational, less edited than normal video.\n[01:14] So the first of the nine critical differences comes down to the model itself.\n[01:19] Sonnet 4.5 has beat the benchmarks.\n[01:22] It is officially the best when it comes to sweep bench verified and the other metrics that we typically look at.\n[01:27] One of the coolest things with Sonnet 4.5 has been its eagerness or its, um, it's grittiness, I would almost say, where it's really, really good at managing its own context and using grep and other bash tools.\n[01:43] So you can kind of just set it loose in a codebase and it's really good at figuring out its own plan.\n[01:49] Gripping around, gathering context, it will even create artifacts internally and use heavily different markdown files where it can save its memory state.\n[01:58] The other difference is the speed.\n[02:00] Sonnet 4.5 is a lot faster than Codex.\n[02:04] I originally didn't think this would matter much, but as I was playing around with the model, I just realized the iteration and the ability for me to move in a synchronous capacity was a lot greater with Sonnet 4.5.\n[02:14] And that, that does add up in terms of the amount of output that you're able to, to get in a day.\n[02:19] Another thing that Sonnet 4.5 uses heavily are creating internal scripts and internal tests and other ways to create validation loop so that it can very quickly identify, is it going in the right direction or does it need to be rethinking or redoing its work.\n[02:37] I have been working on this big web app, which involves a lot of refactoring, migrating over data models from a legacy Python Django stack to a new, uh, Postcress Nextjs React based stack.\n[02:50] And that has involved actually a lot of different areas to test these models.\n[02:54] And in that there was a, uh, kind of a one shot approach I was trying to make that Codex was struggling a little bit with.\n[03:03] Opus definitely wasn't able to do, but throwing Sonnet 4.5 in there, it was able to just go in, figure out a bunch of context and come back with the winning solution, whereas Opus and Codex were required me to take a few more steps to really break down the problem and to break the research steps out into individual pieces, whereas Sonnet 4.5 was able to just figure out and bring and aggregate all of that together.\n[03:27] So if you combine the ability for it to dive deep into these different codebases, gather context, create a plan, create these fast iteration loops in terms of validating whether an approach is right or not, that creates a really independent and just all around amazing model to be thrown into most tasks.\n[03:48] It's not as good, unfortunately, as Codex at just sheer front end, uh, work, I would say mostly on the UI UX design side.\n[03:56] If you just give a generic prompt without much guidance when it comes to style, I, I definitely prefer the outputs from the Codex coding model.\n[04:05] But where you've got additional context as to the UI output you're looking for, a tool like Playwright in order to take screenshots and give context to create a a loop of iteration with Sonnet 4.5.\n[04:17] In that case, it does perform very well.\n[04:19] I would also say that bigger architectural reasoning and deeper thinking, so like more meaty, more back end focused tasks, Codex does tend to be a little bit better.\n[04:29] Sonnet 4.5 is also, I believe, the only model that is aware of its context window.\n[04:35] Cognition actually had a great report on this where the model will understand when it's getting closer to its context limit and document more of what it's doing and spend less time reasoning in order to try to get an answer out before the context window ends.\n[04:50] With Sonnet 4.5, at least with what I've been working on recently, I feel like it does an incredibly good job of continuing to fill up its context and and summarize it well and just manage context really well overall.\n[05:03] I found myself almost not concerned about when it was compacting, which allows me to just let this run for much longer and to complete much more meaty tasks.\n[05:12] Open AI was also talking about Codex running on the upper end of around seven hours on a task, where anthropic mentioned Sonnet 4.5 running on the upper end of 30 plus hours.\n[05:23] Another piece with the models is I really feel like it depends on your specific situation, especially the codebase that you're working in.\n[05:30] And also your own preferences.\n[05:32] I feel like I'm seeing people's reactions all over the place between Codex and and Sonnet 4.5.\n[05:38] I really feel like you just need to experiment with your own text stack.\n[05:41] But for me, I give the win to Sonnet 4.5 easily.\n[05:45] All right, so the second big factor here is the actual CLI agent or the harness itself.\n[05:51] So I'm talking about Claude Code 2.0 or Codex, confusingly with all the different Codex, uh, the actual CLI tool here.\n[05:59] And here it's pretty slam dunk.\n[06:01] I feel like the Claude Code CLI tool is pretty far superior.\n[06:05] There's so many niceties, uh, just way more features with Claude Code.\n[06:09] For example, this is like a very specific one, but the add directory/command add hyphen D that has been so helpful for me to connect multiple of our services together.\n[06:20] I can just run that add a directory and allow Sonnet 4.5 to just go crawl, figure out and map out this other directory and apply and migrate or integrate services.\n[06:29] Another one has been the ability to run context to understand how big the context window is and what's filling it up.\n[06:38] Anthropic has also just released a memory tool and other tools around agentic coding.\n[06:45] So they've got the, uh, just also released Claude Agent SDK, which was just renamed from the Claude Code SDK, but in there they've got examples of amazing slash commands, uh, such as security reviews and code reviews.\n[06:59] Anthropic is building these whole ecosystem around Claude Code.\n[07:02] You can build a lot already with what Anthropic has, has built.\n[07:06] But the one big advantage that Codex has is it's open source.\n[07:10] And with the community development surrounding it, along with your ability to bring your own model in theory, I know that Open AI is going to be investing heavily in bringing the quality of Codex up to par.\n[07:21] One of the biggest downsides as well with the CLI tool for Codex is the lack of sub agents.\n[07:25] That is a really, really powerful way to manage context, to only expose different MCPs or, uh, system prompts or other specifics for a given task to a sub agent, being able to delegate out and not pollute the main context with the finding all those tools or the context that's gathered during a task that the sub agent is doing.\n[07:50] I have been working in on the I've been working on this big web app, which involves a lot of refactoring, uh migrating over data models from a legacy Python Django stack to a new, uh postcress Nextjs React based stack.\n[08:03] And that has involved actually a lot of different areas to test these models.\n[08:09] And in that there was a, uh, kind of a one shot approach I was trying to make that Codex was struggling a little bit with.\n[08:15] Opus definitely wasn't able to do, but throwing Sonnet 4.5 in there, it was able to just go in, figure out a bunch of context and come back with the winning solution.\n[08:41] Whereas Sonnet 4.5 required me to take a few more steps to really break down the problem and to break the research steps out into individual pieces, whereas Sonnet, 4.5 was able to just figure out and bring an aggregate all of that together.\n[08:50] So if you combine the ability for it to dive deep into these different code bases, gather context, create a plan, create these fast iteration loops in terms of validating whether an approach is right or not, that creates a really independent and just all around amazing model to be thrown into most tests.\n[09:17] It's not, and others have talked a lot about this idea of having an abundance mindset.\n[09:28] This idea that you can just kick off tasks and explore through Codex.\n[09:34] So for example, let's say I want to work on a migration, uh or do a bunch of security updates or migrate a legacy service over to a new postcrest Nextjs React based stack, and that has involved actually a lot of different areas to test these models.\n[09:46] In that there was a, uh, kind of a one shot approach I was trying to make that Codex was struggling a little bit with.\n[09:52] Opus definitely wasn't able to do, but throwing Sonnet 4.5 in there, it was able to just go in, figure out a bunch of context and come back with the winning solution, whereas Opus and Codex were required me to take a few more steps to really break down the problem and to break the research steps out into individual pieces, whereas Sonnet 4.5 was able to just figure out and bring an aggregate all of that together.\n[10:02] So if you combine the ability for it to dive deep into these different codebases, gather context, create a plan, create these fast iteration loops in terms of validating whether an approach is right or not, that creates a really independent and just all around amazing model to be thrown into most tests.\n[10:26] I've been working in on the I've been working on this big web app, which involves a lot of refactoring, uh migrating over data models from a legacy Python Django stack to a new, uh postcress Nextjs React based stack.\n[10:42] And that has involved actually a lot of different areas to test these models.\n[10:50] And in that there was a, uh, kind of a one shot approach I was trying to make that Codex was struggling a little bit with.\n[10:58] Opus definitely wasn't able to do, but throwing Sonnet 4.5 in there, it was able to just go in, figure out a bunch of context and come back with the winning solution.\n[11:13] Whereas Sonnet 4.5 required me to take a few more steps to really break down the problem and to break the research steps out into individual pieces, whereas Sonnet 4.5 was able to just figure out and bring an aggregate all of that together.\n[11:28] One more thing that I will throw in just to recap so to have an abundance mindset to really think and say this has to work is super, super key, and that's where everything that I just mentioned about 4.5 about the architecture, about having it all there.\n[11:48] So if you get a good understanding, a great command of your tools and your models to do the job and make things happen.\n[11:59] So that is a wrap.\n[12:07] I want to thank everyone so much for listening to this video.\n[12:12] I am not feeling too hot, but wanted to get all of this data out to all of you.\n[12:19] All of my lessons learned I'm really excited, especially if you like this video.\n[12:25] I'm actually here at AWS in Seattle, so I will see all of you soon.\n[12:35] Bye everyone, take care.",
+        "topics": "Error: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota. Please migrate to Gemini 2.0 Flash Preview (Image Generation) (models/gemini-2.0-flash-preview-image-generation) for higher quota limits. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_paid_tier_input_token_count', 'quotaId': 'GenerateContentPaidTierInputTokensPerModelPerMinute', 'quotaDimensions': {'location': 'global', 'model': 'gemini-2.0-flash-exp'}, 'quotaValue': '250000'}]}, {'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '40s'}]}}",
+        "key_concepts": "Error: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota. Please migrate to Gemini 2.0 Flash Preview (Image Generation) (models/gemini-2.0-flash-preview-image-generation) for higher quota limits. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_paid_tier_input_token_count', 'quotaId': 'GenerateContentPaidTierInputTokensPerModelPerMinute', 'quotaDimensions': {'model': 'gemini-2.0-flash-exp', 'location': 'global'}, 'quotaValue': '250000'}]}, {'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '34s'}]}}",
+        "automation_opportunities": "Error: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota. Please migrate to Gemini 2.0 Flash Preview (Image Generation) (models/gemini-2.0-flash-preview-image-generation) for higher quota limits. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_paid_tier_input_token_count', 'quotaId': 'GenerateContentPaidTierInputTokensPerModelPerMinute', 'quotaDimensions': {'location': 'global', 'model': 'gemini-2.0-flash-exp'}, 'quotaValue': '250000'}]}, {'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '29s'}]}}",
+        "visual_analysis": "Error: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota. Please migrate to Gemini 2.0 Flash Preview (Image Generation) (models/gemini-2.0-flash-preview-image-generation) for higher quota limits. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_paid_tier_input_token_count', 'quotaId': 'GenerateContentPaidTierInputTokensPerModelPerMinute', 'quotaDimensions': {'location': 'global', 'model': 'gemini-2.0-flash-exp'}, 'quotaValue': '250000'}]}, {'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '24s'}]}}",
+        "code_extraction": "Error: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota. Please migrate to Gemini 2.0 Flash Preview (Image Generation) (models/gemini-2.0-flash-preview-image-generation) for higher quota limits. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_paid_tier_input_token_count', 'quotaId': 'GenerateContentPaidTierInputTokensPerModelPerMinute', 'quotaDimensions': {'location': 'global', 'model': 'gemini-2.0-flash-exp'}, 'quotaValue': '250000'}]}, {'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '18s'}]}}",
+        "step_by_step": "Error: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota. Please migrate to Gemini 2.0 Flash Preview (Image Generation) (models/gemini-2.0-flash-preview-image-generation) for higher quota limits. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_paid_tier_input_token_count', 'quotaId': 'GenerateContentPaidTierInputTokensPerModelPerMinute', 'quotaDimensions': {'model': 'gemini-2.0-flash-exp', 'location': 'global'}, 'quotaValue': '250000'}]}, {'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '13s'}]}}",
+        "sentiment": "Error: 400 INVALID_ARGUMENT. {'error': {'code': 400, 'message': 'API key expired. Please renew the API key.', 'status': 'INVALID_ARGUMENT', 'details': [{'@type': 'type.googleapis.com/google.rpc.ErrorInfo', 'reason': 'API_KEY_INVALID', 'domain': 'googleapis.com', 'metadata': {'service': 'generativelanguage.googleapis.com'}}, {'@type': 'type.googleapis.com/google.rpc.LocalizedMessage', 'locale': 'en-US', 'message': 'API key expired. Please renew the API key.'}]}}",
+        "skills_suggested": "Okay! Based on the information provided in this video, here are three skills that could be created to leverage Claude Code 2.0 with Sonnet 4.5 for improving software development tasks:\n\n1.  **Context Audit and Condensation**: The video discusses the importance of managing context within LLMs. A Claude Code skill could be created to automatically analyze a code base and identify and strip redundant or irrelevant information from prompts and provide a context summary, improving effectiveness and potentially reducing token consumption.\n\n2.  **Tool Chain Orchestration Assistant**: The video hints that LLM's are able to access and use tools like grep or the command line, but it mentions not all can manage these tools for a full workflow. The AI can help create simple tool chains by offering a range of tools or workflow configurations based on common tasks.\n\n3.  **Code Review Workflow Builder**: A skill could be built to leverage Claude's superior code review capabilities, guiding it through a structured code review process. By enabling this process to be integrated automatically based on git commits, a more robust AI code review can take place with the latest updates. This could involve setting up custom system prompts for specific types of code changes.\n\nI hope this provides a few ideas for you!"
+      },
+      "status": "completed"
+    }
+  },
+  "processing_time": 162.4141023150296,
+  "success": true
+}

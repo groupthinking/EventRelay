@@ -1,0 +1,98 @@
+{
+  "skills": [
+    {
+      "id": 1,
+      "error_type": "AttributeError",
+      "pattern": "'YouTubeTranscriptApi' has no attribute 'get_transcript'",
+      "resolution": "Use YouTubeTranscriptApi().fetch(video_id) instead of get_transcript()",
+      "context": "YouTube Transcript API updated to new method",
+      "created": "2025-10-27T21:53:21.380460",
+      "usage_count": 1,
+      "success_rate": 50.0
+    },
+    {
+      "id": 2,
+      "error_type": "ModuleNotFoundError",
+      "pattern": "No module named 'src.youtube_extension.backend.services.youtube.adapters.api_cost_monitor'",
+      "resolution": "Fix relative import: use ...api_cost_monitor (three dots) for correct path",
+      "context": "Import from parent directory requires correct relative path",
+      "created": "2025-10-27T21:53:21.380951",
+      "usage_count": 0,
+      "success_rate": 100.0
+    },
+    {
+      "id": 3,
+      "error_type": "ImportError",
+      "pattern": "No module named 'youtube_transcript_api'",
+      "resolution": "pip install youtube-transcript-api",
+      "context": "YouTube processing dependency",
+      "created": "2025-10-27T22:24:29.531755",
+      "usage_count": 0,
+      "success_rate": 100.0
+    },
+    {
+      "id": 4,
+      "error_type": "ImportError",
+      "pattern": "No module named 'youtube_transcript_api'",
+      "resolution": "pip install youtube-transcript-api",
+      "context": "YouTube processing dependency",
+      "created": "2025-11-04T02:56:14.922644",
+      "usage_count": 0,
+      "success_rate": 100.0
+    },
+    {
+      "id": 5,
+      "error_type": "TestError",
+      "pattern": "Test error message for validation",
+      "resolution": "Test resolution for validation",
+      "context": "Integration test",
+      "created": "2025-11-04T02:57:51.796576",
+      "usage_count": 0,
+      "success_rate": 100.0
+    },
+    {
+      "id": 6,
+      "error_type": "ImportError",
+      "pattern": "No module named 'django'",
+      "resolution": "pip install django",
+      "context": "Django web framework dependency",
+      "created": "2025-11-04T02:58:29.968033",
+      "usage_count": 0,
+      "success_rate": 100.0
+    },
+    {
+      "id": 7,
+      "error_type": "ImportError",
+      "pattern": "No module named 'django'",
+      "resolution": "pip install django",
+      "context": "Django web framework dependency",
+      "created": "2025-11-04T03:01:22.469174",
+      "usage_count": 0,
+      "success_rate": 100.0
+    },
+    {
+      "id": 8,
+      "error_type": "TestError",
+      "pattern": "Test error message for validation",
+      "resolution": "Test resolution for validation",
+      "context": "Integration test",
+      "created": "2025-11-04T03:27:09.141310",
+      "usage_count": 0,
+      "success_rate": 100.0
+    },
+    {
+      "id": 9,
+      "error_type": "ImportError",
+      "pattern": "No module named 'django'",
+      "resolution": "pip install django",
+      "context": "Django web framework dependency",
+      "created": "2025-11-04T03:27:14.370706",
+      "usage_count": 0,
+      "success_rate": 100.0
+    }
+  ],
+  "stats": {
+    "total_errors_handled": 8,
+    "auto_resolved": 1
+  }
+}

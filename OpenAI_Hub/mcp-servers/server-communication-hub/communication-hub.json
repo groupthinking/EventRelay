@@ -1,0 +1,6 @@
+{
+  "name": "communication-hub",
+  "status": "active",
+  "endpoint": "http://localhost:51234/service/communication-hub",
+  "registeredAt": "2025-04-18T20:29:51Z"
+}

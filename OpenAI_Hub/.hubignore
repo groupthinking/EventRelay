@@ -1,0 +1,6 @@
+# Names in ~/Code to skip (one per line). Globs allowed.
+node_modules
+venv
+# examples:
+# tmp-*
+# experimental-*

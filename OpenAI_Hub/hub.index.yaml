@@ -1,0 +1,5 @@
+openai_hub:
+  root: ~/Dev/OpenAI_Hub
+  apps:    [ { path: apps/apps-sdk } ]
+  agents:  [ { path: agents/agents-demo }, { path: agents/docs } ]
+  projects:[ { path: projects/sdk-demo } ]

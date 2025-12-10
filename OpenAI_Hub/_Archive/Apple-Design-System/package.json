@@ -1,0 +1,45 @@
+{
+  "name": "apple-hig-design-system",
+  "version": "1.0.0",
+  "description": "Complete Apple Human Interface Guidelines design system with Liquid Glass effects",
+  "main": "apple-design-system.js",
+  "keywords": [
+    "apple",
+    "hig",
+    "design-system",
+    "liquid-glass",
+    "swiftui",
+    "ios",
+    "macos",
+    "react",
+    "components"
+  ],
+  "author": "Apple HIG Design System",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-username/apple-hig-design-system.git"
+  },
+  "peerDependencies": {
+    "react": ">=16.8.0",
+    "react-dom": ">=16.8.0"
+  },
+  "devDependencies": {
+    "tailwindcss": "^3.0.0"
+  },
+  "files": [
+    "apple-design-system.js",
+    "apple-styles.css",
+    "tailwind.config.js",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "echo 'No build step required - use files directly'",
+    "test": "echo 'Add your test files here'"
+  },
+  "exports": {
+    ".": "./apple-design-system.js",
+    "./styles": "./apple-styles.css",
+    "./tailwind": "./tailwind.config.js"
+  }
+}

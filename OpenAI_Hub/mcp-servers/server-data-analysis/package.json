@@ -1,0 +1,8 @@
+{
+  "name": "@modelcontextprotocol/server-data-analysis",
+  "version": "1.0.0",
+  "description": "MCP data-analysis Interface",
+  "type": "module",
+  "main": "index.js",
+  "bin": "cli.js"
+}

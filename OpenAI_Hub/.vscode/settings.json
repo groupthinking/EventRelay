@@ -1,0 +1,4 @@
+{
+    "workbench.experimental.cloudChanges.autoStore": "onShutdown",
+    "redhat.telemetry.enabled": true
+}

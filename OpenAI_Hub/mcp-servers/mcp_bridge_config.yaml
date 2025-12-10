@@ -1,0 +1,35 @@
+mcpServers:
+  sequential-thinking:
+    command: npx
+    args: [mcp-server-sequential-thinking]
+    env:
+      REASONING_DEPTH: deep
+      STEP_BY_STEP_LOGGING: "true"
+  docker-gateway:
+    command: docker
+    args: [mcp, gateway, run]
+  self-correcting-executor:
+    command: python3
+    args: [start_mcp_server.py]
+    cwd: /Users/garvey/self-correcting-executor-PRODUCTION
+    env:
+      PYTHONPATH: /Users/garvey/self-correcting-executor-PRODUCTION
+  github:
+    command: node
+    args: [/Users/garvey/Dev/OpenAI_Hub/mcp-servers/github/custom-github-server.js]
+    env:
+      GITHUB_PERSONAL_ACCESS_TOKEN: "${GITHUB_PERSONAL_ACCESS_TOKEN}"
+  grok:
+    command: node
+    args: [/Users/garvey/Dev/OpenAI_Hub/mcp-servers/grok-server/build/index.js]
+  perplexity:
+    command: node
+    args: [/Users/garvey/Dev/OpenAI_Hub/mcp-servers/perplexity-mcp/build/index.js]
+settings:
+  auto_approve: true
+  startup_timeout: 30000
+  api_rate_limiting: true
+  log_level: info
+  performance_monitoring: true
+  artifact_dir: /Users/garvey/Library/Claude/artifacts
+  callback_url: https://webclaude.ai/results
