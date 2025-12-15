@@ -65,4 +65,31 @@ vectorRoutes.post('/search', async (c) => {
     }
 });
 
+// Trigger Vector Ingestion Workflow
+vectorRoutes.post('/ingest', async (c) => {
+    const { text, id, metadata } = await c.req.json<{ text: string; id?: string; metadata?: Record<string, string> }>();
+
+    if (!text) {
+        return c.json({ error: 'Text is required' }, 400);
+    }
+
+    try {
+        const instance = await c.env.VECTOR_WORKFLOW.create({
+            params: {
+                text,
+                id,
+                metadata
+            }
+        });
+        return c.json({
+            success: true,
+            id: instance.id,
+            status: 'queued'
+        });
+    } catch (error) {
+        console.error('Workflow trigger error:', error);
+        return c.json({ error: 'Failed to trigger workflow' }, 500);
+    }
+});
+
 export { vectorRoutes };

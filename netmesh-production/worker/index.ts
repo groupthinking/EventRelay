@@ -15,6 +15,8 @@ export { UserAppSandboxService, DeployerService } from './services/sandbox/sandb
 // export const DORateLimitStore = Sentry.instrumentDurableObjectWithSentry(sentryOptions, BaseDORateLimitStore);
 export const CodeGeneratorAgent = SmartCodeGeneratorAgent;
 export const DORateLimitStore = BaseDORateLimitStore;
+// Export Workflows
+export { VectorIngestionWorkflow } from "./workflows/VectorIngestionWorkflow";
 
 // Logger for the main application and handlers
 const logger = createLogger('App');
@@ -71,7 +73,7 @@ const worker = {
 		// --- Pre-flight Checks ---
 
 		// 1. Critical configuration check: Ensure custom domain is set.
-        const previewDomain = getPreviewDomain(env);
+		const previewDomain = getPreviewDomain(env);
 		if (!previewDomain || previewDomain.trim() === '') {
 			console.error('FATAL: env.CUSTOM_DOMAIN is not configured in wrangler.toml or the Cloudflare dashboard.');
 			return new Response('Server configuration error: Application domain is not set.', { status: 500 });

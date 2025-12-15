@@ -111,13 +111,6 @@
             "index_name": "uvai-index"
         }
     ],
-    "workflows": [
-        {
-            "name": "vector-ingestion-workflow",
-            "binding": "VECTOR_WORKFLOW",
-            "class_name": "VectorIngestionWorkflow"
-        }
-    ],
     "migrations": [
         {
             "new_sqlite_classes": [

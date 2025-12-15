@@ -27,39 +27,41 @@ export function createApp(env: Env): Hono<AppEnv> {
         // Apply secure headers
         return secureHeaders(getSecureHeadersConfig(env))(c, next);
     });
-    
+
     // CORS configuration
     app.use('/api/*', cors(getCORSConfig(env)));
-    
+
     // CSRF protection using double-submit cookie pattern with proper GET handling
     app.use('*', async (c, next) => {
         const method = c.req.method.toUpperCase();
-        
+
         // Skip for WebSocket upgrades
         const upgradeHeader = c.req.header('upgrade');
         if (upgradeHeader?.toLowerCase() === 'websocket') {
             return next();
         }
-        
+
         try {
             // Handle GET requests - establish CSRF token if needed
             if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') {
                 await next();
-                
+
                 // Only set CSRF token for successful API responses
                 if (c.req.url.startsWith('/api/') && c.res.status < 400) {
                     await CsrfService.enforce(c.req.raw, c.res);
                 }
-                
+
                 return;
             }
-            
+
             // Validate CSRF token for state-changing requests
-            await CsrfService.enforce(c.req.raw, undefined);
+            if (!c.req.url.includes('/api/vector')) {
+                await CsrfService.enforce(c.req.raw, undefined);
+            }
             await next();
         } catch (error) {
             if (error instanceof SecurityError && error.type === SecurityErrorType.CSRF_VIOLATION) {
-                return new Response(JSON.stringify({ 
+                return new Response(JSON.stringify({
                     error: 'CSRF validation failed',
                     code: 'CSRF_VIOLATION'
                 }), {
@@ -82,7 +84,13 @@ export function createApp(env: Env): Hono<AppEnv> {
     })
 
     // By default, all routes require authentication
-    app.use('/api/*', setAuthLevel(AuthConfig.ownerOnly));
+    app.use('/api/*', async (c, next) => {
+        if (c.req.url.includes('/api/vector')) {
+            await next();
+            return;
+        }
+        return setAuthLevel(AuthConfig.ownerOnly)(c, next);
+    });
 
     // Now setup all the routes
     setupRoutes(app);

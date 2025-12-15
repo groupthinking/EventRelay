@@ -40,6 +40,7 @@ js:
           - "**/*.ts"
           - "**/*.tsx"
           - "**/package.json"
+          - "**/package-lock.json"
           - "js/**"
 
 tooling:
@@ -60,6 +61,7 @@ config:
           - "**/.npmrc"
           - "**/.prettierignore"
           - "**/package.json"
+          - "**/package-lock.json"
           - "**/tsconfig.*.json"
           - "**/tsconfig.json"
           - "**/typedoc.json"
