@@ -8,3 +8,10 @@ backups/
 **/.DS_Store
 
 .env/
+
+# From vision/.gitignore
+actions-runner/
+venv/
+__pycache__/
+
+_backup_vision_cleanup/

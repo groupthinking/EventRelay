@@ -1,0 +1,5 @@
+{
+  "name": "Universal State Continuity Fabric Visualizer",
+  "description": "A web application to visualize the architectural vision for a Universal Contextually-Aware State Continuity Fabric. It displays the strategic vision, guiding principles, layered architecture, cross-cutting concerns, implementation strategy, and success criteria.",
+  "requestFramePermissions": []
+}

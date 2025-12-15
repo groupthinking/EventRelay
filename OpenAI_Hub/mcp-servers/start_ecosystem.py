@@ -87,8 +87,7 @@ def verify_ecosystem():
             Path("/Users/garvey/UVAI/src/core/youtube_extension/scripts/youtube_uvai_mcp.py"),
         ],
         "context7_mcp": [BASE_DIR / "servers" / "context7_mcp.py"],
-        "self_correcting_executor": [Path("/Users/garvey/Desktop/Grok-Claude-Hybrid-Deployment/mcp_server/main.py")],
-        "claude_config": [Path("/Users/garvey/.claude/claude_desktop_config.json")],
+        "self_correcting_executor": [Path("/Users/garvey/Dev/OpenAI_Hub/self-correcting-executor-PRODUCTION/mcp_server/main.py")],
     }
     missing_required = []
     for name, paths in candidates.items():
@@ -96,15 +95,12 @@ def verify_ecosystem():
         if found:
             print(f"   ✅ {name}")
         else:
-            required = name in ("state_coordinator", "context7_mcp")
-            status = "MISSING (required)" if required else "MISSING (optional)"
+            # All components are optional for partial startup
+            required = False 
+            status = "MISSING (optional)"
             print(f"   ⚠️  {name}: {status}")
-            if required:
-                missing_required.append(name)
-    if missing_required:
-        print("   ❌ Missing required components:", ", ".join(missing_required))
-        return False
-    print("✅ Core components present")
+
+    print("✅ Core components check complete (starting available services)")
     return True
 
 def start_mcp_server(name: str, command: list, env: dict = None):
@@ -141,7 +137,7 @@ def create_startup_summary():
 - **Shared SQLite Database** - Persistent state and action coordination
 - **Auto-Repair System** - Monitors and fixes failed servers
 
-### **Active MCP Servers (5 servers configured)**
+### **Active MCP Servers (7 servers configured)**
 
 #### **1. YouTube UVAI Processor** ⭐ PRIMARY
 - **Path**: `{youtube_path_primary}` (fallback: `{youtube_path_alt}`)
@@ -159,12 +155,17 @@ def create_startup_summary():
 - **Capabilities**: Code generation, analysis, architecture planning
 - **Tools**: 5 tools for intelligent code assistance
 
-#### **4. Perplexity MCP** 🔍
+#### **4. Cloudflare MCP** ☁️
+- **Path**: `{base}/servers/cloudflare_server.py`
+- **Capabilities**: Fetch Cloudflare Gateway URLs
+- **Tools**: `get_gateway_url`
+
+#### **5. Perplexity MCP** 🔍
 - **Command**: `uvx perplexity-mcp`
 - **Capabilities**: Real-time web search and knowledge retrieval
 - **Status**: External service (working)
 
-#### **5. Context7** 📚
+#### **6. Context7** 📚
 - **Path**: `{context7_path}`  
 - **Capabilities**: Intelligent context management and cross-system awareness
 - **Tools**: 5 tools for context storage, retrieval, and search
@@ -176,8 +177,8 @@ def create_startup_summary():
 {start_cmd}
 ```
 
-### **2. Use via Claude CLI**
-All servers are registered in `~/.claude/claude_desktop_config.json`
+### 2. Use via MCP CLI
+All servers are available via `python3 mcp-servers/mcp_cli.py`
 
 ### **3. Key Features**
 - **Shared State**: All servers can coordinate actions
@@ -254,17 +255,17 @@ def main():
     coordinator_url = "ws://localhost:8005"
 
     # 1. YouTube UVAI Processor
+    # Prioritize the copy we just made in servers/
     youtube_uvai_mcp_path = str(BASE_DIR / "servers" / "youtube_uvai_mcp.py")
-    if not os.path.exists(youtube_uvai_mcp_path):
-        alt_path = "/Users/garvey/UVAI/src/core/youtube_extension/scripts/youtube_uvai_mcp.py"
-        if os.path.exists(alt_path):
-            youtube_uvai_mcp_path = alt_path
+    
     if os.path.exists(youtube_uvai_mcp_path):
         mcp_servers.append(start_mcp_server(
             "YouTube UVAI Processor",
             [sys.executable, youtube_uvai_mcp_path],
             env={"COORDINATOR_URL": coordinator_url}
         ))
+    else:
+        print("   ⚠️  YouTube UVAI Processor not found in servers/ directory")
 
     # 2. Context7 MCP
     context7_mcp_path = str(BASE_DIR / "servers" / "context7_mcp.py")
@@ -275,8 +276,8 @@ def main():
             env={"COORDINATOR_URL": coordinator_url}
         ))
 
-    # 3. Self-Correcting Executor (Grok-Claude-Hybrid-Deployment/mcp_server/main.py)
-    self_correcting_executor_path = "/Users/garvey/Desktop/Grok-Claude-Hybrid-Deployment/mcp_server/main.py"
+    # 3. Self-Correcting Executor
+    self_correcting_executor_path = "/Users/garvey/Dev/OpenAI_Hub/self-correcting-executor-PRODUCTION/mcp_server/main.py"
     if os.path.exists(self_correcting_executor_path):
         mcp_servers.append(start_mcp_server(
             "Self-Correcting Executor",
@@ -284,10 +285,37 @@ def main():
             env={"COORDINATOR_URL": coordinator_url}
         ))
 
+    # 4. Video Agent
+    video_agent_path = str(BASE_DIR / "servers" / "video_agent_server.py")
+    if os.path.exists(video_agent_path):
+        mcp_servers.append(start_mcp_server(
+            "Video Agent",
+            [sys.executable, video_agent_path],
+            env={"COORDINATOR_URL": coordinator_url}
+        ))
+
+    # 5. Code Analysis Agent
+    code_analysis_path = str(BASE_DIR / "servers" / "code_analysis_server.py")
+    if os.path.exists(code_analysis_path):
+        mcp_servers.append(start_mcp_server(
+            "Code Analysis Agent",
+            [sys.executable, code_analysis_path],
+            env={"COORDINATOR_URL": coordinator_url}
+        ))
+
     # Filter out None values from failed starts
     mcp_servers = [s for s in mcp_servers if s is not None]
 
-    # 4. Universal MCP Swarm
+    # 5. Cloudflare MCP Server
+    cloudflare_server_path = str(BASE_DIR / "servers" / "cloudflare_server.py")
+    if os.path.exists(cloudflare_server_path):
+        mcp_servers.append(start_mcp_server(
+            "Cloudflare MCP",
+            [sys.executable, cloudflare_server_path],
+            env={"COORDINATOR_URL": coordinator_url}
+        ))
+
+    # 6. Global MCP Swarm
     universal_mcp_swarm_path = "/Users/garvey/universal-mcp-swarm/dist/agents/code/code-agent.js"
     if os.path.exists(universal_mcp_swarm_path):
         mcp_servers.append(start_mcp_server(
@@ -296,7 +324,7 @@ def main():
             env={"COORDINATOR_URL": coordinator_url}
         ))
 
-    # 5. Perplexity MCP
+    # 7. Perplexity MCP
     # Assuming uvx is installed and perplexity-mcp is available via uvx
     mcp_servers.append(start_mcp_server(
         "Perplexity MCP",
@@ -314,7 +342,7 @@ def main():
     create_startup_summary()
     
     print("\n🎉 MCP ECOSYSTEM IS READY!")
-    print("\nUse Claude CLI to access all MCP servers.")
+    print("\nUse MCP CLI (mcp_cli.py) to access all MCP servers.")
     print("The system will auto-repair failed servers.")
     
     try:
