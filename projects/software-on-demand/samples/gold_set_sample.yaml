@@ -1,0 +1,91 @@
+metadata:
+  cohort: v1-pilot
+  evaluator: alex.dev
+  evaluation_date: 2025-10-13
+  video_url: https://www.youtube.com/watch?v=1234567890A
+  video_title: Build a FastAPI Backend with Agents
+  repo_reference: https://github.com/demo/software-on-demand
+
+execution_context:
+  stack:
+    language: python
+    framework: fastapi
+    runtime_version: "3.11"
+  infra:
+    execution_env: docker
+    image: ghcr.io/software-on-demand/agent-runner:2025-10-01
+    notes:
+      - "Triggered from nightly regression suite"
+
+expected_outcomes:
+  deliverables:
+    - path: backend/app/main.py
+      description: FastAPI entrypoint with agent orchestration routes
+    - path: frontend/
+      description: React dashboard bootstrapped with Vite + telemetry stream
+  commands:
+    - command: poetry
+      args: ["run", "pytest"]
+      success_criteria:
+        exit_code: 0
+        stdout_contains:
+          - 18 passed
+        stderr_absent: []
+    - command: npm
+      args: ["run", "build"]
+      success_criteria:
+        exit_code: 0
+        stdout_contains:
+          - "vite v5"
+        stderr_absent: []
+
+run_observation:
+  build_id: run-20251013-001
+  start_time: 2025-10-13T16:05:32Z
+  end_time: 2025-10-13T16:13:22Z
+  duration_seconds: 470
+  agents:
+    - name: context-intake
+      version: 0.9.1
+      summary: Normalized metadata and permissions
+    - name: transcriber
+      version: 1.4.0
+      summary: Generated timestamped transcript bundle
+    - name: build-orchestrator
+      version: 2.1.0
+      summary: Executed commands with retry on npm install
+  artifacts:
+    logs: https://console.software-on-demand.dev/runs/run-20251013-001/logs
+    repo_bundle: https://console.software-on-demand.dev/runs/run-20251013-001/workspace.tar.gz
+    deployment_url: https://demo.software-on-demand.dev
+
+metric_scores:
+  fidelity:
+    transcript_alignment: 0.86
+    command_accuracy: 0.92
+    artifact_integrity: 0.95
+  quality:
+    tests_passed: true
+    lint_score: 0.94
+    deployment_status: success
+  efficiency:
+    wall_clock_minutes: 7.8
+    retries: 1
+    token_usage:
+      input_tokens: 18542
+      output_tokens: 8843
+      cost_usd: 4.12
+
+annotations:
+  blockers: []
+  deviations:
+    - "Video skipped writing smoke tests; agent synthesized new pytest module."
+  follow_up_actions:
+    - owner: alex.dev
+      action: "Verify deployment after 24h drift monitoring"
+      due_date: 2025-10-14
+
+verdict:
+  pass: true
+  confidence: high
+  notes: "Meets pilot success bar; monitor npm install retry frequency."

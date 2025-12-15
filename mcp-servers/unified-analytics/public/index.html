@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Online Business Hub</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-gray-50">
+    <div class="min-h-screen">
+        <!-- Navigation -->
+        <nav class="bg-indigo-600 text-white shadow-lg">
+            <div class="container mx-auto px-6 py-4">
+                <div class="flex items-center justify-between">
+                    <div class="text-xl font-bold">Online Business Hub</div>
+                    <div class="space-x-4">
+                        <button class="hover:text-indigo-200">Dashboard</button>
+                        <button class="hover:text-indigo-200">Integrations</button>
+                        <button class="hover:text-indigo-200">Analytics</button>
+                    </div>
+                </div>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <div class="container mx-auto px-6 py-8">
+            <!-- Business Streams -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h3 class="text-lg font-semibold mb-4 text-indigo-600">E-commerce</h3>
+                    <div class="space-y-3">
+                        <a href="#" class="block p-3 bg-gray-50 rounded hover:bg-indigo-50">
+                            <div class="font-medium">Shopify Store</div>
+                            <div class="text-sm text-gray-500">Manage your online store</div>
+                        </a>
+                        <a href="#" class="block p-3 bg-gray-50 rounded hover:bg-indigo-50">
+                            <div class="font-medium">Amazon Integration</div>
+                            <div class="text-sm text-gray-500">Sync with Amazon marketplace</div>
+                        </a>
+                        <a href="#" class="block p-3 bg-gray-50 rounded hover:bg-indigo-50">
+                            <div class="font-medium">Inventory Management</div>
+                            <div class="text-sm text-gray-500">Track and manage stock</div>
+                        </a>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h3 class="text-lg font-semibold mb-4 text-purple-600">Digital Products</h3>
+                    <div class="space-y-3">
+                        <a href="#" class="block p-3 bg-gray-50 rounded hover:bg-purple-50">
+                            <div class="font-medium">Online Courses</div>
+                            <div class="text-sm text-gray-500">Create and manage courses</div>
+                        </a>
+                        <a href="#" class="block p-3 bg-gray-50 rounded hover:bg-purple-50">
+                            <div class="font-medium">Digital Downloads</div>
+                            <div class="text-sm text-gray-500">Sell digital content</div>
+                        </a>
+                        <a href="#" class="block p-3 bg-gray-50 rounded hover:bg-purple-50">
+                            <div class="font-medium">Subscriptions</div>
+                            <div class="text-sm text-gray-500">Manage recurring content</div>
+                        </a>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h3 class="text-lg font-semibold mb-4 text-blue-600">Services</h3>
+                    <div class="space-y-3">
+                        <a href="#" class="block p-3 bg-gray-50 rounded hover:bg-blue-50">
+                            <div class="font-medium">Freelance Services</div>
+                            <div class="text-sm text-gray-500">Manage client projects</div>
+                        </a>
+                        <a href="#" class="block p-3 bg-gray-50 rounded hover:bg-blue-50">
+                            <div class="font-medium">Consulting</div>
+                            <div class="text-sm text-gray-500">Schedule consultations</div>
+                        </a>
+                        <a href="#" class="block p-3 bg-gray-50 rounded hover:bg-blue-50">
+                            <div class="font-medium">Virtual Assistance</div>
+                            <div class="text-sm text-gray-500">Offer VA services</div>
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Analytics Section -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h3 class="text-lg font-semibold mb-4">Revenue Overview</h3>
+                    <canvas id="revenueChart"></canvas>
+                </div>
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h3 class="text-lg font-semibold mb-4">Traffic Sources</h3>
+                    <canvas id="trafficChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Marketing Tools -->
+            <div class="bg-white rounded-lg shadow p-6 mb-8">
+                <h3 class="text-lg font-semibold mb-4">Marketing Tools</h3>
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div class="p-4 bg-green-50 rounded-lg">
+                        <h4 class="font-medium text-green-700">Social Media</h4>
+                        <p class="text-sm text-green-600">Schedule and analyze posts</p>
+                    </div>
+                    <div class="p-4 bg-blue-50 rounded-lg">
+                        <h4 class="font-medium text-blue-700">Email Marketing</h4>
+                        <p class="text-sm text-blue-600">Create campaigns</p>
+                    </div>
+                    <div class="p-4 bg-purple-50 rounded-lg">
+                        <h4 class="font-medium text-purple-700">Content Marketing</h4>
+                        <p class="text-sm text-purple-600">Blog and content tools</p>
+                    </div>
+                    <div class="p-4 bg-pink-50 rounded-lg">
+                        <h4 class="font-medium text-pink-700">SEO Tools</h4>
+                        <p class="text-sm text-pink-600">Optimize your content</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Revenue Chart
+        const revenueCtx = document.getElementById('revenueChart').getContext('2d');
+        new Chart(revenueCtx, {
+            type: 'line',
+            data: {
+                labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+                datasets: [{
+                    label: 'E-commerce',
+                    data: [3000, 3500, 4200, 4800, 5100, 5800],
+                    borderColor: 'rgb(99, 102, 241)',
+                    tension: 0.3
+                },
+                {
+                    label: 'Digital Products',
+                    data: [1200, 1800, 2100, 2400, 2900, 3200],
+                    borderColor: 'rgb(139, 92, 246)',
+                    tension: 0.3
+                },
+                {
+                    label: 'Services',
+                    data: [2000, 2200, 2700, 3100, 3400, 3900],
+                    borderColor: 'rgb(59, 130, 246)',
+                    tension: 0.3
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+
+        // Traffic Sources Chart
+        const trafficCtx = document.getElementById('trafficChart').getContext('2d');
+        new Chart(trafficCtx, {
+            type: 'doughnut',
+            data: {
+                labels: ['Social Media', 'Search', 'Direct', 'Referral'],
+                datasets: [{
+                    data: [35, 25, 20, 20],
+                    backgroundColor: [
+                        'rgb(99, 102, 241)',
+                        'rgb(139, 92, 246)',
+                        'rgb(59, 130, 246)',
+                        'rgb(147, 51, 234)'
+                    ]
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        position: 'right'
+                    }
+                }
+            }
+        });
+    </script>
+</body>
+</html>

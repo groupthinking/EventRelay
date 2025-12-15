@@ -1,0 +1,416 @@
+{
+  "youtube_url": "https://youtu.be/9uBW16KlwB4",
+  "mode": "gemini",
+  "timestamp": "2025-10-25T04:18:42.981534",
+  "stages": {
+    "gemini_analysis": {
+      "video_id": "9uBW16KlwB4",
+      "metadata": {
+        "video_id": "9uBW16KlwB4",
+        "url": "https://youtu.be/9uBW16KlwB4",
+        "processor": "gemini-2.5-flash",
+        "title": "Error: 400 INVALID_ARGUMENT",
+        "description": "Error: 400 INVALID_ARGUMENT. {'error': {'code': 400, 'message': 'API key expired. Please renew the API key.', 'status': 'INVALID_ARGUMENT', 'details': [{'@type': 'type.googleapis.com/google.rpc.ErrorInfo', 'reason': 'API_KEY_INVALID', 'domain': 'googleapis.com', 'metadata': {'service': 'generativelanguage.googleapis.com'}}, {'@type': 'type.googleapis.com/google.rpc.LocalizedMessage', 'locale': 'en-US', 'message': 'API key expired. Please renew the API key.'}]}}",
+        "source": "gemini_api"
+      },
+      "transcript": {
+        "text": "[00:00] I want the product experience when you land on my website to be an AI voice agent.\n[00:04] All right, it looks like it's done.\n[00:05] 66 seconds.\n[00:07] Let's try it.\n[00:08] Hey, how's it going?\n[00:08] It's going well.\n[00:09] Thanks for asking.\n[00:10] Could I get your full name, email address and company name?\n[00:13] Okay, my mind is buzzing with the possibilities.\n[00:16] How big is the opportunity to have like an agency that helps implement these tools into small businesses?\n[00:21] I was at a an event in Santa Barbara last week.\n[00:24] The topic executives in the world from Fortune 200 companies.\n[00:29] And even these top executives don't know how to use AI tools.\n[00:32] You're 10 prompts away from the home run.\n[00:34] Could you imagine how arrogant that advice would sound three years ago?\n[00:37] Just launch 50 different things.\n[00:38] Now it's like, no, that's 50 prompts.\n[00:40] You can do that.\n[00:41] You're literally going from like, uh, I have that idea to deploying the thing into literally 90 seconds.\n[00:46] And like the cost and barrier to entry is literally free.\n[00:52] All right, guys, I just recorded a banger of an episode and I feel the need to issue a public apology.\n[00:58] What apology?\n[00:59] Well, in the past, I've talked a little bit of crap about Gemini and or Google's AI products.\n[01:04] I'm a changed man.\n[01:05] Today I chat with Logan Kilpatrick.\n[01:07] He is from Google's deep mind team.\n[01:09] He knows a ton about all of Google's AI products and about what ideas you should vibe code, what AI tools you should use to vibe code, what types of ideas.\n[01:18] He shared a screen and we vibe coded two different apps with one prompt each.\n[01:22] This is not a sponsored episode.\n[01:23] Google paid me $0 to publish this.\n[01:25] But I am a shareholder of Google and a personal fan of their company and I think there's a lot that we can learn and a lot that we can build on top of Google's AI products.\n[01:33] So today we covered VO3 Nano banana's Gemini AI search and more.\n[01:40] So if you are here for ideas and tactics and tools, this is the episode for you.\n[01:44] Please share with a friend and enjoy.\n[01:46] My name is Logan Kilpatrick.\n[01:49] I lead the developer product team for AI Studio and the Gemini API at Google Deep Mind and we're really focused on how do we take the latest AI capabilities coming from Google and coming out of Deep Mind and put those in the hands of people who want to build stuff.\n[02:02] And the whole sort of spectrum of builders these days from everyone from, you know, developers at enterprises who are like building massive companies and products to like, hey, I just have this idea and I want to build my first AI app or build my first app at all and, you know, share with a friend or someone in my family.\n[02:19] So we're building for all of those people, which is challenging, but also a lot of fun.\n[02:23] That's exciting.\n[02:24] What of like all the products within Google's AI studio, what are like the main ones?\n[02:29] Why don't you just list them off?\n[02:30] The fun part about Google is we have a massive spectrum of products.\n[02:34] You get everything from, if folks have heard of of the Gemini app, so the Gemini app is like Google's personal assistant powered by Gemini to, you know, all of the Gemini integrations that you might find in like other Google product services.\n[02:47] So that's everything like Google Docs and sheets and drive etc. all have Gemini integrations to search with AI overviews and AI mode.\n[02:56] Uh folks haven't tried is like an awesome experience inside of search.\n[03:00] To as you mentioned, like actually custom built AI, like almost like AI native products and that's Notebook LM, which is sort of like a research assistant that takes all this like content that you have and makes it infinitely repurposable to AI studio, which is our sort of AI builder platform.\n[03:17] If you want to create software and you want to build something powered by AI and put it in the hands of users is the platform for you to Google Labs, which has all these like early stage bets and things like Opal and and others.\n[03:30] So there's there's a huge spectrum.\n[03:32] The simple answer to your question, Chris is, you can go to Google.ai and it has sort of like the suite of all of these different products that are available and you can sort of look through and find what maybe is most exciting to you.\n[03:41] Okay, so you've got a really unique insight into all of Google's AI products.\n[03:46] If you were forced, heaven forbid, to have to pick one of them to build a business with or to start a business with, only one of them, what would you choose and why?\n[03:55] Yeah, it's a good question.\n[03:56] I'm biased because I spent my time thinking about AI Studio.\n[03:59] So probably AI Studio.\n[04:00] If you want to build a product and build a business, I think the my pitch to you would be build AI products and the reason for this is like AI is both extremely monetizable.\n[04:11] There's edges everywhere you look, like there's all of these emerging interesting product experiences that you could potentially build and actually the barrier to entry is pretty pretty minimal.\n[04:20] The beauty is you don't need to be an AI expert to go and like build AI products.\n[04:25] You just need to have some problem that you're trying to solve and like there's a probably a good chance if it's at least a digital problem that AI can help solve that for you.\n[04:29] Is is this like unique combination of all these things.\n[04:35] Plus like consumer interest is increasing, consumer willingness to pay for AI products is increasing, costs are going down.\n[04:41] The technology is improving.\n[04:46] So there's like all of these very unique tail winds that are happening at the same time, which I think makes this like such a an exciting moment to build AI products in AI Studio.\n[00:53] Because my name is Logan Kilpatrick, I lead the developer product team for AI Studio and the Gemini API at Google DeepMind.\n[01:53] And we're really focused on how do we take the latest AI capabilities coming from Google and coming out of DeepMind and put those in the hands of people who want to build stuff and the whole sort of spectrum of builders these days from everyone from, you know, developers at enterprises who are like building massive companies and products to like, hey, I just have this idea and I want to build my first AI app or build my first app at all and, you know, share with a friend or someone in my family.\n[02:19] So we're building for all of those people, which is challenging, but also a lot of fun.\n[02:23] That's exciting.\n[02:24] What of like all the products within Google's AI studio, what are like the main ones?\n[02:29] Why don't you just list them off?\n[02:30] The fun part about Google is we have a massive spectrum of products.\n[02:34] You get everything from, if folks have heard of of the Gemini app, so the Gemini app is like Google's personal assistant powered by Gemini to, you know, all of the Gemini integrations that you might find in like other Google product services.\n[02:47] So that's everything like Google Docs and sheets and Drive, etc, all have Gemini integrations to search with AI overviews and AI mode.\n[02:56] Uh folks haven't tried is like an awesome experience inside of search.\n[03:00] To as you mentioned, like actually custom built AI, like almost like AI native products and that's Notebook LM, which is sort of like a research assistant that takes all this like content that you have and makes it infinitely repurposable to AI studio, which is our sort of AI builder platform.\n[03:17] If you want to create software and you want to build something powered by AI and put it in the hands of users is the platform for you to Google Labs, which has all these like early stage bets and things like Opal and and others.\n[03:30] So there's there's a huge spectrum.\n[03:31] The simple answer to your question, Chris is, you can go to google.ai and it has sort of like the suite of all of these different products that are available and you can sort of look through and find what maybe is most exciting to you.\n[03:42] Okay, so you've got a really unique insight into all of Google's AI products.\n[03:46] If you were forced, heaven forbid, to have to pick one of them to build a business with or to start a business with, only one of them, what would you choose and why?\n[03:55] Yeah, it's a good question.\n[03:56] I'm biased because I spend my time thinking about AI Studio.\n[03:59] So probably AI studio.\n[04:00] If you want to build a product and build a business, I think the my pitch to you would be build AI products and the reason for this is like AI is both extremely monetizable.\n[04:11] There's edges everywhere you look.\n[04:12] Like there's all of these emerging interesting product experiences that you could potentially build.\n[04:16] And and the cost and barrier to entry is literally free.\n[04:20] This is why yeah.\n[04:21] You're actually the transcript of what happens.\n[04:32] Well, in it's a read public the simple to all of them in to a keyboard a workflow the full name, there the end with So, let's  There's to",
+        "segments": [
+          {
+            "timestamp": "00:00",
+            "text": "I want the product experience when you land on my website to be an AI voice agent."
+          },
+          {
+            "timestamp": "00:04",
+            "text": "All right, it looks like it's done."
+          },
+          {
+            "timestamp": "00:05",
+            "text": "66 seconds."
+          },
+          {
+            "timestamp": "00:07",
+            "text": "Let's try it."
+          },
+          {
+            "timestamp": "00:08",
+            "text": "Hey, how's it going?"
+          },
+          {
+            "timestamp": "00:08",
+            "text": "It's going well."
+          },
+          {
+            "timestamp": "00:09",
+            "text": "Thanks for asking."
+          },
+          {
+            "timestamp": "00:10",
+            "text": "Could I get your full name, email address and company name?"
+          },
+          {
+            "timestamp": "00:13",
+            "text": "Okay, my mind is buzzing with the possibilities."
+          },
+          {
+            "timestamp": "00:16",
+            "text": "How big is the opportunity to have like an agency that helps implement these tools into small businesses?"
+          },
+          {
+            "timestamp": "00:21",
+            "text": "I was at a an event in Santa Barbara last week."
+          },
+          {
+            "timestamp": "00:24",
+            "text": "The topic executives in the world from Fortune 200 companies."
+          },
+          {
+            "timestamp": "00:29",
+            "text": "And even these top executives don't know how to use AI tools."
+          },
+          {
+            "timestamp": "00:32",
+            "text": "You're 10 prompts away from the home run."
+          },
+          {
+            "timestamp": "00:34",
+            "text": "Could you imagine how arrogant that advice would sound three years ago?"
+          },
+          {
+            "timestamp": "00:37",
+            "text": "Just launch 50 different things."
+          },
+          {
+            "timestamp": "00:38",
+            "text": "Now it's like, no, that's 50 prompts."
+          },
+          {
+            "timestamp": "00:40",
+            "text": "You can do that."
+          },
+          {
+            "timestamp": "00:41",
+            "text": "You're literally going from like, uh, I have that idea to deploying the thing into literally 90 seconds."
+          },
+          {
+            "timestamp": "00:46",
+            "text": "And like the cost and barrier to entry is literally free."
+          },
+          {
+            "timestamp": "00:52",
+            "text": "All right, guys, I just recorded a banger of an episode and I feel the need to issue a public apology."
+          },
+          {
+            "timestamp": "00:58",
+            "text": "What apology?"
+          },
+          {
+            "timestamp": "00:59",
+            "text": "Well, in the past, I've talked a little bit of crap about Gemini and or Google's AI products."
+          },
+          {
+            "timestamp": "01:04",
+            "text": "I'm a changed man."
+          },
+          {
+            "timestamp": "01:05",
+            "text": "Today I chat with Logan Kilpatrick."
+          },
+          {
+            "timestamp": "01:07",
+            "text": "He is from Google's deep mind team."
+          },
+          {
+            "timestamp": "01:09",
+            "text": "He knows a ton about all of Google's AI products and about what ideas you should vibe code, what AI tools you should use to vibe code, what types of ideas."
+          },
+          {
+            "timestamp": "01:18",
+            "text": "He shared a screen and we vibe coded two different apps with one prompt each."
+          },
+          {
+            "timestamp": "01:22",
+            "text": "This is not a sponsored episode."
+          },
+          {
+            "timestamp": "01:23",
+            "text": "Google paid me $0 to publish this."
+          },
+          {
+            "timestamp": "01:25",
+            "text": "But I am a shareholder of Google and a personal fan of their company and I think there's a lot that we can learn and a lot that we can build on top of Google's AI products."
+          },
+          {
+            "timestamp": "01:33",
+            "text": "So today we covered VO3 Nano banana's Gemini AI search and more."
+          },
+          {
+            "timestamp": "01:40",
+            "text": "So if you are here for ideas and tactics and tools, this is the episode for you."
+          },
+          {
+            "timestamp": "01:44",
+            "text": "Please share with a friend and enjoy."
+          },
+          {
+            "timestamp": "01:46",
+            "text": "My name is Logan Kilpatrick."
+          },
+          {
+            "timestamp": "01:49",
+            "text": "I lead the developer product team for AI Studio and the Gemini API at Google Deep Mind and we're really focused on how do we take the latest AI capabilities coming from Google and coming out of Deep Mind and put those in the hands of people who want to build stuff."
+          },
+          {
+            "timestamp": "02:02",
+            "text": "And the whole sort of spectrum of builders these days from everyone from, you know, developers at enterprises who are like building massive companies and products to like, hey, I just have this idea and I want to build my first AI app or build my first app at all and, you know, share with a friend or someone in my family."
+          },
+          {
+            "timestamp": "02:19",
+            "text": "So we're building for all of those people, which is challenging, but also a lot of fun."
+          },
+          {
+            "timestamp": "02:23",
+            "text": "That's exciting."
+          },
+          {
+            "timestamp": "02:24",
+            "text": "What of like all the products within Google's AI studio, what are like the main ones?"
+          },
+          {
+            "timestamp": "02:29",
+            "text": "Why don't you just list them off?"
+          },
+          {
+            "timestamp": "02:30",
+            "text": "The fun part about Google is we have a massive spectrum of products."
+          },
+          {
+            "timestamp": "02:34",
+            "text": "You get everything from, if folks have heard of of the Gemini app, so the Gemini app is like Google's personal assistant powered by Gemini to, you know, all of the Gemini integrations that you might find in like other Google product services."
+          },
+          {
+            "timestamp": "02:47",
+            "text": "So that's everything like Google Docs and sheets and drive etc. all have Gemini integrations to search with AI overviews and AI mode."
+          },
+          {
+            "timestamp": "02:56",
+            "text": "Uh folks haven't tried is like an awesome experience inside of search."
+          },
+          {
+            "timestamp": "03:00",
+            "text": "To as you mentioned, like actually custom built AI, like almost like AI native products and that's Notebook LM, which is sort of like a research assistant that takes all this like content that you have and makes it infinitely repurposable to AI studio, which is our sort of AI builder platform."
+          },
+          {
+            "timestamp": "03:17",
+            "text": "If you want to create software and you want to build something powered by AI and put it in the hands of users is the platform for you to Google Labs, which has all these like early stage bets and things like Opal and and others."
+          },
+          {
+            "timestamp": "03:30",
+            "text": "So there's there's a huge spectrum."
+          },
+          {
+            "timestamp": "03:32",
+            "text": "The simple answer to your question, Chris is, you can go to Google.ai and it has sort of like the suite of all of these different products that are available and you can sort of look through and find what maybe is most exciting to you."
+          },
+          {
+            "timestamp": "03:41",
+            "text": "Okay, so you've got a really unique insight into all of Google's AI products."
+          },
+          {
+            "timestamp": "03:46",
+            "text": "If you were forced, heaven forbid, to have to pick one of them to build a business with or to start a business with, only one of them, what would you choose and why?"
+          },
+          {
+            "timestamp": "03:55",
+            "text": "Yeah, it's a good question."
+          },
+          {
+            "timestamp": "03:56",
+            "text": "I'm biased because I spent my time thinking about AI Studio."
+          },
+          {
+            "timestamp": "03:59",
+            "text": "So probably AI Studio."
+          },
+          {
+            "timestamp": "04:00",
+            "text": "If you want to build a product and build a business, I think the my pitch to you would be build AI products and the reason for this is like AI is both extremely monetizable."
+          },
+          {
+            "timestamp": "04:11",
+            "text": "There's edges everywhere you look, like there's all of these emerging interesting product experiences that you could potentially build and actually the barrier to entry is pretty pretty minimal."
+          },
+          {
+            "timestamp": "04:20",
+            "text": "The beauty is you don't need to be an AI expert to go and like build AI products."
+          },
+          {
+            "timestamp": "04:25",
+            "text": "You just need to have some problem that you're trying to solve and like there's a probably a good chance if it's at least a digital problem that AI can help solve that for you."
+          },
+          {
+            "timestamp": "04:29",
+            "text": "Is is this like unique combination of all these things."
+          },
+          {
+            "timestamp": "04:35",
+            "text": "Plus like consumer interest is increasing, consumer willingness to pay for AI products is increasing, costs are going down."
+          },
+          {
+            "timestamp": "04:41",
+            "text": "The technology is improving."
+          },
+          {
+            "timestamp": "04:46",
+            "text": "So there's like all of these very unique tail winds that are happening at the same time, which I think makes this like such a an exciting moment to build AI products in AI Studio."
+          },
+          {
+            "timestamp": "00:53",
+            "text": "Because my name is Logan Kilpatrick, I lead the developer product team for AI Studio and the Gemini API at Google DeepMind."
+          },
+          {
+            "timestamp": "01:53",
+            "text": "And we're really focused on how do we take the latest AI capabilities coming from Google and coming out of DeepMind and put those in the hands of people who want to build stuff and the whole sort of spectrum of builders these days from everyone from, you know, developers at enterprises who are like building massive companies and products to like, hey, I just have this idea and I want to build my first AI app or build my first app at all and, you know, share with a friend or someone in my family."
+          },
+          {
+            "timestamp": "02:19",
+            "text": "So we're building for all of those people, which is challenging, but also a lot of fun."
+          },
+          {
+            "timestamp": "02:23",
+            "text": "That's exciting."
+          },
+          {
+            "timestamp": "02:24",
+            "text": "What of like all the products within Google's AI studio, what are like the main ones?"
+          },
+          {
+            "timestamp": "02:29",
+            "text": "Why don't you just list them off?"
+          },
+          {
+            "timestamp": "02:30",
+            "text": "The fun part about Google is we have a massive spectrum of products."
+          },
+          {
+            "timestamp": "02:34",
+            "text": "You get everything from, if folks have heard of of the Gemini app, so the Gemini app is like Google's personal assistant powered by Gemini to, you know, all of the Gemini integrations that you might find in like other Google product services."
+          },
+          {
+            "timestamp": "02:47",
+            "text": "So that's everything like Google Docs and sheets and Drive, etc, all have Gemini integrations to search with AI overviews and AI mode."
+          },
+          {
+            "timestamp": "02:56",
+            "text": "Uh folks haven't tried is like an awesome experience inside of search."
+          },
+          {
+            "timestamp": "03:00",
+            "text": "To as you mentioned, like actually custom built AI, like almost like AI native products and that's Notebook LM, which is sort of like a research assistant that takes all this like content that you have and makes it infinitely repurposable to AI studio, which is our sort of AI builder platform."
+          },
+          {
+            "timestamp": "03:17",
+            "text": "If you want to create software and you want to build something powered by AI and put it in the hands of users is the platform for you to Google Labs, which has all these like early stage bets and things like Opal and and others."
+          },
+          {
+            "timestamp": "03:30",
+            "text": "So there's there's a huge spectrum."
+          },
+          {
+            "timestamp": "03:31",
+            "text": "The simple answer to your question, Chris is, you can go to google.ai and it has sort of like the suite of all of these different products that are available and you can sort of look through and find what maybe is most exciting to you."
+          },
+          {
+            "timestamp": "03:42",
+            "text": "Okay, so you've got a really unique insight into all of Google's AI products."
+          },
+          {
+            "timestamp": "03:46",
+            "text": "If you were forced, heaven forbid, to have to pick one of them to build a business with or to start a business with, only one of them, what would you choose and why?"
+          },
+          {
+            "timestamp": "03:55",
+            "text": "Yeah, it's a good question."
+          },
+          {
+            "timestamp": "03:56",
+            "text": "I'm biased because I spend my time thinking about AI Studio."
+          },
+          {
+            "timestamp": "03:59",
+            "text": "So probably AI studio."
+          },
+          {
+            "timestamp": "04:00",
+            "text": "If you want to build a product and build a business, I think the my pitch to you would be build AI products and the reason for this is like AI is both extremely monetizable."
+          },
+          {
+            "timestamp": "04:11",
+            "text": "There's edges everywhere you look."
+          },
+          {
+            "timestamp": "04:12",
+            "text": "Like there's all of these emerging interesting product experiences that you could potentially build."
+          },
+          {
+            "timestamp": "04:16",
+            "text": "And and the cost and barrier to entry is literally free."
+          },
+          {
+            "timestamp": "04:20",
+            "text": "This is why yeah."
+          },
+          {
+            "timestamp": "04:21",
+            "text": "You're actually the transcript of what happens."
+          },
+          {
+            "timestamp": "04:32",
+            "text": "Well, in it's a read public the simple to all of them in to a keyboard a workflow the full name, there the end with So, let's  There's to"
+          }
+        ],
+        "source": "gemini_api"
+      },
+      "analysis": {
+        "sentiment": "neutral",
+        "topics": [],
+        "key_concepts": [],
+        "visual_elements": "Error: 400 INVALID_ARGUMENT. {'error': {'code': 400, 'message': 'API key expired. Please renew the API key.', 'status': 'INVALID_ARGUMENT', 'details': [{'@type': 'type.googleapis.com/google.rpc.ErrorInfo', 'reason': 'API_KEY_INVALID', 'domain': 'googleapis.com', 'metadata': {'service': 'generativelanguage.googleapis.com'}}, {'@type': 'type.googleapis.com/google.rpc.LocalizedMessage', 'locale': 'en-US', 'message': 'API key expired. Please renew the API key.'}]}}",
+        "code_snippets": "Error: 400 INVALID_ARGUMENT. {'error': {'code': 400, 'message': 'API key expired. Please renew the API key.', 'status': 'INVALID_ARGUMENT', 'details': [{'@type': 'type.googleapis.com/google.rpc.ErrorInfo', 'reason': 'API_KEY_INVALID', 'domain': 'googleapis.com', 'metadata': {'service': 'generativelanguage.googleapis.com'}}, {'@type': 'type.googleapis.com/google.rpc.LocalizedMessage', 'locale': 'en-US', 'message': 'API key expired. Please renew the API key.'}]}}",
+        "source": "gemini_api"
+      },
+      "learning_data": {
+        "patterns": [
+          {
+            "type": "automation",
+            "data": "Error: 400 INVALID_ARGUMENT. {'error': {'code': 400, 'message': 'API key expired. Please renew the API key.', 'status': 'INVALID_ARGUMENT', 'details': [{'@type': 'type.googleapis.com/google.rpc.ErrorInfo', 'reason': 'API_KEY_INVALID', 'domain': 'googleapis.com', 'metadata': {'service': 'generativelanguage.googleapis.com'}}, {'@type': 'type.googleapis.com/google.rpc.LocalizedMessage', 'locale': 'en-US', 'message': 'API key expired. Please renew the API key.'}]}}"
+          }
+        ],
+        "key_concepts": [],
+        "automation_opportunities": [],
+        "step_by_step": "Error: 400 INVALID_ARGUMENT. {'error': {'code': 400, 'message': 'API key expired. Please renew the API key.', 'status': 'INVALID_ARGUMENT', 'details': [{'@type': 'type.googleapis.com/google.rpc.ErrorInfo', 'reason': 'API_KEY_INVALID', 'domain': 'googleapis.com', 'metadata': {'service': 'generativelanguage.googleapis.com'}}, {'@type': 'type.googleapis.com/google.rpc.LocalizedMessage', 'locale': 'en-US', 'message': 'API key expired. Please renew the API key.'}]}}",
+        "skills_suggested": [],
+        "sentiment_trends": [
+          "neutral"
+        ],
+        "transcript_length": 9239,
+        "source": "gemini_api"
+      },
+      "gemini_raw": {
+        "summary": "Error: 400 INVALID_ARGUMENT. {'error': {'code': 400, 'message': 'API key expired. Please renew the API key.', 'status': 'INVALID_ARGUMENT', 'details': [{'@type': 'type.googleapis.com/google.rpc.ErrorInfo', 'reason': 'API_KEY_INVALID', 'domain': 'googleapis.com', 'metadata': {'service': 'generativelanguage.googleapis.com'}}, {'@type': 'type.googleapis.com/google.rpc.LocalizedMessage', 'locale': 'en-US', 'message': 'API key expired. Please renew the API key.'}]}}",
+        "transcript": "[00:00] I want the product experience when you land on my website to be an AI voice agent.\n[00:04] All right, it looks like it's done.\n[00:05] 66 seconds.\n[00:07] Let's try it.\n[00:08] Hey, how's it going?\n[00:08] It's going well.\n[00:09] Thanks for asking.\n[00:10] Could I get your full name, email address and company name?\n[00:13] Okay, my mind is buzzing with the possibilities.\n[00:16] How big is the opportunity to have like an agency that helps implement these tools into small businesses?\n[00:21] I was at a an event in Santa Barbara last week.\n[00:24] The topic executives in the world from Fortune 200 companies.\n[00:29] And even these top executives don't know how to use AI tools.\n[00:32] You're 10 prompts away from the home run.\n[00:34] Could you imagine how arrogant that advice would sound three years ago?\n[00:37] Just launch 50 different things.\n[00:38] Now it's like, no, that's 50 prompts.\n[00:40] You can do that.\n[00:41] You're literally going from like, uh, I have that idea to deploying the thing into literally 90 seconds.\n[00:46] And like the cost and barrier to entry is literally free.\n[00:52] All right, guys, I just recorded a banger of an episode and I feel the need to issue a public apology.\n[00:58] What apology?\n[00:59] Well, in the past, I've talked a little bit of crap about Gemini and or Google's AI products.\n[01:04] I'm a changed man.\n[01:05] Today I chat with Logan Kilpatrick.\n[01:07] He is from Google's deep mind team.\n[01:09] He knows a ton about all of Google's AI products and about what ideas you should vibe code, what AI tools you should use to vibe code, what types of ideas.\n[01:18] He shared a screen and we vibe coded two different apps with one prompt each.\n[01:22] This is not a sponsored episode.\n[01:23] Google paid me $0 to publish this.\n[01:25] But I am a shareholder of Google and a personal fan of their company and I think there's a lot that we can learn and a lot that we can build on top of Google's AI products.\n[01:33] So today we covered VO3 Nano banana's Gemini AI search and more.\n[01:40] So if you are here for ideas and tactics and tools, this is the episode for you.\n[01:44] Please share with a friend and enjoy.\n[01:46] My name is Logan Kilpatrick.\n[01:49] I lead the developer product team for AI Studio and the Gemini API at Google Deep Mind and we're really focused on how do we take the latest AI capabilities coming from Google and coming out of Deep Mind and put those in the hands of people who want to build stuff.\n[02:02] And the whole sort of spectrum of builders these days from everyone from, you know, developers at enterprises who are like building massive companies and products to like, hey, I just have this idea and I want to build my first AI app or build my first app at all and, you know, share with a friend or someone in my family.\n[02:19] So we're building for all of those people, which is challenging, but also a lot of fun.\n[02:23] That's exciting.\n[02:24] What of like all the products within Google's AI studio, what are like the main ones?\n[02:29] Why don't you just list them off?\n[02:30] The fun part about Google is we have a massive spectrum of products.\n[02:34] You get everything from, if folks have heard of of the Gemini app, so the Gemini app is like Google's personal assistant powered by Gemini to, you know, all of the Gemini integrations that you might find in like other Google product services.\n[02:47] So that's everything like Google Docs and sheets and drive etc. all have Gemini integrations to search with AI overviews and AI mode.\n[02:56] Uh folks haven't tried is like an awesome experience inside of search.\n[03:00] To as you mentioned, like actually custom built AI, like almost like AI native products and that's Notebook LM, which is sort of like a research assistant that takes all this like content that you have and makes it infinitely repurposable to AI studio, which is our sort of AI builder platform.\n[03:17] If you want to create software and you want to build something powered by AI and put it in the hands of users is the platform for you to Google Labs, which has all these like early stage bets and things like Opal and and others.\n[03:30] So there's there's a huge spectrum.\n[03:32] The simple answer to your question, Chris is, you can go to Google.ai and it has sort of like the suite of all of these different products that are available and you can sort of look through and find what maybe is most exciting to you.\n[03:41] Okay, so you've got a really unique insight into all of Google's AI products.\n[03:46] If you were forced, heaven forbid, to have to pick one of them to build a business with or to start a business with, only one of them, what would you choose and why?\n[03:55] Yeah, it's a good question.\n[03:56] I'm biased because I spent my time thinking about AI Studio.\n[03:59] So probably AI Studio.\n[04:00] If you want to build a product and build a business, I think the my pitch to you would be build AI products and the reason for this is like AI is both extremely monetizable.\n[04:11] There's edges everywhere you look, like there's all of these emerging interesting product experiences that you could potentially build and actually the barrier to entry is pretty pretty minimal.\n[04:20] The beauty is you don't need to be an AI expert to go and like build AI products.\n[04:25] You just need to have some problem that you're trying to solve and like there's a probably a good chance if it's at least a digital problem that AI can help solve that for you.\n[04:29] Is is this like unique combination of all these things.\n[04:35] Plus like consumer interest is increasing, consumer willingness to pay for AI products is increasing, costs are going down.\n[04:41] The technology is improving.\n[04:46] So there's like all of these very unique tail winds that are happening at the same time, which I think makes this like such a an exciting moment to build AI products in AI Studio.\n[00:53] Because my name is Logan Kilpatrick, I lead the developer product team for AI Studio and the Gemini API at Google DeepMind.\n[01:53] And we're really focused on how do we take the latest AI capabilities coming from Google and coming out of DeepMind and put those in the hands of people who want to build stuff and the whole sort of spectrum of builders these days from everyone from, you know, developers at enterprises who are like building massive companies and products to like, hey, I just have this idea and I want to build my first AI app or build my first app at all and, you know, share with a friend or someone in my family.\n[02:19] So we're building for all of those people, which is challenging, but also a lot of fun.\n[02:23] That's exciting.\n[02:24] What of like all the products within Google's AI studio, what are like the main ones?\n[02:29] Why don't you just list them off?\n[02:30] The fun part about Google is we have a massive spectrum of products.\n[02:34] You get everything from, if folks have heard of of the Gemini app, so the Gemini app is like Google's personal assistant powered by Gemini to, you know, all of the Gemini integrations that you might find in like other Google product services.\n[02:47] So that's everything like Google Docs and sheets and Drive, etc, all have Gemini integrations to search with AI overviews and AI mode.\n[02:56] Uh folks haven't tried is like an awesome experience inside of search.\n[03:00] To as you mentioned, like actually custom built AI, like almost like AI native products and that's Notebook LM, which is sort of like a research assistant that takes all this like content that you have and makes it infinitely repurposable to AI studio, which is our sort of AI builder platform.\n[03:17] If you want to create software and you want to build something powered by AI and put it in the hands of users is the platform for you to Google Labs, which has all these like early stage bets and things like Opal and and others.\n[03:30] So there's there's a huge spectrum.\n[03:31] The simple answer to your question, Chris is, you can go to google.ai and it has sort of like the suite of all of these different products that are available and you can sort of look through and find what maybe is most exciting to you.\n[03:42] Okay, so you've got a really unique insight into all of Google's AI products.\n[03:46] If you were forced, heaven forbid, to have to pick one of them to build a business with or to start a business with, only one of them, what would you choose and why?\n[03:55] Yeah, it's a good question.\n[03:56] I'm biased because I spend my time thinking about AI Studio.\n[03:59] So probably AI studio.\n[04:00] If you want to build a product and build a business, I think the my pitch to you would be build AI products and the reason for this is like AI is both extremely monetizable.\n[04:11] There's edges everywhere you look.\n[04:12] Like there's all of these emerging interesting product experiences that you could potentially build.\n[04:16] And and the cost and barrier to entry is literally free.\n[04:20] This is why yeah.\n[04:21] You're actually the transcript of what happens.\n[04:32] Well, in it's a read public the simple to all of them in to a keyboard a workflow the full name, there the end with So, let's  There's to",
+        "topics": "Error: 400 INVALID_ARGUMENT. {'error': {'code': 400, 'message': 'API key expired. Please renew the API key.', 'status': 'INVALID_ARGUMENT', 'details': [{'@type': 'type.googleapis.com/google.rpc.ErrorInfo', 'reason': 'API_KEY_INVALID', 'domain': 'googleapis.com', 'metadata': {'service': 'generativelanguage.googleapis.com'}}, {'@type': 'type.googleapis.com/google.rpc.LocalizedMessage', 'locale': 'en-US', 'message': 'API key expired. Please renew the API key.'}]}}",
+        "key_concepts": "Error: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota. Please migrate to Gemini 2.0 Flash Preview (Image Generation) (models/gemini-2.0-flash-preview-image-generation) for higher quota limits. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_paid_tier_input_token_count', 'quotaId': 'GenerateContentPaidTierInputTokensPerModelPerMinute', 'quotaDimensions': {'location': 'global', 'model': 'gemini-2.0-flash-exp'}, 'quotaValue': '250000'}]}, {'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '9s'}]}}",
+        "automation_opportunities": "Error: 400 INVALID_ARGUMENT. {'error': {'code': 400, 'message': 'API key expired. Please renew the API key.', 'status': 'INVALID_ARGUMENT', 'details': [{'@type': 'type.googleapis.com/google.rpc.ErrorInfo', 'reason': 'API_KEY_INVALID', 'domain': 'googleapis.com', 'metadata': {'service': 'generativelanguage.googleapis.com'}}, {'@type': 'type.googleapis.com/google.rpc.LocalizedMessage', 'locale': 'en-US', 'message': 'API key expired. Please renew the API key.'}]}}",
+        "visual_analysis": "Error: 400 INVALID_ARGUMENT. {'error': {'code': 400, 'message': 'API key expired. Please renew the API key.', 'status': 'INVALID_ARGUMENT', 'details': [{'@type': 'type.googleapis.com/google.rpc.ErrorInfo', 'reason': 'API_KEY_INVALID', 'domain': 'googleapis.com', 'metadata': {'service': 'generativelanguage.googleapis.com'}}, {'@type': 'type.googleapis.com/google.rpc.LocalizedMessage', 'locale': 'en-US', 'message': 'API key expired. Please renew the API key.'}]}}",
+        "code_extraction": "Error: 400 INVALID_ARGUMENT. {'error': {'code': 400, 'message': 'API key expired. Please renew the API key.', 'status': 'INVALID_ARGUMENT', 'details': [{'@type': 'type.googleapis.com/google.rpc.ErrorInfo', 'reason': 'API_KEY_INVALID', 'domain': 'googleapis.com', 'metadata': {'service': 'generativelanguage.googleapis.com'}}, {'@type': 'type.googleapis.com/google.rpc.LocalizedMessage', 'locale': 'en-US', 'message': 'API key expired. Please renew the API key.'}]}}",
+        "step_by_step": "Error: 400 INVALID_ARGUMENT. {'error': {'code': 400, 'message': 'API key expired. Please renew the API key.', 'status': 'INVALID_ARGUMENT', 'details': [{'@type': 'type.googleapis.com/google.rpc.ErrorInfo', 'reason': 'API_KEY_INVALID', 'domain': 'googleapis.com', 'metadata': {'service': 'generativelanguage.googleapis.com'}}, {'@type': 'type.googleapis.com/google.rpc.LocalizedMessage', 'locale': 'en-US', 'message': 'API key expired. Please renew the API key.'}]}}",
+        "sentiment": "Error: 400 INVALID_ARGUMENT. {'error': {'code': 400, 'message': 'API key expired. Please renew the API key.', 'status': 'INVALID_ARGUMENT', 'details': [{'@type': 'type.googleapis.com/google.rpc.ErrorInfo', 'reason': 'API_KEY_INVALID', 'domain': 'googleapis.com', 'metadata': {'service': 'generativelanguage.googleapis.com'}}, {'@type': 'type.googleapis.com/google.rpc.LocalizedMessage', 'locale': 'en-US', 'message': 'API key expired. Please renew the API key.'}]}}",
+        "skills_suggested": "Error: 400 INVALID_ARGUMENT. {'error': {'code': 400, 'message': 'API key expired. Please renew the API key.', 'status': 'INVALID_ARGUMENT', 'details': [{'@type': 'type.googleapis.com/google.rpc.ErrorInfo', 'reason': 'API_KEY_INVALID', 'domain': 'googleapis.com', 'metadata': {'service': 'generativelanguage.googleapis.com'}}, {'@type': 'type.googleapis.com/google.rpc.LocalizedMessage', 'locale': 'en-US', 'message': 'API key expired. Please renew the API key.'}]}}"
+      },
+      "status": "completed"
+    }
+  },
+  "processing_time": 127.1902591890539,
+  "success": true
+}

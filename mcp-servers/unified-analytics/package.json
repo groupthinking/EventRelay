@@ -1,0 +1,21 @@
+{
+  "name": "unified-analytics-server",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "build/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node build/index.js",
+    "dev": "ts-node-esm src/index.ts",
+    "test": "jest"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "latest",
+    "events": "^3.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^18.0.0",
+    "typescript": "^4.9.5",
+    "ts-node": "^10.9.1"
+  }
+}

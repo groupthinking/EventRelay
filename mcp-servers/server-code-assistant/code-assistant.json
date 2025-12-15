@@ -1,0 +1,6 @@
+{
+  "name": "code-assistant",
+  "status": "active",
+  "endpoint": "http://localhost:51234/service/code-assistant",
+  "registeredAt": "2025-04-18T20:29:50Z"
+}

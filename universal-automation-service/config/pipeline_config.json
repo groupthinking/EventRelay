@@ -1,0 +1,47 @@
+{
+  "pipeline": {
+    "name": "Universal Automation Service",
+    "version": "1.0.0",
+    "description": "YouTube URL → EventRelay → UVAI → Self-Correcting Executor Pipeline"
+  },
+  "stages": {
+    "eventrelay": {
+      "enabled": true,
+      "servers": ["youtube-api-proxy", "transcription-server", "video-analysis", "learning-analytics"],
+      "timeout": 120,
+      "retry_attempts": 3
+    },
+    "uvai": {
+      "enabled": true,
+      "servers": ["context7", "infrastructure-packaging"],
+      "timeout": 90,
+      "retry_attempts": 2
+    },
+    "executor": {
+      "enabled": true,
+      "servers": ["self-correcting-executor"],
+      "timeout": 180,
+      "max_retries": 3,
+      "self_correction": true
+    }
+  },
+  "output": {
+    "skills_directory": "~/.claude/skills",
+    "logs_directory": "/Users/garvey/Dev/OpenAI_Hub/universal-automation-service/logs",
+    "events_directory": "/Users/garvey/Dev/OpenAI_Hub/universal-automation-service/events",
+    "format": "json"
+  },
+  "monitoring": {
+    "enabled": true,
+    "dashboard_port": 3000,
+    "websocket_enabled": true,
+    "event_logging": true
+  },
+  "features": {
+    "auto_skill_creation": true,
+    "workflow_generation": true,
+    "self_correction": true,
+    "real_time_monitoring": true,
+    "codex_claude_coordination": true
+  }
+}
