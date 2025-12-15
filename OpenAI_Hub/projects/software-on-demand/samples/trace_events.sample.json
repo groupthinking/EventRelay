@@ -1,0 +1,125 @@
+[
+  {
+    "event_id": "evt-0001",
+    "run_id": "run-20251013-001",
+    "event_type": "run.created",
+    "emitted_at": "2025-10-13T16:05:32.000Z",
+    "severity": "info",
+    "source": {
+      "component": "orchestrator",
+      "agent_id": "pm-orchestrator",
+      "version": "1.2.0"
+    },
+    "payload": {
+      "status": "queued",
+      "video_url": "https://www.youtube.com/watch?v=1234567890A",
+      "initiator": "demo-runner"
+    }
+  },
+  {
+    "event_id": "evt-0002",
+    "run_id": "run-20251013-001",
+    "event_type": "agent.step.started",
+    "emitted_at": "2025-10-13T16:05:33.000Z",
+    "source": {
+      "component": "context-intake",
+      "agent_id": "context-intake",
+      "version": "0.9.1"
+    },
+    "payload": {
+      "step_id": "context-intake",
+      "step_kind": "ingest_metadata",
+      "status": "running",
+      "started_at": "2025-10-13T16:05:33.000Z",
+      "retry_count": 0,
+      "message": "Normalizing request metadata."
+    }
+  },
+  {
+    "event_id": "evt-0003",
+    "run_id": "run-20251013-001",
+    "event_type": "agent.step.completed",
+    "emitted_at": "2025-10-13T16:05:35.000Z",
+    "source": {
+      "component": "context-intake",
+      "agent_id": "context-intake",
+      "version": "0.9.1"
+    },
+    "payload": {
+      "step_id": "context-intake",
+      "step_kind": "ingest_metadata",
+      "status": "succeeded",
+      "started_at": "2025-10-13T16:05:33.000Z",
+      "completed_at": "2025-10-13T16:05:35.000Z",
+      "retry_count": 0,
+      "message": "Metadata normalized."
+    }
+  },
+  {
+    "event_id": "evt-0010",
+    "run_id": "run-20251013-001",
+    "event_type": "artifact.generated",
+    "emitted_at": "2025-10-13T16:06:01.500Z",
+    "source": {
+      "component": "transcribe",
+      "agent_id": "transcriber",
+      "version": "1.4.0"
+    },
+    "payload": {
+      "artifact_id": "artifact-transcript",
+      "artifact_type": "file",
+      "uri": "gs://sandbox/transcripts/run-20251013-001.json",
+      "description": "Transcript JSON exported for downstream agents."
+    }
+  },
+  {
+    "event_id": "evt-0030",
+    "run_id": "run-20251013-001",
+    "event_type": "log.appended",
+    "emitted_at": "2025-10-13T16:08:10.125Z",
+    "severity": "debug",
+    "source": {
+      "component": "executor",
+      "agent_id": "build-orchestrator",
+      "version": "2.1.0"
+    },
+    "payload": {
+      "stream": "stdout",
+      "text": "npm install --legacy-peer-deps",
+      "sequence": 45
+    }
+  },
+  {
+    "event_id": "evt-0045",
+    "run_id": "run-20251013-001",
+    "event_type": "metric.updated",
+    "emitted_at": "2025-10-13T16:10:59.200Z",
+    "source": {
+      "component": "verifier",
+      "agent_id": "verifier-agent",
+      "version": "1.0.0"
+    },
+    "payload": {
+      "name": "tests.passed",
+      "value": true,
+      "unit": "boolean"
+    }
+  },
+  {
+    "event_id": "evt-0050",
+    "run_id": "run-20251013-001",
+    "event_type": "run.status.updated",
+    "emitted_at": "2025-10-13T16:13:21.000Z",
+    "severity": "info",
+    "source": {
+      "component": "orchestrator",
+      "agent_id": "pm-orchestrator",
+      "version": "1.2.0"
+    },
+    "payload": {
+      "status": "succeeded",
+      "video_url": "https://www.youtube.com/watch?v=1234567890A",
+      "initiator": "demo-runner"
+    }
+  }
+]

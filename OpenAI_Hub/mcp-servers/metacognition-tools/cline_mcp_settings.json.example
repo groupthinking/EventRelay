@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "metacognition-tools": {
+      "command": "node",
+      "args": [
+        "/Users/garvey/Documents/Cline/MCP/metacognition-tools/build/index.js"
+      ],
+      "env": {
+        "ANTHROPIC_API_KEY": "your_anthropic_api_key_here"
+      },
+      "disabled": false,
+      "autoApprove": []
+    }
+  }
+}

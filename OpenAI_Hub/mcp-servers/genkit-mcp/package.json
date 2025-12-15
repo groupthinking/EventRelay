@@ -1,0 +1,23 @@
+{
+  "name": "genkit-mcp-server",
+  "version": "1.0.0",
+  "description": "Genkit MCP Server Implementation",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "inspect": "npx @modelcontextprotocol/inspector index.js"
+  },
+  "keywords": [
+    "genkit",
+    "mcp",
+    "model-context-protocol"
+  ],
+  "author": "",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "genkit": "latest",
+    "genkitx-mcp": "latest",
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  }
+}

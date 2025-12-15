@@ -1,0 +1,8 @@
+{
+  "name": "@modelcontextprotocol/server-communication-hub",
+  "version": "1.0.0",
+  "description": "MCP communication-hub Interface",
+  "type": "module",
+  "main": "index.js",
+  "bin": "cli.js"
+}

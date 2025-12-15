@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+NAME="${1:?usage: newnode <name>}"
+exec "$HOME/Dev/OpenAI_Hub/bin/new-project.sh" node "$HOME/Code/$NAME" projects "$NAME"

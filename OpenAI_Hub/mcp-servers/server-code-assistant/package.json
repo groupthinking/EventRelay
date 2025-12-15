@@ -1,0 +1,8 @@
+{
+  "name": "@modelcontextprotocol/server-code-assistant",
+  "version": "1.0.0",
+  "description": "MCP code-assistant Interface",
+  "type": "module",
+  "main": "index.js",
+  "bin": "cli.js"
+}

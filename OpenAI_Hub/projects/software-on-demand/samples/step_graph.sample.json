@@ -1,0 +1,253 @@
+{
+  "schema_version": "v1.0",
+  "graph_id": "run-20251013-001",
+  "run_context": {
+    "video_url": "https://www.youtube.com/watch?v=1234567890A",
+    "run_id": "run-20251013-001",
+    "initiated_at": "2025-10-13T16:05:32.000Z",
+    "initiator": "demo-runner",
+    "stack": {
+      "language": "python",
+      "framework": "fastapi",
+      "runtime_version": "3.11"
+    },
+    "notes": "Sample step graph generated from blueprint output."
+  },
+  "steps": [
+    {
+      "id": "context-intake",
+      "display_name": "Context Intake Agent",
+      "kind": "ingest_metadata",
+      "status": "succeeded",
+      "started_at": "2025-10-13T16:05:33.000Z",
+      "completed_at": "2025-10-13T16:05:35.000Z",
+      "retries": 0,
+      "inputs": [
+        {
+          "name": "video_url",
+          "type": "url",
+          "value": "https://www.youtube.com/watch?v=1234567890A"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "tutorial_metadata",
+          "type": "json",
+          "value": {
+            "title": "Build a FastAPI Backend with Agents",
+            "duration_seconds": 1575
+          }
+        }
+      ],
+      "artifacts": []
+    },
+    {
+      "id": "transcribe",
+      "display_name": "Transcribe + Segment Agent",
+      "kind": "transcribe",
+      "status": "succeeded",
+      "started_at": "2025-10-13T16:05:35.500Z",
+      "completed_at": "2025-10-13T16:06:02.000Z",
+      "retries": 0,
+      "inputs": [
+        {
+          "name": "video_audio",
+          "type": "url",
+          "value": "gs://sandbox/audio/run-20251013-001.wav"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "transcript",
+          "type": "file",
+          "value": "gs://sandbox/transcripts/run-20251013-001.json"
+        }
+      ],
+      "artifacts": [
+        {
+          "uri": "gs://sandbox/transcripts/run-20251013-001.json",
+          "type": "file",
+          "checksum": "sha256-abc123",
+          "size_bytes": 58204,
+          "description": "Transcript JSON with timestamps"
+        }
+      ]
+    },
+    {
+      "id": "extract-actions",
+      "display_name": "Action Extraction Agent",
+      "kind": "extract_actions",
+      "status": "succeeded",
+      "started_at": "2025-10-13T16:06:02.500Z",
+      "completed_at": "2025-10-13T16:06:15.000Z",
+      "retries": 0,
+      "inputs": [
+        {
+          "name": "transcript",
+          "type": "file",
+          "value": "gs://sandbox/transcripts/run-20251013-001.json"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "action_plan",
+          "type": "json",
+          "value": {
+            "steps": 18,
+            "commands": 47
+          }
+        }
+      ],
+      "artifacts": []
+    },
+    {
+      "id": "rag-ground",
+      "display_name": "RAG Orchestrator",
+      "kind": "rag_ground",
+      "status": "succeeded",
+      "started_at": "2025-10-13T16:06:15.200Z",
+      "completed_at": "2025-10-13T16:06:25.900Z",
+      "retries": 0,
+      "inputs": [
+        {
+          "name": "action_plan",
+          "type": "json",
+          "value": {
+            "steps": 18,
+            "commands": 47
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "grounded_plan",
+          "type": "json",
+          "value": {
+            "steps": 18,
+            "citations": 52
+          }
+        }
+      ],
+      "artifacts": []
+    },
+    {
+      "id": "execute-build",
+      "display_name": "Build Orchestrator",
+      "kind": "execute",
+      "status": "succeeded",
+      "started_at": "2025-10-13T16:06:26.000Z",
+      "completed_at": "2025-10-13T16:10:58.000Z",
+      "retries": 1,
+      "inputs": [
+        {
+          "name": "grounded_plan",
+          "type": "json",
+          "value": {
+            "steps": 18
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "workspace_snapshot",
+          "type": "url",
+          "value": "gs://sandbox/workspaces/run-20251013-001.tar.gz",
+          "metadata": {
+            "commit": "8f5b3c2"
+          }
+        }
+      ],
+      "tool_invocation": {
+        "model": "gpt-4.2-agent",
+        "tool": "shell",
+        "prompt_tokens": 12562,
+        "completion_tokens": 8901,
+        "cost_usd": 3.28
+      },
+      "artifacts": [
+        {
+          "uri": "gs://sandbox/workspaces/run-20251013-001.tar.gz",
+          "type": "file",
+          "checksum": "sha256-def456",
+          "size_bytes": 12582912,
+          "description": "Workspace archive after execution"
+        }
+      ]
+    },
+    {
+      "id": "verify",
+      "display_name": "Verifier Agent",
+      "kind": "verify",
+      "status": "succeeded",
+      "started_at": "2025-10-13T16:10:59.000Z",
+      "completed_at": "2025-10-13T16:12:05.000Z",
+      "retries": 0,
+      "inputs": [
+        {
+          "name": "workspace_snapshot",
+          "type": "url",
+          "value": "gs://sandbox/workspaces/run-20251013-001.tar.gz",
+          "sensitive": false
+        }
+      ],
+      "outputs": [
+        {
+          "name": "verification_report",
+          "type": "json",
+          "value": {
+            "tests_passed": true,
+            "lint_score": 0.94
+          }
+        }
+      ],
+      "artifacts": [
+        {
+          "uri": "gs://sandbox/reports/run-20251013-001-verification.json",
+          "type": "report",
+          "description": "Consolidated verification results"
+        }
+      ]
+    },
+    {
+      "id": "publish",
+      "display_name": "Publisher Agent",
+      "kind": "publish",
+      "status": "succeeded",
+      "started_at": "2025-10-13T16:12:05.200Z",
+      "completed_at": "2025-10-13T16:13:20.000Z",
+      "retries": 0,
+      "inputs": [
+        {
+          "name": "verification_report",
+          "type": "json",
+          "value": {
+            "tests_passed": true,
+            "lint_score": 0.94
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "pull_request_url",
+          "type": "url",
+          "value": "https://github.com/demo/software-on-demand/pull/42"
+        }
+      ],
+      "artifacts": [
+        {
+          "uri": "https://github.com/demo/software-on-demand/pull/42",
+          "type": "deployment",
+          "description": "GitHub PR ready for review"
+        }
+      ]
+    }
+  ],
+  "edges": [
+    { "from": "context-intake", "to": "transcribe" },
+    { "from": "transcribe", "to": "extract-actions" },
+    { "from": "extract-actions", "to": "rag-ground" },
+    { "from": "rag-ground", "to": "execute-build" },
+    { "from": "execute-build", "to": "verify" },
+    { "from": "verify", "to": "publish" }
+  ]
+}

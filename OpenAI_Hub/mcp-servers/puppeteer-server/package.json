@@ -1,0 +1,9 @@
+{
+  "name": "puppeteer-server",
+  "version": "0.1.0",
+  "type": "module",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "latest",
+    "puppeteer": "^22.0.0"
+  }
+}
