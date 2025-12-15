@@ -1,0 +1,37 @@
+MCP SQL Integration Test Run: 2025-05-06T08:08:34.459Z
+
+=== MCP SQL Integration Test ===
+
+1. Initializing MCP Orchestrator
+
+2. Connecting to PostgreSQL database
+Connected to PostgreSQL database: postgres
+
+3. Setting up test data
+Creating test table: mcp_test_data
+Inserting test data
+
+4. Testing SQL query 1: Simple SELECT
+Query returned 5 rows in 3ms
+SQL extraction complete. Context ID: b4693768-5392-418a-bf13-9b7185c8af52
+
+5. Testing SQL query 2: Aggregation
+Query returned 1 rows in 219ms
+SQL extraction complete. Context ID: 484c015c-693a-4421-9889-5d3891ce65f6
+
+6. Testing SQL query 3: Schema information
+Query returned 4 rows in 51ms
+SQL schema extraction complete. Context ID: 18dd6d3c-c0ba-4605-9c53-88e12d96d830
+
+7. Combining SQL contexts
+SQL context combination complete. Combined Context ID: 79061f57-e761-4fa7-8ec3-78f9a91a7296
+
+8. Generating SQL MCP Visualization
+SQL visualization generated at: /Users/garvey/Desktop/ Framework-Guide-for-Cursor/sql_test_visualization.html
+
+SQL integration test completed successfully!
+
+Running cleanup tasks...
+Closing PostgreSQL connection
+Dropping test table: mcp_test_data
+Error dropping test table: Client was closed and is not queryable

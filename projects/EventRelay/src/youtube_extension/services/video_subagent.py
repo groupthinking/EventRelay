@@ -24,7 +24,8 @@ class YouTubeVideoSubagent:
     """
     
     def __init__(self):
-        self.mcp_server_path = "/Users/garvey/UVAI/05_INFRASTRUCTURE/Grok-Claude-Hybrid-Deployment/self_correcting_executor-R_and_D/mcp_server/main.py"
+        # Updated to point to the new Video Agent Server
+        self.mcp_server_path = "/Users/garvey/Dev/OpenAI_Hub/mcp-servers/servers/video_agent_server.py"
         self.results_dir = Path("/Users/garvey/UVAI/youtube_processing_results")
         self.results_dir.mkdir(exist_ok=True)
         
@@ -55,30 +56,38 @@ class YouTubeVideoSubagent:
         
         try:
             # Step 1: Call MCP tool to process YouTube video
-            logger.info("📡 Dispatching MCP youtube_video_processor tool...")
+            logger.info("📡 Dispatching MCP process_video_pipeline tool...")
+            # Updated to use the new 'process_video_pipeline' tool
             mcp_result = await self._call_mcp_tool(
-                "youtube_video_processor",
+                "process_video_pipeline",
                 {
                     "url": url,
-                    "extract_transcript": True,
-                    "extract_metadata": True,
-                    "domain_analysis": True
+                    "content_type": "general" # Default content type
                 }
             )
             
-            processing_result["mcp_tool_results"]["youtube_video_processor"] = mcp_result
+            processing_result["mcp_tool_results"]["process_video_pipeline"] = mcp_result
             
             if mcp_result.get("status") == "success":
                 # Parse the tool result - handle nested structure
+                # The new server returns content list with JSON string
                 result_data = mcp_result["result"]
-                if "result" in result_data and "content" in result_data["result"]:
-                    tool_data = json.loads(result_data["result"]["content"][0]["text"])
+                if "content" in result_data and isinstance(result_data["content"], list):
+                     tool_data = json.loads(result_data["content"][0]["text"])
                 else:
-                    raise ValueError("Unexpected MCP response structure")
-                
-                if tool_data.get("status") == "success":
+                    # Fallback if it returns direct dict (depending on client implementation)
+                    tool_data = result_data
+
+                if tool_data.get("status") == "completed":
                     processing_result["real_data_extracted"] = True
                     processing_result["video_data"] = tool_data
+                    
+                    # Map new server response fields to expected internal keys for backward compatibility
+                    # New: 'transcription' -> Old: 'transcript' (text)
+                    if "transcription" in tool_data:
+                         tool_data["transcript"] = tool_data["transcription"].get("text", "")
+                    
+                    # New: 'structured_tasks' -> Old usage in _generate_actions
                     
                     # Step 2: Analyze and classify content
                     logger.info("🔍 Analyzing video content and domain...")
@@ -88,6 +97,10 @@ class YouTubeVideoSubagent:
                     # Step 3: Generate domain-specific actions
                     logger.info("⚡ Generating domain-specific actions...")
                     actions = self._generate_actions(tool_data, content_analysis)
+                    # Merge with new server's natively generated tasks if available
+                    if "structured_tasks" in tool_data:
+                        actions.extend(tool_data["structured_tasks"])
+                    
                     processing_result["generated_actions"] = actions
                     
                     # Step 4: Create verification proof

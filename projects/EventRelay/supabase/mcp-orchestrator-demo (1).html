@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MCP Context Visualization</title>
+  <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+  <script src="https://unpkg.com/vis-data/standalone/umd/vis-data.min.js"></script>
+  <style>
+    body, html { margin: 0; padding: 0; font-family: Arial, sans-serif; }
+    #container { width: 100%; height: 100vh; display: flex; }
+    #graph { width: 70%; height: 100%; }
+    #details { width: 30%; height: 100%; overflow: auto; padding: 10px; box-sizing: border-box; }
+    .context-card { 
+      border: 1px solid #ddd; 
+      border-radius: 4px; 
+      margin-bottom: 10px; 
+      padding: 10px; 
+    }
+    .context-header { 
+      font-weight: bold; 
+      margin-bottom: 5px; 
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+    }
+    .context-body { 
+      display: none; 
+      margin-top: 5px; 
+      background: #f9f9f9;
+      padding: 5px;
+      border-radius: 4px;
+      white-space: pre-wrap;
+    }
+    .expanded .context-body { display: block; }
+  </style>
+</head>
+<body>
+  <div id="container">
+    <div id="graph"></div>
+    <div id="details">
+      <h2>MCP Context Visualization</h2>
+      <p>Total Contexts: 5</p>
+      <div id="context-list">
+        
+          <div class="context-card" data-id="claude-conv_demo_ma86ig1o-1746274102110">
+            <div class="context-header">
+              <span>extract - claude</span>
+              <span>7:08:22 AM</span>
+            </div>
+            <div class="context-body">
+              <pre>{
+  "context_id": "claude-conv_demo_ma86ig1o-1746274102110",
+  "operation": "extract",
+  "parameters": {
+    "source": "claude",
+    "conversationId": "conv_demo_ma86ig1o"
+  },
+  "result": {
+    "conversation_id": "conv_demo_ma86ig1o",
+    "created_at": "2025-05-03T12:08:22.099Z",
+    "messages": [
+      {
+        "id": "msg_01",
+        "role": "human",
+        "content": "Hello Claude, I'd like to discuss the Model Context Protocol.",
+        "timestamp": "2025-05-03T11:08:22.106Z"
+      },
+      {
+        "id": "msg_02",
+        "role": "assistant",
+        "content": "Hello! I'd be happy to discuss the Model Context Protocol (MCP). MCP is designed to create a standardized way for AI models to exchange context data with applications and other systems. What specific aspects would you like to explore?",
+        "timestamp": "2025-05-03T11:09:12.110Z"
+      },
+      {
+        "id": "msg_03",
+        "role": "human",
+        "content": "How does MCP help with data extraction from different sources?",
+        "timestamp": "2025-05-03T11:38:22.110Z"
+      },
+      {
+        "id": "msg_04",
+        "role": "assistant",
+        "content": "MCP helps with data extraction by providing a consistent format for context data across different sources. This means you can have extractors for various platforms (like Claude, GitHub, Cursor, etc.) that all output data in the same structured format. The benefits include:\n\n1. **Uniformity**: All extracted data follows the same schema\n2. **Traceability**: Every extraction operation has a unique context_id\n3. **Composability**: You can combine contexts from multiple sources\n4. **Extensibility**: Easy to add new data sources with the same interface\n\nThis makes it much easier to build systems that can work with multiple data sources without having to handle each one differently.",
+        "timestamp": "2025-05-03T11:39:12.110Z"
+      }
+    ]
+  },
+  "metadata": {
+    "extractionTime": "2025-05-03T12:08:22.110Z",
+    "messageCount": 4,
+    "using_real_api": true
+  },
+  "addedAt": 1746274102500
+}</pre>
+            </div>
+          </div>
+        
+          <div class="context-card" data-id="github-mcp-framework-github-extractor-main--1746274102822">
+            <div class="context-header">
+              <span>extract - github</span>
+              <span>7:08:22 AM</span>
+            </div>
+            <div class="context-body">
+              <pre>{
+  "context_id": "github-mcp-framework-github-extractor-main--1746274102822",
+  "operation": "extract",
+  "parameters": {
+    "source": "github",
+    "owner": "mcp-framework",
+    "repo": "github-extractor",
+    "branch": "main",
+    "path": ""
+  },
+  "result": {
+    "repository": {
+      "id": 12345678,
+      "name": "github-extractor",
+      "full_name": "mcp-framework/github-extractor",
+      "description": "A mock repository for MCP extraction testing",
+      "default_branch": "main",
+      "created_at": "2023-05-01T00:00:00Z",
+      "updated_at": "2025-05-03T12:08:22.706Z",
+      "language": "JavaScript",
+      "stars": 42,
+      "forks": 13
+    },
+    "contents": [
+      {
+        "name": "src",
+        "path": "src",
+        "type": "dir",
+        "url": "https://api.github.com/repos/mcp-framework/github-extractor/contents/src?ref=main"
+      },
+      {
+        "name": "package.json",
+        "path": "package.json",
+        "type": "file",
+        "size": 1024,
+        "url": "https://api.github.com/repos/mcp-framework/github-extractor/contents/package.json?ref=main"
+      },
+      {
+        "name": "README.md",
+        "path": "README.md",
+        "type": "file",
+        "size": 2048,
+        "url": "https://api.github.com/repos/mcp-framework/github-extractor/contents/README.md?ref=main"
+      }
+    ],
+    "recent_commits": [
+      {
+        "sha": "commit0h9y",
+        "message": "Add MCP support for GitHub extraction",
+        "author": "MCP Developer",
+        "date": "2025-05-03T12:08:22.772Z",
+        "url": "https://github.com/mcp-framework/github-extractor/commit/abc0"
+      },
+      {
+        "sha": "commit1h9y",
+        "message": "Mock commit message 1",
+        "author": "MCP Developer",
+        "date": "2025-05-02T12:08:22.774Z",
+        "url": "https://github.com/mcp-framework/github-extractor/commit/abc1"
+      },
+      {
+        "sha": "commit2h9y",
+        "message": "Mock commit message 2",
+        "author": "MCP Developer",
+        "date": "2025-05-01T12:08:22.774Z",
+        "url": "https://github.com/mcp-framework/github-extractor/commit/abc2"
+      },
+      {
+        "sha": "commit3h9y",
+        "message": "Mock commit message 3",
+        "author": "MCP Developer",
+        "date": "2025-04-30T12:08:22.774Z",
+        "url": "https://github.com/mcp-framework/github-extractor/commit/abc3"
+      },
+      {
+        "sha": "commit4h9y",
+        "message": "Mock commit message 4",
+        "author": "MCP Developer",
+        "date": "2025-04-29T12:08:22.774Z",
+        "url": "https://github.com/mcp-framework/github-extractor/commit/abc4"
+      }
+    ]
+  },
+  "metadata": {
+    "extractionTime": "2025-05-03T12:08:22.822Z",
+    "api_version": "v3"
+  },
+  "addedAt": 1746274102960
+}</pre>
+            </div>
+          </div>
+        
+          <div class="context-card" data-id="claude-conv_multi_ma86ihf4-1746274103037">
+            <div class="context-header">
+              <span>extract - claude</span>
+              <span>7:08:23 AM</span>
+            </div>
+            <div class="context-body">
+              <pre>{
+  "context_id": "claude-conv_multi_ma86ihf4-1746274103037",
+  "operation": "extract",
+  "parameters": {
+    "source": "claude",
+    "conversationId": "conv_multi_ma86ihf4"
+  },
+  "result": {
+    "conversation_id": "conv_multi_ma86ihf4",
+    "created_at": "2025-05-03T12:08:23.037Z",
+    "messages": [
+      {
+        "id": "msg_01",
+        "role": "human",
+        "content": "Hello Claude, I'd like to discuss the Model Context Protocol.",
+        "timestamp": "2025-05-03T11:08:23.037Z"
+      },
+      {
+        "id": "msg_02",
+        "role": "assistant",
+        "content": "Hello! I'd be happy to discuss the Model Context Protocol (MCP). MCP is designed to create a standardized way for AI models to exchange context data with applications and other systems. What specific aspects would you like to explore?",
+        "timestamp": "2025-05-03T11:09:13.037Z"
+      },
+      {
+        "id": "msg_03",
+        "role": "human",
+        "content": "How does MCP help with data extraction from different sources?",
+        "timestamp": "2025-05-03T11:38:23.037Z"
+      },
+      {
+        "id": "msg_04",
+        "role": "assistant",
+        "content": "MCP helps with data extraction by providing a consistent format for context data across different sources. This means you can have extractors for various platforms (like Claude, GitHub, Cursor, etc.) that all output data in the same structured format. The benefits include:\n\n1. **Uniformity**: All extracted data follows the same schema\n2. **Traceability**: Every extraction operation has a unique context_id\n3. **Composability**: You can combine contexts from multiple sources\n4. **Extensibility**: Easy to add new data sources with the same interface\n\nThis makes it much easier to build systems that can work with multiple data sources without having to handle each one differently.",
+        "timestamp": "2025-05-03T11:39:13.037Z"
+      }
+    ]
+  },
+  "metadata": {
+    "extractionTime": "2025-05-03T12:08:23.037Z",
+    "messageCount": 4,
+    "using_real_api": true
+  },
+  "addedAt": 1746274103165
+}</pre>
+            </div>
+          </div>
+        
+          <div class="context-card" data-id="github-mcp-framework-another-repo-main--1746274103266">
+            <div class="context-header">
+              <span>extract - github</span>
+              <span>7:08:23 AM</span>
+            </div>
+            <div class="context-body">
+              <pre>{
+  "context_id": "github-mcp-framework-another-repo-main--1746274103266",
+  "operation": "extract",
+  "parameters": {
+    "source": "github",
+    "owner": "mcp-framework",
+    "repo": "another-repo",
+    "branch": "main",
+    "path": ""
+  },
+  "result": {
+    "repository": {
+      "id": 12345678,
+      "name": "another-repo",
+      "full_name": "mcp-framework/another-repo",
+      "description": "A mock repository for MCP extraction testing",
+      "default_branch": "main",
+      "created_at": "2023-05-01T00:00:00Z",
+      "updated_at": "2025-05-03T12:08:23.164Z",
+      "language": "JavaScript",
+      "stars": 42,
+      "forks": 13
+    },
+    "contents": [
+      {
+        "name": "src",
+        "path": "src",
+        "type": "dir",
+        "url": "https://api.github.com/repos/mcp-framework/another-repo/contents/src?ref=main"
+      },
+      {
+        "name": "package.json",
+        "path": "package.json",
+        "type": "file",
+        "size": 1024,
+        "url": "https://api.github.com/repos/mcp-framework/another-repo/contents/package.json?ref=main"
+      },
+      {
+        "name": "README.md",
+        "path": "README.md",
+        "type": "file",
+        "size": 2048,
+        "url": "https://api.github.com/repos/mcp-framework/another-repo/contents/README.md?ref=main"
+      }
+    ],
+    "recent_commits": [
+      {
+        "sha": "commit0hmc",
+        "message": "Add MCP support for GitHub extraction",
+        "author": "MCP Developer",
+        "date": "2025-05-03T12:08:23.220Z",
+        "url": "https://github.com/mcp-framework/another-repo/commit/abc0"
+      },
+      {
+        "sha": "commit1hmd",
+        "message": "Mock commit message 1",
+        "author": "MCP Developer",
+        "date": "2025-05-02T12:08:23.221Z",
+        "url": "https://github.com/mcp-framework/another-repo/commit/abc1"
+      },
+      {
+        "sha": "commit2hmd",
+        "message": "Mock commit message 2",
+        "author": "MCP Developer",
+        "date": "2025-05-01T12:08:23.221Z",
+        "url": "https://github.com/mcp-framework/another-repo/commit/abc2"
+      },
+      {
+        "sha": "commit3hmd",
+        "message": "Mock commit message 3",
+        "author": "MCP Developer",
+        "date": "2025-04-30T12:08:23.221Z",
+        "url": "https://github.com/mcp-framework/another-repo/commit/abc3"
+      },
+      {
+        "sha": "commit4hmd",
+        "message": "Mock commit message 4",
+        "author": "MCP Developer",
+        "date": "2025-04-29T12:08:23.221Z",
+        "url": "https://github.com/mcp-framework/another-repo/commit/abc4"
+      }
+    ]
+  },
+  "metadata": {
+    "extractionTime": "2025-05-03T12:08:23.266Z",
+    "api_version": "v3"
+  },
+  "addedAt": 1746274103401
+}</pre>
+            </div>
+          </div>
+        
+          <div class="context-card" data-id="demo-combination-1746274103402">
+            <div class="context-header">
+              <span>combine - unknown</span>
+              <span>7:08:23 AM</span>
+            </div>
+            <div class="context-body">
+              <pre>{
+  "context_id": "demo-combination-1746274103402",
+  "operation": "combine",
+  "parameters": {
+    "sources": [
+      "claude",
+      "github"
+    ],
+    "contextIds": [
+      "claude-conv_demo_ma86ig1o-1746274102110",
+      "github-mcp-framework-github-extractor-main--1746274102822"
+    ]
+  },
+  "result": {
+    "claude": {
+      "context_id": "claude-conv_demo_ma86ig1o-1746274102110",
+      "operation": "extract",
+      "parameters": {
+        "source": "claude",
+        "conversationId": "conv_demo_ma86ig1o"
+      },
+      "result": {
+        "conversation_id": "conv_demo_ma86ig1o",
+        "created_at": "2025-05-03T12:08:22.099Z",
+        "messages": [
+          {
+            "id": "msg_01",
+            "role": "human",
+            "content": "Hello Claude, I'd like to discuss the Model Context Protocol.",
+            "timestamp": "2025-05-03T11:08:22.106Z"
+          },
+          {
+            "id": "msg_02",
+            "role": "assistant",
+            "content": "Hello! I'd be happy to discuss the Model Context Protocol (MCP). MCP is designed to create a standardized way for AI models to exchange context data with applications and other systems. What specific aspects would you like to explore?",
+            "timestamp": "2025-05-03T11:09:12.110Z"
+          },
+          {
+            "id": "msg_03",
+            "role": "human",
+            "content": "How does MCP help with data extraction from different sources?",
+            "timestamp": "2025-05-03T11:38:22.110Z"
+          },
+          {
+            "id": "msg_04",
+            "role": "assistant",
+            "content": "MCP helps with data extraction by providing a consistent format for context data across different sources. This means you can have extractors for various platforms (like Claude, GitHub, Cursor, etc.) that all output data in the same structured format. The benefits include:\n\n1. **Uniformity**: All extracted data follows the same schema\n2. **Traceability**: Every extraction operation has a unique context_id\n3. **Composability**: You can combine contexts from multiple sources\n4. **Extensibility**: Easy to add new data sources with the same interface\n\nThis makes it much easier to build systems that can work with multiple data sources without having to handle each one differently.",
+            "timestamp": "2025-05-03T11:39:12.110Z"
+          }
+        ]
+      },
+      "metadata": {
+        "extractionTime": "2025-05-03T12:08:22.110Z",
+        "messageCount": 4,
+        "using_real_api": true
+      }
+    },
+    "github": {
+      "context_id": "github-mcp-framework-github-extractor-main--1746274102822",
+      "operation": "extract",
+      "parameters": {
+        "source": "github",
+        "owner": "mcp-framework",
+        "repo": "github-extractor",
+        "branch": "main",
+        "path": ""
+      },
+      "result": {
+        "repository": {
+          "id": 12345678,
+          "name": "github-extractor",
+          "full_name": "mcp-framework/github-extractor",
+          "description": "A mock repository for MCP extraction testing",
+          "default_branch": "main",
+          "created_at": "2023-05-01T00:00:00Z",
+          "updated_at": "2025-05-03T12:08:22.706Z",
+          "language": "JavaScript",
+          "stars": 42,
+          "forks": 13
+        },
+        "contents": [
+          {
+            "name": "src",
+            "path": "src",
+            "type": "dir",
+            "url": "https://api.github.com/repos/mcp-framework/github-extractor/contents/src?ref=main"
+          },
+          {
+            "name": "package.json",
+            "path": "package.json",
+            "type": "file",
+            "size": 1024,
+            "url": "https://api.github.com/repos/mcp-framework/github-extractor/contents/package.json?ref=main"
+          },
+          {
+            "name": "README.md",
+            "path": "README.md",
+            "type": "file",
+            "size": 2048,
+            "url": "https://api.github.com/repos/mcp-framework/github-extractor/contents/README.md?ref=main"
+          }
+        ],
+        "recent_commits": [
+          {
+            "sha": "commit0h9y",
+            "message": "Add MCP support for GitHub extraction",
+            "author": "MCP Developer",
+            "date": "2025-05-03T12:08:22.772Z",
+            "url": "https://github.com/mcp-framework/github-extractor/commit/abc0"
+          },
+          {
+            "sha": "commit1h9y",
+            "message": "Mock commit message 1",
+            "author": "MCP Developer",
+            "date": "2025-05-02T12:08:22.774Z",
+            "url": "https://github.com/mcp-framework/github-extractor/commit/abc1"
+          },
+          {
+            "sha": "commit2h9y",
+            "message": "Mock commit message 2",
+            "author": "MCP Developer",
+            "date": "2025-05-01T12:08:22.774Z",
+            "url": "https://github.com/mcp-framework/github-extractor/commit/abc2"
+          },
+          {
+            "sha": "commit3h9y",
+            "message": "Mock commit message 3",
+            "author": "MCP Developer",
+            "date": "2025-04-30T12:08:22.774Z",
+            "url": "https://github.com/mcp-framework/github-extractor/commit/abc3"
+          },
+          {
+            "sha": "commit4h9y",
+            "message": "Mock commit message 4",
+            "author": "MCP Developer",
+            "date": "2025-04-29T12:08:22.774Z",
+            "url": "https://github.com/mcp-framework/github-extractor/commit/abc4"
+          }
+        ]
+      },
+      "metadata": {
+        "extractionTime": "2025-05-03T12:08:22.822Z",
+        "api_version": "v3"
+      }
+    }
+  },
+  "metadata": {
+    "combinationTime": "2025-05-03T12:08:23.402Z",
+    "sourceCount": 2
+  },
+  "addedAt": 1746274103402
+}</pre>
+            </div>
+          </div>
+        
+      </div>
+    </div>
+  </div>
+  
+  <script>
+    // Graph visualization
+    const container = document.getElementById('graph');
+    
+    // Create data for vis.js
+    const nodes = new vis.DataSet([{"id":"claude-conv_demo_ma86ig1o-1746274102110","label":"claude","title":"extract - claude-conv_demo_ma86ig1o-1746274102110","group":"claude"},{"id":"github-mcp-framework-github-extractor-main--1746274102822","label":"github","title":"extract - github-mcp-framework-github-extractor-main--1746274102822","group":"github"},{"id":"claude-conv_multi_ma86ihf4-1746274103037","label":"claude","title":"extract - claude-conv_multi_ma86ihf4-1746274103037","group":"claude"},{"id":"github-mcp-framework-another-repo-main--1746274103266","label":"github","title":"extract - github-mcp-framework-another-repo-main--1746274103266","group":"github"},{"id":"demo-combination-1746274103402","label":"demo","title":"combine - demo-combination-1746274103402","group":"unknown"}]);
+    const edges = new vis.DataSet([{"from":"claude-conv_demo_ma86ig1o-1746274102110","to":"demo-combination-1746274103402","arrows":"to"},{"from":"github-mcp-framework-github-extractor-main--1746274102822","to":"demo-combination-1746274103402","arrows":"to"}]);
+    
+    // Create network
+    const data = { nodes, edges };
+    const options = {
+      nodes: {
+        shape: 'dot',
+        size: 16,
+        font: {
+          size: 12
+        }
+      },
+      edges: {
+        width: 1,
+        smooth: {
+          type: 'continuous'
+        }
+      },
+      physics: {
+        stabilization: false,
+        barnesHut: {
+          gravitationalConstant: -80000,
+          springConstant: 0.001,
+          springLength: 200
+        }
+      },
+      groups: {
+        claude: { color: { background: '#9370DB' } },
+        github: { color: { background: '#6E7781' } },
+        cursor: { color: { background: '#0969DA' } },
+        replit: { color: { background: '#F26207' } },
+        gemini: { color: { background: '#1F8FFF' } },
+        unknown: { color: { background: '#cccccc' } }
+      }
+    };
+    
+    // Initialize network
+    const network = new vis.Network(container, data, options);
+    
+    // Handle node selection
+    network.on('click', function(params) {
+      if (params.nodes.length > 0) {
+        const nodeId = params.nodes[0];
+        const card = document.querySelector(`.context-card[data-id="${nodeId}"]`);
+        if (card) {
+          // Scroll to and highlight the card
+          card.scrollIntoView({ behavior: 'smooth' });
+          card.classList.add('expanded');
+          
+          // Briefly highlight with animation
+          card.style.transition = 'background-color 0.5s';
+          card.style.backgroundColor = '#ffffdd';
+          setTimeout(() => {
+            card.style.backgroundColor = '';
+          }, 1000);
+        }
+      }
+    });
+    
+    // Context card expansion
+    document.querySelectorAll('.context-header').forEach(header => {
+      header.addEventListener('click', () => {
+        const card = header.parentElement;
+        card.classList.toggle('expanded');
+      });
+    });
+  </script>
+</body>
+</html>

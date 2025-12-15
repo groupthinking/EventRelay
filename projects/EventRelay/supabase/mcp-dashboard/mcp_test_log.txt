@@ -1,0 +1,85 @@
+MCP Framework Test Run: 2025-05-05T03:33:14.200Z
+
+=== MCP Framework Full Test ===
+
+1. Initializing MCP Orchestrator
+Registered extractors: claude, github, cursor, sql, document
+
+2. Testing Claude Extractor
+Claude extraction complete. Context ID: 97811a36-5a3f-456c-a6a8-53c69d45b490
+
+3. Testing GitHub Extractor
+GitHub extraction complete. Context ID: df92d2b7-9a25-40d3-a0dc-d9a357260196
+
+4. Testing Cursor Extractor
+Cursor extraction complete. Context ID: 671f63ba-9fbb-4385-8684-db16559d12bb
+
+5. Testing SQL Extractor
+SQL extraction complete. Context ID: 898c0fb8-d688-4e6a-a337-cd26eb67cec7
+
+6. Testing Document Extractor
+Creating test document at: /Users/garvey/Desktop/ Framework-Guide-for-Cursor/test_document.txt
+Test document successfully created at: /Users/garvey/Desktop/ Framework-Guide-for-Cursor/test_document.txt
+Document extraction parameters: { filePath: '/Users/garvey/Desktop/ Framework-Guide-for-Cursor/test_document.txt', documentType: 'txt', extractMetadata: true, extractStructure: true }
+Document extraction complete. Context ID: f745ac98-7ce6-4969-9323-ef444ed545ce
+
+7. Testing Context Combination
+Context combination complete. Combined Context ID: 85c8dffc-37ba-4193-bdbc-d5bd79c18365
+
+8. Generating MCP Visualization
+Visualization generated at: /Users/garvey/Desktop/ Framework-Guide-for-Cursor/full_test_visualization.html
+
+9. Exporting Contexts
+Contexts exported to: /Users/garvey/Desktop/ Framework-Guide-for-Cursor/full_test_contexts.json
+
+10. MCP Context Analytics
+Analytics: {
+  "totalContexts": 6,
+  "sourceBreakdown": {
+    "claude": 1,
+    "github": 1,
+    "cursor": 1,
+    "sql": 1,
+    "document": 1,
+    "unknown": 1
+  },
+  "operationBreakdown": {
+    "extract": 5,
+    "combine": 1
+  },
+  "timeRange": {
+    "start": "2025-05-05T03:33:15.086Z",
+    "end": "2025-05-05T03:33:16.759Z",
+    "durationMs": 1673
+  },
+  "mostConnectedContexts": [
+    [
+      "97811a36-5a3f-456c-a6a8-53c69d45b490",
+      1
+    ],
+    [
+      "df92d2b7-9a25-40d3-a0dc-d9a357260196",
+      1
+    ],
+    [
+      "671f63ba-9fbb-4385-8684-db16559d12bb",
+      1
+    ],
+    [
+      "898c0fb8-d688-4e6a-a337-cd26eb67cec7",
+      1
+    ],
+    [
+      "f745ac98-7ce6-4969-9323-ef444ed545ce",
+      1
+    ]
+  ],
+  "contextRelationships": 5,
+  "orphanedContexts": 5
+}
+
+All tests completed successfully!
+Tracked 5 contexts in this test run.
+
+Running cleanup tasks...
+Test document removed during cleanup

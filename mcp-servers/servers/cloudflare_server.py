@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """
-Code Analysis Agent MCP Server
-==============================
+Cloudflare MCP Server
+=====================
 
-Exposes Code Analysis capabilities (Security, Performance, Style) 
-as an MCP Server.
+Exposes Cloudflare capabilities as an MCP Server.
 """
 
 import asyncio
@@ -12,36 +11,36 @@ import json
 import logging
 import sys
 import os
-from typing import Dict, List, Any, Optional
-from datetime import datetime
+import requests
+from typing import Dict, Any, Optional
 
 # Add lib directory to path
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 LIB_DIR = os.path.join(BASE_DIR, '..', 'lib')
-# Add agents directory to path specifically for direct imports if needed
-AGENTS_DIR = os.path.join(LIB_DIR, 'agents')
 sys.path.append(LIB_DIR)
-sys.path.append(AGENTS_DIR)
-
-try:
-    from agents.code_analysis_subagents import SecurityAnalyzerAgent, PerformanceOptimizerAgent, StyleCheckerAgent
-except ImportError:
-    # Fallback if agents package structure is different
-    from code_analysis_subagents import SecurityAnalyzerAgent, PerformanceOptimizerAgent, StyleCheckerAgent
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, stream=sys.stderr)
-LOGGER = logging.getLogger("code-analysis-server")
+LOGGER = logging.getLogger("cloudflare-server")
 
 # Constants
 MCP_VERSION = "2024-11-05"
+CLOUDFLARE_API_BASE = "https://api.cloudflare.com/client/v4"
+# Credentials from task context
+ACCOUNT_ID = "a8b9cb3a634fca2b1a670019dfa76e15"
+# Using the primary token from the top of the file
+API_TOKEN = "QowMt_bpgC9kc0hD5WRQ2DdlAw0kvOQVFOBcFZLb"
 
-class MCPServer:
+class CloudflareServer:
     def __init__(self):
-        self.security_agent = SecurityAnalyzerAgent()
-        self.performance_agent = PerformanceOptimizerAgent()
-        self.style_agent = StyleCheckerAgent()
-        
+        self.account_id = ACCOUNT_ID
+        self.api_token = API_TOKEN
+        self.session = requests.Session()
+        self.session.headers.update({
+            "Authorization": f"Bearer {self.api_token}",
+            "Content-Type": "application/json"
+        })
+
     async def handle_request(self, request_data: Dict[str, Any]) -> Dict[str, Any]:
         """Handle incoming JSON-RPC requests."""
         request_id = request_data.get("id")
@@ -76,7 +75,7 @@ class MCPServer:
             "id": request_id,
             "result": {
                 "serverInfo": {
-                    "name": "Code Analysis Agent MCP",
+                    "name": "Cloudflare MCP",
                     "version": "1.0.0",
                     "mcpVersion": MCP_VERSION,
                 },
@@ -94,39 +93,15 @@ class MCPServer:
             "result": {
                 "tools": [
                     {
-                        "name": "scan_security",
-                        "description": "Perform security scan on code",
+                        "name": "get_gateway_url",
+                        "description": "Get the URL for a Cloudflare AI Gateway",
                         "inputSchema": {
                             "type": "object",
                             "properties": {
-                                "code": {"type": "string", "description": "Source code to scan"},
-                                "language": {"type": "string", "description": "Programming language (default: python)"}
+                                "gateway_id": {"type": "string", "description": "The ID/Name of the gateway (e.g. 'netmesh')"},
+                                "provider": {"type": "string", "description": "The provider name (e.g. 'openai', 'anthropic')"}
                             },
-                            "required": ["code"]
-                        }
-                    },
-                    {
-                        "name": "analyze_performance",
-                        "description": "Analyze code performance and identify bottlenecks",
-                        "inputSchema": {
-                            "type": "object",
-                            "properties": {
-                                "code": {"type": "string"},
-                                "language": {"type": "string"}
-                            },
-                            "required": ["code"]
-                        }
-                    },
-                    {
-                        "name": "check_style",
-                        "description": "Check code style and conventions",
-                        "inputSchema": {
-                            "type": "object",
-                            "properties": {
-                                "code": {"type": "string"},
-                                "language": {"type": "string"}
-                            },
-                            "required": ["code"]
+                            "required": ["gateway_id", "provider"]
                         }
                     }
                 ]
@@ -139,21 +114,35 @@ class MCPServer:
 
         result = {}
         
-        # Map MCP tools to Agent internal methods
-        # Note: The agents expect a 'data' dictionary in their internal intents
-        # so we wrap arguments in the expected structure if calling _perform_* methods DIRECTLY
-        # OR we call process_intent if we want the full agent flow.
-        # Direct method calls are safer/simpler here since we know the mapping.
-        
-        if tool_name == "scan_security":
-            result = await self.security_agent._perform_security_scan(arguments)
+        if tool_name == "get_gateway_url":
+            gateway_id = arguments.get("gateway_id")
+            provider = arguments.get("provider")
+            if not gateway_id or not provider:
+                raise ValueError("gateway_id and provider are required")
             
-        elif tool_name == "analyze_performance":
-            result = await self.performance_agent._analyze_performance(arguments)
+            url = f"{CLOUDFLARE_API_BASE}/accounts/{self.account_id}/ai-gateway/gateways/{gateway_id}/url/{provider}"
+            
+            try:
+                # Run blocking IO in executor
+                loop = asyncio.get_event_loop()
+                response = await loop.run_in_executor(None, self._make_request, url)
+                
+                if response.ok:
+                   data = response.json()
+                   if data.get("success"):
+                       result_url = data.get("result")
+                       result = {
+                           "url": result_url,
+                           "full_response": data
+                       }
+                   else:
+                       raise Exception(f"Cloudflare API error: {data.get('errors')}")
+                else:
+                    raise Exception(f"HTTP Error {response.status_code}: {response.text}")
 
-        elif tool_name == "check_style":
-            result = await self.style_agent._check_style(arguments)
-            
+            except Exception as e:
+                raise Exception(f"Request failed: {str(e)}")
+
         else:
             raise Exception(f"Unknown tool: {tool_name}")
 
@@ -170,9 +159,12 @@ class MCPServer:
             }
         }
 
+    def _make_request(self, url):
+        return self.session.get(url)
+
 async def main():
-    server = MCPServer()
-    LOGGER.info("Code Analysis Server running on stdio...")
+    server = CloudflareServer()
+    LOGGER.info("Cloudflare MCP Server running on stdio...")
     
     reader = asyncio.StreamReader()
     protocol = asyncio.StreamReaderProtocol(reader)
@@ -190,9 +182,18 @@ async def main():
             line = await reader.readline()
             if not line:
                 break
+                
+            request_data = json.loads(line)
+            response = await server.handle_request(request_data)
             
+            if response:
+                response_str = json.dumps(response)
+                if writer:
+                    writer.write(response_str.encode() + b"\n")
+                    await writer.drain()
                 else:
-                    print(response_str, flush=True)
+                    sys.stdout.write(response_str + "\n")
+                    sys.stdout.flush()
                     
         except json.JSONDecodeError:
             pass 

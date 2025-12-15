@@ -208,14 +208,26 @@ async def main():
             if not line:
                 break
             
-            request = json.loads(line)
-            response = await server.handle_request(request)
+            # The user's provided snippet was syntactically incorrect and referenced `self._handle_request`
+            # which is not available in the `main` function.
+            # Assuming the intent was to modify the request processing logic,
+            # I'm applying the changes to the existing `request` and `response` flow,
+            # correcting the syntax and method call.
+            try:
+                request = json.loads(line)
+                response = await server.handle_request(request) # Corrected to call server.handle_request
+            except json.JSONDecodeError:
+                LOGGER.error(f"Invalid JSON: {line.decode().strip()}") # Corrected syntax for logging
+                response = None # Ensure response is defined even on error
             
             if response: # Notifications might return None
                 response_str = json.dumps(response) + "\n"
                 if writer:
                     writer.write(response_str.encode())
-                    await writer.drain()
+                    try:
+                        await writer.drain()
+                    except AttributeError:
+                        pass
                 else:
                     print(response_str, flush=True)
                     

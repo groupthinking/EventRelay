@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MCP-Supabase Integration Demo</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+      line-height: 1.6;
+      color: #333;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    h1 {
+      color: #2563eb;
+      margin-bottom: 20px;
+    }
+    .container {
+      background-color: #f5f7fa;
+      border-radius: 8px;
+      padding: 20px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    button {
+      background-color: #2563eb;
+      color: white;
+      border: none;
+      padding: 10px 15px;
+      border-radius: 4px;
+      cursor: pointer;
+      margin-right: 10px;
+      margin-bottom: 10px;
+      font-weight: 500;
+    }
+    button:hover {
+      background-color: #1d4ed8;
+    }
+    button:disabled {
+      background-color: #93c5fd;
+      cursor: not-allowed;
+    }
+    .test-panel {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    .output {
+      background-color: #1e293b;
+      color: #f8fafc;
+      padding: 15px;
+      border-radius: 4px;
+      font-family: monospace;
+      white-space: pre-wrap;
+      overflow-x: auto;
+      height: 300px;
+      overflow-y: auto;
+    }
+    .info {
+      background-color: #ecfdf5;
+      border-left: 4px solid #10b981;
+      padding: 10px 15px;
+      margin-bottom: 20px;
+      border-radius: 0 4px 4px 0;
+    }
+    .context-view {
+      margin-top: 20px;
+      background-color: #eff6ff;
+      padding: 15px;
+      border-radius: 4px;
+      border: 1px solid #bfdbfe;
+    }
+    .context-item {
+      margin-bottom: 10px;
+      padding: 8px;
+      background-color: white;
+      border-radius: 4px;
+      border: 1px solid #e5e7eb;
+    }
+    .context-id {
+      font-weight: bold;
+      margin-bottom: 5px;
+    }
+    .context-details {
+      font-size: 0.9em;
+      color: #4b5563;
+    }
+    .controls {
+      margin: 20px 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>MCP-Supabase Integration Demo</h1>
+    
+    <div class="info">
+      <p>This demo demonstrates the MCP (Model Context Protocol) integration with Supabase, providing full context propagation for all database operations.</p>
+    </div>
+    
+    <div class="controls">
+      <div>
+        <button id="clear-log">Clear Log</button>
+        <button id="run-all">Run All Tests</button>
+      </div>
+      <div>
+        <input type="checkbox" id="auto-fetch-contexts" checked>
+        <label for="auto-fetch-contexts">Auto-fetch contexts</label>
+      </div>
+    </div>
+    
+    <div class="test-panel">
+      <button id="test-direct">Test Direct Mode</button>
+      <button id="test-workflow">Test Workflow Mode</button>
+      <button id="test-batch">Test Batch Mode</button>
+      <button id="test-query">Test Simple Query</button>
+    </div>
+    
+    <div class="output" id="output">Waiting for test to run...</div>
+    
+    <div class="context-view" id="context-view">
+      <h3>MCP Contexts</h3>
+      <p>Contexts from operations will appear here</p>
+      <div id="context-list"></div>
+    </div>
+  </div>
+
+  <script type="module">
+    // Import the test module
+    import { testDirectMode, testWorkflowMode, testBatchMode, testQueryMode, runAllTests } from '/lib/test_mcp_supabase.js';
+    
+    // Store context IDs
+    let contextIds = [];
+    
+    // DOM elements
+    const output = document.getElementById('output');
+    const contextView = document.getElementById('context-view');
+    const contextList = document.getElementById('context-list');
+    const autoFetchCheckbox = document.getElementById('auto-fetch-contexts');
+    
+    // Redirect console logs to the output panel
+    const originalConsoleLog = console.log;
+    const originalConsoleError = console.error;
+    
+    console.log = (...args) => {
+      originalConsoleLog(...args);
+      output.innerHTML += args.map(arg => 
+        typeof arg === 'object' ? JSON.stringify(arg, null, 2) : arg
+      ).join(' ') + '\n';
+      output.scrollTop = output.scrollHeight;
+    };
+    
+    console.error = (...args) => {
+      originalConsoleError(...args);
+      output.innerHTML += '<span style="color: #ef4444;">' + 
+        args.map(arg => typeof arg === 'object' ? JSON.stringify(arg, null, 2) : arg).join(' ') + 
+        '</span>\n';
+      output.scrollTop = output.scrollHeight;
+    };
+    
+    // Button handlers
+    document.getElementById('clear-log').addEventListener('click', () => {
+      output.innerHTML = '';
+      contextList.innerHTML = '';
+      contextIds = [];
+    });
+    
+    document.getElementById('run-all').addEventListener('click', async () => {
+      disableButtons(true);
+      output.innerHTML = '';
+      await runAllTests();
+      disableButtons(false);
+      if (autoFetchCheckbox.checked) {
+        fetchContexts();
+      }
+    });
+    
+    document.getElementById('test-direct').addEventListener('click', async () => {
+      disableButtons(true);
+      output.innerHTML = '';
+      await testDirectMode();
+      disableButtons(false);
+      if (autoFetchCheckbox.checked) {
+        fetchContexts();
+      }
+    });
+    
+    document.getElementById('test-workflow').addEventListener('click', async () => {
+      disableButtons(true);
+      output.innerHTML = '';
+      await testWorkflowMode();
+      disableButtons(false);
+      if (autoFetchCheckbox.checked) {
+        fetchContexts();
+      }
+    });
+    
+    document.getElementById('test-batch').addEventListener('click', async () => {
+      disableButtons(true);
+      output.innerHTML = '';
+      await testBatchMode();
+      disableButtons(false);
+      if (autoFetchCheckbox.checked) {
+        fetchContexts();
+      }
+    });
+    
+    document.getElementById('test-query').addEventListener('click', async () => {
+      disableButtons(true);
+      output.innerHTML = '';
+      await testQueryMode();
+      disableButtons(false);
+      if (autoFetchCheckbox.checked) {
+        fetchContexts();
+      }
+    });
+    
+    // Helper to disable buttons during tests
+    function disableButtons(disabled) {
+      document.querySelectorAll('button').forEach(button => {
+        button.disabled = disabled;
+      });
+    }
+    
+    // Extract context IDs from console output
+    function extractContextIds() {
+      const outputText = output.innerText;
+      const regex = /"contextId":\s*"([a-f0-9-]+)"/g;
+      let match;
+      const ids = [];
+      
+      while ((match = regex.exec(outputText)) !== null) {
+        ids.push(match[1]);
+      }
+      
+      return [...new Set(ids)]; // Remove duplicates
+    }
+    
+    // Fetch contexts from the logs API
+    async function fetchContexts() {
+      try {
+        // Extract context IDs from the output
+        contextIds = extractContextIds();
+        
+        if (contextIds.length === 0) {
+          contextList.innerHTML = '<p>No context IDs found in the output</p>';
+          return;
+        }
+        
+        contextList.innerHTML = '<p>Fetching contexts...</p>';
+        
+        // Fetch contexts for each ID
+        const contexts = [];
+        for (const contextId of contextIds) {
+          // Use the mcp_logs table via our API
+          const response = await fetch(`/api/admin/logs?limit=100`);
+          if (!response.ok) {
+            throw new Error(`Failed to fetch contexts: ${response.statusText}`);
+          }
+          
+          const data = await response.json();
+          const matchingContexts = data.logs.filter(log => log.context_id === contextId);
+          contexts.push(...matchingContexts);
+        }
+        
+        // Display the contexts
+        displayContexts(contexts);
+      } catch (error) {
+        console.error('Error fetching contexts:', error);
+        contextList.innerHTML = `<p>Error fetching contexts: ${error.message}</p>`;
+      }
+    }
+    
+    // Display contexts in the UI
+    function displayContexts(contexts) {
+      if (contexts.length === 0) {
+        contextList.innerHTML = '<p>No contexts found</p>';
+        return;
+      }
+      
+      // Group by context ID
+      const groupedContexts = {};
+      contexts.forEach(context => {
+        if (!groupedContexts[context.context_id]) {
+          groupedContexts[context.context_id] = [];
+        }
+        groupedContexts[context.context_id].push(context);
+      });
+      
+      // Sort contexts by timestamp (newest first)
+      Object.values(groupedContexts).forEach(group => {
+        group.sort((a, b) => b.timestamp - a.timestamp);
+      });
+      
+      // Generate HTML
+      let html = '';
+      Object.entries(groupedContexts).forEach(([contextId, group]) => {
+        html += `
+          <div class="context-item">
+            <div class="context-id">${contextId}</div>
+            <div class="context-details">
+              <strong>Operation:</strong> ${group[0].operation}<br>
+              <strong>Status:</strong> ${group[0].status || 'N/A'}<br>
+              <strong>Timestamp:</strong> ${new Date(group[0].timestamp * 1000).toLocaleString()}<br>
+              <strong>User:</strong> ${group[0].user_id || 'N/A'}<br>
+              <details>
+                <summary>Parameters</summary>
+                <pre>${JSON.stringify(group[0].parameters, null, 2)}</pre>
+              </details>
+              <details>
+                <summary>Result</summary>
+                <pre>${JSON.stringify(group[0].result, null, 2)}</pre>
+              </details>
+            </div>
+          </div>
+        `;
+      });
+      
+      contextList.innerHTML = html;
+    }
+  </script>
+</body>
+</html> 

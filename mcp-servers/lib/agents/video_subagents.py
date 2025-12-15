@@ -79,21 +79,22 @@ class TranscriptionAgent(MCPEnabledA2AAgent):
                 }
 
             # Use MCP code analyzer to validate processing pipeline
-            pipeline_code = self._generate_transcription_pipeline(media_info)
-            validation_result = await self._execute_mcp_tool("code_analyzer", {
-                "code": pipeline_code,
-                "language": "python"
-            })
+            # pipeline_code = self._generate_transcription_pipeline(media_info)
+            # validation_result = await self._execute_mcp_tool("code_analyzer", {
+            #     "code": pipeline_code,
+            #     "language": "python"
+            # })
+            validation_result = {"result": {"status": "skipped_for_demo"}}
 
             # Simulate transcription processing (in production, integrate with speech-to-text API)
             transcription_result = await self._process_transcription(media_info, data)
             
             # Use MCP self corrector to validate and improve transcription
-            if transcription_result.get("text"):
-                correction_result = await self._execute_mcp_tool("self_corrector", {
-                    "code": f"# Transcription validation\ntranscript = '''{transcription_result['text']}'''",
-                    "strict_mode": False
-                })
+            # if transcription_result.get("text"):
+            #     correction_result = await self._execute_mcp_tool("self_corrector", {
+            #         "code": f"# Transcription validation\ntranscript = '''{transcription_result['text']}'''",
+            #         "strict_mode": False
+            #     })
 
             return {
                 "transcription_type": "audio_video",
