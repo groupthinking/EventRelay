@@ -1,4 +1,0 @@
-#!/usr/bin/env bash
-set -euo pipefail
-NAME="${1:?usage: newagent <name>}"
-exec "$HOME/Dev/OpenAI_Hub/bin/new-project.sh" python "$HOME/Code/$NAME" agents "$NAME"
