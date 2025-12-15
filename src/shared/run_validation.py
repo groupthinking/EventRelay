@@ -51,8 +51,7 @@ def _discover_validator_root() -> Path:
 
     candidate_subpaths = [
         Path("software-on-demand"),
-        Path("OpenAI_Hub") / "projects" / "software-on-demand",
-        Path("OpenAI_Hub") / "software-on-demand",
+
         Path("projects") / "software-on-demand",
     ]
 

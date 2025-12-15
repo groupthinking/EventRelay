@@ -61,6 +61,18 @@
             "database_id": "3c8487aa-4e3a-4bc7-97a5-15bc648854a4",
             "migrations_dir": "migrations",
             "remote": true
+        },
+        {
+            "binding": "ML_EXPERIMENTS_DB",
+            "database_name": "ml-experiments",
+            "database_id": "41ff7bdb-193b-4747-b2f7-14e966b3ef03",
+            "remote": true
+        },
+        {
+            "binding": "UVAI_DB",
+            "database_name": "uvai",
+            "database_id": "6aa987cd-5be5-4667-b5b9-8a8c27784d87",
+            "remote": true
         }
     ],
     "durable_objects": {
@@ -91,6 +103,12 @@
             "binding": "VibecoderStore",
             "id": "73f5c6f8077b40e9bdedd3a50b08e4ad",
             "remote": true
+        }
+    ],
+    "vectorize": [
+        {
+            "binding": "VECTORIZE",
+            "index_name": "uvai-index"
         }
     ],
     "migrations": [

@@ -12,40 +12,41 @@ import { setupScreenshotRoutes } from './screenshotRoutes';
 import { setupSentryRoutes } from './sentryRoutes';
 import { Hono } from "hono";
 import { AppEnv } from "../../types/appenv";
+import { vectorRoutes } from "./vector";
 
 export function setupRoutes(app: Hono<AppEnv>): void {
     // Health check route
     app.get('/api/health', (c) => {
         return c.json({ status: 'ok' });
     });
-    
+
     // Sentry tunnel routes (public - no auth required)
     setupSentryRoutes(app);
 
     // Authentication and user management routes
     setupAuthRoutes(app);
-    
+
     // Codegen routes
     setupCodegenRoutes(app);
-    
+
     // User dashboard and profile routes
     setupUserRoutes(app);
-    
+
     // App management routes
     setupAppRoutes(app);
-    
+
     // Stats routes
     setupStatsRoutes(app);
-    
+
     // AI Gateway Analytics routes
     setupAnalyticsRoutes(app);
-    
+
     // Secrets management routes
     setupSecretsRoutes(app);
-    
+
     // Model configuration and provider keys routes
     setupModelConfigRoutes(app);
-    
+
     // Model provider routes
     setupModelProviderRoutes(app);
 
@@ -54,4 +55,7 @@ export function setupRoutes(app: Hono<AppEnv>): void {
 
     // Screenshot serving routes (public)
     setupScreenshotRoutes(app);
+
+    // Vector search and embedding routes
+    app.route('/api/vector', vectorRoutes);
 }

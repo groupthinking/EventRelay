@@ -87,7 +87,7 @@ def verify_ecosystem():
             Path("/Users/garvey/UVAI/src/core/youtube_extension/scripts/youtube_uvai_mcp.py"),
         ],
         "context7_mcp": [BASE_DIR / "servers" / "context7_mcp.py"],
-        "self_correcting_executor": [Path("/Users/garvey/Dev/OpenAI_Hub/self-correcting-executor-PRODUCTION/mcp_server/main.py")],
+        "self_correcting_executor": [BASE_DIR.parent / "self-correcting-executor-PRODUCTION" / "mcp_server" / "main.py"],
     }
     missing_required = []
     for name, paths in candidates.items():
@@ -277,7 +277,7 @@ def main():
         ))
 
     # 3. Self-Correcting Executor
-    self_correcting_executor_path = "/Users/garvey/Dev/OpenAI_Hub/self-correcting-executor-PRODUCTION/mcp_server/main.py"
+    self_correcting_executor_path = str(BASE_DIR.parent / "self-correcting-executor-PRODUCTION" / "mcp_server" / "main.py")
     if os.path.exists(self_correcting_executor_path):
         mcp_servers.append(start_mcp_server(
             "Self-Correcting Executor",

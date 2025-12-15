@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-ROOT="$HOME/Dev/OpenAI_Hub"
+ROOT="$HOME/Dev"
 echo "== Hub Health @ $(date)"
 echo "-- Node"
 which node; node -v
