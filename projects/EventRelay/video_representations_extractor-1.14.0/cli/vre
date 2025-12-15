@@ -1,0 +1,72 @@
+#!/usr/bin/env python3
+from argparse import ArgumentParser, Namespace
+from pathlib import Path
+from vre_video import VREVideo
+from vre import VRE
+from vre.utils import abs_path, load_function_from_module
+from vre.representations import build_representations_from_cfg, add_external_repositories
+from vre.logger import vre_logger as logger
+from vre_repository import get_vre_repository
+
+def get_args() -> Namespace:
+    """cli args"""
+    parser = ArgumentParser()
+    parser.add_argument("video_path", help="Path to the scene video we are processing", type=abs_path)
+    parser.add_argument("--output_path", "-o", required=True, type=abs_path,
+                        help="Path to the output directory where representations are stored")
+    parser.add_argument("--config_path", required=True, help="Path to global YAML cfg file", type=abs_path)
+    parser.add_argument("--representations", nargs="+", help="Subset of representations to run VRE for")
+    # run parameters
+    parser.add_argument("--frames", nargs="+", help="The list of frames to be exported from the video or a l..r range")
+    parser.add_argument("--output_dir_exists_mode", choices=["overwrite", "skip_computed", "raise"], default="raise")
+    parser.add_argument("--exception_mode", type=str, choices=["skip_representation", "stop_execution"],
+                        default="stop_execution")
+    parser.add_argument("--n_threads_data_storer", type=int, default=0)
+    parser.add_argument("--external_representations", "-I", nargs="+", default=[],
+                        help="Path to external reprs. Format: /path/to/file.py:fn_name. fn -> [Representation]")
+    parser.add_argument("--external_repositories", "-J", nargs="+", default=[],
+                        help="Path to external reprs. Format: /path/to/file.py:fn_name. fn -> {str: Type[Repr]}")
+    # collage parameters (calls vre_collage)
+    parser.add_argument("--collage", action="store_true", help="If set, calls vre_collage on the output")
+    parser.add_argument("--collage_video", action="store_true", help="if set, calls vre_collage on the output")
+    parser.add_argument("--collage_fps", type=float, help="Required by --make_video_collage for the collage output")
+    parser.add_argument("--collage_output_path", type=Path, help="If not set, uses 'args.output_path/.collage'")
+
+    args = parser.parse_args()
+    if args.collage is True:
+        if args.collage_video:
+            assert args.collage_fps is not None and args.collage_fps > 0, args.collage_fps
+        if args.collage_output_path is None:
+            args.collage_output_path = args.output_path / ".collage"
+            logger.warning(f"--collage_output_path not set, defaulting to: '{args.collage_output_path}'")
+    if args.frames is not None:
+        assert len(args.frames) > 0, f"No frames provided, cannot run VRE"
+        if len(args.frames) == 1 and args.frames[0].find("..") != -1:
+            args.frames = list(range(*map(int, args.frames[0].split(".."))))
+        args.frames = list(map(int, args.frames))
+
+    return args
+
+def main(args: Namespace):
+    """Za main function"""
+    video = VREVideo(args.video_path)
+    representation_types = add_external_repositories(args.external_repositories, get_vre_repository())
+    representations = build_representations_from_cfg(cfg=args.config_path, representation_types=representation_types,
+                                                     external_representations=args.external_representations)
+
+    vre = VRE(video, representations)
+    vre.run(args.output_path, frames=args.frames or range(len(video)),
+            output_dir_exists_mode=args.output_dir_exists_mode,
+            n_threads_data_storer=args.n_threads_data_storer, exception_mode=args.exception_mode,
+            subset_exported_representations=args.representations)
+
+    if args.collage:
+        vre_collage_main = load_function_from_module(Path(__file__).parent / "vre_collage", "main")
+        vre_collage_main(Namespace(vre_export_dir=args.output_path, output_path=args.collage_output_path,
+                                   video=args.collage_video, config_path=args.config_path, fps=args.collage_fps,
+                                   normalization=None, output_resolution=None,
+                                   external_representations=args.external_representations,
+                                   external_repositories=args.external_repositories, n_workers=1))
+
+if __name__ == "__main__":
+    main(get_args())

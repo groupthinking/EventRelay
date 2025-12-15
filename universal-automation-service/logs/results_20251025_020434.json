@@ -1,0 +1,63 @@
+{
+  "youtube_url": "https://youtu.be/9uBW16KlwB4?si=lS0pGefBoFLn_wdb",
+  "mode": "gemini",
+  "timestamp": "2025-10-25T02:04:33.167666",
+  "stages": {
+    "gemini_analysis": {
+      "video_id": "9uBW16KlwB4",
+      "metadata": {
+        "video_id": "9uBW16KlwB4",
+        "url": "https://youtu.be/9uBW16KlwB4?si=lS0pGefBoFLn_wdb",
+        "processor": "gemini-2.5-flash",
+        "title": "Error: 401 UNAUTHENTICATED",
+        "description": "Error: 401 UNAUTHENTICATED. {'error': {'code': 401, 'message': 'API keys are not supported by this API. Expected OAuth2 access token or other authentication credentials that assert a principal. See https://cloud.google.com/docs/authentication', 'status': 'UNAUTHENTICATED', 'details': [{'@type': 'type.googleapis.com/google.rpc.ErrorInfo', 'reason': 'CREDENTIALS_MISSING', 'domain': 'googleapis.com', 'metadata': {'service': 'generativelanguage.googleapis.com', 'method': 'google.ai.generativelanguage.v1beta.GenerativeService.GenerateContent'}}]}}",
+        "source": "gemini_api"
+      },
+      "transcript": {
+        "text": "Error: 401 UNAUTHENTICATED. {'error': {'code': 401, 'message': 'API keys are not supported by this API. Expected OAuth2 access token or other authentication credentials that assert a principal. See https://cloud.google.com/docs/authentication', 'status': 'UNAUTHENTICATED', 'details': [{'@type': 'type.googleapis.com/google.rpc.ErrorInfo', 'reason': 'CREDENTIALS_MISSING', 'domain': 'googleapis.com', 'metadata': {'service': 'generativelanguage.googleapis.com', 'method': 'google.ai.generativelanguage.v1beta.GenerativeService.GenerateContent'}}]}}",
+        "segments": [],
+        "source": "gemini_api"
+      },
+      "analysis": {
+        "sentiment": "neutral",
+        "topics": [],
+        "key_concepts": [],
+        "visual_elements": "Error: 401 UNAUTHENTICATED. {'error': {'code': 401, 'message': 'API keys are not supported by this API. Expected OAuth2 access token or other authentication credentials that assert a principal. See https://cloud.google.com/docs/authentication', 'status': 'UNAUTHENTICATED', 'details': [{'@type': 'type.googleapis.com/google.rpc.ErrorInfo', 'reason': 'CREDENTIALS_MISSING', 'domain': 'googleapis.com', 'metadata': {'method': 'google.ai.generativelanguage.v1beta.GenerativeService.GenerateContent', 'service': 'generativelanguage.googleapis.com'}}]}}",
+        "code_snippets": "Error: 401 UNAUTHENTICATED. {'error': {'code': 401, 'message': 'API keys are not supported by this API. Expected OAuth2 access token or other authentication credentials that assert a principal. See https://cloud.google.com/docs/authentication', 'status': 'UNAUTHENTICATED', 'details': [{'@type': 'type.googleapis.com/google.rpc.ErrorInfo', 'reason': 'CREDENTIALS_MISSING', 'domain': 'googleapis.com', 'metadata': {'service': 'generativelanguage.googleapis.com', 'method': 'google.ai.generativelanguage.v1beta.GenerativeService.GenerateContent'}}]}}",
+        "source": "gemini_api"
+      },
+      "learning_data": {
+        "patterns": [
+          {
+            "type": "automation",
+            "data": "Error: 401 UNAUTHENTICATED. {'error': {'code': 401, 'message': 'API keys are not supported by this API. Expected OAuth2 access token or other authentication credentials that assert a principal. See https://cloud.google.com/docs/authentication', 'status': 'UNAUTHENTICATED', 'details': [{'@type': 'type.googleapis.com/google.rpc.ErrorInfo', 'reason': 'CREDENTIALS_MISSING', 'domain': 'googleapis.com', 'metadata': {'method': 'google.ai.generativelanguage.v1beta.GenerativeService.GenerateContent', 'se"
+          }
+        ],
+        "key_concepts": [],
+        "automation_opportunities": [],
+        "step_by_step": "Error: 401 UNAUTHENTICATED. {'error': {'code': 401, 'message': 'API keys are not supported by this API. Expected OAuth2 access token or other authentication credentials that assert a principal. See https://cloud.google.com/docs/authentication', 'status': 'UNAUTHENTICATED', 'details': [{'@type': 'type.googleapis.com/google.rpc.ErrorInfo', 'reason': 'CREDENTIALS_MISSING', 'domain': 'googleapis.com', 'metadata': {'method': 'google.ai.generativelanguage.v1beta.GenerativeService.GenerateContent', 'service': 'generativelanguage.googleapis.com'}}]}}",
+        "skills_suggested": [],
+        "sentiment_trends": [
+          "neutral"
+        ],
+        "transcript_length": 548,
+        "source": "gemini_api"
+      },
+      "gemini_raw": {
+        "summary": "Error: 401 UNAUTHENTICATED. {'error': {'code': 401, 'message': 'API keys are not supported by this API. Expected OAuth2 access token or other authentication credentials that assert a principal. See https://cloud.google.com/docs/authentication', 'status': 'UNAUTHENTICATED', 'details': [{'@type': 'type.googleapis.com/google.rpc.ErrorInfo', 'reason': 'CREDENTIALS_MISSING', 'domain': 'googleapis.com', 'metadata': {'service': 'generativelanguage.googleapis.com', 'method': 'google.ai.generativelanguage.v1beta.GenerativeService.GenerateContent'}}]}}",
+        "transcript": "Error: 401 UNAUTHENTICATED. {'error': {'code': 401, 'message': 'API keys are not supported by this API. Expected OAuth2 access token or other authentication credentials that assert a principal. See https://cloud.google.com/docs/authentication', 'status': 'UNAUTHENTICATED', 'details': [{'@type': 'type.googleapis.com/google.rpc.ErrorInfo', 'reason': 'CREDENTIALS_MISSING', 'domain': 'googleapis.com', 'metadata': {'service': 'generativelanguage.googleapis.com', 'method': 'google.ai.generativelanguage.v1beta.GenerativeService.GenerateContent'}}]}}",
+        "topics": "Error: 401 UNAUTHENTICATED. {'error': {'code': 401, 'message': 'API keys are not supported by this API. Expected OAuth2 access token or other authentication credentials that assert a principal. See https://cloud.google.com/docs/authentication', 'status': 'UNAUTHENTICATED', 'details': [{'@type': 'type.googleapis.com/google.rpc.ErrorInfo', 'reason': 'CREDENTIALS_MISSING', 'domain': 'googleapis.com', 'metadata': {'method': 'google.ai.generativelanguage.v1beta.GenerativeService.GenerateContent', 'service': 'generativelanguage.googleapis.com'}}]}}",
+        "key_concepts": "Error: 401 UNAUTHENTICATED. {'error': {'code': 401, 'message': 'API keys are not supported by this API. Expected OAuth2 access token or other authentication credentials that assert a principal. See https://cloud.google.com/docs/authentication', 'status': 'UNAUTHENTICATED', 'details': [{'@type': 'type.googleapis.com/google.rpc.ErrorInfo', 'reason': 'CREDENTIALS_MISSING', 'domain': 'googleapis.com', 'metadata': {'method': 'google.ai.generativelanguage.v1beta.GenerativeService.GenerateContent', 'service': 'generativelanguage.googleapis.com'}}]}}",
+        "automation_opportunities": "Error: 401 UNAUTHENTICATED. {'error': {'code': 401, 'message': 'API keys are not supported by this API. Expected OAuth2 access token or other authentication credentials that assert a principal. See https://cloud.google.com/docs/authentication', 'status': 'UNAUTHENTICATED', 'details': [{'@type': 'type.googleapis.com/google.rpc.ErrorInfo', 'reason': 'CREDENTIALS_MISSING', 'domain': 'googleapis.com', 'metadata': {'method': 'google.ai.generativelanguage.v1beta.GenerativeService.GenerateContent', 'service': 'generativelanguage.googleapis.com'}}]}}",
+        "visual_analysis": "Error: 401 UNAUTHENTICATED. {'error': {'code': 401, 'message': 'API keys are not supported by this API. Expected OAuth2 access token or other authentication credentials that assert a principal. See https://cloud.google.com/docs/authentication', 'status': 'UNAUTHENTICATED', 'details': [{'@type': 'type.googleapis.com/google.rpc.ErrorInfo', 'reason': 'CREDENTIALS_MISSING', 'domain': 'googleapis.com', 'metadata': {'method': 'google.ai.generativelanguage.v1beta.GenerativeService.GenerateContent', 'service': 'generativelanguage.googleapis.com'}}]}}",
+        "code_extraction": "Error: 401 UNAUTHENTICATED. {'error': {'code': 401, 'message': 'API keys are not supported by this API. Expected OAuth2 access token or other authentication credentials that assert a principal. See https://cloud.google.com/docs/authentication', 'status': 'UNAUTHENTICATED', 'details': [{'@type': 'type.googleapis.com/google.rpc.ErrorInfo', 'reason': 'CREDENTIALS_MISSING', 'domain': 'googleapis.com', 'metadata': {'service': 'generativelanguage.googleapis.com', 'method': 'google.ai.generativelanguage.v1beta.GenerativeService.GenerateContent'}}]}}",
+        "step_by_step": "Error: 401 UNAUTHENTICATED. {'error': {'code': 401, 'message': 'API keys are not supported by this API. Expected OAuth2 access token or other authentication credentials that assert a principal. See https://cloud.google.com/docs/authentication', 'status': 'UNAUTHENTICATED', 'details': [{'@type': 'type.googleapis.com/google.rpc.ErrorInfo', 'reason': 'CREDENTIALS_MISSING', 'domain': 'googleapis.com', 'metadata': {'method': 'google.ai.generativelanguage.v1beta.GenerativeService.GenerateContent', 'service': 'generativelanguage.googleapis.com'}}]}}",
+        "sentiment": "Error: 401 UNAUTHENTICATED. {'error': {'code': 401, 'message': 'API keys are not supported by this API. Expected OAuth2 access token or other authentication credentials that assert a principal. See https://cloud.google.com/docs/authentication', 'status': 'UNAUTHENTICATED', 'details': [{'@type': 'type.googleapis.com/google.rpc.ErrorInfo', 'reason': 'CREDENTIALS_MISSING', 'domain': 'googleapis.com', 'metadata': {'service': 'generativelanguage.googleapis.com', 'method': 'google.ai.generativelanguage.v1beta.GenerativeService.GenerateContent'}}]}}",
+        "skills_suggested": "Error: 401 UNAUTHENTICATED. {'error': {'code': 401, 'message': 'API keys are not supported by this API. Expected OAuth2 access token or other authentication credentials that assert a principal. See https://cloud.google.com/docs/authentication', 'status': 'UNAUTHENTICATED', 'details': [{'@type': 'type.googleapis.com/google.rpc.ErrorInfo', 'reason': 'CREDENTIALS_MISSING', 'domain': 'googleapis.com', 'metadata': {'method': 'google.ai.generativelanguage.v1beta.GenerativeService.GenerateContent', 'service': 'generativelanguage.googleapis.com'}}]}}"
+      },
+      "status": "completed"
+    }
+  },
+  "processing_time": 1.0120003430056386,
+  "success": true
+}

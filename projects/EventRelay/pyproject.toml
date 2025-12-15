@@ -1,0 +1,278 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "youtube_extension"
+version = "1.0.0"
+description = "UVAI YouTube Extension Platform - Revolutionary AI-Powered Video Learning System"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+authors = [
+    {name = "UVAI Team", email = "team@uvai.com"},
+]
+maintainers = [
+    {name = "UVAI Team", email = "team@uvai.com"},
+]
+keywords = ["youtube", "ai", "video-processing", "machine-learning", "education"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Internet :: WWW/HTTP",
+    "Topic :: Multimedia :: Video",
+    "Topic :: Education",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "fastapi>=0.104.0",
+    "uvicorn[standard]>=0.24.0",
+    "pydantic>=2.5.0",
+    "pydantic-settings>=2.1.0",
+    "httpx>=0.25.0",
+    "aiofiles>=23.2.1",
+    "python-multipart>=0.0.6",
+    "jinja2>=3.1.2",
+    "alembic>=1.12.0",
+    "sqlalchemy>=2.0.0",
+    "aiosqlite>=0.19.0",
+    "python-jose[cryptography]>=3.3.0",
+    "passlib[bcrypt]>=1.7.4",
+    "python-decouple>=3.8",
+    "structlog>=23.2.0",
+    "rich>=13.7.0",
+    "typer>=0.9.0",
+    "click>=8.1.7",
+    "pathlib2>=2.3.7",
+    "python-dotenv>=1.0.0",
+    "PyYAML>=6.0.0",
+    "requests>=2.31.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.1.0",
+    "pytest-xdist>=3.5.0",
+    "pytest-mock>=3.12.0",
+    "black>=23.0.0",
+    "isort>=5.12.0",
+    "flake8>=6.0.0",
+    "mypy>=1.7.0",
+    "pre-commit>=3.5.0",
+    "ruff>=0.1.0",
+    "jupyter>=1.0.0",
+    "ipykernel>=6.25.0",
+    "notebook>=7.0.0",
+]
+docs = [
+    "mkdocs>=1.5.0",
+    "mkdocs-material>=9.4.0",
+    "mkdocstrings[python]>=0.23.0",
+    "mkdocs-autorefs>=0.5.0",
+]
+deploy = [
+    "docker>=6.1.0",
+    "kubernetes>=28.1.0",
+    "helm>=3.12.0",
+    "flyctl>=0.1.0",
+]
+# Video and external API tooling (YouTube processing, downloads, etc.)
+youtube = [
+    "youtube-transcript-api>=0.6.0",
+    "google-api-python-client>=2.100.0",
+    "google-cloud-speech>=2.26.0",
+    "yt-dlp>=2023.7.6",
+    "aiohttp>=3.8.0",
+    "asyncio-throttle>=1.0.0",
+    "websockets>=12.0",
+    "gitpython>=3.1.0",
+    "cachetools>=5.0.0",
+    "google-cloud-storage>=2.13.0",
+]
+# Optional Postgres driver
+postgres = [
+    "psycopg2-binary>=2.9.0",
+    "asyncpg>=0.29.0",
+]
+ml = [
+    "torch>=2.1.0",
+    "torchvision>=0.16.0",
+    "torchaudio>=2.1.0",
+    "transformers>=4.35.0",
+    "datasets>=2.15.0",
+    "accelerate>=0.24.0",
+    "tokenizers>=0.15.0",
+    "sentence-transformers>=2.2.0",
+    "openai>=1.3.0",
+    "anthropic>=0.7.0",
+    "google-generativeai>=0.3.0",
+    "cohere>=4.37.0",
+    "numpy>=1.24.0",
+    "pandas>=2.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/uvai/youtube-extension"
+Documentation = "https://uvai.github.io/youtube-extension/"
+Repository = "https://github.com/uvai/youtube-extension.git"
+Issues = "https://github.com/uvai/youtube-extension/issues"
+Changelog = "https://github.com/uvai/youtube-extension/blob/main/docs/changelog/v1.0.0.md"
+
+[project.scripts]
+youtube-extension = "youtube_extension.cli:main"
+youtube-migrate = "youtube_extension.cli:migrate"
+youtube-test = "youtube_extension.cli:test"
+"uvai.api" = "uvai.api.server:main"
+"uvai.core" = "uvai.core.server:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-dir]
+"" = "src"
+
+[tool.setuptools.package-data]
+youtube_extension = ["templates/**/*", "static/**/*", "config/**/*"]
+
+[tool.black]
+line-length = 88
+target-version = ['py39', 'py310', 'py311', 'py312']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+  | migrations
+  | __pycache__
+  | node_modules
+  | frontend/build
+  | frontend/node_modules
+)/
+'''
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+line_length = 88
+known_first_party = ["youtube_extension"]
+known_third_party = [
+    "fastapi",
+    "uvicorn",
+    "pydantic",
+    "sqlalchemy",
+    "alembic",
+    "httpx",
+    "aiofiles",
+]
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+show_error_codes = true
+
+[[tool.mypy.overrides]]
+module = [
+    "youtube_extension.migrations.*",
+    "tests.*",
+]
+ignore_errors = true
+
+[tool.ruff]
+target-version = "py39"
+line-length = 88
+select = [
+    "E",  # pycodestyle errors
+    "W",  # pycodestyle warnings
+    "F",  # pyflakes
+    "I",  # isort
+    "B",  # flake8-bugbear
+    "C4", # flake8-comprehensions
+    "UP", # pyupgrade
+]
+ignore = [
+    "E501", # line too long, handled by black
+    "B008", # do not perform function calls in argument defaults
+    "C901", # too complex
+]
+
+[tool.ruff.per-file-ignores]
+"__init__.py" = ["F401"]
+"tests/**/*" = ["B011"]
+
+[tool.pytest.ini_options]
+minversion = "7.4"
+addopts = "-ra -q --strict-markers --strict-config"
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+asyncio_mode = "auto"
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+    "asyncio: marks tests that use asyncio event loop",
+    "unit: marks tests as unit tests",
+    "e2e: marks tests as end-to-end tests",
+    "performance: marks tests as performance tests",
+    "database: marks tests requiring database (sqlite/postgres)",
+    "security: marks security tests",
+    "accessibility: marks accessibility tests",
+]
+filterwarnings = [
+    "error",
+    "ignore::UserWarning",
+    "ignore::DeprecationWarning",
+    "ignore::PendingDeprecationWarning",
+]
+
+[tool.coverage.run]
+source = ["src/youtube_extension"]
+omit = [
+    "*/tests/*",
+    "*/migrations/*",
+    "src/youtube_extension/__init__.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if self.debug:",
+    "if settings.DEBUG",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if 0:",
+    "if __name__ == .__main__.:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
+]
+
+[tool.coverage.lcov]
+output = "reports/lcov.info"

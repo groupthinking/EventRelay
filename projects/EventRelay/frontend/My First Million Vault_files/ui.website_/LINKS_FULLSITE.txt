@@ -1,0 +1,105 @@
+	
+chrome-extension://jdpdpdkkofoclmgbopofhlmoikpfamao/assets
+/index.da8656d5.js
+JS (per function)	972,268	653,46067.2%	
+https://www.mfmvault.com/_next/static/chunks
+/fd9d1056-8f82f38cd1d0377e.js
+JS (per function)	172,834	60,30834.9%	
+https://www.mfmvault.com/_next/static/chunks
+/3762-3981e99e2d036358.js
+JS (per function)	157,497	75,67648%	
+https://www.mfmvault.com/_next/static/chunks
+/7023-256127f36c2eeff5.js
+JS (per function)	123,729	43,67135.3%	
+https://www.mfmvault.com/_next/static/chunks
+/3943-ba1288a473af9038.js
+JS (per function)	112,899	67,67259.9%	
+https://www.mfmvault.com/_next/static/chunks
+/677-756d102e05e69db4.js
+JS (per function)	62,869	43,23068.8%	
+https://www.mfmvault.com/_next/static/css
+/0c6f0fdd575d06f5.css
+CSS	46,932	36,74578.3%	
+https://www.mfmvault.com
+/
+JS (per function)	41,412	00%	
+https://www.mfmvault.com/_next/static/chunks
+/5126-e8760d1228f3ea4d.js
+JS (per function)	37,494	34,06990.9%	
+https://www.mfmvault.com/_next/static/chunks
+/515-5e6f37d20de91d04.js
+JS (per function)	31,128	9,46630.4%	
+https://www.mfmvault.com/_next/static/chunks
+/0e5ce63c-fa91981085ba0608.js
+JS (per function)	23,797	9,98241.9%	
+https://www.mfmvault.com/_next/static/chunks/app
+/layout-4a8b8c9a74c54ae8.js
+JS (per function)	20,890	9,71346.5%	
+https://www.mfmvault.com/_next/static/chunks
+/231-6bd3482b21e59473.js
+JS (per function)	20,596	12,07958.6%	
+https://www.mfmvault.com/_next/static/chunks/app
+/page-e1dac9627b84348c.js
+JS (per function)	13,211	1,3139.9%	
+https://www.mfmvault.com/_next/static/chunks
+/3526-26b41057ca1b121e.js
+JS (per function)	9,546	5,98262.7%	
+https://www.mfmvault.com/_next/static/chunks
+/webpack-34a3727f7d24e221.js
+JS (per function)	4,255	1,43033.6%	
+
+
+
+
+	
+chrome-extension://jdpdpdkkofoclmgbopofhlmoikpfamao/assets
+/index.da8656d5.js
+JS (per function)	972,268	653,46067.2%	
+https://www.mfmvault.com/_next/static/chunks
+/fd9d1056-8f82f38cd1d0377e.js
+JS (per function)	172,834	60,30834.9%	
+https://www.mfmvault.com/_next/static/chunks
+/3762-3981e99e2d036358.js
+JS (per function)	157,497	75,67648%	
+https://www.mfmvault.com/_next/static/chunks
+/7023-256127f36c2eeff5.js
+JS (per function)	123,729	43,67135.3%	
+https://www.mfmvault.com/_next/static/chunks
+/3943-ba1288a473af9038.js
+JS (per function)	112,899	67,67259.9%	
+https://www.mfmvault.com/_next/static/chunks
+/677-756d102e05e69db4.js
+JS (per function)	62,869	43,23068.8%	
+https://www.mfmvault.com
+/
+JS (per function)	41,412	00%	
+https://www.mfmvault.com/_next/static/chunks
+/5126-e8760d1228f3ea4d.js
+JS (per function)	37,494	34,06990.9%	
+https://www.mfmvault.com/_next/static/chunks
+/515-5e6f37d20de91d04.js
+JS (per function)	31,128	9,46630.4%	
+https://www.mfmvault.com/_next/static/chunks
+/0e5ce63c-fa91981085ba0608.js
+JS (per function)	23,797	9,98241.9%	
+https://www.mfmvault.com/_next/static/chunks/app
+/layout-4a8b8c9a74c54ae8.js
+JS (per function)	20,890	9,71346.5%	
+https://www.mfmvault.com/_next/static/chunks
+/231-6bd3482b21e59473.js
+JS (per function)	20,596	12,07958.6%	
+https://www.mfmvault.com/_next/static/chunks/app
+/page-e1dac9627b84348c.js
+JS (per function)	13,211	1,3139.9%	
+https://www.mfmvault.com/_next/static/chunks
+/3526-26b41057ca1b121e.js
+JS (per function)	9,546	5,98262.7%	
+https://www.mfmvault.com/_next/static/chunks
+/webpack-34a3727f7d24e221.js
+JS (per function)	4,255	1,43033.6%	
+chrome-extension://jdpdpdkkofoclmgbopofhlmoikpfamao
+/injectScript.js
+JS (per function)	2,199	2,08794.9%	
+
+
+ main-app

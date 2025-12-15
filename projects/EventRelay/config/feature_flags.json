@@ -1,0 +1,11 @@
+{
+  "canary": {
+    "mcp_video_processor": {
+      "enabled": true,
+      "percentage": 20,
+      "allowlist": ["admin", "qa"],
+      "blocklist": []
+    }
+  }
+}
+

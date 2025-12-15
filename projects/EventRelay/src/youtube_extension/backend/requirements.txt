@@ -1,0 +1,11 @@
+This file has been consolidated into pyproject.toml extras.
+
+Use one of the following instead:
+
+  pip install -e .[youtube]
+  pip install -e .[youtube,ml]
+  pip install -e .[youtube,ml,postgres]
+
+For development tooling:
+
+  pip install -e .[dev]

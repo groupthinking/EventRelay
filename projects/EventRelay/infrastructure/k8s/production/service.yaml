@@ -1,0 +1,61 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: enhanced-framework
+  namespace: production
+  labels:
+    app: enhanced-framework
+    component: ai-agent
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: 3000
+    protocol: TCP
+    name: http
+  selector:
+    app: enhanced-framework
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mcp-server
+  namespace: production
+  labels:
+    app: mcp-server
+    component: mcp-protocol
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8000
+    targetPort: 8000
+    protocol: TCP
+    name: mcp-http
+  selector:
+    app: mcp-server
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: enhanced-framework-lb
+  namespace: production
+  labels:
+    app: enhanced-framework
+    component: load-balancer
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 80
+    targetPort: 3000
+    protocol: TCP
+    name: http
+  - port: 443
+    targetPort: 3000
+    protocol: TCP
+    name: https
+  selector:
+    app: enhanced-framework
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 300 

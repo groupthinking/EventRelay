@@ -1,0 +1,21 @@
+---
+alwaysApply: true
+---
+Add comprehensive CI/CD pipeline for UVAI deployment platform
+
+- Add GitHub Actions workflows for automated testing and deployment
+- Implement multi-platform deployment (Vercel, Netlify, Fly.io)
+- Add comprehensive integration tests (21 test cases)
+- Include security scanning and code quality checks
+- Add automated health monitoring and maintenance workflows
+- Create detailed documentation and configuration files
+- Enable automated deployment pipeline with rollback capabilities
+
+This commit triggers the full CI/CD pipeline including:
+✅ Integration tests execution
+✅ Environment validation
+✅ Multi-platform deployment simulation
+✅ Health monitoring and status checks
+✅ Automated maintenance and cleanup
+
+

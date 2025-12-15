@@ -1,0 +1,29 @@
+{
+  "name": "@repo/workflows",
+  "version": "0.0.0",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    "./data-processing": "./dist/data-processing.js",
+    "./mcp-orchestration": "./dist/mcp-orchestration.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "lint": "eslint . --max-warnings 0"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "2.0.53",
+    "@ai-sdk/google": "2.0.44",
+    "@ai-sdk/openai": "2.0.76",
+    "ai": "5.0.106",
+    "vitest": "4.0.15",
+    "workflow": "^4.0.1-beta.24"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "eslint": "^8",
+    "typescript": "^5"
+  }
+}

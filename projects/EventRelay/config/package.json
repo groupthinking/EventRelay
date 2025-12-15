@@ -1,0 +1,44 @@
+{
+  "name": "enhanced-browser-extension-framework",
+  "version": "1.0.0",
+  "description": "AI-powered, HTTP/Workers-enhanced browser extension development framework with MCP integration",
+  "main": "index.js",
+  "scripts": {
+    "docker:build": "docker build -f Dockerfile.production -t enhanced-framework:latest .",
+    "docker:run": "docker run -p 3000:3000 enhanced-framework:latest",
+    "docker:run:detached": "docker run -d -p 3000:3000 --name enhanced-framework enhanced-framework:latest",
+    "docker:stop": "docker stop enhanced-framework && docker rm enhanced-framework",
+    "docker:logs": "docker logs enhanced-framework",
+    "ai-agent:install": "cd ai-learning-agent && npm install",
+    "ai-agent:start": "cd ai-learning-agent && npm start",
+    "ai-agent:build": "cd ai-learning-agent && npm run build",
+    "ai-agent:test": "cd ai-learning-agent && npm test",
+    "mcp:start": "python3 mcp_server.py",
+    "install:all": "npm run ai-agent:install",
+    "build:all": "npm run ai-agent:build && npm run docker:build",
+    "test:all": "npm run ai-agent:test",
+    "start:dev": "npm run ai-agent:start",
+    "start:prod": "npm run docker:run",
+    "clean": "docker system prune -f"
+  },
+  "keywords": [
+    "browser-extension",
+    "ai",
+    "mcp",
+    "automation",
+    "framework",
+    "docker",
+    "production"
+  ],
+  "author": "Hayden Garvey",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  },
+  "devDependencies": {
+    "autoprefixer": "^10.4.21",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^4.1.12"
+  }
+}

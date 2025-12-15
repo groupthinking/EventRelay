@@ -1,0 +1,223 @@
+{
+  "description": "Performance Monitoring Configuration",
+  "version": "1.0.0",
+  "enabled": true,
+  "collection": {
+    "interval": 30000,
+    "retentionPeriod": 86400000,
+    "batchSize": 100,
+    "compression": true
+  },
+  "thresholds": {
+    "cpu": {
+      "warning": 70,
+      "critical": 90,
+      "unit": "percentage"
+    },
+    "memory": {
+      "warning": 80,
+      "critical": 95,
+      "unit": "percentage"
+    },
+    "disk": {
+      "warning": 85,
+      "critical": 95,
+      "unit": "percentage"
+    },
+    "responseTime": {
+      "warning": 500,
+      "critical": 2000,
+      "unit": "milliseconds"
+    },
+    "errorRate": {
+      "warning": 1,
+      "critical": 5,
+      "unit": "percentage"
+    },
+    "throughput": {
+      "min": 10,
+      "max": 1000,
+      "unit": "requests_per_second"
+    },
+    "database": {
+      "connectionPool": {
+        "warning": 80,
+        "critical": 95,
+        "unit": "percentage"
+      },
+      "slowQuery": {
+        "warning": 1000,
+        "critical": 5000,
+        "unit": "milliseconds"
+      }
+    },
+    "cache": {
+      "hitRate": {
+        "warning": 70,
+        "critical": 50,
+        "unit": "percentage"
+      },
+      "memoryUsage": {
+        "warning": 80,
+        "critical": 95,
+        "unit": "percentage"
+      }
+    }
+  },
+  "alerts": {
+    "enabled": true,
+    "cooldown": 300000,
+    "escalation": {
+      "warning": ["email"],
+      "critical": ["email", "slack", "sms"]
+    },
+    "channels": {
+      "console": {
+        "enabled": true,
+        "level": "info"
+      },
+      "file": {
+        "enabled": true,
+        "path": "./monitoring/alerts/",
+        "format": "json",
+        "rotation": "daily"
+      },
+      "webhook": {
+        "enabled": false,
+        "url": "https://your-monitoring-service.com/webhook",
+        "headers": {
+          "Authorization": "Bearer your-token",
+          "Content-Type": "application/json"
+        },
+        "timeout": 5000
+      },
+      "slack": {
+        "enabled": false,
+        "webhookUrl": "https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK",
+        "channel": "#alerts",
+        "username": "Performance Monitor",
+        "iconEmoji": ":chart_with_upwards_trend:"
+      },
+      "email": {
+        "enabled": false,
+        "smtp": {
+          "host": "smtp.gmail.com",
+          "port": 587,
+          "secure": false,
+          "auth": {
+            "user": "alerts@yourcompany.com",
+            "pass": "your-app-password"
+          }
+        },
+        "from": "Performance Monitor <alerts@yourcompany.com>",
+        "to": ["devops@yourcompany.com", "developers@yourcompany.com"],
+        "subjectTemplate": "Performance Alert: {severity} - {metric}",
+        "templates": {
+          "warning": "./monitoring/templates/warning-email.html",
+          "critical": "./monitoring/templates/critical-email.html"
+        }
+      },
+      "pagerduty": {
+        "enabled": false,
+        "integrationKey": "your-pagerduty-integration-key",
+        "severityMapping": {
+          "warning": "warning",
+          "critical": "critical"
+        }
+      }
+    }
+  },
+  "storage": {
+    "metrics": "./monitoring/metrics/",
+    "alerts": "./monitoring/alerts/",
+    "reports": "./monitoring/reports/",
+    "backups": "./monitoring/backups/",
+    "retention": {
+      "metrics": 30,
+      "alerts": 90,
+      "reports": 365,
+      "backups": 365
+    }
+  },
+  "reporting": {
+    "enabled": true,
+    "schedule": {
+      "daily": "0 9 * * *",
+      "weekly": "0 9 * * 1",
+      "monthly": "0 9 1 * *"
+    },
+    "formats": ["html", "pdf", "json", "csv"],
+    "distribution": {
+      "email": ["management@yourcompany.com"],
+      "slack": "#performance-reports",
+      "dashboard": "https://your-dashboard.com/performance"
+    }
+  },
+  "integrations": {
+    "datadog": {
+      "enabled": false,
+      "apiKey": "your-datadog-api-key",
+      "appKey": "your-datadog-app-key",
+      "tags": ["env:production", "service:firebase-app"]
+    },
+    "newrelic": {
+      "enabled": false,
+      "licenseKey": "your-newrelic-license-key",
+      "appName": "Firebase App"
+    },
+    "prometheus": {
+      "enabled": false,
+      "gateway": "http://prometheus-pushgateway:9091",
+      "job": "firebase-app",
+      "metrics": {
+        "response_time": "http_request_duration_seconds",
+        "throughput": "http_requests_total",
+        "error_rate": "http_request_errors_total"
+      }
+    },
+    "grafana": {
+      "enabled": false,
+      "url": "https://your-grafana-instance.com",
+      "apiKey": "your-grafana-api-key",
+      "dashboard": {
+        "id": "performance-dashboard",
+        "folder": "Performance"
+      }
+    }
+  },
+  "anomalyDetection": {
+    "enabled": true,
+    "algorithms": ["zscore", "isolation_forest"],
+    "sensitivity": 0.95,
+    "trainingPeriod": 7,
+    "alertOnAnomaly": true
+  },
+  "predictiveAnalytics": {
+    "enabled": true,
+    "forecastHorizon": 24,
+    "models": ["arima", "prophet"],
+    "alertThreshold": 0.8
+  },
+  "autoScaling": {
+    "enabled": false,
+    "providers": {
+      "aws": {
+        "enabled": false,
+        "region": "us-east-1",
+        "autoScalingGroup": "your-asg-name",
+        "minInstances": 2,
+        "maxInstances": 10,
+        "scaleUpThreshold": 80,
+        "scaleDownThreshold": 30
+      },
+      "gcp": {
+        "enabled": false,
+        "project": "your-gcp-project",
+        "region": "us-central1",
+        "instanceGroup": "your-instance-group",
+        "minReplicas": 2,
+        "maxReplicas": 10
+      }
+    }
+  }
+}

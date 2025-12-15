@@ -1,0 +1,273 @@
+{
+  "import_map": {
+    "test_100_videos": [
+      "youtube_extension.processors.simple_real_processor"
+    ],
+    "backend.main": [
+      "agents.markdown_video_processor",
+      "backend.enhanced_video_processor",
+      "backend.video_processor_factory",
+      "backend.real_api_endpoints"
+    ],
+    "backend.video_processor_factory": [
+      "backend.real_video_processor",
+      "backend.enhanced_video_processor"
+    ],
+    "scripts.test_complete_deployment": [
+      "youtube_extension.services.deployment_manager"
+    ],
+    "backend.main_v2": [
+      "backend.services.websocket_service",
+      "backend.containers.service_container",
+      "backend.api.v1.router",
+      "backend.api.v1.models"
+    ],
+    "backend.main_refactored": [
+      "backend.services.health_monitoring_service",
+      "backend.services.data_service",
+      "backend.services.cache_service",
+      "backend.services.video_processing_service",
+      "backend.containers.service_container",
+      "backend.services.websocket_service"
+    ],
+    "scripts.verify_real_api_integration": [
+      "youtube_extension.services.real_youtube_api",
+      "youtube_extension.services.api_cost_monitor",
+      "youtube_extension.services.real_video_processor"
+    ],
+    "scripts.setup_llama_agent": [
+      "agents.llama_background_agent"
+    ],
+    "agents.enhanced_video_processor": [
+      "backend.enhanced_video_processor"
+    ],
+    "backend.deployment_manager": [
+      "backend.deploy",
+      "youtube_extension.services.deploy.core"
+    ],
+    "scripts.test_live_deployment": [
+      "youtube_extension.services.deployment_manager",
+      "backend.deploy",
+      "backend.deploy.vercel",
+      "youtube_extension.services.deploy.core"
+    ],
+    "scripts.test_deployment_architecture": [
+      "backend.deploy",
+      "youtube_extension.services.deployment_manager",
+      "backend.deploy.vercel",
+      "youtube_extension.services.deploy.core"
+    ],
+    "main": [
+      "youtube_extension.main"
+    ],
+    "factory.tasks": [
+      "factory.monitoring"
+    ],
+    "backend.real_api_endpoints": [
+      "youtube_extension.services.real_video_processor",
+      "youtube_extension.services.real_youtube_api",
+      "youtube_extension.services.real_ai_processor",
+      "youtube_extension.services.api_cost_monitor"
+    ],
+    "start_enhanced_backend": [
+      "agents.markdown_video_processor",
+      "youtube_extension.main"
+    ]
+  },
+  "reverse_map": {
+    "youtube_extension.processors.simple_real_processor": [
+      "test_100_videos"
+    ],
+    "backend.real_api_endpoints": [
+      "backend.main"
+    ],
+    "backend.video_processor_factory": [
+      "backend.main"
+    ],
+    "backend.enhanced_video_processor": [
+      "agents.enhanced_video_processor",
+      "backend.main",
+      "backend.video_processor_factory"
+    ],
+    "agents.markdown_video_processor": [
+      "backend.main",
+      "start_enhanced_backend"
+    ],
+    "backend.real_video_processor": [
+      "backend.video_processor_factory"
+    ],
+    "youtube_extension.services.deployment_manager": [
+      "scripts.test_live_deployment",
+      "scripts.test_deployment_architecture",
+      "scripts.test_complete_deployment"
+    ],
+    "backend.containers.service_container": [
+      "backend.main_refactored",
+      "backend.main_v2"
+    ],
+    "backend.services.websocket_service": [
+      "backend.main_refactored",
+      "backend.main_v2"
+    ],
+    "backend.api.v1.router": [
+      "backend.main_v2"
+    ],
+    "backend.api.v1.models": [
+      "backend.main_v2"
+    ],
+    "backend.services.video_processing_service": [
+      "backend.main_refactored"
+    ],
+    "backend.services.cache_service": [
+      "backend.main_refactored"
+    ],
+    "backend.services.health_monitoring_service": [
+      "backend.main_refactored"
+    ],
+    "backend.services.data_service": [
+      "backend.main_refactored"
+    ],
+    "youtube_extension.services.real_youtube_api": [
+      "scripts.verify_real_api_integration",
+      "backend.real_api_endpoints"
+    ],
+    "youtube_extension.services.real_video_processor": [
+      "scripts.verify_real_api_integration",
+      "backend.real_api_endpoints"
+    ],
+    "youtube_extension.services.api_cost_monitor": [
+      "scripts.verify_real_api_integration",
+      "backend.real_api_endpoints"
+    ],
+    "agents.llama_background_agent": [
+      "scripts.setup_llama_agent"
+    ],
+    "backend.deploy": [
+      "scripts.test_live_deployment",
+      "scripts.test_deployment_architecture",
+      "backend.deployment_manager"
+    ],
+    "youtube_extension.services.deploy.core": [
+      "scripts.test_live_deployment",
+      "scripts.test_deployment_architecture",
+      "backend.deployment_manager"
+    ],
+    "backend.deploy.vercel": [
+      "scripts.test_live_deployment",
+      "scripts.test_deployment_architecture"
+    ],
+    "youtube_extension.main": [
+      "main",
+      "start_enhanced_backend"
+    ],
+    "factory.monitoring": [
+      "factory.tasks"
+    ],
+    "youtube_extension.services.real_ai_processor": [
+      "backend.real_api_endpoints"
+    ]
+  },
+  "module_files": {
+    "agents.grok4_video_subagent": "agents/grok4_video_subagent.py",
+    "deploy_core_integration": "deploy_core_integration.py",
+    "test_100_videos": "test_100_videos.py",
+    "fix_syspath_issues": "fix_syspath_issues.py",
+    "scripts.tts_openai": "scripts/tts_openai.py",
+    "backend.main": "backend/main.py",
+    "direct_action_generator": "direct_action_generator.py",
+    "scripts.say_summary": "scripts/say_summary.py",
+    "factory.monitoring": "factory/monitoring.py",
+    "backend.video_processor_factory": "backend/video_processor_factory.py",
+    "backend.test_real_pipeline": "backend/test_real_pipeline.py",
+    "enterprise_mcp_server": "enterprise_mcp_server.py",
+    "create_import_map": "create_import_map.py",
+    "tools.collect_todos": "tools/collect_todos.py",
+    "monitoring_dashboard": "monitoring_dashboard.py",
+    "scripts.chat_tts_openai": "scripts/chat_tts_openai.py",
+    "agents.multi_llm_video_processor": "agents/multi_llm_video_processor.py",
+    "scripts.test_complete_deployment": "scripts/test_complete_deployment.py",
+    "backend.real_video_processor": "backend/real_video_processor.py",
+    "backend.main_v2": "backend/main_v2.py",
+    "factory.__init__": "factory/__init__.py",
+    "notebooklm_processor": "notebooklm_processor.py",
+    "agents.interactive_metadata_extractor": "agents/interactive_metadata_extractor.py",
+    "agents.mcp_ecosystem_coordinator": "agents/mcp_ecosystem_coordinator.py",
+    "factory.models": "factory/models.py",
+    "scripts.find_duplicates": "scripts/find_duplicates.py",
+    "phase1_import_analyzer": "phase1_import_analyzer.py",
+    "runviewscriptios": "runviewscriptios.py",
+    "scripts.demo_canary": "scripts/demo_canary.py",
+    "factory.celery_app": "factory/celery_app.py",
+    "backend.main_refactored": "backend/main_refactored.py",
+    "youtube_innovation_learning_database": "youtube_innovation_learning_database.py",
+    "scripts.verify_real_api_integration": "scripts/verify_real_api_integration.py",
+    "scripts.batch_process": "scripts/batch_process.py",
+    "scripts.__init__": "scripts/__init__.py",
+    "scripts.security_personas_test": "scripts/security_personas_test.py",
+    "youtube_error_context_integration": "youtube_error_context_integration.py",
+    "intelligence_layer.__init__": "intelligence_layer/__init__.py",
+    "agents.gemini_video_master_agent": "agents/gemini_video_master_agent.py",
+    "scripts.fetch_candidates": "scripts/fetch_candidates.py",
+    "test_enterprise_mcp": "test_enterprise_mcp.py",
+    "deploy_all": "deploy_all.py",
+    "server": "server.py",
+    "scripts.setup_llama_agent": "scripts/setup_llama_agent.py",
+    "agents.enhanced_video_processor": "agents/enhanced_video_processor.py",
+    "agents.observability_setup": "agents/observability_setup.py",
+    "backend.deployment_manager": "backend/deployment_manager.py",
+    "agents.mcp_enhanced_video_processor": "agents/mcp_enhanced_video_processor.py",
+    "scripts.production_demo": "scripts/production_demo.py",
+    "video_transcription_agent": "video_transcription_agent.py",
+    "backend.code_generator": "backend/code_generator.py",
+    "agents.validate_authenticity": "agents/validate_authenticity.py",
+    "factory.security": "factory/security.py",
+    "backend.http_server": "backend/http_server.py",
+    "agents.action_implementer": "agents/action_implementer.py",
+    "scripts.test_live_deployment": "scripts/test_live_deployment.py",
+    "test_simple_batch": "test_simple_batch.py",
+    "agents.a2a_remediation_orchestrator": "agents/a2a_remediation_orchestrator.py",
+    "scripts.stt_openai": "scripts/stt_openai.py",
+    "scripts.enhanced_continuous_runner": "scripts/enhanced_continuous_runner.py",
+    "tools.langextract_cli": "tools/langextract_cli.py",
+    "webhook_receiver": "webhook_receiver.py",
+    "agents.llama_background_agent": "agents/llama_background_agent.py",
+    "tools.__init__": "tools/__init__.py",
+    "build": "build.py",
+    "youtube_uvai_mcp": "youtube_uvai_mcp.py",
+    "scripts.voice_agent_chained": "scripts/voice_agent_chained.py",
+    "scripts.test_deployment_architecture": "scripts/test_deployment_architecture.py",
+    "scripts.continuous_runner": "scripts/continuous_runner.py",
+    "backend.ai_insights_processor": "backend/ai_insights_processor.py",
+    "verification_system": "verification_system.py",
+    "simple_workflow": "simple_workflow.py",
+    "main": "main.py",
+    "scripts.test_real_apis": "scripts/test_real_apis.py",
+    "youtube_innovation_mcp_server": "youtube_innovation_mcp_server.py",
+    "production_deployment": "production_deployment.py",
+    "scripts.script": "scripts/script.py",
+    "agents.orchestrator_minimal": "agents/orchestrator_minimal.py",
+    "factory.tasks": "factory/tasks.py",
+    "scripts.check_credentials": "scripts/check_credentials.py",
+    "agents.__init__": "agents/__init__.py",
+    "agents.video_to_action_workflow": "agents/video_to_action_workflow.py",
+    "tools.execute_bulk_processing": "tools/execute_bulk_processing.py",
+    "gap_fixing_workflow": "gap_fixing_workflow.py",
+    "tools.final_bulk_processor": "tools/final_bulk_processor.py",
+    "enhanced_mcp_server": "enhanced_mcp_server.py",
+    "backend.video_processor_interface": "backend/video_processor_interface.py",
+    "agents.process_video_with_mcp": "agents/process_video_with_mcp.py",
+    "chrome_safari_extractor": "chrome_safari_extractor.py",
+    "videoprism_analyzer": "videoprism_analyzer.py",
+    "__init__": "__init__.py",
+    "backend.real_api_endpoints": "backend/real_api_endpoints.py",
+    "agents.openai_dev_task_manager": "agents/openai_dev_task_manager.py",
+    "agents.a2a_framework": "agents/a2a_framework.py",
+    "mcp_server": "mcp_server.py",
+    "agents.markdown_video_processor": "agents/markdown_video_processor.py",
+    "chart_script": "chart_script.py",
+    "backend.enhanced_video_processor": "backend/enhanced_video_processor.py",
+    "scripts.vision_analyze": "scripts/vision_analyze.py",
+    "start_enhanced_backend": "start_enhanced_backend.py",
+    "video_transfer_pipeline": "video_transfer_pipeline.py"
+  }
+}

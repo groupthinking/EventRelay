@@ -1,0 +1,240 @@
+# Kubernetes Deployment for Firebase Project
+# Production-ready deployment with all Phase 3 systems
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: firebase-app
+  namespace: firebase
+  labels:
+    app: firebase-app
+    version: v1.0.0
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: firebase-app
+  template:
+    metadata:
+      labels:
+        app: firebase-app
+        version: v1.0.0
+    spec:
+      containers:
+      - name: firebase-app
+        image: registry.gitlab.com/groupthinking/firebase:latest
+        ports:
+        - containerPort: 3000
+          name: http
+        - containerPort: 9229
+          name: debug
+        env:
+        - name: NODE_ENV
+          value: "production"
+        - name: PORT
+          value: "3000"
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: firebase-secrets
+              key: database-url
+        - name: REDIS_URL
+          valueFrom:
+            secretKeyRef:
+              name: firebase-secrets
+              key: redis-url
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: firebase-secrets
+              key: jwt-secret
+        - name: ANALYTICS_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: firebase-secrets
+              key: analytics-api-key
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        volumeMounts:
+        - name: logs-volume
+          mountPath: /app/logs
+        - name: config-volume
+          mountPath: /app/config
+      volumes:
+      - name: logs-volume
+        persistentVolumeClaim:
+          claimName: firebase-logs-pvc
+      - name: config-volume
+        configMap:
+          name: firebase-config
+      initContainers:
+      - name: wait-for-postgres
+        image: postgres:15-alpine
+        command: ['sh', '-c', 'until pg_isready -h postgres -p 5432; do echo waiting for postgres; sleep 2; done;']
+      - name: wait-for-redis
+        image: redis:7-alpine
+        command: ['sh', '-c', 'until redis-cli -h redis ping; do echo waiting for redis; sleep 2; done;']
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: firebase-app-service
+  namespace: firebase
+  labels:
+    app: firebase-app
+spec:
+  selector:
+    app: firebase-app
+  ports:
+  - name: http
+    port: 80
+    targetPort: 3000
+    protocol: TCP
+  - name: https
+    port: 443
+    targetPort: 3000
+    protocol: TCP
+  type: ClusterIP
+
+---
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: firebase-app-ingress
+  namespace: firebase
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - firebase.yourdomain.com
+    secretName: firebase-tls
+  rules:
+  - host: firebase.yourdomain.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: firebase-app-service
+            port:
+              number: 80
+
+---
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: firebase-config
+  namespace: firebase
+data:
+  analytics-config.json: |
+    {
+      "enabled": true,
+      "dataRetention": 90,
+      "updateInterval": 300000,
+      "cache": {
+        "enabled": true,
+        "ttl": 300000,
+        "maxSize": 1000
+      }
+    }
+  monitoring-config.json: |
+    {
+      "enabled": true,
+      "interval": 30000,
+      "retentionPeriod": 86400000,
+      "alerts": {
+        "enabled": true,
+        "cooldown": 300000
+      }
+    }
+  compliance-config.json: |
+    {
+      "enabled": true,
+      "standards": {
+        "gdpr": { "enabled": true },
+        "hipaa": { "enabled": false },
+        "owasp": { "enabled": true },
+        "pci": { "enabled": false },
+        "soc2": { "enabled": false }
+      }
+    }
+
+---
+
+apiVersion: v1
+kind: Secret
+metadata:
+  name: firebase-secrets
+  namespace: firebase
+type: Opaque
+data:
+  # Base64 encoded secrets - replace with actual values
+  database-url: cG9zdGdyZXM6Ly91c2VyOnBhc3NAZGJfaG9zdDo1NDMyL2RiX25hbWU=
+  redis-url: cmVkaXM6Ly9yZWRpc19ob3N0OjYzNzk=
+  jwt-secret: eW91ci1qd3Qtc2VjcmV0LWtleQ==
+  analytics-api-key: eW91ci1hbmFseXRpY3MtYXBpLWtleQ==
+
+---
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: firebase-logs-pvc
+  namespace: firebase
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: standard
+
+---
+
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: firebase-app-pdb
+  namespace: firebase
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: firebase-app

@@ -1,0 +1,623 @@
+{
+  "count": 103,
+  "items": [
+    {
+      "file": "FINAL_INTEGRATION_STATUS.md",
+      "line": 109,
+      "tag": "TODO",
+      "text": "ITEMS**"
+    },
+    {
+      "file": "CURRENT_STATUS_ANALYSIS.md",
+      "line": 70,
+      "tag": "TODO",
+      "text": "Implement actual business logic"
+    },
+    {
+      "file": "CURRENT_STATUS_ANALYSIS.md",
+      "line": 214,
+      "tag": "TODO",
+      "text": "/FIXME comments"
+    },
+    {
+      "file": "CURRENT_STATUS_ANALYSIS.md",
+      "line": 244,
+      "tag": "TODO",
+      "text": "/FIXME comments"
+    },
+    {
+      "file": "CLAUDE.md",
+      "line": 155,
+      "tag": "TODO",
+      "text": "\" markers, indicating incomplete sections or future work."
+    },
+    {
+      "file": "CLAUDE.md",
+      "line": 220,
+      "tag": "TODO",
+      "text": "\" in the filename explicitly indicates that this document is a placeholder for future tasks or information."
+    },
+    {
+      "file": "CLAUDE.md",
+      "line": 259,
+      "tag": "TODO",
+      "text": "\" items, indicating areas that are not yet complete or require further attention:"
+    },
+    {
+      "file": "PRODUCTION_READINESS_TODO.md",
+      "line": 1,
+      "tag": "TODO",
+      "text": ""
+    },
+    {
+      "file": "PRODUCTION_READINESS_TODO.md",
+      "line": 3,
+      "tag": "TODO",
+      "text": "LIST**"
+    },
+    {
+      "file": "PHASE_1_CRITICAL_FIXES.md",
+      "line": 361,
+      "tag": "TODO",
+      "text": ".*simulation.*',"
+    },
+    {
+      "file": "PHASE_1_CRITICAL_FIXES.md",
+      "line": 362,
+      "tag": "FIXME",
+      "text": ".*simulation.*',"
+    },
+    {
+      "file": "FRONTEND_BACKEND_INTEGRATION_PLAN.md",
+      "line": 335,
+      "tag": "TODO",
+      "text": "LIST**"
+    },
+    {
+      "file": "bin/task",
+      "line": 86735,
+      "tag": "FIXME",
+      "text": "|TODO|XXX)\\b( .*)$\">"
+    },
+    {
+      "file": "bin/task",
+      "line": 87003,
+      "tag": "TODO",
+      "text": ")\\b\">"
+    },
+    {
+      "file": "bin/task",
+      "line": 110617,
+      "tag": "TODO",
+      "text": ")( .*)$\">"
+    },
+    {
+      "file": "bin/task",
+      "line": 110624,
+      "tag": "TODO",
+      "text": ")( .*)$\">"
+    },
+    {
+      "file": "bin/task",
+      "line": 111050,
+      "tag": "FIXME",
+      "text": "|MARK|TODO):\">"
+    },
+    {
+      "file": "bin/task",
+      "line": 111801,
+      "tag": "FIXME",
+      "text": "|ToggleAI|ToggleCollision|ToggleFogOfWar|ToggleGodMode|ToggleMenus|ToggleSky|ToggleWorld|ToggleVanityMode|CellChanged|GetAcrobatics|GetAgility|GetAIPackageDone|GetAlarm|GetAlchemy|GetAlteration|GetAngle|GetArmorBonus|GetArmorer|GetAthletics|GetAttackBonus|GetAttacked|GetArmorType,|GetAxe|GetBlightDisease|GetBlock|GetBluntWeapon|GetButtonPressed|GetCastPenalty|GetChameleon|GetCollidingActor|GetCollidingPC|GetCommonDisease|GetConjuration|GetCurrentAIPackage|GetCurrentTime|GetCurrentWeather|GetDeadCount|GetDefendBonus|GetDestruction|GetDetected|GetDisabled|GetDisposition|GetDistance|GetEffect|GetEnchant|GetEndurance|GetFatigue|GetFight|GetFlee|GetFlying|GetForceJump|GetForceRun|GetForceSneak|GetHandToHand|GetHealth|GetHealthGetRatio|GetHeavyArmor|GetIllusion|GetIntelligence|GetInterior|GetInvisible|GetItemCount|GetJournalIndex|GetLightArmor|GetLineOfSight|GetLOS|GetLevel|GetLocked|GetLongBlade|GetLuck|GetMagicka|GetMarksman|GetMasserPhase|GetSecundaPhase|GetMediumArmor|GetMercantile|GetMysticism|GetParalysis|GetPCCell|GetPCCrimeLevel|GetPCinJail|GetPCJumping|GetPCRank|GetPCRunning|GetPCSleep|GetPCSneaking|GetPCTraveling|GetPersonality|GetPlayerControlsDisabled|GetPlayerFightingDisabled|GetPlayerJumpingDisabled|GetPlayerLookingDisabled|GetPlayerMagicDisabled|GetPos|GetRace|GetReputation|GetResistBlight|GetResistCorprus|GetResistDisease|GetResistFire|GetResistFrost|GetResistMagicka|GetResistNormalWeapons|GetResistParalysis|GetResistPoison|GetResistShock|GetRestoration|GetScale|GetSecondsPassed|GetSecurity|GetShortBlade|GetSilence|GetSneak|GetSoundPlaying|GetSpear|GetSpeechcraft|GetSpeed|GetSpell|GetSpellEffects|GetSpellReadied|GetSquareRoot|GetStandingActor|GetStandingPC|GetStrength|GetSuperJump|GetSwimSpeed|GetTarget|GetUnarmored|GetVanityModeDisabled|GetWaterBreathing|GetWaterLevel|GetWaterWalking|GetWeaponDrawn|GetWeaponType|GetWerewolfKills|GetWillpower|GetWindSpeed|HasItemEquipped|HasSoulgem|HitAttemptOnMe|HitOnMe|IsWerewolf|MenuMode|OnActivate|OnDeath|OnKnockout|OnMurder|PCExpelled|PCGet3rdPerson|PCKnownWerewolf|Random|RepairedOnMe|SameFaction|SayDone|ScriptRunning|AllowWereWolfForceGreeting|Companion|MinimumProfit|NoFlee|NoHello|NoIdle|NoLore|OnPCAdd|OnPCDrop|OnPCEquip|OnPCHitMe|OnPCRepair|PCSkipEquip|OnPCSoulGemUse|StayOutside|CrimeGoldDiscount|CrimeGoldTurnIn|Day|DaysPassed|GameHour|Month|NPCVoiceDistance|PCRace|PCWerewolf|PCVampire|TimeScale|VampClan|Year)\\b\">"
+    },
+    {
+      "file": "bin/task",
+      "line": 112141,
+      "tag": "TODO",
+      "text": "|un(?:reachable|implemented))!)(\\s*)(\\()(\\s*)(&#34;)\">"
+    },
+    {
+      "file": "bin/task",
+      "line": 121978,
+      "tag": "XXX",
+      "text": "large|space-end|w-resize|georgian|flex-end|baseline|gujarati|fangsong|ui-serif|fill-box|keep-all|view-box|xx-small|gurmukhi|pre-line|pre-wrap|contents|xx-large|text-top|hiragana|self-end|katakana|collapse|separate|anywhere|saturate|expanded|subtract|progress|repeat-x|rotate3d|repeat-y|contrast|relative|forwards|infinite|absolute|matrix3d|vertical|overline|pan-down|pan-left|step-end|triangle|ease-out|textarea|sideways|checkbox|menulist|ellipsis|trim-end|grabbing|multiply|zoom-out|n-resize|s-resize|armenian|ordinal|zoom-in|visible|overlay|no-drop|listbox|unicode|lighten|ease-in|lighter|element|running|justify|display|fantasy|unicase|subgrid|reverse|upright|stretch|rotateX|current|exclude|rotateY|pointer|contain|opacity|default|no-clip|in-flow|hanging|isolate|discard|tibetan|persian|myanmar|rotateZ|content|inherit|outside|initial|kannada|smaller|decimal|symbols|x-large|balance|x-small|economy|caption|minimum|maximum|polygon|ellipse|cursive|bengali|masonry|static|region|column|run-in|inline|middle|circle|larger|button|square|pretty|always|hidden|rotate|inside|scroll|screen|matrix|create|unsafe|center|paused|nowrap|medium|darken|sesame|strict|outset|pan-up|bolder|telugu|scaleX|linear|scaleY|groove|double|scaleZ|dashed|minmax|legacy|hebrew|bottom|dotted|leader|normal|stable|weight|smooth|filled|italic|revert|manual|repeat|sticky|invert|table|round|space|alias|jis78|dense|sepia|emoji|auto;|clear|skewX|cover|right|skewY|style|light|unset|force|alpha|large|focus|solid|ridge|white|embed|tamil|blink|first|scale|radio|color|jis83|under|block|jis90|inset|start|pan-y|oriya|super|loose|mixed|thick|slice|pan-x|khmer|width|local|fixed|clone|avoid|serif|exact|recto|meter|small|verso|jis04|image|flow|flex|grid|ruby|wrap|ease|safe|grab|move|icon|bold|last|open|over|wavy|show|hide|both|url;|none|blur|text|line|menu|copy|dark|left|math|cell|clip|fill|skew|wait|help|flat|snap|keep|thai|thin|disc|path|page|attr|rect|auto|row|all|rtl|end|ltr|sub|hue|dot|url|top|lao|add|ray|pre|x|y|z)\\b\">"
+    },
+    {
+      "file": "docs/EXECUTION_SUMMARY.md",
+      "line": 70,
+      "tag": "TODO",
+      "text": "/FIXME comments indicating incomplete work"
+    },
+    {
+      "file": "backend/main.py",
+      "line": 537,
+      "tag": "TODO",
+      "text": "Implement process_chat_message in EnhancedVideoProcessor"
+    },
+    {
+      "file": "backend/main.py",
+      "line": 898,
+      "tag": "TODO",
+      "text": "Implement process_chat_message in EnhancedVideoProcessor"
+    },
+    {
+      "file": "tests/simulation_detection_agent.py",
+      "line": 109,
+      "tag": "TODO",
+      "text": ".*implement',"
+    },
+    {
+      "file": "tests/simulation_detection_agent.py",
+      "line": 110,
+      "tag": "FIXME",
+      "text": ".*replace',"
+    },
+    {
+      "file": "tests/simulation_detection_agent.py",
+      "line": 461,
+      "tag": "TODO",
+      "text": "Implement actual business logic"
+    },
+    {
+      "file": "frontend/Screenshot 2025-08-08 at 1.37.38 AM.png",
+      "line": 7977,
+      "tag": "XXX",
+      "text": "$PSDXP6e"
+    },
+    {
+      "file": "frontend/team meeting.png",
+      "line": 5263,
+      "tag": "XXX",
+      "text": "\u0019gVy\u001a2\u0012\u001bqIn\u6191\u0007V~1g\\un\u001a\u007ffx.#q\u0001\u0007X\u0000\u0003282j9lx{v\u0018\b\u028b"
+    },
+    {
+      "file": "frontend/project section.png",
+      "line": 10665,
+      "tag": "XXX",
+      "text": "!"
+    },
+    {
+      "file": "tools/collect_todos.py",
+      "line": 2,
+      "tag": "TODO",
+      "text": "/FIXME/HACK/XXX comments from the codebase and emit a JSON backlog."
+    },
+    {
+      "file": "tools/collect_todos.py",
+      "line": 11,
+      "tag": "TODO",
+      "text": "|FIXME|HACK|XXX)\\b[:\\s-]*(.*)\", re.IGNORECASE)"
+    },
+    {
+      "file": ".codeviz/reports/codebase_analysis_report_placeholder_and_fake_data_2025-08-16T07-54-28.md",
+      "line": 35,
+      "tag": "TODO",
+      "text": "\" markers, indicating incomplete sections or future work."
+    },
+    {
+      "file": ".codeviz/reports/codebase_analysis_report_placeholder_and_fake_data_2025-08-16T07-54-28.md",
+      "line": 166,
+      "tag": "TODO",
+      "text": "\" in the filename explicitly indicates that this document is a placeholder for future tasks or information."
+    },
+    {
+      "file": ".codeviz/reports/codebase_analysis_report_placeholder_and_fake_data_2025-08-16T07-54-28.md",
+      "line": 190,
+      "tag": "TODO",
+      "text": "Items<br>PRODUCTION_READINESS_TODO.md\"]"
+    },
+    {
+      "file": ".codeviz/reports/codebase_analysis_report_placeholder_and_fake_data_2025-08-16T07-54-28.md",
+      "line": 222,
+      "tag": "TODO",
+      "text": "\" items, indicating areas that are not yet complete or require further attention:"
+    },
+    {
+      "file": "labs/archive/YouTube_Link_Revenue_App (4)/ai-learning-agent-agents-20250729_020705/temp/audio/0y8BfvDIi3M.webm",
+      "line": 13489,
+      "tag": "XXX",
+      "text": "\u0004Gl,k=P0*?Y#"
+    },
+    {
+      "file": "labs/archive/YouTube_Link_Revenue_App (4)/ai-learning-agent-agents-20250729_020705/temp/audio/0y8BfvDIi3M.webm",
+      "line": 143919,
+      "tag": "TODO",
+      "text": "\\\u018d9H:~@D}cYe@-AZ)7TT\u0013VM\u0007gJ\u001f\u00ef}k"
+    },
+    {
+      "file": "labs/archive/YouTube_Link_Revenue_App (4)/ai-learning-agent-agents-20250729_020705/temp/audio/0y8BfvDIi3M.webm",
+      "line": 284880,
+      "tag": "XXX",
+      "text": "@:~X(t\\ \u001f~\u07f4yq5\u0017g5rTG(6cm\u0010G7\u0018\u007f-cBV"
+    },
+    {
+      "file": "labs/archive/YouTube_Link_Revenue_App (4)/ai-learning-agent-agents-20250729_020705/temp/audio/0y8BfvDIi3M.webm",
+      "line": 388839,
+      "tag": "XXX",
+      "text": "`\u0010@6IY"
+    },
+    {
+      "file": "labs/archive/YouTube_Link_Revenue_App (4)/ai-learning-agent-agents-20250729_020705/temp/audio/0y8BfvDIi3M.webm",
+      "line": 391643,
+      "tag": "XXX",
+      "text": "\u0018!*\u055f`r\u0333co\u0756o"
+    },
+    {
+      "file": "labs/archive/YouTube_Link_Revenue_App (4)/ai-learning-agent-agents-20250729_020705/temp/audio/0y8BfvDIi3M.webm",
+      "line": 476445,
+      "tag": "XXX",
+      "text": "\u06df"
+    },
+    {
+      "file": "labs/archive/YouTube_Link_Revenue_App (4)/ai-learning-agent-agents-20250729_020705/temp/audio/0y8BfvDIi3M.webm",
+      "line": 521176,
+      "tag": "XXX",
+      "text": "\u0000\u0019S\u001a<+IzZ\u03d6Z"
+    },
+    {
+      "file": "labs/archive/YouTube_Link_Revenue_App (4)/ai-learning-agent-agents-20250729_020705/temp/audio/0y8BfvDIi3M.webm",
+      "line": 544306,
+      "tag": "XXX",
+      "text": "?nq#y3H_ifBA>"
+    },
+    {
+      "file": "labs/archive/YouTube_Link_Revenue_App (4)/ai-learning-agent-agents-20250729_020705/temp/audio/0y8BfvDIi3M.webm",
+      "line": 547559,
+      "tag": "XXX",
+      "text": "\u0015CSz!\u0018\u085e\u0016}+c+\u0011C5R\b\u04ab\u0012>\u0002g\u0002@Z\u0007\u0002\u0003A"
+    },
+    {
+      "file": "labs/archive/YouTube_Link_Revenue_App (4)/ai-learning-agent-agents-20250729_020705/temp/audio/0y8BfvDIi3M.webm",
+      "line": 589202,
+      "tag": "XXX",
+      "text": "\u0017"
+    },
+    {
+      "file": "labs/archive/YouTube_Link_Revenue_App (4)/ai-learning-agent-agents-20250729_020705/temp/audio/0y8BfvDIi3M.webm",
+      "line": 593143,
+      "tag": "XXX",
+      "text": "\u06e7R\bI"
+    },
+    {
+      "file": "labs/archive/YouTube_Link_Revenue_App (4)/ai-learning-agent-agents-20250729_020705/temp/audio/0y8BfvDIi3M.webm",
+      "line": 640880,
+      "tag": "XXX",
+      "text": ".\u001a;;RVhg"
+    },
+    {
+      "file": "labs/archive/YouTube_Link_Revenue_App (4)/ai-learning-agent-agents-20250729_020705/temp/audio/0y8BfvDIi3M.webm",
+      "line": 692922,
+      "tag": "XXX",
+      "text": "|O\"\u000e?\u001am1=DeZ\u032d\u001bR-'E7\u0003\"K:\u0018A8%OP]C79 =ctZ6B'\u0002]"
+    },
+    {
+      "file": "labs/archive/YouTube_Link_Revenue_App (4)/ai-learning-agent-agents-20250729_020705/temp/audio/0y8BfvDIi3M.webm",
+      "line": 693951,
+      "tag": "XXX",
+      "text": "$@\u0006`~W\u0005A7{v\u0010\u0012Q\u007fi\u000epA<\u2adcK~\u05b3\t#\t\u001599\u0016\u0460!\u0002$$A70\ba\u0007[;N:"
+    },
+    {
+      "file": "labs/archive/YouTube_Link_Revenue_App (4)/ai-learning-agent-agents-20250729_020705/temp/audio/0y8BfvDIi3M.webm",
+      "line": 742429,
+      "tag": "XXX",
+      "text": "<2\u0010"
+    },
+    {
+      "file": "labs/archive/YouTube_Link_Revenue_App (4)/ai-learning-agent-agents-20250729_020705/temp/audio/0y8BfvDIi3M.webm",
+      "line": 765275,
+      "tag": "HACK",
+      "text": "\u000e\u0001}#"
+    },
+    {
+      "file": "labs/archive/YouTube_Link_Revenue_App (4)/ai-learning-agent-agents-20250729_020705/temp/audio/0y8BfvDIi3M.webm",
+      "line": 809691,
+      "tag": "XXX",
+      "text": "+\u007fj"
+    },
+    {
+      "file": "labs/archive/YouTube_Link_Revenue_App (4)/ai-learning-agent-agents-20250729_020705/temp/audio/0y8BfvDIi3M.webm",
+      "line": 814328,
+      "tag": "XXX",
+      "text": ".~\u0016L\u06b2f\u0018:Mq2T[\"D`{%-T\u0003"
+    },
+    {
+      "file": "labs/archive/YouTube_Link_Revenue_App (4)/ai-learning-agent-agents-20250729_020705/temp/audio/0y8BfvDIi3M.webm",
+      "line": 840023,
+      "tag": "XXX",
+      "text": "\u0000mjE@\u00171P\u0158W4\u000f!h0}rT\u0018$A0y\u0592\u0006q`u>I<"
+    },
+    {
+      "file": "labs/archive/YouTube_Link_Revenue_App (4)/ai-learning-agent-agents-20250729_020705/temp/audio/0y8BfvDIi3M.webm",
+      "line": 844301,
+      "tag": "XXX",
+      "text": "\u0006;P\u1c00\u0015k\u007f(\u0011,duCD"
+    },
+    {
+      "file": "labs/archive/YouTube_Link_Revenue_App (4)/ai-learning-agent-agents-20250729_020705/temp/audio/0y8BfvDIi3M.webm",
+      "line": 868148,
+      "tag": "XXX",
+      "text": ","
+    },
+    {
+      "file": "labs/archive/YouTube_Link_Revenue_App (4)/ai-learning-agent-agents-20250729_020705/temp/audio/0y8BfvDIi3M.webm",
+      "line": 887340,
+      "tag": "XXX",
+      "text": "+\u0005GnbzB}"
+    },
+    {
+      "file": "labs/archive/YouTube_Link_Revenue_App (4)/ai-learning-agent-agents-20250729_020705/temp/audio/jNQXAC9IVRw.webm",
+      "line": 15074,
+      "tag": "XXX",
+      "text": "!W\"B=`*\u001f\u03ae>Lp\u0011&\u0018\\yq\u01c2\u0010D\u0005.8"
+    },
+    {
+      "file": "labs/archive/YouTube_Link_Revenue_App (4)/ai-learning-agent-agents-20250729_020705/temp/audio/J5B9UGTuNoM.webm",
+      "line": 94780,
+      "tag": "XXX",
+      "text": "\u00076_ozIqjr"
+    },
+    {
+      "file": "labs/archive/YouTube_Link_Revenue_App (4)/ai-learning-agent-agents-20250729_020705/temp/audio/J5B9UGTuNoM.webm",
+      "line": 126492,
+      "tag": "XXX",
+      "text": "\u007fo"
+    },
+    {
+      "file": "labs/archive/YouTube_Link_Revenue_App (4)/ai-learning-agent-agents-20250729_020705/temp/audio/J5B9UGTuNoM.webm",
+      "line": 232480,
+      "tag": "XXX",
+      "text": "\u0012"
+    },
+    {
+      "file": "labs/archive/YouTube_Link_Revenue_App (4)/ai-learning-agent-agents-20250729_020705/temp/audio/J5B9UGTuNoM.webm",
+      "line": 340317,
+      "tag": "XXX",
+      "text": "!xZfVA>\u0004"
+    },
+    {
+      "file": "labs/archive/YouTube_Link_Revenue_App (4)/ai-learning-agent-agents-20250729_020705/temp/audio/J5B9UGTuNoM.webm",
+      "line": 383083,
+      "tag": "XXX",
+      "text": ""
+    },
+    {
+      "file": "labs/archive/YouTube_Link_Revenue_App (4)/ai-learning-agent-agents-20250729_020705/temp/audio/J5B9UGTuNoM.webm",
+      "line": 450056,
+      "tag": "XXX",
+      "text": ""
+    },
+    {
+      "file": "labs/archive/YouTube_Link_Revenue_App (4)/ai-learning-agent-agents-20250729_020705/temp/audio/J5B9UGTuNoM.webm",
+      "line": 477580,
+      "tag": "XXX",
+      "text": "COA2"
+    },
+    {
+      "file": "labs/archive/YouTube_Link_Revenue_App (4)/ai-learning-agent-agents-20250729_020705/temp/audio/J5B9UGTuNoM.webm",
+      "line": 544971,
+      "tag": "XXX",
+      "text": ""
+    },
+    {
+      "file": "labs/archive/YouTube_Link_Revenue_App (4)/ai-learning-agent-agents-20250729_020705/temp/audio/J5B9UGTuNoM.webm",
+      "line": 562132,
+      "tag": "XXX",
+      "text": "\bTK_$\u0186"
+    },
+    {
+      "file": "labs/archive/YouTube_Link_Revenue_App (4)/ai-learning-agent-agents-20250729_020705/temp/audio/J5B9UGTuNoM.webm",
+      "line": 563011,
+      "tag": "XXX",
+      "text": "\u0018}"
+    },
+    {
+      "file": "labs/archive/YouTube_Link_Revenue_App (4)/ai-learning-agent-agents-20250729_020705/temp/audio/J5B9UGTuNoM.webm",
+      "line": 564628,
+      "tag": "XXX",
+      "text": "\u0002DB+M0M"
+    },
+    {
+      "file": "labs/archive/YouTube_Link_Revenue_App (4)/ai-learning-agent-agents-20250729_020705/temp/audio/J5B9UGTuNoM.webm",
+      "line": 652248,
+      "tag": "XXX",
+      "text": "\u000f\u007f0b*`qu0V\u00054\u01de)n\u0013C\u0014\u0004F&Z61\u00184"
+    },
+    {
+      "file": "labs/archive/YouTube_Link_Revenue_App (4)/ai-learning-agent-agents-20250729_020705/temp/audio/J5B9UGTuNoM.webm",
+      "line": 670373,
+      "tag": "XXX",
+      "text": "l&\u007f"
+    },
+    {
+      "file": "labs/archive/YouTube_Link_Revenue_App (4)/ai-learning-agent-agents-20250729_020705/temp/audio/J5B9UGTuNoM.webm",
+      "line": 688361,
+      "tag": "XXX",
+      "text": "\u0016"
+    },
+    {
+      "file": "labs/archive/YouTube_Link_Revenue_App (4)/ai-learning-agent-agents-20250729_020705/temp/audio/J5B9UGTuNoM.webm",
+      "line": 776411,
+      "tag": "XXX",
+      "text": "%C4\u000eB?^\u0002/z7xy>\u0017i\\"
+    },
+    {
+      "file": "labs/archive/YouTube_Link_Revenue_App (4)/ai-learning-agent-agents-20250729_020705/temp/audio/J5B9UGTuNoM.webm",
+      "line": 808693,
+      "tag": "XXX",
+      "text": ">_>\u0017+\u0014\u0005>RM\u0007\u02d8\u0002#k\u00028\u0004~"
+    },
+    {
+      "file": "labs/archive/YouTube_Link_Revenue_App (4)/ai-learning-agent-agents-20250729_020705/temp/audio/J5B9UGTuNoM.webm",
+      "line": 859873,
+      "tag": "XXX",
+      "text": "\u00130bG&Ru\u0018?\u0006\u0003*W"
+    },
+    {
+      "file": "labs/archive/_cleanup_2025-08-08_12-00-38/temp_deploy/backend/main.py",
+      "line": 168,
+      "tag": "TODO",
+      "text": "Implement process_chat_message in EnhancedVideoProcessor"
+    },
+    {
+      "file": "labs/archive/_cleanup_2025-08-08_12-00-38/temp_deploy/backend/main.py",
+      "line": 376,
+      "tag": "TODO",
+      "text": "Implement process_chat_message in EnhancedVideoProcessor"
+    },
+    {
+      "file": "labs/archive/_cleanup_2025-08-08_12-00-38/temp_deploy/agents/specialized/quality_agent.py",
+      "line": 275,
+      "tag": "TODO",
+      "text": "/FIXME comments"
+    },
+    {
+      "file": "labs/archive/_cleanup_2025-08-08_12-00-38/temp_deploy/agents/specialized/quality_agent.py",
+      "line": 276,
+      "tag": "TODO",
+      "text": "|FIXME|HACK|XXX)\\b', line, re.IGNORECASE):"
+    },
+    {
+      "file": "labs/archive/_cleanup_2025-08-08_12-00-38/temp_deploy/agents/specialized/quality_agent.py",
+      "line": 280,
+      "tag": "TODO",
+      "text": "/FIXME comment\","
+    },
+    {
+      "file": "labs/archive/_cleanup_2025-08-08_12-00-38/temp_deploy/agents/specialized/quality_agent.py",
+      "line": 283,
+      "tag": "TODO",
+      "text": "or create a proper issue\""
+    },
+    {
+      "file": "labs/cursor-expert-mode/rules/mcp-enforcement.json",
+      "line": 72,
+      "tag": "TODO",
+      "text": "\", \"MOCK\", \"placeholder\", \"...\"],"
+    },
+    {
+      "file": "agents/planning/STRATEGIC_MCP_INTEGRATION_PLAN.md",
+      "line": 80,
+      "tag": "TODO",
+      "text": "(Production-Grade):"
+    },
+    {
+      "file": "agents/specialized/quality_agent.py",
+      "line": 379,
+      "tag": "TODO",
+      "text": "/FIXME comments"
+    },
+    {
+      "file": "agents/specialized/quality_agent.py",
+      "line": 380,
+      "tag": "TODO",
+      "text": "|FIXME|HACK|XXX)\\b', line, re.IGNORECASE):"
+    },
+    {
+      "file": "agents/specialized/quality_agent.py",
+      "line": 384,
+      "tag": "TODO",
+      "text": "/FIXME comment\","
+    },
+    {
+      "file": "agents/specialized/quality_agent.py",
+      "line": 387,
+      "tag": "TODO",
+      "text": "or create a proper issue\""
+    },
+    {
+      "file": "automation/auto_issues/0003-cleanup-todos-fixmes.md",
+      "line": 1,
+      "tag": "TODO",
+      "text": "/FIXME comments into issues"
+    },
+    {
+      "file": "automation/auto_issues/0003-cleanup-todos-fixmes.md",
+      "line": 5,
+      "tag": "TODO",
+      "text": "` and `FIXME` comments across core modules, archived artifacts, and third-party vendored packages. These markers hide incomplete work and technical debt that must be triaged before production readiness."
+    },
+    {
+      "file": "automation/auto_issues/0003-cleanup-todos-fixmes.md",
+      "line": 9,
+      "tag": "TODO",
+      "text": "|FIXME|HACK|XXX` comments but there are many in other areas."
+    },
+    {
+      "file": "automation/auto_issues/0003-cleanup-todos-fixmes.md",
+      "line": 16,
+      "tag": "TODO",
+      "text": "tracking docs."
+    },
+    {
+      "file": "automation/auto_issues/0003-cleanup-todos-fixmes.md",
+      "line": 17,
+      "tag": "TODO",
+      "text": "/FIXME in production code."
+    },
+    {
+      "file": "build_extensions/chrome/icons/icon48.png",
+      "line": 50577,
+      "tag": "TODO",
+      "text": "~?gaiofJ\u0017[lG\u0006Wk>0>m`[;D'\u0015-#K)\u001f]NZb\u0017dBdmBP6D\u0010"
+    },
+    {
+      "file": "build_extensions/chrome/icons/icon128.png",
+      "line": 50577,
+      "tag": "TODO",
+      "text": "~?gaiofJ\u0017[lG\u0006Wk>0>m`[;D'\u0015-#K)\u001f]NZb\u0017dBdmBP6D\u0010"
+    },
+    {
+      "file": "build_extensions/chrome/icons/icon16.png",
+      "line": 50577,
+      "tag": "TODO",
+      "text": "~?gaiofJ\u0017[lG\u0006Wk>0>m`[;D'\u0015-#K)\u001f]NZb\u0017dBdmBP6D\u0010"
+    },
+    {
+      "file": "build_extensions/chrome/icons/icon32.png",
+      "line": 50577,
+      "tag": "TODO",
+      "text": "~?gaiofJ\u0017[lG\u0006Wk>0>m`[;D'\u0015-#K)\u001f]NZb\u0017dBdmBP6D\u0010"
+    },
+    {
+      "file": "build_extensions/uvai-platform/core/ai-reasoning-engine/action-planner/solution_engine.py",
+      "line": 475,
+      "tag": "TODO",
+      "text": "' in solution or 'FIXME' in solution:"
+    },
+    {
+      "file": "build_extensions/uvai-platform/core/ai-reasoning-engine/video-analyzer/mcp_server.py",
+      "line": 81,
+      "tag": "TODO",
+      "text": "Initialize on-demand when actually needed"
+    },
+    {
+      "file": "build_extensions/uvai-platform/core/ai-reasoning-engine/solution-assembler/nexa_integration.py",
+      "line": 77,
+      "tag": "TODO",
+      "text": "Implement actual Nexa model calls when SDK is properly set up"
+    },
+    {
+      "file": "video-to-execution-starter-v2/deploy/fly_adapter.py",
+      "line": 2,
+      "tag": "TODO",
+      "text": "implement Fly.io deploy via API/CLI"
+    },
+    {
+      "file": "video-to-execution-starter-v2/deploy/docker_adapter.py",
+      "line": 2,
+      "tag": "TODO",
+      "text": "implement docker build/push/run"
+    },
+    {
+      "file": "video-to-execution-starter-v2/deploy/vercel_adapter.py",
+      "line": 2,
+      "tag": "TODO",
+      "text": "implement Vercel REST calls using VERCEL_TOKEN/ORG/PROJECT"
+    },
+    {
+      "file": "video-to-execution-starter-v2/deploy/netlify_adapter.py",
+      "line": 2,
+      "tag": "TODO",
+      "text": "implement Netlify deploy via API"
+    }
+  ]
+}

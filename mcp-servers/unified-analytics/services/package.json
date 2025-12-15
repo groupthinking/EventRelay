@@ -1,0 +1,10 @@
+{
+  "name": "mcp-core-server",
+  "version": "1.0.0",
+  "description": "Model Context Protocol Core Server",
+  "type": "module",
+  "main": "core-server.js",
+  "scripts": {
+    "start": "node core-server.js"
+  }
+}

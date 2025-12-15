@@ -1,0 +1,17 @@
+{
+  "name": "@repo/eslint-config",
+  "version": "0.0.0",
+  "private": true,
+  "main": "index.js",
+  "devDependencies": {
+    "eslint": "^8",
+    "eslint-config-next": "^16.0.6",
+    "eslint-config-prettier": "^9.0.0"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "2.0.53",
+    "@ai-sdk/openai": "2.0.76",
+    "ai": "5.0.106",
+    "next": "14.2.33"
+  }
+}

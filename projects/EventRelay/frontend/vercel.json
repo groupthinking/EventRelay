@@ -1,0 +1,26 @@
+{
+  "name": "youtube-extension-frontend",
+  "env": {
+    "REACT_APP_API_URL": "https://eventrelay-api-dd2hbwryvq-uc-833571612383.us-central1.run.app/api",
+    "REACT_APP_WS_URL": "wss://eventrelay-api-dd2hbwryvq-uc-833571612383.us-central1.run.app/ws"
+  },
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        },
+        {
+          "key": "X-XSS-Protection",
+          "value": "1; mode=block"
+        }
+      ]
+    }
+  ]
+}

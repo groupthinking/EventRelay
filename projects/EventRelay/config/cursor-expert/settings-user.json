@@ -1,0 +1,130 @@
+{
+  "cursor.ai": {
+    "model": "claude-3-opus",
+    "temperature": 0.3,
+    "maxTokens": 150000,
+    "contextWindow": "maximum",
+    "streamResponses": true
+  },
+  
+  "cursor.behavior": {
+    "mode": "expert-agentic",
+    "autonomyLevel": "high",
+    "proactiveActions": true,
+    "autoCompleteCode": true,
+    "autoFixErrors": true,
+    "autoRunTests": true,
+    "autoDocumentation": true,
+    "parallelToolExecution": true,
+    "maxParallelTools": 10
+  },
+  
+  "cursor.memory": {
+    "persistentMemory": true,
+    "memoryBackend": "mcp-compatible",
+    "checkpointInterval": 300,
+    "maxMemoryItems": 10000,
+    "autoUpdateMemory": true,
+    "contextPruning": "intelligent"
+  },
+  
+  "cursor.mcp": {
+    "enabled": true,
+    "enforceProtocol": true,
+    "defaultIntegration": "mcp-first",
+    "validateAllConnections": true,
+    "healthCheckInterval": 30,
+    "autoRetry": true,
+    "maxRetries": 3,
+    "timeoutMs": 30000
+  },
+  
+  "cursor.tools": {
+    "enableAllTools": true,
+    "toolPriority": [
+      "codebase_search",
+      "read_file",
+      "search_replace",
+      "MultiEdit",
+      "run_terminal_cmd",
+      "mcp_*",
+      "web_search"
+    ],
+    "autoToolSelection": true,
+    "toolExecutionMode": "parallel-optimized",
+    "verifyToolResults": true
+  },
+  
+  "cursor.context": {
+    "autoLoadRelevantFiles": true,
+    "contextRadius": 10,
+    "includeTests": true,
+    "includeDocs": true,
+    "includeConfigs": true,
+    "smartContextPruning": true,
+    "maxContextSize": "dynamic"
+  },
+  
+  "cursor.analysis": {
+    "deepCodeUnderstanding": true,
+    "crossFileAnalysis": true,
+    "architectureAwareness": true,
+    "securityScanning": true,
+    "performanceAnalysis": true,
+    "dependencyTracking": true
+  },
+  
+  "cursor.execution": {
+    "autoExecuteCommands": true,
+    "requireConfirmation": "critical-only",
+    "sandboxExecution": true,
+    "rollbackOnError": true,
+    "transactionMode": true,
+    "stateCheckpoints": true
+  },
+  
+  "cursor.communication": {
+    "responseStyle": "expert-technical",
+    "includeReasoning": true,
+    "showThinkingProcess": false,
+    "structuredOutputs": true,
+    "includeVerification": true,
+    "citeSources": true
+  },
+  
+  "cursor.rules": {
+    "enforceCustomRules": true,
+    "rulesPath": ".cursor/rules",
+    "validateBeforeExecution": true,
+    "blockOnViolation": true,
+    "autoFixViolations": true
+  },
+  
+  "cursor.integrations": {
+    "github": {
+      "enabled": true,
+      "autoFetchPRs": true,
+      "analyzePRContent": true
+    },
+    "mobileDevices": {
+      "enabled": true,
+      "defaultDevice": "simulator"
+    },
+    "browser": {
+      "enabled": true,
+      "defaultBrowser": "chromium"
+    },
+    "netlify": {
+      "enabled": true,
+      "autoDeployPreviews": true
+    }
+  },
+  
+  "cursor.monitoring": {
+    "trackPerformance": true,
+    "logAllActions": true,
+    "errorReporting": "detailed",
+    "usageAnalytics": true,
+    "exportMetrics": true
+  }
+}

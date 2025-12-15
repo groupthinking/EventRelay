@@ -1,0 +1,2097 @@
+{
+  "timestamp": "/home/runner/work/YOUTUBE-EXTENSION/YOUTUBE-EXTENSION",
+  "summary": {
+    "total_count": 254,
+    "by_tag": {
+      "TODO": 175,
+      "FIXME": 32,
+      "HACK": 5,
+      "XXX": 42
+    },
+    "by_priority": {
+      "medium": 70,
+      "critical": 23,
+      "low": 19,
+      "high": 142
+    },
+    "top_files": [
+      [
+        "deployment/automation/todo_report.json",
+        121
+      ],
+      [
+        "tests/test_todo_collection.py",
+        33
+      ],
+      [
+        "tools/todo_linter.py",
+        25
+      ],
+      [
+        "TODO_TRIAGE_CHECKLIST.md",
+        15
+      ],
+      [
+        "tools/collect_todos.py",
+        10
+      ],
+      [
+        "deployment/automation/auto_issues/0003-cleanup-todos-fixmes.md",
+        5
+      ],
+      [
+        "development/agents/specialized/quality_agent.py",
+        4
+      ],
+      [
+        ".codeviz/reports/codebase_analysis_report_placeholder_and_fake_data_2025-08-16T07-54-28.md",
+        4
+      ],
+      [
+        "tests/simulation_detection_agent.py",
+        3
+      ],
+      [
+        "docs/reports/CURRENT_STATUS_ANALYSIS.md",
+        3
+      ]
+    ],
+    "critical_count": 23,
+    "high_count": 142,
+    "needs_immediate_attention": 165
+  },
+  "items": [
+    {
+      "file": "TODO_TRIAGE_CHECKLIST.md",
+      "line": 1,
+      "tag": "TODO",
+      "text": "/FIXME Triage Checklist",
+      "priority": "medium",
+      "full_line": "# TODO/FIXME Triage Checklist"
+    },
+    {
+      "file": "TODO_TRIAGE_CHECKLIST.md",
+      "line": 5,
+      "tag": "TODO",
+      "text": "/FIXME comments found in the codebase. The enhanced `tools/collect_todos.py` script has identified **182 TODO items** that require attention, with **8 critical** and **136 high-priority** items.",
+      "priority": "critical",
+      "full_line": "This document provides a systematic approach to triaging and resolving the TODO/FIXME comments found in the codebase. The enhanced `tools/collect_todos.py` script has identified **182 TODO items** that require attention, with **8 critical** and **136 high-priority** items."
+    },
+    {
+      "file": "TODO_TRIAGE_CHECKLIST.md",
+      "line": 16,
+      "tag": "TODO",
+      "text": "list (3000+ items) in PRODUCTION_READINESS_TODO.md",
+      "priority": "critical",
+      "full_line": "- [ ] `docs/CLAUDE.md:93` - Massive TODO list (3000+ items) in PRODUCTION_READINESS_TODO.md"
+    },
+    {
+      "file": "TODO_TRIAGE_CHECKLIST.md",
+      "line": 90,
+      "tag": "TODO",
+      "text": "count over time",
+      "priority": "medium",
+      "full_line": "# Track TODO count over time"
+    },
+    {
+      "file": "TODO_TRIAGE_CHECKLIST.md",
+      "line": 94,
+      "tag": "TODO",
+      "text": "Resolution Guidelines",
+      "priority": "medium",
+      "full_line": "## \ud83d\udcdd TODO Resolution Guidelines"
+    },
+    {
+      "file": "TODO_TRIAGE_CHECKLIST.md",
+      "line": 96,
+      "tag": "TODO",
+      "text": "",
+      "priority": "medium",
+      "full_line": "### Before Resolving a TODO:"
+    },
+    {
+      "file": "TODO_TRIAGE_CHECKLIST.md",
+      "line": 111,
+      "tag": "TODO",
+      "text": "Scan** - Verify the TODO is properly resolved",
+      "priority": "medium",
+      "full_line": "3. **Run TODO Scan** - Verify the TODO is properly resolved"
+    },
+    {
+      "file": "TODO_TRIAGE_CHECKLIST.md",
+      "line": 116,
+      "tag": "TODO",
+      "text": "/FIXME in production code paths",
+      "priority": "critical",
+      "full_line": "- Warn on new TODO/FIXME in production code paths"
+    },
+    {
+      "file": "TODO_TRIAGE_CHECKLIST.md",
+      "line": 117,
+      "tag": "TODO",
+      "text": "/FIXME in critical security functions",
+      "priority": "critical",
+      "full_line": "- Block TODO/FIXME in critical security functions"
+    },
+    {
+      "file": "TODO_TRIAGE_CHECKLIST.md",
+      "line": 122,
+      "tag": "TODO",
+      "text": "comments",
+      "priority": "medium",
+      "full_line": "- Production code should avoid TODO comments"
+    },
+    {
+      "file": "TODO_TRIAGE_CHECKLIST.md",
+      "line": 131,
+      "tag": "TODO",
+      "text": "tracking in CI/CD",
+      "priority": "medium",
+      "full_line": "- [ ] Create automated TODO tracking in CI/CD"
+    },
+    {
+      "file": "TODO_TRIAGE_CHECKLIST.md",
+      "line": 141,
+      "tag": "TODO",
+      "text": "Review:",
+      "priority": "medium",
+      "full_line": "### Weekly TODO Review:"
+    },
+    {
+      "file": "TODO_TRIAGE_CHECKLIST.md",
+      "line": 147,
+      "tag": "TODO",
+      "text": "Audit:",
+      "priority": "medium",
+      "full_line": "### Monthly TODO Audit:"
+    },
+    {
+      "file": "TODO_TRIAGE_CHECKLIST.md",
+      "line": 148,
+      "tag": "TODO",
+      "text": "report",
+      "priority": "medium",
+      "full_line": "1. Generate full TODO report"
+    },
+    {
+      "file": "TODO_TRIAGE_CHECKLIST.md",
+      "line": 149,
+      "tag": "TODO",
+      "text": "trends and patterns",
+      "priority": "medium",
+      "full_line": "2. Review TODO trends and patterns"
+    },
+    {
+      "file": "docs/CLAUDE.md",
+      "line": 93,
+      "tag": "TODO",
+      "text": "list (3000+ items) in PRODUCTION_READINESS_TODO.md",
+      "priority": "critical",
+      "full_line": "1. Massive TODO list (3000+ items) in PRODUCTION_READINESS_TODO.md"
+    },
+    {
+      "file": "docs/CLAUDE.md",
+      "line": 149,
+      "tag": "TODO",
+      "text": "list systematically by impact",
+      "priority": "low",
+      "full_line": "1. Process TODO list systematically by impact"
+    },
+    {
+      "file": "docs/EXECUTION_SUMMARY.md",
+      "line": 70,
+      "tag": "TODO",
+      "text": "/FIXME comments indicating incomplete work",
+      "priority": "low",
+      "full_line": "\u251c\u2500\u2500 TODO/FIXME comments indicating incomplete work"
+    },
+    {
+      "file": "tests/simulation_detection_agent.py",
+      "line": 109,
+      "tag": "TODO",
+      "text": ".*implement',",
+      "priority": "medium",
+      "full_line": "r'# TODO.*implement',"
+    },
+    {
+      "file": "tests/simulation_detection_agent.py",
+      "line": 110,
+      "tag": "FIXME",
+      "text": ".*replace',",
+      "priority": "high",
+      "full_line": "r'# FIXME.*replace',"
+    },
+    {
+      "file": "tests/simulation_detection_agent.py",
+      "line": 461,
+      "tag": "TODO",
+      "text": "Implement actual business logic",
+      "priority": "medium",
+      "full_line": "TODO: Implement actual business logic"
+    },
+    {
+      "file": "tests/test_todo_collection.py",
+      "line": 2,
+      "tag": "TODO",
+      "text": "collection and triage functionality.\"\"\"",
+      "priority": "medium",
+      "full_line": "\"\"\"Tests for the enhanced TODO collection and triage functionality.\"\"\""
+    },
+    {
+      "file": "tests/test_todo_collection.py",
+      "line": 17,
+      "tag": "TODO",
+      "text": "collection functionality.\"\"\"",
+      "priority": "medium",
+      "full_line": "\"\"\"Test the enhanced TODO collection functionality.\"\"\""
+    },
+    {
+      "file": "tests/test_todo_collection.py",
+      "line": 35,
+      "tag": "TODO",
+      "text": "') == 'critical'",
+      "priority": "critical",
+      "full_line": "assert categorize_priority('src/auth.py', 'implement password encryption', 'TODO') == 'critical'"
+    },
+    {
+      "file": "tests/test_todo_collection.py",
+      "line": 36,
+      "tag": "TODO",
+      "text": "') == 'critical'",
+      "priority": "critical",
+      "full_line": "assert categorize_priority('backend/api.py', 'fix api key handling', 'TODO') == 'critical'"
+    },
+    {
+      "file": "tests/test_todo_collection.py",
+      "line": 37,
+      "tag": "TODO",
+      "text": "') == 'critical'",
+      "priority": "critical",
+      "full_line": "assert categorize_priority('config/security.py', 'add authentication', 'TODO') == 'critical'"
+    },
+    {
+      "file": "tests/test_todo_collection.py",
+      "line": 39,
+      "tag": "FIXME",
+      "text": "with security keywords should be critical",
+      "priority": "critical",
+      "full_line": "# FIXME with security keywords should be critical"
+    },
+    {
+      "file": "tests/test_todo_collection.py",
+      "line": 40,
+      "tag": "FIXME",
+      "text": "') == 'critical'",
+      "priority": "critical",
+      "full_line": "assert categorize_priority('main.py', 'broken authentication system', 'FIXME') == 'critical'"
+    },
+    {
+      "file": "tests/test_todo_collection.py",
+      "line": 42,
+      "tag": "HACK",
+      "text": "tags are generally high priority",
+      "priority": "high",
+      "full_line": "# HACK tags are generally high priority"
+    },
+    {
+      "file": "tests/test_todo_collection.py",
+      "line": 43,
+      "tag": "HACK",
+      "text": "') == 'high'",
+      "priority": "high",
+      "full_line": "assert categorize_priority('src/utils.py', 'temporary workaround', 'HACK') == 'high'"
+    },
+    {
+      "file": "tests/test_todo_collection.py",
+      "line": 48,
+      "tag": "TODO",
+      "text": "') == 'high'",
+      "priority": "medium",
+      "full_line": "assert categorize_priority('backend/main.py', 'implement error handling', 'TODO') == 'high'"
+    },
+    {
+      "file": "tests/test_todo_collection.py",
+      "line": 49,
+      "tag": "TODO",
+      "text": "') == 'high'",
+      "priority": "medium",
+      "full_line": "assert categorize_priority('src/database.py', 'add connection pooling', 'TODO') == 'high'"
+    },
+    {
+      "file": "tests/test_todo_collection.py",
+      "line": 52,
+      "tag": "TODO",
+      "text": "') == 'high'",
+      "priority": "medium",
+      "full_line": "assert categorize_priority('frontend/app.js', 'fix memory leak issue', 'TODO') == 'high'"
+    },
+    {
+      "file": "tests/test_todo_collection.py",
+      "line": 53,
+      "tag": "TODO",
+      "text": "') == 'high'",
+      "priority": "medium",
+      "full_line": "assert categorize_priority('utils/helper.py', 'performance optimization needed', 'TODO') == 'high'"
+    },
+    {
+      "file": "tests/test_todo_collection.py",
+      "line": 58,
+      "tag": "TODO",
+      "text": "') == 'medium'",
+      "priority": "medium",
+      "full_line": "assert categorize_priority('frontend/components/Button.tsx', 'improve styling', 'TODO') == 'medium'"
+    },
+    {
+      "file": "tests/test_todo_collection.py",
+      "line": 61,
+      "tag": "TODO",
+      "text": "') == 'low'",
+      "priority": "medium",
+      "full_line": "assert categorize_priority('docs/README.md', 'add more examples', 'TODO') == 'low'"
+    },
+    {
+      "file": "tests/test_todo_collection.py",
+      "line": 62,
+      "tag": "TODO",
+      "text": "') == 'low'",
+      "priority": "medium",
+      "full_line": "assert categorize_priority('examples/demo.py', 'cleanup demo code', 'TODO') == 'low'"
+    },
+    {
+      "file": "tests/test_todo_collection.py",
+      "line": 65,
+      "tag": "TODO",
+      "text": "') == 'medium'",
+      "priority": "medium",
+      "full_line": "assert categorize_priority('utils/helper.py', 'refactor this function', 'TODO') == 'medium'"
+    },
+    {
+      "file": "tests/test_todo_collection.py",
+      "line": 74,
+      "tag": "TODO",
+      "text": "implement main functionality\\n'",
+      "priority": "medium",
+      "full_line": "'# TODO: implement main functionality\\n'"
+    },
+    {
+      "file": "tests/test_todo_collection.py",
+      "line": 76,
+      "tag": "FIXME",
+      "text": "broken authentication\\n'",
+      "priority": "critical",
+      "full_line": "'    # FIXME: broken authentication\\n'"
+    },
+    {
+      "file": "tests/test_todo_collection.py",
+      "line": 81,
+      "tag": "TODO",
+      "text": "refactor this utility\\n'",
+      "priority": "medium",
+      "full_line": "'# TODO: refactor this utility\\n'"
+    },
+    {
+      "file": "tests/test_todo_collection.py",
+      "line": 89,
+      "tag": "TODO",
+      "text": "this should be excluded\\n')",
+      "priority": "medium",
+      "full_line": "(excluded_dir / 'old.py').write_text('# TODO: this should be excluded\\n')"
+    },
+    {
+      "file": "tests/test_todo_collection.py",
+      "line": 98,
+      "tag": "TODO",
+      "text": "is excluded",
+      "priority": "medium",
+      "full_line": "# Check that archive TODO is excluded"
+    },
+    {
+      "file": "tests/test_todo_collection.py",
+      "line": 108,
+      "tag": "TODO",
+      "text": "', 'priority': 'critical', 'file': 'main.py'},",
+      "priority": "critical",
+      "full_line": "{'tag': 'TODO', 'priority': 'critical', 'file': 'main.py'},"
+    },
+    {
+      "file": "tests/test_todo_collection.py",
+      "line": 109,
+      "tag": "TODO",
+      "text": "', 'priority': 'high', 'file': 'main.py'},",
+      "priority": "medium",
+      "full_line": "{'tag': 'TODO', 'priority': 'high', 'file': 'main.py'},"
+    },
+    {
+      "file": "tests/test_todo_collection.py",
+      "line": 110,
+      "tag": "FIXME",
+      "text": "', 'priority': 'critical', 'file': 'auth.py'},",
+      "priority": "critical",
+      "full_line": "{'tag': 'FIXME', 'priority': 'critical', 'file': 'auth.py'},"
+    },
+    {
+      "file": "tests/test_todo_collection.py",
+      "line": 111,
+      "tag": "TODO",
+      "text": "', 'priority': 'medium', 'file': 'utils.py'},",
+      "priority": "medium",
+      "full_line": "{'tag': 'TODO', 'priority': 'medium', 'file': 'utils.py'},"
+    },
+    {
+      "file": "tests/test_todo_collection.py",
+      "line": 117,
+      "tag": "TODO",
+      "text": "'] == 3",
+      "priority": "medium",
+      "full_line": "assert summary['by_tag']['TODO'] == 3"
+    },
+    {
+      "file": "tests/test_todo_collection.py",
+      "line": 118,
+      "tag": "FIXME",
+      "text": "'] == 1",
+      "priority": "high",
+      "full_line": "assert summary['by_tag']['FIXME'] == 1"
+    },
+    {
+      "file": "tests/test_todo_collection.py",
+      "line": 127,
+      "tag": "TODO",
+      "text": "linting functionality.\"\"\"",
+      "priority": "medium",
+      "full_line": "\"\"\"Test TODO linting functionality.\"\"\""
+    },
+    {
+      "file": "tests/test_todo_collection.py",
+      "line": 151,
+      "tag": "TODO",
+      "text": "collection tests...\")",
+      "priority": "medium",
+      "full_line": "print(\"Running TODO collection tests...\")"
+    },
+    {
+      "file": "tests/test_todo_collection.py",
+      "line": 167,
+      "tag": "TODO",
+      "text": "', 'critical'),",
+      "priority": "critical",
+      "full_line": "('auth.py', 'implement password encryption', 'TODO', 'critical'),"
+    },
+    {
+      "file": "tests/test_todo_collection.py",
+      "line": 168,
+      "tag": "TODO",
+      "text": "', 'high'),",
+      "priority": "medium",
+      "full_line": "('backend/main.py', 'add error handling', 'TODO', 'high'),"
+    },
+    {
+      "file": "tests/test_todo_collection.py",
+      "line": 169,
+      "tag": "TODO",
+      "text": "', 'low'),",
+      "priority": "medium",
+      "full_line": "('docs/README.md', 'improve documentation', 'TODO', 'low'),"
+    },
+    {
+      "file": "tools/todo_linter.py",
+      "line": 3,
+      "tag": "TODO",
+      "text": "/FIXME linter to prevent production TODOs and encourage proper issue tracking.",
+      "priority": "critical",
+      "full_line": "TODO/FIXME linter to prevent production TODOs and encourage proper issue tracking."
+    },
+    {
+      "file": "tools/todo_linter.py",
+      "line": 5,
+      "tag": "TODO",
+      "text": "hygiene.",
+      "priority": "medium",
+      "full_line": "This script can be used as a pre-commit hook or in CI/CD to enforce TODO hygiene."
+    },
+    {
+      "file": "tools/todo_linter.py",
+      "line": 13,
+      "tag": "TODO",
+      "text": "/FIXME/HACK/XXX comments",
+      "priority": "medium",
+      "full_line": "# Pattern to match TODO/FIXME/HACK/XXX comments"
+    },
+    {
+      "file": "tools/todo_linter.py",
+      "line": 14,
+      "tag": "TODO",
+      "text": "|FIXME|HACK|XXX)\\b[:\\s-]*(.*)', re.IGNORECASE)",
+      "priority": "medium",
+      "full_line": "TODO_PATTERN = re.compile(r'\\b(TODO|FIXME|HACK|XXX)\\b[:\\s-]*(.*)', re.IGNORECASE)"
+    },
+    {
+      "file": "tools/todo_linter.py",
+      "line": 16,
+      "tag": "TODO",
+      "text": "rules",
+      "priority": "medium",
+      "full_line": "# Production code patterns - stricter TODO rules"
+    },
+    {
+      "file": "tools/todo_linter.py",
+      "line": 22,
+      "tag": "TODO",
+      "text": "patterns (with issue links or temporary markers)",
+      "priority": "medium",
+      "full_line": "# Allowed TODO patterns (with issue links or temporary markers)"
+    },
+    {
+      "file": "tools/todo_linter.py",
+      "line": 24,
+      "tag": "TODO",
+      "text": "\\s*\\(#\\d+\\)',  # TODO (#123) - linked to issue",
+      "priority": "medium",
+      "full_line": "r'TODO\\s*\\(#\\d+\\)',  # TODO (#123) - linked to issue"
+    },
+    {
+      "file": "tools/todo_linter.py",
+      "line": 25,
+      "tag": "TODO",
+      "text": "\\s*:\\s*https://github\\.com/',  # TODO: https://github.com/... - linked to issue",
+      "priority": "medium",
+      "full_line": "r'TODO\\s*:\\s*https://github\\.com/',  # TODO: https://github.com/... - linked to issue"
+    },
+    {
+      "file": "tools/todo_linter.py",
+      "line": 26,
+      "tag": "TODO",
+      "text": "\\s*:\\s*TEMP\\b',  # TODO: TEMP - temporary marker",
+      "priority": "medium",
+      "full_line": "r'TODO\\s*:\\s*TEMP\\b',  # TODO: TEMP - temporary marker"
+    },
+    {
+      "file": "tools/todo_linter.py",
+      "line": 27,
+      "tag": "TODO",
+      "text": "\\s*:\\s*REVIEW\\b',  # TODO: REVIEW - code review marker",
+      "priority": "medium",
+      "full_line": "r'TODO\\s*:\\s*REVIEW\\b',  # TODO: REVIEW - code review marker"
+    },
+    {
+      "file": "tools/todo_linter.py",
+      "line": 40,
+      "tag": "TODO",
+      "text": "comment follows allowed patterns.\"\"\"",
+      "priority": "medium",
+      "full_line": "\"\"\"Check if a TODO comment follows allowed patterns.\"\"\""
+    },
+    {
+      "file": "tools/todo_linter.py",
+      "line": 45,
+      "tag": "TODO",
+      "text": "violations.\"\"\"",
+      "priority": "medium",
+      "full_line": "\"\"\"Lint a single file for TODO violations.\"\"\""
+    },
+    {
+      "file": "tools/todo_linter.py",
+      "line": 64,
+      "tag": "FIXME",
+      "text": "', 'HACK', 'XXX']:",
+      "priority": "high",
+      "full_line": "if tag in ['FIXME', 'HACK', 'XXX']:"
+    },
+    {
+      "file": "tools/todo_linter.py",
+      "line": 70,
+      "tag": "TODO",
+      "text": "' and not is_allowed_todo(full_todo):",
+      "priority": "medium",
+      "full_line": "elif tag == 'TODO' and not is_allowed_todo(full_todo):"
+    },
+    {
+      "file": "tools/todo_linter.py",
+      "line": 73,
+      "tag": "TODO",
+      "text": "must link to issue or use allowed pattern\",",
+      "priority": "medium",
+      "full_line": "\"Production TODO must link to issue or use allowed pattern\","
+    },
+    {
+      "file": "tools/todo_linter.py",
+      "line": 77,
+      "tag": "HACK",
+      "text": "/XXX",
+      "priority": "high",
+      "full_line": "# Non-production files: warn on HACK/XXX"
+    },
+    {
+      "file": "tools/todo_linter.py",
+      "line": 78,
+      "tag": "HACK",
+      "text": "', 'XXX']:",
+      "priority": "high",
+      "full_line": "if tag in ['HACK', 'XXX']:"
+    },
+    {
+      "file": "tools/todo_linter.py",
+      "line": 81,
+      "tag": "TODO",
+      "text": "and proper issue tracking\",",
+      "priority": "medium",
+      "full_line": "f\"Consider replacing {tag} with TODO and proper issue tracking\","
+    },
+    {
+      "file": "tools/todo_linter.py",
+      "line": 89,
+      "tag": "TODO",
+      "text": "/FIXME comments')",
+      "priority": "medium",
+      "full_line": "parser = argparse.ArgumentParser(description='Lint TODO/FIXME comments')"
+    },
+    {
+      "file": "tools/todo_linter.py",
+      "line": 134,
+      "tag": "TODO",
+      "text": "Hygiene Guidelines:\")",
+      "priority": "medium",
+      "full_line": "print(\"\\n\ud83d\udcdd TODO Hygiene Guidelines:\")"
+    },
+    {
+      "file": "tools/todo_linter.py",
+      "line": 135,
+      "tag": "TODO",
+      "text": "(#123) or TODO: https://github.com/...\")",
+      "priority": "medium",
+      "full_line": "print(\"  \u2022 Production TODOs must link to issues: TODO (#123) or TODO: https://github.com/...\")"
+    },
+    {
+      "file": "tools/todo_linter.py",
+      "line": 136,
+      "tag": "TODO",
+      "text": "TEMP for temporary development markers\")",
+      "priority": "medium",
+      "full_line": "print(\"  \u2022 Use TODO: TEMP for temporary development markers\")"
+    },
+    {
+      "file": "tools/todo_linter.py",
+      "line": 137,
+      "tag": "FIXME",
+      "text": "/HACK/XXX in production code\")",
+      "priority": "critical",
+      "full_line": "print(\"  \u2022 Avoid FIXME/HACK/XXX in production code\")"
+    },
+    {
+      "file": "tools/todo_linter.py",
+      "line": 141,
+      "tag": "TODO",
+      "text": "violations\")",
+      "priority": "medium",
+      "full_line": "print(\"\\n\u274c Strict mode: Failing due to TODO violations\")"
+    },
+    {
+      "file": "tools/todo_linter.py",
+      "line": 146,
+      "tag": "TODO",
+      "text": "violations found!\")",
+      "priority": "medium",
+      "full_line": "print(\"\u2705 No TODO violations found!\")"
+    },
+    {
+      "file": "tools/collect_todos.py",
+      "line": 2,
+      "tag": "TODO",
+      "text": "/FIXME/HACK/XXX comments from the codebase and emit a JSON backlog.",
+      "priority": "medium",
+      "full_line": "\"\"\"Collect TODO/FIXME/HACK/XXX comments from the codebase and emit a JSON backlog."
+    },
+    {
+      "file": "tools/collect_todos.py",
+      "line": 12,
+      "tag": "TODO",
+      "text": "|FIXME|HACK|XXX)\\b[:\\s-]*(.*)\", re.IGNORECASE)",
+      "priority": "medium",
+      "full_line": "PATTERN = re.compile(r\"\\b(TODO|FIXME|HACK|XXX)\\b[:\\s-]*(.*)\", re.IGNORECASE)"
+    },
+    {
+      "file": "tools/collect_todos.py",
+      "line": 75,
+      "tag": "TODO",
+      "text": "priority based on file path and content.\"\"\"",
+      "priority": "medium",
+      "full_line": "\"\"\"Categorize TODO priority based on file path and content.\"\"\""
+    },
+    {
+      "file": "tools/collect_todos.py",
+      "line": 92,
+      "tag": "FIXME",
+      "text": "and HACK are generally higher priority",
+      "priority": "high",
+      "full_line": "# FIXME and HACK are generally higher priority"
+    },
+    {
+      "file": "tools/collect_todos.py",
+      "line": 93,
+      "tag": "FIXME",
+      "text": "', 'HACK']:",
+      "priority": "high",
+      "full_line": "if tag in ['FIXME', 'HACK']:"
+    },
+    {
+      "file": "tools/collect_todos.py",
+      "line": 125,
+      "tag": "TODO",
+      "text": "comments with enhanced filtering and categorization.\"\"\"",
+      "priority": "medium",
+      "full_line": "\"\"\"Scan for TODO comments with enhanced filtering and categorization.\"\"\""
+    },
+    {
+      "file": "tools/collect_todos.py",
+      "line": 202,
+      "tag": "TODO",
+      "text": "/FIXME comments')",
+      "priority": "medium",
+      "full_line": "parser = argparse.ArgumentParser(description='Collect and triage TODO/FIXME comments')"
+    },
+    {
+      "file": "tools/collect_todos.py",
+      "line": 214,
+      "tag": "TODO",
+      "text": "/FIXME comments...\")",
+      "priority": "medium",
+      "full_line": "print(f\"Scanning {root} for TODO/FIXME comments...\")"
+    },
+    {
+      "file": "tools/collect_todos.py",
+      "line": 225,
+      "tag": "TODO",
+      "text": "/FIXME Summary Report\")",
+      "priority": "medium",
+      "full_line": "print(f\"\\n\ud83d\udcca TODO/FIXME Summary Report\")"
+    },
+    {
+      "file": "tools/collect_todos.py",
+      "line": 250,
+      "tag": "TODO",
+      "text": "/FIXME items\")",
+      "priority": "medium",
+      "full_line": "print(f\"Found {len(items)} TODO/FIXME items\")"
+    },
+    {
+      "file": "development/agents/planning/STRATEGIC_MCP_INTEGRATION_PLAN.md",
+      "line": 80,
+      "tag": "TODO",
+      "text": "(Production-Grade):",
+      "priority": "critical",
+      "full_line": "## Immediate TODO (Production-Grade):"
+    },
+    {
+      "file": "development/agents/specialized/quality_agent.py",
+      "line": 379,
+      "tag": "TODO",
+      "text": "/FIXME comments",
+      "priority": "medium",
+      "full_line": "# TODO/FIXME comments"
+    },
+    {
+      "file": "development/agents/specialized/quality_agent.py",
+      "line": 380,
+      "tag": "TODO",
+      "text": "|FIXME|HACK|XXX)\\b', line, re.IGNORECASE):",
+      "priority": "medium",
+      "full_line": "if re.search(r'\\b(TODO|FIXME|HACK|XXX)\\b', line, re.IGNORECASE):"
+    },
+    {
+      "file": "development/agents/specialized/quality_agent.py",
+      "line": 384,
+      "tag": "TODO",
+      "text": "/FIXME comment\",",
+      "priority": "medium",
+      "full_line": "description=f\"Line {i} contains TODO/FIXME comment\","
+    },
+    {
+      "file": "development/agents/specialized/quality_agent.py",
+      "line": 387,
+      "tag": "TODO",
+      "text": "or create a proper issue\"",
+      "priority": "medium",
+      "full_line": "suggestion=\"Address the TODO or create a proper issue\""
+    },
+    {
+      "file": ".codeviz/reports/codebase_analysis_report_placeholder_and_fake_data_2025-08-16T07-54-28.md",
+      "line": 35,
+      "tag": "TODO",
+      "text": "\" markers, indicating incomplete sections or future work.",
+      "priority": "medium",
+      "full_line": "*   **Documentation/Planning files:** Some markdown files contain \"TODO\" markers, indicating incomplete sections or future work."
+    },
+    {
+      "file": ".codeviz/reports/codebase_analysis_report_placeholder_and_fake_data_2025-08-16T07-54-28.md",
+      "line": 166,
+      "tag": "TODO",
+      "text": "\" in the filename explicitly indicates that this document is a placeholder for future tasks or information.",
+      "priority": "medium",
+      "full_line": "*   [PRODUCTION_READINESS_TODO.md](PRODUCTION_READINESS_TODO.md): The \"TODO\" in the filename explicitly indicates that this document is a placeholder for future tasks or information."
+    },
+    {
+      "file": ".codeviz/reports/codebase_analysis_report_placeholder_and_fake_data_2025-08-16T07-54-28.md",
+      "line": 190,
+      "tag": "TODO",
+      "text": "Items<br>PRODUCTION_READINESS_TODO.md\"]",
+      "priority": "critical",
+      "full_line": "prodReadinessTodo[\"PRODUCTION_READINESS_TODO.md<br>Content Type: TODO Items<br>PRODUCTION_READINESS_TODO.md\"]"
+    },
+    {
+      "file": ".codeviz/reports/codebase_analysis_report_placeholder_and_fake_data_2025-08-16T07-54-28.md",
+      "line": 222,
+      "tag": "TODO",
+      "text": "\" items, indicating areas that are not yet complete or require further attention:",
+      "priority": "medium",
+      "full_line": "This markdown file contains the following \"TODO\" items, indicating areas that are not yet complete or require further attention:"
+    },
+    {
+      "file": "docs/reports/CURRENT_STATUS_ANALYSIS.md",
+      "line": 70,
+      "tag": "TODO",
+      "text": "Implement actual business logic",
+      "priority": "low",
+      "full_line": "# TODO: Implement actual business logic"
+    },
+    {
+      "file": "docs/reports/CURRENT_STATUS_ANALYSIS.md",
+      "line": 214,
+      "tag": "TODO",
+      "text": "/FIXME comments",
+      "priority": "low",
+      "full_line": "- Clean up TODO/FIXME comments"
+    },
+    {
+      "file": "docs/reports/CURRENT_STATUS_ANALYSIS.md",
+      "line": 244,
+      "tag": "TODO",
+      "text": "/FIXME comments",
+      "priority": "low",
+      "full_line": "2. Clean up codebase and remove TODO/FIXME comments"
+    },
+    {
+      "file": "docs/reports/GITHUB_UPDATES_SYNC_REPORT.md",
+      "line": 54,
+      "tag": "TODO",
+      "text": "Collection**: `tools/collect_todos.py` for code quality",
+      "priority": "low",
+      "full_line": "- **TODO Collection**: `tools/collect_todos.py` for code quality"
+    },
+    {
+      "file": "docs/reports/GITHUB_UPDATES_SYNC_REPORT.md",
+      "line": 83,
+      "tag": "TODO",
+      "text": "Collection**: Automated technical debt identification",
+      "priority": "low",
+      "full_line": "- **TODO Collection**: Automated technical debt identification"
+    },
+    {
+      "file": "docs/reports/GITHUB_UPDATES_SYNC_REPORT.md",
+      "line": 118,
+      "tag": "TODO",
+      "text": "/FIXME tracking",
+      "priority": "low",
+      "full_line": "3. **Code Quality** - Continuous TODO/FIXME tracking"
+    },
+    {
+      "file": "docs/reports/FINAL_INTEGRATION_STATUS.md",
+      "line": 109,
+      "tag": "TODO",
+      "text": "ITEMS**",
+      "priority": "low",
+      "full_line": "## \ud83d\udccb **COMPLETED TODO ITEMS**"
+    },
+    {
+      "file": "docs/plans/PRODUCTION_READINESS_TODO.md",
+      "line": 1,
+      "tag": "TODO",
+      "text": "",
+      "priority": "low",
+      "full_line": "# \ud83d\ude80 PRODUCTION READINESS & FRONTEND/BACKEND INTEGRATION TODO"
+    },
+    {
+      "file": "docs/plans/PRODUCTION_READINESS_TODO.md",
+      "line": 3,
+      "tag": "TODO",
+      "text": "LIST**",
+      "priority": "low",
+      "full_line": "## \ud83d\udccb **MASTER TODO LIST**"
+    },
+    {
+      "file": "docs/plans/FRONTEND_BACKEND_INTEGRATION_PLAN.md",
+      "line": 335,
+      "tag": "TODO",
+      "text": "LIST**",
+      "priority": "low",
+      "full_line": "## \ud83d\udccb **IMPLEMENTATION TODO LIST**"
+    },
+    {
+      "file": "docs/plans/PHASE_1_CRITICAL_FIXES.md",
+      "line": 361,
+      "tag": "TODO",
+      "text": ".*simulation.*',",
+      "priority": "low",
+      "full_line": "r'# TODO.*simulation.*',"
+    },
+    {
+      "file": "docs/plans/PHASE_1_CRITICAL_FIXES.md",
+      "line": 362,
+      "tag": "FIXME",
+      "text": ".*simulation.*',",
+      "priority": "high",
+      "full_line": "r'# FIXME.*simulation.*',"
+    },
+    {
+      "file": "docs/archive/CLAUDE.gen.md",
+      "line": 274,
+      "tag": "TODO",
+      "text": "\" markers, indicating incomplete sections or future work.",
+      "priority": "low",
+      "full_line": "* **Documentation/Planning files:** Some markdown files contain \"TODO\" markers, indicating incomplete sections or future work."
+    },
+    {
+      "file": "docs/archive/CLAUDE.gen.md",
+      "line": 404,
+      "tag": "TODO",
+      "text": "\" in the filename explicitly indicates that this document is a placeholder for future tasks or information.",
+      "priority": "low",
+      "full_line": "* [PRODUCTION_READINESS_TODO.md](PRODUCTION_READINESS_TODO.md): The \"TODO\" in the filename explicitly indicates that this document is a placeholder for future tasks or information."
+    },
+    {
+      "file": "docs/archive/archived_research_context.md",
+      "line": 67,
+      "tag": "TODO",
+      "text": "\" markers, indicating incomplete sections or future work.",
+      "priority": "low",
+      "full_line": "*   **Documentation/Planning files:** Some markdown files contain \"TODO\" markers, indicating incomplete sections or future work."
+    },
+    {
+      "file": "docs/project_reports/phases/PHASE3_BACKEND_COMPONENTS_PLAN.md",
+      "line": 155,
+      "tag": "TODO",
+      "text": "List",
+      "priority": "low",
+      "full_line": "## \ud83d\udccb Phase 3 Todo List"
+    },
+    {
+      "file": "docs/project_reports/phases/PHASE2_COMPLETION_REPORT.md",
+      "line": 143,
+      "tag": "TODO",
+      "text": "list to mark Phase 2 as completed. I'll create a quick validation script to run comprehensive tests.",
+      "priority": "low",
+      "full_line": "</xai:function_call\">Now let me create a comprehensive validation script to test all the fixes and update the todo list to mark Phase 2 as completed. I'll create a quick validation script to run comprehensive tests."
+    },
+    {
+      "file": "docs/project_reports/phases/PHASE2_SCRIPTS_TOOLS_PLAN.md",
+      "line": 152,
+      "tag": "TODO",
+      "text": "List",
+      "priority": "low",
+      "full_line": "## \ud83d\udccb Phase 2 Todo List"
+    },
+    {
+      "file": "research/labs/cursor-expert-mode/rules/mcp-enforcement.json",
+      "line": 72,
+      "tag": "TODO",
+      "text": "\", \"MOCK\", \"placeholder\", \"...\"],",
+      "priority": "medium",
+      "full_line": "\"rejectPatterns\": [\"TODO\", \"MOCK\", \"placeholder\", \"...\"],"
+    },
+    {
+      "file": "config/project_templates/TEMPLATE_MASTER_INDEX.md",
+      "line": 15,
+      "tag": "TODO",
+      "text": "lists with implementation checklists",
+      "priority": "high",
+      "full_line": "- Comprehensive TODO lists with implementation checklists"
+    },
+    {
+      "file": "config/project_templates/production_phases/PHASE_3_PRODUCTION_HARDENING.md",
+      "line": 10,
+      "tag": "TODO",
+      "text": "LIST",
+      "priority": "high",
+      "full_line": "## \ud83d\udccb COMPREHENSIVE TODO LIST"
+    },
+    {
+      "file": "legacy/video-to-execution-starter-v2/deploy/fly_adapter.py",
+      "line": 2,
+      "tag": "TODO",
+      "text": "implement Fly.io deploy via API/CLI",
+      "priority": "critical",
+      "full_line": "# TODO: implement Fly.io deploy via API/CLI"
+    },
+    {
+      "file": "legacy/video-to-execution-starter-v2/deploy/docker_adapter.py",
+      "line": 2,
+      "tag": "TODO",
+      "text": "implement docker build/push/run",
+      "priority": "high",
+      "full_line": "# TODO: implement docker build/push/run"
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 7,
+      "tag": "TODO",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"TODO\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 13,
+      "tag": "TODO",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"TODO\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 19,
+      "tag": "TODO",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"TODO\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 20,
+      "tag": "FIXME",
+      "text": "comments\"",
+      "priority": "high",
+      "full_line": "\"text\": \"/FIXME comments\""
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 25,
+      "tag": "TODO",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"TODO\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 26,
+      "tag": "FIXME",
+      "text": "comments\"",
+      "priority": "high",
+      "full_line": "\"text\": \"/FIXME comments\""
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 31,
+      "tag": "TODO",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"TODO\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 37,
+      "tag": "TODO",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"TODO\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 43,
+      "tag": "TODO",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"TODO\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 49,
+      "tag": "TODO",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"TODO\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 55,
+      "tag": "TODO",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"TODO\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 61,
+      "tag": "TODO",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"TODO\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 67,
+      "tag": "FIXME",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"FIXME\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 73,
+      "tag": "TODO",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"TODO\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 79,
+      "tag": "FIXME",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"FIXME\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 80,
+      "tag": "TODO",
+      "text": "|XXX)\\\\b( .*)$\\\">\"",
+      "priority": "high",
+      "full_line": "\"text\": \"|TODO|XXX)\\\\b( .*)$\\\">\""
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 85,
+      "tag": "TODO",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"TODO\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 91,
+      "tag": "TODO",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"TODO\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 97,
+      "tag": "TODO",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"TODO\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 103,
+      "tag": "FIXME",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"FIXME\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 104,
+      "tag": "TODO",
+      "text": "):\\\">\"",
+      "priority": "high",
+      "full_line": "\"text\": \"|MARK|TODO):\\\">\""
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 109,
+      "tag": "FIXME",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"FIXME\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 115,
+      "tag": "TODO",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"TODO\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 121,
+      "tag": "XXX",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"XXX\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 127,
+      "tag": "TODO",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"TODO\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 128,
+      "tag": "FIXME",
+      "text": "comments indicating incomplete work\"",
+      "priority": "high",
+      "full_line": "\"text\": \"/FIXME comments indicating incomplete work\""
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 133,
+      "tag": "TODO",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"TODO\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 139,
+      "tag": "TODO",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"TODO\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 145,
+      "tag": "TODO",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"TODO\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 151,
+      "tag": "FIXME",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"FIXME\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 157,
+      "tag": "TODO",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"TODO\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 163,
+      "tag": "XXX",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"XXX\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 169,
+      "tag": "XXX",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"XXX\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 175,
+      "tag": "XXX",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"XXX\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 181,
+      "tag": "TODO",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"TODO\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 182,
+      "tag": "FIXME",
+      "text": "/HACK/XXX comments from the codebase and emit a JSON backlog.\"",
+      "priority": "high",
+      "full_line": "\"text\": \"/FIXME/HACK/XXX comments from the codebase and emit a JSON backlog.\""
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 187,
+      "tag": "TODO",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"TODO\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 188,
+      "tag": "FIXME",
+      "text": "|HACK|XXX)\\\\b[:\\\\s-]*(.*)\\\", re.IGNORECASE)\"",
+      "priority": "high",
+      "full_line": "\"text\": \"|FIXME|HACK|XXX)\\\\b[:\\\\s-]*(.*)\\\", re.IGNORECASE)\""
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 193,
+      "tag": "TODO",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"TODO\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 199,
+      "tag": "TODO",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"TODO\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 205,
+      "tag": "TODO",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"TODO\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 211,
+      "tag": "TODO",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"TODO\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 217,
+      "tag": "XXX",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"XXX\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 223,
+      "tag": "TODO",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"TODO\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 229,
+      "tag": "XXX",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"XXX\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 235,
+      "tag": "XXX",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"XXX\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 241,
+      "tag": "XXX",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"XXX\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 247,
+      "tag": "XXX",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"XXX\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 253,
+      "tag": "XXX",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"XXX\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 259,
+      "tag": "XXX",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"XXX\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 265,
+      "tag": "XXX",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"XXX\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 271,
+      "tag": "XXX",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"XXX\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 277,
+      "tag": "XXX",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"XXX\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 283,
+      "tag": "XXX",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"XXX\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 289,
+      "tag": "XXX",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"XXX\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 295,
+      "tag": "XXX",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"XXX\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 301,
+      "tag": "XXX",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"XXX\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 307,
+      "tag": "HACK",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"HACK\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 313,
+      "tag": "XXX",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"XXX\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 319,
+      "tag": "XXX",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"XXX\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 325,
+      "tag": "XXX",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"XXX\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 331,
+      "tag": "XXX",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"XXX\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 337,
+      "tag": "XXX",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"XXX\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 343,
+      "tag": "XXX",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"XXX\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 349,
+      "tag": "XXX",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"XXX\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 355,
+      "tag": "XXX",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"XXX\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 361,
+      "tag": "XXX",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"XXX\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 367,
+      "tag": "XXX",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"XXX\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 373,
+      "tag": "XXX",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"XXX\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 379,
+      "tag": "XXX",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"XXX\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 385,
+      "tag": "XXX",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"XXX\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 391,
+      "tag": "XXX",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"XXX\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 397,
+      "tag": "XXX",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"XXX\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 403,
+      "tag": "XXX",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"XXX\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 409,
+      "tag": "XXX",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"XXX\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 415,
+      "tag": "XXX",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"XXX\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 421,
+      "tag": "XXX",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"XXX\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 427,
+      "tag": "XXX",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"XXX\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 433,
+      "tag": "XXX",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"XXX\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 439,
+      "tag": "XXX",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"XXX\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 445,
+      "tag": "XXX",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"XXX\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 451,
+      "tag": "XXX",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"XXX\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 457,
+      "tag": "TODO",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"TODO\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 463,
+      "tag": "TODO",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"TODO\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 469,
+      "tag": "TODO",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"TODO\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 470,
+      "tag": "FIXME",
+      "text": "comments\"",
+      "priority": "high",
+      "full_line": "\"text\": \"/FIXME comments\""
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 475,
+      "tag": "TODO",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"TODO\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 476,
+      "tag": "FIXME",
+      "text": "|HACK|XXX)\\\\b', line, re.IGNORECASE):\"",
+      "priority": "high",
+      "full_line": "\"text\": \"|FIXME|HACK|XXX)\\\\b', line, re.IGNORECASE):\""
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 481,
+      "tag": "TODO",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"TODO\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 482,
+      "tag": "FIXME",
+      "text": "comment\\\",\"",
+      "priority": "high",
+      "full_line": "\"text\": \"/FIXME comment\\\",\""
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 487,
+      "tag": "TODO",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"TODO\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 493,
+      "tag": "TODO",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"TODO\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 499,
+      "tag": "TODO",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"TODO\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 505,
+      "tag": "TODO",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"TODO\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 506,
+      "tag": "FIXME",
+      "text": "comments\"",
+      "priority": "high",
+      "full_line": "\"text\": \"/FIXME comments\""
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 511,
+      "tag": "TODO",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"TODO\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 512,
+      "tag": "FIXME",
+      "text": "|HACK|XXX)\\\\b', line, re.IGNORECASE):\"",
+      "priority": "high",
+      "full_line": "\"text\": \"|FIXME|HACK|XXX)\\\\b', line, re.IGNORECASE):\""
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 517,
+      "tag": "TODO",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"TODO\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 518,
+      "tag": "FIXME",
+      "text": "comment\\\",\"",
+      "priority": "high",
+      "full_line": "\"text\": \"/FIXME comment\\\",\""
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 523,
+      "tag": "TODO",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"TODO\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 529,
+      "tag": "TODO",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"TODO\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 530,
+      "tag": "FIXME",
+      "text": "comments into issues\"",
+      "priority": "high",
+      "full_line": "\"text\": \"/FIXME comments into issues\""
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 535,
+      "tag": "TODO",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"TODO\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 536,
+      "tag": "FIXME",
+      "text": "` comments across core modules, archived artifacts, and third-party vendored packages. These markers hide incomplete work and technical debt that must be triaged before production readiness.\"",
+      "priority": "critical",
+      "full_line": "\"text\": \"` and `FIXME` comments across core modules, archived artifacts, and third-party vendored packages. These markers hide incomplete work and technical debt that must be triaged before production readiness.\""
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 541,
+      "tag": "TODO",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"TODO\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 542,
+      "tag": "FIXME",
+      "text": "|HACK|XXX` comments but there are many in other areas.\"",
+      "priority": "high",
+      "full_line": "\"text\": \"|FIXME|HACK|XXX` comments but there are many in other areas.\""
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 547,
+      "tag": "TODO",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"TODO\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 553,
+      "tag": "TODO",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"TODO\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 554,
+      "tag": "FIXME",
+      "text": "in production code.\"",
+      "priority": "critical",
+      "full_line": "\"text\": \"/FIXME in production code.\""
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 559,
+      "tag": "TODO",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"TODO\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 565,
+      "tag": "TODO",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"TODO\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 571,
+      "tag": "TODO",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"TODO\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 577,
+      "tag": "TODO",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"TODO\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 583,
+      "tag": "TODO",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"TODO\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 584,
+      "tag": "FIXME",
+      "text": "' in solution:\"",
+      "priority": "high",
+      "full_line": "\"text\": \"' in solution or 'FIXME' in solution:\""
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 589,
+      "tag": "TODO",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"TODO\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 595,
+      "tag": "TODO",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"TODO\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 601,
+      "tag": "TODO",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"TODO\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 607,
+      "tag": "TODO",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"TODO\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 613,
+      "tag": "TODO",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"TODO\","
+    },
+    {
+      "file": "deployment/automation/todo_report.json",
+      "line": 619,
+      "tag": "TODO",
+      "text": "\",",
+      "priority": "high",
+      "full_line": "\"tag\": \"TODO\","
+    },
+    {
+      "file": "deployment/automation/auto_issues/0003-cleanup-todos-fixmes.md",
+      "line": 1,
+      "tag": "TODO",
+      "text": "/FIXME comments into issues",
+      "priority": "high",
+      "full_line": "Title: Code hygiene \u2014 audit and triage TODO/FIXME comments into issues"
+    },
+    {
+      "file": "deployment/automation/auto_issues/0003-cleanup-todos-fixmes.md",
+      "line": 5,
+      "tag": "TODO",
+      "text": "` and `FIXME` comments across core modules, archived artifacts, and third-party vendored packages. These markers hide incomplete work and technical debt that must be triaged before production readiness.",
+      "priority": "critical",
+      "full_line": "The codebase contains many `TODO` and `FIXME` comments across core modules, archived artifacts, and third-party vendored packages. These markers hide incomplete work and technical debt that must be triaged before production readiness."
+    },
+    {
+      "file": "deployment/automation/auto_issues/0003-cleanup-todos-fixmes.md",
+      "line": 9,
+      "tag": "TODO",
+      "text": "|FIXME|HACK|XXX` comments but there are many in other areas.",
+      "priority": "high",
+      "full_line": "- `agents/specialized/quality_agent.py` intentionally scans for `TODO|FIXME|HACK|XXX` comments but there are many in other areas."
+    },
+    {
+      "file": "deployment/automation/auto_issues/0003-cleanup-todos-fixmes.md",
+      "line": 16,
+      "tag": "TODO",
+      "text": "tracking docs.",
+      "priority": "high",
+      "full_line": "3. Remove or convert cosmetic TODOs into low-priority issues or TODO tracking docs."
+    },
+    {
+      "file": "deployment/automation/auto_issues/0003-cleanup-todos-fixmes.md",
+      "line": 17,
+      "tag": "TODO",
+      "text": "/FIXME in production code.",
+      "priority": "critical",
+      "full_line": "4. Add a lint rule to warn on TODO/FIXME in production code."
+    },
+    {
+      "file": "src/youtube_extension/main.py",
+      "line": 57,
+      "tag": "TODO",
+      "text": "Implement actual video processing logic",
+      "priority": "high",
+      "full_line": "# TODO: Implement actual video processing logic"
+    },
+    {
+      "file": "src/youtube_extension/backend/main.py",
+      "line": 587,
+      "tag": "TODO",
+      "text": "Implement process_chat_message in EnhancedVideoProcessor",
+      "priority": "high",
+      "full_line": "# TODO: Implement process_chat_message in EnhancedVideoProcessor"
+    },
+    {
+      "file": "src/youtube_extension/backend/main.py",
+      "line": 948,
+      "tag": "TODO",
+      "text": "Implement process_chat_message in EnhancedVideoProcessor",
+      "priority": "high",
+      "full_line": "# TODO: Implement process_chat_message in EnhancedVideoProcessor"
+    },
+    {
+      "file": "src/youtube_extension/backend/services/performance_monitor.py",
+      "line": 320,
+      "tag": "TODO",
+      "text": "Implement notification system (email, Slack, etc.)",
+      "priority": "high",
+      "full_line": "# TODO: Implement notification system (email, Slack, etc.)"
+    },
+    {
+      "file": "src/youtube_extension/backend/services/performance_monitor.py",
+      "line": 355,
+      "tag": "TODO",
+      "text": "Implement actual notification system",
+      "priority": "high",
+      "full_line": "# TODO: Implement actual notification system"
+    },
+    {
+      "file": "src/youtube_extension/backend/services/api_cost_monitor.py",
+      "line": 335,
+      "tag": "TODO",
+      "text": "Implement actual notification system (email, Slack, etc.)",
+      "priority": "high",
+      "full_line": "# TODO: Implement actual notification system (email, Slack, etc.)"
+    },
+    {
+      "file": "frontend/src/hooks/useProjectData.ts",
+      "line": 57,
+      "tag": "TODO",
+      "text": "' | 'highlight';",
+      "priority": "high",
+      "full_line": "type: 'insight' | 'question' | 'todo' | 'highlight';"
+    }
+  ]
+}

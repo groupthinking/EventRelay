@@ -1,0 +1,22 @@
+{
+  "cpu": {
+    "warning": 70,
+    "critical": 90
+  },
+  "memory": {
+    "warning": 80,
+    "critical": 95
+  },
+  "responseTime": {
+    "warning": 500,
+    "critical": 2000
+  },
+  "errorRate": {
+    "warning": 1,
+    "critical": 5
+  },
+  "throughput": {
+    "min": 10,
+    "max": 1000
+  }
+}

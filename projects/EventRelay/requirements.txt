@@ -1,0 +1,2 @@
+# Requirements have moved to pyproject.toml extras.
+# Install with pip install -e .[youtube] (plus optional extras).

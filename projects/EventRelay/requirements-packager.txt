@@ -1,0 +1,27 @@
+# YouTube Packager Service Dependencies
+
+# Core framework
+pydantic>=2.0.0
+aiofiles>=23.0.0
+
+# Testing
+pytest>=7.0.0
+pytest-asyncio>=0.21.0
+pytest-mock>=3.10.0
+pyfakefs>=5.0.0
+
+# Logging and monitoring
+structlog>=23.0.0
+
+# Message queue (optional - depends on your queue choice)
+redis>=4.5.0
+aioredis>=2.0.0
+
+# Development tools
+black>=23.0.0
+isort>=5.12.0
+mypy>=1.0.0
+
+# Optional: Web framework if running as HTTP service
+fastapi>=0.100.0
+uvicorn>=0.22.0

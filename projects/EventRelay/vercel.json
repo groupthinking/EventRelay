@@ -1,0 +1,6 @@
+{
+  "buildCommand": "npm run build",
+  "outputDirectory": "frontend/build",
+  "installCommand": "npm run install:all",
+  "framework": "create-react-app"
+}

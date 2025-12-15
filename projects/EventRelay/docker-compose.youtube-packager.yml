@@ -1,0 +1,73 @@
+version: '3.8'
+
+services:
+  youtube-packager:
+    build:
+      context: .
+      dockerfile: Dockerfile.youtube-packager
+    container_name: youtube-packager-service
+    environment:
+      # Storage configuration
+      - YOUTUBE_PACKAGER_STORAGE_PATH=/app/storage/video_packs
+      - YOUTUBE_PACKAGER_TEMP_PATH=/app/temp
+      # Message queue configuration
+      - MESSAGE_QUEUE_URL=redis://redis:6379
+      # Logging configuration
+      - LOG_LEVEL=INFO
+      - LOG_FILE=/app/logs/packager.log
+    volumes:
+      # Persistent storage for video packs
+      - video_packs_storage:/app/storage:rw
+      # Temporary files (can be tmpfs for performance)
+      - temp_storage:/app/temp:rw
+      # Logs
+      - logs_storage:/app/logs:rw
+    ports:
+      - "8000:8000"
+    depends_on:
+      - redis
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - packager-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: youtube-packager-redis
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+    networks:
+      - packager-network
+
+volumes:
+  video_packs_storage:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${PWD}/data/video_packs
+  temp_storage:
+    driver: tmpfs
+    driver_opts:
+      tmpfs-size: 1G
+  logs_storage:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${PWD}/data/logs
+  redis_data:
+    driver: local
+
+networks:
+  packager-network:
+    driver: bridge

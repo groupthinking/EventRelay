@@ -1,0 +1,10 @@
+{
+  "timestamp": "2025-09-11T00:42:01.437912",
+  "updated_files": [
+    "/Users/garvey/UVAI/src/core/youtube_extension/src/youtube_extension/backend/middleware/error_handling_middleware.py",
+    "/Users/garvey/UVAI/src/core/youtube_extension/scripts/enterprise_mcp_server.py"
+  ],
+  "backup_created": true,
+  "new_timeout_seconds": 7200,
+  "old_timeout_seconds": 300
+}

@@ -1,0 +1,13 @@
+{
+  "name": "github-mcp-server",
+  "version": "1.0.0",
+  "description": "Local installation of GitHub MCP Server",
+  "main": "custom-github-server.js",
+  "scripts": {
+    "start": "node custom-github-server.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.11.4",
+    "@modelcontextprotocol/server-github": "latest"
+  }
+}

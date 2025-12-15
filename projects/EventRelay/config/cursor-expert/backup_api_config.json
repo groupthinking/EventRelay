@@ -1,0 +1,38 @@
+{
+  "anthropic_backup": {
+    "provider": "anthropic",
+    "api_key": "",
+    "model": "claude-3-opus-20240229",
+    "priority": 1,
+    "last_used": null,
+    "failure_count": 0,
+    "is_active": true
+  },
+  "openai_backup": {
+    "provider": "openai",
+    "api_key": "",
+    "model": "gpt-4-turbo-preview",
+    "priority": 2,
+    "last_used": null,
+    "failure_count": 0,
+    "is_active": true
+  },
+  "gemini_backup": {
+    "provider": "gemini",
+    "api_key": "",
+    "model": "gemini-pro",
+    "priority": 3,
+    "last_used": null,
+    "failure_count": 0,
+    "is_active": true
+  },
+  "claude_secondary": {
+    "provider": "anthropic",
+    "api_key": "",
+    "model": "claude-3-sonnet-20240229",
+    "priority": 4,
+    "last_used": null,
+    "failure_count": 0,
+    "is_active": true
+  }
+}

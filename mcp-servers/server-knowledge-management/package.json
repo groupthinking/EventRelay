@@ -1,0 +1,8 @@
+{
+  "name": "@modelcontextprotocol/server-knowledge-management",
+  "version": "1.0.0",
+  "description": "MCP knowledge-management Interface",
+  "type": "module",
+  "main": "index.js",
+  "bin": "cli.js"
+}

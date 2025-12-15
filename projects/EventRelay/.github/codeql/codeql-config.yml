@@ -1,0 +1,30 @@
+# CodeQL Configuration for EventRelay
+# Excludes auto-generated projects and research artifacts from security scanning
+
+name: "EventRelay CodeQL Config"
+
+# Paths to exclude from analysis
+paths-ignore:
+  # Auto-generated Next.js demo projects with syntax errors
+  - 'generated_projects/**'
+  
+  # Archived research artifacts and experiments
+  - 'research/labs/archive/**'
+  
+  # MCP bridge with non-standard import statements
+  - 'src/mcp-bridge.py'
+  
+  # Node modules and build artifacts
+  - '**/node_modules/**'
+  - '**/build/**'
+  - '**/dist/**'
+  - '**/.next/**'
+  
+  # Test fixtures and temporary files
+  - 'tests/fixtures/temp/**'
+  - '**/*.tmp'
+  - '**/*.temp'
+
+# Query configuration
+queries:
+  - uses: security-and-quality

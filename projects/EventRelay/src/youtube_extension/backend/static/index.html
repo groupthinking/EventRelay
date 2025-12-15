@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video → Software | UVAI</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            padding: 40px;
+            max-width: 600px;
+            width: 100%;
+        }
+
+        h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+
+        .input-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        input, select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+
+        input:focus, select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 18px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            margin: 20px 0;
+        }
+
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .result {
+            display: none;
+            margin-top: 30px;
+            padding: 20px;
+            background: #f5f5f5;
+            border-radius: 8px;
+        }
+
+        .result h3 {
+            margin-bottom: 15px;
+            color: #333;
+        }
+
+        .result-item {
+            margin-bottom: 10px;
+            padding: 10px;
+            background: white;
+            border-radius: 5px;
+        }
+
+        .result-item strong {
+            color: #667eea;
+        }
+
+        .link {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .link:hover {
+            text-decoration: underline;
+        }
+
+        .error {
+            display: none;
+            margin-top: 20px;
+            padding: 15px;
+            background: #fee;
+            border: 1px solid #fcc;
+            border-radius: 8px;
+            color: #c33;
+        }
+
+        .example {
+            font-size: 0.9em;
+            color: #999;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Video → Software</h1>
+        <p class="subtitle">Convert YouTube tutorials into deployed applications</p>
+
+        <form id="videoForm">
+            <div class="input-group">
+                <label for="videoUrl">YouTube Video URL</label>
+                <input
+                    type="url"
+                    id="videoUrl"
+                    placeholder="https://www.youtube.com/watch?v=..."
+                    required
+                >
+                <p class="example">Example: https://www.youtube.com/watch?v=bMknfKXIFA8</p>
+            </div>
+
+            <div class="input-group">
+                <label for="projectType">Project Type</label>
+                <select id="projectType">
+                    <option value="web">Web Application</option>
+                    <option value="api">API Service</option>
+                    <option value="mobile">Mobile Starter</option>
+                    <option value="ml">AI/Automation Workflow</option>
+                </select>
+            </div>
+
+            <div class="input-group">
+                <label for="deployTarget">Deployment Target</label>
+                <select id="deployTarget">
+                    <option value="vercel">Vercel</option>
+                    <option value="claude">Claude</option>
+                    <option value="openai">OpenAI</option>
+                    <option value="gemini">Gemini</option>
+                    <option value="lindy">Lindy.ai</option>
+                    <option value="manus">Manus</option>
+                    <option value="genspark">GenSpark.ai</option>
+                    <option value="github">GitHub</option>
+                    <option value="codex">Codex</option>
+                    <option value="cursor">Cursor</option>
+                </select>
+            </div>
+
+            <button type="submit" class="btn" id="submitBtn">
+                Generate Software
+            </button>
+        </form>
+
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p style="margin-top: 15px; color: #666;">Processing video and generating code...</p>
+            <p style="font-size: 0.9em; color: #999;">This may take 30-60 seconds</p>
+        </div>
+
+        <div class="error" id="error"></div>
+
+        <div class="result" id="result">
+            <h3>✅ Generation Complete!</h3>
+            <div id="resultContent"></div>
+        </div>
+    </div>
+
+    <script>
+        const form = document.getElementById('videoForm');
+        const submitBtn = document.getElementById('submitBtn');
+        const loading = document.getElementById('loading');
+        const result = document.getElementById('result');
+        const error = document.getElementById('error');
+        const resultContent = document.getElementById('resultContent');
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            // Reset UI
+            result.style.display = 'none';
+            error.style.display = 'none';
+            loading.style.display = 'block';
+            submitBtn.disabled = true;
+
+            const videoUrl = document.getElementById('videoUrl').value;
+            const projectType = document.getElementById('projectType').value;
+            const deploymentTarget = document.getElementById('deployTarget').value;
+
+            try {
+                const response = await fetch('/api/video-to-software', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        video_url: videoUrl,
+                        project_type: projectType,
+                        deployment_target: deploymentTarget,
+                        features: ['responsive_design', 'modern_ui']
+                    })
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || 'Failed to generate software');
+                }
+
+                const data = await response.json();
+
+                // Display results
+                resultContent.innerHTML = `
+                    <div class="result-item">
+                        <strong>Project Name:</strong> ${data.project_name}
+                    </div>
+                    <div class="result-item">
+                        <strong>Live URL:</strong>
+                        <a href="${data.live_url}" target="_blank" class="link">${data.live_url}</a>
+                    </div>
+                    <div class="result-item">
+                        <strong>GitHub Repo:</strong>
+                        <a href="${data.github_repo}" target="_blank" class="link">${data.github_repo}</a>
+                    </div>
+                    <div class="result-item">
+                        <strong>Build Status:</strong> ${data.build_status}
+                    </div>
+                    <div class="result-item">
+                        <strong>Processing Time:</strong> ${data.processing_time}
+                    </div>
+                    ${data.code_generation ? `
+                    <div class="result-item">
+                        <strong>Framework:</strong> ${data.code_generation.framework || 'N/A'}
+                    </div>
+                    <div class="result-item">
+                        <strong>Files Created:</strong> ${data.code_generation.files_created?.length || 0}
+                    </div>
+                    ` : ''}
+                `;
+
+                result.style.display = 'block';
+
+            } catch (err) {
+                error.textContent = err.message;
+                error.style.display = 'block';
+            } finally {
+                loading.style.display = 'none';
+                submitBtn.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>

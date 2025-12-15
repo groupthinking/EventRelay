@@ -1,0 +1,30 @@
+{
+  "name": "menu",
+  "version": "1.0.0",
+  "description": "A Genkit test app for understanding a restaurant menu",
+  "main": "./lib/src/index.js",
+  "scripts": {
+    "dev": "npx tsx --watch src/index.ts",
+    "start": "genkit start -- pnpm dev",
+    "compile": "tsc",
+    "build": "pnpm build:clean && pnpm compile",
+    "build:clean": "rimraf ./lib",
+    "build:watch": "tsc --watch",
+    "build-and-run": "pnpm build && node lib/index.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "genkit": "workspace:*",
+    "@genkit-ai/dev-local-vectorstore": "workspace:*",
+    "@genkit-ai/firebase": "workspace:*",
+    "@genkit-ai/evaluator": "workspace:*",
+    "@genkit-ai/vertexai": "workspace:*"
+  },
+  "devDependencies": {
+    "rimraf": "^6.0.1",
+    "typescript": "^5.3.3"
+  },
+  "type": "module"
+}

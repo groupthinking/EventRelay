@@ -1,0 +1,159 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.software-on-demand.dev/trace_ui_event_schema.json",
+  "title": "Trace UI Event",
+  "description": "Normalized event payloads streamed to the operator dashboard during a Software-On-Demand run.",
+  "type": "object",
+  "required": ["event_id", "event_type", "emitted_at", "run_id"],
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "description": "Unique identifier for this event payload."
+    },
+    "run_id": {
+      "type": "string",
+      "description": "Identifier shared with step graphs and gold-set evaluations."
+    },
+    "event_type": {
+      "type": "string",
+      "enum": [
+        "run.created",
+        "run.status.updated",
+        "agent.step.started",
+        "agent.step.completed",
+        "agent.step.failed",
+        "artifact.generated",
+        "log.appended",
+        "human.action.requested",
+        "human.action.completed",
+        "metric.updated",
+        "alert.raised",
+        "alert.cleared"
+      ]
+    },
+    "emitted_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "severity": {
+      "type": "string",
+      "enum": ["debug", "info", "warning", "error", "critical"],
+      "default": "info"
+    },
+    "source": {
+      "type": "object",
+      "description": "Agent or service emitting the event.",
+      "required": ["component"],
+      "properties": {
+        "component": { "type": "string" },
+        "agent_id": { "type": "string" },
+        "version": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "payload": {
+      "type": "object",
+      "description": "Type-specific event body.",
+      "oneOf": [
+        { "$ref": "#/$defs/run_payload" },
+        { "$ref": "#/$defs/step_payload" },
+        { "$ref": "#/$defs/artifact_payload" },
+        { "$ref": "#/$defs/log_payload" },
+        { "$ref": "#/$defs/human_payload" },
+        { "$ref": "#/$defs/metric_payload" },
+        { "$ref": "#/$defs/alert_payload" }
+      ]
+    },
+    "correlation_id": {
+      "type": "string",
+      "description": "Optional ID tying multiple events together (e.g., same tool call)."
+    }
+  },
+  "$defs": {
+    "run_payload": {
+      "type": "object",
+      "required": ["status"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["queued", "running", "succeeded", "failed", "cancelled"]
+        },
+        "video_url": { "type": "string", "format": "uri" },
+        "initiator": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "step_payload": {
+      "type": "object",
+      "required": ["step_id"],
+      "properties": {
+        "step_id": { "type": "string" },
+        "step_kind": { "type": "string" },
+        "status": { "type": "string" },
+        "started_at": { "type": "string", "format": "date-time" },
+        "completed_at": { "type": ["string", "null"], "format": "date-time" },
+        "retry_count": { "type": "integer", "minimum": 0 },
+        "message": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "artifact_payload": {
+      "type": "object",
+      "required": ["artifact_id", "artifact_type", "uri"],
+      "properties": {
+        "artifact_id": { "type": "string" },
+        "artifact_type": {
+          "type": "string",
+          "enum": ["log", "file", "dataset", "deployment", "report"]
+        },
+        "uri": { "type": "string", "format": "uri" },
+        "description": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "log_payload": {
+      "type": "object",
+      "required": ["stream", "text"],
+      "properties": {
+        "stream": { "type": "string", "enum": ["stdout", "stderr", "system"] },
+        "text": { "type": "string" },
+        "sequence": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "human_payload": {
+      "type": "object",
+      "required": ["action_id", "state"],
+      "properties": {
+        "action_id": { "type": "string" },
+        "state": { "type": "string", "enum": ["requested", "acknowledged", "completed", "declined"] },
+        "instructions": { "type": "string" },
+        "response": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "metric_payload": {
+      "type": "object",
+      "required": ["name", "value"],
+      "properties": {
+        "name": { "type": "string" },
+        "value": {},
+        "unit": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "alert_payload": {
+      "type": "object",
+      "required": ["alert_id", "status"],
+      "properties": {
+        "alert_id": { "type": "string" },
+        "status": { "type": "string", "enum": ["raised", "cleared"] },
+        "category": { "type": "string", "enum": ["policy", "security", "runtime", "inference", "other"] },
+        "message": { "type": "string" },
+        "severity": { "type": "string", "enum": ["info", "warning", "error", "critical"] }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

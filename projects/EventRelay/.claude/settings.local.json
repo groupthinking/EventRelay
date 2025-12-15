@@ -1,0 +1,45 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python:*)",
+      "Bash(find:*)",
+      "Bash(git log --pretty=format:\"%h %ad %s\" --date=short)",
+      "Bash(ls:*)",
+      "Bash(ls:*)",
+      "Bash(git for-each-ref:*)",
+      "Bash(grep:*)",
+      "Bash(npm cache clean:*)",
+      "Bash(npm run build:*)",
+      "Bash(npm run:*)",
+      "Read(/Users/garvey/UVAI/uvai-v0-integration/**)",
+      "Bash(npm test:*)",
+      "Bash(npm install)",
+      "Bash(timeout 60s npm test -- --coverage --watchAll=false --verbose)",
+      "Bash(CI=true npm test -- --coverage --watchAll=false)",
+      "Bash(mkdir:*)",
+      "Bash(touch:*)",
+      "Read(/Users/garvey/Desktop/api/**)",
+      "Bash(curl:*)",
+      "Bash(git add:*)",
+      "Read(//Users/garvey/Downloads/**)",
+      "Bash(pytest:*)",
+      "Bash(python3:*)",
+      "Read(//Users/garvey/.claude/agents/**)"
+    ],
+    "deny": []
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd /Users/garvey/UVAI/src/core/youtube_extension && ./scripts/post_claude_validation.sh 2>&1"
+          }
+        ]
+      }
+    ]
+  },
+  "outputStyle": "Explanatory"
+}

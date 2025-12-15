@@ -1,0 +1,11 @@
+{
+  "mode": "analysis",
+  "total_issues": 540,
+  "duplicates": 510,
+  "valid": 30,
+  "simulation_results": {
+    "closed": 510,
+    "errors": 0
+  },
+  "ready_for_execution": true
+}

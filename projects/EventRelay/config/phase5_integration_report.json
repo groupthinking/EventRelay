@@ -1,0 +1,114 @@
+{
+  "timestamp": "2025-09-05T04:09:54.001150",
+  "phase": "Phase 5 - Integration Testing",
+  "total_tests": 10,
+  "passed_tests": 9,
+  "failed_tests": 1,
+  "success_rate": "90.0%",
+  "test_results": {
+    "Video Metadata Extraction": {
+      "success": true,
+      "message": "Successfully extracted metadata for: Rick Astley - Never Gonna Give You Up (Official Video) (4K Remaster)",
+      "duration": 0.0,
+      "timestamp": "2025-09-05T04:09:17.992241"
+    },
+    "Transcript Extraction": {
+      "success": false,
+      "message": "Extracted 0 transcript segments",
+      "duration": 0.0,
+      "timestamp": "2025-09-05T04:09:18.001871"
+    },
+    "Comprehensive Data Compilation": {
+      "success": true,
+      "message": "Compiled data with 0 segments",
+      "duration": 0.0,
+      "timestamp": "2025-09-05T04:09:18.590201"
+    },
+    "AI Service Imports": {
+      "success": true,
+      "message": "Successfully imported OpenAI and Anthropic",
+      "duration": 0.0,
+      "timestamp": "2025-09-05T04:09:27.989883"
+    },
+    "Complete Pipeline Test": {
+      "success": true,
+      "message": "Full pipeline completed in 14.81s",
+      "duration": 0.0,
+      "timestamp": "2025-09-05T04:09:27.990043"
+    },
+    "Parallel Processing": {
+      "success": true,
+      "message": "Processed 2/2 videos successfully",
+      "duration": 0.0,
+      "timestamp": "2025-09-05T04:09:44.241768"
+    },
+    "API Rate Limiting": {
+      "success": true,
+      "message": "Quota usage: {'openai': 0, 'anthropic': 0, 'google': 0, 'youtube': 5} \u2192 {'openai': 0, 'anthropic': 0, 'google': 0, 'youtube': 6}",
+      "duration": 0.0,
+      "timestamp": "2025-09-05T04:09:46.795082"
+    },
+    "Error Handling - Invalid URL": {
+      "success": true,
+      "message": "Properly handled invalid URL",
+      "duration": 0.0,
+      "timestamp": "2025-09-05T04:09:48.517615"
+    },
+    "Error Handling - Private Video": {
+      "success": true,
+      "message": "Properly handled private video",
+      "duration": 0.0,
+      "timestamp": "2025-09-05T04:09:49.240636"
+    },
+    "Performance Benchmarks": {
+      "success": true,
+      "message": ".2f",
+      "duration": 0.0,
+      "timestamp": "2025-09-05T04:09:54.001115"
+    }
+  },
+  "performance_metrics": {
+    "parallel_processing": {
+      "duration": 16.01915407180786,
+      "videos_processed": 2,
+      "success_rate": 1.0
+    },
+    "benchmarks": {
+      "metadata_extraction": 0.013601064682006836,
+      "transcript_extraction": 1.9681673049926758,
+      "total_duration": 4.7597620487213135
+    }
+  },
+  "summary": {
+    "pipeline_tests": {
+      "total": 5,
+      "passed": 3,
+      "failed": 1,
+      "success_rate": "60.0%"
+    },
+    "parallel_processing": {
+      "total": 1,
+      "passed": 1,
+      "failed": 0,
+      "success_rate": "100.0%"
+    },
+    "api_management": {
+      "total": 1,
+      "passed": 1,
+      "failed": 0,
+      "success_rate": "100.0%"
+    },
+    "error_handling": {
+      "total": 2,
+      "passed": 2,
+      "failed": 0,
+      "success_rate": "100.0%"
+    },
+    "performance": {
+      "total": 1,
+      "passed": 1,
+      "failed": 0,
+      "success_rate": "100.0%"
+    }
+  }
+}

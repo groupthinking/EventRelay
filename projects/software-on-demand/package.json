@@ -1,0 +1,20 @@
+{
+  "name": "software-on-demand",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "validate:samples": "node scripts/validate-samples.mjs",
+    "validate:run": "node scripts/validate-run.mjs",
+    "validate:run-id": "node scripts/validate-run.mjs --run-id"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
+    "yaml": "^2.8.1"
+  }
+}

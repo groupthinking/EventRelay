@@ -1,0 +1,105 @@
+{
+  "timestamp": "2025-09-02T11:38:09.428Z",
+  "summary": {
+    "totalFiles": 25,
+    "issuesFound": 15,
+    "criticalIssues": 0,
+    "warningIssues": 1,
+    "infoIssues": 14
+  },
+  "issues": [
+    {
+      "type": "incomplete_checklist",
+      "severity": "low",
+      "file": "01_Planning_Phase/Implementation_Plan_Phase_1.md",
+      "message": "Checklist 0% complete (17 items)"
+    },
+    {
+      "type": "incomplete_checklist",
+      "severity": "medium",
+      "file": "01_Planning_Phase/PRD_Implementation_Plan_Generator.md",
+      "message": "Checklist 1.1% complete (1/94)"
+    },
+    {
+      "type": "incomplete_checklist",
+      "severity": "low",
+      "file": "01_Planning_Phase/README.md",
+      "message": "Checklist 0% complete (6 items)"
+    },
+    {
+      "type": "incomplete_checklist",
+      "severity": "low",
+      "file": "02_Development_Phase/Bug_tracking.md",
+      "message": "Checklist 0% complete (8 items)"
+    },
+    {
+      "type": "incomplete_checklist",
+      "severity": "low",
+      "file": "02_Development_Phase/Development_Agent_Workflow.md",
+      "message": "Checklist 0% complete (30 items)"
+    },
+    {
+      "type": "incomplete_checklist",
+      "severity": "low",
+      "file": "02_Development_Phase/README.md",
+      "message": "Checklist 0% complete (15 items)"
+    },
+    {
+      "type": "incomplete_checklist",
+      "severity": "low",
+      "file": "02_Development_Phase/create-doc-templates.md",
+      "message": "Checklist 0% complete (5 items)"
+    },
+    {
+      "type": "incomplete_checklist",
+      "severity": "low",
+      "file": "02_Development_Phase/docs-maintenance.md",
+      "message": "Checklist 0% complete (5 items)"
+    },
+    {
+      "type": "incomplete_checklist",
+      "severity": "low",
+      "file": "02_Development_Phase/maintenance-status.md",
+      "message": "Checklist 0% complete (5 items)"
+    },
+    {
+      "type": "incomplete_checklist",
+      "severity": "low",
+      "file": "03_Risk_Management/README.md",
+      "message": "Checklist 0% complete (18 items)"
+    },
+    {
+      "type": "incomplete_checklist",
+      "severity": "low",
+      "file": "04_Deployment_Operations/Deployment_guide.md",
+      "message": "Checklist 0% complete (30 items)"
+    },
+    {
+      "type": "incomplete_checklist",
+      "severity": "low",
+      "file": "04_Deployment_Operations/README.md",
+      "message": "Checklist 0% complete (18 items)"
+    },
+    {
+      "type": "incomplete_checklist",
+      "severity": "low",
+      "file": "05_References/Enhanced_System_Quick_Reference.md",
+      "message": "Checklist 0% complete (2 items)"
+    },
+    {
+      "type": "incomplete_checklist",
+      "severity": "low",
+      "file": "05_References/README.md",
+      "message": "Checklist 0% complete (12 items)"
+    },
+    {
+      "type": "incomplete_checklist",
+      "severity": "low",
+      "file": "Documentation_Maintenance_Protocol.md",
+      "message": "Checklist 0% complete (12 items)"
+    }
+  ],
+  "recommendations": [
+    "Complete or remove outdated checklists in documentation"
+  ]
+}

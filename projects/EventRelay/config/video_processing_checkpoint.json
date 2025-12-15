@@ -1,0 +1,509 @@
+{
+  "processed_videos": [],
+  "failed_videos": [
+    {
+      "video_id": "t5zQpSjSu9I",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:47:37.400209"
+    },
+    {
+      "video_id": "aircAruvnKk",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:47:39.403275"
+    },
+    {
+      "video_id": "fOqJJphkZA",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:47:41.406269"
+    },
+    {
+      "video_id": "gV0_raKR2UQ",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:47:43.409694"
+    },
+    {
+      "video_id": "J4Wdy0Wc_xQ",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:47:45.413676"
+    },
+    {
+      "video_id": "mJeNghZXtMo",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:47:47.417213"
+    },
+    {
+      "video_id": "HgWvYvvXIM",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:47:49.420559"
+    },
+    {
+      "video_id": "TjkFGrjkXfc",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:47:51.424193"
+    },
+    {
+      "video_id": "7eh4d6r5fNQ",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:47:53.426281"
+    },
+    {
+      "video_id": "X2vAabgKEyw",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:47:55.429736"
+    },
+    {
+      "video_id": "dH0yz-Osy54",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:47:57.433795"
+    },
+    {
+      "video_id": "OXE2a8dqIAA",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:47:59.437130"
+    },
+    {
+      "video_id": "bEpU_7wFKM",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:48:01.440422"
+    },
+    {
+      "video_id": "lpk7MkQ5xQI",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:48:03.444343"
+    },
+    {
+      "video_id": "7kJysT7gXI",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:48:05.448436"
+    },
+    {
+      "video_id": "PkZNo7MFNFg",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:48:07.451807"
+    },
+    {
+      "video_id": "OqBFXhR5E6Y",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:48:09.455546"
+    },
+    {
+      "video_id": "2vMH8lxTvVE",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:48:11.458993"
+    },
+    {
+      "video_id": "yIVXjl4SwVo",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:48:13.462555"
+    },
+    {
+      "video_id": "JdeyVryaal0",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:48:15.467265"
+    },
+    {
+      "video_id": "SSo_EIwHSd4",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:48:17.471070"
+    },
+    {
+      "video_id": "hYip_Vuv8J0",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:48:24.481595"
+    },
+    {
+      "video_id": "qOVAbKKSH10",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:48:26.485332"
+    },
+    {
+      "video_id": "41Ilug_dDcM",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:48:28.488894"
+    },
+    {
+      "video_id": "2yJqjTiwpxM",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:48:30.492406"
+    },
+    {
+      "video_id": "s4g1XFU8Gto",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:48:32.495920"
+    },
+    {
+      "video_id": "QAQatPPtUkU",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:48:34.499672"
+    },
+    {
+      "video_id": "KXdOoIDcmbM",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:48:36.503082"
+    },
+    {
+      "video_id": "SyVMrxYSzUM",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:48:38.506559"
+    },
+    {
+      "video_id": "37JxCFVAAHY",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:48:40.510104"
+    },
+    {
+      "video_id": "LHBE6Q9XlzI",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:48:42.514366"
+    },
+    {
+      "video_id": "xC-c7E5PK0Y",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:48:44.517714"
+    },
+    {
+      "video_id": "ua-CiDNNj30",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:48:46.525069"
+    },
+    {
+      "video_id": "7eh4d6r5fNQ",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:48:48.528357"
+    },
+    {
+      "video_id": "zg9ASOp5j8",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:48:50.531841"
+    },
+    {
+      "video_id": "GtQjRJnvV8",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:48:52.535316"
+    },
+    {
+      "video_id": "KaTE5lPRbn0",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:48:54.538789"
+    },
+    {
+      "video_id": "nfr5j_1BgD8",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:48:56.542535"
+    },
+    {
+      "video_id": "5q87K1WaoFI",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:48:58.546115"
+    },
+    {
+      "video_id": "Gv9_4yMHFhI",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:49:00.550089"
+    },
+    {
+      "video_id": "rGx1QNdYzvs",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:49:02.553978"
+    },
+    {
+      "video_id": "jflA3vXw5Qo",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:49:04.557802"
+    },
+    {
+      "video_id": "h00gbp36KWg",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:49:06.561182"
+    },
+    {
+      "video_id": "HZOv0qUzo8A",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:49:08.564952"
+    },
+    {
+      "video_id": "ub3P8TnFS8M",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:49:10.568725"
+    },
+    {
+      "video_id": "44E8o-IqWTY",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:49:12.572140"
+    },
+    {
+      "video_id": "nFQaZmvCayw",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:49:14.575546"
+    },
+    {
+      "video_id": "YB5ELgW7JGQ",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:49:16.578801"
+    },
+    {
+      "video_id": "SWYqp7iY_Tc",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:49:18.582151"
+    },
+    {
+      "video_id": "WxpCXCIfyAY",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:49:20.585980"
+    },
+    {
+      "video_id": "ZoqgAy3h4OM",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:49:22.589592"
+    },
+    {
+      "video_id": "nKIu9yen5nc",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:49:24.593292"
+    },
+    {
+      "video_id": "BXgQDlW6jxE",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:49:26.596613"
+    },
+    {
+      "video_id": "VECV6r-fQPg",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:49:28.600161"
+    },
+    {
+      "video_id": "V7h3kGtqV8",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:49:30.603397"
+    },
+    {
+      "video_id": "CTBt9NCnqB8",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:49:32.607187"
+    },
+    {
+      "video_id": "xPJoq_QVsY4",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:49:34.610457"
+    },
+    {
+      "video_id": "jOhm-E2fVGk",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:49:36.613773"
+    },
+    {
+      "video_id": "FZLXPC_ug2E",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:49:38.617730"
+    },
+    {
+      "video_id": "4K6MhLXhx0M",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:49:40.624360"
+    },
+    {
+      "video_id": "n7IHhwmDCNE",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:49:42.627823"
+    },
+    {
+      "video_id": "nU-IIXBWlS4",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:49:44.631257"
+    },
+    {
+      "video_id": "5GBT4WJNnG0",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:49:46.634698"
+    },
+    {
+      "video_id": "NLXys9vVXm8",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:49:48.638635"
+    },
+    {
+      "video_id": "pVfGKMU1d9c",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:49:50.642711"
+    },
+    {
+      "video_id": "9KhKPKxPeQI",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:49:52.646083"
+    },
+    {
+      "video_id": "sZz5MPMdao",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:49:54.649681"
+    },
+    {
+      "video_id": "0VGQbKQZ7k8",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:49:56.653596"
+    },
+    {
+      "video_id": "vCh-HUACjUA",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:49:58.657260"
+    },
+    {
+      "video_id": "JcTkbe0TT-U",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:50:00.661037"
+    },
+    {
+      "video_id": "inWWhr5tnEA",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:50:02.664818"
+    },
+    {
+      "video_id": "wXCD8Kb3K7Q",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:50:04.668220"
+    },
+    {
+      "video_id": "z5nc9MDbvkw",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:50:06.672276"
+    },
+    {
+      "video_id": "IQV0LnDoBkQ",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:50:08.673778"
+    },
+    {
+      "video_id": "hXPmnoGVQW0",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:50:10.676338"
+    },
+    {
+      "video_id": "infQ1knyPqI",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:50:12.679944"
+    },
+    {
+      "video_id": "rdFYLTR9I4",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:50:14.683452"
+    },
+    {
+      "video_id": "uPrYPUopgm8",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:50:16.687211"
+    },
+    {
+      "video_id": "UsVfElI9nsM",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:50:18.691143"
+    },
+    {
+      "video_id": "0GfNGKvtXhM",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:50:20.695244"
+    },
+    {
+      "video_id": "s7wmiS2mSXY",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:50:22.699110"
+    },
+    {
+      "video_id": "GZvSYJDk-us",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:50:29.709673"
+    },
+    {
+      "video_id": "mb-QHAqBL1g",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:50:31.713651"
+    },
+    {
+      "video_id": "ByGJQzlzxQg",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:50:33.717884"
+    },
+    {
+      "video_id": "FLnxgSZ0DG4",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:50:35.721840"
+    },
+    {
+      "video_id": "cuPVDvPc9SY",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:50:37.725318"
+    },
+    {
+      "video_id": "pxfEV6XKdY",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:50:39.729153"
+    },
+    {
+      "video_id": "7YcW25PHnAA",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:50:41.733646"
+    },
+    {
+      "video_id": "iFMLyMgCUTs",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:50:43.737949"
+    },
+    {
+      "video_id": "6_xGKdYA0MM",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:50:45.741897"
+    },
+    {
+      "video_id": "BdSiBlLafNM",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:50:47.746206"
+    },
+    {
+      "video_id": "Unzc7oWbYg",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:50:49.752440"
+    },
+    {
+      "video_id": "FRRh5hqzRg",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:50:51.756905"
+    },
+    {
+      "video_id": "UvCri1tqIxQ",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:50:53.760064"
+    },
+    {
+      "video_id": "502ILHjX9EE",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:50:55.763662"
+    },
+    {
+      "video_id": "F8_ME4VwTiw",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:50:57.767323"
+    },
+    {
+      "video_id": "JK_3nIFGOdE",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:50:59.770845"
+    },
+    {
+      "video_id": "BkREIFyCuKY",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:51:01.774605"
+    },
+    {
+      "video_id": "n_F1a7UpKqw",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:51:03.778045"
+    },
+    {
+      "video_id": "QmOF0crdyRU",
+      "error": "Processing returned None",
+      "timestamp": "2025-08-03T07:51:05.781898"
+    }
+  ],
+  "last_processed_index": 99,
+  "start_time": "2025-08-03T07:47:37.340027",
+  "total_processing_time": 0,
+  "results": []
+}

@@ -1,0 +1,163 @@
+{
+  "workspace.name": "youtube-extension-mcp",
+  "workspace.type": "mcp-first-architecture",
+  
+  "workspace.aiAgent": {
+    "role": "expert-full-stack-mcp-developer",
+    "iq": 500,
+    "specializations": [
+      "mcp-protocol-expert",
+      "youtube-api-specialist",
+      "ai-integration-architect",
+      "security-compliance-expert"
+    ],
+    "workingMode": "autonomous-proactive"
+  },
+  
+  "workspace.mcpConfiguration": {
+    "primaryProtocol": "mcp-v2",
+    "enforcementLevel": "strict",
+    "connections": {
+      "youtube_innovation_server": {
+        "path": "./src/youtube-innovation-server.py",
+        "autoStart": true,
+        "healthCheck": true
+      },
+      "ai_tools": {
+        "path": "/Users/garvey/.cursor/mcp-server.py",
+        "autoStart": true
+      },
+      "web_eval_agent": {
+        "command": "uvx --from git+https://github.com/Operative-Sh/web-eval-agent.git webEvalAgent",
+        "autoStart": false
+      }
+    }
+  },
+  
+  "workspace.projectContext": {
+    "primaryGoals": [
+      "automated-youtube-content-processing",
+      "ai-driven-skill-extraction",
+      "mcp-compliant-integrations"
+    ],
+    "criticalPaths": [
+      "intelligence_layer/",
+      "agents/",
+      "connectors/",
+      "build_extensions/"
+    ],
+    "ignorePaths": [
+      "archive/",
+      "mcp-env/",
+      "node_modules/",
+      "*.pyc",
+      "__pycache__"
+    ]
+  },
+  
+  "workspace.taskExecution": {
+    "defaultApproach": "mcp-first",
+    "verificationRequired": true,
+    "testingStrategy": "automated-comprehensive",
+    "documentationMode": "inline-comprehensive",
+    "cleanupPolicy": "aggressive"
+  },
+  
+  "workspace.codeStandards": {
+    "style": "clean-architecture",
+    "linting": "strict",
+    "formatting": "black+prettier",
+    "namingConvention": "semantic-descriptive",
+    "commentStyle": "comprehensive-jsdoc"
+  },
+  
+  "workspace.securityPolicies": {
+    "secretsManagement": "env-only",
+    "apiKeyValidation": true,
+    "inputSanitization": "mandatory",
+    "outputValidation": "strict",
+    "auditLogging": true
+  },
+  
+  "workspace.performanceTargets": {
+    "responseTime": "<2s",
+    "memoryUsage": "<500MB",
+    "cpuUsage": "<70%",
+    "concurrentTasks": 10,
+    "cacheStrategy": "intelligent"
+  },
+  
+  "workspace.aiEnhancements": {
+    "contextAwareness": {
+      "projectStructure": true,
+      "codeRelationships": true,
+      "dependencyGraph": true,
+      "changeHistory": true
+    },
+    "proactiveSuggestions": {
+      "refactoring": true,
+      "optimization": true,
+      "securityFixes": true,
+      "testGeneration": true
+    },
+    "intelligentActions": {
+      "autoImports": true,
+      "autoTypeInference": true,
+      "smartRenaming": true,
+      "codeGeneration": "context-aware"
+    }
+  },
+  
+  "workspace.workflowAutomation": {
+    "preCommitChecks": [
+      "lint",
+      "test",
+      "security-scan",
+      "mcp-validation"
+    ],
+    "continuousIntegration": {
+      "enabled": true,
+      "triggers": ["push", "pr"],
+      "actions": ["test", "build", "deploy-preview"]
+    },
+    "issueManagement": {
+      "autoTriage": true,
+      "suggestFixes": true,
+      "linkPRs": true
+    }
+  },
+  
+  "workspace.customRules": {
+    "enforceMcpFirst": {
+      "priority": 1,
+      "action": "block-and-suggest"
+    },
+    "preventDuplication": {
+      "priority": 2,
+      "action": "merge-or-delete"
+    },
+    "requireVerification": {
+      "priority": 1,
+      "action": "block-until-verified"
+    },
+    "maintainCleanCode": {
+      "priority": 2,
+      "action": "auto-fix"
+    }
+  },
+  
+  "workspace.debugging": {
+    "enhancedMode": true,
+    "breakpointPrediction": true,
+    "variableTracking": "comprehensive",
+    "performanceProfiling": true,
+    "mcpTracing": true
+  },
+  
+  "workspace.collaboration": {
+    "sharedContext": true,
+    "realtimeSync": true,
+    "conflictResolution": "intelligent-merge",
+    "knowledgeSharing": "automatic"
+  }
+}

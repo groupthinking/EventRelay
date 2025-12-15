@@ -1,0 +1,17 @@
+{
+  "project_id": "test_packaging_20251128_014521",
+  "timestamp": "20251128_014521",
+  "total_files": 3,
+  "passed_validation": 2,
+  "failed_validation": 1,
+  "security_issues": [
+    {
+      "file": "/Users/garvey/Dev/OpenAI_Hub/projects/EventRelay/temp/packaged_projects/test_packaging_20251128_014521/.env",
+      "issues": [
+        "SECURITY: Potential secret detected in /Users/garvey/Dev/OpenAI_Hub/projects/EventRelay/temp/packaged_projects/test_packaging_20251128_014521/.env",
+        "SECURITY: Sensitive path detected: /Users/garvey/Dev/OpenAI_Hub/projects/EventRelay/temp/packaged_projects/test_packaging_20251128_014521/.env"
+      ]
+    }
+  ],
+  "validation_score": 66.66666666666666
+}

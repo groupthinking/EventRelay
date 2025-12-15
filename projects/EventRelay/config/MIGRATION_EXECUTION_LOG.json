@@ -1,0 +1,98 @@
+{
+  "timestamp": "1757016930.1664624",
+  "total_actions": 11,
+  "successful_actions": 11,
+  "failed_actions": 0,
+  "dry_run": false,
+  "backup_created": false,
+  "actions": [
+    {
+      "timestamp": "1757016930.1664624",
+      "action": "move",
+      "source": "/Users/garvey/UVAI/src/core/youtube_extension/tools/bulk_issue_processor.py",
+      "destination": "/Users/garvey/UVAI/src/core/youtube_extension/tools/github/bulk_issue_processor.py",
+      "status": "success",
+      "error": null
+    },
+    {
+      "timestamp": "1757016930.1664624",
+      "action": "move",
+      "source": "/Users/garvey/UVAI/src/core/youtube_extension/tools/github_api.py",
+      "destination": "/Users/garvey/UVAI/src/core/youtube_extension/tools/github/api_client.py",
+      "status": "success",
+      "error": null
+    },
+    {
+      "timestamp": "1757016930.1664624",
+      "action": "move",
+      "source": "/Users/garvey/UVAI/src/core/youtube_extension/tools/github_bulk_processor.py",
+      "destination": "/Users/garvey/UVAI/src/core/youtube_extension/tools/github/bulk_processor.py",
+      "status": "success",
+      "error": null
+    },
+    {
+      "timestamp": "1757016930.1664624",
+      "action": "move",
+      "source": "/Users/garvey/UVAI/src/core/youtube_extension/tools/github_issue_bulk_closer.py",
+      "destination": "/Users/garvey/UVAI/src/core/youtube_extension/tools/github/issue_bulk_closer.py",
+      "status": "success",
+      "error": null
+    },
+    {
+      "timestamp": "1757016930.1664624",
+      "action": "move",
+      "source": "/Users/garvey/UVAI/src/core/youtube_extension/tools/github_mcp_bulk_processor.py",
+      "destination": "/Users/garvey/UVAI/src/core/youtube_extension/tools/github/mcp_bulk_processor.py",
+      "status": "success",
+      "error": null
+    },
+    {
+      "timestamp": "1757016930.1664624",
+      "action": "move",
+      "source": "/Users/garvey/UVAI/src/core/youtube_extension/tools/github_mcp_demo.py",
+      "destination": "/Users/garvey/UVAI/src/core/youtube_extension/tools/github/mcp_demo.py",
+      "status": "success",
+      "error": null
+    },
+    {
+      "timestamp": "1757016930.1664624",
+      "action": "move",
+      "source": "/Users/garvey/UVAI/src/core/youtube_extension/tools/production_github_bulk_closer.py",
+      "destination": "/Users/garvey/UVAI/src/core/youtube_extension/tools/github/production_bulk_closer.py",
+      "status": "success",
+      "error": null
+    },
+    {
+      "timestamp": "1757016930.1664624",
+      "action": "move",
+      "source": "/Users/garvey/UVAI/src/core/youtube_extension/tools/test_enhanced_backend.py",
+      "destination": "/Users/garvey/UVAI/src/core/youtube_extension/tools/testing/test_enhanced_backend.py",
+      "status": "success",
+      "error": null
+    },
+    {
+      "timestamp": "1757016930.1664624",
+      "action": "move",
+      "source": "/Users/garvey/UVAI/src/core/youtube_extension/tools/test_integration.py",
+      "destination": "/Users/garvey/UVAI/src/core/youtube_extension/tools/testing/test_integration.py",
+      "status": "success",
+      "error": null
+    },
+    {
+      "timestamp": "1757016930.1664624",
+      "action": "move",
+      "source": "/Users/garvey/UVAI/src/core/youtube_extension/tools/test_youtube_api.py",
+      "destination": "/Users/garvey/UVAI/src/core/youtube_extension/tools/testing/test_youtube_api.py",
+      "status": "success",
+      "error": null
+    },
+    {
+      "timestamp": "1757016930.1664624",
+      "action": "move",
+      "source": "/Users/garvey/UVAI/src/core/youtube_extension/tools/README_BULK_PROCESSING.md",
+      "destination": "/Users/garvey/UVAI/src/core/youtube_extension/tools/github/README.md",
+      "status": "success",
+      "error": null
+    }
+  ]
+}

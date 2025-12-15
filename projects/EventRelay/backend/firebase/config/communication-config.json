@@ -1,0 +1,187 @@
+{
+  "description": "Communication Integration Configuration",
+  "version": "1.0.0",
+  "enabled": true,
+  "rateLimiting": {
+    "maxRequests": 100,
+    "windowMs": 60000,
+    "retryDelay": 5000
+  },
+  "channels": {
+    "slack": {
+      "enabled": false,
+      "token": "${SLACK_BOT_TOKEN}",
+      "defaultChannel": "#alerts",
+      "webhooks": {
+        "alerts": "${SLACK_ALERTS_WEBHOOK}",
+        "reports": "${SLACK_REPORTS_WEBHOOK}",
+        "notifications": "${SLACK_NOTIFICATIONS_WEBHOOK}"
+      }
+    },
+    "teams": {
+      "enabled": false,
+      "clientId": "${TEAMS_CLIENT_ID}",
+      "clientSecret": "${TEAMS_CLIENT_SECRET}",
+      "tenantId": "${TEAMS_TENANT_ID}",
+      "webhooks": {
+        "alerts": "${TEAMS_ALERTS_WEBHOOK}",
+        "reports": "${TEAMS_REPORTS_WEBHOOK}"
+      }
+    },
+    "discord": {
+      "enabled": false,
+      "token": "${DISCORD_BOT_TOKEN}",
+      "defaultChannel": "${DISCORD_CHANNEL_ID}",
+      "webhooks": {
+        "alerts": "${DISCORD_ALERTS_WEBHOOK}",
+        "reports": "${DISCORD_REPORTS_WEBHOOK}"
+      }
+    },
+    "email": {
+      "enabled": false,
+      "smtp": {
+        "host": "smtp.gmail.com",
+        "port": 587,
+        "secure": false,
+        "auth": {
+          "user": "${EMAIL_USER}",
+          "pass": "${EMAIL_PASS}"
+        }
+      },
+      "from": "Firebase System <noreply@firebase.com>",
+      "to": ["dev-team@yourcompany.com"],
+      "templates": {
+        "alerts": "./communications/templates/alert-email.html",
+        "reports": "./communications/templates/report-email.html",
+        "notifications": "./communications/templates/notification-email.html"
+      }
+    },
+    "gitlab": {
+      "enabled": true,
+      "webhookToken": "${GITLAB_WEBHOOK_TOKEN}",
+      "webhookUrl": "https://your-gitlab-instance.com/api/v4/projects/YOUR_PROJECT_ID/hooks",
+      "events": [
+        "pipeline",
+        "job",
+        "merge_request",
+        "push",
+        "tag_push",
+        "note",
+        "build"
+      ],
+      "channels": {
+        "pipeline": "#gitlab-pipelines",
+        "alerts": "#gitlab-alerts",
+        "reports": "#gitlab-reports"
+      }
+    },
+    "webhook": {
+      "enabled": true,
+      "endpoints": {
+        "alerts": "https://your-monitoring-service.com/webhook/alerts",
+        "reports": "https://your-monitoring-service.com/webhook/reports",
+        "notifications": "https://your-monitoring-service.com/webhook/notifications"
+      },
+      "headers": {
+        "Authorization": "Bearer ${WEBHOOK_TOKEN}",
+        "Content-Type": "application/json",
+        "User-Agent": "Firebase-System/1.0.0"
+      },
+      "timeout": 5000,
+      "retries": 3
+    }
+  },
+  "templates": {
+    "alert": {
+      "slack": ":warning: *{title}*\n{description}\n*Severity:* {severity}\n*Time:* {timestamp}\n*Source:* {source}",
+      "teams": {
+        "@type": "MessageCard",
+        "@context": "http://schema.org/extensions",
+        "themeColor": "FF0000",
+        "title": "{title}",
+        "text": "{description}",
+        "sections": [{
+          "facts": [
+            { "name": "Severity:", "value": "{severity}" },
+            { "name": "Time:", "value": "{timestamp}" },
+            { "name": "Source:", "value": "{source}" }
+          ]
+        }]
+      },
+      "discord": "🚨 **{title}**\n{description}\n🔴 Severity: {severity}\n⏰ Time: {timestamp}\n📍 Source: {source}",
+      "gitlab": ":warning: **{title}**\n\n{description}\n\n**Severity:** {severity}\n**Time:** {timestamp}\n**Source:** {source}"
+    },
+    "report": {
+      "slack": ":chart_with_upwards_trend: *{title}*\n{summary}\n[View Full Report]({link})\n*Generated:* {timestamp}",
+      "teams": {
+        "@type": "MessageCard",
+        "@context": "http://schema.org/extensions",
+        "themeColor": "0078D4",
+        "title": "{title}",
+        "text": "{summary}",
+        "potentialAction": [{
+          "@type": "OpenUri",
+          "name": "View Report",
+          "targets": [{ "os": "default", "uri": "{link}" }]
+        }]
+      },
+      "discord": "📊 **{title}**\n{summary}\n🔗 [View Full Report]({link})\n⏰ Generated: {timestamp}",
+      "gitlab": ":chart_with_upwards_trend: **{title}**\n\n{summary}\n\n[View Full Report]({link})\n\n*Generated: {timestamp}*"
+    },
+    "notification": {
+      "slack": ":information_source: *{title}*\n{description}\n*Time:* {timestamp}",
+      "teams": {
+        "@type": "MessageCard",
+        "@context": "http://schema.org/extensions",
+        "themeColor": "0078D4",
+        "title": "{title}",
+        "text": "{description}"
+      },
+      "discord": "ℹ️ **{title}**\n{description}\n⏰ Time: {timestamp}",
+      "gitlab": ":information_source: **{title}**\n\n{description}\n\n*Time: {timestamp}*"
+    }
+  },
+  "routing": {
+    "alerts": {
+      "critical": ["slack", "teams", "email", "webhook"],
+      "high": ["slack", "teams", "webhook"],
+      "medium": ["slack", "webhook"],
+      "low": ["slack"]
+    },
+    "reports": {
+      "daily": ["slack", "email", "webhook"],
+      "weekly": ["slack", "teams", "email", "webhook"],
+      "monthly": ["slack", "teams", "email", "webhook"]
+    },
+    "notifications": {
+      "system": ["slack", "webhook"],
+      "user": ["slack", "teams", "email"],
+      "maintenance": ["slack", "email", "webhook"]
+    }
+  },
+  "gitlab": {
+    "integration": {
+      "enabled": true,
+      "projectId": "YOUR_PROJECT_ID",
+      "apiUrl": "https://your-gitlab-instance.com/api/v4",
+      "webhookSecret": "${GITLAB_WEBHOOK_SECRET}",
+      "events": {
+        "pipeline": {
+          "enabled": true,
+          "statuses": ["success", "failed", "canceled", "running"],
+          "channels": ["slack", "webhook"]
+        },
+        "job": {
+          "enabled": true,
+          "statuses": ["success", "failed", "canceled"],
+          "channels": ["slack", "webhook"]
+        },
+        "merge_request": {
+          "enabled": true,
+          "actions": ["open", "close", "merge", "update"],
+          "channels": ["slack", "teams", "webhook"]
+        }
+      }
+    }
+  }
+}

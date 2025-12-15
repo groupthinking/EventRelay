@@ -1,0 +1,4 @@
+/deep-analysis - Full codebase deep-dive
+/security-review - Security audit (Anthropic's exact prompt)
+/duplicate-detection - DRY violation scanner
+/production-readiness - Deployment readiness scorecard 

@@ -1,0 +1,40 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mcp-youtube"
+version = "0.2.0"
+description = "MCP server wrapping yt-dlp for video/audio/subtitle download via FastMCP"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastmcp>=2.2.1",
+    "yt-dlp>=2025.3.31",
+]
+license = "MIT"
+authors = [{ name = "Kiyotaka Matsushita", email = "kiyotaka.86@gmail.com" }]
+
+[dependency-groups]
+dev = [
+    "black>=25.1.0",
+    "mypy>=1.15.0",
+    "ruff>=0.11.6",
+    "pytest>=8.3.5",
+    "pytest-asyncio>=0.23.5",
+    "poethepoet>=0.33.1",
+]
+
+[project.scripts]
+mcp-youtube = "mcp_youtube:main"
+
+[tool.poe.tasks]
+lint      = "ruff check ."
+format    = "black ."
+typecheck = "mypy ."
+test      = "pytest"
+check     = ["lint", "typecheck", "test"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"

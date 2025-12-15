@@ -1,0 +1,24 @@
+{
+  "project_id": "uvai_MCP (Model Context Protocol) Server Managemen_20251128_171734",
+  "timestamp": "20251128_171734",
+  "total_files": 15,
+  "passed_validation": 13,
+  "failed_validation": 2,
+  "security_issues": [
+    {
+      "file": "/Users/garvey/Dev/OpenAI_Hub/projects/EventRelay/temp/packaged_projects/uvai_MCP (Model Context Protocol) Server Managemen_20251128_171734/.env.local",
+      "issues": [
+        "SECURITY: Potential secret detected in /Users/garvey/Dev/OpenAI_Hub/projects/EventRelay/temp/packaged_projects/uvai_MCP (Model Context Protocol) Server Managemen_20251128_171734/.env.local",
+        "SECURITY: Sensitive path detected: /Users/garvey/Dev/OpenAI_Hub/projects/EventRelay/temp/packaged_projects/uvai_MCP (Model Context Protocol) Server Managemen_20251128_171734/.env.local"
+      ]
+    },
+    {
+      "file": "/Users/garvey/Dev/OpenAI_Hub/projects/EventRelay/temp/packaged_projects/uvai_MCP (Model Context Protocol) Server Managemen_20251128_171734/.env.example",
+      "issues": [
+        "SECURITY: Potential secret detected in /Users/garvey/Dev/OpenAI_Hub/projects/EventRelay/temp/packaged_projects/uvai_MCP (Model Context Protocol) Server Managemen_20251128_171734/.env.example",
+        "SECURITY: Sensitive path detected: /Users/garvey/Dev/OpenAI_Hub/projects/EventRelay/temp/packaged_projects/uvai_MCP (Model Context Protocol) Server Managemen_20251128_171734/.env.example"
+      ]
+    }
+  ],
+  "validation_score": 86.66666666666667
+}

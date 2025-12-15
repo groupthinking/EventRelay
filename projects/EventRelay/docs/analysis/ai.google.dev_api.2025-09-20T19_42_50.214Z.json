@@ -1,0 +1,185 @@
+{
+  "links": [
+    {
+      "url": "https://ai.google.dev/api/files",
+      "title": "Using files  |  Gemini API  |  Google AI for Developers"
+    },
+    {
+      "url": "https://ai.google.dev/api/semantic-retrieval/corpora",
+      "title": "Corpora  |  Gemini API  |  Google AI for Developers"
+    },
+    {
+      "url": "https://ai.google.dev/api/tokens",
+      "title": "Counting tokens  |  Gemini API  |  Google AI for Developers"
+    },
+    {
+      "url": "https://ai.google.dev/api/generate-content",
+      "title": "Generating content  |  Gemini API  |  Google AI for Devel..."
+    },
+    {
+      "url": "https://ai.google.dev/api/caching",
+      "title": "Caching  |  Gemini API  |  Google AI for Developers"
+    },
+    {
+      "url": "https://ai.google.dev/api",
+      "title": "Gemini API reference  |  Google AI for Developers"
+    },
+    {
+      "url": "https://ai.google.dev/api/semantic-retrieval/chunks",
+      "title": "Chunks  |  Gemini API  |  Google AI for Developers"
+    },
+    {
+      "url": "https://ai.google.dev/api/semantic-retrieval/documents",
+      "title": "Documents  |  Gemini API  |  Google AI for Developers"
+    },
+    {
+      "url": "https://ai.google.dev/api/palm",
+      "title": "PaLM (decommissioned)  |  Gemini API  |  Google AI for De..."
+    },
+    {
+      "url": "https://ai.google.dev/api/tuning",
+      "title": "Tuning  |  Gemini API  |  Google AI for Developers"
+    },
+    {
+      "url": "https://ai.google.dev/api/embeddings",
+      "title": "Embeddings  |  Gemini API  |  Google AI for Developers"
+    },
+    {
+      "url": "https://ai.google.dev/api/tuning/permissions",
+      "title": "Permissions  |  Gemini API  |  Google AI for Developers"
+    },
+    {
+      "url": "https://ai.google.dev/api/generate-content#v1beta.CitationMetadata"
+    },
+    {
+      "url": "https://ai.google.dev/api/all-methods",
+      "title": "All methods  |  Gemini API  |  Google AI for Developers"
+    },
+    {
+      "url": "https://ai.google.dev/api/semantic-retrieval/question-answering",
+      "title": "Question answering  |  Gemini API  |  Google AI for Devel..."
+    },
+    {
+      "url": "https://ai.google.dev/api/live",
+      "title": "Live API - WebSockets API reference  |  Gemini API  |  Go..."
+    },
+    {
+      "url": "https://ai.google.dev/api/models",
+      "title": "Models  |  Gemini API  |  Google AI for Developers"
+    },
+    {
+      "url": "https://ai.google.dev/api/batch-mode",
+      "title": "Batch Mode  |  Gemini API  |  Google AI for Developers"
+    },
+    {
+      "url": "https://ai.google.dev/api/semantic-retrieval/permissions",
+      "title": "Corpus Permissions  |  Gemini API  |  Google AI for Devel..."
+    },
+    {
+      "url": "https://ai.google.dev/api/files#v1beta.media.upload"
+    },
+    {
+      "url": "https://ai.google.dev/api/tokens#v1beta.models.countTokens"
+    },
+    {
+      "url": "https://ai.google.dev/api/models#v1beta.models.get",
+      "title": "Models  |  Gemini API  |  Google AI for Developers"
+    },
+    {
+      "url": "https://ai.google.dev/api/generate-content#v1beta.HarmCategory",
+      "title": "Generating content  |  Gemini API  |  Google AI for Devel..."
+    },
+    {
+      "url": "https://ai.google.dev/api/generate-content#v1beta.models.generateContent",
+      "title": "Generating content  |  Gemini API  |  Google AI for Devel..."
+    },
+    {
+      "url": "https://ai.google.dev/api/live_music",
+      "title": "Live Music API - WebSockets API reference  |  Gemini API ..."
+    },
+    {
+      "url": "https://ai.google.dev/api/files#v1beta.files",
+      "title": "Using files  |  Gemini API  |  Google AI for Developers"
+    },
+    {
+      "url": "https://ai.google.dev/api/batch-api",
+      "title": "Batch API | Gemini API - Google AI for Developers",
+      "description": "Output only. The time at which the batch was created. Uses RFC 3339, where generated output will always be Z-normalized and use 0, 3, 6 or 9 fractional ..."
+    }
+  ],
+  "id": "Hr5CN_UZuHBBDYGkO-pvk",
+  "startedAt": "2025-09-20T19:42:50.214Z",
+  "endedAt": "2025-09-20T19:43:22.001Z",
+  "endpoint": "map",
+  "formState": {
+    "extractSetupCompleted": false,
+    "urls": [],
+    "extractSchema": {
+      "type": "object",
+      "required": [],
+      "properties": {
+        "company_mission": {
+          "type": "string"
+        },
+        "supports_sso": {
+          "type": "boolean"
+        },
+        "is_open_source": {
+          "type": "boolean"
+        },
+        "is_in_yc": {
+          "type": "boolean"
+        }
+      }
+    },
+    "extractPrompt": "Extract the company details, following the schema.",
+    "enableWebSearch": false,
+    "options": {
+      "onlyMainContent": true,
+      "parsePDF": true,
+      "stealthMode": false,
+      "excludeTags": [],
+      "includeTags": [],
+      "waitFor": "",
+      "timeout": "",
+      "maxAge": "2 days",
+      "ignoreSitemap": false,
+      "crawlEntireDomain": false,
+      "sitemap": "include",
+      "limit": "5000",
+      "maxDepth": "",
+      "excludePaths": [],
+      "includePaths": [],
+      "includeSubdomains": false,
+      "search": "",
+      "scrapeContentFromSearchResults": true,
+      "timeBasedSearch": "",
+      "location": "",
+      "prompt": ""
+    },
+    "formats": [
+      "markdown"
+    ],
+    "sources": [
+      "web"
+    ],
+    "categories": [],
+    "jsonSchema": {
+      "type": "object",
+      "required": [],
+      "properties": {
+        "company_name": {
+          "type": "string"
+        },
+        "company_description": {
+          "type": "string"
+        }
+      }
+    },
+    "agent": {},
+    "url": "ai.google.dev/api",
+    "endpoint": "map"
+  },
+  "status": "success",
+  "version": "vWTHAXCLL3ZHrf1XVqpgR"
+}

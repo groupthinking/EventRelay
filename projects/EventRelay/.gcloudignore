@@ -1,0 +1,3 @@
+#!include:.gitignore
+!frontend/src/lib/
+!frontend/src/components/ui/

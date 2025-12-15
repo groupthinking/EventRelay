@@ -1,0 +1,156 @@
+{
+  "description": "Project Management Integration Configuration",
+  "version": "1.0.0",
+  "integrations": {
+    "jira": {
+      "enabled": false,
+      "name": "Jira Software",
+      "baseUrl": "https://your-company.atlassian.net",
+      "username": "your-email@company.com",
+      "apiToken": "your-jira-api-token",
+      "projectKey": "DOCS",
+      "webhookSecret": "your-webhook-secret",
+      "syncInterval": 300000,
+      "mappings": {
+        "status": {
+          "todo": "To Do",
+          "in_progress": "In Progress",
+          "review": "In Review",
+          "done": "Done"
+        },
+        "priority": {
+          "low": "Low",
+          "medium": "Medium",
+          "high": "High",
+          "critical": "Highest"
+        }
+      }
+    },
+    "trello": {
+      "enabled": false,
+      "name": "Trello",
+      "apiKey": "your-trello-api-key",
+      "apiToken": "your-trello-api-token",
+      "boardId": "your-board-id",
+      "webhookCallbackUrl": "https://your-app.com/webhooks/trello",
+      "syncInterval": 300000,
+      "mappings": {
+        "lists": {
+          "todo": "To Do",
+          "in_progress": "In Progress",
+          "review": "Review",
+          "done": "Done"
+        },
+        "labels": {
+          "bug": "red",
+          "feature": "green",
+          "documentation": "blue",
+          "urgent": "orange"
+        }
+      }
+    },
+    "asana": {
+      "enabled": false,
+      "name": "Asana",
+      "accessToken": "your-asana-access-token",
+      "workspaceId": "your-workspace-id",
+      "projectId": "your-project-id",
+      "webhookSecret": "your-webhook-secret",
+      "syncInterval": 300000,
+      "mappings": {
+        "sections": {
+          "todo": "To Do",
+          "in_progress": "In Progress",
+          "review": "Review",
+          "done": "Done"
+        },
+        "tags": {
+          "bug": "Bug",
+          "feature": "Feature",
+          "documentation": "Documentation",
+          "urgent": "Urgent"
+        }
+      }
+    }
+  },
+  "sync": {
+    "enabled": true,
+    "interval": 300000,
+    "batchSize": 50,
+    "retryAttempts": 3,
+    "retryDelay": 5000,
+    "conflictResolution": "manual"
+  },
+  "webhooks": {
+    "enabled": true,
+    "baseUrl": "https://your-app-domain.com",
+    "port": 3000,
+    "ssl": true,
+    "gitlab": {
+      "enabled": true,
+      "webhookToken": "74110852_webhook_token_secure_random_string",
+      "instance": "https://gitlab.com",
+      "projectId": 74110852,
+      "projectPath": "groupthinking/firebase",
+      "apiUrl": "https://gitlab.com/api/v4",
+      "pipelineWebhookUrl": "https://gitlab.com/api/v4/projects/74110852/hooks",
+      "jobWebhookUrl": "https://gitlab.com/api/v4/projects/74110852/jobs",
+      "events": [
+        "pipeline",
+        "job",
+        "merge_request",
+        "push",
+        "tag_push",
+        "note"
+      ]
+    },
+    "rateLimit": {
+      "windowMs": 60000,
+      "maxRequests": 100
+    }
+  },
+  "notifications": {
+    "enabled": true,
+    "channels": {
+      "slack": {
+        "enabled": false,
+        "webhookUrl": "https://hooks.slack.com/services/...",
+        "channel": "#docs-sync",
+        "username": "PM Integration Bot"
+      },
+      "email": {
+        "enabled": false,
+        "smtp": {
+          "host": "smtp.gmail.com",
+          "port": 587,
+          "secure": false,
+          "auth": {
+            "user": "your-email@gmail.com",
+            "pass": "your-app-password"
+          }
+        },
+        "from": "PM Integration <noreply@yourcompany.com>",
+        "to": ["dev-team@yourcompany.com"]
+      }
+    },
+    "events": {
+      "task_created": true,
+      "task_updated": true,
+      "task_completed": true,
+      "sync_failed": true,
+      "webhook_failed": true
+    }
+  },
+  "logging": {
+    "level": "info",
+    "file": "./logs/pm-integration.log",
+    "maxSize": "10m",
+    "maxFiles": 5,
+    "format": "json"
+  },
+  "cache": {
+    "enabled": true,
+    "ttl": 300000,
+    "maxSize": 1000
+  }
+}

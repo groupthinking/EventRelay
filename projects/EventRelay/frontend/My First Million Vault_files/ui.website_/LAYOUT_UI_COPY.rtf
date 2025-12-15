@@ -1,0 +1,217 @@
+{\rtf1\ansi\ansicpg1252\cocoartf2709
+\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fnil\fcharset0 HelveticaNeue;\f1\froman\fcharset0 Times-Roman;\f2\froman\fcharset0 Times-Bold;
+\f3\fmodern\fcharset0 Courier;\f4\fnil\fcharset0 .SFNS-Regular_wdth_opsz110000_GRAD_wght1F40000;}
+{\colortbl;\red255\green255\blue255;\red220\green220\blue220;\red30\green30\blue30;\red40\green41\blue44;
+\red0\green0\blue0;\red187\green187\blue187;}
+{\*\expandedcolortbl;;\cssrgb\c89020\c89020\c89020;\cssrgb\c15686\c15686\c15686;\cssrgb\c20533\c21286\c22698;
+\cssrgb\c0\c0\c0;\cssrgb\c78039\c78039\c78039;}
+{\*\listtable{\list\listtemplateid1\listhybrid{\listlevel\levelnfc23\levelnfcn23\leveljc0\leveljcn0\levelfollow0\levelstartat1\levelspace360\levelindent0{\*\levelmarker \{none\}}{\leveltext\leveltemplateid1\'00;}{\levelnumbers;}\fi-360\li720\lin720 }{\listname ;}\listid1}
+{\list\listtemplateid2\listhybrid{\listlevel\levelnfc23\levelnfcn23\leveljc0\leveljcn0\levelfollow0\levelstartat1\levelspace360\levelindent0{\*\levelmarker \{none\}}{\leveltext\leveltemplateid101\'00;}{\levelnumbers;}\fi-360\li720\lin720 }{\listname ;}\listid2}
+{\list\listtemplateid3\listhybrid{\listlevel\levelnfc23\levelnfcn23\leveljc0\leveljcn0\levelfollow0\levelstartat1\levelspace360\levelindent0{\*\levelmarker \{none\}}{\leveltext\leveltemplateid201\'00;}{\levelnumbers;}\fi-360\li720\lin720 }{\listname ;}\listid3}}
+{\*\listoverridetable{\listoverride\listid1\listoverridecount0\ls1}{\listoverride\listid2\listoverridecount0\ls2}{\listoverride\listid3\listoverridecount0\ls3}}
+\margl1440\margr1440\vieww11520\viewh8400\viewkind0
+\deftab720
+\pard\pardeftab720\partightenfactor0
+
+\f0\fs24 \cf2 \cb3 \expnd0\expndtw0\kerning0
+\outl0\strokewidth0 \strokec2 \
+\pard\pardeftab720\sa200\partightenfactor0
+
+\f1 \cf2 \cb1 This Javascript file appears to be part of a Next.js application.\
+\pard\pardeftab720\sa200\partightenfactor0
+
+\f2\b \cf2 Primary Functionality:
+\f1\b0 \
+The primary functionality of this code is to render a navigation bar (menubar) for the "My First Million \uc0\u55357 \u56504  Vault" website. It includes links for navigation, an "Admin" dropdown menu (visible only to authenticated users), and user-specific information like a welcome message and a logout button. The navigation bar has different layouts for larger and smaller screens, with a dropdown menu for navigation links on smaller screens.\
+
+\f2\b Frameworks and Libraries:
+\f1\b0 \
+\pard\tx220\tx720\pardeftab720\li720\fi-720\partightenfactor0
+\ls1\ilvl0
+\f2\b \cf2 \kerning1\expnd0\expndtw0 \outl0\strokewidth0 		\expnd0\expndtw0\kerning0
+\outl0\strokewidth0 \strokec2 React:
+\f1\b0 \'a0The code uses React hooks (
+\f3\fs22 \cb4 useState
+\f1\fs24 \cb1 ,\'a0
+\f3\fs22 \cb4 forwardRef
+\f1\fs24 \cb1 ) and JSX syntax.\
+\ls1\ilvl0
+\f2\b \kerning1\expnd0\expndtw0 \outl0\strokewidth0 		\expnd0\expndtw0\kerning0
+\outl0\strokewidth0 \strokec2 Next.js:
+\f1\b0 \'a0The file is located in the\'a0
+\f3\fs22 \cb4 _next/static/chunks/app
+\f1\fs24 \cb1 \'a0directory, which is typical for Next.js applications. It also uses the\'a0
+\f3\fs22 \cb4 next/link
+\f1\fs24 \cb1 \'a0component (imported as\'a0
+\f3\fs22 \cb4 x.default
+\f1\fs24 \cb1 ).\
+\ls1\ilvl0
+\f2\b \kerning1\expnd0\expndtw0 \outl0\strokewidth0 		\expnd0\expndtw0\kerning0
+\outl0\strokewidth0 \strokec2 shadcn/ui (likely):
+\f1\b0 \'a0The code imports components from various modules (e.g.,\'a0
+\f3\fs22 \cb4 a(92005)
+\f1\fs24 \cb1 \'a0aliased as\'a0
+\f3\fs22 \cb4 r
+\f1\fs24 \cb1 ,\'a0
+\f3\fs22 \cb4 a(79219)
+\f1\fs24 \cb1 \'a0aliased as\'a0
+\f3\fs22 \cb4 v
+\f1\fs24 \cb1 ,\'a0
+\f3\fs22 \cb4 a(54008)
+\f1\fs24 \cb1 \'a0aliased as\'a0
+\f3\fs22 \cb4 b
+\f1\fs24 \cb1 ,\'a0
+\f3\fs22 \cb4 a(4867)
+\f1\fs24 \cb1 \'a0aliased as\'a0
+\f3\fs22 \cb4 o
+\f1\fs24 \cb1 ). The naming conventions (
+\f3\fs22 \cb4 cn
+\f1\fs24 \cb1 ,\'a0
+\f3\fs22 \cb4 Radix
+\f1\fs24 \cb1 ) and component names (
+\f3\fs22 \cb4 Menubar
+\f1\fs24 \cb1 ,\'a0
+\f3\fs22 \cb4 DropdownMenu
+\f1\fs24 \cb1 ,\'a0
+\f3\fs22 \cb4 NavigationMenu
+\f1\fs24 \cb1 ,\'a0
+\f3\fs22 \cb4 className
+\f1\fs24 \cb1 \'a0based styling) strongly suggest the use of components from a UI library like shadcn/ui, which is built on Radix UI and Tailwind CSS.\
+\ls1\ilvl0
+\f2\b \kerning1\expnd0\expndtw0 \outl0\strokewidth0 		\expnd0\expndtw0\kerning0
+\outl0\strokewidth0 \strokec2 Lucide React:
+\f1\b0 \'a0The import\'a0
+\f3\fs22 \cb4 a(4867)
+\f1\fs24 \cb1 \'a0aliased as\'a0
+\f3\fs22 \cb4 o
+\f1\fs24 \cb1 \'a0and the use of components like\'a0
+\f3\fs22 \cb4 o.XCv
+\f1\fs24 \cb1 ,\'a0
+\f3\fs22 \cb4 o.nQG
+\f1\fs24 \cb1 , and\'a0
+\f3\fs22 \cb4 o.jXb
+\f1\fs24 \cb1 \'a0indicates the use of icons, likely from the Lucide React library.\
+\ls1\ilvl0
+\f2\b \kerning1\expnd0\expndtw0 \outl0\strokewidth0 		\expnd0\expndtw0\kerning0
+\outl0\strokewidth0 \strokec2 Tailwind CSS:
+\f1\b0 \'a0The extensive use of utility classes within the\'a0
+\f3\fs22 \cb4 className
+\f1\fs24 \cb1 \'a0attributes (e.g.,\'a0
+\f3\fs22 \cb4 flex
+\f1\fs24 \cb1 ,\'a0
+\f3\fs22 \cb4 h-9
+\f1\fs24 \cb1 ,\'a0
+\f3\fs22 \cb4 items-center
+\f1\fs24 \cb1 ,\'a0
+\f3\fs22 \cb4 space-x-1
+\f1\fs24 \cb1 ,\'a0
+\f3\fs22 \cb4 rounded-md
+\f1\fs24 \cb1 ,\'a0
+\f3\fs22 \cb4 bg-background
+\f1\fs24 \cb1 ,\'a0
+\f3\fs22 \cb4 p-1
+\f1\fs24 \cb1 ,\'a0
+\f3\fs22 \cb4 shadow-sm
+\f1\fs24 \cb1 ) indicates that the styling is being handled by Tailwind CSS.\
+\ls1\ilvl0
+\f2\b \kerning1\expnd0\expndtw0 \outl0\strokewidth0 		\expnd0\expndtw0\kerning0
+\outl0\strokewidth0 \strokec2 @tanstack/react-query (likely):
+\f1\b0 \'a0The use of\'a0
+\f3\fs22 \cb4 (0,h.a)()
+\f1\fs24 \cb1 \'a0which is destructured to get\'a0
+\f3\fs22 \cb4 user
+\f1\fs24 \cb1 \'a0suggests a hook for fetching and managing user data. This pattern is common with libraries like React Query or SWR.\
+\pard\pardeftab720\sa200\partightenfactor0
+
+\f2\b \cf2 Key Technologies, APIs, and Patterns:
+\f1\b0 \
+\pard\tx220\tx720\pardeftab720\li720\fi-720\partightenfactor0
+\ls2\ilvl0
+\f2\b \cf2 \kerning1\expnd0\expndtw0 \outl0\strokewidth0 		\expnd0\expndtw0\kerning0
+\outl0\strokewidth0 \strokec2 React Functional Components and Hooks:
+\f1\b0 \'a0The code is structured using React functional components and utilizes\'a0
+\f3\fs22 \cb4 useState
+\f1\fs24 \cb1 \'a0for managing local component state (like the mobile menu visibility).\
+\ls2\ilvl0
+\f2\b \kerning1\expnd0\expndtw0 \outl0\strokewidth0 		\expnd0\expndtw0\kerning0
+\outl0\strokewidth0 \strokec2 JSX:
+\f1\b0 \'a0Used for defining the structure and content of the UI.\
+\ls2\ilvl0
+\f2\b \kerning1\expnd0\expndtw0 \outl0\strokewidth0 		\expnd0\expndtw0\kerning0
+\outl0\strokewidth0 \strokec2 CSS Modules or Utility Classes:
+\f1\b0 \'a0Styling is applied using\'a0
+\f3\fs22 \cb4 className
+\f1\fs24 \cb1 \'a0with utility classes, strongly suggesting Tailwind CSS. The\'a0
+\f3\fs22 \cb4 (0,d.cn)
+\f1\fs24 \cb1 \'a0function is likely a helper for conditionally combining these classes (possibly from a library like\'a0
+\f3\fs22 \cb4 clsx
+\f1\fs24 \cb1 \'a0or\'a0
+\f3\fs22 \cb4 classnames
+\f1\fs24 \cb1 ).\
+\ls2\ilvl0
+\f2\b \kerning1\expnd0\expndtw0 \outl0\strokewidth0 		\expnd0\expndtw0\kerning0
+\outl0\strokewidth0 \strokec2 Component Composition:
+\f1\b0 \'a0The UI is built by composing smaller, reusable components (likely from shadcn/ui and Radix UI).\
+\ls2\ilvl0
+\f2\b \kerning1\expnd0\expndtw0 \outl0\strokewidth0 		\expnd0\expndtw0\kerning0
+\outl0\strokewidth0 \strokec2 Conditional Rendering:
+\f1\b0 \'a0The code conditionally renders parts of the UI based on the\'a0
+\f3\fs22 \cb4 user
+\f1\fs24 \cb1 \'a0object (e.g., the "Admin" menu and user-specific information).\
+\ls2\ilvl0
+\f2\b \kerning1\expnd0\expndtw0 \outl0\strokewidth0 		\expnd0\expndtw0\kerning0
+\outl0\strokewidth0 \strokec2 Event Handling:
+\f1\b0 \'a0Includes\'a0
+\f3\fs22 \cb4 onClick
+\f1\fs24 \cb1 \'a0handlers for the logout button and navigation links.\
+\ls2\ilvl0
+\f2\b \kerning1\expnd0\expndtw0 \outl0\strokewidth0 		\expnd0\expndtw0\kerning0
+\outl0\strokewidth0 \strokec2 Asynchronous Operations:
+\f1\b0 \'a0The\'a0
+\f3\fs22 \cb4 o
+\f1\fs24 \cb1 \'a0function (logout) is an\'a0
+\f3\fs22 \cb4 async
+\f1\fs24 \cb1 \'a0function, suggesting it performs an asynchronous operation, likely an API call.\
+\pard\pardeftab720\sa200\partightenfactor0
+
+\f2\b \cf2 External Resources:
+\f1\b0 \
+\pard\tx220\tx720\pardeftab720\li720\fi-720\partightenfactor0
+\ls3\ilvl0\cf2 \kerning1\expnd0\expndtw0 \outl0\strokewidth0 		\expnd0\expndtw0\kerning0
+\outl0\strokewidth0 \strokec2 React Documentation:\'a0https://reactjs.org/docs/getting-started.html\
+\ls3\ilvl0\kerning1\expnd0\expndtw0 \outl0\strokewidth0 		\expnd0\expndtw0\kerning0
+\outl0\strokewidth0 \strokec2 Next.js Documentation:\'a0https://nextjs.org/docs\
+\ls3\ilvl0\kerning1\expnd0\expndtw0 \outl0\strokewidth0 		\expnd0\expndtw0\kerning0
+\outl0\strokewidth0 \strokec2 shadcn/ui Documentation:\'a0https://ui.shadcn.com/\
+\ls3\ilvl0\kerning1\expnd0\expndtw0 \outl0\strokewidth0 		\expnd0\expndtw0\kerning0
+\outl0\strokewidth0 \strokec2 Radix UI Documentation:\'a0https://www.radix-ui.com/\
+\ls3\ilvl0\kerning1\expnd0\expndtw0 \outl0\strokewidth0 		\expnd0\expndtw0\kerning0
+\outl0\strokewidth0 \strokec2 Tailwind CSS Documentation:\'a0https://tailwindcss.com/docs\
+\ls3\ilvl0\kerning1\expnd0\expndtw0 \outl0\strokewidth0 		\expnd0\expndtw0\kerning0
+\outl0\strokewidth0 \strokec2 Lucide React Documentation:\'a0https://lucide.dev/guide/packages/lucide-react\
+\ls3\ilvl0\kerning1\expnd0\expndtw0 \outl0\strokewidth0 		\expnd0\expndtw0\kerning0
+\outl0\strokewidth0 \strokec2 React Query Documentation:\'a0https://react-query.tanstack.com/\'a0(if applicable)\
+\ls3\ilvl0\kerning1\expnd0\expndtw0 \outl0\strokewidth0 		\expnd0\expndtw0\kerning0
+\outl0\strokewidth0 \strokec2 SWR Documentation:\'a0https://swr.vercel.app/\'a0(if applicable)\
+\pard\pardeftab720\sa200\partightenfactor0
+
+\f2\b \cf2 Why the file was loaded?
+\f1\b0 \
+\pard\pardeftab720\partightenfactor0
+\cf2 The file was loaded because it is a dependency required by the main page (
+\f3\fs22 \cb4 https://www.mfmvault.com/
+\f1\fs24 \cb1 ) to render its layout, specifically the navigation bar component. The request initiator chain shows that the main page initiated the request for this JavaScript file.\
+\pard\pardeftab720\sa240\partightenfactor0
+\cf0 \strokec5 \
+\pard\pardeftab720\qc\partightenfactor0
+
+\f4 \cf6 \sub \strokec6 \
+File name: layout-4a8b8c9a74c54ae8.js\
+URL: https://www.mfmvault.com/_next/static/chunks/app/layout-4a8b8c9a74c54ae8.js\
+Request initiator chain:\
+- URL: https://www.mfmvault.com/\
+	- URL: https://www.mfmvault.com/_next/static/chunks/app/layout-4a8b8c9a74c54ae8.js\
+File content:\
+```\
+(self.webpackChunk_N_E=self.webpackChunk_N_E||[]).push([[3185],\{27029:function(e,t,a)\{Promise.resolve().then(a.t.bind(a,53054,23)),Promise.resolve().then(a.t.bind(a,85714,23)),Promise.resolve().then(a.t.bind(a,28085,23)),Promise.resolve().then(a.bind(a,10970)),Promise.resolve().then(a.bind(a,85722)),Promise.resolve().then(a.bind(a,60771)),Promise.resolve().then(a.bind(a,32727)),Promise.resolve().then(a.bind(a,30156))\},10970:function(e,t,a)\{"use strict";a.d(t,\{default:function()\{return k\}\});var s=a(57437),n=a(2265),o=a(4867),r=a(92005),d=a(49354);let i=r.v2;r.ZA,r.h_,r.Tr,r.Ee;let l=n.forwardRef((e,t)=>\{let\{className:a,...n\}=e;return(0,s.jsx)(r.fC,\{ref:t,className:(0,d.cn)("flex h-9 items-center space-x-1 rounded-md bg-background p-1 shadow-sm",a),...n\})\});l.displayName=r.fC.displayName;let c=n.forwardRef((e,t)=>\{let\{className:a,...n\}=e;return(0,s.jsx)(r.xz,\{ref:t,className:(0,d.cn)("flex cursor-default select-none items-center rounded-sm px-3 py-1 text-sm font-medium outline-none focus:bg-accent focus:text-accent-foreground data-[state=open]:bg-accent data-[state=open]:text-accent-foreground",a),...n\})\});c.displayName=r.xz.displayName,n.forwardRef((e,t)=>\{let\{className:a,inset:n,children:i,...l\}=e;return(0,s.jsxs)(r.fF,\{ref:t,className:(0,d.cn)("flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[state=open]:bg-accent data-[state=open]:text-accent-foreground",n&&"pl-8",a),...l,children:[i,(0,s.jsx)(o.XCv,\{className:"ml-auto h-4 w-4"\})]\})\}).displayName=r.fF.displayName,n.forwardRef((e,t)=>\{let\{className:a,...n\}=e;return(0,s.jsx)(r.tu,\{ref:t,className:(0,d.cn)("z-50 min-w-[8rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-lg data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",a),...n\})\}).displayName=r.tu.displayName;let f=n.forwardRef((e,t)=>\{let\{className:a,align:n="start",alignOffset:o=-4,sideOffset:i=8,...l\}=e;return(0,s.jsx)(r.h_,\{children:(0,s.jsx)(r.VY,\{ref:t,align:n,alignOffset:o,sideOffset:i,className:(0,d.cn)("z-50 min-w-[12rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md data-[state=open]:animate-in data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",a),...l\})\})\});f.displayName=r.VY.displayName;let u=n.forwardRef((e,t)=>\{let\{className:a,inset:n,...o\}=e;return(0,s.jsx)(r.ck,\{ref:t,className:(0,d.cn)("relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",n&&"pl-8",a),...o\})\});u.displayName=r.ck.displayName,n.forwardRef((e,t)=>\{let\{className:a,children:n,checked:i,...l\}=e;return(0,s.jsxs)(r.oC,\{ref:t,className:(0,d.cn)("relative flex cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",a),checked:i,...l,children:[(0,s.jsx)("span",\{className:"absolute left-2 flex h-3.5 w-3.5 items-center justify-center",children:(0,s.jsx)(r.wU,\{children:(0,s.jsx)(o.nQG,\{className:"h-4 w-4"\})\})\}),n]\})\}).displayName=r.oC.displayName,n.forwardRef((e,t)=>\{let\{className:a,children:n,...i\}=e;return(0,s.jsxs)(r.Rk,\{ref:t,className:(0,d.cn)("relative flex cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",a),...i,children:[(0,s.jsx)("span",\{className:"absolute left-2 flex h-3.5 w-3.5 items-center justify-center",children:(0,s.jsx)(r.wU,\{children:(0,s.jsx)(o.jXb,\{className:"h-4 w-4 fill-current"\})\})\}),n]\})\}).displayName=r.Rk.displayName,n.forwardRef((e,t)=>\{let\{className:a,inset:n,...o\}=e;return(0,s.jsx)(r.__,\{ref:t,className:(0,d.cn)("px-2 py-1.5 text-sm font-semibold",n&&"pl-8",a),...o\})\}).displayName=r.__.displayName,n.forwardRef((e,t)=>\{let\{className:a,...n\}=e;return(0,s.jsx)(r.Z0,\{ref:t,className:(0,d.cn)("-mx-1 my-1 h-px bg-muted",a),...n\})\}).displayName=r.Z0.displayName;var m=a(57818),p=a(91890),x=a(87138),h=a(32727),b=a(54008),g=a(39052),v=a(79219);let y=v.fC,N=v.xz;v.ZA,v.Uv,v.Tr,v.Ee,n.forwardRef((e,t)=>\{let\{className:a,inset:n,children:r,...i\}=e;return(0,s.jsxs)(v.fF,\{ref:t,className:(0,d.cn)("flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none focus:bg-accent data-[state=open]:bg-accent",n&&"pl-8",a),...i,children:[r,(0,s.jsx)(o.XCv,\{className:"ml-auto h-4 w-4"\})]\})\}).displayName=v.fF.displayName,n.forwardRef((e,t)=>\{let\{className:a,...n\}=e;return(0,s.jsx)(v.tu,\{ref:t,className:(0,d.cn)("z-50 min-w-[8rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-lg data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",a),...n\})\}).displayName=v.tu.displayName;let j=n.forwardRef((e,t)=>\{let\{className:a,sideOffset:n=4,...o\}=e;return(0,s.jsx)(v.Uv,\{children:(0,s.jsx)(v.VY,\{ref:t,sideOffset:n,className:(0,d.cn)("z-50 min-w-[8rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md","data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",a),...o\})\})\});j.displayName=v.VY.displayName;let w=n.forwardRef((e,t)=>\{let\{className:a,inset:n,...o\}=e;return(0,s.jsx)(v.ck,\{ref:t,className:(0,d.cn)("relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",n&&"pl-8",a),...o\})\});function k()\{let[e,t]=(0,n.useState)(!1),\{user:a\}=(0,h.a)(),o=async()=>\{await (0,p.hY)()\},r=()=>\{t(!1)\};return(0,s.jsxs)("div",\{role:"menubar",className:"flex h-9 items-center justify-between space-x-1 border bg-background p-1 shadow-sm rounded-none border-b border-none px-2 lg:px-4",tabIndex:0,"data-orientation":"horizontal",style:\{outline:"none"\},children:[(0,s.jsxs)("div",\{className:"flex items-center space-x-1",children:[(0,s.jsx)("button",\{type:"button",role:"menuitem",id:"radix-:ra5:","aria-haspopup":"menu","aria-expanded":"false","data-state":"closed",className:"flex cursor-default select-none items-center rounded-sm px-3 py-1 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[state=open]:bg-accent data-[state=open]:text-accent-foreground font-bold",tabIndex:-1,"data-orientation":"horizontal","data-radix-collection-item":"",children:"My First Million \\uD83C\\uDFE6 Vault"\}),a&&(0,s.jsx)(l,\{children:(0,s.jsxs)(i,\{children:[(0,s.jsx)(c,\{children:"Admin"\}),(0,s.jsxs)(f,\{children:[(0,s.jsx)(u,\{children:(0,s.jsx)(x.default,\{href:"/admin/speaker_labeling",className:"w-full h-full block",children:"Speaker Labeling"\})\}),(0,s.jsx)(u,\{children:(0,s.jsx)(x.default,\{href:"/admin/segments/d40b808f-f5d7-4cf5-84ea-6d388b70f73c",className:"w-full h-full block",children:"Segments"\})\}),(0,s.jsx)(u,\{children:(0,s.jsx)(x.default,\{href:"/admin/episodes",className:"w-full h-full block",children:"Episodes"\})\}),(0,s.jsx)(u,\{children:(0,s.jsx)(x.default,\{href:"/admin/people",className:"w-full h-full block",children:"People"\})\}),(0,s.jsx)(u,\{children:(0,s.jsx)(x.default,\{href:"/admin/insights",className:"w-full h-full block",children:"Insights"\})\})]\})]\})\})]\}),(0,s.jsxs)("div",\{className:"flex items-center space-x-2",children:[a&&(0,s.jsxs)(s.Fragment,\{children:[(0,s.jsxs)("span",\{className:"text-sm hidden md:block",children:["Welcome, ",a.email]\}),(0,s.jsx)("button",\{onClick:o,className:"px-4 py-1 text-sm bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/90 hidden md:block",children:"Logout"\})]\}),(0,s.jsxs)(y,\{children:[(0,s.jsx)(N,\{className:"md:hidden",children:(0,s.jsx)(b.otZ,\{className:"w-6 h-6"\})\}),(0,s.jsxs)(j,\{className:"bg-white shadow-lg rounded-md p-2",children:[a&&(0,s.jsxs)(s.Fragment,\{children:[(0,s.jsx)(w,\{className:"p-2",children:(0,s.jsxs)("span",\{className:"text-sm",children:["Welcome, ",a.email]\})\}),(0,s.jsx)(w,\{className:"p-2",children:(0,s.jsx)("button",\{onClick:o,className:"w-full text-left text-sm bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/90",children:"Logout"\})\})]\}),g.z.map(e=>e.items.map(e=>(0,s.jsx)(w,\{className:"p-2",onClick:r,children:(0,s.jsx)(x.default,\{href:e.href,className:"w-full block text-sm",children:e.name\})\},e.name)))]\})]\})]\})]\})\}w.displayName=v.ck.displayName,n.forwardRef((e,t)=>\{let\{className:a,children:n,checked:r,...i\}=e;return(0,s.jsxs)(v.oC,\{ref:t,className:(0,d.cn)("relative flex cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",a),checked:r,...i,children:[(0,s.jsx)("span",\{className:"absolute left-2 flex h-3.5 w-3.5 items-center justify-center",children:(0,s.jsx)(v.wU,\{children:(0,s.jsx)(o.nQG,\{className:"h...\
+```}

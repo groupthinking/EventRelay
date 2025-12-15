@@ -1,0 +1,59 @@
+name: Coverage Report
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  coverage:
+    name: Generate and Upload Coverage
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Create reports directory
+        run: mkdir -p reports
+
+      - name: Run tests with coverage
+        run: |
+          pytest tests/ \
+            --cov=src/youtube_extension \
+            --cov-report=lcov:reports/lcov.info \
+            --cov-report=term \
+            --cov-report=html:reports/htmlcov \
+            -v || true
+
+      - name: Upload coverage to Qlty
+        uses: qltysh/qlty-action/coverage@v2
+        with:
+          token: ${{ secrets.QLTY_COVERAGE_TOKEN }}
+          files: reports/lcov.info
+
+      - name: Upload coverage artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: |
+            reports/lcov.info
+            reports/htmlcov/
+          retention-days: 30

@@ -1,0 +1,35 @@
+Metadata-Version: 2.1
+Name: video-representations-extractor
+Version: 1.14.0
+Summary: Video Representations Extractor (VRE) for computing algorithmic or neural representations of each frame.
+Home-page: https://gitlab.com/video-representations-extractor/video-representations-extractor
+License: MIT
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+License-File: LICENSE.TXT
+Requires-Dist: vre-video>=0.4.0
+Requires-Dist: numpy<2.0.0,>=1.21.6
+Requires-Dist: PyYAML==6.0
+Requires-Dist: tqdm==4.66.5
+Requires-Dist: torch==2.6.0
+Requires-Dist: torchvision==0.21.0
+Requires-Dist: overrides==7.7.0
+Requires-Dist: loggez==0.4.4
+Requires-Dist: opencv-python==4.7.0.68
+Requires-Dist: Pillow==10.3.0
+Requires-Dist: pycocotools==2.0.7
+Requires-Dist: timm==1.0.9
+Requires-Dist: diffusers==0.30.3
+Requires-Dist: graphviz==0.20.3
+
+# Video Representation Extractor
+
+![logo](logo.png)
+
+Documentation at: [link](https://video-representations-extractor.gitlab.io/video-representations-extractor/).
+
+See the usage and installation page: [link](https://video-representations-extractor.gitlab.io/video-representations-extractor/basics/introduction-and-installation.html#installation).
+
+Google colab showcases:
+- Real time Semantic Segmentation on youtube videos: [link](https://colab.research.google.com/drive/1-Zc7qEC7k7KnCuq-LOnNy9hoMfQBJA9O#scrollTo=TR5G9bBhY9_k)
+- Full example from a single test video to complex extracted representations: [link](https://colab.research.google.com/drive/1vAp71H-TLewhF56odv33TkmGwwhuoFJ-?usp=sharing)

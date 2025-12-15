@@ -1,0 +1,23 @@
+# Minimal runtime dependencies for the API container (keep image small)
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+python-dotenv==1.0.0
+pydantic==2.5.0
+python-multipart==0.0.6
+websockets==12.0
+
+# Video I/O
+youtube-transcript-api>=0.6.0
+google-api-python-client>=2.100.0
+yt-dlp>=2023.7.6
+
+# Networking/utilities
+aiohttp>=3.8.0
+httpx>=0.24.0
+cachetools>=5.0.0
+
+# Background Agent - Llama 3.1 8B
+llama-cpp-python[server]>=0.2.0
+sentence-transformers>=2.2.0
+numpy>=1.24.0
+

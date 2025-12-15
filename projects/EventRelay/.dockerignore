@@ -1,0 +1,192 @@
+# EventRelay .dockerignore
+# Excludes unnecessary files from Docker build context for faster builds and smaller images
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# GitHub
+.github
+
+# Documentation
+*.md
+!README.md
+docs/
+cursor-styled-docs/
+
+# Tests
+tests/
+**/test_*.py
+**/*_test.py
+**/conftest.py
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Development
+.vscode/
+.idea/
+.devcontainer/
+.cursor/
+.codeviz/
+.claude/
+*.swp
+*.swo
+*~
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+.eggs/
+pip-log.txt
+pip-delete-this-directory.txt
+.venv/
+venv/
+ENV/
+env/
+
+# Frontend (deployed separately)
+frontend/
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+yarn.lock
+
+# Environment files
+.env
+.env.*
+!.env.production.template
+!.env.production.example
+*.local
+
+# IDE
+*.iml
+.idea/
+*.code-workspace
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+*.log
+logs/
+execution_workspace/
+storage/
+temp_scripts/
+
+# Build artifacts
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.dylib
+*.dll
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Cache
+.cache/
+*.cache
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Research and examples
+research/
+examples/
+clean_refactor/
+ai-edge-torch/
+fine_tuned_execution/
+
+# Agent development (not needed in production)
+development/
+agents/
+compose-for-agents/
+
+# Infrastructure (K8s, not needed for Cloud Run)
+infrastructure/
+deployment/
+
+# External dependencies
+external/
+fastvlm_gemini_hybrid/
+video_representations_extractor-1.14.0/
+mcp_youtube-0.2.0/
+
+# Docker
+Dockerfile
+Dockerfile.*
+docker-compose*.yml
+.dockerignore
+
+# CI/CD (not needed in container)
+.github/workflows/
+cloudbuild.yaml
+
+# Scripts (not needed in production container)
+scripts/
+
+# Desktop overlay
+desktop-overlay/
+
+# Config files
+.editorconfig
+.prettierrc
+.eslintrc
+.pylintrc
+
+# Vercel
+vercel.json
+
+# Makefile
+Makefile
+
+# Package files
+requirements*.txt
+package.json
+
+# Tools
+tools/
+utilities/
+
+# Database
+database/
+
+# Config
+config/
+
+# Backend Firebase
+backend/firebase/
+
+# Documentation files
+CLAUDE.md
+SECURITY.md
+LICENSE
+INVESTOR_ONE_PAGER.md
+*.md
+!README.md

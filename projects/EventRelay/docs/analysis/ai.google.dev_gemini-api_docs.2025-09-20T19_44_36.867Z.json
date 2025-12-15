@@ -1,0 +1,204 @@
+{
+  "links": [
+    {
+      "url": "https://ai.google.dev/gemini-api/docs",
+      "title": "Gemini API | Google AI for Developers",
+      "description": "Explore long context. Input millions of tokens to Gemini models and derive understanding from unstructured images, videos, and documents. Generate structured ..."
+    },
+    {
+      "url": "https://ai.google.dev/gemini-api/docs/caching",
+      "title": "Context caching | Gemini API | Google AI for Developers",
+      "description": "Using the Gemini API explicit caching feature, you can pass some content to the model once, cache the input tokens, and then refer to the cached tokens for ..."
+    },
+    {
+      "url": "https://ai.google.dev/gemini-api/docs/libraries",
+      "title": "Gemini API libraries - Google AI for Developers",
+      "description": "We recommend using the Google GenAI SDK. These are the official, production-ready libraries that we develop and maintain for the most popular languages."
+    },
+    {
+      "url": "https://ai.google.dev/gemini-api/docs/quickstart",
+      "title": "Gemini API quickstart - Google AI for Developers",
+      "description": "This quickstart shows you how to install our libraries and make your first Gemini API request. Before you begin, you need a Gemini API key."
+    },
+    {
+      "url": "https://ai.google.dev/gemini-api/docs/video",
+      "title": "Generate videos with Veo 3 in Gemini API",
+      "description": "Veo 3 is Google's state-of-the-art model for generating high-fidelity, 8-second 720p or 1080p videos from a text prompt, featuring stunning realism and ..."
+    },
+    {
+      "url": "https://ai.google.dev/gemini-api/docs/imagen",
+      "title": "Generate images using Imagen | Gemini API",
+      "description": "Imagen is Google's high-fidelity image generation model, capable of generating realistic and high quality images from text prompts."
+    },
+    {
+      "url": "https://ai.google.dev/gemini-api/docs/changelog",
+      "title": "Release notes | Gemini API - Google AI for Developers",
+      "description": "Released Gemini 2.0 Flash Thinking Mode for public preview. Thinking Mode is a test-time compute model that lets you see the model's thought process."
+    },
+    {
+      "url": "https://ai.google.dev/gemini-api/docs/models",
+      "title": "Gemini models | Gemini API | Google AI for Developers",
+      "description": "The Gemini API offers different models that are optimized for specific use cases. Here's a brief overview of Gemini variants that are available."
+    },
+    {
+      "url": "https://ai.google.dev/gemini-api/docs/video-understanding",
+      "title": "Video understanding | Gemini API - Google AI for Developers",
+      "description": "This guide shows how to upload video files and generate text outputs from video inputs. To learn more, see the following resources."
+    },
+    {
+      "url": "https://ai.google.dev/gemini-api/docs/text-generation",
+      "title": "Text generation | Gemini API | Google AI for Developers",
+      "description": "The Gemini API can generate text output from various inputs, including text, images, video, and audio, leveraging Gemini models. Here's a basic example that ..."
+    },
+    {
+      "url": "https://ai.google.dev/gemini-api/docs/api-key",
+      "title": "Using Gemini API keys | Google AI for Developers",
+      "description": "Using Gemini API keys ... To use the Gemini API, you need an API key. You can create a key for free with a few clicks in Google AI Studio. Once you have an API ..."
+    },
+    {
+      "url": "https://ai.google.dev/gemini-api/docs/image-understanding",
+      "title": "Image understanding | Gemini API | Google AI for Developers",
+      "description": "This guide shows you how to upload image files and generate text outputs from image inputs. To learn more, see the following resources."
+    },
+    {
+      "url": "https://ai.google.dev/gemini-api/docs/code-execution",
+      "title": "Code execution | Gemini API - Google AI for Developers",
+      "description": "Code execution ... The Gemini API provides a code execution tool that enables the model to generate and run Python code. The model can then learn iteratively from ..."
+    },
+    {
+      "url": "https://ai.google.dev/gemini-api/docs/document-processing",
+      "title": "Document understanding | Gemini API | Google AI for ...",
+      "description": "Passing multiple PDFs. The Gemini API is capable of processing multiple PDF documents (up to 1000 pages) in a single request, as long as the combined size of ..."
+    },
+    {
+      "url": "https://ai.google.dev/gemini-api/docs/batch-api",
+      "title": "Batch API | Gemini API | Google AI for Developers",
+      "description": "Batch API ... The Gemini Batch API is designed to process large volumes of requests asynchronously at 50% of the standard cost. The target turnaround time is 24 ..."
+    },
+    {
+      "url": "https://ai.google.dev/gemini-api/docs/long-context",
+      "title": "Long context | Gemini API - Google AI for Developers",
+      "description": "This document gives you an overview of what you can achieve using models with context windows of 1M and more tokens."
+    },
+    {
+      "url": "https://ai.google.dev/gemini-api/docs/image-generation",
+      "title": "Image generation with Gemini (aka Nano Banana) - Gemini API",
+      "description": "Get started generating images with the Gemini API."
+    },
+    {
+      "url": "https://ai.google.dev/gemini-api/docs/structured-output",
+      "title": "Structured output | Gemini API - Google AI for Developers",
+      "description": "About JSON schemas. Configuring the model for JSON output using responseSchema parameter relies on Schema object to define its structure. This object represents ..."
+    },
+    {
+      "url": "https://ai.google.dev/gemini-api/docs/speech-generation",
+      "title": "Speech generation (text-to-speech) - Gemini API",
+      "description": "Speech generation (text-to-speech) ... The Gemini API can transform text input into single speaker or multi-speaker audio using native text-to-speech (TTS) ..."
+    },
+    {
+      "url": "https://ai.google.dev/gemini-api/docs/google-search",
+      "title": "Grounding with Google Search | Gemini API",
+      "description": "Grounding with Google Search ... Grounding with Google Search connects the Gemini model to real-time web content and works with all available languages. This ..."
+    },
+    {
+      "url": "https://ai.google.dev/gemini-api/docs/music-generation",
+      "title": "Music generation using Lyria RealTime - Gemini API",
+      "description": "Get started building with Lyria's realtime music generation in the Gemini API."
+    },
+    {
+      "url": "https://ai.google.dev/gemini-api/docs/model-tuning",
+      "title": "Fine-tuning with the Gemini API | Google AI for Developers",
+      "description": "Learn how fine-tune a Gemini model with the Gemini API."
+    },
+    {
+      "url": "https://ai.google.dev/gemini-api/docs/function-calling",
+      "title": "Function calling with the Gemini API | Google AI for Developers",
+      "description": "Function calling lets you connect models to external tools and APIs. Instead of generating text responses, the model determines when to call specific functions ..."
+    },
+    {
+      "url": "https://ai.google.dev/gemini-api/docs/pricing",
+      "title": "Prezzi dell'API Gemini per gli sviluppatori",
+      "description": "Il \"livello senza costi\" dell'API Gemini è offerto tramite il servizio API con limiti di frequenza inferiori per scopi di test. L'utilizzo di Google AI ..."
+    },
+    {
+      "url": "https://ai.google.dev/gemini-api/docs/gemini-for-research",
+      "title": "Gemini for Research - Gemini API | Google AI for Developers",
+      "description": "The Gemini API and Google AI Studio help you start working with Google's latest models and turn your ideas into applications that scale."
+    }
+  ],
+  "id": "0JlrVLUFOtNzQ_u5xhaOz",
+  "startedAt": "2025-09-20T19:44:36.867Z",
+  "endedAt": "2025-09-20T19:45:15.363Z",
+  "endpoint": "map",
+  "formState": {
+    "extractSetupCompleted": false,
+    "urls": [],
+    "extractSchema": {
+      "type": "object",
+      "required": [],
+      "properties": {
+        "company_mission": {
+          "type": "string"
+        },
+        "supports_sso": {
+          "type": "boolean"
+        },
+        "is_open_source": {
+          "type": "boolean"
+        },
+        "is_in_yc": {
+          "type": "boolean"
+        }
+      }
+    },
+    "extractPrompt": "Extract the company details, following the schema.",
+    "enableWebSearch": false,
+    "options": {
+      "onlyMainContent": true,
+      "parsePDF": true,
+      "stealthMode": false,
+      "excludeTags": [],
+      "includeTags": [],
+      "waitFor": "",
+      "timeout": "",
+      "maxAge": "2 days",
+      "ignoreSitemap": false,
+      "crawlEntireDomain": false,
+      "sitemap": "include",
+      "limit": "5000",
+      "maxDepth": "",
+      "excludePaths": [],
+      "includePaths": [],
+      "includeSubdomains": false,
+      "search": "",
+      "scrapeContentFromSearchResults": true,
+      "timeBasedSearch": "",
+      "location": "",
+      "prompt": ""
+    },
+    "formats": [
+      "markdown"
+    ],
+    "sources": [
+      "web"
+    ],
+    "categories": [],
+    "jsonSchema": {
+      "type": "object",
+      "required": [],
+      "properties": {
+        "company_name": {
+          "type": "string"
+        },
+        "company_description": {
+          "type": "string"
+        }
+      }
+    },
+    "agent": {},
+    "url": "ai.google.dev/gemini-api/docs",
+    "endpoint": "map"
+  },
+  "status": "success",
+  "version": "na-8msRkAs0SymAYwS7H1"
+}

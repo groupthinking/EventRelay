@@ -1,0 +1,74 @@
+# Gold-set Evaluation Template for Software-On-Demand builds
+metadata:
+  cohort: v1-pilot                 # Identifier for the evaluation batch (e.g., "v1-founders")
+  evaluator: __NAME__              # Person or agent responsible for the review
+  evaluation_date: __DATE__        # ISO-8601 date string (YYYY-MM-DD)
+  video_url: __YOUTUBE_URL__       # Source tutorial URL
+  video_title: __TITLE__           # Optional cached title/description
+  repo_reference: __GITHUB_URL__   # Repo or artifact expected per tutorial
+
+execution_context:
+  stack:                           # Declared runtime stack for the build
+    language: __LANG__             # e.g., python, typescript
+    framework: __FRAMEWORK__       # e.g., fastapi, nextjs
+    runtime_version: __VERSION__   # e.g., python3.11
+  infra:
+    execution_env: docker          # docker, firecracker, etc.
+    image: __IMAGE_TAG__           # Container image used for the run
+    notes: []                      # Optional free-form notes
+
+expected_outcomes:
+  deliverables:
+    - path: __RELATIVE_PATH__      # File or directory expected to exist
+      description: __WHY__         # What should be present or validated
+  commands:
+    - command: __COMMAND__         # Command expected to succeed (e.g., pytest)
+      args: []                     # Optional args
+      success_criteria:            # Structured assertions for success
+        exit_code: 0
+        stdout_contains: []
+        stderr_absent: []
+
+run_observation:
+  build_id: __BUILD_HANDLE__       # Unique identifier from orchestrator
+  start_time: __START_ISO__
+  end_time: __END_ISO__
+  duration_seconds: __DURATION__
+  agents:
+    - name: __AGENT_NAME__
+      version: __AGENT_VERSION__
+      summary: __AGENT_ACTION__
+  artifacts:
+    logs: __LOG_URL__
+    repo_bundle: __ARCHIVE_URL__
+    deployment_url: __DEPLOY_URL__
+
+metric_scores:
+  fidelity:
+    transcript_alignment: 0.0      # 0-1: step coverage vs. video transcript
+    command_accuracy: 0.0          # 0-1: CLI and file ops executed correctly
+    artifact_integrity: 0.0        # 0-1: Generated assets match expectations
+  quality:
+    tests_passed: false
+    lint_score: null
+    deployment_status: pending     # success | failed | pending
+  efficiency:
+    wall_clock_minutes: 0
+    retries: 0
+    token_usage:
+      input_tokens: 0
+      output_tokens: 0
+      cost_usd: 0.0
+
+annotations:
+  blockers: []                     # List of blocking issues discovered
+  deviations: []                   # Differences from video or requirements
+  follow_up_actions:
+    - owner: __OWNER__
+      action: __WHAT__
+      due_date: __DATE__
+
+verdict:
+  pass: false                      # true if run meets success bar
+  confidence: medium               # low | medium | high
+  notes: __FREE_TEXT__

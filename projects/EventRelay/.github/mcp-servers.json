@@ -1,0 +1,54 @@
+{
+  "mcpServers": {
+    "youtube": {
+      "command": "python",
+      "args": [
+        "${workspaceFolder}/mcp_youtube-0.2.0/mcp_youtube.py"
+      ],
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}",
+        "YOUTUBE_API_KEY": "${env:YOUTUBE_API_KEY}"
+      }
+    },
+    "youtube-extension": {
+      "command": "python",
+      "args": [
+        "${workspaceFolder}/external/mcp_servers/youtube_extension_mcp_server.py"
+      ],
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}",
+        "YOUTUBE_EXTENSION_BASE": "http://localhost:8000"
+      }
+    },
+    "video-analysis": {
+      "command": "python",
+      "args": [
+        "${workspaceFolder}/external/mcp_servers/video_analysis_mcp_server.py"
+      ],
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}",
+        "GEMINI_API_KEY": "${env:GEMINI_API_KEY}"
+      }
+    },
+    "github": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@github/github-mcp-server"
+      ],
+      "env": {
+        "GITHUB_TOKEN": "${env:GITHUB_TOKEN}"
+      }
+    },
+    "git-workflow": {
+      "command": "node",
+      "args": [
+        "${workspaceFolder}/tools/mcp/git_workflow_server.mjs"
+      ],
+      "env": {
+        "GIT_WORKSPACE_ROOT": "${workspaceFolder}",
+        "GIT_DEFAULT_REMOTE": "origin"
+      }
+    }
+  }
+}

@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Core ML Tools & Apple Developer - Cursor Style</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-content">
+            <div class="logo">
+                <i class="fas fa-code"></i>
+                <span>Core ML Docs</span>
+            </div>
+            <nav class="nav-menu">
+                <a href="#quickstart" class="nav-link active">Quickstart</a>
+                <a href="#videos" class="nav-link">Videos</a>
+                <a href="#api" class="nav-link">API Examples</a>
+            </nav>
+            <div class="search-bar">
+                <i class="fas fa-search"></i>
+                <input type="text" placeholder="Search documentation..." id="searchInput">
+            </div>
+        </div>
+    </header>
+
+    <div class="container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-section">
+                <h3>Getting Started</h3>
+                <ul>
+                    <li><a href="#installation" class="sidebar-link">Installation</a></li>
+                    <li><a href="#quickstart" class="sidebar-link">Quickstart Guide</a></li>
+                    <li><a href="#converting-models" class="sidebar-link">Converting Models</a></li>
+                </ul>
+            </div>
+            <div class="sidebar-section">
+                <h3>Resources</h3>
+                <ul>
+                    <li><a href="#videos" class="sidebar-link">Developer Videos</a></li>
+                    <li><a href="#api" class="sidebar-link">API Examples</a></li>
+                    <li><a href="#tutorials" class="sidebar-link">Tutorials</a></li>
+                </ul>
+            </div>
+            <div class="sidebar-section">
+                <h3>Advanced Topics</h3>
+                <ul>
+                    <li><a href="#optimization" class="sidebar-link">Model Optimization</a></li>
+                    <li><a href="#deployment" class="sidebar-link">Deployment</a></li>
+                    <li><a href="#debugging" class="sidebar-link">Debugging</a></li>
+                </ul>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Quickstart Section -->
+            <section id="quickstart" class="content-section">
+                <h1>Core ML Tools Quickstart</h1>
+                <p class="lead">Get started with Core ML Tools to convert, optimize, and deploy machine learning models on Apple platforms.</p>
+                
+                <div class="info-card">
+                    <i class="fas fa-info-circle"></i>
+                    <p>Core ML Tools is a Python package for converting trained models from popular machine learning frameworks into Core ML format.</p>
+                </div>
+
+                <h2 id="installation">Installation</h2>
+                <p>Install Core ML Tools using pip:</p>
+                <div class="code-block">
+                    <pre><code class="language-bash">pip install coremltools</code></pre>
+                    <button class="copy-btn" onclick="copyCode(this)">
+                        <i class="fas fa-copy"></i> Copy
+                    </button>
+                </div>
+
+                <p>Or install with additional dependencies for neural networks:</p>
+                <div class="code-block">
+                    <pre><code class="language-bash">pip install coremltools[tensorflow]
+pip install coremltools[torch]</code></pre>
+                    <button class="copy-btn" onclick="copyCode(this)">
+                        <i class="fas fa-copy"></i> Copy
+                    </button>
+                </div>
+
+                <h2 id="converting-models">Converting Models</h2>
+                <p>Here's a simple example of converting a TensorFlow model to Core ML:</p>
+                <div class="code-block">
+                    <pre><code class="language-python">import coremltools as ct
+import tensorflow as tf
+
+# Load a TensorFlow model
+tf_model = tf.keras.applications.MobileNetV2(
+    weights='imagenet',
+    input_shape=(224, 224, 3)
+)
+
+# Convert to Core ML
+coreml_model = ct.convert(
+    tf_model,
+    inputs=[ct.ImageType(shape=(1, 224, 224, 3))]
+)
+
+# Save the Core ML model
+coreml_model.save('MobileNetV2.mlmodel')</code></pre>
+                    <button class="copy-btn" onclick="copyCode(this)">
+                        <i class="fas fa-copy"></i> Copy
+                    </button>
+                </div>
+
+                <h3>Converting PyTorch Models</h3>
+                <p>Convert PyTorch models using TorchScript:</p>
+                <div class="code-block">
+                    <pre><code class="language-python">import torch
+import torchvision
+import coremltools as ct
+
+# Load a PyTorch model
+model = torchvision.models.resnet18(pretrained=True)
+model.eval()
+
+# Trace the model
+example_input = torch.rand(1, 3, 224, 224)
+traced_model = torch.jit.trace(model, example_input)
+
+# Convert to Core ML
+coreml_model = ct.convert(
+    traced_model,
+    inputs=[ct.ImageType(name="input", shape=(1, 3, 224, 224))]
+)
+
+coreml_model.save('ResNet18.mlmodel')</code></pre>
+                    <button class="copy-btn" onclick="copyCode(this)">
+                        <i class="fas fa-copy"></i> Copy
+                    </button>
+                </div>
+
+                <h2 id="optimization">Model Optimization</h2>
+                <p>Optimize your models for better performance:</p>
+                <div class="code-block">
+                    <pre><code class="language-python"># Quantize the model to reduce size
+from coremltools.optimize.coreml import (
+    OptimizationConfig,
+    quantize_weights
+)
+
+# Configure optimization
+config = OptimizationConfig.DEFAULT
+optimized_model = quantize_weights(coreml_model, config)
+
+# Save the optimized model
+optimized_model.save('MobileNetV2_optimized.mlmodel')</code></pre>
+                    <button class="copy-btn" onclick="copyCode(this)">
+                        <i class="fas fa-copy"></i> Copy
+                    </button>
+                </div>
+
+                <h3>Advanced Optimization Techniques</h3>
+                <p>Apply pruning and quantization for maximum efficiency:</p>
+                <div class="code-block">
+                    <pre><code class="language-python"># Configure advanced optimization
+from coremltools.optimize.coreml import (
+    OpPalettizerConfig,
+    OpPrunerConfig,
+    OptimizationConfig
+)
+
+# Set up pruning configuration
+pruner_config = OpPrunerConfig(
+    target_sparsity=0.75,
+    granularity="per_channel"
+)
+
+# Set up quantization configuration
+quantization_config = OpPalettizerConfig(
+    nbits=4,
+    mode="kmeans"
+)
+
+# Combine configurations
+opt_config = OptimizationConfig(
+    global_config=quantization_config,
+    op_type_configs={"conv": pruner_config}
+)
+
+# Apply optimization
+optimized_model = ct.optimize.coreml.optimize_weights(
+    model=coreml_model,
+    config=opt_config
+)</code></pre>
+                    <button class="copy-btn" onclick="copyCode(this)">
+                        <i class="fas fa-copy"></i> Copy
+                    </button>
+                </div>
+
+                <h2 id="deployment">Deployment</h2>
+                <p>Deploy your Core ML models in your iOS, macOS, tvOS, or watchOS apps:</p>
+                <div class="code-block">
+                    <pre><code class="language-swift">import CoreML
+import Vision
+
+// Load the Core ML model
+guard let model = try? VNCoreMLModel(for: MobileNetV2().model) else {
+    fatalError("Failed to load model")
+}
+
+// Create a request
+let request = VNCoreMLRequest(model: model) { request, error in
+    guard let results = request.results as? [VNClassificationObservation] else {
+        return
+    }
+    
+    // Process results
+    if let topResult = results.first {
+        print("Classification: \(topResult.identifier)")
+        print("Confidence: \(topResult.confidence)")
+    }
+}
+
+// Perform inference
+let handler = VNImageRequestHandler(ciImage: image)
+try? handler.perform([request])</code></pre>
+                    <button class="copy-btn" onclick="copyCode(this)">
+                        <i class="fas fa-copy"></i> Copy
+                    </button>
+                </div>
+            </section>
+
+            <!-- Videos Section -->
+            <section id="videos" class="content-section" style="display: none;">
+                <h1>Apple Developer Videos</h1>
+                <p class="lead">Explore the latest sessions, tutorials, and tech talks from Apple's developer conferences.</p>
+
+                <div class="video-filters">
+                    <button class="filter-btn active" data-filter="all">All</button>
+                    <button class="filter-btn" data-filter="ml">Machine Learning</button>
+                    <button class="filter-btn" data-filter="swift">Swift</button>
+                    <button class="filter-btn" data-filter="ui">UI/UX</button>
+                </div>
+
+                <div class="video-grid">
+                    <div class="video-card" data-category="ml">
+                        <div class="video-thumbnail">
+                            <i class="fas fa-play-circle"></i>
+                        </div>
+                        <h3>What's new in Core ML</h3>
+                        <p>Discover the latest features and improvements in Core ML framework.</p>
+                        <div class="video-meta">
+                            <span><i class="fas fa-clock"></i> 45 min</span>
+                            <span><i class="fas fa-calendar"></i> WWDC 2024</span>
+                        </div>
+                    </div>
+
+                    <div class="video-card" data-category="ml">
+                        <div class="video-thumbnail">
+                            <i class="fas fa-play-circle"></i>
+                        </div>
+                        <h3>Optimize ML Models for Core ML</h3>
+                        <p>Learn techniques to optimize your machine learning models for Apple devices.</p>
+                        <div class="video-meta">
+                            <span><i class="fas fa-clock"></i> 30 min</span>
+                            <span><i class="fas fa-calendar"></i> WWDC 2024</span>
+                        </div>
+                    </div>
+
+                    <div class="video-card" data-category="ml">
+                        <div class="video-thumbnail">
+                            <i class="fas fa-play-circle"></i>
+                        </div>
+                        <h3>Create ML Components</h3>
+                        <p>Build custom machine learning models with Create ML Components framework.</p>
+                        <div class="video-meta">
+                            <span><i class="fas fa-clock"></i> 35 min</span>
+                            <span><i class="fas fa-calendar"></i> WWDC 2024</span>
+                        </div>
+                    </div>
+
+                    <div class="video-card" data-category="ml">
+                        <div class="video-thumbnail">
+                            <i class="fas fa-play-circle"></i>
+                        </div>
+                        <h3>Deploy Machine Learning Models</h3>
+                        <p>Best practices for deploying ML models across Apple platforms.</p>
+                        <div class="video-meta">
+                            <span><i class="fas fa-clock"></i> 40 min</span>
+                            <span><i class="fas fa-calendar"></i> WWDC 2024</span>
+                        </div>
+                    </div>
+
+                    <div class="video-card" data-category="swift">
+                        <div class="video-thumbnail">
+                            <i class="fas fa-play-circle"></i>
+                        </div>
+                        <h3>Swift 6 and Beyond</h3>
+                        <p>Explore the future of Swift programming language.</p>
+                        <div class="video-meta">
+                            <span><i class="fas fa-clock"></i> 60 min</span>
+                            <span><i class="fas fa-calendar"></i> WWDC 2024</span>
+                        </div>
+                    </div>
+
+                    <div class="video-card" data-category="swift">
+                        <div class="video-thumbnail">
+                            <i class="fas fa-play-circle"></i>
+                        </div>
+                        <h3>Swift Concurrency</h3>
+                        <p>Master async/await and structured concurrency in Swift.</p>
+                        <div class="video-meta">
+                            <span><i class="fas fa-clock"></i> 55 min</span>
+                            <span><i class="fas fa-calendar"></i> WWDC 2024</span>
+                        </div>
+                    </div>
+
+                    <div class="video-card" data-category="ui">
+                        <div class="video-thumbnail">
+                            <i class="fas fa-play-circle"></i>
+                        </div>
+                        <h3>SwiftUI Essentials</h3>
+                        <p>Build beautiful, responsive user interfaces with SwiftUI.</p>
+                        <div class="video-meta">
+                            <span><i class="fas fa-clock"></i> 50 min</span>
+                            <span><i class="fas fa-calendar"></i> WWDC 2024</span>
+                        </div>
+                    </div>
+
+                    <div class="video-card" data-category="ui">
+                        <div class="video-thumbnail">
+                            <i class="fas fa-play-circle"></i>
+                        </div>
+                        <h3>Design for Spatial Computing</h3>
+                        <p>Create immersive experiences for visionOS and spatial platforms.</p>
+                        <div class="video-meta">
+                            <span><i class="fas fa-clock"></i> 45 min</span>
+                            <span><i class="fas fa-calendar"></i> WWDC 2024</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- API Examples Section -->
+            <section id="api" class="content-section" style="display: none;">
+                <h1>API Examples</h1>
+                <p class="lead">Practical examples of using various APIs in your applications.</p>
+
+                <h2>Tavus API Example</h2>
+                <p>Here's an example of creating a conversation using the Tavus API:</p>
+                <div class="code-block">
+                    <pre><code class="language-python">import requests
+
+headers = {
+    "Content-Type": "application/json",
+    "x-api-key": "&lt;api-key&gt;"
+}
+
+data = {
+    "replica_id": "rb17cf590e15"
+}
+
+response = requests.post(
+    'https://tavusapi.com/v2/conversations', 
+    headers=headers, 
+    json=data
+)
+
+print(response.json())</code></pre>
+                    <button class="copy-btn" onclick="copyCode(this)">
+                        <i class="fas fa-copy"></i> Copy
+                    </button>
+                </div>
+
+                <div class="warning-card">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <p>Remember to replace <code>&lt;api-key&gt;</code> with your actual API key and keep it secure.</p>
+                </div>
+
+                <h2>Core ML API Usage</h2>
+                <p>Using Core ML in your Swift application:</p>
+                <div class="code-block">
+                    <pre><code class="language-swift">import CoreML
+
+class ModelHandler {
+    private let model: MLModel
+    
+    init() throws {
+        let config = MLModelConfiguration()
+        config.computeUnits = .all
+        self.model = try MobileNetV2(configuration: config).model
+    }
+    
+    func predict(image: CVPixelBuffer) throws -> String {
+        let input = MobileNetV2Input(image: image)
+        let output = try model.prediction(from: input)
+        
+        guard let result = output.featureValue(for: "classLabel")?.stringValue else {
+            throw PredictionError.invalidOutput
+        }
+        
+        return result
+    }
+}</code></pre>
+                    <button class="copy-btn" onclick="copyCode(this)">
+                        <i class="fas fa-copy"></i> Copy
+                    </button>
+                </div>
+
+                <h2>Vision Framework Integration</h2>
+                <p>Combine Core ML with Vision framework for image analysis:</p>
+                <div class="code-block">
+                    <pre><code class="language-swift">import Vision
+import CoreML
+
+func performImageClassification(on image: CIImage) {
+    guard let model = try? VNCoreMLModel(for: MobileNetV2().model) else {
+        print("Failed to load Core ML model")
+        return
+    }
+    
+    let request = VNCoreMLRequest(model: model) { request, error in
+        guard let results = request.results as? [VNClassificationObservation],
+              let topResult = results.first else {
+            print("No results found")
+            return
+        }
+        
+        DispatchQueue.main.async {
+            print("Classification: \(topResult.identifier)")
+            print("Confidence: \(topResult.confidence * 100)%")
+        }
+    }
+    
+    request.imageCropAndScaleOption = .centerCrop
+    
+    let handler = VNImageRequestHandler(ciImage: image, options: [:])
+    
+    do {
+        try handler.perform([request])
+    } catch {
+        print("Failed to perform classification: \(error)")
+    }
+}</code></pre>
+                    <button class="copy-btn" onclick="copyCode(this)">
+                        <i class="fas fa-copy"></i> Copy
+                    </button>
+                </div>
+
+                <h2>Async/Await Pattern</h2>
+                <p>Modern async/await pattern for Core ML predictions:</p>
+                <div class="code-block">
+                    <pre><code class="language-swift">import CoreML
+import Vision
+
+@available(iOS 15.0, *)
+class AsyncModelHandler {
+    private let model: VNCoreMLModel
+    
+    init() async throws {
+        let mlModel = try await MobileNetV2.load()
+        self.model = try VNCoreMLModel(for: mlModel.model)
+    }
+    
+    func classify(image: CGImage) async throws -> [(label: String, confidence: Float)] {
+        return try await withCheckedThrowingContinuation { continuation in
+            let request = VNCoreMLRequest(model: model) { request, error in
+                if let error = error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+                
+                guard let results = request.results as? [VNClassificationObservation] else {
+                    continuation.resume(returning: [])
+                    return
+                }
+                
+                let classifications = results.prefix(5).map {
+                    (label: $0.identifier, confidence: $0.confidence)
+                }
+                
+                continuation.resume(returning: classifications)
+            }
+            
+            let handler = VNImageRequestHandler(cgImage: image, options: [:])
+            
+            do {
+                try handler.perform([request])
+            } catch {
+                continuation.resume(throwing: error)
+            }
+        }
+    }
+}</code></pre>
+                    <button class="copy-btn" onclick="copyCode(this)">
+                        <i class="fas fa-copy"></i> Copy
+                    </button>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-bash.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-swift.min.js"></script>
+    <script src="script.js"></script>
+</body>
+</html> 

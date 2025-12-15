@@ -1,0 +1,19 @@
+[Unit]
+Description=UVAI Database Cleanup Service
+After=network.target
+Wants=network.target
+
+[Service]
+Type=oneshot
+User=garvey
+Group=staff
+WorkingDirectory=/Users/garvey/Desktop/youtube_extension
+ExecStart=/usr/local/bin/python3 scripts/scheduled_cleanup.py
+StandardOutput=journal
+StandardError=journal
+# Restart on failure
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

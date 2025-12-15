@@ -1,0 +1,25 @@
+{
+  "name": "@repo/error-handling",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./boundary": "./src/ErrorBoundary.tsx",
+    "./retry": "./src/retry.ts",
+    "./circuit-breaker": "./src/circuit-breaker.ts"
+  },
+  "scripts": {
+    "lint": "eslint . --max-warnings 0",
+    "test": "jest"
+  },
+  "dependencies": {
+    "react": "^18",
+    "@repo/logger": "*"
+  },
+  "devDependencies": {
+    "@types/react": "^18",
+    "typescript": "^5",
+    "eslint": "^8"
+  }
+}

@@ -1,0 +1,197 @@
+{
+  "description": "Security Scanning Configuration",
+  "version": "1.0.0",
+  "tools": {
+    "snyk": {
+      "enabled": true,
+      "severityThreshold": "medium",
+      "failOnVulnerabilities": true,
+      "monitorDependencies": true,
+      "testOnBuild": true
+    },
+    "owasp": {
+      "enabled": true,
+      "failOnCritical": true,
+      "suppressionFile": "./security/owasp-suppressions.xml",
+      "dataDirectory": "./security/owasp-data",
+      "formats": ["HTML", "JSON", "XML"],
+      "cvssThreshold": 7.0
+    },
+    "trivy": {
+      "enabled": true,
+      "severityThreshold": "MEDIUM",
+      "ignoreUnfixed": false,
+      "skipFiles": [".git/**", "node_modules/**", "reports/**"],
+      "outputFormat": "json"
+    },
+    "sonar": {
+      "enabled": false,
+      "serverUrl": "https://sonarcloud.io",
+      "projectKey": "firebase-project",
+      "organization": "your-org",
+      "sources": ["src"],
+      "tests": ["tests"],
+      "exclusions": ["node_modules/**", "reports/**"]
+    },
+    "eslint": {
+      "enabled": true,
+      "configFile": "./security/.eslintrc.security.js",
+      "rules": {
+        "security/detect-object-injection": "error",
+        "security/detect-eval-with-expression": "error",
+        "security/detect-no-csrf-before-method-override": "error",
+        "security/detect-possible-timing-attacks": "warn"
+      }
+    }
+  },
+  "thresholds": {
+    "critical": 0,
+    "high": 5,
+    "medium": 10,
+    "low": 20,
+    "acceptableRiskScore": 7.5
+  },
+  "schedule": {
+    "dependencyScan": "daily",
+    "fullSecurityScan": "weekly",
+    "containerScan": "on-build",
+    "codeQualityScan": "on-pr"
+  },
+  "notifications": {
+    "enabled": true,
+    "channels": {
+      "slack": {
+        "enabled": false,
+        "webhookUrl": "https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK",
+        "channel": "#security-alerts",
+        "username": "Security Scanner",
+        "iconEmoji": ":shield:"
+      },
+      "email": {
+        "enabled": false,
+        "smtp": {
+          "host": "smtp.gmail.com",
+          "port": 587,
+          "secure": false,
+          "auth": {
+            "user": "security@yourcompany.com",
+            "pass": "your-app-password"
+          }
+        },
+        "from": "Security Scanner <security@yourcompany.com>",
+        "to": ["security-team@yourcompany.com", "dev-team@yourcompany.com"],
+        "subjectTemplate": "Security Alert: {severity} Issues Found in {project}"
+      },
+      "teams": {
+        "enabled": false,
+        "webhookUrl": "https://yourcompany.webhook.office.com/webhookb2/...",
+        "title": "Security Alert",
+        "themeColor": "FF0000"
+      }
+    },
+    "triggers": {
+      "criticalVulnerabilities": true,
+      "highSeverityIssues": true,
+      "failedScans": true,
+      "thresholdExceeded": true,
+      "newVulnerabilities": true
+    }
+  },
+  "integrations": {
+    "jira": {
+      "enabled": false,
+      "createSecurityTickets": true,
+      "projectKey": "SEC",
+      "issueType": "Security Vulnerability",
+      "priorityMapping": {
+        "critical": "Highest",
+        "high": "High",
+        "medium": "Medium",
+        "low": "Low"
+      }
+    },
+    "github": {
+      "enabled": true,
+      "createSecurityAdvisories": true,
+      "autoLabelPRs": true,
+      "securityLabels": {
+        "critical": "security/critical",
+        "high": "security/high",
+        "medium": "security/medium",
+        "low": "security/low"
+      }
+    }
+  },
+  "reporting": {
+    "formats": ["JSON", "HTML", "PDF", "CSV"],
+    "outputDirectory": "./reports/security",
+    "retentionDays": 90,
+    "archiveOldReports": true,
+    "generateTrendReports": true,
+    "includeExecutiveSummary": true
+  },
+  "exclusions": {
+    "files": [
+      "**/test/**",
+      "**/spec/**",
+      "**/node_modules/**",
+      "**/vendor/**",
+      "**/dist/**",
+      "**/build/**"
+    ],
+    "paths": [
+      "./.git/",
+      "./reports/",
+      "./logs/"
+    ],
+    "vulnerabilities": [
+      {
+        "cve": "CVE-2021-44228",
+        "reason": "Log4j vulnerability - mitigated by upgrade",
+        "approvedBy": "Security Team",
+        "approvedDate": "2025-01-15"
+      }
+    ]
+  },
+  "compliance": {
+    "standards": {
+      "owasp": {
+        "enabled": true,
+        "top10": true,
+        "apiSecurity": true
+      },
+      "pciDss": {
+        "enabled": false,
+        "version": "3.2.1"
+      },
+      "gdpr": {
+        "enabled": true,
+        "dataProcessing": true,
+        "privacyByDesign": true
+      },
+      "hipaa": {
+        "enabled": false,
+        "phiHandling": true
+      }
+    },
+    "certifications": {
+      "soc2": false,
+      "iso27001": false,
+      "nist": true
+    }
+  },
+  "response": {
+    "incidentResponsePlan": "./security/incident-response-plan.md",
+    "escalationMatrix": {
+      "critical": ["CISO", "CTO", "Security Team Lead"],
+      "high": ["Security Team Lead", "DevOps Lead"],
+      "medium": ["Security Engineer", "Lead Developer"],
+      "low": ["Security Engineer"]
+    },
+    "communicationTemplates": {
+      "internal": "./security/templates/internal-alert.md",
+      "external": "./security/templates/external-notification.md",
+      "customer": "./security/templates/customer-communication.md"
+    }
+  }
+}

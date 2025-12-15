@@ -1,0 +1,8 @@
+{
+  "name": "@modelcontextprotocol/server-workflow-automation",
+  "version": "1.0.0",
+  "description": "MCP workflow-automation Interface",
+  "type": "module",
+  "main": "index.js",
+  "bin": "cli.js"
+}

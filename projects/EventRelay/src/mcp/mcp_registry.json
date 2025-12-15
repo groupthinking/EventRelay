@@ -1,0 +1,30 @@
+{
+  "tools": [
+    {
+      "name": "youtube_learning_service",
+      "transport": "stdio",
+      "command": ["python3", "mcp_servers/youtube_extension_mcp_server.py"],
+      "env": {
+        "YOUTUBE_EXTENSION_BASE": "http://127.0.0.1:8010"
+      },
+      "health": {
+        "method": "tools/call",
+        "params": { "name": "health", "arguments": {} }
+      }
+    },
+    {
+      "name": "langextract",
+      "transport": "stdio",
+      "command": ["python3", "mcp_servers/langextract_mcp_server.py"],
+      "env": {
+        "LANGEXTRACT_CLI": "tools/langextract_cli.py"
+      },
+      "health": {
+        "method": "tools/call",
+        "params": { "name": "health", "arguments": {} }
+      }
+    }
+  ]
+}
+
+

@@ -1,0 +1,28 @@
+{
+  "name": "@repo/ai-gateway",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./models": "./src/models.ts",
+    "./types": "./src/types.ts"
+  },
+  "scripts": {
+    "lint": "eslint . --max-warnings 0",
+    "test": "jest"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "^2.0.53",
+    "@ai-sdk/google": "^2.0.44",
+    "@ai-sdk/openai": "^2.0.76",
+    "ai": "^5.0.106",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "eslint": "^8",
+    "jest": "^29",
+    "typescript": "^5"
+  }
+}

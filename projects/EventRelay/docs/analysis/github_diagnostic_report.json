@@ -1,0 +1,25 @@
+{
+  "timestamp": "2025-09-11T19:04:16.013473",
+  "diagnostic_results": {
+    "Timeout Conflicts": true,
+    "Workflow Configurations": false,
+    "Environment Variables": true,
+    "MCP Server Health": true,
+    "Recent Logs": false
+  },
+  "success_rate": 60.0,
+  "issues_found": [
+    "\u26a0\ufe0f  No timeout set in security.yml",
+    "\u26a0\ufe0f  No timeout set in ci-cd.yml",
+    "\u26a0\ufe0f  No timeout set in deploy.yml",
+    "\u26a0\ufe0f  No timeout set in bulk-issue-processor.yml",
+    "\u26a0\ufe0f  No timeout set in lint-workflows.yml",
+    "\u26a0\ufe0f  No timeout set in maintenance.yml",
+    "\u26a0\ufe0f  Error patterns found in logs: ['src/youtube_extension/backend/middleware/error_handling_middleware.backup.20250911_004201.py', 'src/youtube_extension/backend/middleware/error_handling_middleware.py']"
+  ],
+  "recommendations": [
+    "Fix workflow configuration issues",
+    "Review error logs for specific failure details"
+  ],
+  "severity_assessment": "HIGH - Significant issues found"
+}

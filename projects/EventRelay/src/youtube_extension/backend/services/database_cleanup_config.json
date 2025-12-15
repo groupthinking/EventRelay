@@ -1,0 +1,57 @@
+{
+  "retention_policies": {
+    "performance_monitoring.db": [
+      {
+        "table_name": "performance_metrics",
+        "retention_days": 30,
+        "batch_size": 5000,
+        "enabled": true,
+        "description": "Keep performance metrics for 30 days - balances monitoring needs with storage efficiency"
+      },
+      {
+        "table_name": "performance_alerts",
+        "retention_days": 90,
+        "batch_size": 1000,
+        "enabled": true,
+        "description": "Keep performance alerts for 90 days - longer retention for troubleshooting historical issues"
+      },
+      {
+        "table_name": "benchmark_results",
+        "retention_days": 180,
+        "batch_size": 500,
+        "enabled": true,
+        "description": "Keep benchmark results for 180 days - track performance trends over time"
+      }
+    ],
+    "api_cost_monitoring.db": [
+      {
+        "table_name": "api_usage",
+        "retention_days": 90,
+        "batch_size": 10000,
+        "enabled": true,
+        "description": "Keep API usage data for 90 days - monitor usage patterns and optimize costs"
+      },
+      {
+        "table_name": "daily_budgets",
+        "retention_days": 365,
+        "batch_size": 100,
+        "enabled": true,
+        "description": "Keep daily budget data for 1 year - track long-term spending trends"
+      }
+    ]
+  },
+  "cleanup_schedule": {
+    "enabled": true,
+    "interval_hours": 24,
+    "start_hour": 2,
+    "cleanup_on_startup": false,
+    "max_execution_time_minutes": 30
+  },
+  "notifications": {
+    "enabled": false,
+    "slack_webhook": null,
+    "email_recipients": [],
+    "alert_threshold_mb": 100
+  },
+  "last_updated": "2025-09-12T00:00:00.000000+00:00"
+}

@@ -1,0 +1,150 @@
+{
+  "version": "1.0",
+  "created": "2025-11-26T13:03:17.327966",
+  "mcp_servers": {
+    "youtube-extension": {
+      "endpoint": "http://127.0.0.1:8010",
+      "tools": [
+        "process_video_markdown",
+        "get_transcript",
+        "analyze_video"
+      ]
+    },
+    "gemini-code-gen": {
+      "endpoint": "internal://ai_code_generator",
+      "tools": [
+        "generate_fullstack",
+        "determine_architecture",
+        "generate_files"
+      ]
+    },
+    "github-deploy": {
+      "endpoint": "mcp://github",
+      "tools": [
+        "create_repo",
+        "push_code",
+        "create_pr"
+      ]
+    },
+    "vercel-deploy": {
+      "endpoint": "https://api.vercel.com",
+      "tools": [
+        "deploy_to_github_and_vercel",
+        "deploy_project",
+        "get_deployment_status"
+      ]
+    },
+    "skill-builder": {
+      "endpoint": "internal://skill_builder",
+      "tools": [
+        "validate_build",
+        "get_error_patterns",
+        "learn_from_error",
+        "suggest_fix"
+      ]
+    },
+    "knowledge-base": {
+      "endpoint": "internal://knowledge_base",
+      "tools": [
+        "capture_technology",
+        "get_capabilities",
+        "get_context"
+      ]
+    }
+  },
+  "agents": [
+    {
+      "id": "video-ingest",
+      "name": "Video Ingest Agent",
+      "role": "Extract and analyze video content",
+      "tools": [
+        "process_video_markdown",
+        "get_transcript",
+        "analyze_video"
+      ],
+      "capabilities": [
+        "youtube_processing",
+        "transcript_extraction",
+        "content_analysis"
+      ]
+    },
+    {
+      "id": "architect",
+      "name": "Architecture Agent",
+      "role": "Determine tech stack and project structure",
+      "tools": [
+        "determine_architecture",
+        "get_context",
+        "get_capabilities"
+      ],
+      "capabilities": [
+        "architecture_design",
+        "tech_selection",
+        "knowledge_integration"
+      ]
+    },
+    {
+      "id": "code-gen",
+      "name": "Code Generation Agent",
+      "role": "Generate application code from specifications",
+      "tools": [
+        "generate_fullstack",
+        "generate_files",
+        "get_error_patterns"
+      ],
+      "capabilities": [
+        "code_generation",
+        "fullstack_apps",
+        "template_application"
+      ]
+    },
+    {
+      "id": "build-validator",
+      "name": "Build Validator Agent",
+      "role": "Test builds and fix errors",
+      "tools": [
+        "validate_build",
+        "get_error_patterns",
+        "learn_from_error",
+        "suggest_fix"
+      ],
+      "capabilities": [
+        "build_testing",
+        "error_resolution",
+        "skill_learning"
+      ]
+    },
+    {
+      "id": "deployer",
+      "name": "Deployment Agent",
+      "role": "Deploy to GitHub and Vercel",
+      "tools": [
+        "deploy_to_github_and_vercel",
+        "create_repo",
+        "push_code",
+        "deploy_project",
+        "get_deployment_status"
+      ],
+      "capabilities": [
+        "github_deployment",
+        "vercel_deployment",
+        "ci_cd"
+      ]
+    },
+    {
+      "id": "knowledge-capture",
+      "name": "Knowledge Capture Agent",
+      "role": "Learn from each pipeline run",
+      "tools": [
+        "capture_technology",
+        "get_capabilities",
+        "learn_from_error"
+      ],
+      "capabilities": [
+        "continuous_learning",
+        "pattern_recognition",
+        "capability_generation"
+      ]
+    }
+  ]
+}

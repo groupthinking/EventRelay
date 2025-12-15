@@ -1,0 +1,79 @@
+# UVAI Platform - SECURE Environment Configuration Template
+# =================================================================
+# SECURITY NOTICE: Never commit real API keys to version control
+# Use environment variables or secure secret management systems
+# =================================================================
+
+# Environment Configuration
+ENVIRONMENT=development
+LOG_LEVEL=INFO
+
+# Database Configuration (Thenile PostgreSQL)
+DATABASE_URL=postgresql://[username]:[password]@[host]:5432/[database]
+NILEDB_USER=[thenile_username]
+NILEDB_PASSWORD=[thenile_password]
+NILEDB_API_URL=https://[region].api.thenile.dev/v2/databases/[database_id]
+NILEDB_POSTGRES_URL=postgresql://[host]:5432/[database]
+
+# API Keys (USE ENVIRONMENT VARIABLES OR SECURE VAULT)
+# NEVER STORE REAL KEYS IN THIS FILE
+OPENAI_API_KEY=[SECURE_OPENAI_API_KEY]
+ANTHROPIC_API_KEY=[SECURE_ANTHROPIC_API_KEY]
+GEMINI_API_KEY=[SECURE_GEMINI_API_KEY]
+GOOGLE_API_KEY=[SECURE_GOOGLE_API_KEY]
+YOUTUBE_API_KEY=[SECURE_YOUTUBE_API_KEY]
+
+# Additional AI Service Keys
+XAI_API_KEY=[SECURE_XAI_API_KEY]
+GROQ_API_KEY=[SECURE_GROQ_API_KEY]
+PERPLEXITY_API_KEY=[SECURE_PERPLEXITY_API_KEY]
+ASSEMBLYAI_API_KEY=[SECURE_ASSEMBLYAI_API_KEY]
+
+# Application Configuration
+API_KEY=[SECURE_APP_API_KEY]
+USE_MOCK_SERVERS=false
+USE_PLACEHOLDER_PROVIDERS=false
+VIDEO_PROCESSOR_TYPE=unified
+VIDEO_PROCESSOR_MODE=production
+
+# Cost Monitoring & Rate Limiting
+API_COST_TRACKING=true
+API_DAILY_BUDGET=10.00
+API_ALERT_THRESHOLD=8.00
+OPENAI_RATE_LIMIT=50
+ANTHROPIC_RATE_LIMIT=30
+YOUTUBE_QUOTA_LIMIT=10000
+GEMINI_RATE_LIMIT=60
+
+# Error Handling & Fallback
+ENABLE_API_FALLBACKS=true
+MAX_RETRY_ATTEMPTS=3
+CIRCUIT_BREAKER_THRESHOLD=5
+FALLBACK_TO_CACHE=true
+
+# External Services (Optional)
+LIVEKIT_URL=[SECURE_LIVEKIT_URL]
+LIVEKIT_API_KEY=[SECURE_LIVEKIT_API_KEY]
+LIVEKIT_API_SECRET=[SECURE_LIVEKIT_API_SECRET]
+MOZILLA_AI_URL=[SECURE_MOZILLA_AI_URL]
+
+# MCP Configuration
+MCP_SERVER_URL=http://localhost:8080
+MCP_BRIDGE_URL=http://localhost:8004
+
+# Observability
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
+
+# Development/Production Settings
+NODE_ENV=development
+DEBUG=false
+
+# Secrets (never commit these with values!)
+OPENAI_API_KEY=
+ANTHROPIC_API_KEY=
+
+# Deployment Secrets
+GITHUB_TOKEN=
+VERCEL_TOKEN=
+NETLIFY_AUTH_TOKEN=
+FLY_API_TOKEN=

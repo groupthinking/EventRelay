@@ -1,3 +1,6 @@
 {
-    "files.autoSave": "afterDelay"
+    "files.autoSave": "afterDelay",
+    "workbench.experimental.cloudChanges.autoStore": "onShutdown",
+    "redhat.telemetry.enabled": true,
+    "gitlens.ai.largePromptWarningThreshold": 200000
 }

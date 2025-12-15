@@ -1,0 +1,115 @@
+
+    =====================================
+    VIDEO PROCESSING FINAL REPORT
+    =====================================
+    
+    Total Videos: 100
+    Successfully Processed: 0
+    Failed: 100
+    Success Rate: 0.0%
+    
+    Start Time: 2025-08-03T07:47:37.340027
+    End Time: 2025-08-03T07:51:07.785140
+    
+    Failed Videos:
+    
+    - t5zQpSjSu9I: Processing returned None
+    - aircAruvnKk: Processing returned None
+    - fOqJJphkZA: Processing returned None
+    - gV0_raKR2UQ: Processing returned None
+    - J4Wdy0Wc_xQ: Processing returned None
+    - mJeNghZXtMo: Processing returned None
+    - HgWvYvvXIM: Processing returned None
+    - TjkFGrjkXfc: Processing returned None
+    - 7eh4d6r5fNQ: Processing returned None
+    - X2vAabgKEyw: Processing returned None
+    - dH0yz-Osy54: Processing returned None
+    - OXE2a8dqIAA: Processing returned None
+    - bEpU_7wFKM: Processing returned None
+    - lpk7MkQ5xQI: Processing returned None
+    - 7kJysT7gXI: Processing returned None
+    - PkZNo7MFNFg: Processing returned None
+    - OqBFXhR5E6Y: Processing returned None
+    - 2vMH8lxTvVE: Processing returned None
+    - yIVXjl4SwVo: Processing returned None
+    - JdeyVryaal0: Processing returned None
+    - SSo_EIwHSd4: Processing returned None
+    - hYip_Vuv8J0: Processing returned None
+    - qOVAbKKSH10: Processing returned None
+    - 41Ilug_dDcM: Processing returned None
+    - 2yJqjTiwpxM: Processing returned None
+    - s4g1XFU8Gto: Processing returned None
+    - QAQatPPtUkU: Processing returned None
+    - KXdOoIDcmbM: Processing returned None
+    - SyVMrxYSzUM: Processing returned None
+    - 37JxCFVAAHY: Processing returned None
+    - LHBE6Q9XlzI: Processing returned None
+    - xC-c7E5PK0Y: Processing returned None
+    - ua-CiDNNj30: Processing returned None
+    - 7eh4d6r5fNQ: Processing returned None
+    - zg9ASOp5j8: Processing returned None
+    - GtQjRJnvV8: Processing returned None
+    - KaTE5lPRbn0: Processing returned None
+    - nfr5j_1BgD8: Processing returned None
+    - 5q87K1WaoFI: Processing returned None
+    - Gv9_4yMHFhI: Processing returned None
+    - rGx1QNdYzvs: Processing returned None
+    - jflA3vXw5Qo: Processing returned None
+    - h00gbp36KWg: Processing returned None
+    - HZOv0qUzo8A: Processing returned None
+    - ub3P8TnFS8M: Processing returned None
+    - 44E8o-IqWTY: Processing returned None
+    - nFQaZmvCayw: Processing returned None
+    - YB5ELgW7JGQ: Processing returned None
+    - SWYqp7iY_Tc: Processing returned None
+    - WxpCXCIfyAY: Processing returned None
+    - ZoqgAy3h4OM: Processing returned None
+    - nKIu9yen5nc: Processing returned None
+    - BXgQDlW6jxE: Processing returned None
+    - VECV6r-fQPg: Processing returned None
+    - V7h3kGtqV8: Processing returned None
+    - CTBt9NCnqB8: Processing returned None
+    - xPJoq_QVsY4: Processing returned None
+    - jOhm-E2fVGk: Processing returned None
+    - FZLXPC_ug2E: Processing returned None
+    - 4K6MhLXhx0M: Processing returned None
+    - n7IHhwmDCNE: Processing returned None
+    - nU-IIXBWlS4: Processing returned None
+    - 5GBT4WJNnG0: Processing returned None
+    - NLXys9vVXm8: Processing returned None
+    - pVfGKMU1d9c: Processing returned None
+    - 9KhKPKxPeQI: Processing returned None
+    - sZz5MPMdao: Processing returned None
+    - 0VGQbKQZ7k8: Processing returned None
+    - vCh-HUACjUA: Processing returned None
+    - JcTkbe0TT-U: Processing returned None
+    - inWWhr5tnEA: Processing returned None
+    - wXCD8Kb3K7Q: Processing returned None
+    - z5nc9MDbvkw: Processing returned None
+    - IQV0LnDoBkQ: Processing returned None
+    - hXPmnoGVQW0: Processing returned None
+    - infQ1knyPqI: Processing returned None
+    - rdFYLTR9I4: Processing returned None
+    - uPrYPUopgm8: Processing returned None
+    - UsVfElI9nsM: Processing returned None
+    - 0GfNGKvtXhM: Processing returned None
+    - s7wmiS2mSXY: Processing returned None
+    - GZvSYJDk-us: Processing returned None
+    - mb-QHAqBL1g: Processing returned None
+    - ByGJQzlzxQg: Processing returned None
+    - FLnxgSZ0DG4: Processing returned None
+    - cuPVDvPc9SY: Processing returned None
+    - pxfEV6XKdY: Processing returned None
+    - 7YcW25PHnAA: Processing returned None
+    - iFMLyMgCUTs: Processing returned None
+    - 6_xGKdYA0MM: Processing returned None
+    - BdSiBlLafNM: Processing returned None
+    - Unzc7oWbYg: Processing returned None
+    - FRRh5hqzRg: Processing returned None
+    - UvCri1tqIxQ: Processing returned None
+    - 502ILHjX9EE: Processing returned None
+    - F8_ME4VwTiw: Processing returned None
+    - JK_3nIFGOdE: Processing returned None
+    - BkREIFyCuKY: Processing returned None
+    - n_F1a7UpKqw: Processing returned None
+    - QmOF0crdyRU: Processing returned None

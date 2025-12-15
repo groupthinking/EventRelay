@@ -1,0 +1,45 @@
+{
+  "deployment_timestamp": "2025-07-23",
+  "integration_type": "core_youtube_error_integration",
+  "api_providers": {
+    "openai": {
+      "enabled": true,
+      "model": "gpt-o3",
+      "priority": 1,
+      "use_case": "primary_reasoning"
+    },
+    "claude": {
+      "enabled": true,
+      "model": "claude-sonnet-4-20250514",
+      "priority": 2,
+      "use_case": "deep_analysis"
+    },
+    "grok": {
+      "enabled": true,
+      "model": "grok-beta",
+      "priority": 3,
+      "use_case": "real_time_context"
+    },
+    "gemini": {
+      "enabled": true,
+      "model": "gemini-pro",
+      "priority": 4,
+      "use_case": "logprobs_reasoning"
+    }
+  },
+  "nexa_local": {
+    "enabled": true,
+    "path": "/Applications/Nexa.app/Contents",
+    "models": [
+      "llama",
+      "bark.cpp",
+      "stable_diffusion"
+    ],
+    "priority": 0,
+    "use_case": "cost_optimization"
+  },
+  "external_integrations": {
+    "youtube_mcp": "./external-integrations/youtube-mcp",
+    "minicpm_o": "./external-integrations/MiniCPM-o"
+  }
+}

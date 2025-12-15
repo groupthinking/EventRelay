@@ -1,0 +1,240 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environment
+venv/
+ENV/
+env/
+.venv/
+mcp-env/
+.runtime/
+
+# IDE
+.vscode/
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/*.code-workspace
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+logs/
+*.pid
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.hypothesis/
+test_results/
+coverage.xml
+*.cover
+reports/
+lcov.info
+
+# Node
+node_modules/
+frontend/node_modules/
+frontend/build/
+frontend/coverage/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Output directories - Development/Simulation artifacts
+gdrive_results/
+gemini_working_results/
+grok4_processed_videos/
+multi_llm_results/
+results/
+ultimate_results/
+workflow_output/
+workflow_results/
+youtube_processed_videos/
+unified_processed_videos/
+gemini_processed_videos/
+
+# Simulation and test data
+FINAL_SIMULATION_CLEANUP_REPORT.json
+verification_log.json
+deployment_success_metrics.json
+test_transcript.txt
+*_simulation_*.json
+*_test_data_*.json
+tests/fixtures/temp/
+
+# Build artifacts
+build_extensions/
+chrome_build/
+safari_build/
+dist/
+
+# Models
+models/*.gguf
+*.gguf
+external/ml-fastvlm/
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+.cache/
+
+# Security - Never commit real keys
+*.pem
+*.key
+*.cert
+*.crt
+
+# API Keys and sensitive documentation
+docs/reports/*API*.md
+docs/plans/*API*.md
+*REAL_API*.md
+*api*key*.txt
+*credential*.txt
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Linux
+*~
+.directory
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# FastAPI
+instance/
+.webassets-cache
+
+# Flask
+instance/
+.webassets-cache
+
+# Django
+*.pot
+*.pyc
+local_settings.py
+db.sqlite3
+media/
+
+# Scrapy
+.scrapy
+
+# Sphinx
+docs/_build/
+
+# PyBuilder
+target/
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath
+*.sage.py
+
+# Spyder
+.spyderproject
+.spyproject
+
+# Rope
+.ropeproject
+
+# mkdocs
+site/
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre
+.pyre/
+
+# Custom project ignores
+action_implementations/*.tmp
+intelligence_layer/**/temp/
+labs/experimental/
+NexusLearn/
+Video IDEA*/
+YouTube Video to Learning App Transformer/.DS_Store
+
+# Auto-generated projects (keep execution_workspace as it has learning content)
+generated_projects/
+research/labs/archive/
+
+# Ignore nested git repositories that aren't properly configured as submodules
+build_extensions/uvai-extensions/ai-integrations/MiniCPM-o/
+build_extensions/uvai-extensions/ai-integrations/youtube-mcp/
+.env.production
+*.safetensors
+
+# Production secrets - never commit actual production files
+.env.production
+.env.staging
+.env.prod
+**/secrets.json
+**/production-secrets.json
+
+.gemini/
+gha-creds-*.json
+
+# Secret files
+client_secret_*.json
+*_secret_*.json
+
+# Workspace files
+*.code-workspace
+
+# Test artifacts
+tmp_*.json
+
+# Backup directories
+.backup_*/
+
+# Tarballs (can rebuild)
+*.tar.gz
+*.tgz

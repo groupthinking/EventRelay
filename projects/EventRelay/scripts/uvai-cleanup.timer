@@ -1,0 +1,11 @@
+[Unit]
+Description=Run UVAI Database Cleanup Daily
+Requires=uvai-cleanup.service
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+Unit=uvai-cleanup.service
+
+[Install]
+WantedBy=timers.target

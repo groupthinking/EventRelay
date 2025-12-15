@@ -1,0 +1,61 @@
+# YouTube Extension Environment Configuration
+# Copy this file to .env and add your real API keys
+
+# YouTube API Configuration
+# Format: 39 characters, starts with 'AIzaSy'
+YOUTUBE_API_KEY=
+REACT_APP_YOUTUBE_API_KEY=
+
+# Google AI (Gemini) Configuration
+GEMINI_API_KEY=
+GOOGLE_API_KEY=
+
+# GROK4 AI Configuration
+XAI_GROK4_API=
+XAI_GROK4_OR_3_API=
+XAI_GROK_3_OR_2_ONLY_API=
+
+# OpenAI Configuration
+OPENAI_API_KEY=
+
+# Anthropic (Claude) Configuration
+ANTHROPIC_API_KEY=
+
+# AssemblyAI Configuration
+ASSEMBLYAI_API_KEY=
+
+# Hugging Face Configuration (for AI models)
+HUGGINGFACE_HUB_TOKEN=
+HF_TOKEN=
+
+# MCP Server Configuration
+MCP_SERVER_URL=http://localhost:8080
+MCP_BRIDGE_URL=http://localhost:8004
+USE_MOCK_SERVERS=false
+USE_PLACEHOLDER_PROVIDERS=false
+
+# Observability Configuration
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
+
+# External Connector Configuration (surfaced for health checks)
+LIVEKIT_URL=
+LIVEKIT_API_KEY=
+LIVEKIT_API_SECRET=
+MOZILLA_AI_URL=
+
+# Video Processor Configuration
+VIDEO_PROCESSOR_TYPE=unified
+VIDEO_PROCESSOR_MODE=hybrid
+
+# Production Configuration
+NODE_ENV=production
+DEBUG=false
+
+# Deployment Tokens (leave blank if not deploying)
+GITHUB_TOKEN=
+VERCEL_TOKEN=
+VERCEL_PROJECT_NAME=
+NETLIFY_AUTH_TOKEN=
+NETLIFY_SITE_NAME=
+FLY_API_TOKEN=
+

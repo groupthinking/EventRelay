@@ -1,0 +1,44 @@
+{
+  "mcp_server": {
+    "host": "localhost",
+    "port": 3000,
+    "timeout_seconds": 300,
+    "max_concurrent_requests": 5,
+    "retry_attempts": 3,
+    "retry_delay_seconds": 10,
+    "circuit_breaker": {
+      "enabled": true,
+      "failure_threshold": 5,
+      "recovery_timeout_seconds": 60
+    }
+  },
+  "processing": {
+    "batch_size": 3,
+    "max_processing_time_seconds": 180,
+    "memory_limit_mb": 512,
+    "cpu_limit_percent": 70
+  },
+  "optimization": {
+    "enable_caching": true,
+    "cache_ttl_seconds": 3600,
+    "enable_compression": true,
+    "lazy_loading": true,
+    "background_processing": true
+  },
+  "error_handling": {
+    "graceful_degradation": true,
+    "fallback_mode": "basic_processor",
+    "error_reporting": true,
+    "auto_recovery": true
+  },
+  "monitoring": {
+    "metrics_collection": true,
+    "performance_tracking": true,
+    "health_checks": true,
+    "alert_thresholds": {
+      "response_time_seconds": 30,
+      "error_rate_percent": 10,
+      "memory_usage_percent": 80
+    }
+  }
+}
