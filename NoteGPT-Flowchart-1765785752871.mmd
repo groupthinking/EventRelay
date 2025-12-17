@@ -1,0 +1,17 @@
+flowchart TD
+  A("DecideToMakeNoteGPT") --> B("PlanProject")
+  B --> C{"ChooseTechStack"}
+  C -- Frontend --> D("SelectFramework")
+  C -- Backend --> E("SetUpServer")
+  C -- Database --> F("ChooseDatabase")
+  D --> G("DesignUI")
+  E --> H("ImplementAPI")
+  F --> I("ConfigureDB")
+  G --> J("DevelopFeatures")
+  H --> J
+  I --> J
+  J --> K{"TestApplication"}
+  K -- Pass --> L("DeployApplication")
+  K -- Fail --> J
+  L --> M("LaunchNoteGPT")
+  M --> N("EnjoyUsingNoteGPT")
