@@ -137,10 +137,10 @@ class RealAIProcessorService:
                 }
             },
             AIProvider.GEMINI: {
-                'default': 'gemini-1.5-flash',
+                'default': 'gemini-3-flash',
                 'models': {
-                    'gemini-1.5-pro': {'max_tokens': 8192, 'cost_tier': 'high'},
-                    'gemini-1.5-flash': {'max_tokens': 8192, 'cost_tier': 'low'}
+                    'gemini-3-pro': {'max_tokens': 32768, 'cost_tier': 'high'},
+                    'gemini-3-flash': {'max_tokens': 32768, 'cost_tier': 'low'}
                 }
             }
         }

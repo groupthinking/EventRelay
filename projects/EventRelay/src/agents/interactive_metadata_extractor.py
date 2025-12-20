@@ -169,6 +169,8 @@ class InteractiveMetadataExtractor:
         transcript = await self.extract_transcript(video_id)
         keyframes = await self.extract_keyframes(video_id, transcript)
         resources = await self.extract_resources(video_id, metadata)
+        comments = await self.extract_comments(video_id)
+        channel_context = await self.extract_channel_context(metadata.get('channel_id'))
         
         # Compile complete metadata
         return {
@@ -179,6 +181,8 @@ class InteractiveMetadataExtractor:
             'transcript': transcript,
             'keyframes': keyframes,
             'resources': resources,
+            'comments': comments,
+            'channel_context': channel_context,
             'extracted_at': datetime.now().isoformat()
         }
     
@@ -203,10 +207,76 @@ class InteractiveMetadataExtractor:
                 return {
                     'title': video['snippet']['title'],
                     'channel': video['snippet']['channelTitle'],
+                    'channel_id': video['snippet']['channelId'],
                     'description': video['snippet']['description'],
                     'duration': self._parse_duration(video['contentDetails']['duration']),
                     'category': self._get_category_name(video['snippet']['categoryId'])
                 }
+
+    async def extract_comments(self, video_id: str, max_results: int = 20) -> List[Dict[str, Any]]:
+        """Extract recent comments from the video"""
+        url = "https://www.googleapis.com/youtube/v3/commentThreads"
+        params = {
+            'part': 'snippet',
+            'videoId': video_id,
+            'maxResults': max_results,
+            'order': 'relevance',
+            'key': self.youtube_api_key
+        }
+        
+        comments = []
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, params=params) as response:
+                    data = await response.json()
+                    
+                    for item in data.get('items', []):
+                        snippet = item['snippet']['topLevelComment']['snippet']
+                        comments.append({
+                            'author': snippet['authorDisplayName'],
+                            'text': snippet['textDisplay'],
+                            'like_count': snippet['likeCount'],
+                            'published_at': snippet['publishedAt']
+                        })
+        except Exception as e:
+            logger.warning(f"Failed to extract comments: {e}")
+            
+        return comments
+
+    async def extract_channel_context(self, channel_id: str, max_results: int = 5) -> Dict[str, Any]:
+        """Extract context about the channel (recent videos, etc.)"""
+        if not channel_id:
+            return {}
+            
+        url = "https://www.googleapis.com/youtube/v3/search"
+        params = {
+            'part': 'snippet',
+            'channelId': channel_id,
+            'maxResults': max_results,
+            'order': 'date',
+            'type': 'video',
+            'key': self.youtube_api_key
+        }
+        
+        recent_videos = []
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, params=params) as response:
+                    data = await response.json()
+                    
+                    for item in data.get('items', []):
+                        recent_videos.append({
+                            'title': item['snippet']['title'],
+                            'video_id': item['id']['videoId'],
+                            'published_at': item['snippet']['publishedAt']
+                        })
+        except Exception as e:
+            logger.warning(f"Failed to extract channel context: {e}")
+            
+        return {
+            'channel_id': channel_id,
+            'recent_videos': recent_videos
+        }
     
     async def _generate_chapters_ai(self, video_id: str) -> List[Dict[str, Any]]:
         """Generate chapters using AI analysis"""

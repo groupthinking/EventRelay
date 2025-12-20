@@ -1,0 +1,26 @@
+# UVAI Learning Loop - Activity Diagram
+
+```mermaid
+stateDiagram-v2
+    [*] --> VideoIngestion
+    VideoIngestion --> EventExtraction: Gemini/Veo Analysis
+    EventExtraction --> RAGGrounding: Metadata & Transcripts
+    RAGGrounding --> AgentDispatch: Task Generation
+    
+    state "Execution & Monitoring" as Execution {
+        AgentDispatch --> CodeGeneration
+        CodeGeneration --> ExecutionTest
+        ExecutionTest --> Deployment
+    }
+    
+    Deployment --> FeedbackCollection: Performance Logs / User Feedback
+    
+    state "Learning Loop" as LearningLoop {
+        FeedbackCollection --> Analysis: Analyze Failures/Successes
+        Analysis --> SkillRefinement: Update Skill Adapters
+        SkillRefinement --> RAGUpdate: Augment Knowledge Base
+    }
+    
+    RAGUpdate --> AgentDispatch: Improved Context for Next Run
+    FeedbackCollection --> [*]: Complete
+```

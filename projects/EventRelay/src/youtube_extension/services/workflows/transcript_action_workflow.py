@@ -207,15 +207,42 @@ class TranscriptActionWorkflow:
             "transcript_action": {
                 "hybrid_processor": self._hybrid_processor,
                 "language": language,
+            },
+            "personality_agent": {
+                "hybrid_processor": self._hybrid_processor,
+            },
+            "strategy_agent": {
+                "hybrid_processor": self._hybrid_processor,
             }
         }
 
-        orchestration_result = await self._orchestrator.execute_task(
+        # Execute standard transcript action task
+        transcript_result = await self._orchestrator.execute_task(
             "transcript_action",
             agent_input,
             agent_configs=agent_configs,
         )
-        return self._serialize_orchestration(orchestration_result, metadata)
+
+        # Execute strategic analysis task
+        strategic_result = await self._orchestrator.execute_task(
+            "strategic_analysis",
+            agent_input,
+            agent_configs=agent_configs,
+        )
+
+        # Merge results for final serialization
+        merged_results = transcript_result.results.copy()
+        merged_results.update(strategic_result.results)
+
+        final_result = OrchestrationResult(
+            success=transcript_result.success and strategic_result.success,
+            results=merged_results,
+            errors=transcript_result.errors + strategic_result.errors,
+            total_processing_time=transcript_result.total_processing_time + strategic_result.total_processing_time,
+            agents_used=list(set(transcript_result.agents_used + strategic_result.agents_used))
+        )
+
+        return self._serialize_orchestration(final_result, metadata)
 
     @staticmethod
     def _serialize_orchestration(result: OrchestrationResult, metadata: RobustYouTubeMetadata) -> Dict[str, Any]:

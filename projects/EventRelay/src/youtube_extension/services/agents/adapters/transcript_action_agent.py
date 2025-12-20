@@ -141,10 +141,11 @@ class TranscriptActionAgent(BaseAgent):
         fail_message: str,
     ) -> PromptResult:
         model_name = model_override or self._default_model(TaskType.COMPLEX_REASONING)
-        self._hybrid_processor.gemini.select_model(model_name)
-        result: GeminiResult = await self._hybrid_processor.gemini.process_text(
+        result = await self._hybrid_processor.process(
+            transcript,
             prompt,
-            input_text=transcript,
+            task_type=TaskType.COMPLEX_REASONING,
+            model_name=model_name,
             response_mime_type="application/json",
         )
         if not result.success or not result.response:
@@ -230,14 +231,10 @@ class TranscriptActionAgent(BaseAgent):
         return f"{minutes:02d}:{secs:06.3f}".rstrip("0").rstrip(".")
 
     def _failure(self, message: str, start_time: float) -> AgentResult:
-        elapsed = asyncio.get_event_loop().time() - start_time
         return AgentResult(
-            success=False,
-            data={},
-            errors=[message],
-            processing_time=elapsed,
-            agent_name=self.name,
-            timestamp=datetime.now(),
+            status="error",
+            output={},
+            logs=[message]
         )
 
     @staticmethod

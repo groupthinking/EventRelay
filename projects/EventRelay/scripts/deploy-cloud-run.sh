@@ -159,19 +159,6 @@ fi
 
 log_info "Environment: $ENVIRONMENT"
 
-# Get or validate project ID
-if [ -z "$PROJECT_ID" ]; then
-  PROJECT_ID=$(gcloud config get-value project 2>/dev/null)
-  if [ -z "$PROJECT_ID" ]; then
-    log_error "No GCP project configured. Use --project or run 'gcloud config set project PROJECT_ID'"
-    exit 1
-  fi
-fi
-
-log_info "Project ID: $PROJECT_ID"
-log_info "Region: $REGION"
-log_info "Service Name: $SERVICE_NAME"
-
 # Check if gcloud is installed
 if ! command -v gcloud &> /dev/null; then
   log_error "gcloud CLI not found. Please install Google Cloud SDK."
@@ -186,6 +173,26 @@ if ! gcloud auth list --filter=status:ACTIVE --format="value(account)" 2>/dev/nu
 fi
 log_success "Authenticated"
 
+# Get or validate project ID
+if [ -z "$PROJECT_ID" ]; then
+  PROJECT_ID=$(gcloud config get-value project 2>/dev/null || true)
+  if [ -z "$PROJECT_ID" ]; then
+    log_warn "No default GCP project configured."
+    log_info "Please set a project ID:"
+    read -r -p "Project ID: " PROJECT_ID
+    if [ -z "$PROJECT_ID" ]; then
+        log_error "Project ID is required."
+        exit 1
+    fi
+  fi
+fi
+
+log_info "Project ID: $PROJECT_ID"
+log_info "Region: $REGION"
+log_info "Service Name: $SERVICE_NAME"
+
+# (Auth check moved up)
+
 # Set project
 run_cmd gcloud config set project "$PROJECT_ID"
 
@@ -197,7 +204,7 @@ if [ "$SETUP_SECRETS" = "true" ]; then
   run_cmd gcloud services enable secretmanager.googleapis.com
   
   # Create secrets (will prompt for values)
-  for secret in gemini-api-key openai-api-key jwt-secret session-secret oauth-secret; do
+  for secret in gemini-api-key openai-api-key jwt-secret session-secret oauth-secret turn-token-id turn-api-token cloudflare-app-id cloudflare-api-token; do
     if gcloud secrets describe "$secret" &>/dev/null; then
       log_warning "Secret $secret already exists, skipping..."
     else
@@ -216,7 +223,7 @@ if [ "$SETUP_SECRETS" = "true" ]; then
   PROJECT_NUMBER=$(gcloud projects describe "$PROJECT_ID" --format="value(projectNumber)")
   SERVICE_ACCOUNT="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
   
-  for secret in gemini-api-key openai-api-key jwt-secret session-secret oauth-secret; do
+  for secret in gemini-api-key openai-api-key jwt-secret session-secret oauth-secret turn-token-id turn-api-token cloudflare-app-id cloudflare-api-token; do
     run_cmd gcloud secrets add-iam-policy-binding "$secret" \
       --member="serviceAccount:${SERVICE_ACCOUNT}" \
       --role="roles/secretmanager.secretAccessor"
@@ -292,7 +299,7 @@ fi
 
 # Add secrets if they exist
 SECRETS=()
-for secret in gemini-api-key openai-api-key jwt-secret session-secret oauth-secret; do
+for secret in gemini-api-key openai-api-key jwt-secret session-secret oauth-secret turn-token-id turn-api-token cloudflare-app-id cloudflare-api-token; do
   if gcloud secrets describe "$secret" &>/dev/null; then
     case $secret in
       gemini-api-key)
@@ -309,6 +316,18 @@ for secret in gemini-api-key openai-api-key jwt-secret session-secret oauth-secr
         ;;
       oauth-secret)
         SECRETS+=("OAUTH_SECRET_KEY=$secret:latest")
+        ;;
+      turn-token-id)
+        SECRETS+=("TURN_TOKEN_ID=$secret:latest")
+        ;;
+      turn-api-token)
+        SECRETS+=("TURN_API_TOKEN=$secret:latest")
+        ;;
+      cloudflare-app-id)
+        SECRETS+=("CLOUDFLARE_APP_ID=$secret:latest")
+        ;;
+      cloudflare-api-token)
+        SECRETS+=("CLOUDFLARE_API_TOKEN=$secret:latest")
         ;;
     esac
   fi

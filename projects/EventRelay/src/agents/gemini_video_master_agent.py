@@ -19,6 +19,8 @@ import requests
 from urllib.parse import urlparse, parse_qs
 from dataclasses import dataclass
 from enum import Enum
+from .specialized.personality_agent import PersonalityAgent
+from .specialized.strategy_agent import StrategyAgent
 
 # Google AI imports
 try:
@@ -58,6 +60,8 @@ class TaskType(Enum):
     TIMESTAMP_ANALYSIS = "timestamp_analysis"
     KEY_INSIGHTS = "key_insights"
     IMPLEMENTATION_PLAN = "implementation_plan"
+    STRATEGIC_ANALYSIS = "strategic_analysis"
+    PERSONALITY_MAPPING = "personality_mapping"
 
 class AIProvider(Enum):
     """Available AI providers with benchmarking"""

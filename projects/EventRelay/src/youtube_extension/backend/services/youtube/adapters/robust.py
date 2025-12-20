@@ -80,6 +80,8 @@ class RobustYouTubeMetadata:
     transcript_available: bool = False
     transcript_segments: int = 0
     source_api: str = "unknown"
+    comments: Optional[List[Dict[str, Any]]] = None
+    channel_context: Optional[Dict[str, Any]] = None
 
 class RobustYouTubeService:
     """
@@ -159,6 +161,10 @@ class RobustYouTubeService:
 
         # Check for transcript availability
         transcript_available, transcript_segments = await self._check_transcript_availability(video_id)
+        
+        # Get enhanced strategic metadata
+        comments = await self._get_comments(video_id)
+        channel_context = await self._get_channel_context(snippet['channelId'])
 
         return RobustYouTubeMetadata(
             video_id=video_id,
@@ -183,7 +189,9 @@ class RobustYouTubeService:
             live_broadcast_content='none',
             transcript_available=transcript_available,
             transcript_segments=transcript_segments,
-            source_api='youtube_data_api_v3'
+            source_api='youtube_data_api_v3',
+            comments=comments,
+            channel_context=channel_context
         )
 
     async def _get_metadata_pytube(self, video_url: str) -> RobustYouTubeMetadata:
@@ -260,6 +268,76 @@ class RobustYouTubeService:
             transcript_segments=0,
             source_api='youtube_search_python'
         )
+
+    async def _get_comments(self, video_id: str, max_results: int = 20) -> List[Dict[str, Any]]:
+        """Extract recent comments using YouTube Data API v3"""
+        if not self.youtube_api_key or not self.session:
+            return []
+            
+        url = f"{self.base_url}/commentThreads"
+        params = {
+            'part': 'snippet',
+            'videoId': video_id,
+            'maxResults': max_results,
+            'order': 'relevance',
+            'key': self.youtube_api_key
+        }
+        
+        try:
+            response = await self.session.get(url, params=params)
+            if response.status_code != 200:
+                return []
+                
+            data = response.json()
+            comments = []
+            for item in data.get('items', []):
+                snippet = item['snippet']['topLevelComment']['snippet']
+                comments.append({
+                    'author': snippet['authorDisplayName'],
+                    'text': snippet['textDisplay'],
+                    'like_count': snippet['likeCount'],
+                    'published_at': snippet['publishedAt']
+                })
+            return comments
+        except Exception as e:
+            logger.warning(f"Failed to extract comments: {e}")
+            return []
+
+    async def _get_channel_context(self, channel_id: str, max_results: int = 5) -> Dict[str, Any]:
+        """Extract context about the channel using YouTube Data API v3"""
+        if not self.youtube_api_key or not self.session or not channel_id:
+            return {}
+            
+        url = f"{self.base_url}/search"
+        params = {
+            'part': 'snippet',
+            'channelId': channel_id,
+            'maxResults': max_results,
+            'order': 'date',
+            'type': 'video',
+            'key': self.youtube_api_key
+        }
+        
+        try:
+            response = await self.session.get(url, params=params)
+            if response.status_code != 200:
+                return {}
+                
+            data = response.json()
+            recent_videos = []
+            for item in data.get('items', []):
+                recent_videos.append({
+                    'title': item['snippet']['title'],
+                    'video_id': item['id'].get('videoId'),
+                    'published_at': item['snippet']['publishedAt']
+                })
+            return {
+                'channel_id': channel_id,
+                'recent_videos': recent_videos
+            }
+        except Exception as e:
+            logger.warning(f"Failed to extract channel context: {e}")
+            return {}
 
     async def _check_transcript_availability(self, video_id: str) -> Tuple[bool, int]:
         """Check if transcript is available and count segments"""

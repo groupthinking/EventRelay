@@ -13,7 +13,7 @@ from typing import Dict, Any, List, Optional, Type
 from datetime import datetime
 from dataclasses import dataclass, field
 
-from ..base_agent import BaseAgent, AgentResult
+from ..base_agent import BaseAgent, AgentResult, AgentRequest
 from .transcript_action_agent import TranscriptActionAgent
 
 
@@ -40,12 +40,25 @@ class AgentOrchestrator:
         """Initialize agent orchestrator"""
         self.logger = logging.getLogger("agent_orchestrator")
         self._agents: Dict[str, BaseAgent] = {}
+        self._agent_types: Dict[str, Type[BaseAgent]] = {}
         self._task_mappings: Dict[str, List[str]] = {
-            "video_analysis": ["video_master", "action_implementer"],
+            "video_analysis": ["video_master", "action_implementer", "personality_agent", "strategy_agent"],
             "content_generation": ["video_master"],
             "action_planning": ["action_implementer"],
             "transcript_action": ["transcript_action"],
+            "strategic_analysis": ["personality_agent", "strategy_agent"],
         }
+
+    def register_agent_type(self, name: str, agent_class: Type[BaseAgent]):
+        """
+        Register a new agent type.
+
+        Args:
+            name: Agent type name
+            agent_class: Agent class
+        """
+        self._agent_types[name] = agent_class
+        self.logger.info(f"Registered agent type: {name}")
 
     async def get_agent(self, name: str, config: Optional[Dict[str, Any]] = None) -> Optional[BaseAgent]:
         """
@@ -61,6 +74,18 @@ class AgentOrchestrator:
         if name in self._agents:
             return self._agents[name]
 
+        # Check registered types first
+        if name in self._agent_types:
+            try:
+                agent_class = self._agent_types[name]
+                agent = agent_class(config=config)
+                self._agents[name] = agent
+                return agent
+            except Exception as e:
+                self.logger.error(f"Failed to instantiate agent {name}: {e}")
+                return None
+
+        # Fallback to registry
         try:
             agent_class = get_agent_class(name)
             agent = agent_class(config=config)
@@ -117,7 +142,7 @@ class AgentOrchestrator:
 
         # Execute agents in parallel
         try:
-            tasks = [agent.run(AgentRequest(params=input_data)) for agent in agents]
+            tasks = [agent.run(AgentRequest(task=task_type, params=input_data)) for agent in agents]
             results = await asyncio.gather(*tasks, return_exceptions=True)
 
             orchestration_result = OrchestrationResult(success=True)

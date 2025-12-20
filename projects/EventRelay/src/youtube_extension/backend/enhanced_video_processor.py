@@ -178,7 +178,7 @@ class EnhancedVideoProcessor:
                 raise ValueError("GEMINI_API_KEY not configured")
 
             # Use Gemini's OpenAI-compatible transcription endpoint
-            url = f"{self.gemini_base_url}/models/gemini-1.5-flash:generateContent"
+            url = f"{self.gemini_base_url}/models/gemini-3-flash:generateContent"
 
             # Create prompt for video analysis
             prompt = f"""
@@ -283,7 +283,7 @@ class EnhancedVideoProcessor:
             if not self.gemini_api_key:
                 return {"error": "GEMINI_API_KEY not configured"}
 
-            url = f"{self.gemini_base_url}/models/gemini-1.5-flash:generateContent"
+            url = f"{self.gemini_base_url}/models/gemini-3-flash:generateContent"
 
             # Create comprehensive analysis prompt with strict JSON schema
             prompt = f"""
@@ -408,7 +408,7 @@ class EnhancedVideoProcessor:
 
             # Use direct YouTube URL passing (PREVIEW feature)
             response = client.models.generate_content(
-                model="gemini-3-pro-preview",
+                model="gemini-3-pro",
                 contents=genai_types.Content(
                     parts=[
                         genai_types.Part(
@@ -424,7 +424,7 @@ class EnhancedVideoProcessor:
             try:
                 parsed = json.loads(analysis_text)
                 parsed["source"] = "gemini_direct_url"
-                parsed["model"] = "gemini-3-pro-preview"
+                parsed["model"] = "gemini-3-pro"
                 logger.info("✅ Direct YouTube URL analysis successful")
                 return parsed
             except json.JSONDecodeError:

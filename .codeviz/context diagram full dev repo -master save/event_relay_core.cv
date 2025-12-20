@@ -1,0 +1,23 @@
+# EventRelay Core - C4 Component Diagram
+
+```mermaid
+C4Component
+    title Component diagram for EventRelay Orchestrator
+
+    Container_Boundary(er, "EventRelay Orchestrator") {
+        Component(api, "FastAPI Service", "Python/FastAPI", "Provides REST endpoints for video ingestion and task management.")
+        Component(ui, "Dashboard", "React", "Stateful UI for monitoring video processing and agent tasks.")
+        Component(orchestrator, "Hybrid Orchestrator", "Gemini/Veo", "Main logic for video analysis, event extraction, and multi-agent dispatch.")
+        Component(rag, "RAG Store", "ChromaDB/Pinecone", "Vector store for grounding transcripts, extracted events, and domain knowledge.")
+        Component(loop, "Learning Loop", "Python", "Feedback mechanism for refining agent performance based on execution results.")
+    }
+
+    Rel(api, ui, "Serves", "JSON/WebSockets")
+    Rel(api, orchestrator, "Triggers analysis", "Function Call")
+    Rel(orchestrator, rag, "Queries/Stores", "Vector Embeddings")
+    Rel(orchestrator, mcp, "Dispatches tasks to", "MCP Protocol")
+    Rel(loop, rag, "Updates context", "Knowledge Augmentation")
+    Rel(loop, mcp, "Refines adapters", "Skill Injection")
+
+    System_Ext(mcp, "MCP Swarm", "Multi-Agent AI for implementation & deployment")
+```

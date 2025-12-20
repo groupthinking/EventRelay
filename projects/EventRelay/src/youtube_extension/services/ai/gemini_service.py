@@ -251,8 +251,8 @@ class VeoVideoClient:
 @dataclass
 class GeminiConfig:
     """Configuration for Gemini service"""
-    api_key: Optional[str] = None
-    model_name: str = "gemini-3-pro-preview"
+    api_key: Optional[str] = os.getenv("GEMINI_API_KEY")
+    model_name: str = "gemini-1.5-flash"
     project_id: Optional[str] = None
     location: str = "us-central1"
     max_output_tokens: int = 8192
@@ -305,7 +305,8 @@ class GeminiService:
 
         # Initialize client on startup if credentials available
         if self.is_available():
-            self._initialize_client()
+            self._verification_failed = False
+        self._initialize_client()
 
     def _initialize_client(self):
         """Initialize Gemini client"""
@@ -319,8 +320,17 @@ class GeminiService:
 
             elif self.config.api_key and GEMINI_AVAILABLE:
                 # Use direct API
-                self.logger.info("Initializing Gemini via API key")
+                self.logger.info(f"Initializing Gemini via API key: {self.config.api_key[:8]}...")
                 genai.configure(api_key=self.config.api_key)
+                
+                # Verify key visibility
+                try:
+                    models = [m.name for m in genai.list_models()]
+                    self.logger.info(f"Gemini API key verified. Available models matching flash: {[m for m in models if 'flash' in m]}")
+                except Exception as ve:
+                    self.logger.error(f"Gemini API key verification FAILED: {ve}")
+                    self._verification_failed = True
+
                 self._model = genai.GenerativeModel(
                     model_name=self.config.model_name,
                     generation_config={

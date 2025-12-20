@@ -11,6 +11,8 @@ from .adapters.video_master_agent import VideoMasterAgent
 from .adapters.action_implementer_agent import ActionImplementerAgent
 from .adapters.hybrid_vision_agent import HybridVisionAgent
 from .adapters.transcript_action_agent import TranscriptActionAgent
+from .adapters.personality_agent import PersonalityAgent
+from .adapters.strategy_agent import StrategyAgent
 from .base_agent import BaseAgent
 
 __all__ = [
@@ -19,5 +21,7 @@ __all__ = [
     'ActionImplementerAgent',
     'HybridVisionAgent',
     'TranscriptActionAgent',
+    'PersonalityAgent',
+    'StrategyAgent',
     'BaseAgent'
 ]

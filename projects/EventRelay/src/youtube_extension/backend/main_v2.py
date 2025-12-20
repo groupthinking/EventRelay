@@ -30,16 +30,18 @@ project_root = Path(__file__).parent.parent
 from .containers.service_container import get_service_container
 from .services.websocket_service import WebSocketService
 from .services.database_optimizer import initialize_database_optimization, shutdown_database_optimization
-from ..processors.video_processor import default_processor as video_processor
+# from ..processors.video_processor import default_processor as video_processor
 
 # Import API routers
-from .api.v1.router import router as v1_router
+# Import API routers
+# from .api.v1.router import router as v1_router
 
 # Import integrations router
-try:
-    from integrations.routes import router as integrations_router
-except ImportError:
-    integrations_router = None
+# Import integrations router
+# try:
+#     from integrations.routes import router as integrations_router
+# except ImportError:
+#     integrations_router = None
 
 # Configure structured logging
 logging.basicConfig(
@@ -75,7 +77,13 @@ except Exception as _env_err:  # noqa: F841 - best-effort only
 # -------------------------------------------------------------
 
 # Initialize service container
-service_container = get_service_container()
+# service_container = get_service_container()
+
+# Put this before app creation to debug
+try:
+    print("DEBUG: LOADING MAIN_V2.py NOW!!!! CHECKING TITLE...")
+except:
+    pass
 
 # Create FastAPI application
 app = FastAPI(
@@ -149,28 +157,32 @@ app.add_middleware(
 )
 
 # Security headers middleware
-from .middleware.security_headers import SecurityHeadersMiddleware
-app.add_middleware(
-    SecurityHeadersMiddleware,
-    enable_hsts=True,  # Enable HSTS in production with HTTPS
-    hsts_max_age=31536000,  # 1 year
-)
+# from .middleware.security_headers import SecurityHeadersMiddleware
+# app.add_middleware(
+#     SecurityHeadersMiddleware,
+#     enable_hsts=True,  # Enable HSTS in production with HTTPS
+#     hsts_max_age=31536000,  # 1 year
+# )
 
 # Rate limiting middleware
-from .middleware.rate_limiting import RateLimitMiddleware
-app.add_middleware(
-    RateLimitMiddleware,
-    requests_per_minute=100,  # Configurable via environment
-    burst_size=20,
-    exempt_paths=["/health", "/docs", "/redoc", "/openapi.json", "/api/v1/health"],
-)
+# from .middleware.rate_limiting import RateLimitMiddleware
+# app.add_middleware(
+#    RateLimitMiddleware,
+#    requests_per_minute=100,  # Configurable via environment
+#    burst_size=20,
+#    exempt_paths=["/health", "/docs", "/redoc", "/openapi.json", "/api/v1/health"],
+# )
 
 # Include API version routers
-app.include_router(v1_router)
+# app.include_router(v1_router)
+
+# Include MCP Bridge Router
+from .api import mcp_bridge
+app.include_router(mcp_bridge.router)
 
 # Include integrations router if available
-if integrations_router:
-    app.include_router(integrations_router)
+# if integrations_router:
+#     app.include_router(integrations_router)
 
 # Root redirect to documentation
 @app.get("/", include_in_schema=False)
@@ -462,10 +474,10 @@ async def startup_event():
         # Initialize database optimization (connection pool and minimal schema for SQLite)
         await initialize_database_optimization()
         # Start parallel video processor for availability
-        try:
-            await parallel_processor.start()
-        except Exception as e:
-            logger.warning(f"Parallel processor not started: {e}")
+        # try:
+        #     await parallel_processor.start()
+        # except Exception as e:
+        #     logger.warning(f"Parallel processor not started: {e}")
         logger.info("🎯 API is ready to handle requests")
         
         # Log configuration summary
@@ -490,10 +502,10 @@ async def shutdown_event():
     try:
         await service_container.shutdown()
         # Stop parallel processor and shutdown DB optimization
-        try:
-            await parallel_processor.stop()
-        except Exception:
-            pass
+        # try:
+        #     await parallel_processor.stop()
+        # except Exception:
+        #     pass
         try:
             await shutdown_database_optimization()
         except Exception:

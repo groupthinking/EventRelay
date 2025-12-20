@@ -28,10 +28,10 @@ export default defineConfig({
 	plugins: [
 		react(),
 		svgr(),
-		// cloudflare({
-		// 	configPath: 'wrangler.jsonc',
-		// 	// experimental: { remoteBindings: true },
-		// }), // Add the node polyfills plugin here
+		cloudflare({
+			configPath: 'wrangler.jsonc',
+			// experimental: { remoteBindings: true },
+		}), // Add the node polyfills plugin here
 		// nodePolyfills({
 		//     exclude: [
 		//       'tty', // Exclude 'tty' module

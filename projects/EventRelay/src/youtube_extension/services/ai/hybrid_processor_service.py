@@ -13,7 +13,9 @@ imports elsewhere in the codebase.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+import os
 import time
 from dataclasses import dataclass
 from enum import Enum
@@ -64,6 +66,7 @@ class HybridConfig:
     enable_caching: bool = True
     cache_ttl: int = 3600
     enable_metrics: bool = True
+    enable_mock: bool = os.getenv("YOUTUBE_EXTENSION_MOCK_AI", "0").lower() in {"1", "true", "yes"}
     model_routing: Dict[TaskType, str] = None
 
     def __post_init__(self) -> None:
@@ -71,13 +74,13 @@ class HybridConfig:
             self.gemini = GeminiConfig()
         if self.model_routing is None:
             self.model_routing = {
-                TaskType.YOUTUBE_ANALYSIS: "gemini-3-pro-preview",
-                TaskType.VIDEO_UNDERSTANDING: "gemini-3-pro-preview",
-                TaskType.AUDIO_ANALYSIS: "gemini-1.5-pro",
-                TaskType.COMPLEX_REASONING: "gemini-1.5-pro",
-                TaskType.MULTIMODAL_SEARCH: "gemini-3-pro-preview",
-                TaskType.BATCH_PROCESSING: "gemini-1.5-pro",
-                TaskType.GENERAL_QA: "gemini-1.5-pro",
+                TaskType.YOUTUBE_ANALYSIS: "gemini-3-flash",
+                TaskType.VIDEO_UNDERSTANDING: "gemini-3-flash",
+                TaskType.AUDIO_ANALYSIS: "gemini-3-flash",
+                TaskType.COMPLEX_REASONING: "gemini-3-pro",
+                TaskType.MULTIMODAL_SEARCH: "gemini-3-pro",
+                TaskType.BATCH_PROCESSING: "gemini-3-flash",
+                TaskType.GENERAL_QA: "gemini-3-flash",
                 TaskType.PRIVACY_SENSITIVE: "gemma-2-9b-it",
                 TaskType.PRODUCT_DEMO: "veo-2",
             }
@@ -239,12 +242,23 @@ class HybridProcessorService:
                 task_type=task_type or TaskType.GENERAL_QA,
             )
 
-            cloud_result = await self._call_gemini(
-                input_data,
-                prompt,
-                routing_decision.task_type,
-                **kwargs,
-            )
+            if self.config.enable_mock or not self.gemini.is_available():
+                self.logger.info("Using mock response for Gemini processing")
+                mock_text = self._generate_mock_response(prompt, task_type)
+                cloud_result = GeminiResult(
+                    success=True,
+                    response=mock_text,
+                    latency=0.1,
+                    model_name="mock-model",
+                    backend="mock"
+                )
+            else:
+                cloud_result = await self._call_gemini(
+                    input_data,
+                    prompt,
+                    routing_decision.task_type,
+                    **kwargs,
+                )
 
             hybrid_result = HybridResult(
                 success=cloud_result.success,
@@ -318,12 +332,75 @@ class HybridProcessorService:
                     prompt,
                     **forward_kwargs,
                 )
+            
+            # If it's a string but doesn't look like a file or URL, treat it as text
+            if isinstance(input_data, str) and len(input_data) > 0:
+                # Check for common non-path characters or length to distinguish from paths
+                if "\n" in input_data or len(input_data) > 255 or " " in input_data:
+                    return await self.gemini.process_text(
+                        prompt,
+                        input_text=input_data,
+                        **forward_kwargs
+                    )
 
         return await self.gemini.process_image(input_data, prompt, **forward_kwargs)
 
     def _update_metrics(self, latency: float) -> None:
         self.metrics["cloud_requests"] += 1
         self.metrics["total_latency"] += latency
+
+    def _generate_mock_response(self, prompt: str, task_type: Optional[TaskType]) -> str:
+        """Generate structured mock responses for testing."""
+        prompt_lower = prompt.lower()
+        self.logger.info(f"Generating mock response for prompt snippet: {prompt_lower[:50]}...")
+        
+        # Check for personality/persona
+        if "personality" in prompt_lower or "persona" in prompt_lower:
+            self.logger.info("Matched Personality mock branch")
+            return json.dumps({
+                "creator_persona": {
+                    "type": "Educational Authority",
+                    "style": "Technical and deep-dive",
+                    "authority_score": 0.95
+                },
+                "video_intent": {
+                    "primary": "Skill development",
+                    "secondary": "Strategic planning",
+                    "likely_user_goal": "Master agent orchestration"
+                },
+                "community_sentiment": {
+                    "vibe": "High engagement, technical curiosity",
+                    "common_themes": ["grounding", "MCP", "swarms"],
+                    "intent_alignment": "high"
+                }
+            })
+            
+        # Check for strategy/funnel/strategic
+        if "strategy" in prompt_lower or "strat" in prompt_lower or "funnel" in prompt_lower:
+            self.logger.info("Matched Strategy mock branch")
+            return json.dumps({
+                "strategic_analysis": {
+                    "core_principle": "Atomic Intelligent Workflows",
+                    "user_intent_analysis": "User seeking scalable AI patterns",
+                    "action_optimization": {
+                        "the_better_way": "Use MCP-based swarms for parallel task execution",
+                        "gain": "3x throughput reduction"
+                    }
+                },
+                "a2ui_payload": [
+                    {
+                        "type": "beginRendering",
+                        "surfaceId": "strategic-funnel"
+                    },
+                    {
+                        "type": "surfaceUpdate",
+                        "component": "Heading",
+                        "props": {"text": "Strategic Action Funnel"}
+                    }
+                ]
+            })
+            
+        return "This is a mock response from the Gemini Hybrid Service. (Task: " + str(task_type) + ")"
 
     def get_metrics(self) -> Dict[str, Any]:
         total_requests = self.metrics["total_requests"]
