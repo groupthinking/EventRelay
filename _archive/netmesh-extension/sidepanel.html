@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NetMesh Coach</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background-color: #0f0f11; color: white; font-family: 'Inter', sans-serif; }
+        .glass { background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); }
+        /* Custom scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+    </style>
+</head>
+<body class="w-full h-screen flex flex-col overflow-hidden">
+    
+    <!-- Top Bar -->
+    <div class="p-4 border-b border-white/10 flex justify-between items-center bg-black/50">
+        <h1 class="font-bold text-lg bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-500">NetMesh Vision</h1>
+        <div id="statusDot" class="w-2 h-2 rounded-full bg-red-500"></div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="flex-1 p-4 flex flex-col gap-4 overflow-y-auto">
+        
+        <!-- Live Preview (Tab View) -->
+        <div class="aspect-video bg-black rounded-xl overflow-hidden glass relative group">
+            <video id="previewVideo" autoplay playsinline muted class="w-full h-full object-cover opacity-50"></video>
+            <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <span class="text-xs font-mono text-gray-400">ANALYZING ACTIVE TAB</span>
+            </div>
+        </div>
+
+        <!-- AI Feedback Stream -->
+        <div id="chatFeed" class="flex-1 space-y-3 min-h-[200px]">
+            <!-- Messages inject here -->
+            <div class="p-3 rounded-lg bg-white/5 border border-white/10 text-sm text-gray-300">
+                Ready to analyze your content. Click Start to begin.
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Controls -->
+    <div class="p-4 bg-black/50 border-t border-white/10">
+        <button id="btnAction" class="w-full py-3 rounded-lg bg-blue-600 hover:bg-blue-500 font-semibold transition-all shadow-lg shadow-blue-900/20">
+            Start Analysis
+        </button>
+    </div>
+
+    <script>
+        const videoEl = document.getElementById('previewVideo');
+        const btnAction = document.getElementById('btnAction');
+        const statusDot = document.getElementById('statusDot');
+        const chatFeed = document.getElementById('chatFeed');
+        
+        // Configuration
+        const TOKEN_ENDPOINT = "https://customer-worker-1.netmesh.ai/session";
+        
+        let peerConnection;
+        let dataChannel;
+        let localStream;
+        let isRunning = false;
+
+        btnAction.onclick = async () => {
+            if (isRunning) {
+                stopSession();
+            } else {
+                await startSession();
+            }
+        };
+
+        async function startSession() {
+            try {
+                btnAction.disabled = true;
+                btnAction.innerText = "Connecting...";
+                
+                // 1. Get Token from our Backend (customer-worker-1)
+                const resp = await fetch(TOKEN_ENDPOINT, { method: 'POST' });
+                if (!resp.ok) throw new Error("Backend Error: Check API Key");
+                const data = await resp.json();
+                const EPHEMERAL_KEY = data.client_secret.value;
+
+                // 2. Capture the current Tab
+                // Note: chrome.tabCapture is for background audio, for video user must select tab usually.
+                // Or use displayMedia.
+                localStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+                videoEl.srcObject = localStream;
+                videoEl.style.opacity = "1";
+
+                // 3. WebRTC Setup
+                peerConnection = new RTCPeerConnection();
+                
+                // Audio Routing
+                const remoteAudio = new Audio();
+                remoteAudio.autoplay = true;
+                peerConnection.ontrack = e => {
+                    if(e.track.kind === 'audio') remoteAudio.srcObject = e.streams[0];
+                };
+
+                // Add Tracks
+                localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+
+                // Data Channel
+                dataChannel = peerConnection.createDataChannel("oai-events");
+                dataChannel.onopen = () => {
+                   pushMessage("AI Connected", "system");
+                   // Configure for Analysis
+                   const config = {
+                       type: "session.update",
+                       session: {
+                           instructions: "You are a YouTube Growth Expert (VidIQ style). You are watching the user's screen. Give brief, punchy advice on what you see (thumbnails, analytics, video edits).",
+                           modalities: ["text", "audio"] 
+                       }
+                   };
+                   dataChannel.send(JSON.stringify(config));
+                };
+
+                dataChannel.onmessage = (e) => {
+                    const event = JSON.parse(e.data);
+                    if(event.type === 'response.audio_transcript.delta') {
+                        // could show subtitles here
+                    }
+                };
+
+                // Offer / Answer
+                const offer = await peerConnection.createOffer();
+                await peerConnection.setLocalDescription(offer);
+
+                const baseUrl = "https://api.openai.com/v1/realtime";
+                const model = "gpt-4o-realtime-preview-2024-12-17";
+                const sdpResponse = await fetch(`${baseUrl}?model=${model}`, {
+                    method: "POST",
+                    body: offer.sdp,
+                    headers: {
+                        Authorization: `Bearer ${EPHEMERAL_KEY}`,
+                        "Content-Type": "application/sdp"
+                    },
+                });
+
+                const answer = { type: "answer", sdp: await sdpResponse.text() };
+                await peerConnection.setRemoteDescription(answer);
+
+                // Success State
+                isRunning = true;
+                btnAction.disabled = false;
+                btnAction.innerText = "Stop Analysis";
+                btnAction.classList.replace("bg-blue-600", "bg-red-600");
+                statusDot.classList.replace("bg-red-500", "bg-green-500");
+
+            } catch (err) {
+                console.error(err);
+                pushMessage("Error: " + err.message, "error");
+                btnAction.disabled = false;
+                btnAction.innerText = "Start Analysis";
+            }
+        }
+
+        function stopSession() {
+            if(peerConnection) peerConnection.close();
+            if(localStream) localStream.getTracks().forEach(t => t.stop());
+            
+            isRunning = false;
+            btnAction.innerText = "Start Analysis";
+            btnAction.classList.replace("bg-red-600", "bg-blue-600");
+            statusDot.classList.replace("bg-green-500", "bg-red-500");
+            videoEl.style.opacity = "0.5";
+        }
+
+        function pushMessage(text, type) {
+            const div = document.createElement('div');
+            div.className = "p-3 rounded-lg bg-white/5 border border-white/10 text-sm text-gray-300 animate-fade-in";
+            if (type === 'error') div.classList.add('text-red-400', 'border-red-500/20');
+            div.innerText = text;
+            chatFeed.prepend(div);
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,59 @@
+# Cloud Build configuration for EventRelay Frontend
+# Builds and deploys the frontend to Cloud Run
+#
+# Usage:
+#   gcloud builds submit --config cloudbuild.frontend.yaml
+
+options:
+  machineType: "E2_HIGHCPU_32"
+
+steps:
+  # Step 1: Build the container image with build args
+  - name: "gcr.io/cloud-builders/docker"
+    id: "build-image"
+    dir: "frontend"
+    args:
+      - "build"
+      - "-t"
+      - "us-central1-docker.pkg.dev/$PROJECT_ID/eventrelay-repo/eventrelay-frontend:$SHORT_SHA"
+      - "-t"
+      - "us-central1-docker.pkg.dev/$PROJECT_ID/eventrelay-repo/eventrelay-frontend:latest"
+      - "--build-arg"
+      - "REACT_APP_API_URL=https://eventrelay-api-dd2hbwryvq-uc.a.run.app"
+      - "--build-arg"
+      - "REACT_APP_WS_URL=wss://eventrelay-api-dd2hbwryvq-uc.a.run.app/ws"
+      - "."
+
+  # Step 2: Push the container image to Artifact Registry
+  - name: "gcr.io/cloud-builders/docker"
+    id: "push-image"
+    args:
+      - "push"
+      - "--all-tags"
+      - "us-central1-docker.pkg.dev/$PROJECT_ID/eventrelay-repo/eventrelay-frontend"
+    waitFor: ["build-image"]
+
+  # Step 3: Deploy to Cloud Run
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    id: "deploy-cloud-run"
+    entrypoint: gcloud
+    args:
+      - "run"
+      - "deploy"
+      - "eventrelay-frontend"
+      - "--image"
+      - "us-central1-docker.pkg.dev/$PROJECT_ID/eventrelay-repo/eventrelay-frontend:$SHORT_SHA"
+      - "--region"
+      - "us-central1"
+      - "--platform"
+      - "managed"
+      - "--allow-unauthenticated"
+      - "--memory"
+      - "512Mi"
+    waitFor: ["push-image"]
+
+images:
+  - "us-central1-docker.pkg.dev/$PROJECT_ID/eventrelay-repo/eventrelay-frontend:$SHORT_SHA"
+  - "us-central1-docker.pkg.dev/$PROJECT_ID/eventrelay-repo/eventrelay-frontend:latest"
+
+timeout: 1800s
