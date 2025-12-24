@@ -33,44 +33,61 @@ async def run_investigator_agent():
         
         print("✅ Connected to PerformanceOptimizer Server")
 
-        # 3. Discovery: The Agent asks "What can I do here?"
+        # 3. Discovery
         tools_response = await session.list_tools()
         available_tools = {tool.name: tool for tool in tools_response.tools}
         
         print(f"🔍 Discovered Tools: {list(available_tools.keys())}")
 
-        # --- A2A Simulation Start ---
-        # In a real scenario, an LLM would decide these steps based on the 'available_tools' list.
-        # Here, we simulate the 'Investigator' deciding to profile a suspicious function.
-
-        target_func = "slow_fibonacci"
+        target_func = "target_function"
         input_val = 30
 
-        print(f"\n🤖 Agent Decision: Benchmarking '{target_func}'...")
+        # --- Phase 1: Investigation ---
+        print(f"\nPhase 1: Benchmarking '{target_func}' (Baseline)...")
         
-        # 4. Execution: Call the 'run_benchmark' tool via MCP
         benchmark_result = await session.call_tool(
             "run_benchmark",
             arguments={"function_name": target_func, "input_value": input_val}
         )
-        
         print(f"📊 {benchmark_result.content[0].text}")
 
-        print(f"\n🤖 Agent Decision: Deep profiling required for '{target_func}'...")
-
-        # 5. Deep Dive: Call the 'get_profile_stats' tool
+        print(f"📉 Getting Profile Stats...")
         profile_result = await session.call_tool(
             "get_profile_stats",
             arguments={"function_name": target_func, "input_value": input_val}
         )
+        # Just show the first few lines to confirm we got it
+        print(f"  (Profile data received, length: {len(profile_result.content[0].text)} chars)")
+        
+        # --- Phase 2: Optimization (Simulated Engineer Agent) ---
+        print(f"\nPhase 2: Engineer Agent is constructing a patch...")
+        
+        optimized_code = """
+def optimized_fibonacci(n: int) -> int:
+    if n <= 1: return n
+    a, b = 0, 1
+    for _ in range(2, n + 1):
+        a, b = b, a + b
+    return b
+"""
+        print(f"🛠️ Submitting Patch for '{target_func}'...")
+        
+        patch_result = await session.call_tool(
+            "submit_patch",
+            arguments={"function_name": target_func, "python_code": optimized_code}
+        )
+        print(f"✨ {patch_result.content[0].text}")
 
-        print("📉 Profiler Output (Top Bottlenecks):")
-        print(profile_result.content[0].text)
+        # --- Phase 3: Verification ---
+        print(f"\nPhase 3: Verifying Optimization...")
         
-        # --- A2A Simulation End ---
-        
-        # The 'Investigator' would now pass this text output to the 'Engineer' Agent
-        # to generate the optimized code.
+        # Run the same benchmark again on the *same function name* which is now patched
+        final_benchmark = await session.call_tool(
+            "run_benchmark",
+            arguments={"function_name": target_func, "input_value": input_val}
+        )
+        print(f"🚀 {final_benchmark.content[0].text}")
+
 
 if __name__ == "__main__":
     asyncio.run(run_investigator_agent())
