@@ -8,6 +8,8 @@ import ast
 import os
 import shutil
 import random
+import importlib.util
+import sys
 from mcp.server.fastmcp import FastMCP
 
 mcp = FastMCP("PerformanceOptimizer")
@@ -15,13 +17,9 @@ mcp = FastMCP("PerformanceOptimizer")
 # --- State Management ---
 
 # Reset to slow implementation for the demo
-
 def slow_fibonacci(n: int) -> int:
     if n <= 1: return n
-    a, b = 0, 1
-    for _ in range(2, n + 1):
-        a, b = b, a + b
-    return b
+    return slow_fibonacci(n-1) + slow_fibonacci(n-2)
 
 # Registry for executable functions
 FUNCTION_REGISTRY = {
@@ -97,6 +95,83 @@ def _perform_ast_rewrite(function_name: str, target_file: str) -> str:
     return f"Success: Optimized source code written to {target_file}."
 
 # --- MCP Tools ---
+
+@mcp.tool()
+def load_target_module(file_path: str) -> str:
+    """
+    INNOVATION: Dynamically imports any Python file from disk and 
+    registers its functions into the FUNCTION_REGISTRY for profiling.
+    """
+    if not os.path.exists(file_path):
+        return f"Error: File {file_path} not found."
+    
+    try:
+        # In this demo, we can just treat the file as a module.
+        # But importlib.util.spec_from_file_location needs a module name.
+        module_name = os.path.basename(file_path).replace(".py", "")
+        spec = importlib.util.spec_from_file_location(module_name, file_path)
+        if not spec or not spec.loader:
+            return "Error: Could not create module spec."
+            
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[module_name] = module
+        spec.loader.exec_module(module)
+        
+        count = 0
+        for name, func in inspect.getmembers(module, inspect.isfunction):
+            # Only register functions defined in the file (ignore imports)
+            if func.__module__ == module_name:
+                FUNCTION_REGISTRY[name] = func
+                count += 1
+                
+        return f"Success: Loaded module '{module_name}'. Registered {count} functions: {list(FUNCTION_REGISTRY.keys())}"
+    except Exception as e:
+        return f"Load Failed: {str(e)}"
+
+@mcp.tool()
+def audit_codebase(file_path: str) -> str:
+    """
+    The 'Auditor': Statically analyzes source code to find recursive functions
+    or potential bottlenecks without running them.
+    """
+    try:
+        with open(file_path, "r") as f:
+            tree = ast.parse(f.read())
+            
+        candidates = []
+        
+        class BottleneckFinder(ast.NodeVisitor):
+            def visit_FunctionDef(self, node):
+                # 1. Detect Recursion
+                is_recursive = False
+                for child in ast.walk(node):
+                    if isinstance(child, ast.Call):
+                        if isinstance(child.func, ast.Name) and child.func.id == node.name:
+                            is_recursive = True
+                            break
+                
+                # 2. Detect High Complexity (Nested Loops)
+                loop_depth = 0
+                has_nested_loops = False
+                for child in ast.walk(node):
+                    if isinstance(child, (ast.For, ast.While)):
+                        for grandchild in ast.walk(child):
+                            if isinstance(grandchild, (ast.For, ast.While)) and grandchild is not child:
+                                has_nested_loops = True
+                
+                if is_recursive:
+                    candidates.append(f"{node.name} (Reason: Recursion Detected)")
+                elif has_nested_loops:
+                    candidates.append(f"{node.name} (Reason: Nested Loops Detected)")
+
+        BottleneckFinder().visit(tree)
+        
+        if not candidates:
+            return "Audit Complete: No obvious bottlenecks found."
+        return f"Audit Report: Found {len(candidates)} candidates for optimization:\n- " + "\n- ".join(candidates)
+        
+    except Exception as e:
+        return f"Audit Failed: {str(e)}"
 
 @mcp.tool()
 def run_benchmark(function_name: str, input_value: int, iterations: int = 1) -> str:
