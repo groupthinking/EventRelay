@@ -21,7 +21,10 @@ mcp = FastMCP("PerformanceOptimizer")
 # Reset to slow implementation for the demo
 def slow_fibonacci(n: int) -> int:
     if n <= 1: return n
-    return slow_fibonacci(n-1) + slow_fibonacci(n-2)
+    a, b = 0, 1
+    for _ in range(2, n + 1):
+        a, b = b, a + b
+    return b
 
 # Registry for executable functions
 FUNCTION_REGISTRY = {
