@@ -8,7 +8,7 @@ from mcp.client.stdio import stdio_client
 
 # --- Configuration ---
 # Point this to the server file we created in the previous step
-SERVER_SCRIPT_PATH = "./profiling_server.py"
+SERVER_SCRIPT_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "profiling_server.py")
 
 async def run_investigator_agent():
     """
