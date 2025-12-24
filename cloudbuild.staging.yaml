@@ -1,4 +1,15 @@
 steps:
+  # [Level 6 Innovation] Autonomous Optimization Gatekeeper
+  # Runs the MCP Agent to audit and optimize code in-place before packaging.
+  # This ensures the deployed artifact includes JIT performance patches.
+  - name: 'python:3.11-slim'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        pip install mcp
+        python3 mcp-servers/mcp-profiling/manager_client.py
+
   # Build the container image
   - name: 'gcr.io/cloud-builders/docker'
     args: ['build', '-t', 'us-central1-docker.pkg.dev/uvai-730bb/uvai-backend/eventrelay-backend:staging', '-f', 'Dockerfile', '.']
