@@ -14,4 +14,21 @@ actions-runner/
 venv/
 __pycache__/
 
+
 _backup_vision_cleanup/
+
+# Added during cleanup
+.build/
+.runtime/
+.venv_*/
+*.log
+*.db
+.coverage
+coverage.xml
+.vscode/
+ai-edge-torch/
+video_representations_extractor-*/
+youtube_processed_videos/
+workflow_results/
+**/*.pyc
+**/__pycache__/
