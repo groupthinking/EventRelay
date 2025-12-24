@@ -1,13 +1,17 @@
-import time
-import cProfile
-import pstats
-import io
-import types
-import inspect
 import ast
+import cProfile
+import importlib.util
+import inspect
+import io
 import os
+import pstats
+import random
 import shutil
 import subprocess
+import sys
+import time
+import types
+
 from mcp.server.fastmcp import FastMCP
 
 mcp = FastMCP("PerformanceOptimizer")
@@ -17,7 +21,10 @@ mcp = FastMCP("PerformanceOptimizer")
 # Reset to slow implementation for the demo
 def slow_fibonacci(n: int) -> int:
     if n <= 1: return n
-    return slow_fibonacci(n-1) + slow_fibonacci(n-2)
+    a, b = 0, 1
+    for _ in range(2, n + 1):
+        a, b = b, a + b
+    return b
 
 # Registry for executable functions
 FUNCTION_REGISTRY = {
@@ -105,9 +112,8 @@ def load_target_module(file_path: str) -> str:
     
     try:
         # In this demo, we can just treat the file as a module.
-        # [Level 7 Innovation] Generate unique module name to prevent collisions
-        file_hash = hashlib.md5(file_path.encode()).hexdigest()[:8]
-        module_name = f"{os.path.basename(file_path).replace('.py', '')}_{file_hash}"
+        # But importlib.util.spec_from_file_location needs a module name.
+        module_name = os.path.basename(file_path).replace(".py", "")
         spec = importlib.util.spec_from_file_location(module_name, file_path)
         if not spec or not spec.loader:
             return "Error: Could not create module spec."
@@ -157,18 +163,18 @@ def audit_codebase(file_path: str) -> str:
                         for grandchild in ast.walk(child):
                             if isinstance(grandchild, (ast.For, ast.While)) and grandchild is not child:
                                 has_nested_loops = True
-                
+
                 if is_recursive:
                     candidates.append(f"{node.name} (Reason: Recursion Detected)")
                 elif has_nested_loops:
                     candidates.append(f"{node.name} (Reason: Nested Loops Detected)")
 
         BottleneckFinder().visit(tree)
-        
+
         if not candidates:
             return "Audit Complete: No obvious bottlenecks found."
         return f"Audit Report: Found {len(candidates)} candidates for optimization:\n- " + "\n- ".join(candidates)
-        
+
     except Exception as e:
         return f"Audit Failed: {str(e)}"
 
@@ -176,7 +182,7 @@ def audit_codebase(file_path: str) -> str:
 def run_benchmark(function_name: str, input_value: int, iterations: int = 1) -> str:
     if function_name not in FUNCTION_REGISTRY:
         return f"Error: Function '{function_name}' not found."
-    
+
     func = FUNCTION_REGISTRY[function_name]
     try:
         start_time = time.perf_counter()
@@ -198,7 +204,7 @@ def get_profile_stats(function_name: str, input_value: int) -> str:
     profiler.enable()
     func(input_value)
     profiler.disable()
-    
+
     s = io.StringIO()
     ps = pstats.Stats(profiler, stream=s).sort_stats(pstats.SortKey.CUMULATIVE)
     ps.print_stats(10)
@@ -207,17 +213,16 @@ def get_profile_stats(function_name: str, input_value: int) -> str:
 @mcp.tool()
 def submit_patch(function_name: str, python_code: str) -> str:
     try:
+        # Use globals().copy() so patches can access imports like 'time', 'random'
+        exec_globals = globals().copy()
         local_scope = {}
         exec(python_code, exec_globals, local_scope)
         
-        new_func = None
-        for key, value in local_scope.items():
-            if isinstance(value, types.FunctionType):
-                new_func = value
-                break
-        
-        if not new_func:
-            return "Error: No function definition found in the provided code."
+        # Enforce that the patch defines the correct function name to prevent registry drift
+        if function_name in local_scope and isinstance(local_scope[function_name], types.FunctionType):
+            new_func = local_scope[function_name]
+        else:
+            return f"Error: Patch must define a function named '{function_name}'."
 
         FUNCTION_REGISTRY[function_name] = new_func
         PENDING_PATCHES[function_name] = python_code
@@ -230,7 +235,7 @@ def submit_patch(function_name: str, python_code: str) -> str:
 @mcp.tool()
 def generate_parity_tests(function_name: str, test_inputs: list[int]) -> str:
     """
-    Runs the CURRENT (presumably slow but correct) function against inputs 
+    Runs the CURRENT (presumably slow but correct) function against inputs
     to establish a 'Ground Truth' baseline.
     """
     if function_name not in FUNCTION_REGISTRY:
@@ -280,18 +285,18 @@ def verify_parity(function_name: str) -> str:
     return f"✅ Parity Check Passed: {len(PARITY_TEST_SUITE)}/{len(PARITY_TEST_SUITE)} outputs match baseline."
 
 @mcp.tool()
-def persist_optimization(function_name: str, file_path: str) -> str:
+def persist_optimization(function_name: str) -> str:
     try:
-        return _perform_ast_rewrite(function_name, file_path)
+        return _perform_ast_rewrite(function_name, __file__)
     except Exception as e:
         return f"Persistence Failed: {str(e)}"
 
 @mcp.tool()
-def persist_optimization_safe(function_name: str, file_path: str) -> str:
+def persist_optimization_safe(function_name: str) -> str:
     """
     A safer version of persist that creates a .bak file before overwriting.
     """
-    target_file = file_path
+    target_file = __file__
     
     # 1. Create Backup
     backup_file = target_file + ".bak"
@@ -333,7 +338,8 @@ def git_create_branch(branch_name: str) -> str:
     """
     try:
         # Check if repo is clean first (optional, but good practice)
-        subprocess.run(["git", "checkout", "-b", branch_name], check=True, capture_output=True)
+        repo_dir = os.path.dirname(os.path.abspath(__file__))
+        subprocess.run(["git", "checkout", "-b", branch_name], cwd=repo_dir, check=True, capture_output=True)
         return f"Success: Switched to new branch '{branch_name}'."
     except subprocess.CalledProcessError as e:
         return f"Git Error: {e.stderr.decode().strip()}"
@@ -355,16 +361,50 @@ def git_commit_optimization(function_name: str, baseline_time: float, optimized_
         f"- Logic Parity: Verified via TDD\n"
     )
     
+    repo_dir = os.path.dirname(os.path.abspath(__file__))
     try:
         # Stage the specific file (assuming we know it, or just -a for all tracked)
-        subprocess.run(["git", "add", "-u"], check=True, capture_output=True)
+        subprocess.run(["git", "add", "-u"], cwd=repo_dir, check=True, capture_output=True)
         
         # Commit
-        subprocess.run(["git", "commit", "-m", message], check=True, capture_output=True)
-        
+        subprocess.run(["git", "commit", "-m", message], cwd=repo_dir, check=True, capture_output=True)
+
         return f"Success: Committed changes with message:\n'{message.splitlines()[0]}'"
     except subprocess.CalledProcessError as e:
         return f"Git Commit Failed: {e.stdout.decode() if e.stdout else ''} {e.stderr.decode() if e.stderr else str(e)}"
+
+@mcp.tool()
+def benchmark_and_commit(function_name: str, input_value: int, baseline_time: float, iterations: int = 1) -> str:
+    """
+    INNOVATION: A composite tool that runs a benchmark, then automatically
+    commits the result with a proof-of-optimization message.
+    """
+    # --- 1. Benchmark Phase (from run_benchmark) ---
+    if function_name not in FUNCTION_REGISTRY:
+        return f"Error: Function '{function_name}' not found."
+
+    func = FUNCTION_REGISTRY[function_name]
+    try:
+        start_time = time.perf_counter()
+        for _ in range(iterations):
+            func(input_value)
+        end_time = time.perf_counter()
+        optimized_time = (end_time - start_time) / iterations
+        benchmark_msg = f"Benchmark Result: {function_name}({input_value}) took {optimized_time:.6f} seconds."
+    except Exception as e:
+        return f"Runtime Error during benchmark: {str(e)}"
+
+    # --- 2. Commit Phase (from git_commit_optimization) ---
+    try:
+        # Reuse the existing tool for consistency
+        commit_result = git_commit_optimization(function_name, baseline_time, optimized_time)
+        if "Success" not in commit_result:
+            return f"{benchmark_msg}\nCommit Failed: {commit_result}"
+
+        return f"{benchmark_msg}\n{commit_result}"
+    except Exception as e:
+        return f"Commit Phase Failed: {str(e)}"
+
 
 @mcp.tool()
 def git_reset_hard() -> str:
@@ -372,8 +412,27 @@ def git_reset_hard() -> str:
     Emergency tool: Reverts all local changes to the last commit.
     Useful if the agent messes up the file during patching.
     """
-    subprocess.run(["git", "reset", "--hard"], check=True, capture_output=True)
+    repo_dir = os.path.dirname(os.path.abspath(__file__))
+    subprocess.run(["git", "reset", "--hard"], cwd=repo_dir, check=True, capture_output=True)
     return "Success: Hard reset performed. Working directory clean."
 
 if __name__ == "__main__":
-    mcp.run()
+    # Innovation: CLI mode to execute tools directly for testing/CI
+    if len(sys.argv) > 1:
+        tool_name = sys.argv[1]
+        if tool_name in globals():
+            func = globals()[tool_name]
+            args = []
+            for arg in sys.argv[2:]:
+                try:
+                    args.append(int(arg))
+                except ValueError:
+                    try:
+                        args.append(float(arg))
+                    except ValueError:
+                        args.append(arg)
+            print(func(*args))
+        else:
+            print(f"Error: Tool '{tool_name}' not found.")
+    else:
+        mcp.run()
