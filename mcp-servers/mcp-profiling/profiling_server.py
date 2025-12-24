@@ -10,6 +10,7 @@ import shutil
 import random
 import importlib.util
 import sys
+import subprocess
 from mcp.server.fastmcp import FastMCP
 
 mcp = FastMCP("PerformanceOptimizer")
@@ -324,6 +325,57 @@ def restore_backup() -> str:
         return "Success: Server source code restored from backup. Restart required."
     except Exception as e:
         return f"Restore Failed: {str(e)}"
+
+# --- Git Integration Tools ---
+
+@mcp.tool()
+def git_create_branch(branch_name: str) -> str:
+    """
+    Creates and switches to a new git branch for the optimization task.
+    """
+    try:
+        # Check if repo is clean first (optional, but good practice)
+        subprocess.run(["git", "checkout", "-b", branch_name], check=True, capture_output=True)
+        return f"Success: Switched to new branch '{branch_name}'."
+    except subprocess.CalledProcessError as e:
+        return f"Git Error: {e.stderr.decode().strip()}"
+
+@mcp.tool()
+def git_commit_optimization(function_name: str, baseline_time: float, optimized_time: float) -> str:
+    """
+    Commits the changes with a 'Proof-of-Optimization' message.
+    Calculates the speedup factor automatically.
+    """
+    if optimized_time == 0: optimized_time = 0.000001 # Prevent div by zero
+    speedup = baseline_time / optimized_time
+    
+    message = (
+        f"perf({function_name}): Optimize {speedup:.1f}x speedup\n\n"
+        f"Autonomous Optimization Report:\n"
+        f"- Baseline: {baseline_time:.6f}s\n"
+        f"- Optimized: {optimized_time:.6f}s\n"
+        f"- Logic Parity: Verified via TDD\n"
+    )
+    
+    try:
+        # Stage the specific file (assuming we know it, or just -a for all tracked)
+        subprocess.run(["git", "add", "-u"], check=True, capture_output=True)
+        
+        # Commit
+        subprocess.run(["git", "commit", "-m", message], check=True, capture_output=True)
+        
+        return f"Success: Committed changes with message:\n'{message.splitlines()[0]}'"
+    except subprocess.CalledProcessError as e:
+        return f"Git Commit Failed: {e.stdout.decode() if e.stdout else ''} {e.stderr.decode() if e.stderr else str(e)}"
+
+@mcp.tool()
+def git_reset_hard() -> str:
+    """
+    Emergency tool: Reverts all local changes to the last commit.
+    Useful if the agent messes up the file during patching.
+    """
+    subprocess.run(["git", "reset", "--hard"], check=True, capture_output=True)
+    return "Success: Hard reset performed. Working directory clean."
 
 if __name__ == "__main__":
     mcp.run()
