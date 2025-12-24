@@ -416,6 +416,30 @@ def git_reset_hard() -> str:
     subprocess.run(["git", "reset", "--hard"], cwd=repo_dir, check=True, capture_output=True)
     return "Success: Hard reset performed. Working directory clean."
 
+@mcp.tool()
+def list_tools() -> str:
+    """
+    Lists all available MCP tools and their docstrings.
+    """
+    # List of known tools wrapped by @mcp.tool
+    # We access them from globals() to ensure we get the decorated versions or raw functions
+    # Note: Decorators might wrap them.
+    
+    tools = [
+        load_target_module, audit_codebase, run_benchmark, get_profile_stats,
+        submit_patch, generate_parity_tests, verify_parity, persist_optimization,
+        persist_optimization_safe, restore_backup, git_create_branch, 
+        git_commit_optimization, benchmark_and_commit, git_reset_hard, list_tools
+    ]
+    
+    output = []
+    for func in tools:
+        name = func.__name__
+        doc = inspect.getdoc(func) or "No documentation."
+        output.append(f"Tool: {name}\nDoc: {doc}")
+        
+    return "\n---\n".join(output)
+
 if __name__ == "__main__":
     # Innovation: CLI mode to execute tools directly for testing/CI
     if len(sys.argv) > 1:
