@@ -108,6 +108,7 @@ external/ml-fastvlm/
 *.temp
 *.bak
 .cache/
+ai-edge-torch/
 
 # Security - Never commit real keys
 *.pem
