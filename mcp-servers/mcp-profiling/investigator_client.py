@@ -39,7 +39,7 @@ async def run_investigator_agent():
         
         print(f"🔍 Discovered Tools: {list(available_tools.keys())}")
 
-        target_func = "target_function"
+        target_func = "slow_fibonacci"
         input_val = 30
 
         # --- Phase 1: Investigation ---
