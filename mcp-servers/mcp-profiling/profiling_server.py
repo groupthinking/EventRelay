@@ -7,10 +7,6 @@ import inspect
 import ast
 import os
 import shutil
-import random
-import importlib.util
-import sys
-import hashlib
 import subprocess
 from mcp.server.fastmcp import FastMCP
 
@@ -212,7 +208,7 @@ def get_profile_stats(function_name: str, input_value: int) -> str:
 def submit_patch(function_name: str, python_code: str) -> str:
     try:
         local_scope = {}
-        exec(python_code, {}, local_scope)
+        exec(python_code, exec_globals, local_scope)
         
         new_func = None
         for key, value in local_scope.items():
