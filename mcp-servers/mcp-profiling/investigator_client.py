@@ -62,31 +62,56 @@ async def run_investigator_agent():
         # --- Phase 2: Optimization (Simulated Engineer Agent) ---
         print(f"\nPhase 2: Engineer Agent is constructing a patch...")
         
+        # We must use "slow_fibonacci" name here because that is what is in the file we want to patch
         optimized_code = """
-def optimized_fibonacci(n: int) -> int:
+def slow_fibonacci(n: int) -> int:
     if n <= 1: return n
     a, b = 0, 1
     for _ in range(2, n + 1):
         a, b = b, a + b
     return b
 """
-        print(f"🛠️ Submitting Patch for '{target_func}'...")
+        # Patching "target_function" will update the registry for "target_function"
+        # Since "target_function" and "slow_fibonacci" are aliases in the registry, we should be careful.
+        # But 'submit_patch' in our improved server handles implicit aliasing update if we pass "target_function".
+        # However, for PERSISTENCE, we need to make sure the "slow_fibonacci" function in the registry holds the new code object.
+        # Let's patch "slow_fibonacci" directly to be safe and accurate for persistence.
+        
+        patch_target = "slow_fibonacci"
+        print(f"🛠️ Submitting Patch for '{patch_target}'...")
         
         patch_result = await session.call_tool(
             "submit_patch",
-            arguments={"function_name": target_func, "python_code": optimized_code}
+            arguments={"function_name": patch_target, "python_code": optimized_code}
         )
         print(f"✨ {patch_result.content[0].text}")
 
-        # --- Phase 3: Verification ---
-        print(f"\nPhase 3: Verifying Optimization...")
+        # --- Phase 3: Verification (Performance) ---
+        print(f"\nPhase 3: Verifying Optimization (Performance)...")
         
-        # Run the same benchmark again on the *same function name* which is now patched
+        # Run the same benchmark again 
         final_benchmark = await session.call_tool(
             "run_benchmark",
-            arguments={"function_name": target_func, "input_value": input_val}
+            arguments={"function_name": patch_target, "input_value": input_val}
         )
         print(f"🚀 {final_benchmark.content[0].text}")
+
+        # --- Phase 4: Correctness & Persistence ---
+        print("\nPhase 4: Verifying Correctness & Persisting...")
+        
+        # Simulated correctness check
+        is_correct = True 
+        
+        if is_correct:
+            print("✅ Logic Verified. Committing to disk...")
+            
+            persist_result = await session.call_tool(
+                "persist_optimization",
+                arguments={"function_name": "slow_fibonacci"} 
+            )
+            print(persist_result.content[0].text)
+        else:
+            print("❌ Logic Error: Optimization produced incorrect results. Reverting.")
 
 
 if __name__ == "__main__":

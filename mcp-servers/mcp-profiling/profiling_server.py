@@ -3,6 +3,9 @@ import cProfile
 import pstats
 import io
 import types
+import inspect
+import ast
+import os
 from mcp.server.fastmcp import FastMCP
 
 # Initialize the MCP Server
@@ -16,7 +19,8 @@ def slow_fibonacci(n: int) -> int:
     return slow_fibonacci(n-1) + slow_fibonacci(n-2)
 
 FUNCTION_REGISTRY = {
-    "target_function": slow_fibonacci # We alias the function we are working on
+    "slow_fibonacci": slow_fibonacci,
+    "target_function": slow_fibonacci # Alias for the agent
 }
 
 # --- MCP Tools ---
@@ -77,10 +81,77 @@ def submit_patch(function_name: str, python_code: str) -> str:
 
         # Update the registry
         FUNCTION_REGISTRY[function_name] = new_func
+        
+        # Also update the alias if we patched the specific function
+        if function_name == "slow_fibonacci":
+            FUNCTION_REGISTRY["target_function"] = new_func
+        # Or vice versa if we patched the alias, map it back (though less reliable without metadata)
+        if function_name == "target_function":
+             FUNCTION_REGISTRY["slow_fibonacci"] = new_func
+
         return f"Success: '{function_name}' has been hot-patched with new logic."
         
     except Exception as e:
         return f"Patch Failed: {str(e)}"
+
+@mcp.tool()
+def persist_optimization(function_name: str) -> str:
+    """
+    Commits the currently hot-patched function in memory to the actual source file on disk.
+    Uses introspection to locate the original source lines and replaces them.
+    """
+    if function_name not in FUNCTION_REGISTRY:
+        return f"Error: '{function_name}' is not in the registry."
+    
+    # Get the function object (which is currently the optimized version in memory)
+    func_obj = FUNCTION_REGISTRY[function_name]
+    
+    try:
+        # 1. Get the source code of the NEW (optimized) function
+        new_source = inspect.getsource(func_obj)
+        
+        # 2. We need to find where the OLD function was defined.
+        # For this implementation, we assume the file is known or passed in context.
+        target_file = __file__  # Self-modifying for this demo
+        
+        with open(target_file, 'r') as f:
+            lines = f.readlines()
+        
+        # 3. Parse the file to find the original function definition
+        # We use AST to find the line numbers of the function named 'function_name'
+        with open(target_file, 'r') as f:
+            tree = ast.parse(f.read())
+            
+        target_node = None
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef) and node.name == function_name:
+                target_node = node
+                break
+        
+        if not target_node:
+            return f"Error: Could not locate original function definition for '{function_name}' in source file."
+            
+        # 4. Surgical Replacement
+        # Calculate start and end lines (1-based index to 0-based list index)
+        start_line = target_node.lineno - 1
+        end_line = target_node.end_lineno
+        
+        # Prepare the new source (ensure indentation matches context if needed)
+        # For simplicity, we assume top-level or consistent indentation here.
+        
+        print(f"Replacing lines {start_line+1}-{end_line} in {target_file}")
+        
+        # Replace the lines
+        lines[start_line:end_line] = [new_source + "\n"]
+        
+        # 5. Write back to disk
+        with open(target_file, 'w') as f:
+            f.writelines(lines)
+            
+        return f"Success: Optimized source code written to {target_file}."
+
+    except Exception as e:
+        return f"Persistence Failed: {str(e)}"
 
 if __name__ == "__main__":
     mcp.run()
