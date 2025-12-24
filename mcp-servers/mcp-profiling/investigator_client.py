@@ -42,27 +42,29 @@ async def run_investigator_agent():
         target_func = "slow_fibonacci"
         input_val = 30
 
-        # --- Phase 1: Investigation ---
-        print(f"\nPhase 1: Benchmarking '{target_func}' (Baseline)...")
+        # --- Phase 1: Establish Baseline & Generate Tests ---
+        print(f"\n📉 Running Baseline & Generating Tests for '{target_func}'...")
         
-        benchmark_result = await session.call_tool(
+        # We pick a range of inputs: small (edge cases) and medium
+        test_inputs = [0, 1, 2, 5, 10, 15] 
+        
+        test_result = await session.call_tool(
+            "generate_parity_tests",
+            arguments={"function_name": target_func, "test_inputs": test_inputs}
+        )
+        print(test_result.content[0].text)
+        
+        # Run benchmark to get baseline speed
+        benchmark_baseline = await session.call_tool(
             "run_benchmark",
             arguments={"function_name": target_func, "input_value": input_val}
         )
-        print(f"📊 {benchmark_result.content[0].text}")
+        print(f"📊 Baseline Speed: {benchmark_baseline.content[0].text}")
 
-        print(f"📉 Getting Profile Stats...")
-        profile_result = await session.call_tool(
-            "get_profile_stats",
-            arguments={"function_name": target_func, "input_value": input_val}
-        )
-        # Just show the first few lines to confirm we got it
-        print(f"  (Profile data received, length: {len(profile_result.content[0].text)} chars)")
+
+        # --- Phase 2: Apply Optimization Patch ---
+        print(f"\n🚀 Applying Optimization Patch...")
         
-        # --- Phase 2: Optimization (Simulated Engineer Agent) ---
-        print(f"\nPhase 2: Engineer Agent is constructing a patch...")
-        
-        # We must use "slow_fibonacci" name here because that is what is in the file we want to patch
         optimized_code = """
 def slow_fibonacci(n: int) -> int:
     if n <= 1: return n
@@ -71,47 +73,39 @@ def slow_fibonacci(n: int) -> int:
         a, b = b, a + b
     return b
 """
-        # Patching "target_function" will update the registry for "target_function"
-        # Since "target_function" and "slow_fibonacci" are aliases in the registry, we should be careful.
-        # But 'submit_patch' in our improved server handles implicit aliasing update if we pass "target_function".
-        # However, for PERSISTENCE, we need to make sure the "slow_fibonacci" function in the registry holds the new code object.
-        # Let's patch "slow_fibonacci" directly to be safe and accurate for persistence.
-        
-        patch_target = "slow_fibonacci"
-        print(f"🛠️ Submitting Patch for '{patch_target}'...")
-        
         patch_result = await session.call_tool(
             "submit_patch",
-            arguments={"function_name": patch_target, "python_code": optimized_code}
+            arguments={"function_name": target_func, "python_code": optimized_code}
         )
         print(f"✨ {patch_result.content[0].text}")
 
-        # --- Phase 3: Verification (Performance) ---
-        print(f"\nPhase 3: Verifying Optimization (Performance)...")
-        
-        # Run the same benchmark again 
-        final_benchmark = await session.call_tool(
+        # --- Phase 3: Verify Performance ---
+        print(f"\n📈 Verifying Performance...")
+        benchmark_new = await session.call_tool(
             "run_benchmark",
-            arguments={"function_name": patch_target, "input_value": input_val}
+            arguments={"function_name": target_func, "input_value": input_val}
         )
-        print(f"🚀 {final_benchmark.content[0].text}")
+        print(f"🚀 Optimized Speed: {benchmark_new.content[0].text}")
 
-        # --- Phase 4: Correctness & Persistence ---
-        print("\nPhase 4: Verifying Correctness & Persisting...")
-        
-        # Simulated correctness check
-        is_correct = True 
-        
-        if is_correct:
-            print("✅ Logic Verified. Committing to disk...")
-            
+        # --- Phase 4: Verify Correctness (TDD) ---
+        print("\n🧪 Verifying Logic Parity...")
+        parity_result = await session.call_tool(
+            "verify_parity",
+            arguments={"function_name": target_func}
+        )
+        print(parity_result.content[0].text)
+
+        # --- Phase 5: Conditional Persist ---
+        if "✅" in parity_result.content[0].text:
+            print("\n💾 Tests Passed. Persisting to disk (with backup)...")
             persist_result = await session.call_tool(
-                "persist_optimization",
-                arguments={"function_name": "slow_fibonacci"} 
+                "persist_optimization_safe", # Use the new safe tool
+                arguments={"function_name": target_func}
             )
             print(persist_result.content[0].text)
         else:
-            print("❌ Logic Error: Optimization produced incorrect results. Reverting.")
+            print("\n⚠️ Tests Failed! Discarding patch.")
+            # Ideally, we would call a 'rollback' tool here if implemented
 
 
 if __name__ == "__main__":

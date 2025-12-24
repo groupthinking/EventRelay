@@ -6,12 +6,15 @@ import types
 import inspect
 import ast
 import os
+import shutil
+import random
 from mcp.server.fastmcp import FastMCP
 
 mcp = FastMCP("PerformanceOptimizer")
 
 # --- State Management ---
 
+# Reset to slow implementation for the demo
 
 def slow_fibonacci(n: int) -> int:
     if n <= 1: return n
@@ -25,10 +28,73 @@ FUNCTION_REGISTRY = {
     "slow_fibonacci": slow_fibonacci
 }
 
-# INNOVATION: Staging Area
-# Stores the raw source code of patches that are active in memory 
-# but not yet committed to disk.
+# Staging Area for patches
 PENDING_PATCHES = {}
+
+# In-Memory Test Suite for Parity Check
+PARITY_TEST_SUITE = []
+
+# --- Helper Functions (Internal) ---
+
+def _perform_ast_rewrite(function_name: str, target_file: str) -> str:
+    """Internal helper to perform the AST rewrite logic."""
+    # 1. Retrieve the Source Code
+    if function_name in PENDING_PATCHES:
+        new_source = PENDING_PATCHES[function_name]
+    elif function_name in FUNCTION_REGISTRY:
+        try:
+            new_source = inspect.getsource(FUNCTION_REGISTRY[function_name])
+        except OSError:
+            raise ValueError("Error: Cannot retrieve source. Function is dynamic and not in Staging Area.")
+    else:
+        raise ValueError(f"Error: '{function_name}' is unknown.")
+
+    # 2. Read Target File in pure text mode
+    try:
+        with open(target_file, 'r') as f:
+            source_content = f.read()
+    except IOError as e:
+         raise ValueError(f"Error reading file: {e}")
+        
+    # 3. Parse AST
+    try:
+        tree = ast.parse(source_content)
+    except SyntaxError as e:
+        raise ValueError(f"Error parsing target file AST: {e}")
+
+    target_node = None
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name == function_name:
+            target_node = node
+            break
+    
+    if not target_node:
+        raise ValueError(f"Error: Could not find definition of '{function_name}' in {target_file}.")
+
+    # 4. Surgical Replacement
+    lines = source_content.splitlines(keepends=True)
+    start_index = target_node.lineno - 1
+    end_index = target_node.end_lineno
+    
+    if not new_source.endswith('\n'):
+        new_source += '\n'
+
+    # Validate that we aren't replacing the whole file by accident
+    if start_index < 0 or end_index > len(lines):
+        raise ValueError("Error: Invalid line ranges calculated.")
+
+    print(f"Replacing lines {start_index+1} to {end_index} in {target_file}")
+    lines[start_index:end_index] = [new_source]
+    
+    # 5. Write to Disk
+    with open(target_file, 'w') as f:
+        f.writelines(lines)
+        
+    # Cleanup staging
+    if function_name in PENDING_PATCHES:
+        del PENDING_PATCHES[function_name]
+        
+    return f"Success: Optimized source code written to {target_file}."
 
 # --- MCP Tools ---
 
@@ -66,15 +132,10 @@ def get_profile_stats(function_name: str, input_value: int) -> str:
 
 @mcp.tool()
 def submit_patch(function_name: str, python_code: str) -> str:
-    """
-    Hot-swaps a function in memory and stages the source code for persistence.
-    """
     try:
-        # 1. Execute the new code in a temporary scope
         local_scope = {}
         exec(python_code, {}, local_scope)
         
-        # 2. Extract the new function object
         new_func = None
         for key, value in local_scope.items():
             if isinstance(value, types.FunctionType):
@@ -84,10 +145,7 @@ def submit_patch(function_name: str, python_code: str) -> str:
         if not new_func:
             return "Error: No function definition found in the provided code."
 
-        # 3. Update Runtime Registry (Hot Swap)
         FUNCTION_REGISTRY[function_name] = new_func
-        
-        # 4. Update Staging Area (For Persistence)
         PENDING_PATCHES[function_name] = python_code
         
         return f"Success: '{function_name}' has been hot-patched and staged for commit."
@@ -96,73 +154,101 @@ def submit_patch(function_name: str, python_code: str) -> str:
         return f"Patch Failed: {str(e)}"
 
 @mcp.tool()
-def persist_optimization(function_name: str) -> str:
+def generate_parity_tests(function_name: str, test_inputs: list[int]) -> str:
     """
-    Commits the staged source code to the actual file on disk using AST parsing.
+    Runs the CURRENT (presumably slow but correct) function against inputs 
+    to establish a 'Ground Truth' baseline.
     """
-    # 1. Retrieve the Source Code
-    if function_name in PENDING_PATCHES:
-        # Priority: Get from Staging Area (it was just patched)
-        new_source = PENDING_PATCHES[function_name]
-    elif function_name in FUNCTION_REGISTRY:
-        # Fallback: Try to inspect existing function (if it wasn't patched dynamically)
-        try:
-            new_source = inspect.getsource(FUNCTION_REGISTRY[function_name])
-        except OSError:
-            return "Error: Cannot retrieve source. Function is dynamic and not in Staging Area."
-    else:
-        return f"Error: '{function_name}' is unknown."
-
-    # 2. Locate the Target File
-    # In a real app, you might track file paths in a metadata dict.
-    # Here, we assume we are modifying this very file.
-    target_file = __file__ 
+    if function_name not in FUNCTION_REGISTRY:
+        return f"Error: '{function_name}' not found."
     
+    func = FUNCTION_REGISTRY[function_name]
+    global PARITY_TEST_SUITE
+    PARITY_TEST_SUITE = [] # Clear previous tests
+    
+    results = []
     try:
-        with open(target_file, 'r') as f:
-            source_content = f.read()
-        
-        # 3. Parse AST to find the original function's location
-        tree = ast.parse(source_content)
-        target_node = None
-        
-        for node in ast.walk(tree):
-            if isinstance(node, ast.FunctionDef) and node.name == function_name:
-                target_node = node
-                break
-        
-        if not target_node:
-            return f"Error: Could not find definition of '{function_name}' in {target_file}."
-
-        # 4. Surgical Replacement
-        lines = source_content.splitlines(keepends=True)
-        
-        # Calculate line numbers (AST is 1-based, list is 0-based)
-        start_index = target_node.lineno - 1
-        end_index = target_node.end_lineno
-        
-        # Ensure new source ends with a newline if needed
-        if not new_source.endswith('\n'):
-            new_source += '\n'
-
-        print(f"Replacing lines {start_index+1} to {end_index} in {target_file}")
-        
-        # Replace the block
-        # We replace the entire range with the new source string
-        lines[start_index:end_index] = [new_source]
-        
-        # 5. Write to Disk
-        with open(target_file, 'w') as f:
-            f.writelines(lines)
+        for val in test_inputs:
+            output = func(val)
+            PARITY_TEST_SUITE.append((val, output))
+            results.append(f"f({val})={output}")
             
-        # Clear from staging since it's now permanent
-        if function_name in PENDING_PATCHES:
-            del PENDING_PATCHES[function_name]
-            
-        return f"Success: Optimized source code written to {target_file}."
+        return f"Generated {len(results)} parity tests: {', '.join(results[:3])}..."
+    except Exception as e:
+        return f"Error generating tests: {str(e)}"
 
+@mcp.tool()
+def verify_parity(function_name: str) -> str:
+    """
+    Runs the NEW (hot-patched) function against the stored Ground Truth.
+    Returns success only if 100% of outputs match.
+    """
+    if function_name not in FUNCTION_REGISTRY:
+        return f"Error: '{function_name}' not found."
+    
+    if not PARITY_TEST_SUITE:
+        return "Error: No tests found. Run 'generate_parity_tests' first."
+        
+    func = FUNCTION_REGISTRY[function_name]
+    failures = []
+    
+    for input_val, expected in PARITY_TEST_SUITE:
+        try:
+            actual = func(input_val)
+            if actual != expected:
+                failures.append(f"Input {input_val}: Expected {expected}, Got {actual}")
+        except Exception as e:
+            failures.append(f"Input {input_val}: Crashed with {str(e)}")
+            
+    if failures:
+        return f"❌ Parity Check Failed ({len(failures)} errors):\n" + "\n".join(failures[:5])
+    
+    return f"✅ Parity Check Passed: {len(PARITY_TEST_SUITE)}/{len(PARITY_TEST_SUITE)} outputs match baseline."
+
+@mcp.tool()
+def persist_optimization(function_name: str) -> str:
+    try:
+        return _perform_ast_rewrite(function_name, __file__)
     except Exception as e:
         return f"Persistence Failed: {str(e)}"
+
+@mcp.tool()
+def persist_optimization_safe(function_name: str) -> str:
+    """
+    A safer version of persist that creates a .bak file before overwriting.
+    """
+    target_file = __file__
+    
+    # 1. Create Backup
+    backup_file = target_file + ".bak"
+    try:
+        shutil.copy2(target_file, backup_file)
+    except IOError as e:
+        return f"Safety Error: Could not create backup. Aborting persist. {e}"
+        
+    # 2. Perform Rewrite
+    try:
+        result = _perform_ast_rewrite(function_name, target_file)
+        return f"{result} (Backup saved to {os.path.basename(backup_file)})"
+    except Exception as e:
+        return f"Persistence Failed: {str(e)}"
+
+@mcp.tool()
+def restore_backup() -> str:
+    """
+    Emergency tool to restore the .bak file if the agent breaks the server.
+    """
+    target_file = __file__
+    backup_file = target_file + ".bak"
+    
+    if not os.path.exists(backup_file):
+        return "Error: No backup file found."
+        
+    try:
+        shutil.copy2(backup_file, target_file)
+        return "Success: Server source code restored from backup. Restart required."
+    except Exception as e:
+        return f"Restore Failed: {str(e)}"
 
 if __name__ == "__main__":
     mcp.run()
