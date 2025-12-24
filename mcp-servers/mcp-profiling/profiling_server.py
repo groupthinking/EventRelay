@@ -10,6 +10,7 @@ import shutil
 import random
 import importlib.util
 import sys
+import hashlib
 import subprocess
 from mcp.server.fastmcp import FastMCP
 
@@ -108,8 +109,9 @@ def load_target_module(file_path: str) -> str:
     
     try:
         # In this demo, we can just treat the file as a module.
-        # But importlib.util.spec_from_file_location needs a module name.
-        module_name = os.path.basename(file_path).replace(".py", "")
+        # [Level 7 Innovation] Generate unique module name to prevent collisions
+        file_hash = hashlib.md5(file_path.encode()).hexdigest()[:8]
+        module_name = f"{os.path.basename(file_path).replace('.py', '')}_{file_hash}"
         spec = importlib.util.spec_from_file_location(module_name, file_path)
         if not spec or not spec.loader:
             return "Error: Could not create module spec."
@@ -282,18 +284,18 @@ def verify_parity(function_name: str) -> str:
     return f"✅ Parity Check Passed: {len(PARITY_TEST_SUITE)}/{len(PARITY_TEST_SUITE)} outputs match baseline."
 
 @mcp.tool()
-def persist_optimization(function_name: str) -> str:
+def persist_optimization(function_name: str, file_path: str) -> str:
     try:
-        return _perform_ast_rewrite(function_name, __file__)
+        return _perform_ast_rewrite(function_name, file_path)
     except Exception as e:
         return f"Persistence Failed: {str(e)}"
 
 @mcp.tool()
-def persist_optimization_safe(function_name: str) -> str:
+def persist_optimization_safe(function_name: str, file_path: str) -> str:
     """
     A safer version of persist that creates a .bak file before overwriting.
     """
-    target_file = __file__
+    target_file = file_path
     
     # 1. Create Backup
     backup_file = target_file + ".bak"
