@@ -1,0 +1,32 @@
+steps:
+  # Build the container image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'us-central1-docker.pkg.dev/uvai-730bb/uvai-backend/eventrelay-backend:staging', '-f', 'Dockerfile', '.']
+
+  # Push the container image to Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'us-central1-docker.pkg.dev/uvai-730bb/uvai-backend/eventrelay-backend:staging']
+
+  # Deploy container image to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'eventrelay-staging'
+      - '--image'
+      - 'us-central1-docker.pkg.dev/uvai-730bb/uvai-backend/eventrelay-backend:staging'
+      - '--region'
+      - 'us-central1'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+      - '--port'
+      - '8000'
+      - '--memory'
+      - '2Gi'
+      - '--set-env-vars'
+      - 'ENV=staging,PROJECT_ID=uvai-730bb'
+
+images:
+  - 'us-central1-docker.pkg.dev/uvai-730bb/uvai-backend/eventrelay-backend:staging'
