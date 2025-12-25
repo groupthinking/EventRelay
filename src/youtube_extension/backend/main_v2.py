@@ -266,10 +266,37 @@ async def legacy_process_video(request: dict):
     """Legacy video processing endpoint"""
     try:
         from backend.api.v1.models import VideoProcessingRequest
-        from backend.containers.service_container import get_service
+        from backend.containers.service_container import get_service, get_service_container
+        import os
         
         # Convert to new format
         video_request = VideoProcessingRequest(**request)
+        
+        # Check for async processing flag
+        if os.getenv("ASYNC_PROCESSING", "false").lower() == "true":
+            try:
+                pubsub_service = get_service('pubsub_service')
+                message_id = await pubsub_service.publish_message({
+                    "video_url": video_request.video_url,
+                    "options": video_request.options
+                })
+                
+                if message_id:
+                    logger.info(f"Async processing queued for {video_request.video_url} (msg: {message_id})")
+                    return {
+                        "status": "queued",
+                        "message": "Video processing queued asynchronously",
+                        "job_id": message_id,
+                        # Return basic metadata to satisfy minimal client expectations
+                        "video_data": {"url": video_request.video_url},
+                        "processing_time": 0
+                    }
+                else:
+                    logger.warning("PubSub publish failed, falling back to sync processing")
+            except Exception as e:
+                logger.error(f"Async dispatch failed: {e}, falling back to sync")
+
+        # Sync fallback (original logic)
         video_processing_service = get_service('video_processing_service')
         
         # Process video

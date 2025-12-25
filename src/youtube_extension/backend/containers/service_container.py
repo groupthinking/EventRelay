@@ -100,6 +100,9 @@ class ServiceContainer:
         # AI Agent Orchestrator
         self.register_singleton('agent_orchestrator', self._create_agent_orchestrator)
 
+        # Pub/Sub Service
+        self.register_singleton('pubsub_service', self._create_pubsub_service)
+
         logger.info("Core services registered")
     
     def register_singleton(self, name: str, factory: Callable[[], T]) -> None:
@@ -260,6 +263,14 @@ class ServiceContainer:
         """Create metrics service instance"""
         from ..services.metrics_service import MetricsService
         return MetricsService()
+
+    def _create_pubsub_service(self):
+        """Create Pub/Sub service instance"""
+        from ..services.pubsub_service import PubSubService
+        return PubSubService(
+            project_id=os.getenv('GOOGLE_CLOUD_PROJECT'),
+            topic_name=os.getenv('PUBSUB_TOPIC_NAME', 'video-processing-events')
+        )
 
     def _create_agent_orchestrator(self):
         """Create AI agent orchestrator instance"""

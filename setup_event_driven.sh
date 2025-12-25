@@ -1,0 +1,55 @@
+#!/bin/bash
+# Setup script for Phase 2: Event-Driven Architecture
+# Creates Pub/Sub topics, subscriptions, and Eventarc triggers.
+
+set -e
+
+PROJECT_ID=${GOOGLE_CLOUD_PROJECT:-cloudhub-470100}
+REGION=${GOOGLE_CLOUD_REGION:-us-central1}
+SERVICE_ACCOUNT="833571612383-compute@developer.gserviceaccount.com" # Default Compute Service Account
+BUCKET_NAME="eventrelay-videos-prod-cloudhub-470100"
+
+echo "Using Project: $PROJECT_ID"
+echo "Using Region: $REGION"
+
+# 1. Enable required services
+echo "Enabling required services..."
+gcloud services enable pubsub.googleapis.com eventarc.googleapis.com run.googleapis.com --project="$PROJECT_ID"
+
+# 2. Create Pub/Sub Topic
+TOPIC_NAME="video-processing-events"
+echo "Creating Pub/Sub topic: $TOPIC_NAME"
+if ! gcloud pubsub topics describe "$TOPIC_NAME" --project="$PROJECT_ID" > /dev/null 2>&1; then
+    gcloud pubsub topics create "$TOPIC_NAME" --project="$PROJECT_ID"
+else
+    echo "Topic $TOPIC_NAME already exists."
+fi
+
+# 3. Create Pub/Sub Subscription for the Worker
+# We use a pull subscription for the worker service
+SUBSCRIPTION_NAME="eventrelay-backend-worker"
+echo "Creating Pub/Sub subscription: $SUBSCRIPTION_NAME"
+if ! gcloud pubsub subscriptions describe "$SUBSCRIPTION_NAME" --project="$PROJECT_ID" > /dev/null 2>&1; then
+    gcloud pubsub subscriptions create "$SUBSCRIPTION_NAME" \
+        --topic="$TOPIC_NAME" \
+        --project="$PROJECT_ID" \
+        --ack-deadline=600 \
+        --message-retention-duration=7d
+else
+    echo "Subscription $SUBSCRIPTION_NAME already exists."
+fi
+
+# 4. Grant Pub/Sub Publisher role to the Service Account
+echo "Granting Pub/Sub Publisher role to Service Account..."
+gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+    --member="serviceAccount:$SERVICE_ACCOUNT" \
+    --role="roles/pubsub.publisher"
+
+# 5. Grant Pub/Sub Subscriber role to the Service Account (for the worker)
+echo "Granting Pub/Sub Subscriber role to Service Account..."
+gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+    --member="serviceAccount:$SERVICE_ACCOUNT" \
+    --role="roles/pubsub.subscriber"
+
+echo "Infrastructure setup complete!"
+echo "Next steps: Deploy the updated application code."

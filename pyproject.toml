@@ -101,6 +101,7 @@ youtube = [
     "gitpython>=3.1.0",
     "cachetools>=5.0.0",
     "google-cloud-storage>=2.13.0",
+    "google-cloud-pubsub>=2.19.0",
 ]
 # Optional Postgres driver
 postgres = [
@@ -137,6 +138,7 @@ youtube-migrate = "youtube_extension.cli:migrate"
 youtube-test = "youtube_extension.cli:test"
 "uvai.api" = "uvai.api.server:main"
 "uvai.core" = "uvai.core.server:main"
+"youtube-worker" = "youtube_extension.backend.worker:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

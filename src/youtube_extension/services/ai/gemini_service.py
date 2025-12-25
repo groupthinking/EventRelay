@@ -253,7 +253,7 @@ class GeminiConfig:
     """Configuration for Gemini service"""
     api_key: Optional[str] = os.getenv("GEMINI_API_KEY")
     model_name: str = "gemini-1.5-flash"
-    project_id: Optional[str] = None
+    project_id: Optional[str] = os.getenv("GOOGLE_CLOUD_PROJECT")
     location: str = "us-central1"
     max_output_tokens: int = 8192
     temperature: float = 1.0  # Gemini 3 requires temp=1.0
