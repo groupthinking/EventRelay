@@ -85,7 +85,7 @@ spec:
             secretKeyRef:
               key: latest
               name: JWT_SECRET_KEY
-        image: us-central1-docker.pkg.dev/cloudhub-470100/cloud-run-source-deploy/eventrelay-api@sha256:e5176d38571b416328b9a713acf6939cab6ef30ac5e8480bc3f0d8a428aa7ebe
+        image: us-central1-docker.pkg.dev/uvai-730bb/eventrelay-repo/uvai-api:latest
         ports:
         - containerPort: 8000
           name: http1
