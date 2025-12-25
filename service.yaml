@@ -20,9 +20,9 @@ metadata:
   labels:
     cloud.googleapis.com/location: us-central1
   name: uvai-api
-  namespace: '833571612383'
+  namespace: '688578214833'
   resourceVersion: AAZGQebV5CA
-  selfLink: /apis/serving.knative.dev/v1/namespaces/833571612383/services/eventrelay-api
+  selfLink: /apis/serving.knative.dev/v1/namespaces/688578214833/services/eventrelay-api
   uid: 79073242-f7f9-43be-bd80-ee2e6f34e29b
 spec:
   template:
@@ -44,6 +44,8 @@ spec:
           value: production
         - name: DEBUG
           value: 'false'
+        - name: ASYNC_PROCESSING
+          value: 'true'
         - name: LOG_LEVEL
           value: INFO
         - name: LOG_FORMAT

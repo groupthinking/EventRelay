@@ -17,3 +17,23 @@ coverage/
 dist/
 build/
 *.log
+
+# Heavy directories
+projects/
+_archive/
+reference/
+mcp-servers/
+video_representations_extractor-1.14.0/
+frontend/
+docs/
+tests/
+examples/
+packages/
+apps/
+.build/
+.turbo/
+.runtime/
+google-cloud-sdk/
+ai-edge-torch/
+.venv_prod_verify/
+htmlcov/
