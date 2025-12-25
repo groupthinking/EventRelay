@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-EventRelay Backend Worker
+UVAI Backend Worker
 =========================
 
 Consumes video processing events from Pub/Sub and invokes the video processing service.
@@ -23,7 +23,7 @@ logging.basicConfig(
 logger = logging.getLogger("worker")
 
 # Configuration
-PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT", "cloudhub-470100")
+PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT", "uvai-730bb")
 SUBSCRIPTION_ID = os.getenv("PUBSUB_SUBSCRIPTION_ID", "uvai-backend-worker")
 
 def process_message(message):

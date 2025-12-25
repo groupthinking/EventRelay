@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "youtube_extension"
 version = "1.0.0"
-description = "UVAI YouTube Extension Platform - Revolutionary AI-Powered Video Learning System"
+description = "UVAI Platform - Revolutionary AI-Powered Video Learning System"
 readme = "README.md"
 requires-python = ">=3.9"
 license = {text = "MIT"}

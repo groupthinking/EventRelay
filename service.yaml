@@ -55,11 +55,11 @@ spec:
         - name: THENILE_DB_NAME
           value: uvai_production
         - name: GCS_BUCKET
-          value: eventrelay-videos-prod-cloudhub-470100
+          value: uvai-videos-prod
         - name: VIDEO_PROCESSOR_TYPE
           value: enhanced
         - name: GOOGLE_CLOUD_PROJECT
-          value: cloudhub-470100
+          value: uvai-730bb
         - name: THENILE_DB_PASSWORD
           valueFrom:
             secretKeyRef:
@@ -99,7 +99,7 @@ spec:
           tcpSocket:
             port: 8000
           timeoutSeconds: 240
-      serviceAccountName: 833571612383-compute@developer.gserviceaccount.com
+      serviceAccountName: uvai-app-sa@uvai-730bb.iam.gserviceaccount.com
       timeoutSeconds: 300
   traffic:
   - latestRevision: true
