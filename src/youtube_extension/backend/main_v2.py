@@ -77,7 +77,7 @@ except Exception as _env_err:  # noqa: F841 - best-effort only
 # -------------------------------------------------------------
 
 # Initialize service container
-service_container = get_service_container()
+service_container = None
 
 # Put this before app creation to debug
 try:
@@ -483,6 +483,9 @@ async def global_exception_handler(request, exc):
 @app.on_event("startup")
 async def startup_event():
     """Application startup tasks"""
+    global service_container
+    service_container = get_service_container()
+
     logger.info("🚀 Starting YouTube Extension API v2.0.0")
     logger.info("📐 Architecture: Service-Oriented with Dependency Injection")
     logger.info("📋 API Versioning: v1 available at /api/v1/")
