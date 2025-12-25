@@ -1,8 +1,8 @@
 {
   "name": "youtube-extension-frontend",
   "env": {
-    "REACT_APP_API_URL": "https://eventrelay-api-dd2hbwryvq-uc-833571612383.us-central1.run.app/api",
-    "REACT_APP_WS_URL": "wss://eventrelay-api-dd2hbwryvq-uc-833571612383.us-central1.run.app/ws"
+    "REACT_APP_API_URL": "https://eventrelay-api-dd2hbwryvq-uc-688578214833.us-central1.run.app/api",
+    "REACT_APP_WS_URL": "wss://eventrelay-api-dd2hbwryvq-uc-688578214833.us-central1.run.app/ws"
   },
   "headers": [
     {

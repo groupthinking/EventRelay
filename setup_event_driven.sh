@@ -6,7 +6,7 @@ set -e
 
 PROJECT_ID=${GOOGLE_CLOUD_PROJECT:-uvai-730bb}
 REGION=${GOOGLE_CLOUD_REGION:-us-central1}
-SERVICE_ACCOUNT="833571612383-compute@developer.gserviceaccount.com" # Default Compute Service Account
+SERVICE_ACCOUNT="688578214833-compute@developer.gserviceaccount.com" # Default Compute Service Account
 BUCKET_NAME="uvai-videos-prod"
 
 echo "Using Project: $PROJECT_ID"
