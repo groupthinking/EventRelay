@@ -77,7 +77,7 @@ except Exception as _env_err:  # noqa: F841 - best-effort only
 # -------------------------------------------------------------
 
 # Initialize service container
-# service_container = get_service_container()
+service_container = get_service_container()
 
 # Put this before app creation to debug
 try:
