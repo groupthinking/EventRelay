@@ -11,6 +11,8 @@ import os
 import json
 import logging
 import asyncio
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 from concurrent.futures import TimeoutError
 from google.cloud import pubsub_v1
 from youtube_extension.backend.containers.service_container import get_service_container
@@ -72,7 +74,36 @@ async def run_processing(video_url, options):
         logger.error(f"Service processing error: {e}")
         raise e
 
+
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    """
+    Simple health check handler for Cloud Run.
+    """
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"OK")
+    
+    # Suppress log messages for health checks to keep logs clean
+    def log_message(self, format, *args):
+        pass
+
+def start_health_check_server():
+    """
+    Starts a dummy HTTP server to satisfy Cloud Run's port requirement.
+    """
+    try:
+        port = int(os.environ.get("PORT", 8080))
+        server = HTTPServer(("0.0.0.0", port), HealthCheckHandler)
+        logger.info(f"Health check server listening on port {port}")
+        server.serve_forever()
+    except Exception as e:
+        logger.error(f"Failed to start health check server: {e}")
+
 def main():
+    # Start health check server in background thread
+    threading.Thread(target=start_health_check_server, daemon=True).start()
+
     logger.info(f"Starting worker for subscription: projects/{PROJECT_ID}/subscriptions/{SUBSCRIPTION_ID}")
     
     subscriber = pubsub_v1.SubscriberClient()
