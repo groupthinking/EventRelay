@@ -2,6 +2,7 @@ import json
 import logging
 import os
 from typing import Any, Dict, Optional
+
 from google.cloud import pubsub_v1
 
 logger = logging.getLogger(__name__)

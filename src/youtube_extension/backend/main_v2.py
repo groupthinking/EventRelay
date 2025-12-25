@@ -545,7 +545,7 @@ async def shutdown_event():
 # Development server runner
 if __name__ == "__main__":
     import uvicorn
-    
+
     logger.info("🔧 Starting development server...")
     uvicorn.run(
         "main_v2:app",
