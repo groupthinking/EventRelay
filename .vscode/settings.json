@@ -3,5 +3,6 @@
     "workbench.experimental.cloudChanges.autoStore": "onShutdown",
     "redhat.telemetry.enabled": true,
     "gitlens.ai.largePromptWarningThreshold": 200000,
-    "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python"
+    "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+    "gitlens.launchpad.indicator.useColors": true
 }
