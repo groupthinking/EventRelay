@@ -120,7 +120,9 @@ Always include in CHANGELOG.md:
 ## FILE LOCATIONS
 
 All documentation MUST be in:
-/Users/garvey/Dev/shared/
+/Users/garvey/Dev/projects/EventRelay/shared/
+
+(Migrated from /Users/garvey/Dev/shared/ on Dec 25, 2024)
 
 Never create documentation in:
 - Project root (/) 

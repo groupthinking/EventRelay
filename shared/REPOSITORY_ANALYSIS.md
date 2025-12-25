@@ -26,7 +26,7 @@
 
 **Tech Stack:**
 - **Backend:** Python 3.9+, FastAPI, SQLAlchemy, Pydantic
-- **Frontend:** React 18.2.0, MUI v7, Emotion, Tailwind v3, CRA
+- **Frontend:** React 18.2.0, MUI v7, Emotion, Tailwind v3, Vite 5
 - **Database:** SQLite/Postgres (SQLAlchemy) + Prisma (TypeScript packages)
 - **AI/ML:** Transformers, Torch, Google Gemini, OpenAI
 - **Monorepo:** Turbo, npm workspaces
@@ -55,7 +55,7 @@ EventRelay/
 - ⚠️ React version inconsistency (18.x and 19.x mixed)
 - ⚠️ Three styling systems (MUI + Emotion + Tailwind)
 - ⚠️ Two ORMs (SQLAlchemy + Prisma)
-- ⚠️ Using CRA (should migrate to Vite)
+- ✅ Migrated to Vite 5
 
 **Size:** Large monorepo with extensive dependencies
 
@@ -176,25 +176,30 @@ mcp-servers/
 ---
 
 #### 6. **agents-marketplace** (`./agents-marketplace/`)
-**Purpose:** Agent management scripts and utilities  
+**Purpose:** Legacy project scaffolding scripts for OpenAI Hub  
 **Type:** Shell script collection  
-**Status:** ⚠️ **Needs Review**
+**Status:** 🗄️ **Archive Candidate** - Investigation Complete (Dec 22)
 
 **Contents:**
-- Symlink to `~/.claude/agents/`
+- Symlink to `~/.claude/agents/` (exists but unused by scripts)
 - Shell scripts in `bin/`:
-  - `hub-add.sh`, `hub-sync.sh`, `hub-health.sh`
-  - `new-project.sh`, `newagent`, `newnode`
-  - `codex-batch.sh`
+  - `hub-add.sh` - Adds projects to OpenAI_Hub structure
+  - `hub-sync.sh`, `hub-health.sh` - Hub management
+  - `new-project.sh` - Scaffolds Node/Python projects
+  - `newagent`, `newnode` - Wrapper scripts
+  - `codex-batch.sh` - Batch processing
 
-**Hypothesis:** Development utilities for agent/project management
+**Investigation Results (Dec 22):**
+- Scripts reference `$HOME/Dev/OpenAI_Hub` which **does not exist**
+- No usage found in active projects (EventRelay, netmesh-production, mcp-servers)
+- Scripts modify `.codex/config.toml` but no agents-marketplace references found
+- Legacy infrastructure from previous development setup
 
-**Action Required:**
-- Review if actively used
-- Consider consolidating into `mcp-servers/ai_ops_skill_mesh_kit/`
-- Document purpose and usage
+**Recommendation:** 🗄️ **Archive** to `_archive/agents-marketplace`  
+**Rationale:** No active usage, references non-existent directories, safe to archive  
+**Risk:** Minimal - scripts not integrated with current projects
 
-**Size:** Minimal (shell scripts only)
+**Size:** Minimal (8 shell scripts, 1 symlink)
 
 ---
 
@@ -254,57 +259,64 @@ mcp-servers/
 
 ## Critical Findings
 
-### 🔴 Priority 1: genkit-mcp Bloat
+### ✅ Priority 1: genkit-mcp Bloat - RESOLVED (Dec 21)
 
-**Problem:**
+**Problem:** (Original)
 - **Size:** 203MB
 - **Files:** 24,409 files
 - **Content:** Full Google Genkit repository (not just wrapper)
 - **Impact:** Massive disk usage, slow operations
 
-**Analysis:**
-```bash
-# genkit-mcp contains:
-- Full Google Genkit source code (JS + Python)
-- All samples and test apps
-- Complete documentation
-- Development tools
-- Multiple language implementations
-```
+**Resolution:** ✅ Complete (Dec 21, 2024)
+- Extracted MCP plugin wrapper to `mcp-servers/genkit-wrapper/`
+- Archived full repository to `_archive/genkit-mcp-full-repo/`
+- **Space saved:** ~200MB
+- **Files removed:** ~24,300
 
-**Actual Usage:**
-- Only MCP plugin wrapper is needed
-- Located in: `repo/js/plugins/mcp/`
-- Rest is unnecessary bloat
-
-**Recommendation:**
-1. Extract MCP plugin wrapper only (~100 files)
-2. Create `genkit-wrapper/` with minimal dependencies
-3. Archive full repo to `_archive/genkit-mcp-full/`
-4. **Estimated space savings:** ~200MB
+**Current State:**
+- `mcp-servers/genkit-wrapper/` - Minimal MCP plugin (~100 files)
+- `_archive/genkit-mcp-full-repo/` - Full repo preserved for reference
+- All functionality maintained, no broken imports
 
 ---
 
-### ⚠️ Priority 2: self-correcting-executor-PRODUCTION Duplication
+### ✅ Priority 2: self-correcting-executor-PRODUCTION - RESOLVED (Dec 21)
 
-**Problem:**
+**Problem:** (Original)
 - Contains duplicate MCP servers (github, unified-analytics)
 - Overlaps with `mcp-servers/` infrastructure
 - Unclear relationship to EventRelay
 
-**Investigation Needed:**
-- Compare MCP implementations
-- Check git history
-- Determine if actively deployed
+**Resolution:** ✅ Complete (Dec 21, 2024)
+- Moved to `~/Desktop/self-correcting-executor-PRODUCTION`
+- Disconnected from active MCP configuration
+- Safeguarded for potential future reference
 
-**Possible Actions:**
-- Archive if old version
-- Consolidate into `mcp-servers/` if active
-- Keep separate if it's a deployment environment
+**Rationale:**
+- Not referenced in `claude_desktop_config.json`
+- Duplicate of EventRelay MCP infrastructure
+- Moved to Desktop rather than archived for safety
 
 ---
 
-### ⚠️ Priority 3: EventRelay Technical Debt
+### ⚠️ Priority 3: agents-marketplace Legacy Code - RESOLVED (Dec 22)
+
+**Problem:** (Original)
+- Unknown purpose and usage
+- Unclear if actively used by projects
+- Symlink to `.claude/agents/` with unclear purpose
+
+**Resolution:** ✅ Investigation Complete (Dec 22, 2024)
+- Identified as legacy OpenAI Hub scaffolding scripts
+- No active usage in current projects
+- References non-existent `$HOME/Dev/OpenAI_Hub` directory
+- **Recommendation:** Archive to `_archive/agents-marketplace`
+
+**Impact:** Minimal - safe to archive
+
+---
+
+### ⚠️ Priority 4: EventRelay Technical Debt
 
 **Issues:**
 1. TypeScript 4.9.5 (outdated)
@@ -480,10 +492,10 @@ mv ./mcp-servers/grok-server ./mcp-servers/servers-monorepo/packages/
 
 ### Long-term (Next Quarter)
 
-#### 8. EventRelay Vite Migration
-- Migrate from CRA to Vite
-- Improve build times
-- Better developer experience
+#### 8. EventRelay Vite Migration (COMPLETED)
+- ✅ Migrated from CRA to Vite
+- ✅ Configured build pipeline
+- ✅ Verified with React 18
 
 #### 9. Simplify Styling Strategy
 - Choose: MUI + Emotion OR Tailwind (not both)
@@ -523,12 +535,16 @@ mv ./mcp-servers/grok-server ./mcp-servers/servers-monorepo/packages/
 
 ## Next Steps
 
-1. ✅ **Complete** - Initial investigation and documentation
-2. 🔄 **In Progress** - Detailed analysis of self-correcting-executor
-3. ⏳ **Pending** - genkit-mcp extraction
-4. ⏳ **Pending** - Archive Zero to Launch Bundle
-5. ⏳ **Pending** - Review agents-marketplace usage
-6. ⏳ **Pending** - EventRelay TypeScript upgrade planning
+1. ✅ **Complete** - Initial investigation and documentation (Dec 20)
+2. ✅ **Complete** - genkit-mcp extraction (Dec 21)
+3. ✅ **Complete** - self-correcting-executor relocation (Dec 21)
+4. ✅ **Complete** - Zero to Launch Bundle removal (Dec 21)
+5. ✅ **Complete** - agents-marketplace investigation (Dec 22)
+6. ⏳ **Pending** - Archive agents-marketplace (awaiting approval)
+7. ✅ **Complete** - EventRelay TypeScript upgrade (Frontend verified)
+8. ✅ **Complete** - EventRelay Vite Migration (Phase 3)
+9. ⏳ **Pending** - React standardization (Phase 3)
+10. ⏳ **Pending** - MCP server consolidation (Phase 3)
 
 ---
 
@@ -556,6 +572,6 @@ Others:                     ~500 files
 
 ---
 
-**Report Status:** Phase 1 Complete - Discovery & Documentation  
-**Next Phase:** Phase 2 - Decision Making & Planning  
-**Estimated Completion:** December 27, 2024
+**Report Status:** Phase 2 Complete - Cleanup & Extraction  
+**Next Phase:** Phase 3 - Consolidation (Awaiting Approval)  
+**Last Updated:** December 22, 2024

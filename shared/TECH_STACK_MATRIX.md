@@ -11,7 +11,7 @@
 |---------|------------|-------------------|-------------|--------------------------|
 | **Core Type** | Monorepo (Turbo) | Standalone App | Distributed | Docker Container |
 | **Backend** | Python (FastAPI) | Cloudflare Workers (Hono) | Express / Python | Python (FastAPI) |
-| **Frontend** | React 18.2.0 (CRA) | React 19.1.1 (Vite) | N/A | React (Unknown ver) |
+| **Frontend** | React 18.2.0 (Vite) | React 19.1.1 (Vite) | N/A | React (Unknown ver) |
 | **Styling** | MUI v7 + Tailwind v3 | Tailwind v4 + shadcn | N/A | TBD |
 | **Database** | Postgres / SQLite | D1 (SQLite) | SQLite | Postgres / Redis |
 | **ORM** | SQLAlchemy / Prisma | Drizzle | N/A | SQLAlchemy |
@@ -26,7 +26,7 @@
 | **React** | `18.2.0` | `19.1.1` | ⚠️ Mixed | Standardize on **18.x** for stability |
 | **TypeScript** | `4.9.5` | `5.9.2` | ⚠️ Mixed | Upgrade EventRelay to **5.x** |
 | **Tailwind** | `3.4.17` | `4.1.13` | ⚠️ Mixed | Plan migration to **v4** long-term |
-| **Build Tool** | CRA (Webpack) | Vite 6 | ⚠️ Mixed | Migrate EventRelay to **Vite** |
+| **Build Tool** | Vite 5 | Vite 6 | ✅ Aligned | Kept modern |
 | **Express** | N/A | N/A | v4/v5 Mixed | Standardize MCP on **v5** |
 
 ---
@@ -34,9 +34,9 @@
 ## Tech Debt Scorecard
 
 ### EventRelay
-- **Score:** 6/10 (C)
-- **Issues:** Outdated TS, mixed React versions, complex styling (3 systems), heavy dependency on CRA.
-- **Plan:** Upgrade TS -> Standardize React -> Migrate to Vite.
+- **Score:** 8/10 (B+)
+- **Issues:** Mixed React versions, complex styling (3 systems).
+- **Plan:** Upgrade TS -> Standardize React.
 
 ### netmesh-production
 - **Score:** 9/10 (A)
