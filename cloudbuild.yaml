@@ -65,10 +65,12 @@ steps:
       - '8000'
       - '--add-cloudsql-instances'
       - '$PROJECT_ID:${_REGION}:eventrelay-db'
+      - '--service-account'
+      - 'uvai-app-sa@$PROJECT_ID.iam.gserviceaccount.com'
       - '--set-secrets'
       - 'THENILE_DB_PASSWORD=DB_PASSWORD:latest,OPENAI_API_KEY=OPENAI_API_KEY:latest,GEMINI_API_KEY=GEMINI_API_KEY:latest,YOUTUBE_API_KEY=YOUTUBE_API_KEY:latest,JWT_SECRET_KEY=JWT_SECRET_KEY:latest'
       - '--set-env-vars'
-      - 'ENVIRONMENT=production,DEBUG=false,LOG_LEVEL=INFO,LOG_FORMAT=json,THENILE_DB_HOST=/cloudsql/$PROJECT_ID:${_REGION}:eventrelay-db,THENILE_DB_USERNAME=uvai,THENILE_DB_NAME=uvai_production,GCS_BUCKET=uvai-videos-prod,VIDEO_PROCESSOR_TYPE=enhanced,GOOGLE_CLOUD_PROJECT=$PROJECT_ID'
+      - 'ENVIRONMENT=production,DEBUG=false,ASYNC_PROCESSING=true,LOG_LEVEL=INFO,LOG_FORMAT=json,THENILE_DB_HOST=/cloudsql/$PROJECT_ID:${_REGION}:eventrelay-db,THENILE_DB_USERNAME=uvai,THENILE_DB_NAME=uvai_production,GCS_BUCKET=uvai-videos-prod,VIDEO_PROCESSOR_TYPE=enhanced,GOOGLE_CLOUD_PROJECT=$PROJECT_ID'
     waitFor: ['push-image']
 
 # Images to be pushed to Artifact Registry
