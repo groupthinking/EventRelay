@@ -80,7 +80,7 @@ images:
 # Substitution variables with defaults
 substitutions:
   _REGION: us-central1
-  _SERVICE_NAME: eventrelay-api
+  _SERVICE_NAME: uvai-api
   _ARTIFACT_REPO: eventrelay-repo
 
 # Build options

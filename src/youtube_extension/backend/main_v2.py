@@ -87,9 +87,9 @@ except:
 
 # Create FastAPI application
 app = FastAPI(
-    title="YouTube Extension API",
+    title="UVAI API",
     description="""
-    ## Service-Oriented Backend API for YouTube Extension
+    ## UVAI Platform API
     
     **Architecture Features:**
     - 🏗️ **Service-Oriented Architecture** with dependency injection

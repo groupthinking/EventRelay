@@ -269,7 +269,7 @@ class ServiceContainer:
         from ..services.pubsub_service import PubSubService
         return PubSubService(
             project_id=os.getenv('GOOGLE_CLOUD_PROJECT'),
-            topic_name=os.getenv('PUBSUB_TOPIC_NAME', 'video-processing-events')
+            topic_name=os.getenv('PUBSUB_TOPIC_NAME', 'uvai-processing-events')
         )
 
     def _create_agent_orchestrator(self):

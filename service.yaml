@@ -19,7 +19,7 @@ metadata:
   generation: 9
   labels:
     cloud.googleapis.com/location: us-central1
-  name: eventrelay-api
+  name: uvai-api
   namespace: '833571612383'
   resourceVersion: AAZGQebV5CA
   selfLink: /apis/serving.knative.dev/v1/namespaces/833571612383/services/eventrelay-api

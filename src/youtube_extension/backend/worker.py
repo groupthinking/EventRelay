@@ -24,7 +24,7 @@ logger = logging.getLogger("worker")
 
 # Configuration
 PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT", "cloudhub-470100")
-SUBSCRIPTION_ID = os.getenv("PUBSUB_SUBSCRIPTION_ID", "eventrelay-backend-worker")
+SUBSCRIPTION_ID = os.getenv("PUBSUB_SUBSCRIPTION_ID", "uvai-backend-worker")
 
 def process_message(message):
     """

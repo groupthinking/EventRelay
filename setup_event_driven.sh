@@ -17,7 +17,7 @@ echo "Enabling required services..."
 gcloud services enable pubsub.googleapis.com eventarc.googleapis.com run.googleapis.com --project="$PROJECT_ID"
 
 # 2. Create Pub/Sub Topic
-TOPIC_NAME="video-processing-events"
+TOPIC_NAME="uvai-processing-events"
 echo "Creating Pub/Sub topic: $TOPIC_NAME"
 if ! gcloud pubsub topics describe "$TOPIC_NAME" --project="$PROJECT_ID" > /dev/null 2>&1; then
     gcloud pubsub topics create "$TOPIC_NAME" --project="$PROJECT_ID"
@@ -27,7 +27,7 @@ fi
 
 # 3. Create Pub/Sub Subscription for the Worker
 # We use a pull subscription for the worker service
-SUBSCRIPTION_NAME="eventrelay-backend-worker"
+SUBSCRIPTION_NAME="uvai-backend-worker"
 echo "Creating Pub/Sub subscription: $SUBSCRIPTION_NAME"
 if ! gcloud pubsub subscriptions describe "$SUBSCRIPTION_NAME" --project="$PROJECT_ID" > /dev/null 2>&1; then
     gcloud pubsub subscriptions create "$SUBSCRIPTION_NAME" \
