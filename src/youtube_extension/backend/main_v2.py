@@ -203,7 +203,7 @@ async def legacy_chat(request: dict):
     # For now, maintain the existing implementation for backward compatibility
     try:
         from .api.v1.models import ChatRequest, ChatResponse
-        from backend.containers.service_container import get_service
+        from .containers.service_container import get_service
         
         # Convert legacy request to new format
         chat_request = ChatRequest(**request)
@@ -232,7 +232,7 @@ async def legacy_process_video_markdown(request: dict):
     """Legacy markdown processing endpoint"""
     try:
         from .api.v1.models import MarkdownRequest
-        from backend.containers.service_container import get_service
+        from .containers.service_container import get_service
         
         # Convert to new format
         markdown_request = MarkdownRequest(**request)
@@ -266,7 +266,7 @@ async def legacy_process_video(request: dict):
     """Legacy video processing endpoint"""
     try:
         from .api.v1.models import VideoProcessingRequest
-        from backend.containers.service_container import get_service, get_service_container
+        from .containers.service_container import get_service, get_service_container
         import os
         
         # Convert to new format
