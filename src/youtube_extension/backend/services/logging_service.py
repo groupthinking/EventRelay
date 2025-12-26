@@ -23,10 +23,10 @@ import aiofiles
 from pydantic import BaseModel
 
 try:
-    from backend.config.logging_config import get_logger, PerformanceLogger
+    from youtube_extension.backend.config.logging_config import get_logger, PerformanceLogger
 except ImportError:
     # Fallback for direct imports
-    from backend.config.logging_config import get_logger, PerformanceLogger
+    from youtube_extension.backend.config.logging_config import get_logger, PerformanceLogger
 
 
 class LogLevel:

@@ -36,7 +36,7 @@ try:
     from .intelligent_cache import intelligent_cache, cache_get, cache_set
     from .memory_manager import memory_manager
     from .load_balancer import service_discovery
-    from backend.database.index_analysis import database_optimizer
+    from youtube_extension.backend.database.index_analysis import database_optimizer
     PERFORMANCE_COMPONENTS_AVAILABLE = True
 except ImportError as e:
     logger = logging.getLogger(__name__)

@@ -14,7 +14,7 @@
   "license": "ISC",
   "description": "MCP server for Grok AI integration",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^0.1.0",
+    "@modelcontextprotocol/sdk": "^1.11.4",
     "dotenv": "^16.0.3",
     "puppeteer": "^19.7.0"
   },

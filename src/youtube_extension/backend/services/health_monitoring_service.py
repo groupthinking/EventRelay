@@ -26,8 +26,8 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 try:
-    from backend.services.logging_service import get_logging_service, log_error, performance_monitor
-    from backend.config.logging_config import get_logger
+    from youtube_extension.backend.services.logging_service import get_logging_service, log_error, performance_monitor
+    from youtube_extension.backend.config.logging_config import get_logger
 except ImportError:
     # Create fallback logger if imports fail
     import logging

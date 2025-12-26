@@ -16,15 +16,15 @@ mcpServers:
       PYTHONPATH: /Users/garvey/self-correcting-executor-PRODUCTION
   github:
     command: node
-    args: [/Users/garvey/Dev/OpenAI_Hub/mcp-servers/github/custom-github-server.js]
+    args: [/Users/garvey/Dev/projects/EventRelay/mcp-servers/github/custom-github-server.js]
     env:
       GITHUB_PERSONAL_ACCESS_TOKEN: "${GITHUB_PERSONAL_ACCESS_TOKEN}"
   grok:
     command: node
-    args: [/Users/garvey/Dev/OpenAI_Hub/mcp-servers/grok-server/build/index.js]
+    args: [/Users/garvey/Dev/projects/EventRelay/mcp-servers/grok-server/build/index.js]
   perplexity:
     command: node
-    args: [/Users/garvey/Dev/OpenAI_Hub/mcp-servers/perplexity-mcp/build/index.js]
+    args: [/Users/garvey/Dev/projects/EventRelay/mcp-servers/perplexity-mcp/build/index.js]
 settings:
   auto_approve: true
   startup_timeout: 30000

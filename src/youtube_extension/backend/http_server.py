@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 
 # REMOVED: sys.path.insert with Path manipulation
-from backend.real_video_processor import RealVideoProcessor
+from youtube_extension.backend.real_video_processor import RealVideoProcessor
 
 class Handler(BaseHTTPRequestHandler):
     def _set_headers(self, code: int = 200, content_type: str = 'application/json'):

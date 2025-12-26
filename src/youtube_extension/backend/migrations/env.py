@@ -18,8 +18,8 @@ from alembic import context
 # Path setup for imports
 backend_path = Path(__file__).parent.parent
 
-from backend.config.database import DatabaseSettings, Base
-from backend.models import *  # Import all models to ensure they're registered
+from youtube_extension.backend.config.database import DatabaseSettings, Base
+from youtube_extension.backend.models import *  # Import all models to ensure they're registered
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

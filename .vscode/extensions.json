@@ -1,5 +1,7 @@
 {
     "recommendations": [
-        "codeviz.codeviz"
+        "codeviz.codeviz",
+        "antigravity.antigravity-rpc",
+        "salesforce.agent-script-language-client"
     ]
 }

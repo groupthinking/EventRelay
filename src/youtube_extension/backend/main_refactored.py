@@ -29,12 +29,12 @@ project_root = Path(__file__).parent.parent
 # REMOVED: sys.path.insert for project_root
 
 # Import services and container
-from backend.containers.service_container import get_service_container, get_service
-from backend.services.video_processing_service import VideoProcessingService, resolve_deployment_target
-from backend.services.cache_service import CacheService
-from backend.services.health_monitoring_service import HealthMonitoringService
-from backend.services.data_service import DataService
-from backend.services.websocket_service import WebSocketService, WebSocketConnectionManager
+from youtube_extension.backend.containers.service_container import get_service_container, get_service
+from youtube_extension.backend.services.video_processing_service import VideoProcessingService, resolve_deployment_target
+from youtube_extension.backend.services.cache_service import CacheService
+from youtube_extension.backend.services.health_monitoring_service import HealthMonitoringService
+from youtube_extension.backend.services.data_service import DataService
+from youtube_extension.backend.services.websocket_service import WebSocketService, WebSocketConnectionManager
 
 # Configure logging
 logging.basicConfig(

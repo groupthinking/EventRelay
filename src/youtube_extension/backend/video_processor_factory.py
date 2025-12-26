@@ -36,7 +36,7 @@ def get_video_processor(processor_type: str = "auto") -> Union['EnhancedVideoPro
     # Prefer DeepMCP when explicitly enabled
     if processor_type == "deepmcp" or os.getenv('ENABLE_DEEP_MCP', 'false').lower() == 'true':
         try:
-            from backend.deepmcp.deepmcp_processor import DeepMCPAgentProcessor
+            from youtube_extension.backend.deepmcp.deepmcp_processor import DeepMCPAgentProcessor
             logger.info("✅ Using DeepMCPAgentProcessor (agent orchestration)")
             return DeepMCPAgentProcessor()
         except Exception as e:

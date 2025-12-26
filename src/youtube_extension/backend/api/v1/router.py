@@ -374,7 +374,7 @@ async def process_video_v1(
         )
         # Persist summary for analytics/storage if repository is available
         try:
-            from backend.repositories.video_repository import VideoRepository  # type: ignore
+            from youtube_extension.backend.repositories.video_repository import VideoRepository  # type: ignore
             repo = VideoRepository()
             # Store minimal summary; repository method may be patched in tests
             _ = repo.save({

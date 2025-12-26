@@ -23,8 +23,8 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 import psutil
 
-from backend.services.logging_service import get_logging_service, log_error, log_api_request
-from backend.config.logging_config import get_logger
+from youtube_extension.backend.services.logging_service import get_logging_service, log_error, log_api_request
+from youtube_extension.backend.config.logging_config import get_logger
 
 
 class ErrorCategory:

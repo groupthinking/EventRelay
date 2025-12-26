@@ -329,8 +329,8 @@ class VideoProcessingService:
             
             # Import required components
             try:
-                from backend.code_generator import get_code_generator
-                from backend.services.deployment_manager import get_deployment_manager
+                from youtube_extension.backend.code_generator import get_code_generator
+                from youtube_extension.backend.services.deployment_manager import get_deployment_manager
                 pipeline_available = True
             except ImportError as e:
                 logger.error(f"Software generation pipeline not available: {e}")
