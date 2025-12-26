@@ -7,7 +7,7 @@ import {
   ListToolsRequestSchema,
   McpError,
 } from '@modelcontextprotocol/sdk/types.js';
-import puppeteer from 'puppeteer';
+import puppeteer, { Browser, Page } from 'puppeteer';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -20,8 +20,8 @@ if (!GROK_EMAIL || !GROK_PASSWORD) {
 }
 
 interface GrokSession {
-  browser: puppeteer.Browser;
-  page: puppeteer.Page;
+  browser: Browser;
+  page: Page;
   isAuthenticated: boolean;
 }
 
@@ -62,8 +62,8 @@ class GrokServer {
     // Navigate to Grok and authenticate
     await page.goto('https://grok.x.ai');
     await page.waitForSelector('input[type="email"]');
-    await page.type('input[type="email"]', GROK_EMAIL);
-    await page.type('input[type="password"]', GROK_PASSWORD);
+    await page.type('input[type="email"]', GROK_EMAIL as string);
+    await page.type('input[type="password"]', GROK_PASSWORD as string);
     await page.click('button[type="submit"]');
     
     // Wait for authentication to complete
@@ -141,7 +141,7 @@ class GrokServer {
             
             // Wait for and extract response
             await session.page.waitForSelector('.response-content');
-            const response = await session.page.$eval('.response-content', el => el.textContent);
+            const response = await session.page.$eval('.response-content', (el: any) => el.textContent);
 
             return {
               content: [
@@ -167,7 +167,7 @@ class GrokServer {
             
             // Wait for and extract response
             await session.page.waitForSelector('.response-content');
-            const response = await session.page.$eval('.response-content', el => el.textContent);
+            const response = await session.page.$eval('.response-content', (el: any) => el.textContent);
 
             return {
               content: [

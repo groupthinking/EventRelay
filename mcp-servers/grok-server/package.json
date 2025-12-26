@@ -9,7 +9,11 @@
     "dev": "tsc -w",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": ["mcp", "grok", "ai"],
+  "keywords": [
+    "mcp",
+    "grok",
+    "ai"
+  ],
   "author": "",
   "license": "ISC",
   "description": "MCP server for Grok AI integration",
@@ -20,6 +24,7 @@
   },
   "devDependencies": {
     "@types/node": "^18.15.0",
-    "typescript": "^4.9.5"
+    "@types/puppeteer": "^5.4.7",
+    "typescript": "^5.3.3"
   }
 }

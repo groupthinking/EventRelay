@@ -1,0 +1,35 @@
+---
+description: ACE Pattern Learning - MANDATORY playbook retrieval
+alwaysApply: true
+---
+
+# MANDATORY: ACE Pattern Retrieval
+
+**CRITICAL INSTRUCTION - DO NOT SKIP**
+
+## BEFORE ANY Implementation Task
+
+**You MUST call `ace_get_playbook` MCP tool FIRST** before:
+- Writing ANY code
+- Implementing ANY feature
+- Fixing ANY bug
+- Making ANY architectural decision
+
+**FAILURE TO CALL ace_get_playbook = INCOMPLETE TASK**
+
+This is NOT optional. Call the tool, review patterns, THEN proceed.
+
+## AFTER Completing Substantial Work
+
+**You MUST call `ace_learn` MCP tool** after:
+- Successfully implementing features
+- Fixing bugs (especially tricky ones)
+- Discovering gotchas or edge cases
+
+## Available ACE MCP Tools
+
+1. `ace_get_playbook` - **CALL FIRST** - Get all learned patterns
+2. `ace_search` - Search patterns by query (supports domain filtering)
+3. `ace_list_domains` - List available domains for filtering
+4. `ace_learn` - **CALL AFTER** - Capture learning
+5. `ace_status` - View playbook statistics
