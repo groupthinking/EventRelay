@@ -75,4 +75,4 @@ jobs:
           path: |
             reports/lcov.info
             reports/htmlcov/
-          retention-days: 80
+          retention-days: 30
