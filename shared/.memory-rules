@@ -4,6 +4,13 @@
 
 ## CRITICAL RULES - ALWAYS FOLLOW
 
+### Rule 0: Operating Contract
+WHEN: Executing any action
+THEN:
+  1. Adhere to `shared/OPERATING_CONTRACT.md`
+  2. Perform Pre-Flight Check before tool use
+  3. Ensure failure modes are handled FIRST
+
 ### Rule 1: Session Start Protocol
 WHEN: Starting any new chat session
 THEN: 
