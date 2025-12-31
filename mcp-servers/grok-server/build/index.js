@@ -18,7 +18,11 @@ class GrokSessionManager {
         if (this.session?.isAuthenticated) {
             return this.session;
         }
-        const browser = await puppeteer.launch({ headless: true });
+        const browser = await puppeteer.launch({
+            headless: process.env.HEADLESS !== 'false',
+            defaultViewport: null,
+            args: ['--start-maximized'] // Optional: makes it easier to see
+        });
         const page = await browser.newPage();
         // Navigate to Grok and authenticate
         await page.goto('https://grok.x.ai');
@@ -129,7 +133,10 @@ main().catch((error) => {
     process.exit(1);
 });
 // Handle cleanup
-process.on('SIGINT', async () => {
+// Handle cleanup
+const cleanup = async () => {
     await sessionManager.close();
     process.exit(0);
-});
+};
+process.on('SIGINT', cleanup);
+process.on('SIGTERM', cleanup);
