@@ -1,0 +1,58 @@
+{
+  "video_id": "aircAruvnKk",
+  "processing_timestamp": "2025-08-06T14:21:07.119071",
+  "category": "Educational_Content",
+  "actions": [
+    {
+      "type": "learning_plan",
+      "title": "Create structured learning pathway",
+      "description": "Break down \"But what is a neural network? | Deep learning chapter 1 - YouTube\" into learning modules",
+      "estimated_time": "30 minutes",
+      "priority": "high",
+      "implementation_steps": [
+        "Identify key learning objectives",
+        "Create module breakdown",
+        "Design assessment criteria",
+        "Set up progress tracking"
+      ]
+    },
+    {
+      "type": "practice_exercises",
+      "title": "Generate practice problems",
+      "description": "Create hands-on exercises based on video content",
+      "estimated_time": "45 minutes",
+      "priority": "medium",
+      "implementation_steps": [
+        "Analyze core concepts",
+        "Design practical exercises",
+        "Create difficulty progression",
+        "Develop solution guides"
+      ]
+    },
+    {
+      "type": "knowledge_application",
+      "title": "Real-world application project",
+      "description": "Create a project to apply learned concepts",
+      "estimated_time": "60 minutes",
+      "priority": "medium",
+      "implementation_steps": [
+        "Identify practical applications",
+        "Design project scope",
+        "Create implementation timeline",
+        "Define success metrics"
+      ]
+    }
+  ],
+  "metadata": {
+    "video_id": "aircAruvnKk",
+    "title": "But what is a neural network? | Deep learning chapter 1 - YouTube",
+    "description": "Extracted from page",
+    "duration": "Unknown",
+    "view_count": "Unknown",
+    "category": "General",
+    "extraction_method": "page_scraping"
+  },
+  "total_actions": 3,
+  "file_path": "youtube_processed_videos/enhanced_results/Educational_Content/aircAruvnKk_enhanced_results.json",
+  "processing_method": "enhanced_metadata_analysis"
+}

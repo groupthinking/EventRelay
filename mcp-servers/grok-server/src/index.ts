@@ -1,14 +1,10 @@
 #!/usr/bin/env node
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import {
-  CallToolRequestSchema,
-  ErrorCode,
-  ListToolsRequestSchema,
-  McpError,
-} from '@modelcontextprotocol/sdk/types.js';
+import { z } from 'zod';
 import puppeteer, { Browser, Page } from 'puppeteer';
 import dotenv from 'dotenv';
+import { McpError, ErrorCode, CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 
 dotenv.config();
 
@@ -25,33 +21,10 @@ interface GrokSession {
   isAuthenticated: boolean;
 }
 
-class GrokServer {
-  private server: Server;
+class GrokSessionManager {
   private session: GrokSession | null = null;
 
-  constructor() {
-    this.server = new Server(
-      {
-        name: 'grok-server',
-        version: '0.1.0',
-      },
-      {
-        capabilities: {
-          tools: {},
-        },
-      }
-    );
-
-    this.setupToolHandlers();
-    
-    this.server.onerror = (error) => console.error('[MCP Error]', error);
-    process.on('SIGINT', async () => {
-      await this.cleanup();
-      process.exit(0);
-    });
-  }
-
-  private async initSession(): Promise<GrokSession> {
+  async getSession(): Promise<GrokSession> {
     if (this.session?.isAuthenticated) {
       return this.session;
     }
@@ -73,139 +46,126 @@ class GrokServer {
     return this.session;
   }
 
-  private async cleanup() {
+  async close() {
     if (this.session?.browser) {
       await this.session.browser.close();
+      this.session = null;
     }
-    await this.server.close();
-  }
-
-  private setupToolHandlers() {
-    this.server.setRequestHandler(ListToolsRequestSchema, async () => ({
-      tools: [
-        {
-          name: 'execute_code',
-          description: 'Execute code using Grok and return the result',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              code: {
-                type: 'string',
-                description: 'The code to execute',
-              },
-              language: {
-                type: 'string',
-                description: 'Programming language of the code',
-              },
-            },
-            required: ['code', 'language'],
-          },
-        },
-        {
-          name: 'web_interaction',
-          description: 'Ask Grok to interact with web content',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              url: {
-                type: 'string',
-                description: 'URL of the webpage to interact with',
-              },
-              task: {
-                type: 'string',
-                description: 'Task to perform with the webpage content',
-              },
-            },
-            required: ['url', 'task'],
-          },
-        },
-      ],
-    }));
-
-    this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
-      const session = await this.initSession();
-
-      try {
-        switch (request.params.name) {
-          case 'execute_code': {
-            const { code, language } = request.params.arguments as { code: string; language: string };
-            
-            // Navigate to code execution interface
-            await session.page.goto('https://grok.x.ai/chat');
-            await session.page.waitForSelector('textarea');
-            
-            // Format code execution request
-            const prompt = `Execute this ${language} code and show the result:\n\`\`\`${language}\n${code}\n\`\`\``;
-            await session.page.type('textarea', prompt);
-            await session.page.keyboard.press('Enter');
-            
-            // Wait for and extract response
-            await session.page.waitForSelector('.response-content');
-            const response = await session.page.$eval('.response-content', (el: any) => el.textContent);
-
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: response || 'No response received',
-                },
-              ],
-            };
-          }
-
-          case 'web_interaction': {
-            const { url, task } = request.params.arguments as { url: string; task: string };
-            
-            // Navigate to chat interface
-            await session.page.goto('https://grok.x.ai/chat');
-            await session.page.waitForSelector('textarea');
-            
-            // Format web interaction request
-            const prompt = `Visit this URL: ${url}\nThen ${task}`;
-            await session.page.type('textarea', prompt);
-            await session.page.keyboard.press('Enter');
-            
-            // Wait for and extract response
-            await session.page.waitForSelector('.response-content');
-            const response = await session.page.$eval('.response-content', (el: any) => el.textContent);
-
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: response || 'No response received',
-                },
-              ],
-            };
-          }
-
-          default:
-            throw new McpError(
-              ErrorCode.MethodNotFound,
-              `Unknown tool: ${request.params.name}`
-            );
-        }
-      } catch (error) {
-        console.error('Tool execution error:', error);
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `Error: ${error instanceof Error ? error.message : 'Unknown error occurred'}`,
-            },
-          ],
-          isError: true,
-        };
-      }
-    });
-  }
-
-  async run() {
-    const transport = new StdioServerTransport();
-    await this.server.connect(transport);
-    console.error('Grok MCP server running on stdio');
   }
 }
 
-const server = new GrokServer();
-server.run().catch(console.error);
+const sessionManager = new GrokSessionManager();
+
+const server = new McpServer({
+  name: 'grok-server',
+  version: '0.1.0',
+});
+
+server.tool(
+  'execute_code',
+  {
+    code: z.string().describe('The code to execute'),
+    language: z.string().describe('Programming language of the code'),
+  },
+  async ({ code, language }) => {
+    try {
+      const session = await sessionManager.getSession();
+      
+      // Navigate to code execution interface
+      await session.page.goto('https://grok.x.ai/chat');
+      await session.page.waitForSelector('textarea');
+      
+      // Format code execution request
+      const prompt = `Execute this ${language} code and show the result:\n\`\`\`${language}\n${code}\n\`\`\``;
+      await session.page.type('textarea', prompt);
+      await session.page.keyboard.press('Enter');
+      
+      // Wait for and extract response
+      await session.page.waitForSelector('.response-content');
+      const response = await session.page.$eval('.response-content', (el: any) => el.textContent);
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: response || 'No response received',
+          },
+        ],
+      };
+    } catch (error) {
+      console.error('Tool execution error:', error);
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Error: ${error instanceof Error ? error.message : 'Unknown error occurred'}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  }
+);
+
+server.tool(
+  'web_interaction',
+  {
+    url: z.string().describe('URL of the webpage to interact with'),
+    task: z.string().describe('Task to perform with the webpage content'),
+  },
+  async ({ url, task }) => {
+    try {
+      const session = await sessionManager.getSession();
+
+      // Navigate to chat interface
+      await session.page.goto('https://grok.x.ai/chat');
+      await session.page.waitForSelector('textarea');
+      
+      // Format web interaction request
+      const prompt = `Visit this URL: ${url}\nThen ${task}`;
+      await session.page.type('textarea', prompt);
+      await session.page.keyboard.press('Enter');
+      
+      // Wait for and extract response
+      await session.page.waitForSelector('.response-content');
+      const response = await session.page.$eval('.response-content', (el: any) => el.textContent);
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: response || 'No response received',
+          },
+        ],
+      };
+    } catch (error) {
+      console.error('Tool execution error:', error);
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Error: ${error instanceof Error ? error.message : 'Unknown error occurred'}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  }
+);
+
+async function main() {
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
+  console.error('Grok MCP server running on stdio');
+}
+
+main().catch((error) => {
+  console.error('Fatal error:', error);
+  process.exit(1);
+});
+
+// Handle cleanup
+process.on('SIGINT', async () => {
+  await sessionManager.close();
+  process.exit(0);
+});

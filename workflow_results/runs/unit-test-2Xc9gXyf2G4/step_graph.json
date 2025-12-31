@@ -1,0 +1,72 @@
+{
+  "schema_version": "v1.0",
+  "graph_id": "unit-test-2Xc9gXyf2G4",
+  "run_context": {
+    "video_url": "https://www.youtube.com/watch?v=2Xc9gXyf2G4",
+    "run_id": "unit-test-2Xc9gXyf2G4",
+    "initiated_at": "2025-10-15T08:17:16Z",
+    "initiator": "continuous-runner",
+    "stack": {
+      "language": "python",
+      "framework": "eventrelay"
+    }
+  },
+  "steps": [
+    {
+      "id": "context-intake",
+      "display_name": "Context Intake Agent",
+      "kind": "ingest_metadata",
+      "status": "succeeded",
+      "started_at": "2025-10-15T08:17:16Z",
+      "completed_at": "2025-10-15T08:17:18Z",
+      "retries": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "tutorial_metadata",
+          "type": "json",
+          "value": {
+            "title": "[Beading Battle #3] Menzerna Power Lock vs. Sonax Protect and Shine (Netshield)",
+            "channel": "GLOSSBOSS",
+            "duration": "PT3M12S"
+          }
+        }
+      ],
+      "artifacts": []
+    },
+    {
+      "id": "transcribe",
+      "display_name": "Transcribe Agent",
+      "kind": "transcribe",
+      "status": "skipped",
+      "started_at": "2025-10-15T08:17:18Z",
+      "completed_at": "2025-10-15T08:17:18Z",
+      "retries": 0,
+      "inputs": [],
+      "outputs": [],
+      "artifacts": []
+    },
+    {
+      "id": "extract-actions",
+      "display_name": "Action Extraction Agent",
+      "kind": "extract_actions",
+      "status": "failed",
+      "started_at": "2025-10-15T08:17:51Z",
+      "completed_at": "2025-10-15T08:17:58Z",
+      "retries": 0,
+      "inputs": [],
+      "outputs": [],
+      "artifacts": []
+    }
+  ],
+  "edges": [
+    {
+      "from": "context-intake",
+      "to": "transcribe"
+    },
+    {
+      "from": "transcribe",
+      "to": "extract-actions"
+    }
+  ]
+}

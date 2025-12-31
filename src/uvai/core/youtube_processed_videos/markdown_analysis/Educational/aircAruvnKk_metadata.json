@@ -1,0 +1,18 @@
+{
+  "video_id": "aircAruvnKk",
+  "title": "But what is a neural network? | Deep learning chapter 1",
+  "channel": "3Blue1Brown",
+  "description": "What are the neurons, why are there layers, and what is the math underlying it?\nHelp fund future projects: https://www.patreon.com/3blue1brown\nWritten/interactive form of this series: https://www.3blue1brown.com/topics/neural-networks\n\nAdditional funding for this project was provided by Amplify Partners\n\nTypo correction: At 14 minutes 45 seconds, the last index on the bias vector is n, when it's supposed to, in fact, be k.  Thanks for the sharp eyes that caught that!\n\nFor those who want to learn...",
+  "published_at": "2017-10-05T15:11:25Z",
+  "duration": "18m 40s",
+  "view_count": 20184091,
+  "like_count": 485912,
+  "comment_count": 8240,
+  "thumbnail": "https://i.ytimg.com/vi/aircAruvnKk/hqdefault.jpg",
+  "tags": [],
+  "category_id": "27",
+  "transcript_preview": "This is a 3. It's sloppily written and rendered at an extremely low resolution of 28x28 pixels, but your brain has no trouble recognizing it as a 3. And I want you to take a moment to appreciate how crazy it is that brains can do this so effortlessly.",
+  "has_transcript": true,
+  "transcript_segments": 286,
+  "category": "Educational"
+}
