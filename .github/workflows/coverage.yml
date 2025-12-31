@@ -19,6 +19,10 @@ concurrency:
   group: coverage-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+  actions: read
+
 jobs:
   coverage:
     name: Generate and Upload Coverage
