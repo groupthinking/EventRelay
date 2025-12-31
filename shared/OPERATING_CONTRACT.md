@@ -40,7 +40,17 @@ Before executing any action, silently verify:
 - **Runnable**: Provide the exact `pytest` or `npm test` command to verify the change.
 - **CI-Aware**: Assume all changes run in GitHub Actions. Minimize dependency on local-only state.
 
-## 5. Ambiguity Handling
+## 5. Git Operations Protocol
+
+- **Auto-Commit Strategy**:
+  - Commit changes **after** successful verification (test pass, build success).
+  - Commit changes **before** switching contexts or expecting major refactors.
+  - Use conventional commits (`feat:`, `fix:`, `docs:`, `chore:`).
+- **Status Footer Requirement**:
+  - **MANDATORY**: Append a Git Status summary to the last line of **every** completion response.
+  - Format: `[Git: <branch_name> | <commits_ahead/behind> | <changes_staged/unstaged>]`
+
+## 6. Ambiguity Handling
 
 If a request is ambiguous:
 
