@@ -21,6 +21,15 @@ EventRelay is an AI-powered agentic video execution platform that captures YouTu
 - **Event-Sourced**: Video content drives agent execution and automatic dispatch
 - **RAG-Enhanced**: All transcripts ground into knowledge store for continuous learning
 
+## ⚡ Copilot coding agent quickstart
+- Use Python 3.9+ and Node 18+. From the repo root run:
+  - `pip install -e .[dev,youtube,ml]`
+  - `npm install --prefix frontend`
+- Default checks: `pytest tests/ -v --cov`, `npm test --prefix frontend`, `ruff check . --fix`, `black .`, `npm run lint:fix --prefix frontend`.
+- Follow the single workflow (YouTube link → context → agents → outputs); never introduce alternate flows or the banned test video ID `dQw4w9WgXcQ`.
+- Use real temp directories with `tempfile`/`shutil` and the default test video ID `auJzb1D-fag`.
+- Keep changes minimal, prefer environment variables, and never commit secrets.
+
 ## 📋 Core Principles
 
 ### Code Quality Standards
