@@ -22,7 +22,7 @@ build/
 projects/
 _archive/
 reference/
-mcp-servers/
+# mcp-servers/ # Un-ignored for profiling scripts
 video_representations_extractor-1.14.0/
 frontend/
 docs/
