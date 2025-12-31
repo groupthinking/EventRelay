@@ -7,7 +7,7 @@
     "start": "node custom-github-server.js"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.11.4",
+    "@modelcontextprotocol/sdk": "^1.24.0",
     "@modelcontextprotocol/server-github": "latest"
   }
 }
