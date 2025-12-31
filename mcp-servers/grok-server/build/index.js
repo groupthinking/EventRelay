@@ -107,7 +107,7 @@ class GrokServer {
                         await session.page.keyboard.press('Enter');
                         // Wait for and extract response
                         await session.page.waitForSelector('.response-content');
-                        const response = await session.page.$eval('.response-content', el => el.textContent);
+                        const response = await session.page.$eval('.response-content', (el) => el.textContent);
                         return {
                             content: [
                                 {
@@ -128,7 +128,7 @@ class GrokServer {
                         await session.page.keyboard.press('Enter');
                         // Wait for and extract response
                         await session.page.waitForSelector('.response-content');
-                        const response = await session.page.$eval('.response-content', el => el.textContent);
+                        const response = await session.page.$eval('.response-content', (el) => el.textContent);
                         return {
                             content: [
                                 {
