@@ -20,7 +20,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.11.4",
     "dotenv": "^16.0.3",
-    "puppeteer": "^19.7.0",
+    "puppeteer": "^24.34.0",
     "zod": "^4.3.2"
   },
   "devDependencies": {
