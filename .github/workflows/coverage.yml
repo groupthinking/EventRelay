@@ -2,13 +2,22 @@ name: Coverage Report
 
 on:
   push:
-    branches:
-      - main
-      - develop
+    branches: [main, develop]
+    paths-ignore:
+      - "**/*.md"
+      - "**/*.txt"
   pull_request:
-    branches:
-      - main
-      - develop
+    branches: [main, develop]
+    paths-ignore:
+      - "**/*.md"
+      - "**/*.txt"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: coverage-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   coverage:
@@ -17,7 +26,9 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0  # set to 1 if full history not needed
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -40,10 +51,13 @@ jobs:
             --cov-report=lcov:reports/lcov.info \
             --cov-report=term \
             --cov-report=html:reports/htmlcov \
-            -v || true
+            --cov-fail-under=80 \
+            -v
 
-      - name: Upload coverage to Qlty
+      - name: Upload coverage to Qlty (same-repo only)
+        if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
         uses: qltysh/qlty-action/coverage@v2
+        continue-on-error: true
         with:
           token: ${{ secrets.QLTY_COVERAGE_TOKEN }}
           files: reports/lcov.info
@@ -56,4 +70,4 @@ jobs:
           path: |
             reports/lcov.info
             reports/htmlcov/
-          retention-days: 30
+          retention-days: 80
