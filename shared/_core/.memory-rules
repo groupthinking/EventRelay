@@ -1,0 +1,90 @@
+# Memory Rules for Repository Management
+# Location: /Users/garvey/Dev/projects/EventRelay/shared/_core/.memory-rules
+# Purpose: Automatic documentation update triggers
+
+## CRITICAL RULES - ALWAYS FOLLOW
+
+### Rule 0: Operating Contract
+WHEN: Executing any action
+THEN:
+  1. Adhere to `shared/_core/OPERATING_CONTRACT.md`
+  2. Perform Pre-Flight Check before tool use
+  3. Ensure failure modes are handled FIRST
+
+### Rule 1: Daily Commit Protocol
+WHEN: Starting a new day of work
+THEN:
+  1. Commit the prior day's folder (e.g., `2024-12/30/`) before starting new work.
+  2. Create new day folder under current month (e.g., `2024-12/31/`).
+  3. Start fresh CHANGELOG for the day.
+
+### Rule 2: Session Start Protocol
+WHEN: Starting any new chat session
+THEN:
+  1. Read `shared/YYYY-MM/DD/CHANGELOG.md` (current day)
+  2. If no current day folder exists, follow Rule 1.
+  3. Check "In Progress" section.
+  4. Review "Pending Tasks".
+
+### Rule 3: Session End Protocol
+WHEN: Ending any work session
+THEN:
+  1. Update current day's CHANGELOG.md with:
+     - Completed tasks
+     - In-progress items
+     - Blockers encountered
+     - Notes for next session
+  2. Commit state.
+
+### Rule 4: File Operation Updates
+WHEN: Moving, renaming, or archiving projects
+THEN:
+  1. Update `shared/_reference/REPOSITORY_ANALYSIS.md`
+  2. Update current day's CHANGELOG.md
+
+### Rule 5: Dependency Updates
+WHEN: Installing, upgrading, or removing dependencies
+THEN:
+  1. Update `shared/_reference/TECH_STACK_MATRIX.md`
+  2. Note in current day's CHANGELOG.md
+
+### Rule 6: Decision Documentation
+WHEN: Making any project decision
+THEN:
+  1. Document in `shared/_core/PROJECT_DECISIONS.md`
+  2. Note in current day's CHANGELOG.md
+
+## FILE LOCATIONS (NEW STRUCTURE)
+
+```
+shared/
+├── _core/               # Persistent rules (always active)
+│   ├── .memory-rules
+│   ├── OPERATING_CONTRACT.md
+│   ├── README.md
+│   └── PROJECT_DECISIONS.md
+├── _reference/          # Static reference docs
+│   ├── TECH_STACK_MATRIX.md
+│   ├── PROJECT_CATALOG.md
+│   ├── EXECUTIVE_SUMMARY.md
+│   └── REPOSITORY_ANALYSIS.md
+└── YYYY-MM/             # Date archives
+    └── DD/              # Day folders
+        └── CHANGELOG.md
+```
+
+## MANDATORY CHECKS
+
+Before ending session:
+- [ ] Current day's CHANGELOG.md updated?
+- [ ] All completed tasks checked off?
+
+Before starting session:
+- [ ] Prior day committed (if new day)?
+- [ ] Current day's CHANGELOG.md read?
+
+---
+
+Last Updated: December 31, 2025
+Version: 2.0.0
+Status: Active
