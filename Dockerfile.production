@@ -24,6 +24,9 @@ WORKDIR /app
 # Copy all files (matches existing Dockerfile pattern)
 COPY . /app/
 
+# Pre-install CPU-only PyTorch to reduce image size (avoids massive GPU drivers)
+RUN pip install --no-cache-dir torch>=2.1.0 torchvision>=0.16.0 torchaudio>=2.1.0 --index-url https://download.pytorch.org/whl/cpu
+
 # Install Python packages using pyproject.toml
 # Install core dependencies needed for production
 RUN pip install --no-cache-dir --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org \

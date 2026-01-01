@@ -41,6 +41,14 @@ except ImportError:
     HAS_AI_DEPS = False
     logging.warning("AI dependencies not available")
 
+# Gemini Service Import
+try:
+    from youtube_extension.services.ai.gemini_service import GeminiService
+    HAS_GEMINI = True
+except ImportError:
+    HAS_GEMINI = False
+    logging.warning("GeminiService not available")
+
 # Data processing
 import pandas as pd
 import numpy as np
@@ -142,6 +150,17 @@ class EnhancedVideoExtractor:
         else:
             self.summarizer = None
             self.sentiment_analyzer = None
+            
+        # Initialize Gemini Service
+        if HAS_GEMINI:
+            try:
+                self.gemini_service = GeminiService(self.config)
+                logger.info("Gemini Service initialized for Hybrid AI processing")
+            except Exception as e:
+                logger.error(f"Failed to initialize Gemini Service: {e}")
+                self.gemini_service = None
+        else:
+            self.gemini_service = None
     
     async def extract_video_metadata(self, video_id: str) -> VideoMetadata:
         """Extract comprehensive video metadata"""
@@ -234,15 +253,32 @@ class EnhancedVideoExtractor:
             raise
     
     async def analyze_content(self, transcript: List[TranscriptSegment]) -> Dict[str, Any]:
-        """Analyze video content using AI"""
-        if not self.summarizer or not self.sentiment_analyzer:
-            logger.warning("AI components not available for content analysis")
-            return {}
-        
-        # Combine transcript text
+        """Analyze video content using Hybrid AI (Gemini + Torch)"""
         full_text = " ".join([segment.text for segment in transcript])
-        
         analysis = {}
+
+        # 1. Try Gemini first (Cloud Engine)
+        if self.gemini_service and self.gemini_service.is_available():
+            try:
+                logger.info("Using Gemini for content analysis...")
+                prompt = self._construct_gemini_prompt(full_text)
+                result = await self.gemini_service.process_text(prompt)
+                
+                if result.success and result.response:
+                    # Parse the markdown/text response into structured dict if needed
+                    # For now, we store the full enhanced markdown in 'summary' or a new field
+                    analysis['enhanced_summary'] = result.response
+                    analysis['summary'] = self._extract_summary_from_markdown(result.response)
+                    analysis['sentiment'] = "analyzed_by_gemini" # Placeholder or extract from text
+                    analysis['topics'] = self._extract_topics_from_markdown(result.response)
+                    return analysis
+            except Exception as e:
+                logger.error(f"Gemini analysis failed, falling back to local: {e}")
+
+        # 2. Fallback to Local Torch (Local Engine)
+        if not self.summarizer or not self.sentiment_analyzer:
+            logger.warning("Local AI components not available for fallback analysis")
+            return analysis
         
         try:
             # Generate summary
@@ -262,10 +298,66 @@ class EnhancedVideoExtractor:
             analysis['topics'] = self._extract_topics(full_text)
             
         except Exception as e:
-            logger.error(f"Content analysis failed: {e}")
+            logger.error(f"Local content analysis failed: {e}")
             analysis['error'] = str(e)
         
         return analysis
+
+    def _construct_gemini_prompt(self, text: str) -> str:
+        """Construct prompt to enforce strict schema preservation"""
+        return f"""
+        Analyze the following video transcript and produce a detailed report in strict Markdown format.
+        
+        CRITICAL: You MUST use exactly the following sections and headers:
+        
+        # [Video Title]
+
+        ## 📺 Video Information
+        - **Channel**: [Channel Name]
+        - **Duration**: [Duration]
+        - **Views**: [Views]
+        - **Published**: [Date]
+        - **Category**: [Category]
+
+        ## 🎯 Content Summary
+        [Comprehensive summary of the content]
+
+        ## 🔑 Key Concepts
+        [List of key concepts]
+
+        ## 💻 Technical Details
+        [Technical tools, frameworks, or specifics mentioned]
+
+        ## 🛤️ Learning Path
+        [Logical progression of topics in the video]
+
+        ## 🚀 Code Generation Potential
+        [High/Medium/Low assessment with reasoning]
+
+        ## 📊 Difficulty & Prerequisites
+        - **Level**: [Beginner/Intermediate/Advanced]
+        - **Prerequisites**: [Required knowledge]
+
+        ## 🔗 Related Topics
+        [List of related topics]
+
+        TRANSCRIPT:
+        {text[:25000]} 
+        """
+
+    def _extract_summary_from_markdown(self, md: str) -> str:
+        """Helper to extract clean summary from Gemini markdown"""
+        match = re.search(r'## 🎯 Content Summary\n(.*?)\n##', md, re.DOTALL)
+        return match.group(1).strip() if match else md[:200]
+
+    def _extract_topics_from_markdown(self, md: str) -> List[str]:
+        """Helper to extract topics from Gemini markdown"""
+        match = re.search(r'## 🔗 Related Topics\n(.*?)$', md, re.DOTALL)
+        if match:
+            # clean up list format
+            topics = match.group(1).strip().replace('[', '').replace(']', '').replace("'", "")
+            return [t.strip() for t in topics.split(',')]
+        return []
     
     def _extract_key_points(self, text: str) -> List[str]:
         """Extract key points from text using simple heuristics"""
