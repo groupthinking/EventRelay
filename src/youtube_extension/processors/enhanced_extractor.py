@@ -141,19 +141,9 @@ class EnhancedVideoExtractor:
         else:
             self.youtube = None
 
-        # Initialize AI components
-        if HAS_AI_DEPS and self.openai_api_key:
-            openai.api_key = self.openai_api_key
-            try:
-                self.summarizer = pipeline("summarization", model="sshleifer/distilbart-cnn-12-6", use_safetensors=True)
-                self.sentiment_analyzer = pipeline("sentiment-analysis", use_safetensors=True)
-            except Exception as e:
-                logger.error(f"Failed to initialize AI pipelines: {e}")
-                self.summarizer = None
-                self.sentiment_analyzer = None
-        else:
-            self.summarizer = None
-            self.sentiment_analyzer = None
+        # Initialize AI components placeholders
+        self.summarizer = None
+        self.sentiment_analyzer = None
 
         # Initialize Gemini Service
         if HAS_GEMINI:
@@ -168,6 +158,25 @@ class EnhancedVideoExtractor:
 
         # Initialize Scoring Engine
         self.scoring_engine = ScoringEngine()
+
+    def _load_ai_models(self):
+        """Lazy load AI models if available and not yet loaded"""
+        if not HAS_AI_DEPS:
+            return
+
+        if self.summarizer is None:
+            try:
+                if self.openai_api_key:
+                    openai.api_key = self.openai_api_key
+
+                logger.info("Lazy loading AI models...")
+                self.summarizer = pipeline("summarization", model="sshleifer/distilbart-cnn-12-6", use_safetensors=True)
+                self.sentiment_analyzer = pipeline("sentiment-analysis", use_safetensors=True)
+                logger.info("AI models loaded successfully")
+            except Exception as e:
+                logger.error(f"Failed to lazy load AI pipelines: {e}")
+                self.summarizer = None
+                self.sentiment_analyzer = None
 
     async def extract_video_metadata(self, video_id: str) -> VideoMetadata:
         """Extract comprehensive video metadata"""
@@ -283,6 +292,9 @@ class EnhancedVideoExtractor:
                 logger.error(f"Gemini analysis failed, falling back to local: {e}")
 
         # 2. Fallback to Local Torch (Local Engine)
+        # 2. Fallback to Local Torch (Local Engine)
+        self._load_ai_models()
+
         if not self.summarizer or not self.sentiment_analyzer:
             logger.warning("Local AI components not available for fallback analysis")
             return analysis
@@ -317,12 +329,12 @@ class EnhancedVideoExtractor:
             # or better yet, since we don't store raw response in self, let's use what we have.
             # ScoringEngine expects 'statistics' and 'contentDetails'.
             # We can mock this structure from our standardized VideoMetadata to keep interfaces clean.
-            
+
             # Reconstruct minimal video_info for scoring
             scorable_video_info = {
                'contentDetails': {'duration': f"PT{int(transcript[-1].end if transcript else 0)}S"}, # Approx if needed
                'statistics': {
-                   'viewCount': 0, # We don't have this in analyze_content args! 
+                   'viewCount': 0, # We don't have this in analyze_content args!
                    # CRITICAL FIX: analyze_content only takes transcript. It needs metadata for full scoring.
                    # However, changing the signature is a breaking change.
                    # BUT, analyze_content is called from process_video which HAS metadata.
@@ -330,7 +342,7 @@ class EnhancedVideoExtractor:
                    # OR pass metadata to analyze_content.
                }
             }
-            # Actually, `process_video` calls `extract_video_metadata` first. 
+            # Actually, `process_video` calls `extract_video_metadata` first.
             # I will move the scoring call to `process_video` to have access to both metadata and transcript.
         except Exception as e:
             logger.error(f"Scoring engine prep failed: {e}")
@@ -472,7 +484,7 @@ class EnhancedVideoExtractor:
                     }
                 }
                 transcript_dicts = [asdict(seg) for seg in transcript]
-                
+
                 content.world_class_analysis = self.scoring_engine.calculate_all_scores(video_info_dict, transcript_dicts)
                 content.actions = self.scoring_engine.generate_actions(content.world_class_analysis)
                 logger.info("✅ World-class scoring applied via Unified Pipeline")

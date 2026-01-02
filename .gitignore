@@ -50,6 +50,7 @@ __pycache__/
 
 # --- Logs & Temp ---
 *.log
+logs/
 tmp/
 *.tmp
 *.temp
@@ -117,4 +118,3 @@ _archive/
 build_extensions/uvai-extensions/ai-integrations/MiniCPM-o/
 build_extensions/uvai-extensions/ai-integrations/youtube-mcp/
 youtube_processed_videos/
-
