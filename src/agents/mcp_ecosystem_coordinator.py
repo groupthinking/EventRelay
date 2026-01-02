@@ -8,7 +8,11 @@ import abc
 import asyncio
 import json
 import logging
+import logging
 import os
+from dataclasses import asdict
+
+from youtube_extension.processors.enhanced_extractor import EnhancedVideoExtractor, VideoContent
 
 # Add src/mcp to path for imports
 # REMOVED: sys.path.append removed
@@ -44,6 +48,8 @@ class MCPVideoProcessorServer(BaseMCPServer):
     def __init__(self):
         super().__init__("video_processor", "video_processing")
         self.supported_formats = ["mp4", "webm", "avi"]
+        # Initialize the Unified Pipeline Extractor
+        self.extractor = EnhancedVideoExtractor()
 
     async def handle_request(self, request: dict) -> dict:
         """Process video processing requests."""
@@ -52,19 +58,28 @@ class MCPVideoProcessorServer(BaseMCPServer):
 
         if action == "process_video":
             logger.info(f"Processing video: {video_id}")
-            use_mock = os.getenv("USE_MOCK_SERVERS", "false").lower() == "true"
-            if use_mock:
-                # Simulated response only when mock mode is explicitly enabled
+            try:
+                # Use the Unified Pipeline (Gemini + Scoring)
+                # Note: process_video expects a URL usually, but if ID is passed, we might need to construct URL
+                # or ensure process_video handles IDs (it extracts ID from URL, so URL is safer)
+                video_url = f"https://www.youtube.com/watch?v={video_id}"
+                content: VideoContent = await self.extractor.process_video(video_url)
+                
                 return {
                     "status": "success",
-                    "result": f"Video {video_id} processed successfully (mock)",
-                    "metadata": {
-                        "duration": "120s",
-                        "format": "mp4",
-                        "size": "15MB"
+                    "result": content.summary,
+                    "metadata": asdict(content.metadata),
+                    "analysis": {
+                        "topics": content.topics,
+                        "sentiment": content.sentiment,
+                        "world_class_score": content.world_class_analysis.get('quality_score') if content.world_class_analysis else None,
+                        "actions": content.actions
                     }
                 }
-            return {"status": "error", "message": "Real video processing not wired here; route via backend processors."}
+            except Exception as e:
+                logger.error(f"Error in Unified Pipeline: {e}")
+                return {"status": "error", "message": str(e)}
+
         elif action == "extract_transcript":
             logger.info(f"Extracting transcript for video: {video_id}")
             use_mock = os.getenv("USE_MOCK_SERVERS", "false").lower() == "true"

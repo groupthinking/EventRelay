@@ -55,6 +55,7 @@ from dataclasses import asdict, dataclass
 from enum import Enum
 
 import pandas as pd
+from youtube_extension.processors.scoring_engine import ScoringEngine
 
 # Configure logging
 logging.basicConfig(
@@ -117,6 +118,8 @@ class VideoContent:
     processing_stage: ProcessingStage = ProcessingStage.EXTRACTION
     processing_time: float = 0.0
     error_log: list[str] = None
+    world_class_analysis: dict[str, Any] = None
+    actions: list[dict[str, Any]] = None
 
 class EnhancedVideoExtractor:
     """
@@ -162,6 +165,9 @@ class EnhancedVideoExtractor:
                 self.gemini_service = None
         else:
             self.gemini_service = None
+
+        # Initialize Scoring Engine
+        self.scoring_engine = ScoringEngine()
 
     async def extract_video_metadata(self, video_id: str) -> VideoMetadata:
         """Extract comprehensive video metadata"""
@@ -302,6 +308,33 @@ class EnhancedVideoExtractor:
             logger.error(f"Local content analysis failed: {e}")
             analysis['error'] = str(e)
 
+        # 3. Apply Unified World Class Scoring (Unified Pipeline)
+        try:
+            # We need to convert our TranscriptSegment list to the list of dicts expected by ScoringEngine
+            transcript_dicts = [asdict(seg) for seg in transcript]
+            # We also need a dict-like representation of metadata for some scoring functions
+            # Ideally we pass the raw response, but we can reconstruct a subset from VideoMetadata
+            # or better yet, since we don't store raw response in self, let's use what we have.
+            # ScoringEngine expects 'statistics' and 'contentDetails'.
+            # We can mock this structure from our standardized VideoMetadata to keep interfaces clean.
+            
+            # Reconstruct minimal video_info for scoring
+            scorable_video_info = {
+               'contentDetails': {'duration': f"PT{int(transcript[-1].end if transcript else 0)}S"}, # Approx if needed
+               'statistics': {
+                   'viewCount': 0, # We don't have this in analyze_content args! 
+                   # CRITICAL FIX: analyze_content only takes transcript. It needs metadata for full scoring.
+                   # However, changing the signature is a breaking change.
+                   # BUT, analyze_content is called from process_video which HAS metadata.
+                   # Let's handle this by computing score in process_video INSTEAD of analyze_content,
+                   # OR pass metadata to analyze_content.
+               }
+            }
+            # Actually, `process_video` calls `extract_video_metadata` first. 
+            # I will move the scoring call to `process_video` to have access to both metadata and transcript.
+        except Exception as e:
+            logger.error(f"Scoring engine prep failed: {e}")
+
         return analysis
 
     def _construct_gemini_prompt(self, text: str) -> str:
@@ -426,6 +459,25 @@ class EnhancedVideoExtractor:
                 processing_stage=ProcessingStage.COMPLETE,
                 processing_time=time.time() - start_time
             )
+
+            # 4. Run Unified Scoring (Simulated Post-Processing)
+            try:
+                # Reconstruct info dict for scoring engine
+                video_info_dict = {
+                    'contentDetails': {'duration': f"PT{metadata.duration}S"},
+                    'statistics': {
+                        'viewCount': metadata.view_count,
+                        'likeCount': metadata.like_count or 0,
+                        'commentCount': metadata.comment_count or 0
+                    }
+                }
+                transcript_dicts = [asdict(seg) for seg in transcript]
+                
+                content.world_class_analysis = self.scoring_engine.calculate_all_scores(video_info_dict, transcript_dicts)
+                content.actions = self.scoring_engine.generate_actions(content.world_class_analysis)
+                logger.info("✅ World-class scoring applied via Unified Pipeline")
+            except Exception as e:
+                logger.error(f"Unified scoring failed: {e}")
 
             logger.info(f"Successfully processed video {video_id} in {content.processing_time:.2f}s")
             return content
