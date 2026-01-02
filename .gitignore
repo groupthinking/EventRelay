@@ -18,6 +18,8 @@ venv/
 .venv_prod_verify/
 .npm/
 .yarn/
+pnpm-lock.yaml
+yarn.lock
 
 # --- Build Artifacts ---
 dist/
