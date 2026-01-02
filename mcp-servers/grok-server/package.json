@@ -4,9 +4,9 @@
   "type": "module",
   "main": "build/index.js",
   "scripts": {
-    "build": "tsc && chmod +x build/index.js",
-    "start": "node build/index.js",
-    "dev": "tsc -w",
+    "build": "export NODE_OPTIONS='--max-old-space-size=8192' && tsc && chmod +x build/index.js",
+    "start": "export NODE_OPTIONS='--max-old-space-size=8192' && node build/index.js",
+    "dev": "export NODE_OPTIONS='--max-old-space-size=8192' && tsc -w",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [
