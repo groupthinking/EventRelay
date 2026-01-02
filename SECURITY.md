@@ -37,6 +37,23 @@ If email is unavailable, open a private security advisory via the GitHub reposit
 - Use feature flags when integrating new agents to avoid exposing experimental endpoints in production.
 - Monitor dependencies with `scripts/check_credentials.py` and container scans in your CI pipeline.
 
+### Container Security Scanning
+
+The project uses [Trivy](https://github.com/aquasecurity/trivy) for automated container vulnerability scanning in CI/CD:
+
+- Scans run automatically on push, pull requests, and weekly schedules
+- Results are uploaded to GitHub Security tab in SARIF format for tracking
+- Only CRITICAL and HIGH severity vulnerabilities are reported
+- Known false positives or accepted risks are documented in `.trivyignore`
+- Exit code is set to 0 to prevent blocking deployments while still surfacing issues
+
+To run Trivy locally before pushing:
+```bash
+# Scan the production Docker image
+docker build -t eventrelay:test -f Dockerfile.production .
+docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasecurity/trivy:latest image eventrelay:test
+```
+
 ## Infrastructure Hardening
 
 - Enforce HTTPS for any public deployment behind a load balancer or CDN.
