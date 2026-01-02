@@ -10,7 +10,7 @@ TODO: Replace with production unified AI SDK implementation.
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Dict, Any, Optional, Union
+from typing import Any, Optional, Union
 
 # Import ModelProvider from rate_limiter
 from .rate_limiter import ModelProvider
@@ -51,45 +51,45 @@ class AIResponse:
     success: bool = True
     tokens_used: int = 0
     error: Optional[str] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 class UnifiedAISDK:
     """
     Unified interface for multiple AI providers.
-    
+
     This is a placeholder implementation that provides a basic
     structure for unified AI requests.
-    
+
     TODO: Implement actual provider integrations for Claude, Grok, OpenAI, etc.
     """
-    
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
+
+    def __init__(self, config: Optional[dict[str, Any]] = None):
         """
         Initialize Unified AI SDK.
-        
+
         Args:
             config: Configuration dict with API keys and settings
         """
         self.config = config if config is not None else {}
-        
+
     async def unified_request(self, request: AIRequest) -> AIResponse:
         """
         Execute a unified AI request across providers.
-        
+
         Args:
             request: AIRequest object with prompt and configuration
-            
+
         Returns:
             AIResponse with the result
-            
+
         Note:
             This is a placeholder that returns a simulated response.
             TODO: Implement actual provider API calls.
         """
         # Get provider name
         provider_name = request.provider.value if isinstance(request.provider, ModelProvider) else str(request.provider)
-        
+
         # Placeholder implementation - returns simulated response
         return AIResponse(
             content=f"[Placeholder response for {request.task_type.value} task using {request.model}]",
@@ -104,11 +104,11 @@ class UnifiedAISDK:
                 "note": "This is a placeholder response. Implement actual AI provider integration."
             }
         )
-    
-    async def health_check(self) -> Dict[str, Any]:
+
+    async def health_check(self) -> dict[str, Any]:
         """
         Check health status of all configured providers.
-        
+
         Returns:
             Dict with health status for each provider
         """

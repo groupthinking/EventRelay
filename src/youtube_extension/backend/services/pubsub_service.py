@@ -1,7 +1,6 @@
 import json
 import logging
-import os
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 from google.cloud import pubsub_v1
 
@@ -25,7 +24,7 @@ class PubSubService:
         self.topic_name = topic_name
         self._publisher = None
         self._topic_path = None
-        
+
         # Only initialize if we have the necessary config
         if self.project_id and self.topic_name:
              try:
@@ -35,7 +34,7 @@ class PubSubService:
              except Exception as e:
                  logger.warning(f"Failed to initialize PubSub publisher: {e}")
 
-    async def publish_message(self, data: Dict[str, Any], attributes: Optional[Dict[str, str]] = None) -> Optional[str]:
+    async def publish_message(self, data: dict[str, Any], attributes: Optional[dict[str, str]] = None) -> Optional[str]:
         """
         Publish a message to the configured Pub/Sub topic.
 

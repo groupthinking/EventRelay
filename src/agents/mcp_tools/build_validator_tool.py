@@ -4,14 +4,12 @@ Build Validator MCP Tool - Validates and fixes generated projects
 Runs npm build and uses Gemini to fix errors
 """
 
-import asyncio
+import json
 import logging
 import os
-import sys
-from pathlib import Path
-from typing import Dict, Any, List, Optional
 import subprocess
-import json
+from pathlib import Path
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +47,7 @@ class BuildValidatorMCPTool:
         self,
         project_path: str,
         max_fix_attempts: int = 3
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Validate that a generated project can build successfully.
 
@@ -137,7 +135,7 @@ class BuildValidatorMCPTool:
 
                 # Try to fix build errors
                 if self.client and attempt < max_fix_attempts - 1:
-                    logger.info(f"Attempting to fix build errors...")
+                    logger.info("Attempting to fix build errors...")
                     fix = await self._fix_errors(
                         project_dir,
                         "npm run build",
@@ -164,7 +162,7 @@ class BuildValidatorMCPTool:
                 "project_path": project_path
             }
 
-    async def _run_npm_install(self, project_dir: Path) -> Dict[str, Any]:
+    async def _run_npm_install(self, project_dir: Path) -> dict[str, Any]:
         """Run npm install"""
         try:
             logger.info(f"Running npm install in {project_dir}")
@@ -196,7 +194,7 @@ class BuildValidatorMCPTool:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    async def _run_npm_build(self, project_dir: Path) -> Dict[str, Any]:
+    async def _run_npm_build(self, project_dir: Path) -> dict[str, Any]:
         """Run npm run build"""
         try:
             import time
@@ -239,7 +237,7 @@ class BuildValidatorMCPTool:
         project_dir: Path,
         command: str,
         error_output: str
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Use Gemini to analyze and fix build errors.
 

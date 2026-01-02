@@ -12,7 +12,6 @@ imports elsewhere in the codebase.
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import os
@@ -20,7 +19,7 @@ import time
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 from PIL import Image
 
@@ -67,7 +66,7 @@ class HybridConfig:
     cache_ttl: int = 3600
     enable_metrics: bool = True
     enable_mock: bool = os.getenv("YOUTUBE_EXTENSION_MOCK_AI", "0").lower() in {"1", "true", "yes"}
-    model_routing: Dict[TaskType, str] = None
+    model_routing: dict[TaskType, str] = None
 
     def __post_init__(self) -> None:
         if self.gemini is None:
@@ -101,16 +100,16 @@ class HybridResult:
     """Result from the hybrid processor (Gemini only)."""
 
     success: bool
-    response: Optional[str]
+    response: str | None
     latency: float
     mode_used: ProcessingMode
-    cloud_result: Optional[GeminiResult] = None
-    routing_decision: Optional[RoutingDecision] = None
+    cloud_result: GeminiResult | None = None
+    routing_decision: RoutingDecision | None = None
     from_cache: bool = False
-    error: Optional[str] = None
+    error: str | None = None
 
 
-TASK_ROUTING_RULES: Dict[TaskType, ProcessingMode] = {
+TASK_ROUTING_RULES: dict[TaskType, ProcessingMode] = {
     TaskType.REAL_TIME_CAPTION: ProcessingMode.CLOUD_ONLY,
     TaskType.TECHNICAL_DOCUMENT: ProcessingMode.CLOUD_ONLY,
     TaskType.PRODUCT_DEMO: ProcessingMode.CLOUD_ONLY,
@@ -138,8 +137,8 @@ class RoutingEngine:
     def decide_routing(
         self,
         prompt: str,
-        metadata: Optional[Dict[str, Any]] = None,
-        task_type: Optional[TaskType] = None,
+        metadata: dict[str, Any] | None = None,
+        task_type: TaskType | None = None,
     ) -> RoutingDecision:
         """Decide routing strategy; currently always Gemini."""
         metadata = metadata or {}
@@ -152,7 +151,7 @@ class RoutingEngine:
             task_type=inferred_task,
         )
 
-    def _classify_task(self, prompt: str, metadata: Dict[str, Any]) -> TaskType:
+    def _classify_task(self, prompt: str, metadata: dict[str, Any]) -> TaskType:
         """Simple classifier retained from original implementation."""
         prompt_lower = prompt.lower()
 
@@ -183,14 +182,14 @@ class HybridProcessorService:
     The public API remains intact for callers that expect a hybrid service.
     """
 
-    def __init__(self, config: Optional[HybridConfig] = None) -> None:
+    def __init__(self, config: HybridConfig | None = None) -> None:
         self.config = config or HybridConfig()
         self.logger = logging.getLogger(__name__)
 
         self.gemini = GeminiService(self.config.gemini)
         self.router = RoutingEngine(self.config)
 
-        self._cache: Optional[Dict[str, HybridResult]] = {} if self.config.enable_caching else None
+        self._cache: dict[str, HybridResult] | None = {} if self.config.enable_caching else None
         self.metrics = {
             "total_requests": 0,
             "cloud_requests": 0,
@@ -206,16 +205,16 @@ class HybridProcessorService:
         gemini_info = self.gemini.get_model_info()
         self.logger.info(f"Gemini status: {gemini_info}")
 
-    def _get_cache_key(self, input_data: Union[str, Path], prompt: str) -> str:
+    def _get_cache_key(self, input_data: str | Path, prompt: str) -> str:
         return f"{hash(str(input_data))}_{hash(prompt)}"
 
     async def process(
         self,
-        input_data: Union[str, Path, Image.Image],
+        input_data: str | Path | Image.Image,
         prompt: str,
-        task_type: Optional[TaskType] = None,
-        force_mode: Optional[ProcessingMode] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        task_type: TaskType | None = None,
+        force_mode: ProcessingMode | None = None,
+        metadata: dict[str, Any] | None = None,
         **kwargs,
     ) -> HybridResult:
         """Process an input using Gemini."""
@@ -291,9 +290,9 @@ class HybridProcessorService:
 
     async def _call_gemini(
         self,
-        input_data: Union[str, Path, Image.Image],
+        input_data: str | Path | Image.Image,
         prompt: str,
-        task_type: Optional[TaskType],
+        task_type: TaskType | None,
         **kwargs,
     ) -> GeminiResult:
         """Route requests to Gemini helpers based on input type."""
@@ -332,7 +331,7 @@ class HybridProcessorService:
                     prompt,
                     **forward_kwargs,
                 )
-            
+
             # If it's a string but doesn't look like a file or URL, treat it as text
             if isinstance(input_data, str) and len(input_data) > 0:
                 # Check for common non-path characters or length to distinguish from paths
@@ -349,11 +348,11 @@ class HybridProcessorService:
         self.metrics["cloud_requests"] += 1
         self.metrics["total_latency"] += latency
 
-    def _generate_mock_response(self, prompt: str, task_type: Optional[TaskType]) -> str:
+    def _generate_mock_response(self, prompt: str, task_type: TaskType | None) -> str:
         """Generate structured mock responses for testing."""
         prompt_lower = prompt.lower()
         self.logger.info(f"Generating mock response for prompt snippet: {prompt_lower[:50]}...")
-        
+
         # Check for personality/persona
         if "personality" in prompt_lower or "persona" in prompt_lower:
             self.logger.info("Matched Personality mock branch")
@@ -374,7 +373,7 @@ class HybridProcessorService:
                     "intent_alignment": "high"
                 }
             })
-            
+
         # Check for strategy/funnel/strategic
         if "strategy" in prompt_lower or "strat" in prompt_lower or "funnel" in prompt_lower:
             self.logger.info("Matched Strategy mock branch")
@@ -399,10 +398,10 @@ class HybridProcessorService:
                     }
                 ]
             })
-            
+
         return "This is a mock response from the Gemini Hybrid Service. (Task: " + str(task_type) + ")"
 
-    def get_metrics(self) -> Dict[str, Any]:
+    def get_metrics(self) -> dict[str, Any]:
         total_requests = self.metrics["total_requests"]
         avg_latency = self.metrics["total_latency"] / total_requests if total_requests else 0.0
         return {

@@ -6,11 +6,11 @@ Compatibility wrapper for the consolidated RealYouTubeAPIService.
 # Import from the actual implementation
 from .youtube.adapters.official_api import (
     RealYouTubeAPIService,
-    YouTubeVideoMetadata,
-    YouTubeTranscriptSegment,
     YouTubeSearchResult,
-    get_youtube_service,
+    YouTubeTranscriptSegment,
+    YouTubeVideoMetadata,
     get_video_data,
+    get_youtube_service,
 )
 
 __all__ = [

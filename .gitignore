@@ -18,6 +18,8 @@ venv/
 .venv_prod_verify/
 .npm/
 .yarn/
+pnpm-lock.yaml
+yarn.lock
 
 # --- Build Artifacts ---
 dist/
@@ -113,4 +115,4 @@ _archive/
 
 # --- Ignore nested git repositories that aren't properly configured as submodules ---
 build_extensions/uvai-extensions/ai-integrations/MiniCPM-o/
-build_extensions/uvai-extensions/ai-integrations/youtube-mcp/
+No response.

@@ -9,18 +9,16 @@ replacing mock implementations with actual video analysis and processing.
 
 import asyncio
 import logging
-import sys
-import os
-from typing import Dict, Any, List, Optional
 from pathlib import Path
+from typing import Any, Optional
 
 # Path setup
 uvai_root = Path(__file__).parent.parent.parent.parent
 
 try:
-    from src.mcp.mcp_video_processor import MCPVideoProcessor
     from src.adapters.multi_modal_engine.engine import VideoToSystemEngine
     from src.core.youtube_extension.backend.ai_insights_processor import get_ai_insights
+    from src.mcp.mcp_video_processor import MCPVideoProcessor
 except (ImportError, AttributeError) as e:
     logging.warning(f"Import error in real_video_processor: {e}")
     MCPVideoProcessor = None
@@ -34,11 +32,11 @@ class RealVideoProcessor:
     Real video processor that integrates existing UVAI components
     for actual video-to-software processing
     """
-    
+
     def __init__(self):
         self.mcp_processor = None
         self.engine = None
-        
+
         # Initialize components if available
         if MCPVideoProcessor:
             try:
@@ -46,62 +44,63 @@ class RealVideoProcessor:
                 logger.info("✅ MCP Video Processor initialized")
             except Exception as e:
                 logger.warning(f"Failed to initialize MCP processor: {e}")
-        
+
         if VideoToSystemEngine:
             try:
                 self.engine = VideoToSystemEngine()
                 logger.info("✅ Video-to-System Engine initialized")
             except Exception as e:
                 logger.warning(f"Failed to initialize video engine: {e}")
-    
-    async def process_video(self, video_url: str) -> Dict[str, Any]:
+
+    async def process_video(self, video_url: str) -> dict[str, Any]:
         """
         Process a YouTube video and extract comprehensive information
         for software generation
         """
         logger.info(f"🎥 Processing video: {video_url}")
-        
+
         try:
             # Step 1: Extract basic video information and transcript
             video_data = await self._extract_video_data(video_url)
-            
+
             # Step 2: Get AI insights if available
             ai_insights = await self._get_ai_insights(video_url)
-            
+
             # Step 3: Process with MCP if available
             mcp_result = None
             if self.mcp_processor:
                 try:
                     mcp_result = await self.mcp_processor.process_video_mcp(
-                        video_url, 
+                        video_url,
                         ai_insights=ai_insights
                     )
                 except Exception as e:
                     logger.warning(f"MCP processing failed: {e}")
-            
+
             # Step 4: Combine results
             result = self._combine_results(video_data, ai_insights, mcp_result)
-            
+
             logger.info(f"✅ Video processing complete for {video_url}")
             return result
-            
+
         except Exception as e:
             logger.error(f"❌ Video processing failed: {e}")
             raise
-    
-    async def _extract_video_data(self, video_url: str) -> Dict[str, Any]:
+
+    async def _extract_video_data(self, video_url: str) -> dict[str, Any]:
         """Extract basic video data including transcript"""
         try:
-            from youtube_transcript_api import YouTubeTranscriptApi
             import re
-            
+
+            from youtube_transcript_api import YouTubeTranscriptApi
+
             # Extract video ID
             video_id_match = re.search(r'(?:v=|\/)([0-9A-Za-z_-]{11}).*', video_url)
             if not video_id_match:
                 raise ValueError(f"Invalid YouTube URL: {video_url}")
-            
+
             video_id = video_id_match.group(1)
-            
+
             # Get transcript
             try:
                 yt_api = YouTubeTranscriptApi()
@@ -111,7 +110,7 @@ class RealVideoProcessor:
                 logger.warning(f"Failed to get transcript: {e}")
                 transcript = []
                 transcript_text = ""
-            
+
             return {
                 "video_id": video_id,
                 "video_url": video_url,
@@ -122,7 +121,7 @@ class RealVideoProcessor:
                 "language": "en",  # Default
                 "processing_timestamp": asyncio.get_event_loop().time()
             }
-            
+
         except Exception as e:
             logger.error(f"Failed to extract video data: {e}")
             return {
@@ -134,8 +133,8 @@ class RealVideoProcessor:
                 "duration": 0,
                 "error": str(e)
             }
-    
-    async def _get_ai_insights(self, video_url: str) -> Optional[Dict[str, Any]]:
+
+    async def _get_ai_insights(self, video_url: str) -> Optional[dict[str, Any]]:
         """Get AI insights from video if available"""
         try:
             if get_ai_insights:
@@ -146,12 +145,12 @@ class RealVideoProcessor:
         except Exception as e:
             logger.warning(f"Failed to get AI insights: {e}")
             return None
-    
+
     def _extract_title_from_transcript(self, transcript_text: str) -> str:
         """Extract a title from transcript text"""
         if not transcript_text:
             return "Untitled Video"
-        
+
         # Get first sentence or first 50 characters
         sentences = transcript_text.split('.')
         if sentences:
@@ -159,24 +158,24 @@ class RealVideoProcessor:
             if len(title) > 50:
                 title = title[:47] + "..."
             return title
-        
+
         return transcript_text[:50] + "..." if len(transcript_text) > 50 else transcript_text
-    
-    def _combine_results(self, video_data: Dict, ai_insights: Optional[Dict], mcp_result: Optional[Dict]) -> Dict[str, Any]:
+
+    def _combine_results(self, video_data: dict, ai_insights: Optional[dict], mcp_result: Optional[dict]) -> dict[str, Any]:
         """Combine all processing results into a unified response"""
         result = {
             "status": "success",
             "video_data": video_data,
             "processing_pipeline": []
         }
-        
+
         # Add basic video data
         result["processing_pipeline"].append({
             "stage": "video_extraction",
             "status": "completed",
             "data": video_data
         })
-        
+
         # Add AI insights if available
         if ai_insights:
             result["ai_insights"] = ai_insights
@@ -185,7 +184,7 @@ class RealVideoProcessor:
                 "status": "completed",
                 "data": ai_insights
             })
-        
+
         # Add MCP results if available
         if mcp_result:
             result["mcp_analysis"] = mcp_result
@@ -194,28 +193,28 @@ class RealVideoProcessor:
                 "status": "completed",
                 "data": mcp_result
             })
-        
+
         # Extract key information for software generation
         result["extracted_info"] = self._extract_software_info(video_data, ai_insights, mcp_result)
-        
+
         return result
-    
-    def _extract_software_info(self, video_data: Dict, ai_insights: Optional[Dict], mcp_result: Optional[Dict]) -> Dict[str, Any]:
+
+    def _extract_software_info(self, video_data: dict, ai_insights: Optional[dict], mcp_result: Optional[dict]) -> dict[str, Any]:
         """Extract software-relevant information from processed video data"""
         transcript_text = video_data.get("transcript_text", "").lower()
-        
+
         # Detect technologies mentioned
         technologies = self._detect_technologies(transcript_text)
-        
+
         # Detect project type
         project_type = self._detect_project_type(transcript_text, technologies)
-        
+
         # Extract features mentioned
         features = self._extract_features(transcript_text)
-        
+
         # Determine complexity level
         complexity = self._assess_complexity(transcript_text, len(video_data.get("transcript", [])))
-        
+
         return {
             "technologies": technologies,
             "project_type": project_type,
@@ -227,8 +226,8 @@ class RealVideoProcessor:
             "has_ui_elements": any(ui_term in transcript_text for ui_term in ["button", "form", "component", "interface"]),
             "tutorial_steps": self._extract_tutorial_steps(video_data.get("transcript", []))
         }
-    
-    def _detect_technologies(self, text: str) -> List[str]:
+
+    def _detect_technologies(self, text: str) -> list[str]:
         """Detect mentioned technologies in the transcript"""
         tech_keywords = {
             "react": ["react", "jsx", "component", "useState", "useEffect"],
@@ -243,15 +242,15 @@ class RealVideoProcessor:
             "nextjs": ["next", "next.js", "nextjs"],
             "tailwind": ["tailwind", "tailwindcss"]
         }
-        
+
         detected = []
         for tech, keywords in tech_keywords.items():
             if any(keyword in text for keyword in keywords):
                 detected.append(tech)
-        
+
         return detected if detected else ["javascript", "html", "css"]  # Default web stack
-    
-    def _detect_project_type(self, text: str, technologies: List[str]) -> str:
+
+    def _detect_project_type(self, text: str, technologies: list[str]) -> str:
         """Detect the type of project being demonstrated"""
         if any(term in text for term in ["website", "web app", "frontend", "ui"]):
             return "web"
@@ -265,8 +264,8 @@ class RealVideoProcessor:
             return "script"
         else:
             return "web"  # Default
-    
-    def _extract_features(self, text: str) -> List[str]:
+
+    def _extract_features(self, text: str) -> list[str]:
         """Extract mentioned features from the transcript"""
         feature_keywords = {
             "authentication": ["login", "auth", "signup", "password"],
@@ -280,21 +279,21 @@ class RealVideoProcessor:
             "dashboard": ["dashboard", "admin", "panel"],
             "chat": ["chat", "message", "communication"]
         }
-        
+
         detected_features = []
         for feature, keywords in feature_keywords.items():
             if any(keyword in text for keyword in keywords):
                 detected_features.append(feature)
-        
+
         return detected_features if detected_features else ["responsive_design", "user_interface"]
-    
+
     def _assess_complexity(self, text: str, transcript_length: int) -> str:
         """Assess the complexity of the project based on content"""
         complexity_indicators = [
-            "advanced", "complex", "enterprise", "scalable", 
+            "advanced", "complex", "enterprise", "scalable",
             "architecture", "patterns", "optimization"
         ]
-        
+
         if transcript_length > 500:  # Long video
             return "high"
         elif any(indicator in text for indicator in complexity_indicators):
@@ -303,17 +302,17 @@ class RealVideoProcessor:
             return "medium"
         else:
             return "low"
-    
-    def _extract_tutorial_steps(self, transcript: List[Dict]) -> List[str]:
+
+    def _extract_tutorial_steps(self, transcript: list[dict]) -> list[str]:
         """Extract tutorial steps from transcript segments"""
         steps = []
         step_indicators = ["first", "next", "then", "now", "step", "let's", "we'll"]
-        
+
         for entry in transcript:
             text = entry.get('text', '').lower()
             if any(indicator in text for indicator in step_indicators):
                 steps.append(entry.get('text', '').strip())
-        
+
         return steps[:10]  # Limit to first 10 steps
 
 # Initialize global processor instance

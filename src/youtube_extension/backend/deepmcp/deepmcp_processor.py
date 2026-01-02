@@ -8,14 +8,15 @@ discovery and model-agnostic AI selection. This provides a drop-in replacement
 interface compatible with `RealVideoProcessor` where possible.
 """
 
-import os
 import json
 import logging
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+import os
 from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Optional
 
 from youtube_extension.utils import extract_video_id
+
 logger = logging.getLogger(__name__)
 
 
@@ -50,7 +51,7 @@ class DeepMCPAgentProcessor:
     def _cache_path(self, video_id: str) -> Path:
         return self.cache_dir / f"{video_id}_processed.json"
 
-    async def _maybe_load_cache(self, video_id: str) -> Optional[Dict[str, Any]]:
+    async def _maybe_load_cache(self, video_id: str) -> Optional[dict[str, Any]]:
         if not self.enable_caching:
             return None
         try:
@@ -63,7 +64,7 @@ class DeepMCPAgentProcessor:
             logger.warning("Cache load failed for %s: %s", video_id, e)
         return None
 
-    async def _save_cache(self, video_id: str, result: Dict[str, Any]) -> None:
+    async def _save_cache(self, video_id: str, result: dict[str, Any]) -> None:
         if not self.enable_caching:
             return
         try:
@@ -75,9 +76,9 @@ class DeepMCPAgentProcessor:
             logger.warning("Cache save failed for %s: %s", video_id, e)
 
 
-    async def process_video(self, video_url: str, force_refresh: bool = False) -> Dict[str, Any]:
+    async def process_video(self, video_url: str, force_refresh: bool = False) -> dict[str, Any]:
         start_time = datetime.now(timezone.utc)
-        processing_steps: List[Dict[str, Any]] = []
+        processing_steps: list[dict[str, Any]] = []
         total_cost = 0.0
 
         try:
@@ -148,7 +149,7 @@ class DeepMCPAgentProcessor:
                 'cached': False
             }
 
-    async def validate_and_process(self, video_url: str) -> Dict[str, Any]:
+    async def validate_and_process(self, video_url: str) -> dict[str, Any]:
         try:
             # Basic validation via extraction for Phase 1
             video_id = extract_video_id(video_url)
@@ -165,12 +166,12 @@ class DeepMCPAgentProcessor:
                 'timestamp': datetime.now(timezone.utc).isoformat()
             }
 
-    async def batch_process_videos(self, video_urls: List[str], max_concurrent: int = 3) -> Dict[str, Any]:
+    async def batch_process_videos(self, video_urls: list[str], max_concurrent: int = 3) -> dict[str, Any]:
         import asyncio
         start_time = datetime.now(timezone.utc)
         semaphore = asyncio.Semaphore(max_concurrent)
 
-        async def process_single(url: str) -> Tuple[str, Dict[str, Any]]:
+        async def process_single(url: str) -> tuple[str, dict[str, Any]]:
             async with semaphore:
                 try:
                     return url, await self.process_video(url)
@@ -180,8 +181,8 @@ class DeepMCPAgentProcessor:
         tasks = [process_single(u) for u in video_urls]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        successful: List[Dict[str, Any]] = []
-        failed: List[Dict[str, Any]] = []
+        successful: list[dict[str, Any]] = []
+        failed: list[dict[str, Any]] = []
         total_cost = 0.0
         for item in results:
             if isinstance(item, Exception):
@@ -207,7 +208,7 @@ class DeepMCPAgentProcessor:
             'errors': failed,
         }
 
-    async def get_processing_status(self) -> Dict[str, Any]:
+    async def get_processing_status(self) -> dict[str, Any]:
         try:
             cached_files = len(list(self.cache_dir.glob("*_processed.json"))) if self.cache_dir.exists() else 0
             return {
@@ -238,7 +239,7 @@ class DeepMCPAgentProcessor:
         except Exception as e:
             logger.warning("DeepMCPAgentProcessor cleanup error: %s", e)
 
-    async def _get_youtube_data(self, video_url: str) -> Dict[str, Any]:
+    async def _get_youtube_data(self, video_url: str) -> dict[str, Any]:
         """Phase 1: delegate to existing real_youtube_api if present; fallback to minimal."""
         try:
             from ..services.real_youtube_api import get_youtube_service
@@ -257,7 +258,7 @@ class DeepMCPAgentProcessor:
                 'related_videos': []
             }
 
-    async def _analyze_with_models(self, youtube_data: Dict[str, Any]) -> Dict[str, Any]:
+    async def _analyze_with_models(self, youtube_data: dict[str, Any]) -> dict[str, Any]:
         """Phase 1: delegate to existing real_ai_processor if present; support auto provider."""
         try:
             from ..services.real_ai_processor import analyze_video_with_ai

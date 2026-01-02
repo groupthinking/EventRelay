@@ -5,10 +5,9 @@ Lightweight WebSocket client for real-time observability
 """
 
 import json
-import asyncio
 import logging
-from typing import Dict, Any, Optional
 from datetime import datetime
+from typing import Any
 
 try:
     import websockets
@@ -44,7 +43,7 @@ class SkillMonitorEmitter:
             self.failed_connection = True
             self.ws = None
 
-    async def emit(self, event_type: str, payload: Dict[str, Any]):
+    async def emit(self, event_type: str, payload: dict[str, Any]):
         """Send event to monitor"""
         if not self.enabled or self.failed_connection:
             return

@@ -4,10 +4,15 @@ Vercel deployment adapter for UVAI platform.
 Updated to use new base adapter architecture with retry logic and proper error handling.
 """
 
-import os
 import asyncio
-from typing import Dict, Any, Optional
-from .core import BaseDeploymentAdapter, DeploymentResult, EnvironmentValidator, DeploymentError
+from typing import Any, Optional
+
+from .core import (
+    BaseDeploymentAdapter,
+    DeploymentError,
+    DeploymentResult,
+    EnvironmentValidator,
+)
 
 VERCEL_API = "https://api.vercel.com"
 
@@ -17,7 +22,7 @@ class VercelAdapter(BaseDeploymentAdapter):
     def __init__(self):
         super().__init__('vercel')
 
-    async def _deploy_impl(self, project_path: str, project_config: Dict[str, Any], env: Dict[str, Any]) -> DeploymentResult:
+    async def _deploy_impl(self, project_path: str, project_config: dict[str, Any], env: dict[str, Any]) -> DeploymentResult:
         """Vercel-specific deployment implementation"""
 
         # Get and validate GitHub repository URL
@@ -120,7 +125,7 @@ class VercelAdapter(BaseDeploymentAdapter):
             }
         )
 
-    async def _check_github_repo_exists(self, headers: Dict[str, str], repo_url: str) -> bool:
+    async def _check_github_repo_exists(self, headers: dict[str, str], repo_url: str) -> bool:
         """Check if GitHub repository exists and is accessible"""
         try:
             # Extract owner/repo from URL
@@ -134,7 +139,7 @@ class VercelAdapter(BaseDeploymentAdapter):
         except Exception:
             return False
 
-    async def _deploy_files_directly(self, project_path: str, project_config: Dict[str, Any], env: Dict[str, Any], token: str, headers: Dict[str, str]) -> DeploymentResult:
+    async def _deploy_files_directly(self, project_path: str, project_config: dict[str, Any], env: dict[str, Any], token: str, headers: dict[str, str]) -> DeploymentResult:
         """Deploy files directly to Vercel without GitHub integration"""
         self.logger.info("Deploying files directly to Vercel...")
 
@@ -201,7 +206,7 @@ class VercelAdapter(BaseDeploymentAdapter):
                 }
             )
 
-    def _detect_framework(self, project_config: Dict[str, Any]) -> Optional[str]:
+    def _detect_framework(self, project_config: dict[str, Any]) -> Optional[str]:
         """Detect framework from project configuration"""
 
         # Check for explicit framework specification
@@ -227,7 +232,7 @@ class VercelAdapter(BaseDeploymentAdapter):
         return framework_mapping.get(project_type)
 
 # Legacy function for backward compatibility
-async def deploy(project_path: str, project_config: Dict[str, Any], env: Dict[str, Any]) -> Dict[str, Any]:
+async def deploy(project_path: str, project_config: dict[str, Any], env: dict[str, Any]) -> dict[str, Any]:
     """Legacy deployment function - use VercelAdapter for new code"""
     adapter = VercelAdapter()
     result = await adapter.deploy(project_path, project_config, env)

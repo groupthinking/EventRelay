@@ -8,7 +8,6 @@ Extracted from fastvlm_gemini_hybrid with clean service architecture.
 """
 
 import asyncio
-import base64
 import io
 import json
 import logging
@@ -18,7 +17,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Optional, Union
 
 from PIL import Image
 
@@ -36,8 +35,8 @@ except ImportError:
     genai_types = None
 
 try:
-    from vertexai.generative_models import GenerativeModel, Part
     import vertexai
+    from vertexai.generative_models import GenerativeModel, Part
     VERTEX_AVAILABLE = True
 except ImportError:
     VERTEX_AVAILABLE = False
@@ -116,13 +115,13 @@ class GemmaTextClient:
         return normalized
 
     @staticmethod
-    def _extract_prompt(contents: Union[str, List[Any]]) -> str:
+    def _extract_prompt(contents: Union[str, list[Any]]) -> str:
         """Flatten google-style content payload into a plain text prompt."""
 
         if isinstance(contents, str):
             return contents
 
-        parts: List[str] = []
+        parts: list[str] = []
         for item in contents or []:
             if isinstance(item, str):
                 parts.append(item)
@@ -142,9 +141,9 @@ class GemmaTextClient:
 
     def generate_content(  # pragma: no cover - relies on model availability
         self,
-        contents: Union[str, List[Any]],
+        contents: Union[str, list[Any]],
         *,
-        generation_config: Optional[Dict[str, Any]] = None,
+        generation_config: Optional[dict[str, Any]] = None,
         **_: Any,
     ) -> _TextOnlyResponse:
         """Mimic the GenerativeModel.generate_content interface."""
@@ -188,7 +187,7 @@ class VeoVideoClient:
         model_name: str,
         *,
         api_key: Optional[str],
-        generation_config: Optional[Dict[str, Any]] = None,
+        generation_config: Optional[dict[str, Any]] = None,
         logger: Optional[logging.Logger] = None,
     ) -> None:
         if not GEMINI_AVAILABLE:
@@ -207,9 +206,9 @@ class VeoVideoClient:
 
     def generate_content(
         self,
-        contents: Union[str, List[Any]],
+        contents: Union[str, list[Any]],
         *,
-        generation_config: Optional[Dict[str, Any]] = None,
+        generation_config: Optional[dict[str, Any]] = None,
         **request_kwargs: Any,
     ):
         """Proxy to Veo's content generation (text or structured control)."""
@@ -221,7 +220,7 @@ class VeoVideoClient:
         self,
         prompt: str,
         *,
-        generation_config: Optional[Dict[str, Any]] = None,
+        generation_config: Optional[dict[str, Any]] = None,
         **request_kwargs: Any,
     ):
         """Invoke Veo's video generation endpoint when available."""
@@ -240,8 +239,8 @@ class VeoVideoClient:
 
     def _merge_generation_config(
         self,
-        overrides: Optional[Dict[str, Any]],
-    ) -> Dict[str, Any]:
+        overrides: Optional[dict[str, Any]],
+    ) -> dict[str, Any]:
         base = dict(self._generation_config)
         if overrides:
             base.update(overrides)
@@ -264,7 +263,7 @@ class GeminiConfig:
     max_video_duration: int = 600
     response_schema: Optional[Any] = None
     response_mime_type: Optional[str] = None
-    tools: Optional[List[Any]] = None
+    tools: Optional[list[Any]] = None
     tool_choice: Optional[str] = None
     thinking: bool = False
 
@@ -298,9 +297,9 @@ class GeminiService:
         self._model = None
         self._use_vertex = False
         self._is_initialized = False
-        self._model_cache: Dict[str, Any] = {}
-        self._backend_cache: Dict[str, str] = {}
-        self._vertex_cache: Dict[str, bool] = {}
+        self._model_cache: dict[str, Any] = {}
+        self._backend_cache: dict[str, str] = {}
+        self._vertex_cache: dict[str, bool] = {}
         self._backend_kind: str = "gemini"
 
         # Initialize client on startup if credentials available
@@ -322,7 +321,7 @@ class GeminiService:
                 # Use direct API
                 self.logger.info(f"Initializing Gemini via API key: {self.config.api_key[:8]}...")
                 genai.configure(api_key=self.config.api_key)
-                
+
                 # Verify key visibility
                 try:
                     models = [m.name for m in genai.list_models()]
@@ -381,7 +380,7 @@ class GeminiService:
         self._use_vertex = use_vertex
         self._is_initialized = True
 
-    def _prepare_generation_args(self, kwargs: Dict[str, Any]) -> tuple[Dict[str, Any], Dict[str, Any]]:
+    def _prepare_generation_args(self, kwargs: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
         """Split kwargs into generation_config and request kwargs."""
 
         generation_config = {
@@ -391,7 +390,7 @@ class GeminiService:
             "max_output_tokens": kwargs.pop('max_tokens', self.config.max_output_tokens),
         }
 
-        request_kwargs: Dict[str, Any] = {}
+        request_kwargs: dict[str, Any] = {}
 
         response_schema = kwargs.pop('response_schema', self.config.response_schema)
         if response_schema is not None:
@@ -589,8 +588,8 @@ class GeminiService:
         self,
         prepared_image: Any,
         prompt: str,
-        generation_config: Dict[str, Any],
-        request_kwargs: Dict[str, Any],
+        generation_config: dict[str, Any],
+        request_kwargs: dict[str, Any],
     ):
         """Synchronous image processing in executor"""
         if self._use_vertex:
@@ -676,8 +675,8 @@ class GeminiService:
         self,
         text_payload: str,
         prompt: str,
-        generation_config: Dict[str, Any],
-        request_kwargs: Dict[str, Any],
+        generation_config: dict[str, Any],
+        request_kwargs: dict[str, Any],
     ):
         """Synchronous helper for text-only requests."""
 
@@ -699,7 +698,7 @@ class GeminiService:
             )
 
         # Default Gemini path
-        contents: List[Any] = [prompt]
+        contents: list[Any] = [prompt]
         if text_payload and text_payload != prompt:
             contents.append(text_payload)
 
@@ -714,7 +713,7 @@ class GeminiService:
         video_path: Union[str, Path],
         prompt: str,
         *,
-        video_metadata: Optional[Dict[str, Any]] = None,
+        video_metadata: Optional[dict[str, Any]] = None,
         **kwargs
     ) -> GeminiResult:
         """
@@ -892,9 +891,9 @@ class GeminiService:
         self,
         video_path: Union[str, Path],
         prompt: str,
-        video_metadata: Optional[Dict[str, Any]],
-        generation_config: Dict[str, Any],
-        request_kwargs: Dict[str, Any],
+        video_metadata: Optional[dict[str, Any]],
+        generation_config: dict[str, Any],
+        request_kwargs: dict[str, Any],
     ):
         """Synchronous video processing in executor"""
         video_path = Path(video_path)
@@ -970,8 +969,8 @@ class GeminiService:
         self,
         audio_path: Union[str, Path],
         prompt: str,
-        generation_config: Dict[str, Any],
-        request_kwargs: Dict[str, Any],
+        generation_config: dict[str, Any],
+        request_kwargs: dict[str, Any],
     ):
         """Synchronous audio processing in executor."""
 
@@ -1029,8 +1028,8 @@ class GeminiService:
     def _process_veo_video_sync(
         self,
         prompt: str,
-        generation_config: Dict[str, Any],
-        request_kwargs: Dict[str, Any],
+        generation_config: dict[str, Any],
+        request_kwargs: dict[str, Any],
     ):
         """Invoke Veo client in a worker thread."""
 
@@ -1054,7 +1053,7 @@ class GeminiService:
         if response is None:
             return ""
 
-        summary: Dict[str, Any] = {}
+        summary: dict[str, Any] = {}
 
         for attr in ("output_uri", "video_uri", "video", "media", "candidates"):
             if hasattr(response, attr):
@@ -1082,7 +1081,7 @@ class GeminiService:
         youtube_url: str,
         prompt: str,
         *,
-        video_metadata: Optional[Dict[str, Any]] = None,
+        video_metadata: Optional[dict[str, Any]] = None,
         **kwargs
     ) -> GeminiResult:
         """
@@ -1169,9 +1168,9 @@ class GeminiService:
         self,
         youtube_url: str,
         prompt: str,
-        video_metadata: Optional[Dict[str, Any]],
-        generation_config: Dict[str, Any],
-        request_kwargs: Dict[str, Any],
+        video_metadata: Optional[dict[str, Any]],
+        generation_config: dict[str, Any],
+        request_kwargs: dict[str, Any],
     ):
         """Synchronous YouTube processing in executor"""
         if genai_types:
@@ -1210,12 +1209,12 @@ class GeminiService:
     async def start_cached_session(
         self,
         *,
-        contents: Union[str, List[Any]],
+        contents: Union[str, list[Any]],
         model_name: Optional[str] = None,
         ttl_seconds: int = 3600,
         display_name: Optional[str] = None,
         **kwargs,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Create a reusable cache for repeated prompts via Google's caching API."""
 
         start_time = time.time()
@@ -1231,7 +1230,7 @@ class GeminiService:
             raise ValueError("contents must be provided to create a cache")
 
         if isinstance(contents, str):
-            contents_payload: Union[str, List[Any]] = [contents]
+            contents_payload: Union[str, list[Any]] = [contents]
         else:
             contents_payload = contents
 
@@ -1267,14 +1266,14 @@ class GeminiService:
 
     async def submit_batch_job(
         self,
-        requests: List[Dict[str, Any]],
+        requests: list[dict[str, Any]],
         *,
         model_name: Optional[str] = None,
         wait: bool = False,
         poll_interval: float = 5.0,
         timeout: float = 600.0,
         **kwargs,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Submit a batch generateContent job, optionally waiting for completion."""
 
         start_time = time.time()
@@ -1369,7 +1368,7 @@ class GeminiService:
         audience: Optional[str] = None,
         ttl_seconds: Optional[int] = None,
         **kwargs,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Request an ephemeral auth token for client-side uploads."""
 
         start_time = time.time()
@@ -1381,7 +1380,7 @@ class GeminiService:
                 "error": "Gemini tokens API unavailable; install google-generativeai >= 0.6.0",
             }
 
-        request_kwargs: Dict[str, Any] = dict(kwargs)
+        request_kwargs: dict[str, Any] = dict(kwargs)
         request_kwargs.setdefault("model", model_name or self.config.model_name)
         if audience:
             request_kwargs["audience"] = audience
@@ -1443,10 +1442,10 @@ class GeminiService:
 
     async def batch_process(
         self,
-        items: List[Union[str, Path, Image.Image]],
-        prompts: Union[str, List[str]],
+        items: list[Union[str, Path, Image.Image]],
+        prompts: Union[str, list[str]],
         **kwargs
-    ) -> List[GeminiResult]:
+    ) -> list[GeminiResult]:
         """
         Process multiple items.
 
@@ -1490,7 +1489,7 @@ class GeminiService:
         """Check if service is initialized and ready"""
         return self._is_initialized and self._model is not None
 
-    def get_model_info(self) -> Dict[str, Any]:
+    def get_model_info(self) -> dict[str, Any]:
         """Get model information"""
         return {
             "available": self.is_available(),

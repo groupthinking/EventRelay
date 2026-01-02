@@ -110,7 +110,7 @@ Implement a complete MCP ecosystem with full agent-to-agent (A2A) communication,
 ```
 
 ### Quantum Integration
-```
+kip``skip quantum  part 
 ┌─────────────────────────────────────────────────────────┐
 │                   MCP QUANTUM TOOLS                      │
 │              (QUBO Solver, Optimization)                 │

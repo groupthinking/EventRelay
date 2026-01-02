@@ -22,21 +22,25 @@ import json
 import logging
 import statistics
 import time
-from collections import defaultdict
-from dataclasses import dataclass, asdict
-from datetime import datetime, timedelta, timezone
-from typing import Dict, Any, List, Optional, Tuple, Callable
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from typing import Any, Optional
+
 import aiofiles
-import numpy as np
 
 # Import all performance components with proper error handling
 try:
-    from .performance_monitor import performance_monitor, track_video_processing_time, track_database_query_time
-    from ...processors.video_processor import VideoProcessor
-    from .intelligent_cache import intelligent_cache, cache_get, cache_set
-    from .memory_manager import memory_manager
-    from .load_balancer import service_discovery
     from youtube_extension.backend.database.index_analysis import database_optimizer
+
+    from ...processors.video_processor import VideoProcessor
+    from .intelligent_cache import cache_get, cache_set, intelligent_cache
+    from .load_balancer import service_discovery
+    from .memory_manager import memory_manager
+    from .performance_monitor import (
+        performance_monitor,
+        track_database_query_time,
+        track_video_processing_time,
+    )
     PERFORMANCE_COMPONENTS_AVAILABLE = True
 except ImportError as e:
     logger = logging.getLogger(__name__)
@@ -63,9 +67,9 @@ class BenchmarkResult:
     cpu_usage_percent: float
     success: bool
     error_message: Optional[str] = None
-    metadata: Dict[str, Any] = None
+    metadata: dict[str, Any] = None
     timestamp: datetime = None
-    
+
     def __post_init__(self):
         if self.timestamp is None:
             self.timestamp = datetime.now(timezone.utc)
@@ -77,9 +81,9 @@ class BenchmarkSuite:
     """Benchmark suite configuration"""
     name: str
     description: str
-    benchmarks: List[Dict[str, Any]]
+    benchmarks: list[dict[str, Any]]
     target_improvement_percent: float = 60.0
-    baseline_results: Optional[Dict[str, BenchmarkResult]] = None
+    baseline_results: Optional[dict[str, BenchmarkResult]] = None
 
 @dataclass
 class PerformanceTarget:
@@ -94,7 +98,7 @@ class PerformanceTarget:
 class ComprehensiveBenchmark:
     """
     Comprehensive benchmarking system for Phase 3 validation
-    
+
     Features:
     - Multi-component benchmarking
     - Performance regression detection
@@ -102,20 +106,20 @@ class ComprehensiveBenchmark:
     - Automated reporting
     - Continuous monitoring integration
     """
-    
+
     def __init__(self):
-        self.benchmark_suites: Dict[str, BenchmarkSuite] = {}
+        self.benchmark_suites: dict[str, BenchmarkSuite] = {}
         self.performance_targets = self._define_performance_targets()
-        self.benchmark_history: List[Dict[str, Any]] = []
+        self.benchmark_history: list[dict[str, Any]] = []
         self.baseline_established = False
-        
+
         # Results storage
         self.results_directory = "benchmark_results"
         self.current_session_results = []
-        
+
         logger.info("🏁 Comprehensive Benchmarking System initialized")
-    
-    def _define_performance_targets(self) -> List[PerformanceTarget]:
+
+    def _define_performance_targets(self) -> list[PerformanceTarget]:
         """Define Phase 3 performance targets"""
         return [
             # Video Processing Targets
@@ -127,7 +131,7 @@ class ComprehensiveBenchmark:
                 comparison="less_than",
                 priority="critical"
             ),
-            
+
             # Database Query Targets
             PerformanceTarget(
                 component="database",
@@ -145,7 +149,7 @@ class ComprehensiveBenchmark:
                 comparison="greater_than",
                 priority="critical"
             ),
-            
+
             # Frontend Performance Targets
             PerformanceTarget(
                 component="frontend",
@@ -163,7 +167,7 @@ class ComprehensiveBenchmark:
                 comparison="less_than",
                 priority="medium"
             ),
-            
+
             # System Resource Targets
             PerformanceTarget(
                 component="system",
@@ -181,7 +185,7 @@ class ComprehensiveBenchmark:
                 comparison="less_than",
                 priority="medium"
             ),
-            
+
             # Cache Performance Targets
             PerformanceTarget(
                 component="cache",
@@ -200,28 +204,28 @@ class ComprehensiveBenchmark:
                 priority="medium"
             )
         ]
-    
+
     def register_benchmark_suite(self, suite: BenchmarkSuite):
         """Register a benchmark suite"""
         self.benchmark_suites[suite.name] = suite
         logger.info(f"📋 Registered benchmark suite: {suite.name}")
-    
-    async def establish_baseline(self) -> Dict[str, Any]:
+
+    async def establish_baseline(self) -> dict[str, Any]:
         """Establish performance baseline before optimizations"""
         logger.info("📏 Establishing performance baseline...")
-        
+
         baseline_results = {}
-        
+
         # Run all benchmark suites to establish baseline
         for suite_name, suite in self.benchmark_suites.items():
             logger.info(f"🏃 Running baseline for {suite_name}")
-            
+
             suite_results = await self._run_benchmark_suite(suite)
             baseline_results[suite_name] = suite_results
-            
+
             # Store baseline in suite
             suite.baseline_results = suite_results
-        
+
         # Save baseline to file
         baseline_report = {
             'timestamp': datetime.now(timezone.utc).isoformat(),
@@ -229,22 +233,22 @@ class ComprehensiveBenchmark:
             'results': baseline_results,
             'system_info': await self._get_system_info()
         }
-        
+
         await self._save_benchmark_report(baseline_report, 'baseline')
-        
+
         self.baseline_established = True
         logger.info("✅ Performance baseline established")
-        
+
         return baseline_results
-    
-    async def run_comprehensive_benchmark(self) -> Dict[str, Any]:
+
+    async def run_comprehensive_benchmark(self) -> dict[str, Any]:
         """Run comprehensive benchmark across all components"""
         if not self.baseline_established:
             logger.warning("⚠️ No baseline established - results may not show improvement")
-        
+
         logger.info("🚀 Starting comprehensive performance benchmark...")
         start_time = time.time()
-        
+
         benchmark_results = {
             'timestamp': datetime.now(timezone.utc).isoformat(),
             'type': 'comprehensive',
@@ -253,59 +257,59 @@ class ComprehensiveBenchmark:
             'improvement_analysis': {},
             'system_info': await self._get_system_info()
         }
-        
+
         # Run all benchmark suites
         for suite_name, suite in self.benchmark_suites.items():
             logger.info(f"🏃 Running benchmark suite: {suite_name}")
-            
+
             suite_results = await self._run_benchmark_suite(suite)
             benchmark_results['suite_results'][suite_name] = suite_results
-            
+
             # Calculate improvements if baseline exists
             if suite.baseline_results:
                 improvement = self._calculate_improvement(suite.baseline_results, suite_results)
                 benchmark_results['improvement_analysis'][suite_name] = improvement
-        
+
         # Validate against performance targets
         target_validation = await self._validate_performance_targets(benchmark_results)
         benchmark_results['target_validation'] = target_validation
-        
+
         # Calculate overall performance grade
         benchmark_results['performance_grade'] = self._calculate_performance_grade(benchmark_results)
-        
+
         # Calculate total execution time
         benchmark_results['total_execution_time_ms'] = (time.time() - start_time) * 1000
-        
+
         # Save comprehensive report
         await self._save_benchmark_report(benchmark_results, 'comprehensive')
-        
+
         # Add to history
         self.benchmark_history.append(benchmark_results)
-        
+
         # Keep only last 50 benchmark runs
         if len(self.benchmark_history) > 50:
             self.benchmark_history = self.benchmark_history[-50:]
-        
+
         logger.info(f"✅ Comprehensive benchmark completed in {benchmark_results['total_execution_time_ms']:.0f}ms")
         logger.info(f"📊 Performance Grade: {benchmark_results['performance_grade']}")
-        
+
         return benchmark_results
-    
-    async def _run_benchmark_suite(self, suite: BenchmarkSuite) -> Dict[str, BenchmarkResult]:
+
+    async def _run_benchmark_suite(self, suite: BenchmarkSuite) -> dict[str, BenchmarkResult]:
         """Run a single benchmark suite"""
         suite_results = {}
-        
+
         for benchmark_config in suite.benchmarks:
             benchmark_name = benchmark_config['name']
             component = benchmark_config['component']
-            
+
             logger.debug(f"🔬 Running benchmark: {benchmark_name}")
-            
+
             try:
                 # Run the specific benchmark
                 result = await self._run_single_benchmark(benchmark_config)
                 suite_results[benchmark_name] = result
-                
+
             except Exception as e:
                 logger.error(f"❌ Benchmark {benchmark_name} failed: {e}")
                 suite_results[benchmark_name] = BenchmarkResult(
@@ -317,22 +321,22 @@ class ComprehensiveBenchmark:
                     success=False,
                     error_message=str(e)
                 )
-        
+
         return suite_results
-    
-    async def _run_single_benchmark(self, config: Dict[str, Any]) -> BenchmarkResult:
+
+    async def _run_single_benchmark(self, config: dict[str, Any]) -> BenchmarkResult:
         """Run a single benchmark"""
         name = config['name']
         component = config['component']
         benchmark_type = config['type']
         params = config.get('params', {})
-        
+
         # Get initial system state
         initial_memory = await self._get_memory_usage()
-        initial_cpu = await self._get_cpu_usage()
-        
+        await self._get_cpu_usage()
+
         start_time = time.time()
-        
+
         try:
             # Run specific benchmark based on type
             if benchmark_type == 'video_processing':
@@ -349,13 +353,13 @@ class ComprehensiveBenchmark:
                 result = await self._benchmark_system_integration(params)
             else:
                 raise ValueError(f"Unknown benchmark type: {benchmark_type}")
-            
+
             execution_time = (time.time() - start_time) * 1000
-            
+
             # Get final system state
             final_memory = await self._get_memory_usage()
             final_cpu = await self._get_cpu_usage()
-            
+
             return BenchmarkResult(
                 name=name,
                 component=component,
@@ -365,10 +369,10 @@ class ComprehensiveBenchmark:
                 success=True,
                 metadata=result
             )
-            
+
         except Exception as e:
             execution_time = (time.time() - start_time) * 1000
-            
+
             return BenchmarkResult(
                 name=name,
                 component=component,
@@ -378,8 +382,8 @@ class ComprehensiveBenchmark:
                 success=False,
                 error_message=str(e)
             )
-    
-    async def _benchmark_video_processing(self, params: Dict[str, Any]) -> Dict[str, Any]:
+
+    async def _benchmark_video_processing(self, params: dict[str, Any]) -> dict[str, Any]:
         """Benchmark video processing performance"""
         if not PERFORMANCE_COMPONENTS_AVAILABLE:
             raise RuntimeError("Performance components not available. Cannot run real benchmarks.")
@@ -395,7 +399,7 @@ class ComprehensiveBenchmark:
 
         processing_times = []
 
-        for i in range(iterations):
+        for _i in range(iterations):
             for url in test_urls:
                 start_time = time.time()
 
@@ -422,8 +426,8 @@ class ComprehensiveBenchmark:
             'meets_30s_target': all(t < 30000 for t in processing_times),
             'data_source': 'real_video_processing'
         }
-    
-    async def _benchmark_database_query(self, params: Dict[str, Any]) -> Dict[str, Any]:
+
+    async def _benchmark_database_query(self, params: dict[str, Any]) -> dict[str, Any]:
         """Benchmark database query performance"""
         if not PERFORMANCE_COMPONENTS_AVAILABLE or not database_optimizer:
             raise RuntimeError("Database performance components not available. Cannot run real benchmarks.")
@@ -434,12 +438,12 @@ class ComprehensiveBenchmark:
         query_times = []
         queries_under_100ms = 0
 
-        for i in range(iterations):
+        for _i in range(iterations):
             for query_type in query_types:
                 start_time = time.time()
 
                 # Run database benchmark
-                benchmark_result = await database_optimizer.run_performance_benchmark()
+                await database_optimizer.run_performance_benchmark()
 
                 query_time = (time.time() - start_time) * 1000
                 query_times.append(query_time)
@@ -462,43 +466,43 @@ class ComprehensiveBenchmark:
             'meets_95_percent_target': sub_100ms_percent >= 95.0,
             'data_source': 'real_database_queries'
         }
-    
-    async def _benchmark_cache_operation(self, params: Dict[str, Any]) -> Dict[str, Any]:
+
+    async def _benchmark_cache_operation(self, params: dict[str, Any]) -> dict[str, Any]:
         """Benchmark cache operation performance"""
         if not intelligent_cache:
             raise RuntimeError("Intelligent cache not available")
-        
+
         iterations = params.get('iterations', 1000)
         key_prefix = params.get('key_prefix', 'benchmark')
-        
+
         # Test cache set operations
         set_times = []
         for i in range(iterations):
             key = f"{key_prefix}_{i}"
             value = {'data': f'test_value_{i}', 'timestamp': time.time()}
-            
+
             start_time = time.time()
             await cache_set(key, value, ttl=300)
             set_time = (time.time() - start_time) * 1000
             set_times.append(set_time)
-        
+
         # Test cache get operations
         get_times = []
         cache_hits = 0
-        
+
         for i in range(iterations):
             key = f"{key_prefix}_{i}"
-            
+
             start_time = time.time()
             value = await cache_get(key)
             get_time = (time.time() - start_time) * 1000
             get_times.append(get_time)
-            
+
             if value is not None:
                 cache_hits += 1
-        
+
         hit_ratio = (cache_hits / iterations) * 100
-        
+
         return {
             'avg_set_time_ms': statistics.mean(set_times),
             'avg_get_time_ms': statistics.mean(get_times),
@@ -507,38 +511,38 @@ class ComprehensiveBenchmark:
             'meets_hit_ratio_target': hit_ratio >= 90.0,
             'meets_access_time_target': statistics.mean(get_times) < 10
         }
-    
-    async def _benchmark_memory_management(self, params: Dict[str, Any]) -> Dict[str, Any]:
+
+    async def _benchmark_memory_management(self, params: dict[str, Any]) -> dict[str, Any]:
         """Benchmark memory management performance"""
         if not memory_manager:
             raise RuntimeError("Memory manager not available")
-        
+
         # Get initial memory stats
         initial_stats = memory_manager.get_memory_stats()
         initial_memory = initial_stats['current']['rss_mb']
-        
+
         # Simulate memory-intensive operations
         large_objects = []
         for i in range(100):
             # Create large objects to trigger memory management
             large_object = [0] * 10000  # ~40KB object
             large_objects.append(large_object)
-            
+
             if i % 10 == 0:
                 # Force garbage collection periodically
                 memory_manager.force_garbage_collection()
-        
+
         # Get final memory stats
         final_stats = memory_manager.get_memory_stats()
         final_memory = final_stats['current']['rss_mb']
-        
+
         memory_growth = final_memory - initial_memory
         growth_rate = final_stats['growth_rate_mb_per_min']
-        
+
         # Cleanup
         del large_objects
         memory_manager.force_garbage_collection()
-        
+
         return {
             'initial_memory_mb': initial_memory,
             'final_memory_mb': final_memory,
@@ -547,28 +551,28 @@ class ComprehensiveBenchmark:
             'gc_collections': final_stats['gc_stats']['total_objects'],
             'meets_memory_target': final_memory < 1024  # < 1GB
         }
-    
-    async def _benchmark_load_balancing(self, params: Dict[str, Any]) -> Dict[str, Any]:
+
+    async def _benchmark_load_balancing(self, params: dict[str, Any]) -> dict[str, Any]:
         """Benchmark load balancing performance"""
         if not service_discovery:
             raise RuntimeError("Service discovery not available")
-        
+
         # Get load balancer stats
         stats = service_discovery.get_service_discovery_stats()
-        
+
         # Simulate load balancing operations
         request_count = params.get('request_count', 1000)
         response_times = []
-        
-        for i in range(request_count):
+
+        for _i in range(request_count):
             start_time = time.time()
-            
+
             # Simulate request routing (this would be actual service calls in production)
             await asyncio.sleep(0.001)  # Simulate minimal processing
-            
+
             response_time = (time.time() - start_time) * 1000
             response_times.append(response_time)
-        
+
         return {
             'avg_response_time_ms': statistics.mean(response_times),
             'total_requests': request_count,
@@ -576,8 +580,8 @@ class ComprehensiveBenchmark:
             'auto_scaling_enabled': stats['auto_scaling_enabled'],
             'meets_response_target': statistics.mean(response_times) < 100
         }
-    
-    async def _benchmark_system_integration(self, params: Dict[str, Any]) -> Dict[str, Any]:
+
+    async def _benchmark_system_integration(self, params: dict[str, Any]) -> dict[str, Any]:
         """Benchmark end-to-end system integration"""
         # Require all core components; do not simulate
         if not database_optimizer or not intelligent_cache or not memory_manager:
@@ -617,7 +621,7 @@ class ComprehensiveBenchmark:
         # Step 2: Database operations (real)
         db_start = time.time()
         if database_optimizer:
-            db_benchmark = await database_optimizer.run_performance_benchmark()
+            await database_optimizer.run_performance_benchmark()
         else:
             raise RuntimeError("Database optimizer not available for real database operations")
 
@@ -663,19 +667,19 @@ class ComprehensiveBenchmark:
             ]),
             'data_source': 'real_integration_test'
         }
-    
-    def _calculate_improvement(self, baseline: Dict[str, BenchmarkResult], 
-                             current: Dict[str, BenchmarkResult]) -> Dict[str, Any]:
+
+    def _calculate_improvement(self, baseline: dict[str, BenchmarkResult],
+                             current: dict[str, BenchmarkResult]) -> dict[str, Any]:
         """Calculate performance improvement between baseline and current"""
         improvements = {}
-        
+
         for bench_name in baseline.keys():
             if bench_name not in current:
                 continue
-            
+
             baseline_result = baseline[bench_name]
             current_result = current[bench_name]
-            
+
             if not baseline_result.success or not current_result.success:
                 improvements[bench_name] = {
                     'improvement_percent': 0,
@@ -683,25 +687,25 @@ class ComprehensiveBenchmark:
                     'message': 'One or both benchmarks failed'
                 }
                 continue
-            
+
             # Calculate time improvement
             baseline_time = baseline_result.execution_time_ms
             current_time = current_result.execution_time_ms
-            
+
             if baseline_time > 0:
                 time_improvement = ((baseline_time - current_time) / baseline_time) * 100
             else:
                 time_improvement = 0
-            
+
             # Calculate memory improvement
             baseline_memory = baseline_result.memory_usage_mb
             current_memory = current_result.memory_usage_mb
-            
+
             if baseline_memory > 0:
                 memory_improvement = ((baseline_memory - current_memory) / baseline_memory) * 100
             else:
                 memory_improvement = 0
-            
+
             improvements[bench_name] = {
                 'time_improvement_percent': time_improvement,
                 'memory_improvement_percent': memory_improvement,
@@ -711,10 +715,10 @@ class ComprehensiveBenchmark:
                 'current_memory_mb': current_memory,
                 'meets_60_percent_target': time_improvement >= 60.0
             }
-        
+
         return improvements
-    
-    async def _validate_performance_targets(self, benchmark_results: Dict[str, Any]) -> Dict[str, Any]:
+
+    async def _validate_performance_targets(self, benchmark_results: dict[str, Any]) -> dict[str, Any]:
         """Validate benchmark results against performance targets"""
         validation_results = {
             'targets_met': 0,
@@ -723,7 +727,7 @@ class ComprehensiveBenchmark:
             'critical_targets_failed': 0,
             'target_details': []
         }
-        
+
         for target in self.performance_targets:
             target_result = {
                 'component': target.component,
@@ -736,11 +740,11 @@ class ComprehensiveBenchmark:
                 'actual_value': None,
                 'message': ''
             }
-            
+
             # Extract actual value from benchmark results
             actual_value = await self._extract_metric_value(benchmark_results, target)
             target_result['actual_value'] = actual_value
-            
+
             if actual_value is not None:
                 # Check if target is met
                 if target.comparison == 'less_than':
@@ -751,14 +755,14 @@ class ComprehensiveBenchmark:
                     met = abs(actual_value - target.target_value) < 0.01
                 else:
                     met = False
-                
+
                 target_result['met'] = met
                 target_result['message'] = (
                     f"✅ Target met: {actual_value}{target.unit} {target.comparison.replace('_', ' ')} {target.target_value}{target.unit}"
                     if met else
                     f"❌ Target missed: {actual_value}{target.unit} not {target.comparison.replace('_', ' ')} {target.target_value}{target.unit}"
                 )
-                
+
                 # Update counters
                 if met:
                     validation_results['targets_met'] += 1
@@ -770,30 +774,30 @@ class ComprehensiveBenchmark:
                         validation_results['critical_targets_failed'] += 1
             else:
                 target_result['message'] = f"⚠️ Could not extract metric {target.metric} for {target.component}"
-            
+
             validation_results['target_details'].append(target_result)
-        
+
         # Calculate overall target achievement
         total_targets = len(self.performance_targets)
         validation_results['overall_success_rate'] = (validation_results['targets_met'] / total_targets) * 100
-        
+
         return validation_results
-    
-    async def _extract_metric_value(self, benchmark_results: Dict[str, Any], 
+
+    async def _extract_metric_value(self, benchmark_results: dict[str, Any],
                                   target: PerformanceTarget) -> Optional[float]:
         """Extract metric value from benchmark results"""
         try:
             # Look through suite results for matching component and metric
-            for suite_name, suite_results in benchmark_results.get('suite_results', {}).items():
-                for bench_name, result in suite_results.items():
+            for _suite_name, suite_results in benchmark_results.get('suite_results', {}).items():
+                for _bench_name, result in suite_results.items():
                     if not isinstance(result, BenchmarkResult):
                         continue
-                    
+
                     if result.component == target.component:
                         # Check in metadata first
                         if target.metric in result.metadata:
                             return float(result.metadata[target.metric])
-                        
+
                         # Check standard result fields
                         if target.metric == 'processing_time_ms':
                             return result.execution_time_ms
@@ -801,39 +805,39 @@ class ComprehensiveBenchmark:
                             return result.memory_usage_mb
                         elif target.metric == 'cpu_usage_percent':
                             return result.cpu_usage_percent
-            
+
             return None
-            
+
         except Exception as e:
             logger.error(f"Error extracting metric {target.metric}: {e}")
             return None
-    
-    def _calculate_performance_grade(self, benchmark_results: Dict[str, Any]) -> str:
+
+    def _calculate_performance_grade(self, benchmark_results: dict[str, Any]) -> str:
         """Calculate overall performance grade"""
         target_validation = benchmark_results.get('target_validation', {})
-        
+
         # Base score
         score = 100
-        
+
         # Deduct points for failed targets
         critical_failed = target_validation.get('critical_targets_failed', 0)
         targets_failed = target_validation.get('targets_failed', 0)
-        
+
         # Critical failures are heavily penalized
         score -= critical_failed * 20
         score -= (targets_failed - critical_failed) * 10
-        
+
         # Check 60% improvement target
         improvement_met = False
-        for suite_name, improvements in benchmark_results.get('improvement_analysis', {}).items():
-            for bench_name, improvement in improvements.items():
+        for _suite_name, improvements in benchmark_results.get('improvement_analysis', {}).items():
+            for _bench_name, improvement in improvements.items():
                 if improvement.get('meets_60_percent_target', False):
                     improvement_met = True
                     break
-        
+
         if not improvement_met:
             score -= 15  # Penalty for not meeting 60% improvement target
-        
+
         # Convert to letter grade
         if score >= 95:
             return 'A+'
@@ -853,13 +857,14 @@ class ComprehensiveBenchmark:
             return 'D'
         else:
             return 'F'
-    
-    async def _get_system_info(self) -> Dict[str, Any]:
+
+    async def _get_system_info(self) -> dict[str, Any]:
         """Get current system information"""
         try:
             import platform
+
             import psutil
-            
+
             return {
                 'platform': platform.platform(),
                 'python_version': platform.python_version(),
@@ -870,7 +875,7 @@ class ComprehensiveBenchmark:
             }
         except Exception as e:
             return {'error': str(e)}
-    
+
     async def _get_memory_usage(self) -> float:
         """Get current memory usage in MB"""
         try:
@@ -878,7 +883,7 @@ class ComprehensiveBenchmark:
             return psutil.Process().memory_info().rss / (1024 * 1024)
         except Exception:
             return 0.0
-    
+
     async def _get_cpu_usage(self) -> float:
         """Get current CPU usage percentage"""
         try:
@@ -886,30 +891,30 @@ class ComprehensiveBenchmark:
             return psutil.cpu_percent(interval=0.1)
         except Exception:
             return 0.0
-    
-    async def _save_benchmark_report(self, report: Dict[str, Any], report_type: str):
+
+    async def _save_benchmark_report(self, report: dict[str, Any], report_type: str):
         """Save benchmark report to file"""
         try:
             import os
-            
+
             # Create results directory if it doesn't exist
             os.makedirs(self.results_directory, exist_ok=True)
-            
+
             # Generate filename
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"{report_type}_benchmark_{timestamp}.json"
             filepath = os.path.join(self.results_directory, filename)
-            
+
             # Save report
             async with aiofiles.open(filepath, 'w') as f:
                 await f.write(json.dumps(report, indent=2, default=str))
-            
+
             logger.info(f"📄 Saved benchmark report: {filepath}")
-            
+
         except Exception as e:
             logger.error(f"Failed to save benchmark report: {e}")
-    
-    def get_benchmark_summary(self) -> Dict[str, Any]:
+
+    def get_benchmark_summary(self) -> dict[str, Any]:
         """Get summary of benchmark system status"""
         return {
             'timestamp': datetime.now(timezone.utc).isoformat(),
@@ -921,9 +926,9 @@ class ComprehensiveBenchmark:
         }
 
 # Create default benchmark suites
-def create_default_benchmark_suites() -> List[BenchmarkSuite]:
+def create_default_benchmark_suites() -> list[BenchmarkSuite]:
     """Create default benchmark suites for Phase 3 validation"""
-    
+
     return [
         BenchmarkSuite(
             name="video_processing_suite",
@@ -940,7 +945,7 @@ def create_default_benchmark_suites() -> List[BenchmarkSuite]:
                 },
                 {
                     'name': 'batch_video_processing',
-                    'component': 'video_processing', 
+                    'component': 'video_processing',
                     'type': 'video_processing',
                     'params': {
                         'test_urls': [
@@ -953,7 +958,7 @@ def create_default_benchmark_suites() -> List[BenchmarkSuite]:
                 }
             ]
         ),
-        
+
         BenchmarkSuite(
             name="database_performance_suite",
             description="Database query performance validation",
@@ -969,9 +974,9 @@ def create_default_benchmark_suites() -> List[BenchmarkSuite]:
                 }
             ]
         ),
-        
+
         BenchmarkSuite(
-            name="cache_performance_suite", 
+            name="cache_performance_suite",
             description="Cache system performance validation",
             benchmarks=[
                 {
@@ -985,7 +990,7 @@ def create_default_benchmark_suites() -> List[BenchmarkSuite]:
                 }
             ]
         ),
-        
+
         BenchmarkSuite(
             name="system_integration_suite",
             description="End-to-end system performance validation",
@@ -999,7 +1004,7 @@ def create_default_benchmark_suites() -> List[BenchmarkSuite]:
                 {
                     'name': 'memory_management_test',
                     'component': 'memory',
-                    'type': 'memory_management', 
+                    'type': 'memory_management',
                     'params': {}
                 },
                 {
@@ -1022,36 +1027,36 @@ for suite in create_default_benchmark_suites():
     comprehensive_benchmark.register_benchmark_suite(suite)
 
 # Convenience functions
-async def run_phase3_validation() -> Dict[str, Any]:
+async def run_phase3_validation() -> dict[str, Any]:
     """Run Phase 3 performance validation"""
     logger.info("🎯 Starting Phase 3 Performance Validation")
     logger.info("Target: 60%+ improvement across all systems")
-    
+
     # Establish baseline if not done
     if not comprehensive_benchmark.baseline_established:
         await comprehensive_benchmark.establish_baseline()
-    
+
     # Run comprehensive benchmark
     results = await comprehensive_benchmark.run_comprehensive_benchmark()
-    
+
     # Log summary
     grade = results['performance_grade']
     target_validation = results['target_validation']
     success_rate = target_validation['overall_success_rate']
-    
-    logger.info(f"✅ Phase 3 Validation Complete!")
+
+    logger.info("✅ Phase 3 Validation Complete!")
     logger.info(f"📊 Performance Grade: {grade}")
     logger.info(f"🎯 Target Success Rate: {success_rate:.1f}%")
     logger.info(f"✅ Targets Met: {target_validation['targets_met']}")
     logger.info(f"❌ Targets Failed: {target_validation['targets_failed']}")
-    
+
     return results
 
-async def establish_performance_baseline() -> Dict[str, Any]:
+async def establish_performance_baseline() -> dict[str, Any]:
     """Establish performance baseline"""
     return await comprehensive_benchmark.establish_baseline()
 
-def get_benchmark_status() -> Dict[str, Any]:
+def get_benchmark_status() -> dict[str, Any]:
     """Get benchmark system status"""
     return comprehensive_benchmark.get_benchmark_summary()
 
@@ -1059,17 +1064,17 @@ if __name__ == "__main__":
     async def test_comprehensive_benchmark():
         # Run Phase 3 validation
         results = await run_phase3_validation()
-        
-        print(f"Benchmark Results:")
+
+        print("Benchmark Results:")
         print(f"Grade: {results['performance_grade']}")
         print(f"Success Rate: {results['target_validation']['overall_success_rate']:.1f}%")
-        
+
         # Print improvement analysis
         for suite_name, improvements in results.get('improvement_analysis', {}).items():
             print(f"\n{suite_name} Improvements:")
             for bench_name, improvement in improvements.items():
                 time_imp = improvement.get('time_improvement_percent', 0)
                 print(f"  {bench_name}: {time_imp:+.1f}% time improvement")
-    
+
 if __name__ == "__main__":
     asyncio.run(test_comprehensive_benchmark())

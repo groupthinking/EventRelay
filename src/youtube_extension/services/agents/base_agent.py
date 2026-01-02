@@ -1,5 +1,6 @@
 from .dto import AgentRequest, AgentResult
 
+
 class BaseAgent:
     name = "base"
 

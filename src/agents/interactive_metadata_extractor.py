@@ -3,20 +3,18 @@ Interactive Metadata Extractor
 Extracts time-coded chapters, transcript, keyframes, and resources from YouTube videos
 """
 
-import os
-import re
+import asyncio
 import json
 import logging
-import asyncio
-from typing import Dict, List, Any, Optional, Tuple
+import os
+import re
 from datetime import datetime
-import aiohttp
-import cv2
-import numpy as np
 from pathlib import Path
-from youtube_transcript_api import YouTubeTranscriptApi
-import whisper
+from typing import Any
+
+import aiohttp
 from dotenv import load_dotenv
+from youtube_transcript_api import YouTubeTranscriptApi
 
 load_dotenv()
 logger = logging.getLogger(__name__)
@@ -24,12 +22,12 @@ logger = logging.getLogger(__name__)
 
 class InteractiveMetadataExtractor:
     """Extract comprehensive time-coded metadata for interactive learning"""
-    
+
     def __init__(self):
         self.youtube_api_key = os.getenv('YOUTUBE_API_KEY')
         self.openai_api_key = os.getenv('OPENAI_API_KEY')
         self.whisper_model = None  # Lazy load
-        
+
     def extract_video_id(self, url: str) -> str:
         """Extract video ID from YouTube URL"""
         patterns = [
@@ -37,25 +35,25 @@ class InteractiveMetadataExtractor:
             r'(?:embed\/)([0-9A-Za-z_-]{11})',
             r'(?:watch\?v=)([0-9A-Za-z_-]{11})'
         ]
-        
+
         for pattern in patterns:
             match = re.search(pattern, url)
             if match:
                 return match.group(1)
-        
+
         if len(url) == 11:
             return url
-            
+
         raise ValueError(f"Could not extract video ID from: {url}")
-    
-    async def extract_chapters(self, video_id: str, description: str) -> List[Dict[str, Any]]:
+
+    async def extract_chapters(self, video_id: str, description: str) -> list[dict[str, Any]]:
         """Extract chapters from video description or generate them"""
         chapters = []
-        
+
         # Try to extract from description timestamps
         timestamp_pattern = r'(\d{1,2}:?\d{1,2}:\d{2}|\d{1,2}:\d{2})\s*[-–—]\s*(.+?)(?=\n|$)'
         matches = re.findall(timestamp_pattern, description, re.MULTILINE)
-        
+
         if matches:
             for i, (time_str, title) in enumerate(matches):
                 chapters.append({
@@ -67,22 +65,22 @@ class InteractiveMetadataExtractor:
         else:
             # Generate chapters using AI if none found
             chapters = await self._generate_chapters_ai(video_id)
-        
+
         # Calculate durations
         for i in range(len(chapters) - 1):
             duration = chapters[i + 1]['timeSeconds'] - chapters[i]['timeSeconds']
             chapters[i]['duration'] = self._seconds_to_time(duration)
-        
+
         return chapters
-    
-    async def extract_transcript(self, video_id: str) -> List[Dict[str, Any]]:
+
+    async def extract_transcript(self, video_id: str) -> list[dict[str, Any]]:
         """Extract transcript with timing information"""
         transcript_lines = []
-        
+
         try:
             # Try YouTube's auto-generated captions
             transcript = YouTubeTranscriptApi.get_transcript(video_id)
-            
+
             for i, entry in enumerate(transcript):
                 transcript_lines.append({
                     'id': f'tr_{i}',
@@ -95,37 +93,37 @@ class InteractiveMetadataExtractor:
             logger.warning(f"Failed to get YouTube transcript: {e}")
             # Fall back to Whisper or other methods
             transcript_lines = await self._generate_transcript_whisper(video_id)
-        
+
         return transcript_lines
-    
-    async def extract_keyframes(self, video_id: str, transcript: List[Dict]) -> List[Dict[str, Any]]:
+
+    async def extract_keyframes(self, video_id: str, transcript: list[dict]) -> list[dict[str, Any]]:
         """Extract visual keyframes from video"""
         keyframes = []
-        
+
         # For now, generate keyframes at chapter boundaries and important moments
         # In production, this would use computer vision to detect scene changes
-        
+
         # Mock implementation - would use actual video processing
         important_times = [0, 60, 120, 180, 240]  # Every minute for demo
-        
-        for i, time in enumerate(important_times):
+
+        for _i, time in enumerate(important_times):
             keyframes.append({
                 'time': time,
                 'image': f'/api/keyframe/{video_id}/{time}',  # Would be actual image URL
                 'description': f'Key concept at {self._seconds_to_time(time)}'
             })
-        
+
         return keyframes
-    
-    async def extract_resources(self, video_id: str, metadata: Dict) -> List[Dict[str, Any]]:
+
+    async def extract_resources(self, video_id: str, metadata: dict) -> list[dict[str, Any]]:
         """Extract or generate relevant resources"""
         resources = []
-        
+
         # Extract links from description
         description = metadata.get('description', '')
         url_pattern = r'https?://[^\s<>"{}|\\^`\[\]]+'
         urls = re.findall(url_pattern, description)
-        
+
         for i, url in enumerate(urls[:10]):  # Limit to 10 resources
             resource_type = self._classify_resource_url(url)
             resources.append({
@@ -135,7 +133,7 @@ class InteractiveMetadataExtractor:
                 'url': url,
                 'chapters': []  # Would map to relevant chapters
             })
-        
+
         # Add generated resources based on content
         if metadata.get('category') == 'Educational':
             resources.extend([
@@ -154,16 +152,16 @@ class InteractiveMetadataExtractor:
                     'chapters': []
                 }
             ])
-        
+
         return resources
-    
-    async def extract_all_metadata(self, video_url: str) -> Dict[str, Any]:
+
+    async def extract_all_metadata(self, video_url: str) -> dict[str, Any]:
         """Extract all interactive metadata from video"""
         video_id = self.extract_video_id(video_url)
-        
+
         # Get basic metadata
         metadata = await self._get_video_metadata(video_id)
-        
+
         # Extract all components
         chapters = await self.extract_chapters(video_id, metadata.get('description', ''))
         transcript = await self.extract_transcript(video_id)
@@ -171,7 +169,7 @@ class InteractiveMetadataExtractor:
         resources = await self.extract_resources(video_id, metadata)
         comments = await self.extract_comments(video_id)
         channel_context = await self.extract_channel_context(metadata.get('channel_id'))
-        
+
         # Compile complete metadata
         return {
             'video_id': video_id,
@@ -185,8 +183,8 @@ class InteractiveMetadataExtractor:
             'channel_context': channel_context,
             'extracted_at': datetime.now().isoformat()
         }
-    
-    async def _get_video_metadata(self, video_id: str) -> Dict[str, Any]:
+
+    async def _get_video_metadata(self, video_id: str) -> dict[str, Any]:
         """Get basic video metadata from YouTube API"""
         url = "https://www.googleapis.com/youtube/v3/videos"
         params = {
@@ -194,16 +192,16 @@ class InteractiveMetadataExtractor:
             'id': video_id,
             'key': self.youtube_api_key
         }
-        
+
         async with aiohttp.ClientSession() as session:
             async with session.get(url, params=params) as response:
                 data = await response.json()
-                
+
                 if not data.get('items'):
                     raise ValueError(f"Video not found: {video_id}")
-                
+
                 video = data['items'][0]
-                
+
                 return {
                     'title': video['snippet']['title'],
                     'channel': video['snippet']['channelTitle'],
@@ -213,7 +211,7 @@ class InteractiveMetadataExtractor:
                     'category': self._get_category_name(video['snippet']['categoryId'])
                 }
 
-    async def extract_comments(self, video_id: str, max_results: int = 20) -> List[Dict[str, Any]]:
+    async def extract_comments(self, video_id: str, max_results: int = 20) -> list[dict[str, Any]]:
         """Extract recent comments from the video"""
         url = "https://www.googleapis.com/youtube/v3/commentThreads"
         params = {
@@ -223,13 +221,13 @@ class InteractiveMetadataExtractor:
             'order': 'relevance',
             'key': self.youtube_api_key
         }
-        
+
         comments = []
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get(url, params=params) as response:
                     data = await response.json()
-                    
+
                     for item in data.get('items', []):
                         snippet = item['snippet']['topLevelComment']['snippet']
                         comments.append({
@@ -240,14 +238,14 @@ class InteractiveMetadataExtractor:
                         })
         except Exception as e:
             logger.warning(f"Failed to extract comments: {e}")
-            
+
         return comments
 
-    async def extract_channel_context(self, channel_id: str, max_results: int = 5) -> Dict[str, Any]:
+    async def extract_channel_context(self, channel_id: str, max_results: int = 5) -> dict[str, Any]:
         """Extract context about the channel (recent videos, etc.)"""
         if not channel_id:
             return {}
-            
+
         url = "https://www.googleapis.com/youtube/v3/search"
         params = {
             'part': 'snippet',
@@ -257,13 +255,13 @@ class InteractiveMetadataExtractor:
             'type': 'video',
             'key': self.youtube_api_key
         }
-        
+
         recent_videos = []
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get(url, params=params) as response:
                     data = await response.json()
-                    
+
                     for item in data.get('items', []):
                         recent_videos.append({
                             'title': item['snippet']['title'],
@@ -272,13 +270,13 @@ class InteractiveMetadataExtractor:
                         })
         except Exception as e:
             logger.warning(f"Failed to extract channel context: {e}")
-            
+
         return {
             'channel_id': channel_id,
             'recent_videos': recent_videos
         }
-    
-    async def _generate_chapters_ai(self, video_id: str) -> List[Dict[str, Any]]:
+
+    async def _generate_chapters_ai(self, video_id: str) -> list[dict[str, Any]]:
         """Generate chapters using AI analysis"""
         # This would use GPT-4 or similar to analyze transcript and generate chapters
         # Mock implementation for now
@@ -302,8 +300,8 @@ class InteractiveMetadataExtractor:
                 'timeSeconds': 480
             }
         ]
-    
-    async def _generate_transcript_whisper(self, video_id: str) -> List[Dict[str, Any]]:
+
+    async def _generate_transcript_whisper(self, video_id: str) -> list[dict[str, Any]]:
         """Generate transcript using Whisper"""
         # This would download audio and transcribe with Whisper
         # Mock implementation for now
@@ -316,30 +314,30 @@ class InteractiveMetadataExtractor:
                 'speaker': 'narrator'
             }
         ]
-    
+
     def _time_to_seconds(self, time_str: str) -> int:
         """Convert time string to seconds"""
         parts = time_str.split(':')
         parts = [int(p) for p in parts]
-        
+
         if len(parts) == 3:
             return parts[0] * 3600 + parts[1] * 60 + parts[2]
         elif len(parts) == 2:
             return parts[0] * 60 + parts[1]
         else:
             return parts[0]
-    
+
     def _seconds_to_time(self, seconds: int) -> str:
         """Convert seconds to time string"""
         h = seconds // 3600
         m = (seconds % 3600) // 60
         s = seconds % 60
-        
+
         if h > 0:
             return f"{h}:{m:02d}:{s:02d}"
         else:
             return f"{m}:{s:02d}"
-    
+
     def _parse_duration(self, duration: str) -> str:
         """Parse ISO 8601 duration to readable format"""
         import re
@@ -355,7 +353,7 @@ class InteractiveMetadataExtractor:
                 parts.append(f"{seconds}s")
             return " ".join(parts) if parts else "0s"
         return duration
-    
+
     def _get_category_name(self, category_id: str) -> str:
         """Map YouTube category ID to name"""
         categories = {
@@ -375,7 +373,7 @@ class InteractiveMetadataExtractor:
             '2': 'Autos & Vehicles'
         }
         return categories.get(category_id, 'General')
-    
+
     def _classify_resource_url(self, url: str) -> str:
         """Classify resource type based on URL"""
         if 'github.com' in url or 'gitlab.com' in url:
@@ -386,18 +384,18 @@ class InteractiveMetadataExtractor:
             return 'exercise'
         else:
             return 'link'
-    
-    async def save_metadata(self, metadata: Dict[str, Any]) -> str:
+
+    async def save_metadata(self, metadata: dict[str, Any]) -> str:
         """Save extracted metadata to file"""
         video_id = metadata['video_id']
         save_dir = Path('youtube_processed_videos/interactive_metadata')
         save_dir.mkdir(parents=True, exist_ok=True)
-        
+
         filepath = save_dir / f"{video_id}_metadata.json"
-        
+
         with open(filepath, 'w', encoding='utf-8') as f:
             json.dump(metadata, f, indent=2, ensure_ascii=False)
-        
+
         logger.info(f"Saved interactive metadata to: {filepath}")
         return str(filepath)
 
@@ -405,13 +403,13 @@ class InteractiveMetadataExtractor:
 # Example usage
 async def test_metadata_extraction():
     extractor = InteractiveMetadataExtractor()
-    
+
     # Test with a sample video
     video_url = "https://www.youtube.com/watch?v=aircAruvnKk"
-    
+
     metadata = await extractor.extract_all_metadata(video_url)
     filepath = await extractor.save_metadata(metadata)
-    
+
     print(f"✅ Extracted metadata for: {metadata['metadata']['title']}")
     print(f"📁 Saved to: {filepath}")
     print(f"📚 Chapters: {len(metadata['chapters'])}")

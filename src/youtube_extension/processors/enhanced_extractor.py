@@ -8,24 +8,25 @@ import asyncio
 import json
 import logging
 import os
-import sys
+import re
 import time
 from datetime import datetime
-from typing import Dict, Any, List, Optional, Union
-from pathlib import Path
-from urllib.parse import urlparse, parse_qs
-import re
+from typing import Any, Optional
+
 import httpx
 
 from youtube_extension.utils import extract_video_id, parse_duration_to_seconds
 
 # Video processing imports
 try:
-    from youtube_transcript_api import get_transcript
-    from youtube_transcript_api._errors import CouldNotRetrieveTranscript, NoTranscriptFound
+    import yt_dlp
     from googleapiclient.discovery import build
     from googleapiclient.errors import HttpError
-    import yt_dlp
+    from youtube_transcript_api import get_transcript
+    from youtube_transcript_api._errors import (
+        CouldNotRetrieveTranscript,
+        NoTranscriptFound,
+    )
     HAS_VIDEO_DEPS = True
 except ImportError as e:
     HAS_VIDEO_DEPS = False
@@ -34,18 +35,27 @@ except ImportError as e:
 # AI processing imports
 try:
     import openai
-    from transformers import pipeline
     import torch
+    from transformers import pipeline
     HAS_AI_DEPS = True
 except ImportError:
     HAS_AI_DEPS = False
     logging.warning("AI dependencies not available")
 
+# Gemini Service Import
+try:
+    from youtube_extension.services.ai.gemini_service import GeminiService
+    HAS_GEMINI = True
+except ImportError:
+    HAS_GEMINI = False
+    logging.warning("GeminiService not available")
+
 # Data processing
-import pandas as pd
-import numpy as np
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from enum import Enum
+
+import pandas as pd
+from youtube_extension.processors.scoring_engine import ScoringEngine
 
 # Configure logging
 logging.basicConfig(
@@ -79,7 +89,7 @@ class VideoMetadata:
     view_count: int
     like_count: Optional[int] = None
     comment_count: Optional[int] = None
-    tags: List[str] = None
+    tags: list[str] = None
     thumbnail_url: str = ""
     language: str = "en"
     source: VideoSource = VideoSource.YOUTUBE
@@ -91,7 +101,7 @@ class TranscriptSegment:
     start: float
     duration: float
     end: float = None
-    
+
     def __post_init__(self):
         if self.end is None:
             self.end = self.start + self.duration
@@ -100,25 +110,27 @@ class TranscriptSegment:
 class VideoContent:
     """Complete video content package"""
     metadata: VideoMetadata
-    transcript: List[TranscriptSegment]
+    transcript: list[TranscriptSegment]
     summary: Optional[str] = None
-    key_points: List[str] = None
-    topics: List[str] = None
+    key_points: list[str] = None
+    topics: list[str] = None
     sentiment: Optional[str] = None
     processing_stage: ProcessingStage = ProcessingStage.EXTRACTION
     processing_time: float = 0.0
-    error_log: List[str] = None
+    error_log: list[str] = None
+    world_class_analysis: dict[str, Any] = None
+    actions: list[dict[str, Any]] = None
 
 class EnhancedVideoExtractor:
     """
     Enhanced video extractor integrating multiple processing approaches
     """
-    
-    def __init__(self, config: Dict[str, Any] = None):
+
+    def __init__(self, config: dict[str, Any] = None):
         self.config = config or {}
         self.youtube_api_key = self.config.get('youtube_api_key') or os.getenv('YOUTUBE_API_KEY')
         self.openai_api_key = self.config.get('openai_api_key') or os.getenv('OPENAI_API_KEY')
-        
+
         # Initialize YouTube API client
         if self.youtube_api_key and HAS_VIDEO_DEPS:
             try:
@@ -128,7 +140,7 @@ class EnhancedVideoExtractor:
                 self.youtube = None
         else:
             self.youtube = None
-        
+
         # Initialize AI components
         if HAS_AI_DEPS and self.openai_api_key:
             openai.api_key = self.openai_api_key
@@ -142,7 +154,21 @@ class EnhancedVideoExtractor:
         else:
             self.summarizer = None
             self.sentiment_analyzer = None
-    
+
+        # Initialize Gemini Service
+        if HAS_GEMINI:
+            try:
+                self.gemini_service = GeminiService(self.config)
+                logger.info("Gemini Service initialized for Hybrid AI processing")
+            except Exception as e:
+                logger.error(f"Failed to initialize Gemini Service: {e}")
+                self.gemini_service = None
+        else:
+            self.gemini_service = None
+
+        # Initialize Scoring Engine
+        self.scoring_engine = ScoringEngine()
+
     async def extract_video_metadata(self, video_id: str) -> VideoMetadata:
         """Extract comprehensive video metadata"""
         if not self.youtube:
@@ -150,25 +176,25 @@ class EnhancedVideoExtractor:
             if not self.youtube_api_key:
                 raise ValueError("YouTube API key is not set. Please set the YOUTUBE_API_KEY environment variable.")
             raise ValueError("YouTube API not available")
-        
+
         try:
             response = self.youtube.videos().list(
                 part='snippet,statistics,contentDetails',
                 id=video_id
             ).execute()
-            
+
             if not response['items']:
                 raise ValueError(f"Video {video_id} not found")
-            
+
             item = response['items'][0]
             snippet = item['snippet']
             statistics = item.get('statistics', {})
             content_details = item['contentDetails']
-            
+
             # Parse duration (PT format)
             duration_str = content_details['duration']
             duration = parse_duration_to_seconds(duration_str)
-            
+
             metadata = VideoMetadata(
                 video_id=video_id,
                 title=snippet['title'],
@@ -184,14 +210,14 @@ class EnhancedVideoExtractor:
                 language=snippet.get('defaultLanguage', 'en'),
                 source=VideoSource.YOUTUBE
             )
-            
+
             return metadata
-            
+
         except Exception as e:
             logger.error(f"Failed to extract metadata for {video_id}: {e}")
             raise
-    
-    async def extract_transcript(self, video_id: str, languages: List[str] = None) -> List[TranscriptSegment]:
+
+    async def extract_transcript(self, video_id: str, languages: list[str] = None) -> list[TranscriptSegment]:
         """Extract transcript using the new youtube-caption-extractor service"""
         if not HAS_VIDEO_DEPS:
             raise ValueError("Video dependencies not available")
@@ -223,27 +249,44 @@ class EnhancedVideoExtractor:
                         start=float(item['start']),
                         duration=float(item['dur'])
                     ))
-                
+
                 return segments
 
         except httpx.RequestError as e:
             logger.error(f"HTTP request to caption extractor failed: {e}")
-            raise ValueError(f"Could not connect to the caption extractor service at http://localhost:3000.")
+            raise ValueError("Could not connect to the caption extractor service at http://localhost:3000.")
         except Exception as e:
             logger.error(f"Failed to extract transcript for {video_id}: {e}")
             raise
-    
-    async def analyze_content(self, transcript: List[TranscriptSegment]) -> Dict[str, Any]:
-        """Analyze video content using AI"""
-        if not self.summarizer or not self.sentiment_analyzer:
-            logger.warning("AI components not available for content analysis")
-            return {}
-        
-        # Combine transcript text
+
+    async def analyze_content(self, transcript: list[TranscriptSegment]) -> dict[str, Any]:
+        """Analyze video content using Hybrid AI (Gemini + Torch)"""
         full_text = " ".join([segment.text for segment in transcript])
-        
         analysis = {}
-        
+
+        # 1. Try Gemini first (Cloud Engine)
+        if self.gemini_service and self.gemini_service.is_available():
+            try:
+                logger.info("Using Gemini for content analysis...")
+                prompt = self._construct_gemini_prompt(full_text)
+                result = await self.gemini_service.process_text(prompt)
+
+                if result.success and result.response:
+                    # Parse the markdown/text response into structured dict if needed
+                    # For now, we store the full enhanced markdown in 'summary' or a new field
+                    analysis['enhanced_summary'] = result.response
+                    analysis['summary'] = self._extract_summary_from_markdown(result.response)
+                    analysis['sentiment'] = "analyzed_by_gemini" # Placeholder or extract from text
+                    analysis['topics'] = self._extract_topics_from_markdown(result.response)
+                    return analysis
+            except Exception as e:
+                logger.error(f"Gemini analysis failed, falling back to local: {e}")
+
+        # 2. Fallback to Local Torch (Local Engine)
+        if not self.summarizer or not self.sentiment_analyzer:
+            logger.warning("Local AI components not available for fallback analysis")
+            return analysis
+
         try:
             # Generate summary
             if len(full_text) > 1000:  # Only summarize if text is substantial
@@ -251,77 +294,160 @@ class EnhancedVideoExtractor:
                 analysis['summary'] = summary_result[0]['summary_text']
             else:
                 analysis['summary'] = full_text[:200] + "..." if len(full_text) > 200 else full_text
-            
+
             # Analyze sentiment
             sentiment_result = self.sentiment_analyzer(full_text[:512])  # Limit for model
             analysis['sentiment'] = sentiment_result[0]['label'].lower()
             analysis['sentiment_score'] = sentiment_result[0]['score']
-            
+
             # Extract key topics (simple keyword extraction)
             analysis['key_points'] = self._extract_key_points(full_text)
             analysis['topics'] = self._extract_topics(full_text)
-            
+
         except Exception as e:
-            logger.error(f"Content analysis failed: {e}")
+            logger.error(f"Local content analysis failed: {e}")
             analysis['error'] = str(e)
-        
+
+        # 3. Apply Unified World Class Scoring (Unified Pipeline)
+        try:
+            # We need to convert our TranscriptSegment list to the list of dicts expected by ScoringEngine
+            transcript_dicts = [asdict(seg) for seg in transcript]
+            # We also need a dict-like representation of metadata for some scoring functions
+            # Ideally we pass the raw response, but we can reconstruct a subset from VideoMetadata
+            # or better yet, since we don't store raw response in self, let's use what we have.
+            # ScoringEngine expects 'statistics' and 'contentDetails'.
+            # We can mock this structure from our standardized VideoMetadata to keep interfaces clean.
+            
+            # Reconstruct minimal video_info for scoring
+            scorable_video_info = {
+               'contentDetails': {'duration': f"PT{int(transcript[-1].end if transcript else 0)}S"}, # Approx if needed
+               'statistics': {
+                   'viewCount': 0, # We don't have this in analyze_content args! 
+                   # CRITICAL FIX: analyze_content only takes transcript. It needs metadata for full scoring.
+                   # However, changing the signature is a breaking change.
+                   # BUT, analyze_content is called from process_video which HAS metadata.
+                   # Let's handle this by computing score in process_video INSTEAD of analyze_content,
+                   # OR pass metadata to analyze_content.
+               }
+            }
+            # Actually, `process_video` calls `extract_video_metadata` first. 
+            # I will move the scoring call to `process_video` to have access to both metadata and transcript.
+        except Exception as e:
+            logger.error(f"Scoring engine prep failed: {e}")
+
         return analysis
-    
-    def _extract_key_points(self, text: str) -> List[str]:
+
+    def _construct_gemini_prompt(self, text: str) -> str:
+        """Construct prompt to enforce strict schema preservation"""
+        return f"""
+        Analyze the following video transcript and produce a detailed report in strict Markdown format.
+
+        CRITICAL: You MUST use exactly the following sections and headers:
+
+        # [Video Title]
+
+        ## 📺 Video Information
+        - **Channel**: [Channel Name]
+        - **Duration**: [Duration]
+        - **Views**: [Views]
+        - **Published**: [Date]
+        - **Category**: [Category]
+
+        ## 🎯 Content Summary
+        [Comprehensive summary of the content]
+
+        ## 🔑 Key Concepts
+        [List of key concepts]
+
+        ## 💻 Technical Details
+        [Technical tools, frameworks, or specifics mentioned]
+
+        ## 🛤️ Learning Path
+        [Logical progression of topics in the video]
+
+        ## 🚀 Code Generation Potential
+        [High/Medium/Low assessment with reasoning]
+
+        ## 📊 Difficulty & Prerequisites
+        - **Level**: [Beginner/Intermediate/Advanced]
+        - **Prerequisites**: [Required knowledge]
+
+        ## 🔗 Related Topics
+        [List of related topics]
+
+        TRANSCRIPT:
+        {text[:25000]}
+        """
+
+    def _extract_summary_from_markdown(self, md: str) -> str:
+        """Helper to extract clean summary from Gemini markdown"""
+        match = re.search(r'## 🎯 Content Summary\n(.*?)\n##', md, re.DOTALL)
+        return match.group(1).strip() if match else md[:200]
+
+    def _extract_topics_from_markdown(self, md: str) -> list[str]:
+        """Helper to extract topics from Gemini markdown"""
+        match = re.search(r'## 🔗 Related Topics\n(.*?)$', md, re.DOTALL)
+        if match:
+            # clean up list format
+            topics = match.group(1).strip().replace('[', '').replace(']', '').replace("'", "")
+            return [t.strip() for t in topics.split(',')]
+        return []
+
+    def _extract_key_points(self, text: str) -> list[str]:
         """Extract key points from text using simple heuristics"""
         sentences = text.split('.')
         key_points = []
-        
+
         # Look for sentences with key indicators
         indicators = ['important', 'key', 'main', 'primary', 'essential', 'crucial', 'significant']
-        
+
         for sentence in sentences:
             sentence = sentence.strip()
             if len(sentence) > 20 and any(indicator in sentence.lower() for indicator in indicators):
                 key_points.append(sentence)
-        
+
         return key_points[:5]  # Limit to top 5
-    
-    def _extract_topics(self, text: str) -> List[str]:
+
+    def _extract_topics(self, text: str) -> list[str]:
         """Extract topics using simple keyword frequency"""
         # Simple topic extraction - in production, use more sophisticated NLP
         words = re.findall(r'\b[a-zA-Z]{4,}\b', text.lower())
-        
+
         # Filter common words
         stop_words = {'this', 'that', 'with', 'have', 'will', 'from', 'they', 'been', 'were', 'said', 'what', 'when', 'where', 'more', 'some', 'like', 'into', 'time', 'very', 'make', 'than', 'many', 'over', 'such', 'only', 'know', 'just', 'first', 'also', 'after', 'back', 'other', 'well', 'come', 'could', 'would', 'should', 'think', 'people', 'really', 'going', 'about', 'because', 'through', 'before', 'being', 'between', 'during', 'without', 'around', 'something', 'everything'}
-        
+
         filtered_words = [word for word in words if word not in stop_words and len(word) > 4]
-        
+
         # Count frequency
         word_freq = {}
         for word in filtered_words:
             word_freq[word] = word_freq.get(word, 0) + 1
-        
+
         # Return top topics
         sorted_topics = sorted(word_freq.items(), key=lambda x: x[1], reverse=True)
         return [topic[0] for topic in sorted_topics[:10]]
-    
-    async def process_video(self, video_url: str, languages: List[str] = None) -> VideoContent:
+
+    async def process_video(self, video_url: str, languages: list[str] = None) -> VideoContent:
         """Complete video processing pipeline"""
         start_time = time.time()
-        
+
         try:
             # Extract video ID
             video_id = extract_video_id(video_url)
             if not video_id:
                 raise ValueError(f"Could not extract video ID from {video_url}")
-            
+
             logger.info(f"Processing video: {video_id}")
-            
+
             # Extract metadata
             metadata = await self.extract_video_metadata(video_id)
-            
+
             # Extract transcript
             transcript = await self.extract_transcript(video_id, languages)
-            
+
             # Analyze content
             analysis = await self.analyze_content(transcript)
-            
+
             # Create video content object
             content = VideoContent(
                 metadata=metadata,
@@ -333,13 +459,32 @@ class EnhancedVideoExtractor:
                 processing_stage=ProcessingStage.COMPLETE,
                 processing_time=time.time() - start_time
             )
-            
+
+            # 4. Run Unified Scoring (Simulated Post-Processing)
+            try:
+                # Reconstruct info dict for scoring engine
+                video_info_dict = {
+                    'contentDetails': {'duration': f"PT{metadata.duration}S"},
+                    'statistics': {
+                        'viewCount': metadata.view_count,
+                        'likeCount': metadata.like_count or 0,
+                        'commentCount': metadata.comment_count or 0
+                    }
+                }
+                transcript_dicts = [asdict(seg) for seg in transcript]
+                
+                content.world_class_analysis = self.scoring_engine.calculate_all_scores(video_info_dict, transcript_dicts)
+                content.actions = self.scoring_engine.generate_actions(content.world_class_analysis)
+                logger.info("✅ World-class scoring applied via Unified Pipeline")
+            except Exception as e:
+                logger.error(f"Unified scoring failed: {e}")
+
             logger.info(f"Successfully processed video {video_id} in {content.processing_time:.2f}s")
             return content
-            
+
         except Exception as e:
             logger.error(f"Video processing failed for {video_url}: {e}")
-            
+
             # Return partial content with error
             content = VideoContent(
                 metadata=VideoMetadata(
@@ -356,20 +501,20 @@ class EnhancedVideoExtractor:
                 processing_time=time.time() - start_time,
                 error_log=[str(e)]
             )
-            
+
             return content
-    
-    async def batch_process_videos(self, video_urls: List[str], max_concurrent: int = 3) -> List[VideoContent]:
+
+    async def batch_process_videos(self, video_urls: list[str], max_concurrent: int = 3) -> list[VideoContent]:
         """Process multiple videos concurrently"""
         semaphore = asyncio.Semaphore(max_concurrent)
-        
+
         async def process_single(url):
             async with semaphore:
                 return await self.process_video(url)
-        
+
         tasks = [process_single(url) for url in video_urls]
         results = await asyncio.gather(*tasks, return_exceptions=True)
-        
+
         # Handle exceptions
         processed_results = []
         for i, result in enumerate(results):
@@ -392,37 +537,37 @@ class EnhancedVideoExtractor:
                 processed_results.append(error_content)
             else:
                 processed_results.append(result)
-        
+
         return processed_results
-    
+
     def export_content(self, content: VideoContent, format: str = "json", output_path: str = None) -> str:
         """Export processed content in various formats"""
         if not output_path:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             output_path = f"video_content_{content.metadata.video_id}_{timestamp}"
-        
+
         if format.lower() == "json":
             output_file = f"{output_path}.json"
             with open(output_file, 'w', encoding='utf-8') as f:
                 json.dump(asdict(content), f, indent=2, ensure_ascii=False, default=str)
-        
+
         elif format.lower() == "markdown":
             output_file = f"{output_path}.md"
             markdown_content = self._generate_markdown(content)
             with open(output_file, 'w', encoding='utf-8') as f:
                 f.write(markdown_content)
-        
+
         elif format.lower() == "csv":
             output_file = f"{output_path}.csv"
             df = pd.DataFrame([asdict(segment) for segment in content.transcript])
             df.to_csv(output_file, index=False)
-        
+
         else:
             raise ValueError(f"Unsupported format: {format}")
-        
+
         logger.info(f"Content exported to {output_file}")
         return output_file
-    
+
     def _generate_markdown(self, content: VideoContent) -> str:
         """Generate markdown representation of video content"""
         md = f"""# {content.metadata.title}
@@ -443,50 +588,50 @@ class EnhancedVideoExtractor:
 
 ## Key Points
 """
-        
+
         if content.key_points:
             for point in content.key_points:
                 md += f"- {point}\n"
         else:
             md += "No key points extracted.\n"
-        
+
         md += "\n## Topics\n"
         if content.topics:
             md += ", ".join(content.topics)
         else:
             md += "No topics identified."
-        
+
         md += f"\n\n## Sentiment\n{content.sentiment or 'Not analyzed'}\n"
-        
+
         md += "\n## Transcript\n"
-        for i, segment in enumerate(content.transcript):
+        for _i, segment in enumerate(content.transcript):
             timestamp = f"{int(segment.start // 60)}:{int(segment.start % 60):02d}"
             md += f"**[{timestamp}]** {segment.text}\n\n"
-        
+
         return md
 
 # Example usage and testing
 async def main():
     """Example usage of the enhanced video extractor"""
-    
+
     # Initialize extractor
     extractor = EnhancedVideoExtractor()
-    
+
     # Test video URL
     test_url = "https://www.youtube.com/watch?v=jNQXAC9IVRw"  # Compliance-safe test video
-    
+
     try:
         # Process single video
         content = await extractor.process_video(test_url)
-        
+
         # Export in different formats
         extractor.export_content(content, "json")
         extractor.export_content(content, "markdown")
-        
+
         print(f"Successfully processed: {content.metadata.title}")
         print(f"Duration: {content.metadata.duration}s")
         print(f"Transcript segments: {len(content.transcript)}")
-        
+
     except Exception as e:
         print(f"Processing failed: {e}")
 

@@ -10,11 +10,10 @@ Provides comprehensive video processing using Google AI (Gemini) with clean serv
 import asyncio
 import json
 import logging
-from datetime import datetime
-from typing import Dict, Any, List, Optional
 from dataclasses import dataclass
+from typing import Any, Optional
 
-from ..base_agent import BaseAgent, AgentResult
+from ..base_agent import AgentResult, BaseAgent
 
 # Google AI imports
 try:
@@ -31,28 +30,28 @@ class VideoAnalysisResult:
     """Structured result from video analysis"""
     title: str
     summary: str
-    key_points: List[str]
-    actions: List[Dict[str, Any]]
+    key_points: list[str]
+    actions: list[dict[str, Any]]
     difficulty_level: str
     estimated_duration: str
     quality_score: float
 
 
-from ..registry import register
 from ..dto import AgentRequest, AgentResult
+from ..registry import register
+
 
 @register
 class VideoMasterAgent(BaseAgent):
     name = "video_master"
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, config: Optional[dict[str, Any]] = None):
         """
         Initialize Video Master Agent.
 
         Args:
             config: Configuration including API keys and settings
         """
-        cfg = config or {}
         self._gemini_client = None
         self._setup_gemini()
 
@@ -137,7 +136,7 @@ class VideoMasterAgent(BaseAgent):
                 logs=[error_msg, f"Processing time: {processing_time:.2f}s"],
             )
 
-    def _create_analysis_prompt(self, video_data: Dict[str, Any], transcript: List[Dict[str, Any]]) -> str:
+    def _create_analysis_prompt(self, video_data: dict[str, Any], transcript: list[dict[str, Any]]) -> str:
         """Create comprehensive analysis prompt for Gemini"""
         transcript_text = self._format_transcript(transcript)
 
@@ -177,7 +176,7 @@ class VideoMasterAgent(BaseAgent):
         """
         return prompt
 
-    def _format_transcript(self, transcript: List[Dict[str, Any]]) -> str:
+    def _format_transcript(self, transcript: list[dict[str, Any]]) -> str:
         """Format transcript for analysis"""
         if not transcript:
             return "No transcript available"

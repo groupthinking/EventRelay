@@ -4,14 +4,14 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-from typing import Any
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from urllib.parse import urlparse, parse_qs
-import sys
 from pathlib import Path
+from typing import Any
+from urllib.parse import urlparse
 
 # REMOVED: sys.path.insert with Path manipulation
 from youtube_extension.backend.real_video_processor import RealVideoProcessor
+
 
 class Handler(BaseHTTPRequestHandler):
     def _set_headers(self, code: int = 200, content_type: str = 'application/json'):

@@ -13,16 +13,16 @@ Services:
 """
 
 from .gemini_video import GeminiVideoService, VideoAnalysisResult
-from .youtube_api import YouTubeAPIService
-from .vercel_deploy import VercelDeployService
+from .openai_voice import OpenAIVideoFallback, OpenAIVoiceService
 from .stripe_payments import StripePaymentService
 from .supabase_db import SupabaseDBService
-from .openai_voice import OpenAIVoiceService, OpenAIVideoFallback
+from .vercel_deploy import VercelDeployService
+from .youtube_api import YouTubeAPIService
 
 __all__ = [
     "GeminiVideoService",
     "VideoAnalysisResult",
-    "YouTubeAPIService", 
+    "YouTubeAPIService",
     "VercelDeployService",
     "StripePaymentService",
     "SupabaseDBService",

@@ -9,21 +9,18 @@ consolidated from the previous `optimized_video_processor`,
 """
 
 import asyncio
+import hashlib
 import json
 import logging
 import os
-import sys
-import time
-import hashlib
-from datetime import datetime
-from typing import Dict, Any, List, Optional, Union
-from pathlib import Path
-from urllib.parse import urlparse, parse_qs
 import re
-import httpx
+import time
+from pathlib import Path
+from typing import Any, Optional
 
 # Video processing imports
 from youtube_extension.utils import extract_video_id
+
 try:
     from google.cloud import videointelligence
     HAS_VIDEO_DEPS = True
@@ -40,9 +37,7 @@ except ImportError:
     logging.warning("AI dependencies (google-generativeai) not available")
 
 # Data processing
-import pandas as pd
-import numpy as np
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from enum import Enum
 
 # Configure logging
@@ -55,11 +50,11 @@ logger = logging.getLogger(__name__)
 # Simple cache implementation for optimized strategy
 _cache = {}
 
-async def cache_get(key: str) -> Optional[Dict[str, Any]]:
+async def cache_get(key: str) -> Optional[dict[str, Any]]:
     """Simple in-memory cache get operation"""
     return _cache.get(key)
 
-async def cache_set(key: str, value: Dict[str, Any], ttl: int = 3600, tags: List[str] = None) -> None:
+async def cache_set(key: str, value: dict[str, Any], ttl: int = 3600, tags: list[str] = None) -> None:
     """Simple in-memory cache set operation"""
     _cache[key] = value
     # In production, implement proper TTL and tag management
@@ -89,7 +84,7 @@ class VideoMetadata:
     view_count: int
     like_count: Optional[int] = None
     comment_count: Optional[int] = None
-    tags: List[str] = None
+    tags: list[str] = None
     thumbnail_url: str = ""
     language: str = "en"
     source: VideoSource = VideoSource.YOUTUBE
@@ -101,7 +96,7 @@ class TranscriptSegment:
     start: float
     duration: float
     end: float = None
-    
+
     def __post_init__(self):
         if self.end is None:
             self.end = self.start + self.duration
@@ -110,14 +105,14 @@ class TranscriptSegment:
 class VideoContent:
     """Complete video content package"""
     metadata: VideoMetadata
-    transcript: List[TranscriptSegment]
+    transcript: list[TranscriptSegment]
     summary: Optional[str] = None
-    key_points: List[str] = None
-    topics: List[str] = None
+    key_points: list[str] = None
+    topics: list[str] = None
     sentiment: Optional[str] = None
     processing_stage: ProcessingStage = ProcessingStage.EXTRACTION
     processing_time: float = 0.0
-    error_log: List[str] = None
+    error_log: list[str] = None
 
 from abc import ABC, abstractmethod
 
@@ -142,13 +137,13 @@ class ProcessorStrategy(ABC):
     Abstract base class for a video processing strategy.
     """
     @abstractmethod
-    async def process_video(self, video_url: str, options: Dict[str, Any] = None) -> Dict[str, Any]:
+    async def process_video(self, video_url: str, options: dict[str, Any] = None) -> dict[str, Any]:
         """
         Process a single video and return the results.
         """
         pass
 
-    async def process_batch(self, video_urls: List[str], options: Dict[str, Any] = None) -> List[Dict[str, Any]]:
+    async def process_batch(self, video_urls: list[str], options: dict[str, Any] = None) -> list[dict[str, Any]]:
         """
         Process a batch of videos.
         The default implementation processes them concurrently.
@@ -164,7 +159,7 @@ class OptimizedStrategy(ProcessorStrategy):
     A high-performance video processing strategy that uses parallelism,
     caching, and other optimizations.
     """
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, config: Optional[dict[str, Any]] = None):
         self.config = config or {}
         self.processing_stats = {
             'cache_hits': 0,
@@ -173,15 +168,15 @@ class OptimizedStrategy(ProcessorStrategy):
         }
         # Initialize enhanced strategy for delegation
         self._enhanced_strategy = None
-    async def process_video(self, video_url: str, options: Dict[str, Any] = None) -> Dict[str, Any]:
+    async def process_video(self, video_url: str, options: dict[str, Any] = None) -> dict[str, Any]:
         """
         Process video with all optimizations enabled
         """
         start_time = time.time()
         processing_id = hashlib.md5(f"{video_url}_{time.time()}".encode()).hexdigest()[:8]
-        
+
         logger.info(f"🎯 Processing video (optimized): {video_url[:50]}... [ID: {processing_id}]")
-        
+
         try:
             # Check cache first
             cache_key = f"optimized_video:{hashlib.md5(video_url.encode()).hexdigest()}"
@@ -216,11 +211,11 @@ class OptimizedStrategy(ProcessorStrategy):
             logger.info(f"✅ Video processed in {processing_time:.2f}s [ID: {processing_id}]")
 
             return result
-            
+
         except Exception as e:
             processing_time = time.time() - start_time
             logger.error(f"❌ Video processing failed after {processing_time:.2f}s: {e} [ID: {processing_id}]")
-            
+
             return {
                 'success': False,
                 'error': str(e),
@@ -234,14 +229,14 @@ class ParallelStrategy(ProcessorStrategy):
     A video processing strategy that uses a task queue and a pool of workers
     to process videos in parallel.
     """
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, config: Optional[dict[str, Any]] = None):
         self.config = config or {}
         self.max_workers = self.config.get("max_workers", 4)
         self.semaphore = asyncio.Semaphore(self.max_workers)
         # Use enhanced strategy for actual processing
         self._enhanced_strategy = None
 
-    async def process_video(self, video_url: str, options: Dict[str, Any] = None) -> Dict[str, Any]:
+    async def process_video(self, video_url: str, options: dict[str, Any] = None) -> dict[str, Any]:
         """Process a single video with resource limiting."""
         async with self.semaphore:
             # Initialize enhanced strategy if not already done
@@ -279,7 +274,7 @@ class ParallelStrategy(ProcessorStrategy):
                     'parallel_processed': True
                 }
 
-    async def process_batch(self, video_urls: List[str], options: Dict[str, Any] = None) -> List[Dict[str, Any]]:
+    async def process_batch(self, video_urls: list[str], options: dict[str, Any] = None) -> list[dict[str, Any]]:
         """Process a batch of videos in parallel with controlled concurrency."""
         logger.info(f"🚀 Starting parallel batch processing: {len(video_urls)} videos, max {self.max_workers} workers")
 
@@ -316,7 +311,7 @@ class EnhancedStrategy(ProcessorStrategy):
     An enhanced video processing strategy that extracts metadata,
     transcript, and performs AI analysis.
     """
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, config: Optional[dict[str, Any]] = None):
         self.config = config or {}
         if HAS_VIDEO_DEPS:
             self.video_client = videointelligence.VideoIntelligenceServiceClient()
@@ -326,27 +321,27 @@ class EnhancedStrategy(ProcessorStrategy):
                 raise ValueError("Gemini API key is not configured.")
             genai.configure(api_key=gemini_api_key)
             self.gemini_model = genai.GenerativeModel('gemini-pro')
-    async def process_video(self, video_url: str, options: Dict[str, Any] = None) -> Dict[str, Any]:
+    async def process_video(self, video_url: str, options: dict[str, Any] = None) -> dict[str, Any]:
         """Complete video processing pipeline"""
         start_time = time.time()
-        
+
         try:
             # Extract video ID
             video_id = extract_video_id(video_url)
             if not video_id:
                 raise ValueError(f"Could not extract video ID from {video_url}")
-            
+
             logger.info(f"Processing video: {video_id}")
-            
+
             # Extract metadata
             metadata = await self.extract_video_metadata(video_id)
-            
+
             # Extract transcript
             transcript = await self.extract_transcript(video_id, options.get("languages"))
-            
+
             # Analyze content
             analysis = await self.analyze_content(transcript)
-            
+
             # Create video content object
             content = VideoContent(
                 metadata=metadata,
@@ -358,13 +353,13 @@ class EnhancedStrategy(ProcessorStrategy):
                 processing_stage=ProcessingStage.COMPLETE,
                 processing_time=time.time() - start_time
             )
-            
+
             logger.info(f"Successfully processed video {video_id} in {content.processing_time:.2f}s")
             return asdict(content)
-            
+
         except Exception as e:
             logger.info(f"Video processing failed for {video_url}: {e}")
-            
+
             # Return partial content with error
             content = VideoContent(
                 metadata=VideoMetadata(
@@ -381,7 +376,7 @@ class EnhancedStrategy(ProcessorStrategy):
                 processing_time=time.time() - start_time,
                 error_log=[str(e)]
             )
-            
+
             return asdict(content)
 
     async def extract_video_metadata(self, video_id: str) -> VideoMetadata:
@@ -404,9 +399,9 @@ class EnhancedStrategy(ProcessorStrategy):
 
         operation = self.video_client.annotate_video(request=request)
         result = operation.result(timeout=90)
-        
+
         annotation_results = result.annotation_results[0]
-        
+
         # This is a simplified mapping. A real implementation would need to
         # extract more details from the annotation results.
         metadata = VideoMetadata(
@@ -421,7 +416,7 @@ class EnhancedStrategy(ProcessorStrategy):
         )
         return metadata
 
-    async def extract_transcript(self, video_id: str, languages: List[str] = None) -> List[TranscriptSegment]:
+    async def extract_transcript(self, video_id: str, languages: list[str] = None) -> list[TranscriptSegment]:
         """Extract transcript using Vertex AI Video Intelligence"""
         if not HAS_VIDEO_DEPS:
             raise ValueError("Video dependencies not available")
@@ -448,7 +443,7 @@ class EnhancedStrategy(ProcessorStrategy):
         for result in result.annotation_results:
             for transcription in result.speech_transcriptions:
                 for alternative in transcription.alternatives:
-                    for i, word in enumerate(alternative.words):
+                    for _i, word in enumerate(alternative.words):
                         segments.append(
                             TranscriptSegment(
                                 text=word.word,
@@ -458,27 +453,27 @@ class EnhancedStrategy(ProcessorStrategy):
                         )
         return segments
 
-    async def analyze_content(self, transcript: List[TranscriptSegment]) -> Dict[str, Any]:
+    async def analyze_content(self, transcript: list[TranscriptSegment]) -> dict[str, Any]:
         """Analyze video content using Gemini"""
         if not HAS_AI_DEPS:
             logger.warning("AI components not available for content analysis")
             return {}
-        
+
         full_text = " ".join([segment.text for segment in transcript])
-        
+
         prompt = f"""
         Analyze the following video transcript and provide a summary, key points, topics, and sentiment.
-        
+
         Transcript:
         {full_text}
-        
+
         Format your response as a JSON object with the following keys:
         - "summary": A brief summary of the video content.
         - "key_points": A list of key points.
         - "topics": A list of topics discussed.
         - "sentiment": The overall sentiment of the video (e.g., "positive", "negative", "neutral").
         """
-        
+
         try:
             response = self.gemini_model.generate_content(prompt)
             return json.loads(response.text)
@@ -486,36 +481,36 @@ class EnhancedStrategy(ProcessorStrategy):
             logger.error(f"Content analysis failed: {e}")
             return {"error": str(e)}
 
-    def _extract_key_points(self, text: str) -> List[str]:
+    def _extract_key_points(self, text: str) -> list[str]:
         """Extract key points from text using simple heuristics"""
         sentences = text.split('.')
         key_points = []
-        
+
         # Look for sentences with key indicators
         indicators = ['important', 'key', 'main', 'primary', 'essential', 'crucial', 'significant']
-        
+
         for sentence in sentences:
             sentence = sentence.strip()
             if len(sentence) > 20 and any(indicator in sentence.lower() for indicator in indicators):
                 key_points.append(sentence)
-        
+
         return key_points[:5]  # Limit to top 5
 
-    def _extract_topics(self, text: str) -> List[str]:
+    def _extract_topics(self, text: str) -> list[str]:
         """Extract topics using simple keyword frequency"""
         # Simple topic extraction - in production, use more sophisticated NLP
         words = re.findall(r'\b[a-zA-Z]{4,}\b', text.lower())
-        
+
         # Filter common words
         stop_words = {'this', 'that', 'with', 'have', 'will', 'from', 'they', 'been', 'were', 'said', 'what', 'when', 'where', 'more', 'some', 'like', 'into', 'time', 'very', 'make', 'than', 'many', 'over', 'such', 'only', 'know', 'just', 'first', 'also', 'after', 'back', 'other', 'well', 'come', 'could', 'would', 'should', 'think', 'people', 'really', 'going', 'about', 'because', 'through', 'before', 'being', 'between', 'during', 'without', 'around', 'something', 'everything'}
-        
+
         filtered_words = [word for word in words if word not in stop_words and len(word) > 4]
-        
+
         # Count frequency
         word_freq = {}
         for word in filtered_words:
             word_freq[word] = word_freq.get(word, 0) + 1
-        
+
         # Return top topics
         sorted_topics = sorted(word_freq.items(), key=lambda x: x[1], reverse=True)
         return [topic[0] for topic in sorted_topics[:10]]

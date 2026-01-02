@@ -11,8 +11,9 @@ from __future__ import annotations
 
 import importlib
 import logging
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import Any, Dict, Iterable, Optional
+from typing import Any
 
 ModelProvider = None
 try:  # pragma: no cover - prefer the official SDK module name
@@ -49,7 +50,7 @@ class RoutingDecision:
 
     provider: ModelProvider
     reason: str
-    signals: Dict[str, Any] = field(default_factory=dict)
+    signals: dict[str, Any] = field(default_factory=dict)
 
 
 class ModelRouter:
@@ -77,7 +78,7 @@ class ModelRouter:
     VIDEO_KEYWORDS = {"video", "transcript", "frame", "segment", "youtube"}
     SAFETY_KEYWORDS = {"policy", "compliance", "safety", "ethics", "governance"}
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, config: dict[str, Any] | None = None) -> None:
         self.config = config or {}
         routing_cfg = self._extract_routing_config(self.config)
         self.strategy = routing_cfg.get("strategy", "balanced")
@@ -95,11 +96,11 @@ class ModelRouter:
     def select_provider(
         self,
         *,
-        task_type: Optional[Any],
-        priority: Optional[Any],
-        content: Optional[Dict[str, Any]] = None,
-        preferred_provider: Optional[ModelProvider] = None,
-        claude_plan: Optional[Dict[str, Any]] = None,
+        task_type: Any | None,
+        priority: Any | None,
+        content: dict[str, Any] | None = None,
+        preferred_provider: ModelProvider | None = None,
+        claude_plan: dict[str, Any] | None = None,
     ) -> RoutingDecision:
         """Return the provider that should own this request."""
 
@@ -126,7 +127,7 @@ class ModelRouter:
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
-    def _extract_routing_config(self, config: Dict[str, Any]) -> Dict[str, Any]:
+    def _extract_routing_config(self, config: dict[str, Any]) -> dict[str, Any]:
         candidates = [
             config.get("model_routing", {}),
             config.get("routing", {}),
@@ -137,7 +138,7 @@ class ModelRouter:
                 return entry
         return {}
 
-    def _build_fallback_order(self, configured_order: Optional[Iterable[str]]) -> list:
+    def _build_fallback_order(self, configured_order: Iterable[str] | None) -> list:
         order: list[ModelProvider] = []
         iterable = configured_order or ["claude", "grok", "openai", "gemini"]
         for provider_name in iterable:
@@ -153,7 +154,7 @@ class ModelRouter:
                 order = [ModelProvider.CLAUDE, ModelProvider.GROK, ModelProvider.OPENAI]  # type: ignore[attr-defined]
         return order
 
-    def _provider_from_plan(self, plan: Optional[Dict[str, Any]]) -> Optional[ModelProvider]:
+    def _provider_from_plan(self, plan: dict[str, Any] | None) -> ModelProvider | None:
         if not plan:
             return None
         provider_hint = plan.get("recommended_provider") or plan.get("provider")
@@ -161,10 +162,10 @@ class ModelRouter:
 
     def _detect_signals(
         self,
-        task_type: Optional[Any],
-        priority: Optional[Any],
-        content: Optional[Dict[str, Any]],
-    ) -> Dict[str, Any]:
+        task_type: Any | None,
+        priority: Any | None,
+        content: dict[str, Any] | None,
+    ) -> dict[str, Any]:
         task_value = self._normalize_value(task_type)
         priority_value = self._normalize_value(priority)
 
@@ -200,7 +201,7 @@ class ModelRouter:
         }
         return signals
 
-    def _route_from_signals(self, signals: Dict[str, Any]) -> ModelProvider:
+    def _route_from_signals(self, signals: dict[str, Any]) -> ModelProvider:
         if signals.get("requires_real_time"):
             provider = self._to_provider("grok")
             if provider:
@@ -233,7 +234,7 @@ class ModelRouter:
 
         return signals.get("default_provider") or self.fallback_order[0]
 
-    def _cost_effective_provider(self, signals: Dict[str, Any]) -> Optional[ModelProvider]:
+    def _cost_effective_provider(self, signals: dict[str, Any]) -> ModelProvider | None:
         priority = signals.get("priority") or "normal"
         if priority in {"low", "background"}:
             preferred = ["openai", "grok", "claude"]
@@ -248,7 +249,7 @@ class ModelRouter:
                 return provider
         return None
 
-    def _flatten_text(self, content: Optional[Dict[str, Any]]) -> str:
+    def _flatten_text(self, content: dict[str, Any] | None) -> str:
         if not content:
             return ""
         fragments = []
@@ -261,7 +262,7 @@ class ModelRouter:
                 fragments.append(self._flatten_text(value))
         return " ".join(fragments)
 
-    def _normalize_value(self, value: Optional[Any]) -> Optional[str]:
+    def _normalize_value(self, value: Any | None) -> str | None:
         if value is None:
             return None
         if isinstance(value, str):
@@ -272,7 +273,7 @@ class ModelRouter:
             return str(value.name).lower()
         return str(value).lower()
 
-    def _to_provider(self, name: Optional[str]) -> Optional[ModelProvider]:
+    def _to_provider(self, name: str | None) -> ModelProvider | None:
         if not name:
             return None
         normalized = str(name).lower()

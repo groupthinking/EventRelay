@@ -4,12 +4,12 @@ Command Line Interface for UVAI YouTube Extension
 Provides CLI commands for development, testing, and deployment
 """
 
-import typer
-from pathlib import Path
+import os
 import subprocess
 import sys
-import os
-from typing import Optional
+from pathlib import Path
+
+import typer
 
 app = typer.Typer(
     name="youtube-extension",

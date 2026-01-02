@@ -6,8 +6,8 @@ Video Processor Factory
 Factory module to provide working video processors with proper fallbacks.
 """
 
-import os
 import logging
+import os
 from typing import Union
 
 logger = logging.getLogger(__name__)
@@ -15,13 +15,13 @@ logger = logging.getLogger(__name__)
 def get_video_processor(processor_type: str = "auto") -> Union['EnhancedVideoProcessor', 'RealVideoProcessor', 'DeepMCPAgentProcessor']:
     """
     Get appropriate video processor based on configuration
-    
+
     Args:
         processor_type: Type of processor to create
             - "auto": Automatically select best working processor
             - "enhanced": Use enhanced Gemini processor
             - "real": Use real MCP processor
-            
+
     Returns:
         Video processor instance
     """
@@ -36,14 +36,16 @@ def get_video_processor(processor_type: str = "auto") -> Union['EnhancedVideoPro
     # Prefer DeepMCP when explicitly enabled
     if processor_type == "deepmcp" or os.getenv('ENABLE_DEEP_MCP', 'false').lower() == 'true':
         try:
-            from youtube_extension.backend.deepmcp.deepmcp_processor import DeepMCPAgentProcessor
+            from youtube_extension.backend.deepmcp.deepmcp_processor import (
+                DeepMCPAgentProcessor,
+            )
             logger.info("✅ Using DeepMCPAgentProcessor (agent orchestration)")
             return DeepMCPAgentProcessor()
         except Exception as e:
             logger.warning(f"DeepMCP processor failed: {e}, falling back to enhanced/real")
-    
+
     logger.info(f"Creating video processor: {processor_type}")
-    
+
     if processor_type == "enhanced":
         try:
             from .enhanced_video_processor import EnhancedVideoProcessor
@@ -52,7 +54,7 @@ def get_video_processor(processor_type: str = "auto") -> Union['EnhancedVideoPro
         except Exception as e:
             logger.warning(f"Enhanced processor failed: {e}, falling back to real processor")
             processor_type = "real"
-    
+
     if processor_type == "real":
         try:
             from .real_video_processor import RealVideoProcessor
@@ -67,7 +69,7 @@ def get_video_processor(processor_type: str = "auto") -> Union['EnhancedVideoPro
             except Exception as e2:
                 logger.error(f"All processors failed: {e2}")
                 raise ValueError(f"No working video processor available: {e2}")
-    
+
     if processor_type == "hybrid":
         """Hybrid processor using FastVLM + Gemini pipeline for video understanding.
 
@@ -78,15 +80,16 @@ def get_video_processor(processor_type: str = "auto") -> Union['EnhancedVideoPro
         try:
             import json
             import tempfile
-            from typing import Dict, Any
-            from fastvlm_gemini_hybrid.video_pipeline import VideoPipeline
+            from typing import Any
+
             import yt_dlp  # type: ignore
+            from fastvlm_gemini_hybrid.video_pipeline import VideoPipeline
 
             class HybridVideoProcessorAdapter:
                 def __init__(self) -> None:
                     self._pipeline = VideoPipeline()
 
-                async def process_video(self, video_url: str) -> Dict[str, Any]:
+                async def process_video(self, video_url: str) -> dict[str, Any]:
                     # Download to a temporary mp4 using yt-dlp
                     with tempfile.TemporaryDirectory() as tmpdir:
                         ydl_opts = {
@@ -104,7 +107,7 @@ def get_video_processor(processor_type: str = "auto") -> Union['EnhancedVideoPro
                         result = self._pipeline.process_video_hybrid(filepath, prompt)
 
                         # Map to common structure
-                        ai_analysis: Dict[str, Any] = {}
+                        ai_analysis: dict[str, Any] = {}
                         actions = []
                         # If Gemini returned JSON in text, parse it
                         resp_text = result.get("response") or ""
@@ -138,7 +141,7 @@ def get_video_processor(processor_type: str = "auto") -> Union['EnhancedVideoPro
             except Exception as e2:
                 logger.error(f"Hybrid fallback failed: {e2}")
                 raise ValueError(f"No working video processor available: {e2}")
-    
+
     # Final fallback
     try:
         from .enhanced_video_processor import EnhancedVideoProcessor
@@ -153,12 +156,12 @@ def get_video_processor(processor_type: str = "auto") -> Union['EnhancedVideoPro
 async def process_video_with_best_processor(video_url: str) -> dict:
     """
     Process video using the best available processor
-    
+
     This function provides a smooth migration path from legacy processors
     to the new working processors.
     """
     processor = get_video_processor("auto")
-    
+
     try:
         result = await processor.process_video(video_url)
         return result

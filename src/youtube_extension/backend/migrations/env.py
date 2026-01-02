@@ -11,14 +11,14 @@ import logging
 from logging.config import fileConfig
 from typing import Optional
 
-from sqlalchemy import pool, create_engine
-from sqlalchemy.ext.asyncio import async_engine_from_config, create_async_engine
 from alembic import context
+from sqlalchemy import pool
+from sqlalchemy.ext.asyncio import create_async_engine
 
 # Path setup for imports
 backend_path = Path(__file__).parent.parent
 
-from youtube_extension.backend.config.database import DatabaseSettings, Base
+from youtube_extension.backend.config.database import Base, DatabaseSettings
 from youtube_extension.backend.models import *  # Import all models to ensure they're registered
 
 # this is the Alembic Config object, which provides
@@ -42,12 +42,12 @@ config.set_main_option("sqlalchemy.url", db_settings.database_url)
 def run_migrations_offline() -> None:
     """
     Run migrations in 'offline' mode.
-    
+
     This configures the context with just a URL
     and not an Engine, though an Engine is acceptable
     here as well. By skipping the Engine creation
     we don't even need a DBAPI to be available.
-    
+
     Calls to context.execute() here emit the given string to the
     script output.
     """
@@ -75,23 +75,23 @@ def run_migrations_offline() -> None:
 def include_name(name: Optional[str], type_: str, parent_names: dict) -> bool:
     """
     Determine whether to include a name in the migration.
-    
+
     This function is used to filter out certain tables, indexes,
     or other database objects from being included in migrations.
     """
     if type_ == "schema":
         return name in [None, "public"]
-    
+
     # Skip system tables and temp tables
     if name and (name.startswith("pg_") or name.startswith("information_schema") or name.startswith("temp_")):
         return False
-    
+
     return True
 
 def include_object(object, name: Optional[str], type_: str, reflected: bool, compare_to: Optional[object]) -> bool:
     """
     Determine whether to include an object in the migration.
-    
+
     This provides fine-grained control over which objects
     are included in the migration generation.
     """
@@ -100,7 +100,7 @@ def include_object(object, name: Optional[str], type_: str, reflected: bool, com
 
 async def run_async_migrations() -> None:
     """Run migrations in async mode"""
-    
+
     # Create async engine
     connectable = create_async_engine(
         db_settings.database_url,
@@ -111,7 +111,7 @@ async def run_async_migrations() -> None:
 
     async with connectable.connect() as connection:
         await connection.run_sync(do_run_migrations)
-    
+
     await connectable.dispose()
 
 def do_run_migrations(connection):
@@ -138,23 +138,23 @@ def do_run_migrations(connection):
 
 def render_item(type_: str, obj, autogen_context):
     """Custom rendering for migration items"""
-    
+
     # Custom rendering for JSONB columns
     if hasattr(obj, 'type') and 'JSONB' in str(obj.type):
         return f"sa.Column({obj.name!r}, postgresql.JSONB(), nullable={obj.nullable})"
-    
+
     # Custom rendering for UUID columns with server defaults
     if hasattr(obj, 'type') and 'UUID' in str(obj.type):
         if hasattr(obj, 'server_default') and obj.server_default:
             return f"sa.Column({obj.name!r}, postgresql.UUID(as_uuid=True), server_default=sa.text('gen_random_uuid()'), nullable={obj.nullable})"
-    
+
     # Default rendering
     return False
 
 def run_migrations_online() -> None:
     """
     Run migrations in 'online' mode.
-    
+
     In this scenario we need to create an Engine
     and associate a connection with the context.
     """
@@ -166,7 +166,7 @@ def setup_rls_policies(connection):
     """
     Set up row-level security policies for multi-tenant architecture
     """
-    
+
     # Enable RLS on tenant-aware tables
     tables_with_rls = [
         'users', 'user_profiles', 'user_sessions', 'user_activities',
@@ -175,17 +175,17 @@ def setup_rls_policies(connection):
         'cache_entries', 'audit_logs', 'security_events',
         'analytics_events', 'performance_metrics', 'usage_statistics'
     ]
-    
+
     for table in tables_with_rls:
         try:
             connection.execute(f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY;")
-            
+
             # Create policy for tenant isolation
             connection.execute(f"""
                 CREATE POLICY {table}_tenant_isolation ON {table}
                 USING (tenant_id = current_setting('uvai.tenant_id')::text);
             """)
-            
+
             logging.info(f"Enabled RLS for table: {table}")
         except Exception as e:
             logging.warning(f"Could not enable RLS for {table}: {e}")
@@ -193,22 +193,22 @@ def setup_rls_policies(connection):
 # Custom migration context setup
 def setup_migration_context():
     """Setup custom migration context with UVAI-specific configurations"""
-    
+
     # Set up custom comparison functions
     def compare_type(context, inspected_column, metadata_column, inspected_type, metadata_type):
         """Custom type comparison for better migration detection"""
-        
+
         # Handle JSONB type comparisons
         if "JSONB" in str(metadata_type) and "json" in str(inspected_type).lower():
             return False  # These are equivalent
-        
+
         # Handle UUID type comparisons
         if "UUID" in str(metadata_type) and "uuid" in str(inspected_type).lower():
             return False  # These are equivalent
-        
+
         # Default comparison
         return None
-    
+
     return {
         "compare_type": compare_type,
         "compare_server_default": True,

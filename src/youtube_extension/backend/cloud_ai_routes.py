@@ -5,18 +5,19 @@ FastAPI routes for cloud AI video analysis services.
 """
 
 import logging
-from typing import List, Optional, Dict, Any
-from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends
+from typing import Any, Optional
+
+from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel, Field
 
 from ..integrations.cloud_ai import (
-    CloudAIIntegrator,
     AnalysisType,
-    CloudAIProvider,
-    VideoAnalysisResult,
     CloudAIError,
+    CloudAIIntegrator,
+    CloudAIProvider,
+    ConfigurationError,
     RateLimitError,
-    ConfigurationError
+    VideoAnalysisResult,
 )
 
 logger = logging.getLogger(__name__)
@@ -27,7 +28,7 @@ router = APIRouter(prefix="/api/v1/cloud-ai", tags=["cloud-ai"])
 class VideoAnalysisRequest(BaseModel):
     """Request model for video analysis."""
     video_url: str = Field(..., description="YouTube video URL or video ID")
-    analysis_types: List[str] = Field(
+    analysis_types: list[str] = Field(
         default=["label_detection", "object_tracking"],
         description="Types of analysis to perform"
     )
@@ -46,21 +47,21 @@ class VideoAnalysisResponse(BaseModel):
     video_id: str
     provider: str
     processing_time: float
-    analysis_types: List[str]
-    objects: List[Dict[str, Any]]
-    labels: List[Dict[str, Any]]
-    text_detections: List[Dict[str, Any]]
-    faces: List[Dict[str, Any]]
-    logos: List[Dict[str, Any]]
-    shots: List[Dict[str, Any]]
-    scenes: List[Dict[str, Any]]
+    analysis_types: list[str]
+    objects: list[dict[str, Any]]
+    labels: list[dict[str, Any]]
+    text_detections: list[dict[str, Any]]
+    faces: list[dict[str, Any]]
+    logos: list[dict[str, Any]]
+    shots: list[dict[str, Any]]
+    scenes: list[dict[str, Any]]
     cost_estimate: Optional[float]
 
 
 class BatchAnalysisRequest(BaseModel):
     """Request model for batch video analysis."""
-    video_urls: List[str] = Field(..., description="List of YouTube video URLs")
-    analysis_types: List[str] = Field(
+    video_urls: list[str] = Field(..., description="List of YouTube video URLs")
+    analysis_types: list[str] = Field(
         default=["label_detection"],
         description="Types of analysis to perform"
     )
@@ -70,15 +71,15 @@ class BatchAnalysisRequest(BaseModel):
 
 class ProviderStatusResponse(BaseModel):
     """Response model for provider status."""
-    providers: Dict[str, Dict[str, Any]]
-    available_providers: List[str]
-    enabled_providers: List[str]
+    providers: dict[str, dict[str, Any]]
+    available_providers: list[str]
+    enabled_providers: list[str]
 
 
-def get_cloud_ai_config() -> Dict[str, Any]:
+def get_cloud_ai_config() -> dict[str, Any]:
     """Get cloud AI configuration from environment or settings."""
     import os
-    
+
     return {
         "google_cloud": {
             "enabled": bool(os.getenv("GOOGLE_CLOUD_PROJECT")),
@@ -103,7 +104,7 @@ def get_cloud_ai_config() -> Dict[str, Any]:
     }
 
 
-def parse_analysis_types(analysis_types: List[str]) -> List[AnalysisType]:
+def parse_analysis_types(analysis_types: list[str]) -> list[AnalysisType]:
     """Convert string analysis types to AnalysisType enum."""
     type_mapping = {
         "object_tracking": AnalysisType.OBJECT_TRACKING,
@@ -116,7 +117,7 @@ def parse_analysis_types(analysis_types: List[str]) -> List[AnalysisType]:
         "content_moderation": AnalysisType.CONTENT_MODERATION,
         "scene_analysis": AnalysisType.SCENE_ANALYSIS
     }
-    
+
     result = []
     for type_str in analysis_types:
         if type_str in type_mapping:
@@ -126,7 +127,7 @@ def parse_analysis_types(analysis_types: List[str]) -> List[AnalysisType]:
                 status_code=400,
                 detail=f"Unknown analysis type: {type_str}. Available types: {list(type_mapping.keys())}"
             )
-    
+
     return result
 
 
@@ -134,14 +135,14 @@ def parse_provider(provider_str: Optional[str]) -> Optional[CloudAIProvider]:
     """Convert string provider to CloudAIProvider enum."""
     if not provider_str:
         return None
-    
+
     provider_mapping = {
         "google_cloud": CloudAIProvider.GOOGLE_CLOUD,
         "aws_rekognition": CloudAIProvider.AWS_REKOGNITION,
         "azure_vision": CloudAIProvider.AZURE_VISION,
         "apple_fastvlm": CloudAIProvider.APPLE_FASTVLM
     }
-    
+
     if provider_str in provider_mapping:
         return provider_mapping[provider_str]
     else:
@@ -214,10 +215,10 @@ async def get_provider_status():
     """Get status of all cloud AI providers."""
     try:
         config = get_cloud_ai_config()
-        
+
         async with CloudAIIntegrator(config) as ai:
             provider_status = await ai.get_provider_status()
-            
+
             return ProviderStatusResponse(
                 providers=provider_status,
                 available_providers=[
@@ -226,7 +227,7 @@ async def get_provider_status():
                 ],
                 enabled_providers=list(ai.providers.keys())
             )
-            
+
     except Exception as e:
         logger.error(f"Failed to get provider status: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get provider status: {str(e)}")
@@ -239,10 +240,10 @@ async def analyze_video(request: VideoAnalysisRequest):
         # Parse request parameters
         analysis_types = parse_analysis_types(request.analysis_types)
         preferred_provider = parse_provider(request.preferred_provider)
-        
+
         # Get configuration and initialize integrator
         config = get_cloud_ai_config()
-        
+
         async with CloudAIIntegrator(config) as ai:
             # Analyze video
             result = await ai.analyze_video(
@@ -251,10 +252,10 @@ async def analyze_video(request: VideoAnalysisRequest):
                 preferred_provider=preferred_provider,
                 use_fallback=request.use_fallback
             )
-            
+
             # Format and return response
             return format_analysis_result(result)
-            
+
     except CloudAIError as e:
         logger.error(f"Cloud AI analysis failed: {e}")
         raise HTTPException(status_code=503, detail=f"AI analysis failed: {str(e)}")
@@ -275,10 +276,10 @@ async def analyze_batch_videos(request: BatchAnalysisRequest, background_tasks: 
     try:
         analysis_types = parse_analysis_types(request.analysis_types)
         preferred_provider = parse_provider(request.preferred_provider)
-        
+
         # Start background task for batch processing
         task_id = f"batch_{hash(tuple(request.video_urls))}"
-        
+
         background_tasks.add_task(
             process_batch_videos,
             request.video_urls,
@@ -287,38 +288,38 @@ async def analyze_batch_videos(request: BatchAnalysisRequest, background_tasks: 
             request.batch_size,
             task_id
         )
-        
+
         return {
             "message": f"Batch analysis started for {len(request.video_urls)} videos",
             "task_id": task_id,
             "video_count": len(request.video_urls),
             "batch_size": request.batch_size
         }
-        
+
     except Exception as e:
         logger.error(f"Failed to start batch analysis: {e}")
         raise HTTPException(status_code=500, detail=f"Batch analysis failed: {str(e)}")
 
 
-@router.post("/analyze/multi-provider", response_model=List[VideoAnalysisResponse])
+@router.post("/analyze/multi-provider", response_model=list[VideoAnalysisResponse])
 async def analyze_video_multi_provider(request: VideoAnalysisRequest):
     """Analyze video using multiple providers for comparison."""
     try:
         analysis_types = parse_analysis_types(request.analysis_types)
         config = get_cloud_ai_config()
-        
+
         async with CloudAIIntegrator(config) as ai:
             # Get results from all available providers
             results = await ai.multi_provider_analysis(
                 video_url=request.video_url,
                 analysis_types=analysis_types
             )
-            
+
             # Format results
             formatted_results = [format_analysis_result(result) for result in results]
-            
+
             return formatted_results
-            
+
     except Exception as e:
         logger.error(f"Multi-provider analysis failed: {e}")
         raise HTTPException(status_code=500, detail=f"Multi-provider analysis failed: {str(e)}")
@@ -352,21 +353,21 @@ async def get_available_providers():
     }
 
 
-async def process_batch_videos(video_urls: List[str], analysis_types: List[AnalysisType],
-                             preferred_provider: Optional[CloudAIProvider], 
+async def process_batch_videos(video_urls: list[str], analysis_types: list[AnalysisType],
+                             preferred_provider: Optional[CloudAIProvider],
                              batch_size: int, task_id: str):
     """Background task for batch video processing."""
     logger.info(f"Starting batch processing task {task_id} for {len(video_urls)} videos")
-    
+
     try:
         config = get_cloud_ai_config()
         results = []
-        
+
         async with CloudAIIntegrator(config) as ai:
             # Process in batches
             for i in range(0, len(video_urls), batch_size):
                 batch = video_urls[i:i+batch_size]
-                
+
                 for video_url in batch:
                     try:
                         result = await ai.analyze_video(
@@ -376,22 +377,22 @@ async def process_batch_videos(video_urls: List[str], analysis_types: List[Analy
                             use_fallback=True
                         )
                         results.append(format_analysis_result(result))
-                        
+
                     except Exception as e:
                         logger.error(f"Failed to analyze video {video_url}: {e}")
                         continue
-                
+
                 # Brief pause between batches
                 if i + batch_size < len(video_urls):
                     import asyncio
                     await asyncio.sleep(1)
-        
+
         # Store results (in production, save to database or cache)
         logger.info(f"Batch processing task {task_id} completed. Processed {len(results)}/{len(video_urls)} videos")
-        
+
         # In production, you would save results to a database or cache
         # and provide an endpoint to retrieve them by task_id
-        
+
     except Exception as e:
         logger.error(f"Batch processing task {task_id} failed: {e}")
 

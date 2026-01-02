@@ -4,11 +4,10 @@ YouTube MCP Tool - Connects existing YouTube processing to MCP Agent Network
 Wraps VideoProcessingService for agent consumption
 """
 
-import asyncio
 import logging
 import sys
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Any
 
 # Add paths for imports
 project_root = Path(__file__).parent.parent.parent
@@ -43,7 +42,7 @@ class YouTubeMCPTool:
 
     async def process_video_markdown(self, video_url: str,
                                      extract_transcript: bool = True,
-                                     analyze_content: bool = True) -> Dict[str, Any]:
+                                     analyze_content: bool = True) -> dict[str, Any]:
         """
         Process video and generate markdown analysis.
 
@@ -96,7 +95,7 @@ class YouTubeMCPTool:
                 "video_url": video_url
             }
 
-    def _generate_markdown(self, result: Dict[str, Any]) -> str:
+    def _generate_markdown(self, result: dict[str, Any]) -> str:
         """Generate markdown from processing result"""
         lines = []
 
@@ -127,7 +126,7 @@ class YouTubeMCPTool:
 
         return "\n".join(lines)
 
-    async def get_transcript(self, video_url: str) -> Dict[str, Any]:
+    async def get_transcript(self, video_url: str) -> dict[str, Any]:
         """
         Extract transcript from video.
 
@@ -165,7 +164,7 @@ class YouTubeMCPTool:
                 "video_url": video_url
             }
 
-    async def analyze_video(self, video_url: str) -> Dict[str, Any]:
+    async def analyze_video(self, video_url: str) -> dict[str, Any]:
         """
         Perform AI analysis on video content.
 

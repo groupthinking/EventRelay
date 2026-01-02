@@ -2,10 +2,10 @@
 # Enables autonomous agents to negotiate, collaborate, and share context
 
 import asyncio
-from typing import Dict, List, Callable
-from datetime import datetime
-from abc import ABC, abstractmethod
 import uuid
+from abc import ABC, abstractmethod
+from datetime import datetime
+from typing import Callable
 
 
 class A2AMessage:
@@ -16,7 +16,7 @@ class A2AMessage:
         sender: str,
         recipient: str,
         message_type: str,
-        content: Dict,
+        content: dict,
         conversation_id: str = None,
     ):
         self.id = str(uuid.uuid4())
@@ -27,7 +27,7 @@ class A2AMessage:
         self.conversation_id = conversation_id or str(uuid.uuid4())
         self.timestamp = datetime.utcnow().isoformat()
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         return {
             "id": self.id,
             "sender": self.sender,
@@ -39,7 +39,7 @@ class A2AMessage:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict) -> "A2AMessage":
+    def from_dict(cls, data: dict) -> "A2AMessage":
         msg = cls(
             sender=data["sender"],
             recipient=data["recipient"],
@@ -55,7 +55,7 @@ class A2AMessage:
 class BaseAgent(ABC):
     """Base class for all agents with A2A capabilities"""
 
-    def __init__(self, agent_id: str, capabilities: List[str]):
+    def __init__(self, agent_id: str, capabilities: list[str]):
         self.agent_id = agent_id
         self.capabilities = capabilities
         self.conversations = {}
@@ -63,11 +63,11 @@ class BaseAgent(ABC):
         self.state = {}
 
     @abstractmethod
-    async def process_intent(self, intent: Dict) -> Dict:
+    async def process_intent(self, intent: dict) -> dict:
         """Process an intent and return result"""
 
     async def send_message(
-        self, recipient: str, message_type: str, content: Dict
+        self, recipient: str, message_type: str, content: dict
     ) -> A2AMessage:
         """Send message to another agent"""
         msg = A2AMessage(
@@ -111,7 +111,7 @@ class NegotiationAgent(BaseAgent):
         super().__init__("negotiator", ["negotiate", "mediate", "coordinate"])
         self.register_handler("negotiate_request", self.handle_negotiation)
 
-    async def process_intent(self, intent: Dict) -> Dict:
+    async def process_intent(self, intent: dict) -> dict:
         """Process negotiation intent"""
         if intent.get("action") == "negotiate":
             return await self.negotiate_between_agents(
@@ -122,8 +122,8 @@ class NegotiationAgent(BaseAgent):
         return {"error": "Unknown intent"}
 
     async def negotiate_between_agents(
-        self, agents: List[str], topic: str, constraints: Dict
-    ) -> Dict:
+        self, agents: list[str], topic: str, constraints: dict
+    ) -> dict:
         """Coordinate negotiation between multiple agents"""
         negotiation_id = str(uuid.uuid4())
 
@@ -163,13 +163,13 @@ class NegotiationAgent(BaseAgent):
             "status": "completed",
         }
 
-    async def find_optimal_solution(self, proposals: Dict, constraints: Dict) -> Dict:
+    async def find_optimal_solution(self, proposals: dict, constraints: dict) -> dict:
         """Find optimal solution from proposals"""
         # This would use optimization algorithms
         # For now, return a simple solution
         return {"agreed_terms": {}, "consensus_level": 0.85}
 
-    async def handle_negotiation(self, message: A2AMessage) -> Dict:
+    async def handle_negotiation(self, message: A2AMessage) -> dict:
         """Handle incoming negotiation request"""
         # Process negotiation request
         return {"status": "accepted", "terms": {}}
@@ -182,7 +182,7 @@ class DataAnalysisAgent(BaseAgent):
         super().__init__("data_analyst", ["analyze", "process", "insights"])
         self.register_handler("analysis_request", self.handle_analysis_request)
 
-    async def process_intent(self, intent: Dict) -> Dict:
+    async def process_intent(self, intent: dict) -> dict:
         """Process data analysis intent"""
         if intent.get("action") == "analyze":
             return await self.analyze_data(
@@ -190,7 +190,7 @@ class DataAnalysisAgent(BaseAgent):
             )
         return {"error": "Unknown intent"}
 
-    async def analyze_data(self, data_source: str, analysis_type: str) -> Dict:
+    async def analyze_data(self, data_source: str, analysis_type: str) -> dict:
         """Perform data analysis"""
         # This would connect to actual data sources
         # For now, return mock analysis
@@ -205,7 +205,7 @@ class DataAnalysisAgent(BaseAgent):
             "confidence": 0.92,
         }
 
-    async def handle_analysis_request(self, message: A2AMessage) -> Dict:
+    async def handle_analysis_request(self, message: A2AMessage) -> dict:
         """Handle incoming analysis request"""
         content = message.content
         result = await self.analyze_data(

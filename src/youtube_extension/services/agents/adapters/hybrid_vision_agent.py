@@ -9,46 +9,47 @@ retaining the same interface for callers.
 """
 
 import asyncio
-import logging
 import os
-from datetime import datetime
-from typing import Dict, Any, List, Optional, Union
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
+from typing import Any, Optional, Union
+
 from PIL import Image
 
-from ..base_agent import BaseAgent, AgentResult
 from ...ai import (
-    HybridProcessorService,
+    GeminiConfig,
     HybridConfig,
+    HybridProcessorService,
     HybridResult,
     ProcessingMode,
     TaskType,
-    GeminiConfig
 )
+from ..base_agent import AgentResult, BaseAgent
 
 
 @dataclass
 class VisionAnalysisResult:
     """Structured result from vision analysis"""
     description: str
-    objects_detected: List[str]
+    objects_detected: list[str]
     scene_analysis: str
-    text_content: List[str]
+    text_content: list[str]
     confidence_score: float
     processing_mode: str
     local_latency: Optional[float] = None
     cloud_latency: Optional[float] = None
 
 
-from ..registry import register
 from ..dto import AgentRequest, AgentResult
+from ..registry import register
+
 
 @register
 class HybridVisionAgent(BaseAgent):
     name = "hybrid_vision"
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, config: Optional[dict[str, Any]] = None):
         """
         Initialize Hybrid Vision Agent.
 
@@ -156,7 +157,7 @@ class HybridVisionAgent(BaseAgent):
     async def _handle_special_action(
         self,
         action: str,
-        input_data: Dict[str, Any],
+        input_data: dict[str, Any],
         start_time: float,
     ) -> AgentResult:
         """Handle auxiliary hybrid operations such as caching, batch jobs, and tokens."""
@@ -275,7 +276,7 @@ class HybridVisionAgent(BaseAgent):
                 timestamp=datetime.now()
             )
 
-    def _safe_get_metrics(self) -> Dict[str, Any]:
+    def _safe_get_metrics(self) -> dict[str, Any]:
         """Safely fetch metrics from the hybrid processor if available."""
         try:
             if self._hybrid_processor and hasattr(self._hybrid_processor, "get_metrics"):
@@ -284,7 +285,7 @@ class HybridVisionAgent(BaseAgent):
             self.logger.debug("Failed to retrieve hybrid metrics: %s", exc)
         return {}
 
-    def _extract_image_data(self, input_data: Dict[str, Any]) -> Union[str, Path, Image.Image]:
+    def _extract_image_data(self, input_data: dict[str, Any]) -> Union[str, Path, Image.Image]:
         """Extract image data from input"""
         if 'image' in input_data:
             return input_data['image']
@@ -297,7 +298,7 @@ class HybridVisionAgent(BaseAgent):
         else:
             raise ValueError("No image or video data found")
 
-    def _determine_task_type(self, input_data: Dict[str, Any]) -> Optional[TaskType]:
+    def _determine_task_type(self, input_data: dict[str, Any]) -> Optional[TaskType]:
         """Determine task type from input data"""
         # Check explicit task type
         if 'task_type' in input_data:
@@ -323,7 +324,7 @@ class HybridVisionAgent(BaseAgent):
 
         return TaskType.GENERAL_QA
 
-    def _get_processing_mode(self, input_data: Dict[str, Any]) -> Optional[ProcessingMode]:
+    def _get_processing_mode(self, input_data: dict[str, Any]) -> Optional[ProcessingMode]:
         """Get processing mode from input data"""
         if 'processing_mode' in input_data:
             mode_str = input_data['processing_mode']
@@ -375,7 +376,7 @@ class HybridVisionAgent(BaseAgent):
             cloud_latency=hybrid_result.cloud_result.latency if hybrid_result.cloud_result else None
         )
 
-    def _extract_objects(self, response: str) -> List[str]:
+    def _extract_objects(self, response: str) -> list[str]:
         """Extract object mentions from response"""
         # Simple object detection based on common nouns
         common_objects = [
@@ -393,7 +394,7 @@ class HybridVisionAgent(BaseAgent):
 
         return detected[:10]  # Limit to top 10
 
-    def _extract_text_mentions(self, response: str) -> List[str]:
+    def _extract_text_mentions(self, response: str) -> list[str]:
         """Extract text content mentions"""
         text_indicators = ['text', 'words', 'writing', 'sign says', 'reads', 'written']
         text_content = []
@@ -451,7 +452,7 @@ class HybridVisionAgent(BaseAgent):
         """Check if agent is available for processing"""
         return self._hybrid_processor is not None and self._hybrid_processor.is_available()
 
-    def get_capabilities(self) -> Dict[str, Any]:
+    def get_capabilities(self) -> dict[str, Any]:
         """Get agent capabilities"""
         if not self._hybrid_processor:
             return {"available": False, "services": []}

@@ -4,14 +4,13 @@ ACTION IMPLEMENTER
 Helps users implement generated actions from video processing
 """
 
+import asyncio
 import json
 import logging
-import os
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Any, List
-import asyncio
+from typing import Any
 
 # Configure logging
 logging.basicConfig(
@@ -26,11 +25,11 @@ logger = logging.getLogger("action_implementer")
 
 class ActionImplementer:
     """Helps implement generated actions from video processing"""
-    
+
     def __init__(self):
         self.output_dir = Path('action_implementations')
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        
+
         # Templates for different action types
         self.templates = {
             'learning_plan': self._create_learning_plan_template,
@@ -49,41 +48,41 @@ class ActionImplementer:
             'project_setup': self._create_project_setup_template,
             'skill_practice': self._create_skill_practice_template
         }
-        
+
         logger.info("🎯 ACTION IMPLEMENTER INITIALIZED")
-    
-    def load_processed_video(self, video_id: str) -> Dict[str, Any]:
+
+    def load_processed_video(self, video_id: str) -> dict[str, Any]:
         """Load processed video results"""
-        
+
         # Search for the video in processed results
         search_paths = [
             Path('youtube_processed_videos/enhanced_results'),
             Path('youtube_processed_videos/enterprise_videos'),
             Path('gdrive_results')
         ]
-        
+
         for base_path in search_paths:
             if base_path.exists():
                 for category_dir in base_path.iterdir():
                     if category_dir.is_dir():
                         result_file = category_dir / f"{video_id}_enhanced_results.json"
                         if result_file.exists():
-                            with open(result_file, 'r') as f:
+                            with open(result_file) as f:
                                 data = json.load(f)
                                 logger.info(f"✅ Loaded results from: {result_file}")
                                 return data
-        
+
         raise FileNotFoundError(f"No processed results found for video ID: {video_id}")
-    
-    def create_implementation_plan(self, video_data: Dict[str, Any]) -> Dict[str, Any]:
+
+    def create_implementation_plan(self, video_data: dict[str, Any]) -> dict[str, Any]:
         """Create detailed implementation plan for all actions"""
-        
+
         video_id = video_data['video_id']
         actions = video_data['actions']
         category = video_data['category']
-        
+
         logger.info(f"📋 Creating implementation plan for {video_id}")
-        
+
         implementation_plan = {
             'video_id': video_id,
             'category': category,
@@ -92,30 +91,30 @@ class ActionImplementer:
             'estimated_total_time': 0,
             'implementations': []
         }
-        
+
         for i, action in enumerate(actions, 1):
             action_type = action['type']
             estimated_time = action['estimated_time']
-            
+
             # Convert time estimate to minutes for calculation
             time_minutes = self._parse_time_estimate(estimated_time)
             implementation_plan['estimated_total_time'] += time_minutes
-            
+
             # Create implementation template
             if action_type in self.templates:
                 implementation = self.templates[action_type](action, video_data)
             else:
                 implementation = self._create_generic_template(action, video_data)
-            
+
             implementation['action_number'] = i
             implementation['action_type'] = action_type
             implementation['priority'] = action['priority']
             implementation['estimated_time'] = estimated_time
-            
+
             implementation_plan['implementations'].append(implementation)
-        
+
         return implementation_plan
-    
+
     def _parse_time_estimate(self, time_str: str) -> int:
         """Parse time estimate string to minutes"""
         try:
@@ -127,12 +126,12 @@ class ActionImplementer:
                 return 30  # Default 30 minutes
         except:
             return 30
-    
-    def _create_learning_plan_template(self, action: Dict[str, Any], video_data: Dict[str, Any]) -> Dict[str, Any]:
+
+    def _create_learning_plan_template(self, action: dict[str, Any], video_data: dict[str, Any]) -> dict[str, Any]:
         """Create learning plan implementation template"""
-        
-        title = video_data['metadata'].get('title', 'Unknown Video')
-        
+
+        video_data['metadata'].get('title', 'Unknown Video')
+
         return {
             'title': action['title'],
             'description': action['description'],
@@ -183,10 +182,10 @@ class ActionImplementer:
                 'Set up progress tracking system'
             ]
         }
-    
-    def _create_practice_exercises_template(self, action: Dict[str, Any], video_data: Dict[str, Any]) -> Dict[str, Any]:
+
+    def _create_practice_exercises_template(self, action: dict[str, Any], video_data: dict[str, Any]) -> dict[str, Any]:
         """Create practice exercises implementation template"""
-        
+
         return {
             'title': action['title'],
             'description': action['description'],
@@ -241,10 +240,10 @@ class ActionImplementer:
                 'Test exercises with sample audience'
             ]
         }
-    
-    def _create_knowledge_application_template(self, action: Dict[str, Any], video_data: Dict[str, Any]) -> Dict[str, Any]:
+
+    def _create_knowledge_application_template(self, action: dict[str, Any], video_data: dict[str, Any]) -> dict[str, Any]:
         """Create knowledge application project template"""
-        
+
         return {
             'title': action['title'],
             'description': action['description'],
@@ -287,10 +286,10 @@ class ActionImplementer:
                 'Gather necessary resources and tools'
             ]
         }
-    
-    def _create_generic_template(self, action: Dict[str, Any], video_data: Dict[str, Any]) -> Dict[str, Any]:
+
+    def _create_generic_template(self, action: dict[str, Any], video_data: dict[str, Any]) -> dict[str, Any]:
         """Create generic implementation template for unknown action types"""
-        
+
         return {
             'title': action['title'],
             'description': action['description'],
@@ -321,39 +320,39 @@ class ActionImplementer:
                 'Evaluate and refine the results'
             ])
         }
-    
+
     # Additional template methods for other action types...
-    def _create_workflow_automation_template(self, action: Dict[str, Any], video_data: Dict[str, Any]) -> Dict[str, Any]:
+    def _create_workflow_automation_template(self, action: dict[str, Any], video_data: dict[str, Any]) -> dict[str, Any]:
         return self._create_generic_template(action, video_data)
-    
-    def _create_process_documentation_template(self, action: Dict[str, Any], video_data: Dict[str, Any]) -> Dict[str, Any]:
+
+    def _create_process_documentation_template(self, action: dict[str, Any], video_data: dict[str, Any]) -> dict[str, Any]:
         return self._create_generic_template(action, video_data)
-    
-    def _create_performance_optimization_template(self, action: Dict[str, Any], video_data: Dict[str, Any]) -> Dict[str, Any]:
+
+    def _create_performance_optimization_template(self, action: dict[str, Any], video_data: dict[str, Any]) -> dict[str, Any]:
         return self._create_generic_template(action, video_data)
-    
-    def _create_materials_list_template(self, action: Dict[str, Any], video_data: Dict[str, Any]) -> Dict[str, Any]:
+
+    def _create_materials_list_template(self, action: dict[str, Any], video_data: dict[str, Any]) -> dict[str, Any]:
         return self._create_generic_template(action, video_data)
-    
-    def _create_step_timeline_template(self, action: Dict[str, Any], video_data: Dict[str, Any]) -> Dict[str, Any]:
+
+    def _create_step_timeline_template(self, action: dict[str, Any], video_data: dict[str, Any]) -> dict[str, Any]:
         return self._create_generic_template(action, video_data)
-    
-    def _create_skill_development_template(self, action: Dict[str, Any], video_data: Dict[str, Any]) -> Dict[str, Any]:
+
+    def _create_skill_development_template(self, action: dict[str, Any], video_data: dict[str, Any]) -> dict[str, Any]:
         return self._create_generic_template(action, video_data)
-    
-    def _create_meal_planning_template(self, action: Dict[str, Any], video_data: Dict[str, Any]) -> Dict[str, Any]:
+
+    def _create_meal_planning_template(self, action: dict[str, Any], video_data: dict[str, Any]) -> dict[str, Any]:
         return self._create_generic_template(action, video_data)
-    
-    def _create_fitness_routine_template(self, action: Dict[str, Any], video_data: Dict[str, Any]) -> Dict[str, Any]:
+
+    def _create_fitness_routine_template(self, action: dict[str, Any], video_data: dict[str, Any]) -> dict[str, Any]:
         return self._create_generic_template(action, video_data)
-    
-    def _create_lifestyle_optimization_template(self, action: Dict[str, Any], video_data: Dict[str, Any]) -> Dict[str, Any]:
+
+    def _create_lifestyle_optimization_template(self, action: dict[str, Any], video_data: dict[str, Any]) -> dict[str, Any]:
         return self._create_generic_template(action, video_data)
-    
-    def _create_code_implementation_template(self, action: Dict[str, Any], video_data: Dict[str, Any]) -> Dict[str, Any]:
+
+    def _create_code_implementation_template(self, action: dict[str, Any], video_data: dict[str, Any]) -> dict[str, Any]:
         return self._create_generic_template(action, video_data)
-    
-    def _create_project_setup_template(self, action: Dict[str, Any], video_data: Dict[str, Any]) -> Dict[str, Any]:
+
+    def _create_project_setup_template(self, action: dict[str, Any], video_data: dict[str, Any]) -> dict[str, Any]:
         return self._create_generic_template(action, video_data)
     # The following template types are handled by the generic template.
     # If specialized logic is needed in the future, implement here:
@@ -369,41 +368,41 @@ class ActionImplementer:
     #   - code_implementation
     #   - project_setup
         return self._create_generic_template(action, video_data)
-    
-    def _create_skill_practice_template(self, action: Dict[str, Any], video_data: Dict[str, Any]) -> Dict[str, Any]:
+
+    def _create_skill_practice_template(self, action: dict[str, Any], video_data: dict[str, Any]) -> dict[str, Any]:
         return self._create_generic_template(action, video_data)
-    
-    def save_implementation_plan(self, plan: Dict[str, Any]) -> str:
+
+    def save_implementation_plan(self, plan: dict[str, Any]) -> str:
         """Save implementation plan to file"""
-        
+
         video_id = plan['video_id']
         filename = f"{video_id}_implementation_plan.json"
         filepath = self.output_dir / filename
-        
+
         with open(filepath, 'w') as f:
             json.dump(plan, f, indent=2)
-        
+
         logger.info(f"✅ Implementation plan saved to: {filepath}")
         return str(filepath)
-    
-    def display_implementation_summary(self, plan: Dict[str, Any]):
+
+    def display_implementation_summary(self, plan: dict[str, Any]):
         """Display a summary of the implementation plan"""
-        
+
         print(f"\n🎯 IMPLEMENTATION PLAN FOR VIDEO: {plan['video_id']}")
         print(f"   Category: {plan['category']}")
         print(f"   Total Actions: {plan['total_actions']}")
         print(f"   Estimated Total Time: {plan['estimated_total_time']} minutes")
         print(f"   Created: {plan['created_at']}")
-        
-        print(f"\n📋 ACTION IMPLEMENTATIONS:")
+
+        print("\n📋 ACTION IMPLEMENTATIONS:")
         for i, implementation in enumerate(plan['implementations'], 1):
             print(f"\n   {i}. {implementation['title']} ({implementation['priority']} priority)")
             print(f"      Type: {implementation['action_type']}")
             print(f"      Time: {implementation['estimated_time']}")
             print(f"      Description: {implementation['description']}")
-            
+
             if 'next_steps' in implementation:
-                print(f"      Next Steps:")
+                print("      Next Steps:")
                 for step in implementation['next_steps'][:3]:  # Show first 3 steps
                     print(f"        • {step}")
                 if len(implementation['next_steps']) > 3:
@@ -411,34 +410,34 @@ class ActionImplementer:
 
 async def main():
     """Main execution function"""
-    
+
     if len(sys.argv) < 2:
         print("Usage: python action_implementer.py <video_id>")
         print("Example: python action_implementer.py aircAruvnKk")
         sys.exit(1)
-    
+
     video_id = sys.argv[1]
     implementer = ActionImplementer()
-    
+
     try:
         # Load processed video data
         video_data = implementer.load_processed_video(video_id)
-        
+
         # Create implementation plan
         plan = implementer.create_implementation_plan(video_data)
-        
+
         # Save implementation plan
         filepath = implementer.save_implementation_plan(plan)
-        
+
         # Display summary
         implementer.display_implementation_summary(plan)
-        
-        print(f"\n✅ Implementation plan created successfully!")
+
+        print("\n✅ Implementation plan created successfully!")
         print(f"📁 Saved to: {filepath}")
         print(f"\n🚀 Ready to implement {plan['total_actions']} actions!")
-        
+
         return plan
-        
+
     except FileNotFoundError as e:
         print(f"❌ ERROR: {e}")
         print("Make sure the video has been processed first using the enhanced video processor.")
@@ -448,4 +447,4 @@ async def main():
         sys.exit(1)
 
 if __name__ == "__main__":
-    asyncio.run(main()) 
+    asyncio.run(main())

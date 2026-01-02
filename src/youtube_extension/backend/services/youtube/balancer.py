@@ -1,11 +1,13 @@
-from typing import List, Optional
-from .provider import YouTubeProvider, TranscriptSegment
+from typing import Optional
+
+from .provider import TranscriptSegment, YouTubeProvider
+
 
 class BalancedYouTube(YouTubeProvider):
-    def __init__(self, providers: List[YouTubeProvider]):
+    def __init__(self, providers: list[YouTubeProvider]):
         self.providers = providers
 
-    def get_transcript(self, video_id: str, lang_hint: Optional[str]=None) -> List[TranscriptSegment]:
+    def get_transcript(self, video_id: str, lang_hint: Optional[str]=None) -> list[TranscriptSegment]:
         errors = []
         for p in self.providers:
             try:

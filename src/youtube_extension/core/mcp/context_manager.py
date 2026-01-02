@@ -12,14 +12,13 @@ Key Responsibilities:
 - Context metadata management
 """
 
+import hashlib
 import json
 import logging
 import uuid
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional, Protocol, Union
-from dataclasses import dataclass, field
 from enum import Enum
-import hashlib
+from typing import Any, Optional
 
 from pydantic import BaseModel, Field, validator
 
@@ -59,14 +58,14 @@ class MCPContext(BaseModel):
     task: str = Field(..., description="Task or operation identifier")
     intent: str = Field(..., description="User intent or goal")
     env: str = Field(default="development", description="Environment context")
-    code_state: Dict[str, Any] = Field(
+    code_state: dict[str, Any] = Field(
         default_factory=dict, description="Code/file state"
     )
 
     # Optional context fields
     subtask: Optional[str] = None
-    history: List[Dict[str, Any]] = Field(default_factory=list)
-    metadata: Dict[str, Any] = Field(default_factory=dict)
+    history: list[dict[str, Any]] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
     # System fields
     status: ContextStatus = Field(default=ContextStatus.ACTIVE)
@@ -98,7 +97,7 @@ class MCPContext(BaseModel):
 
         return current_checksum == self.checksum
 
-    def add_history_entry(self, action: str, details: Dict[str, Any]) -> None:
+    def add_history_entry(self, action: str, details: dict[str, Any]) -> None:
         """Add an entry to the context history"""
         entry = {
             "timestamp": datetime.utcnow().isoformat(),
@@ -153,8 +152,8 @@ class MCPContextManager:
             storage_path: Optional path for context persistence
         """
         self.storage_path = storage_path or "./data/mcp_contexts/"
-        self.active_contexts: Dict[str, MCPContext] = {}
-        self.context_cache: Dict[str, MCPContext] = {}
+        self.active_contexts: dict[str, MCPContext] = {}
+        self.context_cache: dict[str, MCPContext] = {}
 
         # Ensure storage directory exists
         import os
@@ -231,7 +230,7 @@ class MCPContextManager:
         return None
 
     def update_context(
-        self, context_id: str, updates: Dict[str, Any]
+        self, context_id: str, updates: dict[str, Any]
     ) -> Optional[MCPContext]:
         """
         Update an existing context
@@ -301,7 +300,7 @@ class MCPContextManager:
         user: Optional[str] = None,
         status: Optional[ContextStatus] = None,
         limit: int = 50,
-    ) -> List[MCPContext]:
+    ) -> list[MCPContext]:
         """
         List contexts with optional filtering
 
@@ -370,7 +369,7 @@ class MCPContextManager:
             if not os.path.exists(file_path):
                 return None
 
-            with open(file_path, "r") as f:
+            with open(file_path) as f:
                 data = json.load(f)
 
             context = MCPContext(**data)

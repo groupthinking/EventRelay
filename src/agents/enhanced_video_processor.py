@@ -4,17 +4,7 @@ Shim for Enhanced Video Processor
 Redirects to canonical implementation in `backend/enhanced_video_processor.py`
 """
 
-import asyncio
-import json
 import logging
-import os
-import sys
-import time
-from datetime import datetime
-from typing import Dict, Any, List, Optional
-from pathlib import Path
-import requests
-from urllib.parse import urlparse, parse_qs
 
 # Load environment variables
 try:
@@ -35,7 +25,10 @@ logging.basicConfig(
 logger = logging.getLogger("enhanced_video_processor")
 
 try:
-    from backend.enhanced_video_processor import EnhancedVideoProcessor, get_enhanced_video_processor
+    from backend.enhanced_video_processor import (
+        EnhancedVideoProcessor,
+        get_enhanced_video_processor,
+    )
 except ImportError as e:
     logger.error("Could not import backend.enhanced_video_processor: %s", e)
     def _not_implemented(*args, **kwargs):
@@ -43,4 +36,4 @@ except ImportError as e:
     EnhancedVideoProcessor = _not_implemented
     get_enhanced_video_processor = _not_implemented
 
-__all__ = ["EnhancedVideoProcessor", "get_enhanced_video_processor"] 
+__all__ = ["EnhancedVideoProcessor", "get_enhanced_video_processor"]

@@ -11,14 +11,13 @@ import asyncio
 import json
 import logging
 import os
+from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Dict, Any, List, Optional, Union, Tuple
-from dataclasses import dataclass, asdict
 from enum import Enum
-import httpx
+from typing import Any, Optional
 
 # Import our cost monitor
-from .api_cost_monitor import cost_monitor, track_api_call, check_rate_limit_decorator
+from .api_cost_monitor import check_rate_limit_decorator, cost_monitor, track_api_call
 
 # AI Service Clients
 try:
@@ -65,7 +64,7 @@ class AIProcessingRequest:
     max_tokens: Optional[int] = None
     temperature: float = 0.7
     video_id: Optional[str] = None
-    context: Dict[str, Any] = None
+    context: dict[str, Any] = None
 
 @dataclass
 class AIProcessingResult:
@@ -73,7 +72,7 @@ class AIProcessingResult:
     provider: str
     model: str
     processing_type: str
-    result: Dict[str, Any]
+    result: dict[str, Any]
     tokens_used: int
     cost: float
     processing_time: float
@@ -84,7 +83,7 @@ class AIProcessingResult:
 class RealAIProcessorService:
     """
     Multi-provider AI processing service
-    
+
     Features:
     - OpenAI GPT-4/GPT-3.5 integration with streaming
     - Anthropic Claude integration with tool use
@@ -94,22 +93,22 @@ class RealAIProcessorService:
     - Comprehensive error handling and retries
     - Specialized prompts for video content analysis
     """
-    
+
     def __init__(self):
         """Initialize AI processing service"""
         # Initialize API clients
         self.openai_client = None
         self.anthropic_client = None
         self.gemini_client = None
-        
+
         # API Keys
         self.openai_api_key = os.getenv('OPENAI_API_KEY')
         self.anthropic_api_key = os.getenv('ANTHROPIC_API_KEY')
         self.gemini_api_key = os.getenv('GEMINI_API_KEY')
-        
+
         # Initialize available clients
         self._init_clients()
-        
+
         # Provider preferences for different tasks
         self.provider_preferences = {
             ProcessingType.ANALYSIS: [AIProvider.GEMINI, AIProvider.OPENAI, AIProvider.ANTHROPIC],
@@ -118,7 +117,7 @@ class RealAIProcessorService:
             ProcessingType.LEARNING_PATH: [AIProvider.ANTHROPIC, AIProvider.GEMINI, AIProvider.OPENAI],
             ProcessingType.CATEGORIZATION: [AIProvider.GEMINI, AIProvider.OPENAI, AIProvider.ANTHROPIC]
         }
-        
+
         # Model configurations
         self.model_configs = {
             AIProvider.OPENAI: {
@@ -144,22 +143,22 @@ class RealAIProcessorService:
                 }
             }
         }
-        
+
         logger.info(f"🤖 AI Processor initialized with providers: {self._get_available_providers()}")
-    
+
     def _init_clients(self):
         """Initialize AI service clients"""
         if HAS_OPENAI and self.openai_api_key:
             self.openai_client = openai.AsyncOpenAI(api_key=self.openai_api_key)
-            
+
         if HAS_ANTHROPIC and self.anthropic_api_key:
             self.anthropic_client = anthropic.AsyncAnthropic(api_key=self.anthropic_api_key)
-            
+
         if HAS_GEMINI and self.gemini_api_key:
             genai.configure(api_key=self.gemini_api_key)
             self.gemini_client = genai
-    
-    def _get_available_providers(self) -> List[str]:
+
+    def _get_available_providers(self) -> list[str]:
         """Get list of available AI providers"""
         providers = []
         if self.openai_client:
@@ -169,11 +168,11 @@ class RealAIProcessorService:
         if self.gemini_client:
             providers.append("gemini")
         return providers
-    
+
     def _select_optimal_provider(self, processing_type: ProcessingType, content_length: int) -> AIProvider:
         """Select optimal AI provider based on task type and content"""
         preferences = self.provider_preferences.get(processing_type, [AIProvider.OPENAI])
-        
+
         # Check which providers are available and select the first preference
         for provider in preferences:
             if provider == AIProvider.OPENAI and self.openai_client:
@@ -182,17 +181,17 @@ class RealAIProcessorService:
                 return provider
             elif provider == AIProvider.GEMINI and self.gemini_client:
                 return provider
-        
+
         # Fallback to any available provider
         available = self._get_available_providers()
         if available:
             return AIProvider(available[0])
-        
+
         raise Exception("No AI providers available")
-    
-    def _get_processing_prompt(self, processing_type: ProcessingType, content: str, context: Dict = None) -> str:
+
+    def _get_processing_prompt(self, processing_type: ProcessingType, content: str, context: dict = None) -> str:
         """Get specialized prompt for different processing types"""
-        
+
         if processing_type == ProcessingType.ANALYSIS:
             return f"""
 Analyze the following video content and provide a comprehensive analysis:
@@ -332,18 +331,18 @@ Please provide categorization in the following JSON structure:
 
 Focus on accurate classification for content discovery.
 """
-        
+
         return content
-    
+
     @check_rate_limit_decorator('openai')
     async def _process_with_openai(self, request: AIProcessingRequest) -> AIProcessingResult:
         """Process content using OpenAI"""
         try:
             model = request.model or self.model_configs[AIProvider.OPENAI]['default']
             prompt = self._get_processing_prompt(request.processing_type, request.content, request.context)
-            
+
             start_time = datetime.now(timezone.utc)
-            
+
             response = await self.openai_client.chat.completions.create(
                 model=model,
                 messages=[
@@ -354,14 +353,14 @@ Focus on accurate classification for content discovery.
                 temperature=request.temperature,
                 response_format={"type": "json_object"}
             )
-            
+
             processing_time = (datetime.now(timezone.utc) - start_time).total_seconds()
-            
+
             # Extract tokens and calculate cost
             tokens_used = response.usage.total_tokens
             input_tokens = response.usage.prompt_tokens
             output_tokens = response.usage.completion_tokens
-            
+
             # Track usage
             await track_api_call(
                 service="openai",
@@ -372,16 +371,16 @@ Focus on accurate classification for content discovery.
                 request_type=request.processing_type.value,
                 video_id=request.video_id
             )
-            
+
             # Calculate cost
             cost = cost_monitor.calculate_cost("openai", model, input_tokens, output_tokens)
-            
+
             # Parse result
             try:
                 result_data = json.loads(response.choices[0].message.content)
             except json.JSONDecodeError:
                 result_data = {"raw_response": response.choices[0].message.content}
-            
+
             result = AIProcessingResult(
                 provider="openai",
                 model=model,
@@ -393,14 +392,14 @@ Focus on accurate classification for content discovery.
                 timestamp=datetime.now(timezone.utc).isoformat(),
                 success=True
             )
-            
+
             logger.info(f"✅ OpenAI processing complete: {model} - {tokens_used} tokens - ${cost:.4f}")
             return result
-            
+
         except Exception as e:
             error_msg = f"OpenAI processing failed: {str(e)}"
             logger.error(error_msg)
-            
+
             return AIProcessingResult(
                 provider="openai",
                 model=request.model or "gpt-4o-mini",
@@ -413,16 +412,16 @@ Focus on accurate classification for content discovery.
                 success=False,
                 error_message=error_msg
             )
-    
+
     @check_rate_limit_decorator('anthropic')
     async def _process_with_anthropic(self, request: AIProcessingRequest) -> AIProcessingResult:
         """Process content using Anthropic Claude"""
         try:
             model = request.model or self.model_configs[AIProvider.ANTHROPIC]['default']
             prompt = self._get_processing_prompt(request.processing_type, request.content, request.context)
-            
+
             start_time = datetime.now(timezone.utc)
-            
+
             response = await self.anthropic_client.messages.create(
                 model=model,
                 max_tokens=request.max_tokens or 2048,
@@ -431,14 +430,14 @@ Focus on accurate classification for content discovery.
                     {"role": "user", "content": prompt}
                 ]
             )
-            
+
             processing_time = (datetime.now(timezone.utc) - start_time).total_seconds()
-            
+
             # Extract tokens and calculate cost
             tokens_used = response.usage.input_tokens + response.usage.output_tokens
             input_tokens = response.usage.input_tokens
             output_tokens = response.usage.output_tokens
-            
+
             # Track usage
             await track_api_call(
                 service="anthropic",
@@ -449,17 +448,17 @@ Focus on accurate classification for content discovery.
                 request_type=request.processing_type.value,
                 video_id=request.video_id
             )
-            
+
             # Calculate cost
             cost = cost_monitor.calculate_cost("anthropic", model, input_tokens, output_tokens)
-            
+
             # Parse result
             content = response.content[0].text
             try:
                 result_data = json.loads(content)
             except json.JSONDecodeError:
                 result_data = {"raw_response": content}
-            
+
             result = AIProcessingResult(
                 provider="anthropic",
                 model=model,
@@ -471,14 +470,14 @@ Focus on accurate classification for content discovery.
                 timestamp=datetime.now(timezone.utc).isoformat(),
                 success=True
             )
-            
+
             logger.info(f"✅ Anthropic processing complete: {model} - {tokens_used} tokens - ${cost:.4f}")
             return result
-            
+
         except Exception as e:
             error_msg = f"Anthropic processing failed: {str(e)}"
             logger.error(error_msg)
-            
+
             return AIProcessingResult(
                 provider="anthropic",
                 model=request.model or "claude-3-5-sonnet-20241022",
@@ -491,16 +490,16 @@ Focus on accurate classification for content discovery.
                 success=False,
                 error_message=error_msg
             )
-    
+
     @check_rate_limit_decorator('google')
     async def _process_with_gemini(self, request: AIProcessingRequest) -> AIProcessingResult:
         """Process content using Google Gemini"""
         try:
             model_name = request.model or self.model_configs[AIProvider.GEMINI]['default']
             prompt = self._get_processing_prompt(request.processing_type, request.content, request.context)
-            
+
             start_time = datetime.now(timezone.utc)
-            
+
             model = genai.GenerativeModel(model_name)
             response = await asyncio.to_thread(
                 model.generate_content,
@@ -510,12 +509,12 @@ Focus on accurate classification for content discovery.
                     temperature=request.temperature
                 )
             )
-            
+
             processing_time = (datetime.now(timezone.utc) - start_time).total_seconds()
-            
+
             # Estimate tokens (Gemini doesn't provide exact counts)
             estimated_tokens = len(prompt.split()) + len(response.text.split())
-            
+
             # Track usage
             await track_api_call(
                 service="google",
@@ -525,16 +524,16 @@ Focus on accurate classification for content discovery.
                 request_type=request.processing_type.value,
                 video_id=request.video_id
             )
-            
+
             # Calculate cost
             cost = cost_monitor.calculate_cost("google", model_name, estimated_tokens)
-            
+
             # Parse result
             try:
                 result_data = json.loads(response.text)
             except json.JSONDecodeError:
                 result_data = {"raw_response": response.text}
-            
+
             result = AIProcessingResult(
                 provider="gemini",
                 model=model_name,
@@ -546,14 +545,14 @@ Focus on accurate classification for content discovery.
                 timestamp=datetime.now(timezone.utc).isoformat(),
                 success=True
             )
-            
+
             logger.info(f"✅ Gemini processing complete: {model_name} - {estimated_tokens} tokens - ${cost:.4f}")
             return result
-            
+
         except Exception as e:
             error_msg = f"Gemini processing failed: {str(e)}"
             logger.error(error_msg)
-            
+
             return AIProcessingResult(
                 provider="gemini",
                 model=request.model or "gemini-1.5-flash",
@@ -566,14 +565,14 @@ Focus on accurate classification for content discovery.
                 success=False,
                 error_message=error_msg
             )
-    
+
     async def process_content(self, request: AIProcessingRequest) -> AIProcessingResult:
         """
         Process content using the best available AI provider
-        
+
         Args:
             request: AI processing request
-            
+
         Returns:
             Processing result with analysis, cost, and metadata
         """
@@ -581,12 +580,12 @@ Focus on accurate classification for content discovery.
             # Select provider
             if request.provider == AIProvider.AUTO:
                 provider = self._select_optimal_provider(
-                    request.processing_type, 
+                    request.processing_type,
                     len(request.content)
                 )
             else:
                 provider = request.provider
-            
+
             # Route to appropriate processor
             if provider == AIProvider.OPENAI and self.openai_client:
                 return await self._process_with_openai(request)
@@ -612,13 +611,13 @@ Focus on accurate classification for content discovery.
                     except Exception as e:
                         logger.warning(f"Fallback {fallback_provider} failed: {e}")
                         continue
-                
+
                 raise Exception("All AI providers failed")
-                
+
         except Exception as e:
             error_msg = f"AI processing completely failed: {str(e)}"
             logger.error(error_msg)
-            
+
             return AIProcessingResult(
                 provider="none",
                 model="none",
@@ -631,14 +630,14 @@ Focus on accurate classification for content discovery.
                 success=False,
                 error_message=error_msg
             )
-    
-    async def analyze_video_content(self, video_data: Dict[str, Any]) -> Dict[str, Any]:
+
+    async def analyze_video_content(self, video_data: dict[str, Any]) -> dict[str, Any]:
         """
         Comprehensive video content analysis using multiple AI processing types
-        
+
         Args:
             video_data: Complete video data from YouTube API
-            
+
         Returns:
             Comprehensive AI analysis results
         """
@@ -646,27 +645,27 @@ Focus on accurate classification for content discovery.
             video_id = video_data.get('video_id', '')
             metadata = video_data.get('metadata', {})
             transcript = video_data.get('transcript', {})
-            
+
             # Prepare content for analysis
             content_parts = []
-            
+
             # Add metadata
             content_parts.append(f"Title: {metadata.get('title', 'Unknown')}")
             content_parts.append(f"Description: {metadata.get('description', '')[:1000]}")  # Limit description
             content_parts.append(f"Duration: {metadata.get('duration', 'Unknown')}")
             content_parts.append(f"Channel: {metadata.get('channel_title', 'Unknown')}")
-            
+
             # Add transcript if available
             full_text = transcript.get('full_text', '')
             if full_text:
                 # Limit transcript to avoid token limits
                 content_parts.append(f"Transcript: {full_text[:8000]}")
-            
+
             combined_content = '\n'.join(content_parts)
-            
+
             # Run multiple analysis types concurrently
             analysis_tasks = []
-            
+
             # Content analysis
             analysis_tasks.append(
                 self.process_content(AIProcessingRequest(
@@ -675,7 +674,7 @@ Focus on accurate classification for content discovery.
                     video_id=video_id
                 ))
             )
-            
+
             # Summary generation
             analysis_tasks.append(
                 self.process_content(AIProcessingRequest(
@@ -684,7 +683,7 @@ Focus on accurate classification for content discovery.
                     video_id=video_id
                 ))
             )
-            
+
             # Action items generation
             analysis_tasks.append(
                 self.process_content(AIProcessingRequest(
@@ -693,7 +692,7 @@ Focus on accurate classification for content discovery.
                     video_id=video_id
                 ))
             )
-            
+
             # Categorization
             analysis_tasks.append(
                 self.process_content(AIProcessingRequest(
@@ -702,10 +701,10 @@ Focus on accurate classification for content discovery.
                     video_id=video_id
                 ))
             )
-            
+
             # Execute all analyses
             results = await asyncio.gather(*analysis_tasks, return_exceptions=True)
-            
+
             # Compile results
             ai_analysis = {
                 'video_id': video_id,
@@ -720,14 +719,14 @@ Focus on accurate classification for content discovery.
                 'success': True,
                 'errors': []
             }
-            
+
             # Process results
             result_types = ['content_analysis', 'summary', 'actions', 'categorization']
             for i, result in enumerate(results):
                 if isinstance(result, Exception):
                     ai_analysis['errors'].append(f"{result_types[i]}: {str(result)}")
                     continue
-                
+
                 if isinstance(result, AIProcessingResult) and result.success:
                     ai_analysis[result_types[i]] = result.result
                     ai_analysis['total_cost'] += result.cost
@@ -736,18 +735,18 @@ Focus on accurate classification for content discovery.
                         ai_analysis['processing_providers'].append(result.provider)
                 else:
                     ai_analysis['errors'].append(f"{result_types[i]}: Processing failed")
-            
+
             # Determine overall success
             successful_analyses = sum(1 for i in range(4) if ai_analysis[result_types[i]] is not None)
             ai_analysis['success'] = successful_analyses >= 2  # At least 50% success rate
-            
+
             logger.info(f"🤖 Video AI analysis complete for {video_id}")
             logger.info(f"   - Successful analyses: {successful_analyses}/4")
             logger.info(f"   - Total cost: ${ai_analysis['total_cost']:.4f}")
             logger.info(f"   - Providers used: {', '.join(ai_analysis['processing_providers'])}")
-            
+
             return ai_analysis
-            
+
         except Exception as e:
             logger.error(f"Error in video content analysis: {e}")
             return {
@@ -769,7 +768,7 @@ def get_ai_processor() -> RealAIProcessorService:
         ai_processor = RealAIProcessorService()
     return ai_processor
 
-async def analyze_video_with_ai(video_data: Dict[str, Any]) -> Dict[str, Any]:
+async def analyze_video_with_ai(video_data: dict[str, Any]) -> dict[str, Any]:
     """Convenience function for video AI analysis"""
     processor = get_ai_processor()
     return await processor.analyze_video_content(video_data)
@@ -778,27 +777,27 @@ if __name__ == "__main__":
     # Test the AI processor
     async def test_ai_processor():
         processor = RealAIProcessorService()
-        
+
         test_content = """
         This is a sample video about machine learning fundamentals.
         The video covers linear regression, decision trees, and neural networks.
         It's aimed at beginners and includes practical Python examples.
         Duration: 15 minutes.
         """
-        
+
         request = AIProcessingRequest(
             content=test_content,
             processing_type=ProcessingType.ANALYSIS,
             provider=AIProvider.AUTO
         )
-        
+
         result = await processor.process_content(request)
-        print(f"Analysis Result:")
+        print("Analysis Result:")
         print(f"Provider: {result.provider}")
         print(f"Success: {result.success}")
         print(f"Cost: ${result.cost:.4f}")
         print(f"Result: {json.dumps(result.result, indent=2)}")
-    
+
 if __name__ == "__main__":
     import asyncio
     asyncio.run(test_ai_processor())

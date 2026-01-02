@@ -30,7 +30,7 @@ import sys
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 # Load environment variables from project root .env if present
 try:
@@ -179,7 +179,7 @@ class RealVideoProcessor:
             return "Health_Fitness_Cooking"
         return "General"
 
-    def _generate_category_actions(self, category: str, summary: str, transcript: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def _generate_category_actions(self, category: str, summary: str, transcript: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if category == "Educational_Content":
             actions = [
                 ActionItem("learning_plan", "Personalized Learning Plan", "Step-by-step plan from basics to advanced", "2h", "high"),
@@ -209,7 +209,7 @@ class RealVideoProcessor:
         return [a.__dict__ for a in actions]
 
     # ---------- Core async ops ----------
-    async def _extract_transcript_with_rotation(self, video_id: str) -> List[Dict[str, Any]]:
+    async def _extract_transcript_with_rotation(self, video_id: str) -> list[dict[str, Any]]:
         # 1) Direct transcript
         try:
             if YouTubeTranscriptApi is not None:
@@ -242,7 +242,7 @@ class RealVideoProcessor:
 
         raise RuntimeError("Failed to extract transcript via all methods")
 
-    async def _generate_actionable_content(self, video_id: str, transcript_data: List[Dict[str, Any]]) -> Dict[str, Any]:
+    async def _generate_actionable_content(self, video_id: str, transcript_data: list[dict[str, Any]]) -> dict[str, Any]:
         if not transcript_data:
             raise ValueError("Cannot generate actionable content from empty transcript")
 
@@ -263,7 +263,7 @@ class RealVideoProcessor:
             "estimated_duration": estimated_duration,
         }
 
-    async def _save_to_google_drive(self, video_id: str, content: Dict[str, Any]) -> Dict[str, Any]:
+    async def _save_to_google_drive(self, video_id: str, content: dict[str, Any]) -> dict[str, Any]:
         # Emulate Drive by writing locally under CWD/gdrive_results
         folder = Path.cwd() / "gdrive_results" / content.get("category", "General")
         folder.mkdir(parents=True, exist_ok=True)
@@ -286,7 +286,7 @@ class RealVideoProcessor:
         }
 
     # ---------- Validation ----------
-    def validate_real_output(self, result: Dict[str, Any]) -> None:
+    def validate_real_output(self, result: dict[str, Any]) -> None:
         processing_time = float(result.get("processing_time", 0.0))
         transcript_data = result.get("transcript_data", [])
         video_id = str(result.get("video_id", ""))
@@ -305,7 +305,7 @@ class RealVideoProcessor:
             raise SimulationDetectionError("SIMULATION_DETECTED: Invalid video ID")
 
     # ---------- Orchestration ----------
-    async def process_video_real(self, video_url_or_id: str) -> Dict[str, Any]:
+    async def process_video_real(self, video_url_or_id: str) -> dict[str, Any]:
         start = asyncio.get_event_loop().time()
         video_id = self.extract_video_id(video_url_or_id)
 
@@ -354,7 +354,7 @@ class RealVideoProcessor:
 
 
 # ---------- CLI entry ----------
-async def main() -> Dict[str, Any]:
+async def main() -> dict[str, Any]:
     if len(sys.argv) < 2:
         print("Usage: process_video_with_mcp.py <video_url_or_id> [--real-mode]")
         sys.exit(1)

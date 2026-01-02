@@ -18,18 +18,22 @@ import logging
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import FastAPI, WebSocket, HTTPException
+from fastapi import FastAPI, HTTPException, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.openapi.utils import get_openapi
+from fastapi.responses import JSONResponse, RedirectResponse
 
 # Path setup for imports
 project_root = Path(__file__).parent.parent
 
 # Import services and container
 from .containers.service_container import get_service_container
+from .services.database_optimizer import (
+    initialize_database_optimization,
+    shutdown_database_optimization,
+)
 from .services.websocket_service import WebSocketService
-from .services.database_optimizer import initialize_database_optimization, shutdown_database_optimization
+
 # from ..processors.video_processor import default_processor as video_processor
 
 # Import API routers
@@ -90,25 +94,25 @@ app = FastAPI(
     title="UVAI API",
     description="""
     ## UVAI Platform API
-    
+
     **Architecture Features:**
     - 🏗️ **Service-Oriented Architecture** with dependency injection
-    - 📋 **API Versioning** for backward compatibility  
+    - 📋 **API Versioning** for backward compatibility
     - 🔄 **Real-time WebSocket** communication
     - 📊 **Comprehensive Monitoring** and health checks
     - 🚀 **Production-ready** with proper error handling
-    
+
     **Core Capabilities:**
     - **Video Processing**: AI-powered analysis of YouTube videos
     - **Markdown Generation**: Automated learning guides and summaries
     - **Video-to-Software**: Convert videos into deployable applications
     - **Caching System**: Intelligent caching for improved performance
     - **Real-time Communication**: WebSocket support for live updates
-    
+
     **API Versions:**
     - **v1**: Current stable API with all core features
     - **Legacy**: Backward compatibility with original endpoints
-    
+
     **MCP Integration:**
     - Multi-modal Content Processing with agent orchestration
     - Support for multiple LLM providers (Gemini, Claude, GPT-4)
@@ -136,14 +140,14 @@ app.add_middleware(
         "http://localhost:5173",  # Vite dev server
         "http://localhost:8080",  # Alternative dev server
         "http://localhost:3001",  # Additional dev port
-        
+
         # Production environments
         "https://youtube-extension-frontend.vercel.app",
         "https://youtube-extension-frontend-jxk2359s8-garvs-projects-5153e7c7.vercel.app",
-        
+
         # Vercel preview deployments
         "https://*.vercel.app",
-        
+
         # Additional production domains
         "https://uvai.platform",
         "https://api.uvai.platform",
@@ -178,6 +182,7 @@ app.add_middleware(
 
 # Include MCP Bridge Router
 from .api import mcp_bridge
+
 app.include_router(mcp_bridge.router)
 
 # Include integrations router if available
@@ -199,30 +204,29 @@ async def legacy_health():
 @app.post("/api/chat")
 async def legacy_chat(request: dict):
     """Legacy chat endpoint - redirects to v1 with data preservation"""
-    from fastapi import Request
     # For now, maintain the existing implementation for backward compatibility
     try:
-        from .api.v1.models import ChatRequest, ChatResponse
+        from .api.v1.models import ChatRequest
         from .containers.service_container import get_service
-        
+
         # Convert legacy request to new format
         chat_request = ChatRequest(**request)
         video_processing_service = get_service('video_processing_service')
-        
+
         processor = video_processing_service.get_video_processor()
-        
+
         if processor:
             response_text = f"AI Assistant: I received your message: '{chat_request.message}'. I'm here to help with video processing and analysis!"
         else:
             response_text = f"AI Assistant: I received your message: '{chat_request.message}'. (Video processor unavailable)"
-        
+
         return {
             "response": response_text,
             "status": "success",
             "session_id": chat_request.session_id,
             "timestamp": datetime.now().isoformat()
         }
-        
+
     except Exception as e:
         logger.error(f"Legacy chat endpoint error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -233,28 +237,28 @@ async def legacy_process_video_markdown(request: dict):
     try:
         from .api.v1.models import MarkdownRequest
         from .containers.service_container import get_service
-        
+
         # Convert to new format
         markdown_request = MarkdownRequest(**request)
         video_processing_service = get_service('video_processing_service')
         health_service = get_service('health_monitoring_service')
-        
+
         # Rate limiting
         if not health_service.rate_limit_check():
             raise HTTPException(status_code=429, detail="Rate limit exceeded")
-        
+
         health_service.increment_metric("requests_total")
-        
+
         # Process video
         result = await video_processing_service.process_video_for_markdown(
-            markdown_request.video_url, 
+            markdown_request.video_url,
             markdown_request.force_regenerate
         )
-        
+
         health_service.increment_metric("success_total")
-        
+
         return result
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -265,13 +269,14 @@ async def legacy_process_video_markdown(request: dict):
 async def legacy_process_video(request: dict):
     """Legacy video processing endpoint"""
     try:
-        from .api.v1.models import VideoProcessingRequest
-        from .containers.service_container import get_service, get_service_container
         import os
-        
+
+        from .api.v1.models import VideoProcessingRequest
+        from .containers.service_container import get_service
+
         # Convert to new format
         video_request = VideoProcessingRequest(**request)
-        
+
         # Check for async processing flag
         if os.getenv("ASYNC_PROCESSING", "false").lower() == "true":
             try:
@@ -280,7 +285,7 @@ async def legacy_process_video(request: dict):
                     "video_url": video_request.video_url,
                     "options": video_request.options
                 })
-                
+
                 if message_id:
                     logger.info(f"Async processing queued for {video_request.video_url} (msg: {message_id})")
                     return {
@@ -298,15 +303,15 @@ async def legacy_process_video(request: dict):
 
         # Sync fallback (original logic)
         video_processing_service = get_service('video_processing_service')
-        
+
         # Process video
         result = await video_processing_service.process_video_basic(
             video_request.video_url,
             video_request.options
         )
-        
+
         return result
-        
+
     except Exception as e:
         logger.error(f"Legacy video processing error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -345,7 +350,7 @@ async def system_info():
     """Get comprehensive system information"""
     try:
         container_health = service_container.health_check()
-        
+
         system_info = {
             "api_version": "2.0.0",
             "architecture": "service-oriented",
@@ -367,9 +372,9 @@ async def system_info():
             },
             "timestamp": datetime.now().isoformat()
         }
-        
+
         return system_info
-        
+
     except Exception as e:
         logger.error(f"System info error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -379,19 +384,19 @@ def custom_openapi():
     """Generate enhanced OpenAPI schema"""
     if app.openapi_schema:
         return app.openapi_schema
-    
+
     openapi_schema = get_openapi(
         title="YouTube Extension API",
         version="2.0.0",
         description=app.description,
         routes=app.routes,
     )
-    
+
     # Add custom extensions
     openapi_schema["info"]["x-logo"] = {
         "url": "https://uvai.io/logo.png"
     }
-    
+
     # Add server information
     openapi_schema["servers"] = [
         {
@@ -403,7 +408,7 @@ def custom_openapi():
             "description": "Production server"
         }
     ]
-    
+
     # Add security schemes
     openapi_schema["components"]["securitySchemes"] = {
         "ApiKeyAuth": {
@@ -412,7 +417,7 @@ def custom_openapi():
             "name": "X-API-Key"
         }
     }
-    
+
     # Add custom tags
     openapi_schema["tags"] = [
         {
@@ -436,7 +441,7 @@ def custom_openapi():
             "description": "Data retrieval and analytics endpoints"
         }
     ]
-    
+
     app.openapi_schema = openapi_schema
     return app.openapi_schema
 
@@ -461,7 +466,7 @@ async def value_error_handler(request, exc):
 async def global_exception_handler(request, exc):
     """Global exception handler with enhanced error details"""
     logger.error(f"Unhandled exception: {exc}", exc_info=True)
-    
+
     error_detail = {
         "error": "Internal server error",
         "detail": str(exc),
@@ -470,10 +475,10 @@ async def global_exception_handler(request, exc):
         "version": "2.0.0",
         "architecture": "service-oriented"
     }
-    
+
     if hasattr(exc, '__class__'):
         error_detail["error_type"] = exc.__class__.__name__
-    
+
     return JSONResponse(
         status_code=500,
         content=error_detail
@@ -491,15 +496,15 @@ async def startup_event():
     logger.info("📋 API Versioning: v1 available at /api/v1/")
     logger.info("⚡ WebSocket: Real-time communication enabled at /ws")
     logger.info("📊 Documentation: Available at /docs and /redoc")
-    
+
     try:
         # Verify critical services
-        video_service = service_container.get_service('video_processing_service')
+        service_container.get_service('video_processing_service')
         cache_service = service_container.get_service('cache_service')
-        health_service = service_container.get_service('health_monitoring_service')
-        data_service = service_container.get_service('data_service')
-        websocket_service = service_container.get_service('websocket_service')
-        
+        service_container.get_service('health_monitoring_service')
+        service_container.get_service('data_service')
+        service_container.get_service('websocket_service')
+
         logger.info("✅ All critical services initialized and verified")
         # Initialize database optimization (connection pool and minimal schema for SQLite)
         await initialize_database_optimization()
@@ -509,7 +514,7 @@ async def startup_event():
         # except Exception as e:
         #     logger.warning(f"Parallel processor not started: {e}")
         logger.info("🎯 API is ready to handle requests")
-        
+
         # Log configuration summary
         config_summary = {
             # Pull from container configuration; HealthMonitoringService no longer exposes _rate_limit_rps
@@ -519,7 +524,7 @@ async def startup_event():
             "api_endpoints": len(app.routes)
         }
         logger.info(f"⚙️  Configuration: {config_summary}")
-        
+
     except Exception as e:
         logger.error(f"❌ Critical service initialization failed: {e}")
         raise e
@@ -528,7 +533,7 @@ async def startup_event():
 async def shutdown_event():
     """Application shutdown tasks"""
     logger.info("🛑 Shutting down YouTube Extension API")
-    
+
     try:
         await service_container.shutdown()
         # Stop parallel processor and shutdown DB optimization
@@ -541,7 +546,7 @@ async def shutdown_event():
         except Exception:
             pass
         logger.info("✅ Graceful shutdown completed")
-        
+
     except Exception as e:
         logger.warning(f"⚠️  Shutdown warning: {e}")
 

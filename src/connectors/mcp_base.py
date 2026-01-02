@@ -1,7 +1,7 @@
 """MCP Base Classes - Model Context Protocol support."""
 
-from typing import Dict, Any, List
 from datetime import datetime
+from typing import Any
 
 
 class MCPContext:
@@ -9,15 +9,15 @@ class MCPContext:
     Model Context Protocol context for semantic understanding.
     Provides context for agent operations and decision-making.
     """
-    
+
     def __init__(self):
-        self.task: Dict[str, Any] = {}
-        self.intent: Dict[str, Any] = {}
-        self.env: Dict[str, Any] = {}
-        self.history: List[Dict[str, Any]] = []
+        self.task: dict[str, Any] = {}
+        self.intent: dict[str, Any] = {}
+        self.env: dict[str, Any] = {}
+        self.history: list[dict[str, Any]] = []
         self.created_at = datetime.utcnow().isoformat()
-    
-    def to_dict(self) -> Dict[str, Any]:
+
+    def to_dict(self) -> dict[str, Any]:
         """Convert context to dictionary."""
         return {
             "task": self.task,
@@ -26,9 +26,9 @@ class MCPContext:
             "history": self.history,
             "created_at": self.created_at,
         }
-    
+
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "MCPContext":
+    def from_dict(cls, data: dict[str, Any]) -> "MCPContext":
         """Create context from dictionary."""
         context = cls()
         context.task = data.get("task", {})

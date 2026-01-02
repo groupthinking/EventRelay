@@ -4,12 +4,11 @@ Main FastAPI application for UVAI YouTube Extension
 Provides the core API endpoints and integrates all services including cloud AI
 """
 
+import logging
+
+import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from typing import Optional, Dict, Any
-import logging
-import uvicorn
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)

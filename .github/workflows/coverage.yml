@@ -14,14 +14,11 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: coverage-${{ github.ref }}
   cancel-in-progress: true
-
-permissions:
-  contents: read
-  actions: read
 
 jobs:
   coverage:
@@ -30,15 +27,15 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # set to 1 if full history not needed
+          fetch-depth: 0 # set to 1 if full history not needed
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
-          cache: 'pip'
+          python-version: "3.12"
+          cache: "pip"
 
       - name: Install dependencies
         run: |
@@ -49,7 +46,7 @@ jobs:
         run: mkdir -p reports
 
       - name: Run tests with coverage
-        continue-on-error: true  # Allow workflow to complete for coverage tracking
+        continue-on-error: true # Allow workflow to complete for coverage tracking
         run: |
           pytest tests/ \
             --cov=src/youtube_extension \

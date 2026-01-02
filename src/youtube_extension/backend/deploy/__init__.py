@@ -1,25 +1,26 @@
 import importlib
-from typing import Dict, Any, Callable, Awaitable
+from collections.abc import Awaitable
+from typing import Any, Callable, Dict
 
-AdapterFunc = Callable[[str, Dict[str, Any], Dict[str, Any]], Awaitable[Dict[str, Any]]]
+AdapterFunc = Callable[[str, dict[str, Any], dict[str, Any]], Awaitable[dict[str, Any]]]
 
 # Registry of available deployment adapters
-_adapters: Dict[str, str] = {
+_adapters: dict[str, str] = {
     "vercel": "youtube_extension.backend.deploy.vercel",
     "netlify": "youtube_extension.backend.deploy.netlify",
     "fly": "youtube_extension.backend.deploy.fly",
 }
 
-_loaded: Dict[str, AdapterFunc] = {}
+_loaded: dict[str, AdapterFunc] = {}
 
 # Registry of adapter classes for new architecture
-_adapter_classes: Dict[str, str] = {
+_adapter_classes: dict[str, str] = {
     "vercel": "youtube_extension.backend.deploy.vercel:VercelAdapter",
     "netlify": "youtube_extension.backend.deploy.netlify:NetlifyAdapter",
     "fly": "youtube_extension.backend.deploy.fly:FlyAdapter",
 }
 
-_loaded_classes: Dict[str, Any] = {}
+_loaded_classes: dict[str, Any] = {}
 
 def get_adapter(target: str) -> AdapterFunc:
     """Get legacy adapter function"""
@@ -28,7 +29,7 @@ def get_adapter(target: str) -> AdapterFunc:
         raise ValueError(f"Unsupported deployment target: {target}")
     if target not in _loaded:
         module = importlib.import_module(_adapters[target])
-        _loaded[target] = getattr(module, "deploy")  # type: ignore
+        _loaded[target] = module.deploy  # type: ignore
     return _loaded[target]
 
 def get_adapter_class(target: str) -> Any:
@@ -44,7 +45,7 @@ def get_adapter_class(target: str) -> Any:
 
     return _loaded_classes[target]
 
-async def deploy_project(target: str, project_path: str, project_config: Dict[str, Any], env: Dict[str, Any]) -> Dict[str, Any]:
+async def deploy_project(target: str, project_path: str, project_config: dict[str, Any], env: dict[str, Any]) -> dict[str, Any]:
     """Unified entrypoint to call specific adapter - supports both old and new architecture"""
     try:
         # Try new architecture first
@@ -68,7 +69,7 @@ async def deploy_project(target: str, project_path: str, project_config: Dict[st
         adapter = get_adapter(target)
         return await adapter(project_path, project_config, env)
 
-def list_available_adapters() -> Dict[str, str]:
+def list_available_adapters() -> dict[str, str]:
     """List all available deployment adapters"""
     return {
         "vercel": "Vercel deployment platform",

@@ -3,17 +3,20 @@
 
 from __future__ import annotations
 
-import os
 import asyncio
 import json
 import logging
+import os
 from dataclasses import dataclass
-from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any
 
+from ...ai.gemini_service import GeminiConfig
+from ...ai.hybrid_processor_service import (
+    HybridConfig,
+    HybridProcessorService,
+    TaskType,
+)
 from ..base_agent import BaseAgent
-from ...ai.hybrid_processor_service import HybridProcessorService, HybridConfig, TaskType
-from ...ai.gemini_service import GeminiResult, GeminiConfig
 
 logger = logging.getLogger(__name__)
 
@@ -23,17 +26,18 @@ class PromptResult:
     """Container for parsed Gemini responses."""
 
     raw_text: str
-    parsed: Optional[Dict[str, Any]]
+    parsed: dict[str, Any] | None
 
 
-from ..registry import register
 from ..dto import AgentRequest, AgentResult
+from ..registry import register
+
 
 @register
 class TranscriptActionAgent(BaseAgent):
     name = "transcript_action"
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, config: dict[str, Any] | None = None):
         cfg = config or {}
         hybrid_cfg = cfg.get("hybrid_config") or self._build_hybrid_config()
         self._hybrid_processor: HybridProcessorService = cfg.get("hybrid_processor") or HybridProcessorService(hybrid_cfg)
@@ -59,7 +63,7 @@ class TranscriptActionAgent(BaseAgent):
             scaffold = await self._generate_project_scaffold(transcript_text, metadata, video_metadata)
             tasks = await self._generate_task_board(transcript_text, metadata, video_metadata)
 
-            total_time = asyncio.get_event_loop().time() - start_time
+            asyncio.get_event_loop().time() - start_time
             return AgentResult(
                 status="ok",
                 output={
@@ -84,8 +88,8 @@ class TranscriptActionAgent(BaseAgent):
     async def _generate_summary(
         self,
         transcript: str,
-        metadata: Dict[str, Any],
-        video_metadata: Dict[str, Any],
+        metadata: dict[str, Any],
+        video_metadata: dict[str, Any],
     ) -> PromptResult:
         clip_hint = self._build_prompt_clip_context(metadata, video_metadata)
         prompt = (
@@ -100,8 +104,8 @@ class TranscriptActionAgent(BaseAgent):
     async def _generate_project_scaffold(
         self,
         transcript: str,
-        metadata: Dict[str, Any],
-        video_metadata: Dict[str, Any],
+        metadata: dict[str, Any],
+        video_metadata: dict[str, Any],
     ) -> PromptResult:
         context = metadata.get("title") or metadata.get("video_id") or "the referenced content"
         clip_hint = self._build_prompt_clip_context(metadata, video_metadata)
@@ -119,8 +123,8 @@ class TranscriptActionAgent(BaseAgent):
     async def _generate_task_board(
         self,
         transcript: str,
-        metadata: Dict[str, Any],
-        video_metadata: Dict[str, Any],
+        metadata: dict[str, Any],
+        video_metadata: dict[str, Any],
     ) -> PromptResult:
         clip_hint = self._build_prompt_clip_context(metadata, video_metadata)
         prompt = (
@@ -136,7 +140,7 @@ class TranscriptActionAgent(BaseAgent):
         self,
         prompt: str,
         transcript: str,
-        model_override: Optional[str],
+        model_override: str | None,
         *,
         fail_message: str,
     ) -> PromptResult:
@@ -158,14 +162,14 @@ class TranscriptActionAgent(BaseAgent):
         return self._hybrid_processor.config.model_routing.get(task_type, self._hybrid_processor.config.gemini.model_name)
 
     @staticmethod
-    def _safe_parse_json(payload: str) -> Optional[Dict[str, Any]]:
+    def _safe_parse_json(payload: str) -> dict[str, Any] | None:
         try:
             return json.loads(payload)
         except json.JSONDecodeError:
             return None
 
     @staticmethod
-    def _clip_window_notes(video_metadata: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def _clip_window_notes(video_metadata: dict[str, Any]) -> dict[str, Any] | None:
         if not video_metadata:
             return None
         if not any(key in video_metadata for key in ("start_offset", "end_offset", "fps")):
@@ -178,8 +182,8 @@ class TranscriptActionAgent(BaseAgent):
 
     def _build_prompt_clip_context(
         self,
-        metadata: Dict[str, Any],
-        video_metadata: Dict[str, Any],
+        metadata: dict[str, Any],
+        video_metadata: dict[str, Any],
     ) -> str:
         if not video_metadata:
             return ""
@@ -203,7 +207,7 @@ class TranscriptActionAgent(BaseAgent):
         return ", ".join(segments)
 
     @staticmethod
-    def _format_offset(value: Optional[Any]) -> Optional[str]:
+    def _format_offset(value: Any | None) -> str | None:
         if value is None:
             return None
 

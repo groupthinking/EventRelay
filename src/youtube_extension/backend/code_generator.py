@@ -7,14 +7,12 @@ This module generates actual project code based on video analysis,
 creating deployable applications from YouTube tutorial content.
 """
 
-import os
 import json
 import logging
-from typing import Dict, Any, List, Optional
-from pathlib import Path
 import tempfile
-import shutil
 from datetime import datetime
+from pathlib import Path
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -22,35 +20,35 @@ class ProjectCodeGenerator:
     """
     Generates project code based on video analysis results
     """
-    
+
     def __init__(self):
         self.templates_dir = Path(__file__).parent / "templates"
         self.ensure_templates_directory()
-    
+
     def ensure_templates_directory(self):
         """Ensure templates directory exists"""
         self.templates_dir.mkdir(exist_ok=True)
-        
+
         # Create basic templates if they don't exist
         self._create_basic_templates()
-    
-    async def generate_project(self, video_analysis: Dict[str, Any], project_config: Dict[str, Any]) -> Dict[str, Any]:
+
+    async def generate_project(self, video_analysis: dict[str, Any], project_config: dict[str, Any]) -> dict[str, Any]:
         """
         Generate a complete project based on video analysis
         """
         logger.info(f"🏗️ Generating project: {project_config.get('type', 'web')}")
-        
+
         try:
             # Extract project information
             extracted_info = video_analysis.get("extracted_info", {})
             project_type = project_config.get("type", extracted_info.get("project_type", "web"))
             technologies = extracted_info.get("technologies", ["javascript", "html", "css"])
             features = project_config.get("features", extracted_info.get("features", []))
-            
+
             # Create temporary project directory
             temp_dir = tempfile.mkdtemp(prefix="uvai_project_")
             project_path = Path(temp_dir)
-            
+
             # Generate project structure based on type
             if project_type == "web":
                 result = await self._generate_web_project(project_path, video_analysis, technologies, features)
@@ -60,25 +58,25 @@ class ProjectCodeGenerator:
                 result = await self._generate_mobile_project(project_path, video_analysis, technologies, features)
             else:
                 result = await self._generate_web_project(project_path, video_analysis, technologies, features)
-            
+
             result["project_path"] = str(project_path)
             result["project_type"] = project_type
             result["technologies"] = technologies
             result["features"] = features
-            
+
             logger.info(f"✅ Project generated successfully at {project_path}")
             return result
-            
+
         except Exception as e:
             logger.error(f"❌ Project generation failed: {e}")
             raise
-    
-    async def _generate_web_project(self, project_path: Path, video_analysis: Dict, technologies: List[str], features: List[str]) -> Dict[str, Any]:
+
+    async def _generate_web_project(self, project_path: Path, video_analysis: dict, technologies: list[str], features: list[str]) -> dict[str, Any]:
         """Generate a web application project"""
-        
+
         extracted_info = video_analysis.get("extracted_info", {})
-        title = extracted_info.get("title", "UVAI Generated Project")
-        
+        extracted_info.get("title", "UVAI Generated Project")
+
         # Determine the tech stack
         if "react" in technologies:
             return await self._generate_react_project(project_path, video_analysis, features)
@@ -86,14 +84,14 @@ class ProjectCodeGenerator:
             return await self._generate_vue_project(project_path, video_analysis, features)
         else:
             return await self._generate_vanilla_js_project(project_path, video_analysis, features)
-    
-    async def _generate_react_project(self, project_path: Path, video_analysis: Dict, features: List[str]) -> Dict[str, Any]:
+
+    async def _generate_react_project(self, project_path: Path, video_analysis: dict, features: list[str]) -> dict[str, Any]:
         """Generate a React project"""
-        
+
         extracted_info = video_analysis.get("extracted_info", {})
         title = extracted_info.get("title", "UVAI React App")
         tutorial_steps = extracted_info.get("tutorial_steps", [])
-        
+
         # Create package.json
         package_json = {
             "name": self._sanitize_name(title),
@@ -116,7 +114,7 @@ class ProjectCodeGenerator:
                 "development": ["last 1 chrome version", "last 1 firefox version", "last 1 safari version"]
             }
         }
-        
+
         # Add additional dependencies based on features
         if "authentication" in features:
             package_json["dependencies"]["@auth0/auth0-react"] = "^2.2.0"
@@ -125,44 +123,44 @@ class ProjectCodeGenerator:
         if "responsive_design" in features or "tailwind" in video_analysis.get("extracted_info", {}).get("technologies", []):
             package_json["dependencies"]["tailwindcss"] = "^3.3.0"
             package_json["devDependencies"] = {"autoprefixer": "^10.4.14", "postcss": "^8.4.24"}
-        
+
         # Write package.json
         with open(project_path / "package.json", "w") as f:
             json.dump(package_json, f, indent=2)
-        
+
         # Create src directory
         src_dir = project_path / "src"
         src_dir.mkdir(exist_ok=True)
-        
+
         # Create public directory
         public_dir = project_path / "public"
         public_dir.mkdir(exist_ok=True)
-        
+
         # Generate index.html
         index_html = self._generate_index_html(title)
         with open(public_dir / "index.html", "w") as f:
             f.write(index_html)
-        
+
         # Generate main App component
         app_component = self._generate_react_app_component(title, tutorial_steps, features)
         with open(src_dir / "App.js", "w") as f:
             f.write(app_component)
-        
+
         # Generate index.js
         index_js = self._generate_react_index_js()
         with open(src_dir / "index.js", "w") as f:
             f.write(index_js)
-        
+
         # Generate CSS
         app_css = self._generate_app_css(features)
         with open(src_dir / "App.css", "w") as f:
             f.write(app_css)
-        
+
         # Generate README
         readme = self._generate_readme(title, "React", video_analysis)
         with open(project_path / "README.md", "w") as f:
             f.write(readme)
-        
+
         return {
             "framework": "react",
             "entry_point": "src/App.js",
@@ -170,34 +168,34 @@ class ProjectCodeGenerator:
             "start_command": "npm start",
             "files_created": ["package.json", "src/App.js", "src/index.js", "src/App.css", "public/index.html", "README.md"]
         }
-    
-    async def _generate_vanilla_js_project(self, project_path: Path, video_analysis: Dict, features: List[str]) -> Dict[str, Any]:
+
+    async def _generate_vanilla_js_project(self, project_path: Path, video_analysis: dict, features: list[str]) -> dict[str, Any]:
         """Generate a vanilla JavaScript project"""
-        
+
         extracted_info = video_analysis.get("extracted_info", {})
         title = extracted_info.get("title", "UVAI Web App")
         tutorial_steps = extracted_info.get("tutorial_steps", [])
-        
+
         # Generate index.html
         index_html = self._generate_vanilla_index_html(title, tutorial_steps, features)
         with open(project_path / "index.html", "w") as f:
             f.write(index_html)
-        
+
         # Generate main.js
         main_js = self._generate_vanilla_main_js(tutorial_steps, features)
         with open(project_path / "main.js", "w") as f:
             f.write(main_js)
-        
+
         # Generate styles.css
         styles_css = self._generate_vanilla_styles_css(features)
         with open(project_path / "styles.css", "w") as f:
             f.write(styles_css)
-        
+
         # Generate README
         readme = self._generate_readme(title, "Vanilla JavaScript", video_analysis)
         with open(project_path / "README.md", "w") as f:
             f.write(readme)
-        
+
         return {
             "framework": "vanilla",
             "entry_point": "index.html",
@@ -205,26 +203,26 @@ class ProjectCodeGenerator:
             "start_command": "Open index.html in browser",
             "files_created": ["index.html", "main.js", "styles.css", "README.md"]
         }
-    
-    async def _generate_api_project(self, project_path: Path, video_analysis: Dict, technologies: List[str], features: List[str]) -> Dict[str, Any]:
+
+    async def _generate_api_project(self, project_path: Path, video_analysis: dict, technologies: list[str], features: list[str]) -> dict[str, Any]:
         """Generate an API project"""
-        
+
         extracted_info = video_analysis.get("extracted_info", {})
-        title = extracted_info.get("title", "UVAI API")
-        
+        extracted_info.get("title", "UVAI API")
+
         if "python" in technologies:
             return await self._generate_python_api(project_path, video_analysis, features)
         elif "nodejs" in technologies:
             return await self._generate_node_api(project_path, video_analysis, features)
         else:
             return await self._generate_python_api(project_path, video_analysis, features)
-    
-    async def _generate_python_api(self, project_path: Path, video_analysis: Dict, features: List[str]) -> Dict[str, Any]:
+
+    async def _generate_python_api(self, project_path: Path, video_analysis: dict, features: list[str]) -> dict[str, Any]:
         """Generate a Python FastAPI project"""
-        
+
         extracted_info = video_analysis.get("extracted_info", {})
         title = extracted_info.get("title", "UVAI Python API")
-        
+
         # Create requirements.txt for generated project
         requirements = [
             "fastapi==0.104.1",
@@ -237,17 +235,17 @@ class ProjectCodeGenerator:
             requirements.append("python-jose[cryptography]==3.3.0")
         with open(project_path / "requirements.txt", "w") as f:
             f.write("\n".join(requirements))
-        
+
         # Generate main.py
         main_py = self._generate_fastapi_main(title, features)
         with open(project_path / "main.py", "w") as f:
             f.write(main_py)
-        
+
         # Generate README
         readme = self._generate_readme(title, "Python FastAPI", video_analysis)
         with open(project_path / "README.md", "w") as f:
             f.write(readme)
-        
+
         return {
             "framework": "fastapi",
             "entry_point": "main.py",
@@ -255,7 +253,7 @@ class ProjectCodeGenerator:
             "start_command": "uvicorn main:app --reload",
             "files_created": ["main.py", "requirements.txt", "README.md"]
         }
-    
+
     def _generate_index_html(self, title: str) -> str:
         """Generate index.html for React projects"""
         return f'''<!DOCTYPE html>
@@ -272,8 +270,8 @@ class ProjectCodeGenerator:
     <div id="root"></div>
   </body>
 </html>'''
-    
-    def _generate_react_app_component(self, title: str, tutorial_steps: List[str], features: List[str]) -> str:
+
+    def _generate_react_app_component(self, title: str, tutorial_steps: list[str], features: list[str]) -> str:
         """Generate the main React App component"""
         steps_jsx = ""
         if tutorial_steps:
@@ -285,7 +283,7 @@ class ProjectCodeGenerator:
 {steps_list}
         </ol>
       </section>'''
-        
+
         features_jsx = ""
         if features:
             features_list = "\\n".join([f"        <li key='{feature}'>{feature.replace('_', ' ').title()}</li>" for feature in features[:5]])
@@ -296,7 +294,7 @@ class ProjectCodeGenerator:
 {features_list}
         </ul>
       </section>'''
-        
+
         return f'''import React from 'react';
 import './App.css';
 
@@ -307,7 +305,7 @@ function App() {{
         <h1>{title}</h1>
         <p>Generated by UVAI from YouTube tutorial</p>
       </header>
-      
+
       <main className="App-main">
         <section className="welcome">
           <h2>Welcome to your generated application!</h2>
@@ -316,7 +314,7 @@ function App() {{
 {steps_jsx}
 {features_jsx}
       </main>
-      
+
       <footer className="App-footer">
         <p>Powered by UVAI - Universal Video-to-Action Intelligence</p>
       </footer>
@@ -325,7 +323,7 @@ function App() {{
 }}
 
 export default App;'''
-    
+
     def _generate_react_index_js(self) -> str:
         """Generate React index.js"""
         return '''import React from 'react';
@@ -339,8 +337,8 @@ root.render(
     <App />
   </React.StrictMode>
 );'''
-    
-    def _generate_app_css(self, features: List[str]) -> str:
+
+    def _generate_app_css(self, features: list[str]) -> str:
         """Generate App.css"""
         responsive_css = ""
         if "responsive_design" in features:
@@ -349,12 +347,12 @@ root.render(
   .App-main {
     padding: 1rem;
   }
-  
+
   .App-header h1 {
     font-size: 2rem;
   }
 }'''
-        
+
         return f'''body {{
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
@@ -422,8 +420,8 @@ root.render(
   margin-top: auto;
 }}
 {responsive_css}'''
-    
-    def _generate_vanilla_index_html(self, title: str, tutorial_steps: List[str], features: List[str]) -> str:
+
+    def _generate_vanilla_index_html(self, title: str, tutorial_steps: list[str], features: list[str]) -> str:
         """Generate index.html for vanilla JS projects"""
         steps_html = ""
         if tutorial_steps:
@@ -435,7 +433,7 @@ root.render(
 {steps_list}
       </ol>
     </section>'''
-        
+
         features_html = ""
         if features:
             features_list = "\\n".join([f"      <li>{feature.replace('_', ' ').title()}</li>" for feature in features[:5]])
@@ -446,7 +444,7 @@ root.render(
 {features_list}
       </ul>
     </section>'''
-        
+
         return f'''<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -461,7 +459,7 @@ root.render(
             <h1>{title}</h1>
             <p>Generated by UVAI from YouTube tutorial</p>
         </header>
-        
+
         <main class="app-main">
             <section class="welcome">
                 <h2>Welcome to your generated application!</h2>
@@ -472,26 +470,26 @@ root.render(
 {steps_html}
 {features_html}
         </main>
-        
+
         <footer class="app-footer">
             <p>Powered by UVAI - Universal Video-to-Action Intelligence</p>
         </footer>
     </div>
-    
+
     <script src="main.js"></script>
 </body>
 </html>'''
-    
-    def _generate_vanilla_main_js(self, tutorial_steps: List[str], features: List[str]) -> str:
+
+    def _generate_vanilla_main_js(self, tutorial_steps: list[str], features: list[str]) -> str:
         """Generate main.js for vanilla projects"""
         return '''// UVAI Generated JavaScript
 document.addEventListener('DOMContentLoaded', function() {
     console.log('UVAI Generated App Loaded');
-    
+
     // Demo functionality
     const demoButton = document.getElementById('demo-button');
     const demoOutput = document.getElementById('demo-output');
-    
+
     if (demoButton && demoOutput) {
         demoButton.addEventListener('click', function() {
             const messages = [
@@ -501,13 +499,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 'You can customize this functionality.',
                 'UVAI makes video-to-code magic happen!'
             ];
-            
+
             const randomMessage = messages[Math.floor(Math.random() * messages.length)];
             demoOutput.innerHTML = `<p>${randomMessage}</p>`;
             demoOutput.style.display = 'block';
         });
     }
-    
+
     // Add interactive features based on video analysis
     addInteractiveFeatures();
 });
@@ -518,7 +516,7 @@ function addInteractiveFeatures() {
     sections.forEach((section, index) => {
         section.style.opacity = '0';
         section.style.transform = 'translateY(20px)';
-        
+
         setTimeout(() => {
             section.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
             section.style.opacity = '1';
@@ -526,8 +524,8 @@ function addInteractiveFeatures() {
         }, index * 200);
     });
 }'''
-    
-    def _generate_vanilla_styles_css(self, features: List[str]) -> str:
+
+    def _generate_vanilla_styles_css(self, features: list[str]) -> str:
         """Generate styles.css for vanilla projects"""
         responsive_css = ""
         if "responsive_design" in features:
@@ -536,16 +534,16 @@ function addInteractiveFeatures() {
     .app-main {
         padding: 1rem;
     }
-    
+
     .app-header h1 {
         font-size: 2rem;
     }
-    
+
     .welcome {
         padding: 1rem;
     }
 }'''
-        
+
         return f'''* {{
     margin: 0;
     padding: 0;
@@ -635,12 +633,12 @@ body {{
     padding: 1rem;
 }}
 {responsive_css}'''
-    
-    def _generate_fastapi_main(self, title: str, features: List[str]) -> str:
+
+    def _generate_fastapi_main(self, title: str, features: list[str]) -> str:
         """Generate main.py for FastAPI projects"""
         auth_imports = ""
         auth_code = ""
-        
+
         if "authentication" in features:
             auth_imports = '''
 from datetime import datetime, timedelta
@@ -658,7 +656,7 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 async def login():
     """Placeholder login endpoint"""
     return {"message": "Login endpoint - implement authentication logic"}'''
-        
+
         database_code = ""
         if "database" in features:
             database_code = '''
@@ -666,7 +664,7 @@ async def login():
 async def get_data():
     """Placeholder data endpoint"""
     return {"data": "Connect to your database here"}'''
-        
+
         return f'''from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -728,12 +726,12 @@ async def create_message(message: Message):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)'''
-    
-    def _generate_readme(self, title: str, framework: str, video_analysis: Dict) -> str:
+
+    def _generate_readme(self, title: str, framework: str, video_analysis: dict) -> str:
         """Generate README.md"""
         video_data = video_analysis.get("video_data", {})
         video_url = video_data.get("video_url", "Unknown")
-        
+
         return f'''# {title}
 
 This project was automatically generated by UVAI (Universal Video-to-Action Intelligence) from a YouTube tutorial.
@@ -785,7 +783,7 @@ Learn more about UVAI at: https://uvai.platform
 
 ---
 *Generated with ❤️ by UVAI - Making video tutorials actionable*'''
-    
+
     def _sanitize_name(self, name: str) -> str:
         """Sanitize project name for package.json"""
         import re
@@ -796,24 +794,24 @@ Learn more about UVAI at: https://uvai.platform
         if name and not name[0].isalpha():
             name = 'uvai-' + name
         return name[:50] if name else 'uvai-project'
-    
+
     def _create_basic_templates(self):
         """Create basic template files if they don't exist"""
         # This method can be expanded to create template files
         # For now, we generate everything programmatically
         pass
-    
-    async def _generate_vue_project(self, project_path: Path, video_analysis: Dict, features: List[str]) -> Dict[str, Any]:
+
+    async def _generate_vue_project(self, project_path: Path, video_analysis: dict, features: list[str]) -> dict[str, Any]:
         """Generate a Vue.js project (placeholder for future implementation)"""
         # For now, fall back to vanilla JS
         return await self._generate_vanilla_js_project(project_path, video_analysis, features)
-    
-    async def _generate_mobile_project(self, project_path: Path, video_analysis: Dict, technologies: List[str], features: List[str]) -> Dict[str, Any]:
+
+    async def _generate_mobile_project(self, project_path: Path, video_analysis: dict, technologies: list[str], features: list[str]) -> dict[str, Any]:
         """Generate a mobile project (placeholder for future implementation)"""
         # For now, generate a responsive web app
         return await self._generate_web_project(project_path, video_analysis, technologies, features)
-    
-    async def _generate_node_api(self, project_path: Path, video_analysis: Dict, features: List[str]) -> Dict[str, Any]:
+
+    async def _generate_node_api(self, project_path: Path, video_analysis: dict, features: list[str]) -> dict[str, Any]:
         """Generate a Node.js API project (placeholder for future implementation)"""
         # For now, fall back to Python API
         return await self._generate_python_api(project_path, video_analysis, features)

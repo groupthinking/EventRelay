@@ -8,13 +8,13 @@ This script demonstrates chaining:
 3) Deploy (stub hook)
 """
 import json
-import subprocess
 import os
-from typing import Dict, Any
+import subprocess
+from typing import Any
 
 REG = os.path.join(os.path.dirname(__file__), "..", "src", "mcp", "mcp_registry.json")
 
-def mcp_call(server_cmd, payload: Dict[str, Any]) -> Dict[str, Any]:
+def mcp_call(server_cmd, payload: dict[str, Any]) -> dict[str, Any]:
     proc = subprocess.Popen(server_cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     out, err = proc.communicate((json.dumps(payload) + "\n").encode(), timeout=60)
     if proc.returncode not in (0, None):
@@ -26,7 +26,7 @@ def load_registry():
     with open(REG) as f:
         return json.load(f)
 
-def process_video(video_url: str) -> Dict[str, Any]:
+def process_video(video_url: str) -> dict[str, Any]:
     reg = load_registry()
     yt = next(t for t in reg["tools"] if t["name"]=="youtube_learning_service")
     cmd = yt["command"]
@@ -38,11 +38,11 @@ def process_video(video_url: str) -> Dict[str, Any]:
         raise RuntimeError(err.decode())
     return json.loads(out.decode().strip().splitlines()[-1]).get("result", {})
 
-def repo_scaffold(result: Dict[str, Any]) -> Dict[str, Any]:
+def repo_scaffold(result: dict[str, Any]) -> dict[str, Any]:
     # Stub: create repo structure
     return {"status":"ok","repo_url":"https://example.com/repo"}
 
-def deploy(repo_info: Dict[str, Any]) -> Dict[str, Any]:
+def deploy(repo_info: dict[str, Any]) -> dict[str, Any]:
     # Stub: simulate deploy
     return {"status":"ok","url":"https://app.example.com"}
 

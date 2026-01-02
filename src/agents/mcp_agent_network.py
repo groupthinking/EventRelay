@@ -6,12 +6,11 @@ Anti-bloat: <100 lines per component, JSON config, no framework overhead
 """
 
 import json
-import asyncio
 import logging
-from typing import Dict, List, Any, Optional
-from dataclasses import dataclass, asdict
-from pathlib import Path
+from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
+from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +23,7 @@ class MCPTool:
     name: str
     server: str
     description: str
-    input_schema: Dict[str, Any]
+    input_schema: dict[str, Any]
 
 @dataclass
 class Agent:
@@ -32,8 +31,8 @@ class Agent:
     id: str
     name: str
     role: str
-    tools: List[str]  # MCP tool names
-    capabilities: List[str]
+    tools: list[str]  # MCP tool names
+    capabilities: list[str]
     active: bool = True
 
 class MCPAgentNetwork:
@@ -43,9 +42,9 @@ class MCPAgentNetwork:
     """
 
     def __init__(self):
-        self.agents: Dict[str, Agent] = {}
-        self.tools: Dict[str, MCPTool] = {}
-        self.tool_servers: Dict[str, str] = {}  # tool_name -> server_endpoint
+        self.agents: dict[str, Agent] = {}
+        self.tools: dict[str, MCPTool] = {}
+        self.tool_servers: dict[str, str] = {}  # tool_name -> server_endpoint
         self._load_config()
 
     def _load_config(self):
@@ -138,7 +137,7 @@ class MCPAgentNetwork:
         self._apply_config(config)
         logger.info(f"Created default agent network config: {AGENT_NETWORK_CONFIG}")
 
-    def _apply_config(self, config: Dict):
+    def _apply_config(self, config: dict):
         """Apply configuration to network"""
         # Register tools from MCP servers
         for server_name, server_config in config.get("mcp_servers", {}).items():
@@ -166,7 +165,7 @@ class MCPAgentNetwork:
         """Get agent by ID"""
         return self.agents.get(agent_id)
 
-    def get_agents_for_capability(self, capability: str) -> List[Agent]:
+    def get_agents_for_capability(self, capability: str) -> list[Agent]:
         """Find agents that have a specific capability"""
         return [a for a in self.agents.values() if capability in a.capabilities]
 
@@ -174,7 +173,7 @@ class MCPAgentNetwork:
         """Get MCP endpoint for a tool"""
         return self.tool_servers.get(tool_name)
 
-    async def route_to_agent(self, agent_id: str, action: str, payload: Dict) -> Dict:
+    async def route_to_agent(self, agent_id: str, action: str, payload: dict) -> dict:
         """Route a request to an agent's MCP tools"""
         # Circuit Breaker / Rate Limiting
         if not self._check_rate_limit(agent_id):
@@ -200,7 +199,7 @@ class MCPAgentNetwork:
         else:
             return await self._call_http(endpoint, action, payload)
 
-    async def _call_internal(self, endpoint: str, action: str, payload: Dict) -> Dict:
+    async def _call_internal(self, endpoint: str, action: str, payload: dict) -> dict:
         """Call internal module"""
         module_name = endpoint.replace("internal://", "")
         logger.info(f"Internal call: {module_name}.{action}")
@@ -218,13 +217,13 @@ class MCPAgentNetwork:
         except Exception as e:
             return {"error": f"Internal tool error: {str(e)}"}
 
-    async def _call_mcp(self, endpoint: str, action: str, payload: Dict) -> Dict:
+    async def _call_mcp(self, endpoint: str, action: str, payload: dict) -> dict:
         """Call MCP server via stdio/protocol"""
         server_name = endpoint.replace("mcp://", "")
         logger.info(f"MCP call: {server_name}.{action}")
         return {"status": "routed", "server": server_name, "action": action}
 
-    async def _call_http(self, endpoint: str, action: str, payload: Dict) -> Dict:
+    async def _call_http(self, endpoint: str, action: str, payload: dict) -> dict:
         """Call HTTP endpoint"""
         logger.info(f"HTTP call: {endpoint}/{action}")
 
@@ -252,11 +251,11 @@ class MCPAgentNetwork:
 
         return {"status": "routed", "endpoint": endpoint, "action": action}
 
-    def get_pipeline_agents(self) -> List[str]:
+    def get_pipeline_agents(self) -> list[str]:
         """Get ordered list of agents for video-to-software pipeline"""
         return ["video-ingest", "architect", "code-gen", "build-validator", "deployer", "knowledge-capture"]
 
-    async def _call_code_generator(self, action: str, payload: Dict) -> Dict:
+    async def _call_code_generator(self, action: str, payload: dict) -> dict:
         """Call AI code generator (Gemini 3)"""
         logger.info(f"Code generator call: {action}")
 
@@ -287,7 +286,7 @@ class MCPAgentNetwork:
             logger.error(f"AI code generator error: {e}")
             return {"error": f"Code generator error: {str(e)}"}
 
-    async def _call_skill_builder(self, action: str, payload: Dict) -> Dict:
+    async def _call_skill_builder(self, action: str, payload: dict) -> dict:
         """Call skill builder and build validator"""
         logger.info(f"Skill builder call: {action}")
 
@@ -307,13 +306,13 @@ class MCPAgentNetwork:
             logger.error(f"Build validator error: {e}")
             return {"error": f"Build validator error: {str(e)}"}
 
-    async def _call_knowledge_base(self, action: str, payload: Dict) -> Dict:
+    async def _call_knowledge_base(self, action: str, payload: dict) -> dict:
         """Call knowledge base"""
         logger.info(f"Knowledge base call: {action}")
         # TODO: Implement knowledge base integration
         return {"status": "pending_implementation", "action": action}
 
-    async def _call_vercel_api(self, action: str, payload: Dict) -> Dict:
+    async def _call_vercel_api(self, action: str, payload: dict) -> dict:
         """Call deployment tools (GitHub + Vercel)"""
         logger.info(f"Deployment call: {action}")
 
@@ -338,7 +337,7 @@ class MCPAgentNetwork:
             logger.error(f"Deployment error: {e}")
             return {"error": f"Deployment error: {str(e)}"}
 
-    def get_network_status(self) -> Dict:
+    def get_network_status(self) -> dict:
         """Get network status summary"""
         return {
             "agents": len(self.agents),
@@ -356,14 +355,14 @@ class MCPAgentNetwork:
         now = datetime.now().timestamp()
         if not hasattr(self, '_rate_limits'):
             self._rate_limits = {}  # agent_id -> [timestamps]
-        
+
         history = self._rate_limits.get(agent_id, [])
         # Clean old entries (1 minute window)
         history = [t for t in history if now - t < 60]
-        
+
         if len(history) >= 30:
             return False
-            
+
         history.append(now)
         self._rate_limits[agent_id] = history
         return True

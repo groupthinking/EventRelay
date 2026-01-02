@@ -8,15 +8,15 @@ enabled via feature flag. It coordinates multi-video processing using the
 `DeepMCPAgentProcessor` and writes results to workflow outputs for the UI.
 """
 
-import os
-import json
 import asyncio
+import json
 import logging
+import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional
-from datetime import datetime
+from typing import Any, Optional
 
 from youtube_extension.utils import extract_video_id
+
 from .deepmcp_processor import DeepMCPAgentProcessor
 
 logger = logging.getLogger(__name__)
@@ -37,7 +37,7 @@ class DeepMCPAgentOrchestrator:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self._semaphore = None
 
-    async def process_and_save(self, video_url: str) -> Dict[str, Any]:
+    async def process_and_save(self, video_url: str) -> dict[str, Any]:
         try:
             result = await self.processor.process_video(video_url)
             video_id = result.get('video_id') or extract_video_id(video_url)
@@ -49,18 +49,18 @@ class DeepMCPAgentOrchestrator:
             logger.error("Processing failed for %s: %s", video_url, e)
             return {'success': False, 'video_url': video_url, 'error': str(e)}
 
-    async def run(self, video_urls: List[str], max_concurrent: int = 3) -> List[Dict[str, Any]]:
+    async def run(self, video_urls: list[str], max_concurrent: int = 3) -> list[dict[str, Any]]:
         if not video_urls:
             return []
         self._semaphore = asyncio.Semaphore(max(1, max_concurrent))
 
-        async def _guarded(url: str) -> Dict[str, Any]:
+        async def _guarded(url: str) -> dict[str, Any]:
             async with self._semaphore:
                 return await self.process_and_save(url)
 
         tasks = [_guarded(u) for u in video_urls]
         results = await asyncio.gather(*tasks, return_exceptions=True)
-        out: List[Dict[str, Any]] = []
+        out: list[dict[str, Any]] = []
         for r in results:
             if isinstance(r, Exception):
                 out.append({'success': False, 'error': str(r)})

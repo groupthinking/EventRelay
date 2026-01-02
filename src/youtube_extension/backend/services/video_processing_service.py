@@ -12,9 +12,9 @@ import logging
 import os
 import time
 from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Any, Optional
 
-DEPLOYMENT_TARGET_ALIASES: Dict[str, str] = {
+DEPLOYMENT_TARGET_ALIASES: dict[str, str] = {
     "vercel": "vercel",
     "claude": "vercel",
     "openai": "vercel",
@@ -34,7 +34,7 @@ DEPLOYMENT_TARGET_ALIASES: Dict[str, str] = {
 }
 
 
-def resolve_deployment_target(target: Optional[str]) -> Dict[str, Any]:
+def resolve_deployment_target(target: Optional[str]) -> dict[str, Any]:
     """Map requested deployment target to a supported adapter."""
     normalized = (target or "vercel").strip().lower()
     resolved = DEPLOYMENT_TARGET_ALIASES.get(normalized)
@@ -55,11 +55,11 @@ class VideoProcessingService:
     Service for handling video processing business logic.
     Separated from API endpoints for better testability and modularity.
     """
-    
+
     def __init__(self, video_processor_factory, cache_service):
         """
         Initialize video processing service with dependencies.
-        
+
         Args:
             video_processor_factory: Factory for creating video processors
             cache_service: Service for handling caching operations
@@ -67,53 +67,53 @@ class VideoProcessingService:
         self.video_processor_factory = video_processor_factory
         self.cache_service = cache_service
         self._processor_singleton = None
-        
+
         # Configuration
         self.use_langextract_fallback = os.getenv("USE_LANGEXTRACT_FALLBACK", "false").lower() in ("1", "true", "yes")
-        
+
     def get_video_processor(self):
         """Get or create video processor with proper error handling"""
         try:
             if self._processor_singleton is not None:
                 return self._processor_singleton
-            
+
             # Use factory to get processor
             processor = self.video_processor_factory.create_processor("auto")
             self._processor_singleton = processor
             logger.info("✅ Video processor initialized successfully")
             return processor
-            
+
         except Exception as e:
             logger.error(f"Error initializing video processor: {e}")
             return None
-    
-    async def process_video_for_markdown(self, video_url: str, force_regenerate: bool = False) -> Dict[str, Any]:
+
+    async def process_video_for_markdown(self, video_url: str, force_regenerate: bool = False) -> dict[str, Any]:
         """
         Process video and generate markdown analysis.
-        
+
         Args:
             video_url: YouTube video URL to process
             force_regenerate: Whether to force regeneration bypassing cache
-            
+
         Returns:
             Dict containing processing results and metadata
         """
         try:
             logger.info(f"Processing video for markdown: {video_url}")
-            
+
             # Check cache first unless force regenerate
             if not force_regenerate:
                 cached_result = self.cache_service.get_cached_result(video_url)
                 if cached_result:
                     logger.info(f"Returning cached result for {cached_result['video_id']}")
-                    
+
                     # Process cached content
                     content = cached_result['markdown_content']
                     if content.startswith('---'):
                         end_idx = content.find('---', 3)
                         if end_idx != -1:
                             content = content[end_idx + 3:].strip()
-                    
+
                     return {
                         'video_id': cached_result['video_id'],
                         'video_url': video_url,
@@ -124,16 +124,16 @@ class VideoProcessingService:
                         'processing_time': datetime.now().isoformat(),
                         'status': 'success'
                     }
-            
+
             # Get processor and process video
             processor = self.get_video_processor()
             if not processor:
                 raise ValueError("Video processor not available")
-            
+
             start_time = datetime.now()
             result = await processor.process_video(video_url)
             processing_duration = (datetime.now() - start_time).total_seconds()
-            
+
             # Handle processing results
             if not result or not result.get('success'):
                 # Try fallback if enabled
@@ -141,17 +141,17 @@ class VideoProcessingService:
                     fallback_result = await self._try_langextract_fallback(video_url)
                     if fallback_result:
                         return fallback_result
-                
+
                 logger.warning(f"Video processing failed for {video_url}")
                 raise ValueError("Video processing failed")
-            
+
             # Process successful result
             markdown_content = result.get('markdown_analysis', '')
             if markdown_content.startswith('---'):
                 end_idx = markdown_content.find('---', 3)
                 if end_idx != -1:
                     markdown_content = markdown_content[end_idx + 3:].strip()
-            
+
             return {
                 'video_id': result['video_id'],
                 'video_url': video_url,
@@ -162,26 +162,26 @@ class VideoProcessingService:
                 'processing_time': f"{processing_duration:.2f}s",
                 'status': 'success'
             }
-            
+
         except Exception as e:
             logger.error(f"Error in video processing service: {e}")
-            
+
             # Try fallback on error
             if self.use_langextract_fallback:
                 fallback_result = await self._try_langextract_fallback(video_url)
                 if fallback_result:
                     return fallback_result
-            
+
             raise e
-    
-    async def process_video_basic(self, video_url: str, options: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+
+    async def process_video_basic(self, video_url: str, options: Optional[dict[str, Any]] = None) -> dict[str, Any]:
         """
         Basic video processing for general use.
-        
+
         Args:
             video_url: YouTube video URL to process
             options: Processing options
-            
+
         Returns:
             Dict containing processing results
         """
@@ -226,7 +226,7 @@ class VideoProcessingService:
             logger.error(f"Error in basic video processing: {e}")
             raise
 
-    def _normalize_result(self, video_url: str, result: Dict[str, Any]) -> Dict[str, Any]:
+    def _normalize_result(self, video_url: str, result: dict[str, Any]) -> dict[str, Any]:
         """Normalize processor output to the contract expected by tests/clients.
 
         Expected keys in returned dict:
@@ -306,45 +306,47 @@ class VideoProcessingService:
                 normalized[key] = result[key]
 
         return normalized
-    
-    async def process_video_to_software(self, video_url: str, project_type: str = "web", 
-                                      deployment_target: str = "vercel", 
-                                      features: Optional[list] = None) -> Dict[str, Any]:
+
+    async def process_video_to_software(self, video_url: str, project_type: str = "web",
+                                      deployment_target: str = "vercel",
+                                      features: Optional[list] = None) -> dict[str, Any]:
         """
         Process video and generate deployable software.
-        
+
         Args:
             video_url: YouTube video URL to process
             project_type: Type of project to generate
             deployment_target: Target deployment platform
             features: List of features to implement
-            
+
         Returns:
             Dict containing software generation results
         """
         start_time = time.time()
-        
+
         try:
             logger.info(f"Processing video to software: {video_url}")
-            
+
             # Import required components
             try:
                 from youtube_extension.backend.code_generator import get_code_generator
-                from youtube_extension.backend.services.deployment_manager import get_deployment_manager
+                from youtube_extension.backend.services.deployment_manager import (
+                    get_deployment_manager,
+                )
                 pipeline_available = True
             except ImportError as e:
                 logger.error(f"Software generation pipeline not available: {e}")
                 pipeline_available = False
-            
+
             if not pipeline_available:
                 raise ValueError("Software generation pipeline not available")
-            
+
             # Phase 1: Video Processing
             processor = self.get_video_processor()
             video_analysis = await processor.process_video(video_url)
-            
+
             # Extract information based on processor format
-            if video_analysis.get("success") == True:
+            if video_analysis.get("success"):
                 extracted_info = {
                     "title": video_analysis.get("metadata", {}).get("title", "UVAI Generated Project"),
                     "technologies": video_analysis.get("ai_analysis", {}).get("Related Topics", []),
@@ -358,7 +360,7 @@ class VideoProcessingService:
                 video_status = "success"
             else:
                 raise ValueError(f"Video processing failed: {video_analysis.get('error', 'Unknown error')}")
-            
+
             # Phase 2: Code Generation
             code_generator = get_code_generator()
             project_config = {
@@ -367,22 +369,22 @@ class VideoProcessingService:
                 "title": extracted_info.get("title", "UVAI Generated Project"),
                 "video_url": video_url
             }
-            
+
             generation_result = await code_generator.generate_project(video_analysis, project_config)
-            
+
             # Phase 3: Deployment
             deployment_manager = get_deployment_manager()
             deployment_config = {
                 "target": deployment_target,
                 "auto_deploy": True
             }
-            
+
             deployment_result = await deployment_manager.deploy_project(
                 generation_result["project_path"],
                 project_config,
                 deployment_config
             )
-            
+
             # Compile results
             processing_time = time.time() - start_time
             deployment_urls = deployment_result.get("urls", {})
@@ -445,18 +447,18 @@ class VideoProcessingService:
                 "timestamp": datetime.now().isoformat(),
                 "real_implementation": True
             }
-            
+
         except Exception as e:
             processing_time = time.time() - start_time
             logger.error(f"Video-to-software processing failed: {e}")
             raise e
-    
-    async def _try_langextract_fallback(self, video_url: str) -> Optional[Dict[str, Any]]:
+
+    async def _try_langextract_fallback(self, video_url: str) -> Optional[dict[str, Any]]:
         """Fallback processing using LangExtract MCP service"""
         try:
-            import subprocess
             import json as _json
-            
+            import subprocess
+
             payload = _json.dumps({
                 "method": "tools/call",
                 "params": {
@@ -464,31 +466,31 @@ class VideoProcessingService:
                     "arguments": {"source_url": video_url}
                 }
             }) + "\n"
-            
+
             # SAFE: Payload is passed via stdin, not command line arguments.
             # video_url is contained in the JSON payload.
             proc = subprocess.run(
                 ["python3", "mcp_servers/langextract_mcp_server.py"],
-                input=payload.encode(), 
-                capture_output=True, 
+                input=payload.encode(),
+                capture_output=True,
                 timeout=60
             )
-            
+
             if proc.returncode != 0:
                 logger.warning(f"LangExtract MCP call failed: {proc.stderr.decode()[:200]}")
                 return None
-            
+
             out = proc.stdout.decode().strip().splitlines()[-1]
             res = _json.loads(out).get("result", {})
-            
+
             if "error" in res:
                 logger.warning(f"LangExtract error: {res['error']}")
                 return None
-            
+
             text = res.get("text", "")
             if not text:
                 return None
-            
+
             return {
                 'video_id': self.cache_service.extract_video_id(video_url),
                 'video_url': video_url,
@@ -499,11 +501,11 @@ class VideoProcessingService:
                 'processing_time': datetime.now().isoformat(),
                 'status': 'success'
             }
-            
+
         except Exception as e:
             logger.warning(f"LangExtract fallback exception: {e}")
             return None
-    
+
     async def cleanup(self):
         """Cleanup resources"""
         try:

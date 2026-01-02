@@ -4,14 +4,11 @@ Deployment MCP Tool - Deploys validated projects to GitHub + Vercel
 Automates repo creation, code push, and Vercel deployment
 """
 
-import asyncio
 import logging
 import os
-import sys
-from pathlib import Path
-from typing import Dict, Any, Optional
 import subprocess
-import json
+from pathlib import Path
+from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +40,7 @@ class DeploymentMCPTool:
         project_name: Optional[str] = None,
         github_org: Optional[str] = None,
         vercel_team: Optional[str] = None
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Deploy a project to GitHub and Vercel.
 
@@ -169,7 +166,7 @@ class DeploymentMCPTool:
                 "project_path": project_path
             }
 
-    async def _initialize_git(self, project_dir: Path) -> Dict[str, Any]:
+    async def _initialize_git(self, project_dir: Path) -> dict[str, Any]:
         """Initialize git repository if not already initialized"""
         try:
             git_dir = project_dir / ".git"
@@ -235,7 +232,7 @@ dist/
         project_dir: Path,
         repo_name: str,
         github_org: Optional[str]
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Create GitHub repository and push code"""
         try:
             logger.info(f"Creating GitHub repo: {repo_name}")
@@ -300,7 +297,7 @@ dist/
         project_dir: Path,
         project_name: str,
         vercel_team: Optional[str]
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Deploy project to Vercel"""
         try:
             logger.info(f"Deploying to Vercel: {project_name}")

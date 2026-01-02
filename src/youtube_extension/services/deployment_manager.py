@@ -6,12 +6,12 @@ This module provides imports from backend.deployment_manager for backward compat
 
 from ..backend.deployment_manager import (
     DeploymentManager,
+    get_deployment_manager,
     validate_deployment_environment,
-    get_deployment_manager
 )
 
 __all__ = [
-    'DeploymentManager', 
+    'DeploymentManager',
     'validate_deployment_environment',
     'get_deployment_manager'
 ]

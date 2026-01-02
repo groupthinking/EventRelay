@@ -14,12 +14,12 @@ amplifies the capabilities of the others.
 """
 
 import asyncio
-import time
 import os
 import re
-from typing import Dict, Any, Optional, List
+import time
 from dataclasses import dataclass
 from enum import Enum
+from typing import Any, Optional
 
 # Import our existing components
 from agents.a2a_framework import A2AMessage, BaseAgent
@@ -30,23 +30,23 @@ from connectors.mcp_base import MCPContext
 def validate_agent_identifier(identifier: str) -> bool:
     """
     Validate agent ID or recipient to prevent injection attacks.
-    
+
     Security rationale: User-controlled data flowing into message construction
     must be validated to prevent malicious input from compromising the agent
     coordination system.
-    
+
     Args:
         identifier: Agent ID or recipient name to validate
-        
+
     Returns:
         True if valid, False otherwise
-        
+
     Valid format: alphanumeric characters, underscores, and hyphens only
     Length: 1-64 characters
     """
     if not identifier or not isinstance(identifier, str):
         return False
-    
+
     # Alphanumeric, underscore, and hyphen only, 1-64 characters
     pattern = r'^[a-zA-Z0-9_-]{1,64}$'
     return bool(re.match(pattern, identifier))
@@ -55,19 +55,19 @@ def validate_agent_identifier(identifier: str) -> bool:
 def sanitize_message_content(content: Any) -> Any:
     """
     Sanitize message content to prevent injection and data leakage.
-    
+
     Security rationale: Content data must be sanitized before inclusion in
     agent messages to prevent injection attacks and ensure data integrity.
-    
+
     Args:
         content: Message content to sanitize (dict, list, str, or primitive)
-        
+
     Returns:
         Sanitized content with dangerous patterns removed
     """
     if content is None:
         return None
-    
+
     if isinstance(content, dict):
         # Recursively sanitize dict values
         return {
@@ -75,25 +75,25 @@ def sanitize_message_content(content: Any) -> Any:
             for key, value in content.items()
             if isinstance(key, str) and validate_agent_identifier(key.replace('.', '_'))
         }
-    
+
     if isinstance(content, list):
         # Recursively sanitize list items
         return [sanitize_message_content(item) for item in content]
-    
+
     if isinstance(content, str):
         # Remove potentially dangerous patterns
         # Strip control characters except newlines and tabs
         sanitized = ''.join(
-            char for char in content 
+            char for char in content
             if char.isprintable() or char in '\n\t'
         )
         # Limit string length to prevent DOS
         return sanitized[:10000]
-    
+
     # For primitives (int, float, bool), return as-is
     if isinstance(content, (int, float, bool)):
         return content
-    
+
     # For unknown types, convert to string and sanitize
     return sanitize_message_content(str(content))
 
@@ -126,7 +126,7 @@ class UnifiedMessage:
     transport_strategy: TransportStrategy
     priority: int = 0  # 0 = normal, 1 = high, 2 = critical
     deadline_ms: Optional[float] = None
-    resource_handles: Optional[List[Any]] = None
+    resource_handles: Optional[list[Any]] = None
 
     def requires_zero_copy(self) -> bool:
         """Determine if message requires zero-copy transport"""
@@ -166,9 +166,10 @@ class UnifiedMessage:
 
 
 import multiprocessing
-from multiprocessing import shared_memory
 import pickle
 import struct
+from multiprocessing import shared_memory
+
 
 class MojoTransportLayer:
     """
@@ -182,12 +183,12 @@ class MojoTransportLayer:
             strategy.value: {"count": 0, "total_latency_ms": 0}
             for strategy in TransportStrategy
         }
-        self._shm_blocks: Dict[str, shared_memory.SharedMemory] = {}
-        self._pipes: Dict[str, multiprocessing.connection.Connection] = {}
+        self._shm_blocks: dict[str, shared_memory.SharedMemory] = {}
+        self._pipes: dict[str, multiprocessing.connection.Connection] = {}
 
     async def send(
         self, message: UnifiedMessage, sender_pid: int, receiver_pid: int
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Send message using optimal transport strategy"""
         start_time = time.perf_counter()
 
@@ -214,7 +215,7 @@ class MojoTransportLayer:
 
         return result
 
-    async def _zero_copy_send(self, message: UnifiedMessage) -> Dict[str, Any]:
+    async def _zero_copy_send(self, message: UnifiedMessage) -> dict[str, Any]:
         """Zero-copy for ultimate performance"""
         # In Python, passing object references IS zero-copy for same process.
         # No fake delays - this is actually instant in Python
@@ -226,7 +227,7 @@ class MojoTransportLayer:
             "zero_copy": True,
         }
 
-    async def _shared_memory_send(self, message: UnifiedMessage) -> Dict[str, Any]:
+    async def _shared_memory_send(self, message: UnifiedMessage) -> dict[str, Any]:
         """Shared memory for large transfers"""
         try:
             # Serialize the message
@@ -234,19 +235,19 @@ class MojoTransportLayer:
             # to avoid serializing the whole object if we only want parts.
             serialized = pickle.dumps(message)
             size = len(serialized)
-            
+
             # Create or get shared memory block
             # We use a unique name based on message ID
             shm_name = f"eventrelay_{id(message)}_{int(time.time()*1000)}"
-            
+
             # Create shared memory (size + 4 bytes for length header)
             shm = shared_memory.SharedMemory(name=shm_name, create=True, size=size + 4)
             self._shm_blocks[shm_name] = shm
-            
+
             # Write size header + data
             shm.buf[:4] = struct.pack('I', size)
             shm.buf[4:4+size] = serialized
-            
+
             return {
                 "status": "delivered",
                 "method": "shared_memory",
@@ -257,18 +258,18 @@ class MojoTransportLayer:
         except Exception as e:
             return {"status": "error", "error": str(e)}
 
-    async def _pipe_send(self, message: UnifiedMessage) -> Dict[str, Any]:
+    async def _pipe_send(self, message: UnifiedMessage) -> dict[str, Any]:
         """Mojo pipe for small cross-process messages"""
         # Real pipe communication using multiprocessing.Pipe
         parent_conn, child_conn = multiprocessing.Pipe()
-        
+
         try:
             # Send through actual pipe
             # We send the dict representation to be safe across processes
             parent_conn.send(message.a2a_message.to_dict())
-            
+
             return {
-                "status": "delivered", 
+                "status": "delivered",
                 "method": "mojo_pipe",
                 "pipe_fileno": parent_conn.fileno(),
                 "is_real": True
@@ -277,11 +278,11 @@ class MojoTransportLayer:
             parent_conn.close()
             # child_conn would be passed to receiver in a real scenario
 
-    async def _handle_passing_send(self, message: UnifiedMessage) -> Dict[str, Any]:
+    async def _handle_passing_send(self, message: UnifiedMessage) -> dict[str, Any]:
         """Handle passing for resources (GPU memory, file descriptors, etc)"""
         # Real handle passing using multiprocessing.reduction (simulated logic for now as we don't have real GPU handles)
         # But we remove the fake sleep.
-        
+
         handles = []
         for handle in message.resource_handles or []:
             handles.append(
@@ -301,7 +302,7 @@ class MojoTransportLayer:
 
     def cleanup(self):
         """Clean up shared memory blocks"""
-        for name, shm in self._shm_blocks.items():
+        for _name, shm in self._shm_blocks.items():
             try:
                 shm.close()
                 shm.unlink()
@@ -318,7 +319,7 @@ class IntelligentUnifiedAgent(BaseAgent):
     - Uses Mojo for optimal transport performance
     """
 
-    def __init__(self, agent_id: str, capabilities: List[str]):
+    def __init__(self, agent_id: str, capabilities: list[str]):
         super().__init__(agent_id, capabilities)
         self.mcp_context = MCPContext()
         self.mojo_transport = MojoTransportLayer()
@@ -335,34 +336,34 @@ class IntelligentUnifiedAgent(BaseAgent):
         self,
         recipient: str,
         intent: str,
-        data: Dict,
+        data: dict,
         priority: int = 0,
         deadline_ms: Optional[float] = None,
-        resources: Optional[List[Any]] = None,
-    ) -> Dict[str, Any]:
+        resources: Optional[list[Any]] = None,
+    ) -> dict[str, Any]:
         """
         Send message using all three layers intelligently:
         1. MCP provides semantic context
         2. A2A handles agent protocol
         3. Mojo optimizes transport
-        
+
         Security: All inputs are validated and sanitized to prevent injection attacks.
         """
-        
+
         # Security: Validate recipient identifier
         if not validate_agent_identifier(recipient):
             raise ValueError(
                 f"Invalid recipient identifier: {recipient!r}. "
                 "Must be alphanumeric, underscore, or hyphen only (1-64 chars)."
             )
-        
+
         # Security: Validate intent identifier
         if not validate_agent_identifier(intent):
             raise ValueError(
                 f"Invalid intent identifier: {intent!r}. "
                 "Must be alphanumeric, underscore, or hyphen only (1-64 chars)."
             )
-        
+
         # Security: Sanitize message content
         sanitized_data = sanitize_message_content(data)
 
@@ -418,7 +419,7 @@ class IntelligentUnifiedAgent(BaseAgent):
             "a2a_conversation": a2a_msg.conversation_id,
         }
 
-    async def process_intent(self, intent: Dict) -> Dict:
+    async def process_intent(self, intent: dict) -> dict:
         """Process intent using all three layers"""
         # MCP understands the semantic meaning
         self.mcp_context.intent = intent
@@ -437,7 +438,7 @@ class IntelligentUnifiedAgent(BaseAgent):
             "context": self.mcp_context.to_dict(),
         }
 
-    async def negotiate_with_agents(self, partners: List[str], topic: str) -> Dict:
+    async def negotiate_with_agents(self, partners: list[str], topic: str) -> dict:
         """High-performance multi-agent negotiation"""
         tasks = []
 
@@ -468,7 +469,7 @@ class IntelligentUnifiedAgent(BaseAgent):
             },
         }
 
-    def _generate_proposal(self) -> Dict:
+    def _generate_proposal(self) -> dict:
         """Generate negotiation proposal"""
         return {
             "terms": {"resource_allocation": "dynamic"},
@@ -488,7 +489,7 @@ class HighFrequencyTradingAgent(IntelligentUnifiedAgent):
             "critical_threshold_ms": 0.05,  # 50 microseconds hard stop
         }
 
-    async def execute_market_order(self, order: Dict) -> Dict:
+    async def execute_market_order(self, order: dict) -> dict:
         """Execute order with microsecond latency"""
         # MCP Layer: Market context
         self.mcp_context.env = {

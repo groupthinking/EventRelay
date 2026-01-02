@@ -13,16 +13,15 @@ Key Responsibilities:
 """
 
 import asyncio
+import hashlib
 import json
 import logging
 import time
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional, Set, Protocol
-from dataclasses import dataclass, field
 from enum import Enum
-import aiohttp
-import hashlib
+from typing import Any, Optional
 
+import aiohttp
 from pydantic import BaseModel, Field, validator
 
 # Configure logging
@@ -60,7 +59,7 @@ class MCPServer(BaseModel):
     id: str = Field(..., description="Unique server identifier")
     name: str = Field(..., description="Human-readable server name")
     endpoint: str = Field(..., description="Server endpoint URL")
-    capabilities: List[ServerCapability] = Field(
+    capabilities: list[ServerCapability] = Field(
         default_factory=list, description="Server capabilities"
     )
 
@@ -80,10 +79,10 @@ class MCPServer(BaseModel):
     # Metadata
     version: str = Field(default="1.0.0", description="Server version")
     description: Optional[str] = None
-    tags: List[str] = Field(
+    tags: list[str] = Field(
         default_factory=list, description="Server tags for categorization"
     )
-    metadata: Dict[str, Any] = Field(
+    metadata: dict[str, Any] = Field(
         default_factory=dict, description="Additional server metadata"
     )
 
@@ -148,8 +147,8 @@ class MCPServerRegistry:
             config_path: Optional path for server configuration storage
         """
         self.config_path = config_path or "./config/mcp_servers.json"
-        self.servers: Dict[str, MCPServer] = {}
-        self.capability_index: Dict[ServerCapability, Set[str]] = {}
+        self.servers: dict[str, MCPServer] = {}
+        self.capability_index: dict[ServerCapability, set[str]] = {}
 
         # Health monitoring
         self.health_check_task: Optional[asyncio.Task] = None
@@ -185,7 +184,7 @@ class MCPServerRegistry:
         id: str,
         name: str,
         endpoint: str,
-        capabilities: List[ServerCapability],
+        capabilities: list[ServerCapability],
         **kwargs,
     ) -> MCPServer:
         """
@@ -273,7 +272,7 @@ class MCPServerRegistry:
         self,
         capability: ServerCapability,
         status_filter: Optional[ServerStatus] = ServerStatus.ONLINE,
-    ) -> List[MCPServer]:
+    ) -> list[MCPServer]:
         """
         Find servers by capability
 
@@ -295,7 +294,7 @@ class MCPServerRegistry:
 
         return servers
 
-    def get_servers_by_status(self, status: ServerStatus) -> List[MCPServer]:
+    def get_servers_by_status(self, status: ServerStatus) -> list[MCPServer]:
         """
         Get all servers with a specific status
 
@@ -307,7 +306,7 @@ class MCPServerRegistry:
         """
         return [server for server in self.servers.values() if server.status == status]
 
-    def get_all_servers(self) -> List[MCPServer]:
+    def get_all_servers(self) -> list[MCPServer]:
         """
         Get all registered servers
 
@@ -386,7 +385,7 @@ class MCPServerRegistry:
             if not os.path.exists(self.config_path):
                 return
 
-            with open(self.config_path, "r") as f:
+            with open(self.config_path) as f:
                 data = json.load(f)
 
             for server_data in data.get("servers", []):
@@ -469,7 +468,7 @@ def get_server_registry() -> MCPServerRegistry:
 
 
 async def register_ai_server(
-    name: str, endpoint: str, capabilities: List[ServerCapability]
+    name: str, endpoint: str, capabilities: list[ServerCapability]
 ) -> MCPServer:
     """Convenience function to register an AI server"""
     server_id = f"ai-{name.lower().replace(' ', '-')}-{hashlib.md5(endpoint.encode()).hexdigest()[:8]}"
@@ -478,6 +477,6 @@ async def register_ai_server(
     )
 
 
-def find_ai_servers(capability: ServerCapability) -> List[MCPServer]:
+def find_ai_servers(capability: ServerCapability) -> list[MCPServer]:
     """Convenience function to find AI servers by capability"""
     return get_server_registry().find_servers_by_capability(capability)

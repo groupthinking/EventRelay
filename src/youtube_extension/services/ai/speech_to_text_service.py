@@ -10,11 +10,11 @@ import time
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
 
 try:  # pragma: no cover - optional dependency
-    from google.cloud import speech_v2
     from google.api_core import exceptions as google_exceptions
+    from google.cloud import speech_v2
     SPEECH_AVAILABLE = True
 except Exception:  # pragma: no cover - import guard
     speech_v2 = None
@@ -42,7 +42,7 @@ logger = logging.getLogger(__name__)
 class SpeechToTextConfig:
     """Configuration for Google Speech-to-Text V2."""
 
-    project_id: Optional[str] = os.getenv("GOOGLE_SPEECH_PROJECT_ID")
+    project_id: str | None = os.getenv("GOOGLE_SPEECH_PROJECT_ID")
     location: str = os.getenv("GOOGLE_SPEECH_LOCATION", "us-central1")
     recognizer_id: str = os.getenv("GOOGLE_SPEECH_RECOGNIZER", "default")
     model: str = os.getenv("GOOGLE_SPEECH_MODEL", "latest_long")
@@ -52,11 +52,11 @@ class SpeechToTextConfig:
     max_download_bytes: int = 200 * 1024 * 1024  # 200MB safety guard
     long_running_threshold_bytes: int = int(os.getenv("GOOGLE_SPEECH_LONG_RUNNING_THRESHOLD", str(10 * 1024 * 1024)))
     batch_timeout_seconds: int = int(os.getenv("GOOGLE_SPEECH_BATCH_TIMEOUT", "1800"))
-    gcs_bucket: Optional[str] = os.getenv("GOOGLE_SPEECH_GCS_BUCKET")
+    gcs_bucket: str | None = os.getenv("GOOGLE_SPEECH_GCS_BUCKET")
     gcs_path_prefix: str = os.getenv("GOOGLE_SPEECH_GCS_PREFIX", "speech-transcripts")
 
     @property
-    def recognizer_path(self) -> Optional[str]:
+    def recognizer_path(self) -> str | None:
         if not self.project_id:
             return None
         recognizer = self.recognizer_id or "default"
@@ -69,23 +69,23 @@ class SpeechToTextResult:
     transcript: str
     segments: list[dict[str, Any]]
     latency: float
-    error: Optional[str] = None
+    error: str | None = None
     source: str = "speech_to_text_v2"
 
 
 class SpeechToTextService:
     """High-level wrapper around Google Speech-to-Text V2."""
 
-    def __init__(self, config: Optional[SpeechToTextConfig] = None):
+    def __init__(self, config: SpeechToTextConfig | None = None):
         self.config = config or SpeechToTextConfig()
-        self._client: Optional[Any] = None
-        self._storage_client: Optional[Any] = None
+        self._client: Any | None = None
+        self._storage_client: Any | None = None
 
     async def transcribe_youtube_video(
         self,
         video_url: str,
         *,
-        language_code: Optional[str] = None,
+        language_code: str | None = None,
     ) -> SpeechToTextResult:
         """Transcribe a YouTube video by downloading the audio track and sending it to Speech-to-Text."""
 
@@ -211,10 +211,10 @@ class SpeechToTextService:
             error=None if success else "Speech-to-Text returned empty transcript",
         )
 
-    async def _download_audio_bytes(self, video_url: str) -> Tuple[bytes, str, int]:
+    async def _download_audio_bytes(self, video_url: str) -> tuple[bytes, str, int]:
         """Download best available audio track using yt-dlp and return raw bytes."""
 
-        def _download() -> Tuple[bytes, str]:
+        def _download() -> tuple[bytes, str]:
             with tempfile.TemporaryDirectory(prefix="stt_") as tmpdir:
                 output_template = os.path.join(tmpdir, "%(id)s.%(ext)s")
                 ydl_opts = {
@@ -427,12 +427,12 @@ class SpeechToTextService:
         return response
 
     @staticmethod
-    def _parse_response(response) -> Tuple[str, list[dict[str, Any]]]:  # pragma: no cover - simple parsing
+    def _parse_response(response) -> tuple[str, list[dict[str, Any]]]:  # pragma: no cover - simple parsing
         results = getattr(response, "results", []) or []
         return SpeechToTextService._parse_speech_results(results)
 
     @staticmethod
-    def _parse_batch_response(response) -> Tuple[str, list[dict[str, Any]]]:
+    def _parse_batch_response(response) -> tuple[str, list[dict[str, Any]]]:
         transcript_parts: list[str] = []
         segments: list[dict[str, Any]] = []
 
@@ -454,7 +454,7 @@ class SpeechToTextService:
         return full_transcript, segments
 
     @staticmethod
-    def _parse_speech_results(results) -> Tuple[str, list[dict[str, Any]]]:
+    def _parse_speech_results(results) -> tuple[str, list[dict[str, Any]]]:
         transcript_parts: list[str] = []
         segments: list[dict[str, Any]] = []
 

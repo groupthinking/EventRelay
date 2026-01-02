@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
-_CACHE: Dict[str, Any] | None = None
+_CACHE: dict[str, Any] | None = None
 
 
 def _flags_path() -> Path:
@@ -13,7 +12,7 @@ def _flags_path() -> Path:
     return root / "config" / "feature_flags.json"
 
 
-def _load_flags() -> Dict[str, Any]:
+def _load_flags() -> dict[str, Any]:
     global _CACHE
     if _CACHE is not None:
         return _CACHE
@@ -29,7 +28,7 @@ def is_enabled(namespace: str, flag: str) -> bool:
     return bool(cfg.get("enabled", False))
 
 
-def get_flag(namespace: str, flag: str) -> Dict[str, Any]:
+def get_flag(namespace: str, flag: str) -> dict[str, Any]:
     flags = _load_flags()
     return flags.get(namespace, {}).get(flag, {})
 

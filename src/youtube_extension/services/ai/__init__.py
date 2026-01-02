@@ -6,19 +6,19 @@ AI processing services including local and cloud-based models.
 Provides clean interfaces for multi-modal AI capabilities.
 """
 
-from .gemini_service import GeminiService, GeminiConfig, GeminiResult
+from .gemini_service import GeminiConfig, GeminiResult, GeminiService
 from .hybrid_processor_service import (
-    HybridProcessorService,
     HybridConfig,
+    HybridProcessorService,
     HybridResult,
     ProcessingMode,
-    TaskType,
     RoutingDecision,
+    TaskType,
 )
 from .speech_to_text_service import (
-    SpeechToTextService,
     SpeechToTextConfig,
     SpeechToTextResult,
+    SpeechToTextService,
 )
 
 __all__ = [

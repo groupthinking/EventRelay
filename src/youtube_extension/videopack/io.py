@@ -1,14 +1,17 @@
 from __future__ import annotations
-import json, os
+
+import json
+import os
 from pathlib import Path
 from typing import Union
+
 from .schema import VideoPackV0
 
 PathLike = Union[str, os.PathLike]
 
 
 def load_json(path: PathLike) -> dict:
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         return json.load(f)
 
 

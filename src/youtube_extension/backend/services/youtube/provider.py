@@ -1,5 +1,6 @@
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import Optional
+
 
 @dataclass
 class TranscriptSegment:
@@ -9,7 +10,7 @@ class TranscriptSegment:
     text: str
 
 class YouTubeProvider:
-    def get_transcript(self, video_id: str, lang_hint: Optional[str]=None) -> List[TranscriptSegment]:
+    def get_transcript(self, video_id: str, lang_hint: Optional[str]=None) -> list[TranscriptSegment]:
         raise NotImplementedError
 
     def get_metadata(self, video_id: str) -> dict:

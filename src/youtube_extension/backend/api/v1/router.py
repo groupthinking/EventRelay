@@ -8,39 +8,54 @@ Provides versioned API endpoints with proper OpenAPI documentation.
 """
 
 from datetime import datetime
-from typing import Dict, Any, List
-from typing import Optional
+from typing import Any, Optional
 
-from fastapi import APIRouter, HTTPException, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
 
-# Import models
-from .models import (
-    ChatRequest, ChatResponse,
-    VideoProcessingRequest, VideoProcessingResponse,
-    MarkdownRequest, MarkdownResponse,
-    VideoToSoftwareRequest, VideoToSoftwareResponse,
-    HealthResponse, CacheStats,
-    GeminiCacheRequest, GeminiCacheResponse,
-    GeminiBatchRequest, GeminiBatchResponse,
-    GeminiTokenRequest, GeminiTokenResponse,
-    TranscriptActionRequest, TranscriptActionResponse,
-    FeedbackRequest, FeedbackResponse,
-    ErrorResponse
+from youtube_extension.services.agents import AgentOrchestrator
+from youtube_extension.services.ai import HybridProcessorService
+from youtube_extension.services.workflows.transcript_action_workflow import (
+    TranscriptActionWorkflow,
 )
 
 # Import services
 from ...containers.service_container import get_service
-from ...services.video_processing_service import VideoProcessingService, resolve_deployment_target
 from ...services.cache_service import CacheService
-from ...services.health_monitoring_service import HealthMonitoringService
 from ...services.data_service import DataService
-from ...services.websocket_service import WebSocketConnectionManager
+from ...services.health_monitoring_service import HealthMonitoringService
 from ...services.metrics_service import MetricsService
 from ...services.performance_monitor import PerformanceMonitor
-from youtube_extension.services.agents import AgentOrchestrator
-from youtube_extension.services.ai import HybridProcessorService
-from youtube_extension.services.workflows.transcript_action_workflow import TranscriptActionWorkflow
+from ...services.video_processing_service import (
+    VideoProcessingService,
+    resolve_deployment_target,
+)
+from ...services.websocket_service import WebSocketConnectionManager
+
+# Import models
+from .models import (
+    CacheStats,
+    ChatRequest,
+    ChatResponse,
+    ErrorResponse,
+    FeedbackRequest,
+    FeedbackResponse,
+    GeminiBatchRequest,
+    GeminiBatchResponse,
+    GeminiCacheRequest,
+    GeminiCacheResponse,
+    GeminiTokenRequest,
+    GeminiTokenResponse,
+    HealthResponse,
+    MarkdownRequest,
+    MarkdownResponse,
+    TranscriptActionRequest,
+    TranscriptActionResponse,
+    VideoProcessingRequest,
+    VideoToSoftwareRequest,
+    VideoToSoftwareResponse,
+)
+
 performance_monitor = PerformanceMonitor()
 
 import logging
@@ -99,12 +114,12 @@ def get_agent_orchestrator_service() -> AgentOrchestrator:
 # Repositories (used by some endpoints; simple wrapper over storage layer)
 class _InMemoryActionRepository:
     """Minimal in-memory repository used for tests when real repo is absent."""
-    _actions: Dict[str, Dict[str, Any]] = {}
+    _actions: dict[str, dict[str, Any]] = {}
 
-    def get_by_video_id(self, video_id: str) -> List[Dict[str, Any]]:
+    def get_by_video_id(self, video_id: str) -> list[dict[str, Any]]:
         return [a for a in self._actions.values() if a.get("video_id") == video_id]
 
-    def update(self, action_id: str, **kwargs) -> Optional[Dict[str, Any]]:
+    def update(self, action_id: str, **kwargs) -> Optional[dict[str, Any]]:
         action = self._actions.get(action_id)
         if not action:
             return None
@@ -112,7 +127,7 @@ class _InMemoryActionRepository:
         self._actions[action_id] = action
         return action
 
-    def save(self, action: Dict[str, Any]) -> Dict[str, Any]:
+    def save(self, action: dict[str, Any]) -> dict[str, Any]:
         action_id = action.get("id") or f"action_{len(self._actions)+1}"
         action["id"] = action_id
         self._actions[action_id] = action
@@ -124,7 +139,7 @@ except Exception:
     ActionRepository = _InMemoryActionRepository  # type: ignore
 
 # Health Endpoints
-@router.get("/health", 
+@router.get("/health",
            response_model=HealthResponse,
            summary="Health Check",
            description="Get basic health status of the API and its components")
@@ -143,8 +158,8 @@ async def health_check_v1(
         logger.error(f"Health check failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/health/detailed", 
-           response_model=Dict[str, Any],
+@router.get("/health/detailed",
+           response_model=dict[str, Any],
            summary="Detailed Health Check",
            description="Get comprehensive health status including external connectors")
 async def detailed_health_check_v1(
@@ -153,12 +168,12 @@ async def detailed_health_check_v1(
     """Detailed health check including external services"""
     try:
         basic_health = health_service.get_basic_health_status(
-            get_service('video_processor_factory'), 
+            get_service('video_processor_factory'),
             get_service('websocket_connection_manager')
         )
         connector_health = health_service.check_external_connectors_health()
         pipeline_health = health_service.check_video_to_software_pipeline_health()
-        
+
         return {
             "basic": basic_health,
             "connectors": connector_health,
@@ -171,10 +186,10 @@ async def detailed_health_check_v1(
 
 # Capabilities / Model availability
 @router.get("/capabilities",
-           response_model=Dict[str, Any],
+           response_model=dict[str, Any],
            summary="Model capabilities status",
            description="Report availability info for FastVLM (local) and Gemini (cloud)")
-async def get_capabilities_v1() -> Dict[str, Any]:
+async def get_capabilities_v1() -> dict[str, Any]:
     """Return FastVLM and Gemini availability without performing inference."""
     try:
         # Lazy import to avoid impacting startup if modules are missing
@@ -325,7 +340,7 @@ async def run_transcript_action(
     return TranscriptActionResponse(**result)
 
 # Chat Endpoints
-@router.post("/chat", 
+@router.post("/chat",
             response_model=ChatResponse,
             summary="Chat with AI Assistant",
             description="Send a message to the AI assistant for help with video processing")
@@ -336,23 +351,23 @@ async def chat_v1(
     """Chat endpoint with AI processing"""
     try:
         logger.info(f"Chat request received: {request.message[:50]}...")
-        
+
         processor = video_processing_service.get_video_processor()
-        
+
         if processor:
             response_text = f"AI Assistant: I received your message: '{request.message}'. I'm here to help with video processing and analysis! Please provide a YouTube URL for video processing."
         else:
             response_text = f"AI Assistant: I received your message: '{request.message}'. (Video processor unavailable - please check configuration)"
-        
+
         response = ChatResponse(
             response=response_text,
             status="success",
             session_id=request.session_id,
             timestamp=datetime.now()
         )
-        
+
         return response
-        
+
     except Exception as e:
         logger.error(f"Error in chat endpoint: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -368,13 +383,15 @@ async def process_video_v1(
     """Basic video processing endpoint"""
     try:
         logger.info(f"Video processing request: {request.video_url}")
-        
+
         result = await video_processing_service.process_video_basic(
             request.video_url, request.options
         )
         # Persist summary for analytics/storage if repository is available
         try:
-            from youtube_extension.backend.repositories.video_repository import VideoRepository  # type: ignore
+            from youtube_extension.backend.repositories.video_repository import (
+                VideoRepository,  # type: ignore
+            )
             repo = VideoRepository()
             # Store minimal summary; repository method may be patched in tests
             _ = repo.save({
@@ -386,12 +403,12 @@ async def process_video_v1(
             # Repository layer optional; ignore if unavailable
             pass
         return result
-        
+
     except Exception as e:
         logger.error(f"Error in video processing: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/process-video-markdown", 
+@router.post("/process-video-markdown",
             response_model=MarkdownResponse,
             summary="Process Video to Markdown",
             description="Process a YouTube video and generate markdown analysis with caching")
@@ -404,27 +421,27 @@ async def process_video_markdown_v1(
     # Rate limiting check
     if not health_service.rate_limit_check():
         raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS, 
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Rate limit exceeded"
         )
-    
+
     health_service.increment_metric("requests_total")
     health_service.increment_metric("process_video_markdown_total")
-    
+
     try:
         logger.info(f"Markdown processing request: {request.video_url}")
-        
+
         result = await video_processing_service.process_video_for_markdown(
             request.video_url, request.force_regenerate
         )
-        
+
         # Update metrics
         if result['cached']:
             health_service.increment_metric("cached_total")
         health_service.increment_metric("success_total")
-        
+
         return MarkdownResponse(**result)
-        
+
     except HTTPException:
         health_service.increment_metric("error_total")
         raise
@@ -433,7 +450,7 @@ async def process_video_markdown_v1(
         health_service.increment_metric("error_total")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/video-to-software", 
+@router.post("/video-to-software",
             response_model=VideoToSoftwareResponse,
             summary="Convert Video to Software",
             description="Process a YouTube video and generate deployable software application")
@@ -445,7 +462,7 @@ async def video_to_software_v1(
     try:
         logger.info(f"Video-to-software request: {request.video_url}")
         target_info = resolve_deployment_target(request.deployment_target)
-        
+
         result = await video_processing_service.process_video_to_software(
             request.video_url,
             request.project_type,
@@ -458,15 +475,15 @@ async def video_to_software_v1(
         result["deployment"]["resolved_target"] = target_info["resolved"]
         result["deployment"]["alias_applied"] = target_info.get("alias_applied", False)
         result["deployment_target"] = target_info["requested"]
-        
+
         return VideoToSoftwareResponse(**result)
-        
+
     except Exception as e:
         logger.error(f"Video-to-software processing failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # Cache Management Endpoints
-@router.get("/cache/stats", 
+@router.get("/cache/stats",
            response_model=CacheStats,
            summary="Get Cache Statistics",
            description="Get comprehensive statistics about cached video processing results")
@@ -481,7 +498,7 @@ async def get_cache_stats_v1(
         logger.error(f"Error getting cache stats: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/cache/{video_id}", 
+@router.get("/cache/{video_id}",
            summary="Get Cached Video Analysis",
            description="Retrieve cached analysis for a specific video by ID")
 async def get_cached_video_v1(
@@ -492,22 +509,22 @@ async def get_cached_video_v1(
     """Get cached video analysis by ID"""
     try:
         cache_info = cache_service.get_video_cache_info(video_id)
-        
+
         if not cache_info:
             raise HTTPException(
-                status_code=404, 
+                status_code=404,
                 detail=f"Cached analysis not found for video ID: {video_id}"
             )
-        
+
         return cache_info
-        
+
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error retrieving cached video: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.delete("/cache/{video_id}", 
+@router.delete("/cache/{video_id}",
               summary="Clear Video Cache",
               description="Clear cached results for a specific video")
 async def clear_video_cache_v1(
@@ -518,7 +535,7 @@ async def clear_video_cache_v1(
     try:
         video_url = f"https://www.youtube.com/watch?v={video_id}"
         cache_service.clear_cache(video_url)
-        
+
         return {
             "status": "success",
             "message": f"Cache cleared for video: {video_id}",
@@ -528,7 +545,7 @@ async def clear_video_cache_v1(
         logger.error(f"Error clearing video cache: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.delete("/cache", 
+@router.delete("/cache",
               summary="Clear All Cache",
               description="Clear all cached video processing results")
 async def clear_all_cache_v1(
@@ -537,7 +554,7 @@ async def clear_all_cache_v1(
     """Clear all cached results"""
     try:
         cache_service.clear_cache()
-        
+
         return {
             "status": "success",
             "message": "All cache cleared",
@@ -548,8 +565,8 @@ async def clear_all_cache_v1(
         raise HTTPException(status_code=500, detail=str(e))
 
 # Data Endpoints
-@router.get("/videos", 
-           response_model=List[Dict[str, Any]],
+@router.get("/videos",
+           response_model=list[dict[str, Any]],
            summary="List Processed Videos",
            description="Get summary list of all processed videos")
 async def list_videos_v1(
@@ -560,12 +577,12 @@ async def list_videos_v1(
     """Get paginated list of processed videos"""
     try:
         all_videos = data_service.get_videos_summary()
-        
+
         # Apply pagination
         start = offset
         end = offset + limit
         paginated_videos = all_videos[start:end]
-        
+
         return {
             "videos": paginated_videos,
             "total": len(all_videos),
@@ -573,12 +590,12 @@ async def list_videos_v1(
             "offset": offset,
             "has_more": end < len(all_videos)
         }
-        
+
     except Exception as e:
         logger.error(f"Error listing videos: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/videos/{video_id}", 
+@router.get("/videos/{video_id}",
            summary="Get Video Details",
            description="Get detailed information for a specific processed video")
 async def get_video_detail_v1(
@@ -588,23 +605,23 @@ async def get_video_detail_v1(
     """Get detailed info for specific video"""
     try:
         video_detail = data_service.get_video_detail(video_id)
-        
+
         if not video_detail:
             raise HTTPException(
-                status_code=404, 
+                status_code=404,
                 detail=f"Video not found: {video_id}"
             )
-        
+
         return video_detail
-        
+
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error getting video detail: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/learning-log", 
-           response_model=List[Dict[str, Any]],
+@router.get("/learning-log",
+           response_model=list[dict[str, Any]],
            summary="Get Learning Log",
            description="Get learning log entries from processed videos")
 async def get_learning_log_v1(
@@ -634,7 +651,7 @@ async def get_actions_by_video_v1(video_id: str):
 @router.put("/actions/{action_id}",
            summary="Update action status",
            description="Update action completion status or metadata")
-async def update_action_v1(action_id: str, payload: Dict[str, Any]):
+async def update_action_v1(action_id: str, payload: dict[str, Any]):
     try:
         repo = ActionRepository()
         success = repo.update(action_id, **payload)
@@ -644,7 +661,7 @@ async def update_action_v1(action_id: str, payload: Dict[str, Any]):
         raise HTTPException(status_code=500, detail=str(e))
 
 # Feedback Endpoints
-@router.post("/feedback", 
+@router.post("/feedback",
             response_model=FeedbackResponse,
             summary="Submit Feedback",
             description="Submit feedback about video processing results or the service")
@@ -655,7 +672,7 @@ async def submit_feedback_v1(
     """Submit feedback data"""
     try:
         success = data_service.save_feedback(request.dict())
-        
+
         if success:
             return FeedbackResponse(
                 status="ok",
@@ -665,13 +682,13 @@ async def submit_feedback_v1(
             )
         else:
             raise HTTPException(status_code=500, detail="Failed to save feedback")
-            
+
     except Exception as e:
         logger.error(f"Error saving feedback: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # Metrics Endpoints
-@router.get("/metrics", 
+@router.get("/metrics",
            summary="Get Metrics",
            description="Get system metrics in Prometheus format",
            response_class=JSONResponse,
@@ -683,7 +700,7 @@ async def get_metrics_v1(
     try:
         metrics_lines = health_service.get_metrics_prometheus_format()
         return JSONResponse(
-            content="\n".join(metrics_lines), 
+            content="\n".join(metrics_lines),
             media_type="text/plain"
         )
     except Exception as e:
@@ -692,7 +709,7 @@ async def get_metrics_v1(
 
 # Frontend performance ingestion endpoints
 @router.post("/performance/alert", summary="Ingest frontend performance alert")
-async def ingest_performance_alert_v1(payload: Dict[str, Any]):
+async def ingest_performance_alert_v1(payload: dict[str, Any]):
     try:
         # Record as a metric for observability; store basic fields
         metric_value = float(payload.get("data", 0)) if isinstance(payload.get("data"), (int, float)) else 1.0
@@ -704,9 +721,9 @@ async def ingest_performance_alert_v1(payload: Dict[str, Any]):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/performance/report", summary="Ingest frontend performance report")
-async def ingest_performance_report_v1(report: Dict[str, Any]):
+async def ingest_performance_report_v1(report: dict[str, Any]):
     try:
-        metrics: Dict[str, Any] = report.get("metrics", {}) if isinstance(report, dict) else {}
+        metrics: dict[str, Any] = report.get("metrics", {}) if isinstance(report, dict) else {}
         for name, stats in metrics.items():
             value = stats.get("current") if isinstance(stats, dict) else None
             if isinstance(value, (int, float)):

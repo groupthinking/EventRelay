@@ -11,13 +11,13 @@ import asyncio
 import json
 import logging
 import statistics
-import time
-from collections import defaultdict, deque
+from collections import deque
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Union, Tuple
+from typing import Any, Optional, Union
+
 import psutil
-from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
 
@@ -27,8 +27,8 @@ class MetricPoint:
     name: str
     value: Union[int, float]
     timestamp: datetime = field(default_factory=datetime.utcnow)
-    tags: Dict[str, str] = field(default_factory=dict)
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    tags: dict[str, str] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 @dataclass
 class MetricSeries:
@@ -38,7 +38,7 @@ class MetricSeries:
     aggregation_window: int = 300  # 5 minutes in seconds
 
     def add_point(self, value: Union[int, float], timestamp: Optional[datetime] = None,
-                  tags: Optional[Dict[str, str]] = None) -> None:
+                  tags: Optional[dict[str, str]] = None) -> None:
         """Add a metric point to the series"""
         if timestamp is None:
             timestamp = datetime.utcnow()
@@ -51,12 +51,12 @@ class MetricSeries:
         )
         self.points.append(point)
 
-    def get_recent_points(self, seconds: int = 300) -> List[MetricPoint]:
+    def get_recent_points(self, seconds: int = 300) -> list[MetricPoint]:
         """Get points from the last N seconds"""
         cutoff = datetime.utcnow() - timedelta(seconds=seconds)
         return [p for p in self.points if p.timestamp >= cutoff]
 
-    def get_aggregated_stats(self, seconds: int = 300) -> Dict[str, Any]:
+    def get_aggregated_stats(self, seconds: int = 300) -> dict[str, Any]:
         """Get aggregated statistics for recent points"""
         recent_points = self.get_recent_points(seconds)
 
@@ -82,7 +82,7 @@ class MetricsService:
     Provides real-time monitoring and historical analytics.
     """
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, config: Optional[dict[str, Any]] = None):
         """
         Initialize metrics service.
 
@@ -90,7 +90,7 @@ class MetricsService:
             config: Configuration dictionary with metrics settings
         """
         self.config = config or {}
-        self.metrics: Dict[str, MetricSeries] = {}
+        self.metrics: dict[str, MetricSeries] = {}
         self.collection_interval = self.config.get("collection_interval", 60)  # seconds
         self.retention_period = self.config.get("retention_period", 3600)  # 1 hour
         self.metrics_file = Path("logs/metrics.json")
@@ -125,8 +125,8 @@ class MetricsService:
         logger.info("Metrics collection stopped")
 
     async def record_metric(self, name: str, value: Union[int, float],
-                          tags: Optional[Dict[str, str]] = None,
-                          metadata: Optional[Dict[str, Any]] = None) -> None:
+                          tags: Optional[dict[str, str]] = None,
+                          metadata: Optional[dict[str, Any]] = None) -> None:
         """
         Record a metric value.
 
@@ -145,7 +145,7 @@ class MetricsService:
         if len(self.metrics[name].points) % 10 == 0:
             await self._persist_metrics()
 
-    async def get_metric_stats(self, name: str, time_window: int = 300) -> Dict[str, Any]:
+    async def get_metric_stats(self, name: str, time_window: int = 300) -> dict[str, Any]:
         """
         Get statistics for a metric over a time window.
 
@@ -169,7 +169,7 @@ class MetricsService:
             "point_count": len(series.points)
         }
 
-    async def get_all_metrics(self) -> Dict[str, Any]:
+    async def get_all_metrics(self) -> dict[str, Any]:
         """
         Get overview of all metrics.
 
@@ -192,7 +192,7 @@ class MetricsService:
 
         return overview
 
-    async def get_system_metrics(self) -> Dict[str, Any]:
+    async def get_system_metrics(self) -> dict[str, Any]:
         """
         Get current system metrics.
 
@@ -337,8 +337,8 @@ class MetricsService:
             if not self.metrics_file.exists():
                 return False
 
-            with open(self.metrics_file, 'r') as f:
-                data = json.load(f)
+            with open(self.metrics_file) as f:
+                json.load(f)
 
             # Restore metrics (simplified - would need more complex logic for full restoration)
             logger.info(f"Loaded persisted metrics from {self.metrics_file}")
@@ -372,7 +372,7 @@ class MetricsService:
         logger.info(f"Cleared {cleared_count} old metric points")
         return cleared_count
 
-    async def health_check(self) -> Dict[str, Any]:
+    async def health_check(self) -> dict[str, Any]:
         """
         Health check for metrics service.
 
@@ -404,7 +404,7 @@ class MetricsService:
         try:
             system_metrics = await self.get_system_metrics()
             health["metrics"]["system_collection_works"] = "error" not in system_metrics
-        except Exception as e:
+        except Exception:
             health["metrics"]["system_collection_works"] = False
             health["status"] = "degraded"
 

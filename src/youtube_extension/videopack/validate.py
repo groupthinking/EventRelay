@@ -1,5 +1,7 @@
 from __future__ import annotations
+
 from .schema import VideoPackV0
+
 
 def validate_pack(pack: VideoPackV0) -> None:
     # Invariants reflecting docs/VIDEO_PACK_V0_SPEC.md

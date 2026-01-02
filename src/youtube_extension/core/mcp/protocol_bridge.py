@@ -13,19 +13,14 @@ Key Responsibilities:
 - Protocol capability negotiation
 """
 
-import asyncio
-import json
 import logging
-from datetime import datetime
-from typing import Any, Dict, List, Optional, Protocol, Union, Callable
 from abc import ABC, abstractmethod
+from datetime import datetime
 from enum import Enum
-import aiohttp
-
-from pydantic import BaseModel, Field
+from typing import Any, Callable, Optional
 
 from .context_manager import MCPContext, get_context_manager
-from .server_registry import MCPServer, ServerCapability, get_server_registry
+from .server_registry import ServerCapability
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -64,12 +59,12 @@ class ProtocolAdapter(ABC):
         pass
 
     @abstractmethod
-    async def initialize(self, config: Dict[str, Any]) -> bool:
+    async def initialize(self, config: dict[str, Any]) -> bool:
         """Initialize the protocol adapter"""
         pass
 
     @abstractmethod
-    async def send_request(self, request: Dict[str, Any], context: MCPContext) -> Dict[str, Any]:
+    async def send_request(self, request: dict[str, Any], context: MCPContext) -> dict[str, Any]:
         """Send a request using this protocol"""
         pass
 
@@ -79,7 +74,7 @@ class ProtocolAdapter(ABC):
         pass
 
     @abstractmethod
-    async def get_capabilities(self) -> List[ServerCapability]:
+    async def get_capabilities(self) -> list[ServerCapability]:
         """Get capabilities supported by this protocol"""
         pass
 
@@ -94,9 +89,9 @@ class MCPProtocolBridge:
 
     def __init__(self):
         """Initialize the MCP Protocol Bridge"""
-        self.adapters: Dict[ProtocolType, ProtocolAdapter] = {}
-        self.bridge_status: Dict[ProtocolType, BridgeStatus] = {}
-        self.request_handlers: Dict[str, Callable] = {}
+        self.adapters: dict[ProtocolType, ProtocolAdapter] = {}
+        self.bridge_status: dict[ProtocolType, BridgeStatus] = {}
+        self.request_handlers: dict[str, Callable] = {}
 
         # Register built-in protocol handlers
         self._register_builtin_handlers()
@@ -116,7 +111,7 @@ class MCPProtocolBridge:
 
         logger.info(f"Registered protocol adapter: {protocol_type.value}")
 
-    async def initialize_adapter(self, protocol_type: ProtocolType, config: Dict[str, Any]) -> bool:
+    async def initialize_adapter(self, protocol_type: ProtocolType, config: dict[str, Any]) -> bool:
         """
         Initialize a protocol adapter
 
@@ -149,9 +144,9 @@ class MCPProtocolBridge:
     async def send_protocol_request(
         self,
         protocol_type: ProtocolType,
-        request: Dict[str, Any],
+        request: dict[str, Any],
         context: Optional[MCPContext] = None
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Send a request through a specific protocol
 
@@ -210,10 +205,10 @@ class MCPProtocolBridge:
 
     async def route_request(
         self,
-        request: Dict[str, Any],
-        preferred_protocols: Optional[List[ProtocolType]] = None,
+        request: dict[str, Any],
+        preferred_protocols: Optional[list[ProtocolType]] = None,
         context: Optional[MCPContext] = None
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Route a request to the best available protocol
 
@@ -251,7 +246,7 @@ class MCPProtocolBridge:
 
         return await self.send_protocol_request(selected_protocol, request, context)
 
-    async def health_check_all(self) -> Dict[ProtocolType, bool]:
+    async def health_check_all(self) -> dict[ProtocolType, bool]:
         """
         Check health of all protocol adapters
 
@@ -278,7 +273,7 @@ class MCPProtocolBridge:
 
         return results
 
-    def get_bridge_status(self) -> Dict[ProtocolType, BridgeStatus]:
+    def get_bridge_status(self) -> dict[ProtocolType, BridgeStatus]:
         """
         Get the status of all protocol bridges
 
@@ -287,7 +282,7 @@ class MCPProtocolBridge:
         """
         return self.bridge_status.copy()
 
-    def get_available_protocols(self) -> List[ProtocolType]:
+    def get_available_protocols(self) -> list[ProtocolType]:
         """
         Get list of available protocol types
 
@@ -325,7 +320,7 @@ class OpenAIAdapter(ProtocolAdapter):
     def protocol_type(self) -> ProtocolType:
         return ProtocolType.OPENAI
 
-    async def initialize(self, config: Dict[str, Any]) -> bool:
+    async def initialize(self, config: dict[str, Any]) -> bool:
         """Initialize OpenAI adapter"""
         self.api_key = config.get("api_key")
         self.base_url = config.get("base_url", "https://api.openai.com/v1")
@@ -337,7 +332,7 @@ class OpenAIAdapter(ProtocolAdapter):
 
         return True
 
-    async def send_request(self, request: Dict[str, Any], context: MCPContext) -> Dict[str, Any]:
+    async def send_request(self, request: dict[str, Any], context: MCPContext) -> dict[str, Any]:
         """Send request to OpenAI API"""
         # Implementation would go here
         # This is a placeholder for the actual OpenAI API integration
@@ -352,7 +347,7 @@ class OpenAIAdapter(ProtocolAdapter):
         # Implementation would check API availability
         return True
 
-    async def get_capabilities(self) -> List[ServerCapability]:
+    async def get_capabilities(self) -> list[ServerCapability]:
         """Get OpenAI capabilities"""
         return [ServerCapability.AI_INFERENCE]
 
@@ -364,7 +359,7 @@ class AnthropicAdapter(ProtocolAdapter):
     def protocol_type(self) -> ProtocolType:
         return ProtocolType.ANTHROPIC
 
-    async def initialize(self, config: Dict[str, Any]) -> bool:
+    async def initialize(self, config: dict[str, Any]) -> bool:
         """Initialize Anthropic adapter"""
         self.api_key = config.get("api_key")
         self.model = config.get("model", "claude-3-sonnet-20240229")
@@ -375,7 +370,7 @@ class AnthropicAdapter(ProtocolAdapter):
 
         return True
 
-    async def send_request(self, request: Dict[str, Any], context: MCPContext) -> Dict[str, Any]:
+    async def send_request(self, request: dict[str, Any], context: MCPContext) -> dict[str, Any]:
         """Send request to Anthropic API"""
         # Implementation would go here
         return {
@@ -388,7 +383,7 @@ class AnthropicAdapter(ProtocolAdapter):
         """Check Anthropic API health"""
         return True
 
-    async def get_capabilities(self) -> List[ServerCapability]:
+    async def get_capabilities(self) -> list[ServerCapability]:
         """Get Anthropic capabilities"""
         return [ServerCapability.AI_INFERENCE]
 
@@ -400,7 +395,7 @@ class GoogleAIAdapter(ProtocolAdapter):
     def protocol_type(self) -> ProtocolType:
         return ProtocolType.GOOGLE_AI
 
-    async def initialize(self, config: Dict[str, Any]) -> bool:
+    async def initialize(self, config: dict[str, Any]) -> bool:
         """Initialize Google AI adapter"""
         self.api_key = config.get("api_key")
         self.model = config.get("model", "gemini-pro")
@@ -411,7 +406,7 @@ class GoogleAIAdapter(ProtocolAdapter):
 
         return True
 
-    async def send_request(self, request: Dict[str, Any], context: MCPContext) -> Dict[str, Any]:
+    async def send_request(self, request: dict[str, Any], context: MCPContext) -> dict[str, Any]:
         """Send request to Google AI API"""
         # Implementation would go here
         return {
@@ -424,7 +419,7 @@ class GoogleAIAdapter(ProtocolAdapter):
         """Check Google AI API health"""
         return True
 
-    async def get_capabilities(self) -> List[ServerCapability]:
+    async def get_capabilities(self) -> list[ServerCapability]:
         """Get Google AI capabilities"""
         return [ServerCapability.AI_INFERENCE]
 
@@ -448,10 +443,10 @@ def get_protocol_bridge() -> MCPProtocolBridge:
 
 
 async def send_ai_request(
-    request: Dict[str, Any],
+    request: dict[str, Any],
     protocol: Optional[ProtocolType] = None,
     context: Optional[MCPContext] = None
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Convenience function to send AI request through protocol bridge"""
     bridge = get_protocol_bridge()
 

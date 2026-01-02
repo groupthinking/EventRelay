@@ -7,21 +7,20 @@ This module handles deployment of generated projects to various platforms
 including GitHub, Vercel, Netlify, and others.
 """
 
-import os
-import sys
 import asyncio
-import logging
-import json
-import tempfile
-import shutil
-import zipfile
-import subprocess
-from typing import Dict, Any, List, Optional, Tuple
-from pathlib import Path
-import requests
 import base64
+import logging
+import os
+import subprocess
+import sys
 from datetime import datetime
+from pathlib import Path
+from typing import Any, Optional
+
+import requests
+
 from youtube_extension.backend.deploy import deploy_project as _adapter_deploy
+
 from .deploy.core import EnvironmentValidator
 
 # Add UVAI paths
@@ -60,7 +59,7 @@ class DeploymentManager:
     """
 
     SUPPORTED_PLATFORMS = ['vercel', 'netlify', 'fly']
-    
+
     def __init__(self, github_token: Optional[str] = None):
         self.github_token = github_token or os.getenv('GITHUB_TOKEN')
         self.github_agent = None
@@ -91,7 +90,7 @@ class DeploymentManager:
             except Exception as e:
                 logger.warning(f"Failed to initialize AI code generator: {e}")
 
-    async def verify_project(self, project_path: str) -> Dict[str, Any]:
+    async def verify_project(self, project_path: str) -> dict[str, Any]:
         """
         Verify generated project builds successfully before deployment.
         Runs npm install and npm run build to catch errors early.
@@ -231,7 +230,7 @@ class DeploymentManager:
             logger.error(f"❌ Verification failed: {e}")
             return result
 
-    async def verify_and_fix_project(self, project_path: str, max_retries: int = 2) -> Dict[str, Any]:
+    async def verify_and_fix_project(self, project_path: str, max_retries: int = 2) -> dict[str, Any]:
         """
         Verify project with automatic AI-powered error fixing and retry.
 
@@ -323,15 +322,15 @@ class DeploymentManager:
         result["final_verification"] = verification
         return result
 
-    async def deploy_project(self, 
-                           project_path: str, 
-                           project_config: Dict[str, Any],
-                           deployment_config: Dict[str, Any]) -> Dict[str, Any]:
+    async def deploy_project(self,
+                           project_path: str,
+                           project_config: dict[str, Any],
+                           deployment_config: dict[str, Any]) -> dict[str, Any]:
         """
         Deploy a generated project to the specified platforms
         """
         logger.info(f"🚀 Starting deployment: {deployment_config.get('target', 'unknown')}")
-        
+
         results = {
             "deployment_id": f"uvai_{int(asyncio.get_event_loop().time())}",
             "timestamp": datetime.now().isoformat(),
@@ -350,7 +349,7 @@ class DeploymentManager:
                 final_ver = verification_result.get("final_verification", {})
                 logger.error(f"❌ Project verification failed after {len(verification_result.get('attempts', []))} attempts")
                 results["status"] = "failed"
-                results["errors"].append(f"Build verification failed after auto-fix attempts")
+                results["errors"].append("Build verification failed after auto-fix attempts")
                 results["errors"].extend(final_ver.get("npm_build", {}).get("errors", [])[:5])
                 results["auto_fix_attempts"] = verification_result.get("fixes_applied", [])
                 return results
@@ -364,11 +363,11 @@ class DeploymentManager:
             else:
                 logger.warning("No GitHub token provided, skipping GitHub deployment")
                 results["errors"].append("GitHub token not configured")
-            
+
             # Step 2: Deploy to hosting platforms
             deployment_target = deployment_config.get("target", "vercel")
             github_result = results["deployments"].get("github", {})
-            
+
             if deployment_target in ("vercel", "netlify", "fly"):
                 # Start with environment from deployment_config
                 adapter_env = deployment_config.get("environment", {}).copy()
@@ -394,7 +393,7 @@ class DeploymentManager:
             else:
                 logger.warning(f"Unknown deployment target: {deployment_target}")
                 results["errors"].append(f"Unknown deployment target: {deployment_target}")
-            
+
             # Generate final URLs
             results["urls"] = self._generate_deployment_urls(results["deployments"], project_config)
 
@@ -415,14 +414,14 @@ class DeploymentManager:
 
             logger.info(f"✅ Deployment completed: {results['status']}")
             return results
-            
+
         except Exception as e:
             logger.error(f"❌ Deployment failed: {e}")
             results["status"] = "failed"
             results["errors"].append(str(e))
             return results
 
-    def _generate_deployment_summary(self, deployments: Dict[str, Any]) -> Dict[str, Any]:
+    def _generate_deployment_summary(self, deployments: dict[str, Any]) -> dict[str, Any]:
         """Generate a summary of deployment results"""
         total_deployments = len(deployments)
         successful_deployments = sum(1 for result in deployments.values() if result.get('status') == 'success')
@@ -447,24 +446,24 @@ class DeploymentManager:
             "deployment_urls": deployment_urls,
             "primary_url": primary_url
         }
-    
-    async def _deploy_to_github(self, project_path: str, project_config: Dict[str, Any]) -> Dict[str, Any]:
+
+    async def _deploy_to_github(self, project_path: str, project_config: dict[str, Any]) -> dict[str, Any]:
         """Deploy project to GitHub repository"""
         logger.info("📦 Deploying to GitHub...")
 
         try:
             if not self.github_token:
                 raise Exception("GitHub token not configured")
-            
+
             # Generate repository name
             repo_name = self._generate_repo_name(project_config)
-            
+
             # Create repository
             repo_result = await self._create_github_repository(repo_name, project_config)
-            
+
             # Upload project files
             upload_result = await self._upload_to_github(project_path, repo_result["repo_name"])
-            
+
             return {
                 "status": "success",
                 "repository": repo_result,
@@ -472,32 +471,32 @@ class DeploymentManager:
                 "url": f"https://github.com/{repo_result['owner']}/{repo_result['repo_name']}",
                 "clone_url": repo_result.get("clone_url")
             }
-            
+
         except Exception as e:
             logger.error(f"GitHub deployment failed: {e}")
             return {
                 "status": "failed",
                 "error": str(e)
             }
-    
-    async def _create_github_repository(self, repo_name: str, project_config: Dict[str, Any]) -> Dict[str, Any]:
+
+    async def _create_github_repository(self, repo_name: str, project_config: dict[str, Any]) -> dict[str, Any]:
         """Create a new GitHub repository"""
         if not self.github_token:
             raise Exception("GitHub token not configured")
-        
+
         headers = {
             "Authorization": f"token {self.github_token}",
             "Accept": "application/vnd.github.v3+json"
         }
-        
+
         # Get user info
         user_response = requests.get("https://api.github.com/user", headers=headers)
         if user_response.status_code != 200:
             raise Exception(f"Failed to get GitHub user info: {user_response.text}")
-        
+
         user_data = user_response.json()
         username = user_data["login"]
-        
+
         # Create repository
         repo_data = {
             "name": repo_name,
@@ -508,16 +507,16 @@ class DeploymentManager:
             "has_projects": True,
             "has_wiki": False
         }
-        
+
         response = requests.post(
             "https://api.github.com/user/repos",
             headers=headers,
             json=repo_data
         )
-        
+
         if response.status_code not in [201, 422]:  # 422 if repo already exists
             raise Exception(f"Failed to create GitHub repository: {response.text}")
-        
+
         if response.status_code == 422:
             # Repository already exists, get its info
             repo_response = requests.get(f"https://api.github.com/repos/{username}/{repo_name}", headers=headers)
@@ -527,7 +526,7 @@ class DeploymentManager:
                 raise Exception(f"Repository exists but can't access it: {repo_response.text}")
         else:
             repo_info = response.json()
-        
+
         return {
             "repo_name": repo_name,
             "owner": username,
@@ -535,22 +534,22 @@ class DeploymentManager:
             "clone_url": repo_info["clone_url"],
             "html_url": repo_info["html_url"]
         }
-    
-    async def _upload_to_github(self, project_path: str, repo_name: str) -> Dict[str, Any]:
+
+    async def _upload_to_github(self, project_path: str, repo_name: str) -> dict[str, Any]:
         """Upload project files to GitHub repository"""
         if not self.github_token:
             raise Exception("GitHub token not configured")
-        
+
         headers = {
             "Authorization": f"token {self.github_token}",
             "Accept": "application/vnd.github.v3+json"
         }
-        
+
         # Get user info
         user_response = requests.get("https://api.github.com/user", headers=headers)
         user_data = user_response.json()
         username = user_data["login"]
-        
+
         uploaded_files = []
         project_path_obj = Path(project_path)
 
@@ -569,62 +568,62 @@ class DeploymentManager:
             if file_path.is_file() and not file_path.name.startswith('.'):
                 try:
                     relative_path = file_path.relative_to(project_path_obj)
-                    
+
                     # Read file content
                     with open(file_path, 'rb') as f:
                         content = f.read()
-                    
+
                     # Encode content
                     encoded_content = base64.b64encode(content).decode('utf-8')
-                    
+
                     # Upload file
                     file_data = {
                         "message": f"Add {relative_path}",
                         "content": encoded_content
                     }
-                    
+
                     upload_url = f"https://api.github.com/repos/{username}/{repo_name}/contents/{relative_path}"
                     response = requests.put(upload_url, headers=headers, json=file_data)
-                    
+
                     if response.status_code in [201, 200]:
                         uploaded_files.append(str(relative_path))
                     else:
                         logger.warning(f"Failed to upload {relative_path}: {response.text}")
-                
+
                 except Exception as e:
                     logger.warning(f"Error uploading {file_path}: {e}")
-        
+
         return {
             "files_uploaded": len(uploaded_files),
             "file_list": uploaded_files
         }
-    
+
     # NOTE: legacy _deploy_to_vercel removed; real implementation now in backend.deploy.vercel
     async def _deploy_to_vercel(self, *_args, **_kwargs):
         raise NotImplementedError("_deploy_to_vercel is deprecated – use backend.deploy.vercel adapter")
-    
+
     # NOTE: legacy _deploy_to_netlify removed; see backend.deploy.netlify
     async def _deploy_to_netlify(self, *_args, **_kwargs):
         raise NotImplementedError("_deploy_to_netlify is deprecated – use backend.deploy.netlify adapter")
-    
-    async def _deploy_to_github_pages(self, project_path: str, project_config: Dict[str, Any], github_result: Dict[str, Any]) -> Dict[str, Any]:
+
+    async def _deploy_to_github_pages(self, project_path: str, project_config: dict[str, Any], github_result: dict[str, Any]) -> dict[str, Any]:
         """Deploy project to GitHub Pages"""
         logger.info("📄 Attempting GitHub Pages deployment...")
-        
+
         try:
             if github_result.get("status") != "success":
                 raise Exception("GitHub repository required for GitHub Pages deployment")
-            
+
             repo_info = github_result.get("repository", {})
             owner = repo_info.get("owner")
             repo_name = repo_info.get("repo_name")
-            
+
             if not owner or not repo_name:
                 raise Exception("Invalid GitHub repository information")
-            
+
             # Enable GitHub Pages (this would require additional API calls in real implementation)
             pages_url = f"https://{owner}.github.io/{repo_name}"
-            
+
             return {
                 "status": "simulated",
                 "url": pages_url,
@@ -637,46 +636,46 @@ class DeploymentManager:
                 ],
                 "github_repo": repo_info.get("html_url")
             }
-            
+
         except Exception as e:
             logger.error(f"GitHub Pages deployment failed: {e}")
             return {
                 "status": "failed",
                 "error": str(e)
             }
-    
-    def _generate_repo_name(self, project_config: Dict[str, Any]) -> str:
+
+    def _generate_repo_name(self, project_config: dict[str, Any]) -> str:
         """Generate a repository name from project config"""
         title = project_config.get("title", "uvai-project")
-        
+
         # Sanitize title for repository name
         import re
         name = re.sub(r'[^a-zA-Z0-9\s-]', '', title.lower())
         name = re.sub(r'\s+', '-', name.strip())
-        
+
         # Ensure it's not too long and add timestamp
         name = name[:30]
         timestamp = int(asyncio.get_event_loop().time()) % 10000
-        
+
         return f"{name}-{timestamp}" if name else f"uvai-project-{timestamp}"
-    
+
     def _generate_random_id(self) -> str:
         """Generate a random ID for URLs"""
         import random
         import string
         return ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
-    
-    def _generate_deployment_urls(self, deployments: Dict[str, Any], project_config: Dict[str, Any]) -> Dict[str, str]:
+
+    def _generate_deployment_urls(self, deployments: dict[str, Any], project_config: dict[str, Any]) -> dict[str, str]:
         """Generate final deployment URLs from all deployment results"""
         urls = {}
-        
+
         for platform, result in deployments.items():
             if result.get("status") in ["success", "simulated"] and result.get("url"):
                 urls[platform] = result["url"]
-        
+
         return urls
-    
-    async def get_deployment_status(self, deployment_id: str) -> Dict[str, Any]:
+
+    async def get_deployment_status(self, deployment_id: str) -> dict[str, Any]:
         """Get the status of a deployment (placeholder for real implementation)"""
         return {
             "deployment_id": deployment_id,
@@ -689,7 +688,7 @@ def get_deployment_manager(github_token: Optional[str] = None) -> DeploymentMana
     """Get or create deployment manager instance"""
     return DeploymentManager(github_token)
 
-def validate_deployment_environment() -> Dict[str, Any]:
+def validate_deployment_environment() -> dict[str, Any]:
     """Validate the deployment environment for all supported platforms"""
 
     validation_results = {}
