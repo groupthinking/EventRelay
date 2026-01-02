@@ -114,3 +114,4 @@ _archive/
 # --- Ignore nested git repositories that aren't properly configured as submodules ---
 build_extensions/uvai-extensions/ai-integrations/MiniCPM-o/
 build_extensions/uvai-extensions/ai-integrations/youtube-mcp/
+youtube_processed_videos/
