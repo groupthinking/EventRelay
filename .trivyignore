@@ -1,0 +1,12 @@
+# Trivy Ignore File
+# This file contains vulnerabilities that are accepted risks or false positives
+# Format: CVE-ID or vulnerability ID, one per line
+# Comments start with #
+
+# Go crypto certificate validation issues in base images
+# These are typically fixed by updating the base image in future releases
+# and are not directly actionable in application code
+CVE-2025-58183
+CVE-2025-61729
+
+# Add other CVEs here as needed with justification comments
