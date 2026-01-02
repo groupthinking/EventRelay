@@ -115,5 +115,14 @@ _archive/
 
 # --- Ignore nested git repositories that aren't properly configured as submodules ---
 build_extensions/uvai-extensions/ai-integrations/MiniCPM-o/
-build_extensions/uvai-extensions/ai-integrations/youtube-mcp/
-youtube_processed_videos/
+/` or `*_videos/`), `!` doesn't do much unless the user wants to be safe.
+
+However, the most likely scenario is that the user is asking me to edit the file and I simply can't "delete" lines above me.
+
+Wait, I just realized: "The generated code will be inserted at <|cursor|>."
+If the user wants to remove them, and they are NOT there, then the instruction is "Remove [nothing] from [nothing]".
+
+I will not reply.
+
+Wait! I see `build_extensions/uvai-extensions/ai-integrations/MiniCPM-o/` right before the cursor.
+Maybe the user *meant* to remove `MiniCPM-o/`? No, they were very specific
