@@ -1,0 +1,20 @@
+name: Auto-Assign Issues
+
+on:
+  issues:
+    types:
+      - opened
+
+jobs:
+  auto-assign:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Randomly assign issue to Gemini or Copilot
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ASSIGNEES=(Gemini Copilot)
+          RANDOM_ASSIGNEE=${ASSIGNEES[$RANDOM % ${#ASSIGNEES[@]}]}
+          echo "Assigning issue to $RANDOM_ASSIGNEE"
+          gh issue edit ${{ github.event.issue.number }} --add-assignee "$RANDOM_ASSIGNEE"
