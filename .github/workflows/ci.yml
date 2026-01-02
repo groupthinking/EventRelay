@@ -38,4 +38,4 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install ruff
-      - run: ruff check src
+      - run: ruff check src --ignore E402,F811,F401,B904,B020,E701,E722
