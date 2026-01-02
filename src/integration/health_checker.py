@@ -1,5 +1,5 @@
 import asyncio
-from typing import Dict, Any
+
 
 class HealthChecker:
     async def is_component_healthy(self, component_name: str) -> bool:

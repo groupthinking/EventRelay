@@ -7,7 +7,7 @@ modules. This shim keeps legacy imports operational while centralising the real
 logic inside the modern strategy registry.
 """
 
-from typing import Optional, Dict, Any
+from typing import Any, Optional
 
 from src.youtube_extension.processors.strategies import (
     OptimizedStrategy,
@@ -24,7 +24,7 @@ class OptimizedVideoProcessor(VideoProcessor):
     all behaviour routes through the `"optimized"` strategy.
     """
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, config: Optional[dict[str, Any]] = None):
         super().__init__(strategy="optimized", config=config)
 
 

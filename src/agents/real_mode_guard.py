@@ -16,8 +16,6 @@ This ensures all production code uses real implementations.
 import os
 import sys
 import traceback
-from typing import List, Tuple
-
 
 # Read environment variable at module load
 REAL_MODE_ONLY = os.getenv("REAL_MODE_ONLY", "true").lower() in ("true", "1", "yes")
@@ -35,66 +33,66 @@ SIMULATION_PATTERNS = [
 ]
 
 
-def detect_simulation_in_stack() -> Tuple[bool, str]:
+def detect_simulation_in_stack() -> tuple[bool, str]:
     """
     Analyze the current stack trace for simulation patterns.
-    
+
     Returns:
         (is_simulation, pattern): Tuple indicating if simulation detected and which pattern
     """
     if not REAL_MODE_ONLY:
         return False, ""
-    
+
     # Get current stack trace
     stack = traceback.format_stack()
     stack_str = "".join(stack)
-    
+
     # Check for simulation patterns
     for pattern in SIMULATION_PATTERNS:
         if pattern in stack_str:
             return True, pattern
-    
+
     return False, ""
 
 
 def enforce_real_mode(context: str = "") -> None:
     """
     Runtime guard that checks for simulation code execution.
-    
+
     Args:
         context: Optional context string to include in error message
-    
+
     Raises:
         RuntimeError: If simulation pattern detected in REAL_MODE_ONLY
     """
     if not REAL_MODE_ONLY:
         return
-    
+
     is_simulation, pattern = detect_simulation_in_stack()
-    
+
     if is_simulation:
         error_msg = f"REAL_MODE_ONLY: Simulation pattern detected: {pattern}"
         if context:
             error_msg += f"\nContext: {context}"
         error_msg += "\nSet REAL_MODE_ONLY=false to allow simulation code."
-        
+
         raise RuntimeError(error_msg)
 
 
 def validate_no_fake_delays(func_name: str, delay_value: float) -> None:
     """
     Validate that async sleep calls are not being used for fake delays.
-    
+
     Args:
         func_name: Name of the function calling sleep
         delay_value: The delay value in seconds
-    
+
     Raises:
         RuntimeError: If fake delay detected in REAL_MODE_ONLY
     """
     if not REAL_MODE_ONLY:
         return
-    
+
     # Delays less than 1ms are likely fake/simulation delays
     if delay_value < 0.001:
         raise RuntimeError(
@@ -108,17 +106,17 @@ def validate_no_fake_delays(func_name: str, delay_value: float) -> None:
 def validate_no_placeholders(code: str, file_name: str = "") -> None:
     """
     Validate that code doesn't contain placeholder implementations.
-    
+
     Args:
         code: Source code to validate
         file_name: Optional file name for error message
-    
+
     Raises:
         RuntimeError: If placeholder detected in REAL_MODE_ONLY
     """
     if not REAL_MODE_ONLY:
         return
-    
+
     placeholder_indicators = [
         "# Placeholder",
         "# TODO: Real implementation",
@@ -126,7 +124,7 @@ def validate_no_placeholders(code: str, file_name: str = "") -> None:
         "# Simulate",
         "pass  # Not implemented",
     ]
-    
+
     for indicator in placeholder_indicators:
         if indicator in code:
             location = f" in {file_name}" if file_name else ""
@@ -140,7 +138,7 @@ def validate_no_placeholders(code: str, file_name: str = "") -> None:
 def get_enforcement_status() -> dict:
     """
     Get current enforcement status for monitoring/debugging.
-    
+
     Returns:
         dict with enforcement configuration
     """

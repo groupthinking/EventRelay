@@ -1,14 +1,15 @@
 """Create initial UVAI database schema with multi-tenant architecture
 
 Revision ID: 001_initial_schema
-Revises: 
+Revises:
 Create Date: 2024-12-31 12:00:00.000000
 
 """
-from typing import Sequence, Union
+from collections.abc import Sequence
+from typing import Union
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
@@ -20,100 +21,100 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Upgrade database schema - Create complete UVAI schema"""
-    
+
     # Enable necessary PostgreSQL extensions
     op.execute("CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\"")
     op.execute("CREATE EXTENSION IF NOT EXISTS \"pg_trgm\"")
     op.execute("CREATE EXTENSION IF NOT EXISTS \"btree_gin\"")
-    
+
     # Create custom types
     op.execute("""
         CREATE TYPE user_status AS ENUM (
             'active', 'inactive', 'suspended', 'pending_verification'
         )
     """)
-    
+
     op.execute("""
         CREATE TYPE auth_provider AS ENUM (
             'local', 'google', 'github', 'microsoft', 'apple'
         )
     """)
-    
+
     op.execute("""
         CREATE TYPE tenant_status AS ENUM (
             'active', 'suspended', 'cancelled', 'trial', 'pending'
         )
     """)
-    
+
     op.execute("""
         CREATE TYPE subscription_tier AS ENUM (
             'free', 'basic', 'pro', 'enterprise'
         )
     """)
-    
+
     op.execute("""
         CREATE TYPE video_status AS ENUM (
             'pending', 'processing', 'completed', 'failed', 'cancelled'
         )
     """)
-    
+
     op.execute("""
         CREATE TYPE processing_type AS ENUM (
-            'transcript', 'analysis', 'summary', 'learning_extraction', 
+            'transcript', 'analysis', 'summary', 'learning_extraction',
             'code_generation', 'full_pipeline'
         )
     """)
-    
+
     op.execute("""
         CREATE TYPE video_quality AS ENUM (
             'low', 'medium', 'high', 'hd', 'uhd'
         )
     """)
-    
+
     op.execute("""
         CREATE TYPE learning_type AS ENUM (
             'concept', 'skill', 'process', 'tool', 'framework', 'best_practice'
         )
     """)
-    
+
     op.execute("""
         CREATE TYPE difficulty_level AS ENUM (
             'beginner', 'intermediate', 'advanced', 'expert'
         )
     """)
-    
+
     op.execute("""
         CREATE TYPE progress_status AS ENUM (
             'not_started', 'in_progress', 'completed', 'mastered', 'needs_review'
         )
     """)
-    
+
     op.execute("""
         CREATE TYPE cache_type AS ENUM (
             'video_metadata', 'transcript', 'analysis_result', 'learning_extraction',
             'api_response', 'thumbnail', 'user_session', 'search_result'
         )
     """)
-    
+
     op.execute("""
         CREATE TYPE cache_status AS ENUM (
             'active', 'expired', 'invalidated', 'warming', 'error'
         )
     """)
-    
+
     op.execute("""
         CREATE TYPE audit_action AS ENUM (
             'create', 'read', 'update', 'delete', 'login', 'logout',
             'download', 'upload', 'process', 'export', 'import', 'configure'
         )
     """)
-    
+
     op.execute("""
         CREATE TYPE audit_level AS ENUM (
             'info', 'warning', 'error', 'critical'
         )
     """)
-    
+
     op.execute("""
         CREATE TYPE security_event_type AS ENUM (
             'authentication_failure', 'authorization_failure', 'suspicious_activity',
@@ -121,27 +122,27 @@ def upgrade() -> None:
             'rate_limit_exceeded', 'privilege_escalation', 'sql_injection_attempt', 'xss_attempt'
         )
     """)
-    
+
     op.execute("""
         CREATE TYPE severity_level AS ENUM (
             'low', 'medium', 'high', 'critical'
         )
     """)
-    
+
     op.execute("""
         CREATE TYPE event_category AS ENUM (
             'user_behavior', 'system_performance', 'business_metric',
             'error_tracking', 'conversion', 'engagement'
         )
     """)
-    
+
     op.execute("""
         CREATE TYPE metric_type AS ENUM (
             'latency', 'throughput', 'error_rate', 'resource_usage',
             'availability', 'capacity'
         )
     """)
-    
+
     # Create tenants table
     op.create_table('tenants',
         sa.Column('id', postgresql.UUID(as_uuid=True), server_default=sa.text('gen_random_uuid()'), primary_key=True),
@@ -170,7 +171,7 @@ def upgrade() -> None:
         sa.Column('version', sa.Integer, nullable=False, default=1),
         sa.Column('metadata', postgresql.JSONB(), nullable=True)
     )
-    
+
     # Create users table
     op.create_table('users',
         sa.Column('id', postgresql.UUID(as_uuid=True), server_default=sa.text('gen_random_uuid()'), primary_key=True),
@@ -206,7 +207,7 @@ def upgrade() -> None:
         sa.Column('version', sa.Integer, nullable=False, default=1),
         sa.Column('metadata', postgresql.JSONB(), nullable=True)
     )
-    
+
     # Create user_profiles table
     op.create_table('user_profiles',
         sa.Column('id', postgresql.UUID(as_uuid=True), server_default=sa.text('gen_random_uuid()'), primary_key=True),
@@ -235,7 +236,7 @@ def upgrade() -> None:
         sa.Column('version', sa.Integer, nullable=False, default=1),
         sa.Column('metadata', postgresql.JSONB(), nullable=True)
     )
-    
+
     # Create tenant_users table
     op.create_table('tenant_users',
         sa.Column('id', postgresql.UUID(as_uuid=True), server_default=sa.text('gen_random_uuid()'), primary_key=True),
@@ -257,37 +258,37 @@ def upgrade() -> None:
         sa.Column('version', sa.Integer, nullable=False, default=1),
         sa.Column('metadata', postgresql.JSONB(), nullable=True)
     )
-    
+
     # Continue with additional tables...
     # (This is getting quite long - I'll create a more focused migration)
-    
+
     # Create essential indexes
     op.create_index('ix_tenants_tenant_id', 'tenants', ['tenant_id'], unique=True)
     op.create_index('ix_users_email_status', 'users', ['email', 'status'])
     op.create_index('ix_users_tenant_email', 'users', ['tenant_id', 'email'], unique=True)
-    
+
     # Enable Row Level Security
     op.execute("ALTER TABLE tenants ENABLE ROW LEVEL SECURITY")
     op.execute("ALTER TABLE users ENABLE ROW LEVEL SECURITY")
     op.execute("ALTER TABLE user_profiles ENABLE ROW LEVEL SECURITY")
     op.execute("ALTER TABLE tenant_users ENABLE ROW LEVEL SECURITY")
-    
+
     # Create RLS policies
     op.execute("""
         CREATE POLICY tenants_tenant_isolation ON tenants
         USING (tenant_id = current_setting('uvai.tenant_id', true))
     """)
-    
+
     op.execute("""
         CREATE POLICY users_tenant_isolation ON users
         USING (tenant_id = current_setting('uvai.tenant_id', true))
     """)
-    
+
     op.execute("""
         CREATE POLICY user_profiles_tenant_isolation ON user_profiles
         USING (tenant_id = current_setting('uvai.tenant_id', true))
     """)
-    
+
     op.execute("""
         CREATE POLICY tenant_users_tenant_isolation ON tenant_users
         USING (tenant_id = current_setting('uvai.tenant_id', true))
@@ -296,19 +297,19 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     """Downgrade database schema - Drop all tables and types"""
-    
+
     # Drop RLS policies
     op.execute("DROP POLICY IF EXISTS tenants_tenant_isolation ON tenants")
     op.execute("DROP POLICY IF EXISTS users_tenant_isolation ON users")
     op.execute("DROP POLICY IF EXISTS user_profiles_tenant_isolation ON user_profiles")
     op.execute("DROP POLICY IF EXISTS tenant_users_tenant_isolation ON tenant_users")
-    
+
     # Drop tables
     op.drop_table('tenant_users')
     op.drop_table('user_profiles')
     op.drop_table('users')
     op.drop_table('tenants')
-    
+
     # Drop custom types
     op.execute("DROP TYPE IF EXISTS user_status")
     op.execute("DROP TYPE IF EXISTS auth_provider")

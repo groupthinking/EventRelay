@@ -11,25 +11,24 @@ A comprehensive YouTube service that tries multiple approaches:
 """
 
 import asyncio
-import json
 import logging
 import os
 import re
+from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Dict, Any, List, Optional, Tuple, Union
-from dataclasses import dataclass, asdict
+from typing import Any, Optional
+
 import httpx
-from urllib.parse import urlparse, parse_qs
 
 # Import our cost monitor
 try:
-    from .api_cost_monitor import cost_monitor, track_api_call, check_rate_limit_decorator
-except ImportError:  # pragma: no cover - fallback for refactored layout
-    from ...api_cost_monitor import (  # type: ignore
+    from .api_cost_monitor import (
         check_rate_limit_decorator,
         cost_monitor,
         track_api_call,
     )
+except ImportError:  # pragma: no cover - fallback for refactored layout
+    pass
 from .innertube import (
     InnertubeTranscriptError,
     InnertubeTranscriptNotFound,
@@ -45,7 +44,7 @@ except ImportError:
     PyTubeYouTube = None
 
 try:
-    from youtubesearchpython import VideosSearch, Transcript
+    from youtubesearchpython import Transcript, VideosSearch
     HAS_YOUTUBE_SEARCH = True
 except ImportError:
     HAS_YOUTUBE_SEARCH = False
@@ -71,8 +70,8 @@ class RobustYouTubeMetadata:
     view_count: Optional[int]
     like_count: Optional[int]
     comment_count: Optional[int]
-    thumbnail_urls: Dict[str, str]
-    tags: List[str]
+    thumbnail_urls: dict[str, str]
+    tags: list[str]
     category_id: str
     default_language: Optional[str]
     default_audio_language: Optional[str]
@@ -80,8 +79,8 @@ class RobustYouTubeMetadata:
     transcript_available: bool = False
     transcript_segments: int = 0
     source_api: str = "unknown"
-    comments: Optional[List[Dict[str, Any]]] = None
-    channel_context: Optional[Dict[str, Any]] = None
+    comments: Optional[list[dict[str, Any]]] = None
+    channel_context: Optional[dict[str, Any]] = None
 
 class RobustYouTubeService:
     """
@@ -161,7 +160,7 @@ class RobustYouTubeService:
 
         # Check for transcript availability
         transcript_available, transcript_segments = await self._check_transcript_availability(video_id)
-        
+
         # Get enhanced strategic metadata
         comments = await self._get_comments(video_id)
         channel_context = await self._get_channel_context(snippet['channelId'])
@@ -269,11 +268,11 @@ class RobustYouTubeService:
             source_api='youtube_search_python'
         )
 
-    async def _get_comments(self, video_id: str, max_results: int = 20) -> List[Dict[str, Any]]:
+    async def _get_comments(self, video_id: str, max_results: int = 20) -> list[dict[str, Any]]:
         """Extract recent comments using YouTube Data API v3"""
         if not self.youtube_api_key or not self.session:
             return []
-            
+
         url = f"{self.base_url}/commentThreads"
         params = {
             'part': 'snippet',
@@ -282,12 +281,12 @@ class RobustYouTubeService:
             'order': 'relevance',
             'key': self.youtube_api_key
         }
-        
+
         try:
             response = await self.session.get(url, params=params)
             if response.status_code != 200:
                 return []
-                
+
             data = response.json()
             comments = []
             for item in data.get('items', []):
@@ -303,11 +302,11 @@ class RobustYouTubeService:
             logger.warning(f"Failed to extract comments: {e}")
             return []
 
-    async def _get_channel_context(self, channel_id: str, max_results: int = 5) -> Dict[str, Any]:
+    async def _get_channel_context(self, channel_id: str, max_results: int = 5) -> dict[str, Any]:
         """Extract context about the channel using YouTube Data API v3"""
         if not self.youtube_api_key or not self.session or not channel_id:
             return {}
-            
+
         url = f"{self.base_url}/search"
         params = {
             'part': 'snippet',
@@ -317,12 +316,12 @@ class RobustYouTubeService:
             'type': 'video',
             'key': self.youtube_api_key
         }
-        
+
         try:
             response = await self.session.get(url, params=params)
             if response.status_code != 200:
                 return {}
-                
+
             data = response.json()
             recent_videos = []
             for item in data.get('items', []):
@@ -339,7 +338,7 @@ class RobustYouTubeService:
             logger.warning(f"Failed to extract channel context: {e}")
             return {}
 
-    async def _check_transcript_availability(self, video_id: str) -> Tuple[bool, int]:
+    async def _check_transcript_availability(self, video_id: str) -> tuple[bool, int]:
         """Check if transcript is available and count segments"""
         try:
             if HAS_TRANSCRIPT_API:
@@ -366,7 +365,7 @@ class RobustYouTubeService:
 
         return False, 0
 
-    async def get_transcript(self, video_id: str, language: str = "en") -> Dict[str, Any]:
+    async def get_transcript(self, video_id: str, language: str = "en") -> dict[str, Any]:
         """Get video transcript using multiple fallback approaches"""
         # Try YouTube Transcript API first
         if HAS_TRANSCRIPT_API:
@@ -489,7 +488,7 @@ async def get_video_metadata_robust(video_url: str, api_key: Optional[str] = Non
 
 async def get_video_transcript_robust(
     video_id: str, api_key: Optional[str] = None, language: str = "en"
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Get video transcript with robust fallbacks"""
     async with RobustYouTubeService(api_key) as service:
         return await service.get_transcript(video_id, language=language)

@@ -7,17 +7,17 @@ Persistent JSON-based issue tracker with recurrence detection, severity escalati
 and optional MCP session correlation for enhanced debugging and monitoring.
 """
 
-import json
+import asyncio
 import hashlib
+import json
 import logging
 import time
-import asyncio
-from datetime import datetime, timezone
-from pathlib import Path
-from typing import Dict, List, Optional, Any, Union
-from enum import Enum
-from dataclasses import dataclass, asdict
 from contextlib import asynccontextmanager
+from dataclasses import asdict
+from datetime import datetime, timezone
+from enum import Enum
+from pathlib import Path
+from typing import Any, Optional
 
 try:
     from pydantic import BaseModel, Field
@@ -70,7 +70,7 @@ class IssueRecurrencePattern(BaseModel):
     last_occurrence: str
     average_interval_hours: float = Field(default=0.0, description="Average hours between occurrences")
     peak_hour: Optional[int] = Field(default=None, description="Hour of day when issue most frequently occurs")
-    affected_components: List[str] = Field(default_factory=list, description="Components affected by this issue")
+    affected_components: list[str] = Field(default_factory=list, description="Components affected by this issue")
 
 
 class MCPContext(BaseModel):
@@ -79,7 +79,7 @@ class MCPContext(BaseModel):
     provider: Optional[str] = Field(default=None, description="MCP provider used")
     operation: Optional[str] = Field(default=None, description="MCP operation being performed")
     correlation_id: Optional[str] = Field(default=None, description="MCP correlation ID")
-    metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional MCP context")
+    metadata: dict[str, Any] = Field(default_factory=dict, description="Additional MCP context")
 
 
 class IssueEntry(BaseModel):
@@ -115,7 +115,7 @@ class IssueEntry(BaseModel):
     mcp_context: MCPContext = Field(default_factory=MCPContext)
 
     # Additional metadata
-    tags: List[str] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)
     environment: str = Field(default="production")
     version: str = Field(default="1.0.0")
 
@@ -152,7 +152,7 @@ class IssueTracker:
 
     def __init__(self, config: Optional[IssueTrackerConfig] = None):
         self.config = config or IssueTrackerConfig()
-        self.issues: Dict[str, IssueEntry] = {}
+        self.issues: dict[str, IssueEntry] = {}
         self._lock = asyncio.Lock()
         self._last_cleanup = time.time()
         self._load_issues()
@@ -161,7 +161,7 @@ class IssueTracker:
         """Load issues from persistent storage"""
         try:
             if self.config.storage_path.exists():
-                with open(self.config.storage_path, 'r') as f:
+                with open(self.config.storage_path) as f:
                     data = json.load(f)
                     for issue_data in data.get('issues', []):
                         try:
@@ -289,7 +289,7 @@ class IssueTracker:
         mcp_provider: Optional[str] = None,
         mcp_operation: Optional[str] = None,
         mcp_correlation_id: Optional[str] = None,
-        tags: Optional[List[str]] = None,
+        tags: Optional[list[str]] = None,
         environment: str = "production",
         version: str = "1.0.0"
     ) -> str:
@@ -409,29 +409,29 @@ class IssueTracker:
         """Get issue by ID"""
         return self.issues.get(issue_id)
 
-    async def get_issues_by_component(self, component: str) -> List[IssueEntry]:
+    async def get_issues_by_component(self, component: str) -> list[IssueEntry]:
         """Get all issues for a specific component"""
         return [issue for issue in self.issues.values() if issue.component == component]
 
-    async def get_issues_by_severity(self, severity: IssueSeverity) -> List[IssueEntry]:
+    async def get_issues_by_severity(self, severity: IssueSeverity) -> list[IssueEntry]:
         """Get all issues with specific severity"""
         return [issue for issue in self.issues.values() if issue.severity == severity]
 
-    async def get_issues_by_category(self, category: IssueCategory) -> List[IssueEntry]:
+    async def get_issues_by_category(self, category: IssueCategory) -> list[IssueEntry]:
         """Get all issues in specific category"""
         return [issue for issue in self.issues.values() if issue.category == category]
 
-    async def get_recurring_issues(self, min_occurrences: int = 2) -> List[IssueEntry]:
+    async def get_recurring_issues(self, min_occurrences: int = 2) -> list[IssueEntry]:
         """Get issues that have recurred multiple times"""
         return [issue for issue in self.issues.values()
                 if issue.recurrence_pattern.occurrence_count >= min_occurrences]
 
-    async def get_mcp_correlated_issues(self) -> List[IssueEntry]:
+    async def get_mcp_correlated_issues(self) -> list[IssueEntry]:
         """Get issues that have MCP session correlation"""
         return [issue for issue in self.issues.values()
                 if issue.mcp_context.session_id is not None]
 
-    def get_issue_summary(self) -> Dict[str, Any]:
+    def get_issue_summary(self) -> dict[str, Any]:
         """Get comprehensive issue tracking summary"""
         total_issues = len(self.issues)
         open_issues = len([i for i in self.issues.values() if i.status == IssueStatus.OPEN])
@@ -461,7 +461,7 @@ class IssueTracker:
             'severity_distribution': self._get_severity_distribution()
         }
 
-    def _get_top_components(self, limit: int = 10) -> List[Dict[str, Any]]:
+    def _get_top_components(self, limit: int = 10) -> list[dict[str, Any]]:
         """Get most problematic components"""
         component_counts = {}
         for issue in self.issues.values():
@@ -470,7 +470,7 @@ class IssueTracker:
         return [{'component': comp, 'count': count}
                 for comp, count in sorted(component_counts.items(), key=lambda x: x[1], reverse=True)][:limit]
 
-    def _get_severity_distribution(self) -> Dict[str, int]:
+    def _get_severity_distribution(self) -> dict[str, int]:
         """Get severity distribution"""
         severity_counts = {}
         for severity in IssueSeverity:

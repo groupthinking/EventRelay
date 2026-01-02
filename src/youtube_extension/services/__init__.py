@@ -22,7 +22,12 @@ except ImportError:
     pass
 
 try:  # pragma: no cover - AI agent services
-    from .agents import AgentOrchestrator, VideoMasterAgent, ActionImplementerAgent, BaseAgent
+    from .agents import (
+        ActionImplementerAgent,
+        AgentOrchestrator,
+        BaseAgent,
+        VideoMasterAgent,
+    )
 
     __all__.extend([
         "AgentOrchestrator",

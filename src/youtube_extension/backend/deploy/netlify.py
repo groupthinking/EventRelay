@@ -4,9 +4,14 @@ Netlify deployment adapter for UVAI platform.
 Updated to use new base adapter architecture with retry logic and proper error handling.
 """
 
-import os
-from typing import Dict, Any, Optional
-from .core import BaseDeploymentAdapter, DeploymentResult, EnvironmentValidator, DeploymentError
+from typing import Any
+
+from .core import (
+    BaseDeploymentAdapter,
+    DeploymentError,
+    DeploymentResult,
+    EnvironmentValidator,
+)
 
 NETLIFY_API = "https://api.netlify.com/api/v1"
 
@@ -16,7 +21,7 @@ class NetlifyAdapter(BaseDeploymentAdapter):
     def __init__(self):
         super().__init__('netlify')
 
-    async def _deploy_impl(self, project_path: str, project_config: Dict[str, Any], env: Dict[str, Any]) -> DeploymentResult:
+    async def _deploy_impl(self, project_path: str, project_config: dict[str, Any], env: dict[str, Any]) -> DeploymentResult:
         """Netlify-specific deployment implementation"""
 
         # Get and validate GitHub repository URL
@@ -74,7 +79,7 @@ class NetlifyAdapter(BaseDeploymentAdapter):
                 timeout_minutes=20  # Netlify builds can take longer
             )
 
-            site_url = site.get('url') or final_status.get('url', site.get('admin_url', ''))
+            site.get('url') or final_status.get('url', site.get('admin_url', ''))
 
         return DeploymentResult(
             status='success',
@@ -90,7 +95,7 @@ class NetlifyAdapter(BaseDeploymentAdapter):
             }
         )
 
-    async def _create_or_get_site(self, headers: Dict[str, str], site_name: str) -> Dict[str, Any]:
+    async def _create_or_get_site(self, headers: dict[str, str], site_name: str) -> dict[str, Any]:
         """Create a new site or get existing one"""
 
         # Try to get existing site first
@@ -127,7 +132,7 @@ class NetlifyAdapter(BaseDeploymentAdapter):
         self.logger.info(f"Created new Netlify site: {site_name}")
         return site_data
 
-    def _get_build_settings(self, project_config: Dict[str, Any]) -> Dict[str, Any]:
+    def _get_build_settings(self, project_config: dict[str, Any]) -> dict[str, Any]:
         """Get build settings from project configuration"""
 
         # Default build settings
@@ -159,7 +164,7 @@ class NetlifyAdapter(BaseDeploymentAdapter):
 
         return build_settings
 
-    async def _configure_site_build_settings(self, headers: Dict[str, str], site_id: str, build_settings: Dict[str, Any]):
+    async def _configure_site_build_settings(self, headers: dict[str, str], site_id: str, build_settings: dict[str, Any]):
         """Configure build settings for the site"""
 
         try:
@@ -174,7 +179,7 @@ class NetlifyAdapter(BaseDeploymentAdapter):
             self.logger.warning(f"Could not update build settings: {e.message}")
             # Continue anyway - build settings can be updated during deployment
 
-    async def _trigger_deployment(self, headers: Dict[str, str], site: Dict[str, Any], repo_url: str) -> Dict[str, Any]:
+    async def _trigger_deployment(self, headers: dict[str, str], site: dict[str, Any], repo_url: str) -> dict[str, Any]:
         """Trigger a new deployment"""
 
         payload = {
@@ -195,7 +200,7 @@ class NetlifyAdapter(BaseDeploymentAdapter):
         )
 
 # Legacy function for backward compatibility
-async def deploy(project_path: str, project_config: Dict[str, Any], env: Dict[str, Any]) -> Dict[str, Any]:
+async def deploy(project_path: str, project_config: dict[str, Any], env: dict[str, Any]) -> dict[str, Any]:
     """Legacy deployment function - use NetlifyAdapter for new code"""
     adapter = NetlifyAdapter()
     result = await adapter.deploy(project_path, project_config, env)

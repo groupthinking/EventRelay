@@ -8,15 +8,13 @@ transcript extraction, and metadata retrieval.
 """
 
 import asyncio
-import json
 import logging
 import os
-import re
+from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
-from typing import Dict, Any, List, Optional, Tuple, Union
-from dataclasses import dataclass, asdict
+from typing import Any, Optional
+
 import httpx
-from urllib.parse import urlparse, parse_qs
 
 from youtube_extension.utils import extract_video_id
 
@@ -28,15 +26,15 @@ except Exception:
     HAS_ROBUST_TRANSCRIPT_FALLBACK = False
 
 # Import our cost monitor (from services directory, not adapters)
-from ...api_cost_monitor import cost_monitor, track_api_call, check_rate_limit_decorator
+from ...api_cost_monitor import check_rate_limit_decorator, track_api_call
 
 # YouTube Transcript API
 try:
     from youtube_transcript_api import (
-        YouTubeTranscriptApi,
-        TranscriptsDisabled,
-        NoTranscriptFound,
         CouldNotRetrieveTranscript,
+        NoTranscriptFound,
+        TranscriptsDisabled,
+        YouTubeTranscriptApi,
     )
     HAS_TRANSCRIPT_API = True
 except ImportError:
@@ -64,8 +62,8 @@ class YouTubeVideoMetadata:
     view_count: int
     like_count: Optional[int]
     comment_count: Optional[int]
-    thumbnail_urls: Dict[str, str]
-    tags: List[str]
+    thumbnail_urls: dict[str, str]
+    tags: list[str]
     category_id: str
     default_language: Optional[str]
     default_audio_language: Optional[str]
@@ -78,7 +76,7 @@ class YouTubeTranscriptSegment:
     text: str
     start: float
     duration: float
-    
+
     @property
     def end(self) -> float:
         return self.start + self.duration
@@ -98,7 +96,7 @@ class YouTubeSearchResult:
 class RealYouTubeAPIService:
     """
     Complete YouTube Data API v3 integration service
-    
+
     Features:
     - Real video metadata extraction using YouTube Data API v3
     - Transcript extraction with multiple fallbacks
@@ -108,13 +106,13 @@ class RealYouTubeAPIService:
     - Cost-aware API usage with quota management
     - Comprehensive error handling and fallbacks
     """
-    
+
     def __init__(self, api_key: str = None):
         """Initialize YouTube API service"""
         self.api_key = api_key or os.getenv('YOUTUBE_API_KEY')
         if not self.api_key:
             raise ValueError("YouTube API key is required. Set YOUTUBE_API_KEY environment variable.")
-        
+
         self.base_url = "https://www.googleapis.com/youtube/v3"
         self.quota_costs = {
             'videos': 1,
@@ -124,29 +122,29 @@ class RealYouTubeAPIService:
             'commentThreads': 1,
             'captions': 200
         }
-        
+
         # HTTP client for API calls
         self.client = httpx.AsyncClient(
             timeout=30.0,
             headers={'User-Agent': 'UVAI-YouTube-Processor/1.0'}
         )
-        
+
         logger.info("🎬 Real YouTube API Service initialized")
-    
+
     @check_rate_limit_decorator('youtube')
     async def get_video_metadata(self, video_id_or_url: str) -> YouTubeVideoMetadata:
         """
         Get comprehensive video metadata using YouTube Data API v3
-        
+
         Args:
             video_id_or_url: YouTube video ID or URL
-            
+
         Returns:
             YouTubeVideoMetadata with complete video information
         """
         try:
             video_id = extract_video_id(video_id_or_url)
-            
+
             # Track API usage
             await track_api_call(
                 service="youtube",
@@ -155,7 +153,7 @@ class RealYouTubeAPIService:
                 request_type="metadata",
                 video_id=video_id
             )
-            
+
             # Make API request
             url = f"{self.base_url}/videos"
             params = {
@@ -169,26 +167,26 @@ class RealYouTubeAPIService:
                     'contentDetails(duration),status(privacyStatus,uploadStatus))'
                 )
             }
-            
+
             response = await self.client.get(url, params=params)
             response.raise_for_status()
-            
+
             data = response.json()
-            
+
             if not data.get('items'):
                 raise ValueError(f"Video not found: {video_id}")
-            
+
             item = data['items'][0]
             snippet = item['snippet']
             statistics = item.get('statistics', {})
             content_details = item['contentDetails']
             status = item.get('status', {})
-            
+
             # Parse thumbnails
             thumbnails = {}
             for quality, thumb_data in snippet.get('thumbnails', {}).items():
                 thumbnails[quality] = thumb_data['url']
-            
+
             metadata = YouTubeVideoMetadata(
                 video_id=video_id,
                 title=snippet['title'],
@@ -208,14 +206,14 @@ class RealYouTubeAPIService:
                 live_broadcast_content=snippet.get('liveBroadcastContent', 'none'),
                 privacy_status=status.get('privacyStatus', 'public')
             )
-            
+
             logger.info(f"✅ Retrieved metadata for: {metadata.title} ({video_id})")
             return metadata
-            
+
         except httpx.HTTPStatusError as e:
             error_msg = f"YouTube API error: {e.response.status_code} - {e.response.text}"
             logger.error(error_msg)
-            
+
             await track_api_call(
                 service="youtube",
                 endpoint="videos",
@@ -225,28 +223,28 @@ class RealYouTubeAPIService:
                 success=False,
                 error_message=error_msg
             )
-            
+
             raise Exception(error_msg)
-        
+
         except Exception as e:
             logger.error(f"Error getting video metadata: {e}")
             raise
-    
-    async def get_video_transcript(self, video_id_or_url: str, language: str = 'en') -> List[YouTubeTranscriptSegment]:
+
+    async def get_video_transcript(self, video_id_or_url: str, language: str = 'en') -> list[YouTubeTranscriptSegment]:
         """
         Get video transcript with multiple fallback strategies
-        
+
         Args:
             video_id_or_url: YouTube video ID or URL
             language: Preferred transcript language
-            
+
         Returns:
             List of transcript segments with timing
         """
         if not HAS_TRANSCRIPT_API and not HAS_ROBUST_TRANSCRIPT_FALLBACK:
             logger.warning("No transcript providers available; returning empty transcript")
             return []
-        
+
         try:
             video_id = extract_video_id(video_id_or_url)
 
@@ -289,7 +287,7 @@ class RealYouTubeAPIService:
             # If still nothing, return empty list
             if not transcript_data:
                 return []
-            
+
             # Convert to our format
             segments = []
             for entry in transcript_data:
@@ -302,7 +300,7 @@ class RealYouTubeAPIService:
                     start = float(getattr(entry, 'start', 0.0))
                     duration = float(getattr(entry, 'duration', 0.0))
                 segments.append(YouTubeTranscriptSegment(text=text, start=start, duration=duration))
-            
+
             # Track successful transcript retrieval
             await track_api_call(
                 service="youtube",
@@ -311,13 +309,13 @@ class RealYouTubeAPIService:
                 request_type="transcript",
                 video_id=video_id
             )
-            
+
             logger.info(f"✅ Retrieved {len(segments)} transcript segments for {video_id}")
             return segments
-            
+
         except Exception as e:
             logger.error(f"Error getting transcript: {e}")
-            
+
             # Track failed transcript retrieval
             await track_api_call(
                 service="youtube",
@@ -328,20 +326,20 @@ class RealYouTubeAPIService:
                 success=False,
                 error_message=str(e)
             )
-            
+
             return []
-    
+
     @check_rate_limit_decorator('youtube')
-    async def search_videos(self, 
-                           query: str, 
+    async def search_videos(self,
+                           query: str,
                            max_results: int = 10,
                            order: str = 'relevance',
                            published_after: str = None,
                            duration: str = None,
-                           video_type: str = None) -> List[YouTubeSearchResult]:
+                           video_type: str = None) -> list[YouTubeSearchResult]:
         """
         Search YouTube videos with filters
-        
+
         Args:
             query: Search query
             max_results: Maximum results to return
@@ -349,7 +347,7 @@ class RealYouTubeAPIService:
             published_after: RFC 3339 formatted date-time
             duration: Video duration (short, medium, long)
             video_type: Type of video (any, episode, movie)
-            
+
         Returns:
             List of search results
         """
@@ -361,7 +359,7 @@ class RealYouTubeAPIService:
                 tokens=self.quota_costs['search'],
                 request_type="search"
             )
-            
+
             url = f"{self.base_url}/search"
             params = {
                 'key': self.api_key,
@@ -375,20 +373,20 @@ class RealYouTubeAPIService:
                     'publishedAt,thumbnails(high(url))))'
                 )
             }
-            
+
             if published_after:
                 params['publishedAfter'] = published_after
             if duration:
                 params['videoDuration'] = duration
             if video_type:
                 params['videoType'] = video_type
-            
+
             response = await self.client.get(url, params=params)
             response.raise_for_status()
-            
+
             data = response.json()
             results = []
-            
+
             for item in data.get('items', []):
                 result = YouTubeSearchResult(
                     video_id=item['id']['videoId'],
@@ -399,16 +397,16 @@ class RealYouTubeAPIService:
                     thumbnail_url=item['snippet']['thumbnails']['high']['url']
                 )
                 results.append(result)
-            
+
             logger.info(f"🔍 Found {len(results)} videos for query: '{query}'")
             return results
-            
+
         except Exception as e:
             logger.error(f"Error searching videos: {e}")
             raise
-    
+
     @check_rate_limit_decorator('youtube')
-    async def get_channel_info(self, channel_id: str) -> Dict[str, Any]:
+    async def get_channel_info(self, channel_id: str) -> dict[str, Any]:
         """Get channel information and statistics"""
         try:
             # Track API usage
@@ -418,7 +416,7 @@ class RealYouTubeAPIService:
                 tokens=self.quota_costs['channels'],
                 request_type="channel_info"
             )
-            
+
             url = f"{self.base_url}/channels"
             params = {
                 'key': self.api_key,
@@ -430,19 +428,19 @@ class RealYouTubeAPIService:
                     'brandingSettings(channel(title,description)))'
                 )
             }
-            
+
             response = await self.client.get(url, params=params)
             response.raise_for_status()
-            
+
             data = response.json()
-            
+
             if not data.get('items'):
                 raise ValueError(f"Channel not found: {channel_id}")
-            
+
             item = data['items'][0]
             snippet = item['snippet']
             statistics = item.get('statistics', {})
-            
+
             channel_info = {
                 'channel_id': channel_id,
                 'title': snippet['title'],
@@ -453,82 +451,82 @@ class RealYouTubeAPIService:
                 'video_count': int(statistics.get('videoCount', 0)),
                 'view_count': int(statistics.get('viewCount', 0))
             }
-            
+
             logger.info(f"📺 Retrieved info for channel: {channel_info['title']}")
             return channel_info
-            
+
         except Exception as e:
             logger.error(f"Error getting channel info: {e}")
             raise
-    
-    async def get_related_videos(self, video_id_or_url: str, max_results: int = 10) -> List[YouTubeSearchResult]:
+
+    async def get_related_videos(self, video_id_or_url: str, max_results: int = 10) -> list[YouTubeSearchResult]:
         """Get videos related to the given video using channel and tags"""
         try:
             video_id = extract_video_id(video_id_or_url)
             metadata = await self.get_video_metadata(video_id)
-            
+
             # Search using video title and channel for related content
             search_query = f"{metadata.title} {metadata.channel_title}"
             related_videos = await self.search_videos(
                 query=search_query,
                 max_results=max_results + 5  # Get extra to filter out original
             )
-            
+
             # Filter out the original video and return requested count
             filtered_videos = [
-                video for video in related_videos 
+                video for video in related_videos
                 if video.video_id != video_id
             ][:max_results]
-            
+
             logger.info(f"🔗 Found {len(filtered_videos)} related videos for {video_id}")
             return filtered_videos
-            
+
         except Exception as e:
             logger.error(f"Error getting related videos: {e}")
             return []
-    
-    async def get_comprehensive_video_data(self, video_id_or_url: str) -> Dict[str, Any]:
+
+    async def get_comprehensive_video_data(self, video_id_or_url: str) -> dict[str, Any]:
         """
         Get comprehensive video data combining metadata, transcript, and related info
-        
+
         Returns:
             Complete video dataset for AI processing
         """
         try:
             video_id = extract_video_id(video_id_or_url)
-            
+
             # Get metadata and transcript concurrently
             metadata_task = self.get_video_metadata(video_id)
             transcript_task = self.get_video_transcript(video_id)
-            
+
             metadata, transcript = await asyncio.gather(
-                metadata_task, 
+                metadata_task,
                 transcript_task,
                 return_exceptions=True
             )
-            
+
             if isinstance(metadata, Exception):
                 raise metadata
-            
+
             # Handle transcript errors gracefully
             if isinstance(transcript, Exception):
                 logger.warning(f"Transcript error for {video_id}: {transcript}")
                 transcript = []
-            
+
             # Get channel info
             try:
                 channel_info = await self.get_channel_info(metadata.channel_id)
             except Exception as e:
                 logger.warning(f"Could not get channel info: {e}")
                 channel_info = {}
-            
+
             # Get related videos
             try:
                 related_videos = await self.get_related_videos(video_id, max_results=5)
             except Exception as e:
                 logger.warning(f"Could not get related videos: {e}")
                 related_videos = []
-            
+
             # Compile comprehensive data
             comprehensive_data = {
                 'video_id': video_id,
@@ -545,43 +543,43 @@ class RealYouTubeAPIService:
                 'processing_timestamp': datetime.now(timezone.utc).isoformat(),
                 'api_source': 'youtube_data_api_v3'
             }
-            
+
             logger.info(f"✅ Compiled comprehensive data for {metadata.title}")
             logger.info(f"   - Transcript: {'✅' if transcript else '❌'} ({len(transcript)} segments)")
             logger.info(f"   - Channel: {'✅' if channel_info else '❌'}")
             logger.info(f"   - Related: {len(related_videos)} videos")
-            
+
             return comprehensive_data
-            
+
         except Exception as e:
             logger.error(f"Error getting comprehensive video data: {e}")
             raise
-    
-    async def validate_video_url(self, url: str) -> Tuple[bool, str, str]:
+
+    async def validate_video_url(self, url: str) -> tuple[bool, str, str]:
         """
         Validate YouTube URL and return video status
-        
+
         Returns:
             (is_valid, video_id, error_message)
         """
         try:
             video_id = extract_video_id(url)
-            
+
             # Try to get basic metadata to validate
             metadata = await self.get_video_metadata(video_id)
-            
+
             if metadata.privacy_status == 'private':
                 return False, video_id, "Video is private"
             elif metadata.privacy_status == 'unlisted':
                 return True, video_id, "Video is unlisted but accessible"
-            
+
             return True, video_id, "Video is public and accessible"
-            
+
         except ValueError as e:
             return False, "", f"Invalid URL format: {e}"
         except Exception as e:
             return False, "", f"Video validation failed: {e}"
-    
+
     async def close(self):
         """Close the HTTP client"""
         await self.client.aclose()
@@ -596,7 +594,7 @@ def get_youtube_service() -> RealYouTubeAPIService:
         youtube_service = RealYouTubeAPIService()
     return youtube_service
 
-async def get_video_data(video_url: str) -> Dict[str, Any]:
+async def get_video_data(video_url: str) -> dict[str, Any]:
     """Convenience function to get comprehensive video data"""
     service = get_youtube_service()
     return await service.get_comprehensive_video_data(video_url)
@@ -605,15 +603,15 @@ if __name__ == "__main__":
     # Test the YouTube API service
     async def test_youtube_api():
         service = RealYouTubeAPIService()
-        
+
         # Test with a real video
         test_url = "https://www.youtube.com/watch?v=jNQXAC9IVRw"  # Compliance-safe test video
-        
+
         try:
             # Test URL validation
             is_valid, video_id, message = await service.validate_video_url(test_url)
             print(f"URL Validation: {is_valid} - {message}")
-            
+
             if is_valid:
                 # Get comprehensive data
                 data = await service.get_comprehensive_video_data(test_url)
@@ -622,13 +620,13 @@ if __name__ == "__main__":
                 print(f"Views: {data['metadata']['view_count']:,}")
                 print(f"Transcript: {data['transcript']['segment_count']} segments")
                 print(f"Related videos: {len(data['related_videos'])}")
-        
+
         except Exception as e:
             print(f"Error: {e}")
-        
+
         finally:
             await service.close()
-    
+
 if __name__ == "__main__":
     import asyncio
     asyncio.run(test_youtube_api())

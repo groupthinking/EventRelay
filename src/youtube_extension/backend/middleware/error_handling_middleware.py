@@ -8,23 +8,26 @@ Provides comprehensive error catching, logging, monitoring, and user-friendly re
 """
 
 import asyncio
-import json
 import time
 import traceback
 import uuid
-from typing import Any, Dict, Optional, Union, Callable, Awaitable
+from collections.abc import Awaitable
 from datetime import datetime, timezone
+from typing import Any, Callable, Optional, Union
 
-from fastapi import FastAPI, Request, Response, HTTPException
-from fastapi.responses import JSONResponse
+import psutil
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
-import psutil
 
-from youtube_extension.backend.services.logging_service import get_logging_service, log_error, log_api_request
 from youtube_extension.backend.config.logging_config import get_logger
+from youtube_extension.backend.services.logging_service import (
+    log_api_request,
+    log_error,
+)
 
 
 class ErrorCategory:
@@ -43,7 +46,7 @@ class ErrorCategory:
 
 class ErrorResponse:
     """Standardized error response format"""
-    
+
     def __init__(
         self,
         error_id: str,
@@ -63,7 +66,7 @@ class ErrorResponse:
         self.status_code = status_code
         self.retryable = retryable
         self.retry_after = retry_after
-    
+
     def get_user_friendly_message(self, category: str, status_code: int) -> str:
         """Generate user-friendly error messages"""
         messages = {
@@ -78,10 +81,10 @@ class ErrorResponse:
             ErrorCategory.NETWORK: "Network connectivity issues. Please check your connection and try again.",
             ErrorCategory.TIMEOUT: "The request took too long to process. Please try again."
         }
-        
+
         return messages.get(category, "An unexpected error occurred. Please try again later.")
-    
-    def to_dict(self, include_details: bool = False) -> Dict[str, Any]:
+
+    def to_dict(self, include_details: bool = False) -> dict[str, Any]:
         """Convert to dictionary for JSON response"""
         response = {
             "error": {
@@ -92,46 +95,46 @@ class ErrorResponse:
                 "timestamp": datetime.now(timezone.utc).isoformat()
             }
         }
-        
+
         if self.retry_after:
             response["error"]["retry_after"] = self.retry_after
-        
+
         if include_details and self.details:
             response["error"]["details"] = self.details
             response["error"]["technical_message"] = self.message
-        
+
         return response
 
 
 class ErrorClassifier:
     """Classifies errors into categories and determines appropriate responses"""
-    
+
     @staticmethod
     def classify_exception(exception: Exception, status_code: Optional[int] = None) -> ErrorResponse:
         """Classify exception and return appropriate error response"""
-        
+
         error_id = f"ERR_{uuid.uuid4().hex[:8].upper()}"
-        
+
         # HTTP Exceptions
         if isinstance(exception, (HTTPException, StarletteHTTPException)):
             return ErrorClassifier._classify_http_exception(exception, error_id)
-        
+
         # Validation Errors
         if isinstance(exception, RequestValidationError):
             return ErrorClassifier._classify_validation_error(exception, error_id)
-        
+
         # Database Errors
         if ErrorClassifier._is_database_error(exception):
             return ErrorClassifier._classify_database_error(exception, error_id)
-        
+
         # Network/External Service Errors
         if ErrorClassifier._is_network_error(exception):
             return ErrorClassifier._classify_network_error(exception, error_id)
-        
+
         # Timeout Errors
         if ErrorClassifier._is_timeout_error(exception):
             return ErrorClassifier._classify_timeout_error(exception, error_id)
-        
+
         # Generic Internal Server Error
         return ErrorResponse(
             error_id=error_id,
@@ -140,13 +143,13 @@ class ErrorClassifier:
             status_code=500,
             retryable=True
         )
-    
+
     @staticmethod
     def _classify_http_exception(exception: Union[HTTPException, StarletteHTTPException], error_id: str) -> ErrorResponse:
         """Classify HTTP exceptions"""
         status_code = exception.status_code
         detail = exception.detail if hasattr(exception, 'detail') else str(exception)
-        
+
         category_map = {
             400: ErrorCategory.VALIDATION,
             401: ErrorCategory.AUTHENTICATION,
@@ -154,11 +157,11 @@ class ErrorClassifier:
             404: ErrorCategory.NOT_FOUND,
             429: ErrorCategory.RATE_LIMIT,
         }
-        
+
         category = category_map.get(status_code, ErrorCategory.INTERNAL_SERVER)
         retryable = status_code in [429, 500, 502, 503, 504]
         retry_after = 60 if status_code == 429 else None
-        
+
         return ErrorResponse(
             error_id=error_id,
             category=category,
@@ -167,7 +170,7 @@ class ErrorClassifier:
             retryable=retryable,
             retry_after=retry_after
         )
-    
+
     @staticmethod
     def _classify_validation_error(exception: RequestValidationError, error_id: str) -> ErrorResponse:
         """Classify validation errors"""
@@ -176,9 +179,9 @@ class ErrorClassifier:
             field = " -> ".join(str(x) for x in error["loc"])
             message = error["msg"]
             errors.append(f"{field}: {message}")
-        
+
         details = "; ".join(errors)
-        
+
         return ErrorResponse(
             error_id=error_id,
             category=ErrorCategory.VALIDATION,
@@ -187,7 +190,7 @@ class ErrorClassifier:
             status_code=422,
             retryable=False
         )
-    
+
     @staticmethod
     def _is_database_error(exception: Exception) -> bool:
         """Check if exception is database-related"""
@@ -195,10 +198,10 @@ class ErrorClassifier:
             'connection', 'database', 'sql', 'query', 'transaction',
             'deadlock', 'timeout', 'constraint', 'integrity'
         ]
-        
+
         error_str = str(exception).lower()
         return any(pattern in error_str for pattern in db_error_patterns)
-    
+
     @staticmethod
     def _classify_database_error(exception: Exception, error_id: str) -> ErrorResponse:
         """Classify database errors"""
@@ -210,7 +213,7 @@ class ErrorClassifier:
             retryable=True,
             retry_after=30
         )
-    
+
     @staticmethod
     def _is_network_error(exception: Exception) -> bool:
         """Check if exception is network-related"""
@@ -218,10 +221,10 @@ class ErrorClassifier:
             'connection', 'network', 'timeout', 'dns', 'socket',
             'unreachable', 'refused', 'reset', 'http'
         ]
-        
+
         error_str = str(exception).lower()
         return any(pattern in error_str for pattern in network_patterns)
-    
+
     @staticmethod
     def _classify_network_error(exception: Exception, error_id: str) -> ErrorResponse:
         """Classify network errors"""
@@ -233,14 +236,14 @@ class ErrorClassifier:
             retryable=True,
             retry_after=60
         )
-    
+
     @staticmethod
     def _is_timeout_error(exception: Exception) -> bool:
         """Check if exception is timeout-related"""
         timeout_patterns = ['timeout', 'time out', 'timed out', 'deadline exceeded']
         error_str = str(exception).lower()
         return any(pattern in error_str for pattern in timeout_patterns)
-    
+
     @staticmethod
     def _classify_timeout_error(exception: Exception, error_id: str) -> ErrorResponse:
         """Classify timeout errors"""
@@ -256,11 +259,11 @@ class ErrorClassifier:
 
 class RequestTracker:
     """Tracks request context and performance metrics"""
-    
+
     def __init__(self):
-        self.active_requests: Dict[str, Dict[str, Any]] = {}
-    
-    def start_request(self, request_id: str, request: Request) -> Dict[str, Any]:
+        self.active_requests: dict[str, dict[str, Any]] = {}
+
+    def start_request(self, request_id: str, request: Request) -> dict[str, Any]:
         """Start tracking a request"""
         context = {
             'request_id': request_id,
@@ -272,46 +275,46 @@ class RequestTracker:
             'memory_start': self.get_memory_usage(),
             'headers': dict(request.headers)
         }
-        
+
         self.active_requests[request_id] = context
         return context
-    
-    def end_request(self, request_id: str, status_code: int) -> Dict[str, Any]:
+
+    def end_request(self, request_id: str, status_code: int) -> dict[str, Any]:
         """End request tracking and return metrics"""
         if request_id not in self.active_requests:
             return {}
-        
+
         context = self.active_requests.pop(request_id)
         end_time = time.time()
-        
+
         context.update({
             'end_time': end_time,
             'duration_ms': (end_time - context['start_time']) * 1000,
             'memory_end': self.get_memory_usage(),
             'status_code': status_code
         })
-        
+
         context['memory_used'] = context['memory_end'] - context['memory_start']
-        
+
         return context
-    
+
     def get_client_ip(self, request: Request) -> str:
         """Extract client IP address"""
         # Check for forwarded headers first
         forwarded_for = request.headers.get('x-forwarded-for')
         if forwarded_for:
             return forwarded_for.split(',')[0].strip()
-        
+
         real_ip = request.headers.get('x-real-ip')
         if real_ip:
             return real_ip
-        
+
         # Fallback to client IP
         if hasattr(request, 'client') and request.client:
             return request.client.host
-        
+
         return 'unknown'
-    
+
     def get_memory_usage(self) -> float:
         """Get current memory usage in MB"""
         try:
@@ -325,7 +328,7 @@ class ErrorHandlingMiddleware(BaseHTTPMiddleware):
     """
     Comprehensive error handling middleware for FastAPI applications
     """
-    
+
     def __init__(
         self,
         app: ASGIApp,
@@ -343,36 +346,36 @@ class ErrorHandlingMiddleware(BaseHTTPMiddleware):
         self.timeout_seconds = timeout_seconds
         self.logger = get_logger(__name__)
         self.request_tracker = RequestTracker() if enable_request_tracking else None
-        
+
         # Error rate tracking
-        self.error_counts: Dict[str, int] = {}
+        self.error_counts: dict[str, int] = {}
         self.last_error_reset = time.time()
-        
+
     async def dispatch(self, request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
         """Main middleware dispatch method"""
-        
+
         request_id = str(uuid.uuid4())
         request.state.request_id = request_id
-        
+
         # Start request tracking
         if self.request_tracker:
             context = self.request_tracker.start_request(request_id, request)
         else:
             context = {'request_id': request_id}
-        
+
         try:
             # Check request size
             if hasattr(request, 'headers') and 'content-length' in request.headers:
                 content_length = int(request.headers['content-length'])
                 if content_length > self.max_request_size:
                     raise HTTPException(413, "Request too large")
-            
+
             # Process request with timeout
             response = await asyncio.wait_for(
                 call_next(request),
                 timeout=self.timeout_seconds
             )
-            
+
             # Log successful request
             if self.enable_performance_monitoring:
                 if self.request_tracker:
@@ -386,24 +389,24 @@ class ErrorHandlingMiddleware(BaseHTTPMiddleware):
                         client_ip=context.get('client_ip'),
                         memory_used=metrics.get('memory_used', 0)
                     )
-            
+
             return response
-            
+
         except asyncio.TimeoutError:
             return await self.handle_timeout_error(request, context)
-        
+
         except Exception as exception:
             return await self.handle_exception(request, exception, context)
-    
-    async def handle_exception(self, request: Request, exception: Exception, context: Dict[str, Any]) -> JSONResponse:
+
+    async def handle_exception(self, request: Request, exception: Exception, context: dict[str, Any]) -> JSONResponse:
         """Handle exceptions with comprehensive error processing"""
-        
+
         try:
             # Classify the error
             error_response = ErrorClassifier.classify_exception(exception)
-            
+
             # Log the error with full context
-            error_id = await log_error(
+            await log_error(
                 exception,
                 context={
                     **context,
@@ -412,34 +415,34 @@ class ErrorHandlingMiddleware(BaseHTTPMiddleware):
                     'stack_trace': traceback.format_exc()
                 }
             )
-            
+
             # Update error tracking
             self.update_error_tracking(error_response.category)
-            
+
             # Create response
             response_data = error_response.to_dict(include_details=self.debug)
-            
+
             # Add additional headers for client handling
             headers = {
                 'X-Error-ID': error_response.error_id,
                 'X-Error-Category': error_response.category
             }
-            
+
             if error_response.retryable:
                 headers['X-Retryable'] = 'true'
                 if error_response.retry_after:
                     headers['Retry-After'] = str(error_response.retry_after)
-            
+
             return JSONResponse(
                 status_code=error_response.status_code,
                 content=response_data,
                 headers=headers
             )
-            
+
         except Exception as handling_error:
             # Fallback error handling
             self.logger.critical(f"Error in error handler: {handling_error}", exc_info=True)
-            
+
             return JSONResponse(
                 status_code=500,
                 content={
@@ -452,10 +455,10 @@ class ErrorHandlingMiddleware(BaseHTTPMiddleware):
                     }
                 }
             )
-    
-    async def handle_timeout_error(self, request: Request, context: Dict[str, Any]) -> JSONResponse:
+
+    async def handle_timeout_error(self, request: Request, context: dict[str, Any]) -> JSONResponse:
         """Handle timeout errors specifically"""
-        
+
         timeout_error = ErrorResponse(
             error_id=f"TIMEOUT_{uuid.uuid4().hex[:8].upper()}",
             category=ErrorCategory.TIMEOUT,
@@ -464,7 +467,7 @@ class ErrorHandlingMiddleware(BaseHTTPMiddleware):
             retryable=True,
             retry_after=120
         )
-        
+
         # Log timeout
         await log_error(
             TimeoutError(f"Request timeout: {self.timeout_seconds}s"),
@@ -474,9 +477,9 @@ class ErrorHandlingMiddleware(BaseHTTPMiddleware):
                 'timeout_seconds': self.timeout_seconds
             }
         )
-        
+
         response_data = timeout_error.to_dict(include_details=self.debug)
-        
+
         return JSONResponse(
             status_code=timeout_error.status_code,
             content=response_data,
@@ -487,20 +490,20 @@ class ErrorHandlingMiddleware(BaseHTTPMiddleware):
                 'Retry-After': str(timeout_error.retry_after)
             }
         )
-    
+
     def update_error_tracking(self, category: str) -> None:
         """Update error rate tracking"""
         current_time = time.time()
-        
+
         # Reset counters every hour
         if current_time - self.last_error_reset > 3600:
             self.error_counts.clear()
             self.last_error_reset = current_time
-        
+
         # Increment error count
         self.error_counts[category] = self.error_counts.get(category, 0) + 1
-    
-    def get_error_stats(self) -> Dict[str, Any]:
+
+    def get_error_stats(self) -> dict[str, Any]:
         """Get current error statistics"""
         return {
             'error_counts': self.error_counts.copy(),
@@ -512,14 +515,14 @@ class ErrorHandlingMiddleware(BaseHTTPMiddleware):
 
 def setup_error_handlers(app: FastAPI) -> None:
     """Setup comprehensive error handlers for FastAPI app"""
-    
+
     logger = get_logger(__name__)
-    
+
     @app.exception_handler(HTTPException)
     async def http_exception_handler(request: Request, exc: HTTPException):
         """Handle HTTP exceptions"""
         error_response = ErrorClassifier.classify_exception(exc)
-        
+
         # Log HTTP exceptions
         await log_error(exc, context={
             'request_id': getattr(request.state, 'request_id', 'unknown'),
@@ -527,57 +530,57 @@ def setup_error_handlers(app: FastAPI) -> None:
             'url': str(request.url),
             'status_code': exc.status_code
         })
-        
+
         return JSONResponse(
             status_code=error_response.status_code,
             content=error_response.to_dict(),
             headers={'X-Error-ID': error_response.error_id}
         )
-    
+
     @app.exception_handler(RequestValidationError)
     async def validation_exception_handler(request: Request, exc: RequestValidationError):
         """Handle validation exceptions"""
         error_response = ErrorClassifier.classify_exception(exc)
-        
+
         await log_error(exc, context={
             'request_id': getattr(request.state, 'request_id', 'unknown'),
             'validation_errors': exc.errors()
         })
-        
+
         return JSONResponse(
             status_code=error_response.status_code,
             content=error_response.to_dict(),
             headers={'X-Error-ID': error_response.error_id}
         )
-    
+
     @app.exception_handler(Exception)
     async def general_exception_handler(request: Request, exc: Exception):
         """Handle all other exceptions"""
         error_response = ErrorClassifier.classify_exception(exc)
-        
+
         await log_error(exc, context={
             'request_id': getattr(request.state, 'request_id', 'unknown'),
             'method': request.method,
             'url': str(request.url),
             'stack_trace': traceback.format_exc()
         })
-        
+
         return JSONResponse(
             status_code=error_response.status_code,
             content=error_response.to_dict(),
             headers={'X-Error-ID': error_response.error_id}
         )
-    
+
     logger.info("Error handlers configured for FastAPI application")
 
 
 def add_error_handling_middleware(app: FastAPI, **kwargs) -> ErrorHandlingMiddleware:
     """Add error handling middleware to FastAPI app"""
-    
+
     middleware = ErrorHandlingMiddleware(app, **kwargs)
     app.add_middleware(ErrorHandlingMiddleware, **kwargs)
-    
+
     # Also setup exception handlers
     setup_error_handlers(app)
-    
+
     return middleware

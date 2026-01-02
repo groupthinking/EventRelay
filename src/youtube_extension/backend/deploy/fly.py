@@ -4,12 +4,18 @@ Fly.io deployment adapter for UVAI platform.
 Updated to use new base adapter architecture with retry logic and proper error handling.
 """
 
-import os
 import asyncio
-import subprocess
-from typing import Dict, Any, Optional, List
+import os
 from pathlib import Path
-from .core import BaseDeploymentAdapter, DeploymentResult, EnvironmentValidator, DeploymentError
+from typing import Any, Optional
+
+from .core import (
+    BaseDeploymentAdapter,
+    DeploymentError,
+    DeploymentResult,
+    EnvironmentValidator,
+)
+
 
 class FlyAdapter(BaseDeploymentAdapter):
     """Fly.io deployment adapter with enhanced error handling and monitoring"""
@@ -17,7 +23,7 @@ class FlyAdapter(BaseDeploymentAdapter):
     def __init__(self):
         super().__init__('fly')
 
-    async def _deploy_impl(self, project_path: str, project_config: Dict[str, Any], env: Dict[str, Any]) -> DeploymentResult:
+    async def _deploy_impl(self, project_path: str, project_config: dict[str, Any], env: dict[str, Any]) -> DeploymentResult:
         """Fly.io-specific deployment implementation"""
 
         # Get Fly token
@@ -75,7 +81,7 @@ class FlyAdapter(BaseDeploymentAdapter):
         except Exception:
             return False
 
-    async def _run_flyctl_command(self, args: List[str], env_vars: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
+    async def _run_flyctl_command(self, args: list[str], env_vars: Optional[dict[str, str]] = None) -> dict[str, Any]:
         """Run a flyctl command with proper error handling"""
         try:
             env = env_vars or os.environ.copy()
@@ -118,7 +124,7 @@ class FlyAdapter(BaseDeploymentAdapter):
                 recoverable=True
             )
 
-    async def _run_flyctl_deploy(self, project_path: str, env_vars: Dict[str, str]) -> Dict[str, Any]:
+    async def _run_flyctl_deploy(self, project_path: str, env_vars: dict[str, str]) -> dict[str, Any]:
         """Run flyctl deploy command"""
         deploy_args = [
             "flyctl", "deploy",
@@ -132,7 +138,7 @@ class FlyAdapter(BaseDeploymentAdapter):
 
         return await self._run_flyctl_command(deploy_args, env_vars)
 
-    async def _ensure_fly_config(self, project_path: str, project_config: Dict[str, Any], env: Dict[str, Any]):
+    async def _ensure_fly_config(self, project_path: str, project_config: dict[str, Any], env: dict[str, Any]):
         """Ensure fly.toml configuration exists"""
         fly_config_path = Path(project_path) / "fly.toml"
 
@@ -173,7 +179,7 @@ primary_region = "iad"
 
         self.logger.info(f"Created fly.toml for app: {app_name}")
 
-    def _generate_app_name(self, project_config: Dict[str, Any]) -> str:
+    def _generate_app_name(self, project_config: dict[str, Any]) -> str:
         """Generate a unique app name for Fly.io"""
         title = project_config.get('title', 'uvai-app')
         sanitized = ''.join(c for c in title.lower().replace(' ', '-') if c.isalnum() or c == '-')
@@ -200,7 +206,7 @@ primary_region = "iad"
         return "https://deployment-in-progress.fly.dev"
 
 # Legacy function for backward compatibility
-async def deploy(project_path: str, project_config: Dict[str, Any], env: Dict[str, Any]) -> Dict[str, Any]:
+async def deploy(project_path: str, project_config: dict[str, Any], env: dict[str, Any]) -> dict[str, Any]:
     """Legacy deployment function - use FlyAdapter for new code"""
     adapter = FlyAdapter()
     result = await adapter.deploy(project_path, project_config, env)

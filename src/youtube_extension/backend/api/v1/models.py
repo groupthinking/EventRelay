@@ -7,10 +7,11 @@ Pydantic models for API v1 requests and responses.
 Provides data validation and serialization for all API endpoints.
 """
 
-from datetime import datetime
-from typing import Dict, Any, Optional, List, Union
-from pydantic import BaseModel, Field, validator
 import re
+from datetime import datetime
+from typing import Any, Optional, Union
+
+from pydantic import BaseModel, Field, validator
 
 
 class ChatRequest(BaseModel):
@@ -53,7 +54,7 @@ class VideoProcessingRequest(BaseModel):
     """Request model for video processing"""
 
     video_url: str = Field(..., description="YouTube video URL")
-    options: Optional[Dict[str, Any]] = Field({}, description="Processing options")
+    options: Optional[dict[str, Any]] = Field({}, description="Processing options")
 
     @validator("video_url")
     def validate_video_url(cls, value):
@@ -77,7 +78,7 @@ class VideoProcessingRequest(BaseModel):
 class VideoProcessingResponse(BaseModel):
     """Response model for video processing"""
 
-    result: Dict[str, Any] = Field(..., description="Processing results")
+    result: dict[str, Any] = Field(..., description="Processing results")
     status: str = Field(..., description="Processing status")
     progress: Optional[float] = Field(
         0.0, ge=0.0, le=100.0, description="Progress percentage"
@@ -131,7 +132,7 @@ class MarkdownResponse(BaseModel):
 
     video_id: str = Field(..., description="YouTube video ID")
     video_url: str = Field(..., description="Original video URL")
-    metadata: Dict[str, Any] = Field(..., description="Video metadata")
+    metadata: dict[str, Any] = Field(..., description="Video metadata")
     markdown_content: str = Field(..., description="Generated markdown content")
     cached: bool = Field(..., description="Whether result was cached")
     save_path: str = Field(..., description="File save path")
@@ -159,7 +160,7 @@ class VideoToSoftwareRequest(BaseModel):
     video_url: str = Field(..., description="YouTube video URL")
     project_type: str = Field("web", description="Project type (web, api, ml, mobile)")
     deployment_target: str = Field("vercel", description="Deployment platform")
-    features: Optional[List[str]] = Field(
+    features: Optional[list[str]] = Field(
         [], description="Additional features to implement"
     )
 
@@ -227,10 +228,10 @@ class VideoToSoftwareResponse(BaseModel):
     github_repo: str = Field(..., description="GitHub repository URL")
     build_status: str = Field(..., description="Build status")
     processing_time: str = Field(..., description="Total processing time")
-    features_implemented: List[str] = Field(..., description="Implemented features")
-    video_analysis: Dict[str, Any] = Field(..., description="Video analysis results")
-    code_generation: Dict[str, Any] = Field(..., description="Code generation details")
-    deployment: Dict[str, Any] = Field(..., description="Deployment information")
+    features_implemented: list[str] = Field(..., description="Implemented features")
+    video_analysis: dict[str, Any] = Field(..., description="Video analysis results")
+    code_generation: dict[str, Any] = Field(..., description="Code generation details")
+    deployment: dict[str, Any] = Field(..., description="Deployment information")
     status: str = Field(..., description="Overall status")
     timestamp: datetime = Field(..., description="Completion timestamp")
 
@@ -261,7 +262,7 @@ class HealthResponse(BaseModel):
     status: str = Field(..., description="Overall health status")
     timestamp: datetime = Field(..., description="Health check timestamp")
     version: Optional[str] = Field(None, description="API version")
-    components: Optional[Dict[str, Any]] = Field(
+    components: Optional[dict[str, Any]] = Field(
         {}, description="Component health details"
     )
 
@@ -280,7 +281,7 @@ class CacheStats(BaseModel):
     """Response model for cache statistics"""
 
     total_cached_videos: int = Field(..., description="Total cached videos")
-    categories: Dict[str, Any] = Field(..., description="Cache by category")
+    categories: dict[str, Any] = Field(..., description="Cache by category")
     total_size_mb: float = Field(..., description="Total cache size in MB")
     oldest_cache: Optional[str] = Field(
         None, description="Oldest cache entry timestamp"
@@ -307,7 +308,7 @@ class CacheStats(BaseModel):
 class GeminiCacheRequest(BaseModel):
     """Request payload for Gemini cache creation"""
 
-    contents: Union[str, Dict[str, Any], List[Any]] = Field(
+    contents: Union[str, dict[str, Any], list[Any]] = Field(
         ..., description="Prompt or content payload to cache"
     )
     model_name: Optional[str] = Field(
@@ -317,7 +318,7 @@ class GeminiCacheRequest(BaseModel):
     display_name: Optional[str] = Field(
         None, description="Friendly name for the cache entry"
     )
-    generation_params: Optional[Dict[str, Any]] = Field(
+    generation_params: Optional[dict[str, Any]] = Field(
         default_factory=dict, description="Additional Gemini parameters"
     )
 
@@ -326,7 +327,7 @@ class GeminiCacheResponse(BaseModel):
     """Response payload for Gemini cache creation"""
 
     success: bool
-    cache: Optional[Dict[str, Any]] = None
+    cache: Optional[dict[str, Any]] = None
     error: Optional[str] = None
     latency: Optional[float] = None
 
@@ -334,7 +335,7 @@ class GeminiCacheResponse(BaseModel):
 class GeminiBatchRequest(BaseModel):
     """Request payload for Gemini batch submission"""
 
-    requests: List[Dict[str, Any]] = Field(
+    requests: list[dict[str, Any]] = Field(
         ..., min_items=1, description="List of generateContent requests"
     )
     model_name: Optional[str] = Field(None, description="Optional model override")
@@ -345,7 +346,7 @@ class GeminiBatchRequest(BaseModel):
     timeout: Optional[float] = Field(
         600.0, ge=1.0, description="Maximum wait time in seconds"
     )
-    batch_params: Optional[Dict[str, Any]] = Field(
+    batch_params: Optional[dict[str, Any]] = Field(
         default_factory=dict, description="Additional Gemini batch parameters"
     )
 
@@ -354,7 +355,7 @@ class GeminiBatchResponse(BaseModel):
     """Response payload for Gemini batch submission"""
 
     success: bool
-    operation: Optional[Dict[str, Any]] = None
+    operation: Optional[dict[str, Any]] = None
     result: Optional[Any] = None
     completed: Optional[bool] = None
     error: Optional[str] = None
@@ -371,7 +372,7 @@ class GeminiTokenRequest(BaseModel):
     ttl_seconds: Optional[int] = Field(
         None, ge=60, description="Token time-to-live in seconds"
     )
-    token_params: Optional[Dict[str, Any]] = Field(
+    token_params: Optional[dict[str, Any]] = Field(
         default_factory=dict, description="Additional token parameters"
     )
 
@@ -380,7 +381,7 @@ class GeminiTokenResponse(BaseModel):
     """Response payload for Gemini ephemeral token creation"""
 
     success: bool
-    token: Optional[Dict[str, Any]] = None
+    token: Optional[dict[str, Any]] = None
     error: Optional[str] = None
     latency: Optional[float] = None
 
@@ -433,11 +434,11 @@ class TranscriptActionResponse(BaseModel):
 
     success: bool
     video_url: str
-    metadata: Dict[str, Any]
-    transcript: Dict[str, Any]
-    outputs: Dict[str, Any]
-    errors: List[str] = Field(default_factory=list)
-    orchestration_meta: Dict[str, Any]
+    metadata: dict[str, Any]
+    transcript: dict[str, Any]
+    outputs: dict[str, Any]
+    errors: list[str] = Field(default_factory=list)
+    orchestration_meta: dict[str, Any]
 
 
 class FeedbackRequest(BaseModel):
@@ -450,7 +451,7 @@ class FeedbackRequest(BaseModel):
         None, max_length=1000, description="Feedback comment"
     )
     user_id: Optional[str] = Field(None, description="User identifier")
-    metadata: Optional[Dict[str, Any]] = Field({}, description="Additional metadata")
+    metadata: Optional[dict[str, Any]] = Field({}, description="Additional metadata")
 
     @validator("feedback_type")
     def validate_feedback_type(cls, value):

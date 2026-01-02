@@ -15,15 +15,15 @@ Features:
 """
 
 import asyncio
-import sqlite3
+import json
 import logging
 import os
-from datetime import datetime, timedelta, timezone
-from typing import Dict, List, Optional, Any, Tuple
-from dataclasses import dataclass, asdict
-from pathlib import Path
-import json
+import sqlite3
 import time
+from dataclasses import asdict, dataclass
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from typing import Any, Optional
 
 _API_COST_DB_OVERRIDE = os.getenv("API_COST_MONITOR_DB_PATH")
 _PROJECT_ROOT = Path(__file__).resolve().parents[4]
@@ -82,7 +82,7 @@ class DatabaseCleanupService:
         # Load custom configuration if exists
         self._load_config()
 
-    def _load_default_policies(self) -> Dict[str, List[RetentionPolicy]]:
+    def _load_default_policies(self) -> dict[str, list[RetentionPolicy]]:
         """Load default retention policies for each database type"""
         return {
             'performance_monitoring.db': [
@@ -125,7 +125,7 @@ class DatabaseCleanupService:
         """Load custom configuration from JSON file"""
         try:
             if os.path.exists(self.config_path):
-                with open(self.config_path, 'r') as f:
+                with open(self.config_path) as f:
                     config = json.load(f)
 
                 # Update retention policies from config
@@ -320,7 +320,7 @@ class DatabaseCleanupService:
 
         return result
 
-    def cleanup_database(self, db_path: str) -> List[CleanupResult]:
+    def cleanup_database(self, db_path: str) -> list[CleanupResult]:
         """Clean up all tables in a specific database"""
         results = []
 
@@ -358,7 +358,7 @@ class DatabaseCleanupService:
 
         return results
 
-    def cleanup_all_databases(self) -> Dict[str, List[CleanupResult]]:
+    def cleanup_all_databases(self) -> dict[str, list[CleanupResult]]:
         """Clean up all configured databases"""
         all_results = {}
 
@@ -383,7 +383,7 @@ class DatabaseCleanupService:
 
         return all_results
 
-    def get_cleanup_report(self) -> Dict[str, Any]:
+    def get_cleanup_report(self) -> dict[str, Any]:
         """Generate a comprehensive cleanup report"""
         return {
             'cleanup_stats': self.cleanup_stats,
@@ -435,11 +435,11 @@ class DatabaseCleanupService:
 # Global cleanup service instance
 cleanup_service = DatabaseCleanupService()
 
-async def run_database_cleanup() -> Dict[str, List[CleanupResult]]:
+async def run_database_cleanup() -> dict[str, list[CleanupResult]]:
     """Convenience function to run database cleanup"""
     return cleanup_service.cleanup_all_databases()
 
-def get_cleanup_report() -> Dict[str, Any]:
+def get_cleanup_report() -> dict[str, Any]:
     """Get cleanup service report"""
     return cleanup_service.get_cleanup_report()
 

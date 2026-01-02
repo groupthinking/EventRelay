@@ -14,13 +14,13 @@ except ImportError:
     pass
 
 try:
-    from .aws_rekognition import AWSRekognition  
+    from .aws_rekognition import AWSRekognition
     __all__.append("AWSRekognition")
 except ImportError:
     pass
 
 try:
     from .azure_vision import AzureVision
-    __all__.append("AzureVision") 
+    __all__.append("AzureVision")
 except ImportError:
     pass

@@ -1,4 +1,6 @@
 from enum import Enum
+
+
 class UpgradePolicy(str, Enum):
     hard_fail = "hard_fail"
     best_effort = "best_effort"

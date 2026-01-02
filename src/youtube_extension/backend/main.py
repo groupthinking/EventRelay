@@ -13,27 +13,26 @@ This is the main FastAPI application that provides:
 5. **NEW: MCP + A2A Orchestration for On-Demand Software Deployment**
 """
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
-from fastapi.middleware import Middleware
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, FileResponse
-from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
-from typing import List, Dict, Any, Optional
-from pathlib import Path
 import asyncio
+import hashlib
 import json
 import logging
 import os
-import sys
-import hashlib
-import time
 import random
-from datetime import datetime, timedelta
-from dotenv import load_dotenv
 import socket
+import time
 import urllib.parse
 import urllib.request
+from datetime import datetime, timedelta
+from pathlib import Path
+from typing import Any, Optional
+
+from dotenv import load_dotenv
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 
 # Path setup for imports
 project_root = Path(__file__).parent.parent
@@ -44,7 +43,7 @@ logger = logging.getLogger(__name__)
 
 # Real API integration
 try:
-    from .real_api_endpoints import setup_real_api_endpoints, SERVICES_INITIALIZED
+    from .real_api_endpoints import SERVICES_INITIALIZED, setup_real_api_endpoints
     HAS_REAL_API_SERVICES = SERVICES_INITIALIZED
 except ImportError as e:
     logger.warning(f"Real API services not available: {e}")
@@ -59,7 +58,7 @@ except ImportError:
 try:
     from .services.video_processing_service import resolve_deployment_target
 except ImportError:
-    def resolve_deployment_target(target: Optional[str]) -> Dict[str, Any]:
+    def resolve_deployment_target(target: Optional[str]) -> dict[str, Any]:
         normalized = (target or "vercel").strip().lower()
         return {"requested": normalized, "resolved": "vercel", "alias_applied": normalized != "vercel"}
 
@@ -126,12 +125,12 @@ def _http_health_ok(url: str, timeout: float = 3.0) -> bool:
     except Exception:
         return False
 
-def _check_livekit_health() -> Dict[str, Any]:
+def _check_livekit_health() -> dict[str, Any]:
     url = os.getenv("LIVEKIT_URL", "").strip()
     api_key = os.getenv("LIVEKIT_API_KEY", "").strip()
     api_secret = os.getenv("LIVEKIT_API_SECRET", "").strip()
     configured = bool(url)
-    result: Dict[str, Any] = {
+    result: dict[str, Any] = {
         "name": "livekit",
         "configured": configured,
         "reachable": False,
@@ -163,10 +162,10 @@ def _check_livekit_health() -> Dict[str, Any]:
         result["details"]["error"] = str(e)
     return result
 
-def _check_mozilla_ai_health() -> Dict[str, Any]:
+def _check_mozilla_ai_health() -> dict[str, Any]:
     url = os.getenv("MOZILLA_AI_URL", "").strip()
     configured = bool(url)
-    result: Dict[str, Any] = {
+    result: dict[str, Any] = {
         "name": "mozilla_ai",
         "configured": configured,
         "reachable": False,
@@ -259,7 +258,7 @@ except ImportError as e:
 # WebSocket connection manager
 class ConnectionManager:
     def __init__(self):
-        self.active_connections: List[WebSocket] = []
+        self.active_connections: list[WebSocket] = []
 
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
@@ -286,7 +285,7 @@ class ConnectionManager:
             except Exception as e:
                 logger.error(f"Error broadcasting message: {e}")
                 disconnected.append(connection)
-        
+
         # Remove disconnected connections
         for connection in disconnected:
             self.disconnect(connection)
@@ -303,13 +302,13 @@ class VideoToSoftwareRequest(BaseModel):
     video_url: str
     project_type: str = "web"  # web, api, ml, mobile
     deployment_target: str = "vercel"  # vercel, netlify, aws
-    features: Optional[List[str]] = []
+    features: Optional[list[str]] = []
 
 class VideoCategoryRequest(BaseModel):
     category: str
     project_type: str = "web"
     deployment_target: str = "vercel"
-    features: Optional[List[str]] = []
+    features: Optional[list[str]] = []
     query_override: Optional[str] = None
     max_results: int = 5
     order: str = "date"  # relevance, date, viewCount, rating, title
@@ -324,7 +323,7 @@ def _build_category_query(category: str) -> str:
     return f"{normalized} tutorial"
 
 
-DEFAULT_CATEGORY_LIBRARY: Dict[str, List[Dict[str, str]]] = {
+DEFAULT_CATEGORY_LIBRARY: dict[str, list[dict[str, str]]] = {
     "react": [
         {"video_id": "w7ejDZ8SWv8", "title": "React JS Crash Course", "channel": "Traversy Media", "published_at": "2020-09-11T00:00:00Z"},
         {"video_id": "bMknfKXIFA8", "title": "React 18 Tutorial for Beginners", "channel": "freeCodeCamp.org", "published_at": "2022-03-29T00:00:00Z"},
@@ -348,7 +347,7 @@ DEFAULT_CATEGORY_LIBRARY: Dict[str, List[Dict[str, str]]] = {
 CATEGORY_SEARCH_TIMEOUT = float(os.getenv("CATEGORY_SEARCH_TIMEOUT", "15"))
 
 
-def _fallback_video_for_category(category: str) -> Optional[Dict[str, str]]:
+def _fallback_video_for_category(category: str) -> Optional[dict[str, str]]:
     """Return a deterministic fallback video when live search fails."""
     normalized = category.lower()
     for key, entries in DEFAULT_CATEGORY_LIBRARY.items():
@@ -379,10 +378,10 @@ class ChatResponse(BaseModel):
 
 class VideoProcessingRequest(BaseModel):
     video_url: str
-    options: Optional[Dict[str, Any]] = {}
+    options: Optional[dict[str, Any]] = {}
 
 class VideoProcessingResponse(BaseModel):
-    result: Dict[str, Any]
+    result: dict[str, Any]
     status: str
     progress: Optional[float] = 0.0
     timestamp: datetime
@@ -394,7 +393,7 @@ class MarkdownRequest(BaseModel):
 class MarkdownResponse(BaseModel):
     video_id: str
     video_url: str
-    metadata: Dict[str, Any]
+    metadata: dict[str, Any]
     markdown_content: str
     cached: bool
     save_path: str
@@ -403,10 +402,11 @@ class MarkdownResponse(BaseModel):
 
 USE_LANGEXTRACT_FALLBACK = os.getenv("USE_LANGEXTRACT_FALLBACK", "false").lower() in ("1","true","yes")
 
-async def _try_langextract_fallback(video_url: str) -> Optional[Dict[str, Any]]:
+async def _try_langextract_fallback(video_url: str) -> Optional[dict[str, Any]]:
     """When transcript or pipeline fails, attempt content extraction via MCP LangExtract."""
     try:
-        import subprocess, json as _json
+        import json as _json
+        import subprocess
         payload = _json.dumps({
             "method": "tools/call",
             "params": {
@@ -452,7 +452,7 @@ def get_video_processor():
         global _processor_singleton
         if _processor_singleton is not None:
             return _processor_singleton
-        
+
         # Import with proper path handling
 
         # Use the working factory to get a processor
@@ -478,7 +478,7 @@ def get_video_processor():
                 _processor_singleton = processor
                 logger.info("✅ MarkdownVideoProcessor initialized successfully (fallback)")
                 return processor
-            
+
     except ImportError as e:
         logger.error(f"Failed to import video processors: {e}")
         return None
@@ -488,15 +488,15 @@ def get_video_processor():
 
 class CacheManager:
     """Manages caching for processed markdown content"""
-    
+
     def __init__(self, cache_dir: str = "youtube_processed_videos/markdown_analysis"):
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
-    
+
     def _get_cache_key(self, video_url: str) -> str:
         """Generate cache key from video URL"""
         return hashlib.md5(video_url.encode()).hexdigest()[:12]
-    
+
     def _extract_video_id(self, url: str) -> str:
         """Extract video ID from YouTube URL"""
         import re
@@ -505,18 +505,18 @@ class CacheManager:
             r'(?:embed\/)([0-9A-Za-z_-]{11})',
             r'(?:watch\?v=)([0-9A-Za-z_-]{11})'
         ]
-        
+
         for pattern in patterns:
             match = re.search(pattern, url)
             if match:
                 return match.group(1)
-        
+
         if len(url) == 11:
             return url
-        
+
         raise ValueError(f"Could not extract video ID from: {url}")
-    
-    def get_cached_result(self, video_url: str) -> Optional[Dict[str, Any]]:
+
+    def get_cached_result(self, video_url: str) -> Optional[dict[str, Any]]:
         """Get cached markdown result if available (supports legacy and enhanced caches)"""
         try:
             video_id = self._extract_video_id(video_url)
@@ -530,9 +530,9 @@ class CacheManager:
                     if markdown_file.exists() and metadata_file.exists():
                         age = time.time() - markdown_file.stat().st_mtime
                         if age < 86400:
-                            with open(markdown_file, 'r', encoding='utf-8') as f:
+                            with open(markdown_file, encoding='utf-8') as f:
                                 content = f.read()
-                            with open(metadata_file, 'r', encoding='utf-8') as f:
+                            with open(metadata_file, encoding='utf-8') as f:
                                 metadata = json.load(f)
                             return {
                                 'video_id': video_id,
@@ -556,9 +556,9 @@ class CacheManager:
                         meta_candidates = sorted(category_dir.glob(f"{video_id}_*_metadata.json"))
                         metadata = {}
                         if meta_candidates:
-                            with open(meta_candidates[-1], 'r', encoding='utf-8') as f:
+                            with open(meta_candidates[-1], encoding='utf-8') as f:
                                 metadata = json.load(f)
-                        with open(md_path, 'r', encoding='utf-8') as f:
+                        with open(md_path, encoding='utf-8') as f:
                             content = f.read()
                         return {
                             'video_id': video_id,
@@ -572,7 +572,7 @@ class CacheManager:
         except Exception as e:
             logger.error(f"Error checking cache: {e}")
             return None
-    
+
     def clear_cache(self, video_url: str = None):
         """Clear cache for specific video or all videos"""
         if video_url:
@@ -611,7 +611,7 @@ async def health_check():
 
     processor = get_video_processor()
     processor_status = "available" if processor else "unavailable"
-    
+
     # Check real API services
     real_api_status = {
         "enabled": HAS_REAL_API_SERVICES,
@@ -620,7 +620,7 @@ async def health_check():
         "anthropic_api_key": bool(os.getenv("ANTHROPIC_API_KEY")),
         "gemini_api_key": bool(os.getenv("GEMINI_API_KEY"))
     }
-    
+
     connectors = {
         "livekit": {
             "configured": bool(os.getenv("LIVEKIT_URL", "").strip()),
@@ -629,10 +629,10 @@ async def health_check():
             "configured": bool(os.getenv("MOZILLA_AI_URL", "").strip()),
         }
     }
-    
-    overall_status = "healthy" if (processor_status == "available" and 
+
+    overall_status = "healthy" if (processor_status == "available" and
                                    (HAS_REAL_API_SERVICES or processor_status == "available")) else "degraded"
-    
+
     return {
         "status": overall_status,
         "timestamp": datetime.now().isoformat(),
@@ -643,8 +643,8 @@ async def health_check():
         "connectors": connectors,
         "features": {
             "real_youtube_api": real_api_status["youtube_api_key"],
-            "multi_provider_ai": any([real_api_status["openai_api_key"], 
-                                    real_api_status["anthropic_api_key"], 
+            "multi_provider_ai": any([real_api_status["openai_api_key"],
+                                    real_api_status["anthropic_api_key"],
                                     real_api_status["gemini_api_key"]]),
             "cost_monitoring": HAS_REAL_API_SERVICES,
             "mock_fallback": not HAS_REAL_API_SERVICES
@@ -679,34 +679,34 @@ async def chat_endpoint(request: ChatRequest):
     """Handle chat requests from frontend with real AI processing"""
     try:
         logger.info(f"Chat request received: {request.message[:50]}...")
-        
+
         # Get the video processor
         processor = get_video_processor()
-        
+
         if processor:
             # Use real AI processing for chat responses
             try:
                 # For now, use a simple AI response since process_chat_message doesn't exist
                 # TODO: Implement process_chat_message in EnhancedVideoProcessor
                 response_text = f"AI Assistant: I received your message: '{request.message}'. I'm here to help with video processing and analysis! Please provide a YouTube URL for video processing."
-                
+
             except Exception as e:
                 logger.error(f"Error in AI processing: {e}")
                 response_text = f"AI Assistant: I received your message: '{request.message}'. (Processing error: {str(e)})"
         else:
             # Fallback response when processor is unavailable
             response_text = f"AI Assistant: I received your message: '{request.message}'. (Video processor unavailable - please check configuration)"
-        
+
         response = ChatResponse(
             response=response_text,
             status="success",
             session_id=request.session_id,
             timestamp=datetime.now()
         )
-        
-        logger.info(f"Chat response sent successfully")
+
+        logger.info("Chat response sent successfully")
         return response
-        
+
     except Exception as e:
         logger.error(f"Error in chat endpoint: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -722,24 +722,24 @@ async def process_video_markdown(request: MarkdownRequest):
     _metrics["process_video_markdown_total"] += 1
     try:
         logger.info(f"Markdown processing request received: {request.video_url}")
-        
+
         if not request.video_url:
             raise HTTPException(status_code=400, detail="Video URL required")
-        
+
         # Check cache first unless force regenerate is requested
         if not request.force_regenerate:
             cached_result = cache_manager.get_cached_result(request.video_url)
             if cached_result:
                 logger.info(f"Returning cached result for {cached_result['video_id']}")
                 _metrics["cached_total"] += 1
-                
+
                 # Extract markdown content (skip frontmatter)
                 content = cached_result['markdown_content']
                 if content.startswith('---'):
                     end_idx = content.find('---', 3)
                     if end_idx != -1:
                         content = content[end_idx + 3:].strip()
-                
+
                 return MarkdownResponse(
                     video_id=cached_result['video_id'],
                     video_url=request.video_url,
@@ -750,18 +750,18 @@ async def process_video_markdown(request: MarkdownRequest):
                     processing_time=datetime.now().isoformat(),
                     status="success"
                 )
-        
+
         # Get the video processor
         processor = get_video_processor()
         if not processor:
             raise HTTPException(status_code=503, detail="Video processor not available")
-        
+
         try:
             # Process the video with enhanced markdown processor
             start_time = datetime.now()
             result = await processor.process_video(request.video_url)
             processing_duration = (datetime.now() - start_time).total_seconds()
-            
+
             if not result or not result.get('success'):
                 # Force fallback if primary pipeline didn't produce success
                 if USE_LANGEXTRACT_FALLBACK:
@@ -783,14 +783,14 @@ async def process_video_markdown(request: MarkdownRequest):
                                "ENABLED" if USE_LANGEXTRACT_FALLBACK else "DISABLED",
                                "SUCCESS" if USE_LANGEXTRACT_FALLBACK else "N/A")
                 raise HTTPException(status_code=500, detail="Video processing failed")
-            
+
             # Extract markdown content (skip frontmatter)
             markdown_content = result.get('markdown_analysis', '')
             if markdown_content.startswith('---'):
                 end_idx = markdown_content.find('---', 3)
                 if end_idx != -1:
                     markdown_content = markdown_content[end_idx + 3:].strip()
-            
+
             response = MarkdownResponse(
                 video_id=result['video_id'],
                 video_url=request.video_url,
@@ -810,10 +810,10 @@ async def process_video_markdown(request: MarkdownRequest):
                     _metrics["transcript_success_total"] += 1
             except Exception:
                 pass
-            
+
             logger.info(f"Markdown processing completed in {processing_duration:.2f}s")
             return response
-            
+
         except Exception as e:
             logger.exception(f"Error in markdown video processing (exception): {e}")
             # Fallback path using LangExtract
@@ -835,7 +835,7 @@ async def process_video_markdown(request: MarkdownRequest):
             logger.warning("LangExtract fallback %s or returned empty; propagating 500",
                            "FAILED" if USE_LANGEXTRACT_FALLBACK else "DISABLED")
             raise HTTPException(status_code=500, detail=f"Processing failed: {str(e)}")
-            
+
     except HTTPException:
         _metrics["error_total"] += 1
         raise
@@ -850,32 +850,32 @@ async def get_markdown_analysis(video_id: str, format: str = "markdown"):
     try:
         # Search for the video in cache directories
         cache_dir = Path("youtube_processed_videos/markdown_analysis")
-        
+
         for category_dir in cache_dir.iterdir():
             if category_dir.is_dir():
                 analysis_path = category_dir / f"{video_id}_analysis.md"
                 metadata_path = category_dir / f"{video_id}_metadata.json"
-                
+
                 if analysis_path.exists():
-                    with open(analysis_path, 'r', encoding='utf-8') as f:
+                    with open(analysis_path, encoding='utf-8') as f:
                         content = f.read()
-                    
+
                     metadata = {}
                     if metadata_path.exists():
-                        with open(metadata_path, 'r', encoding='utf-8') as f:
+                        with open(metadata_path, encoding='utf-8') as f:
                             metadata = json.load(f)
-                    
+
                     # Skip the frontmatter if present
                     markdown_content = content
                     if content.startswith('---'):
                         end_idx = content.find('---', 3)
                         if end_idx != -1:
                             markdown_content = content[end_idx + 3:].strip()
-                    
+
                     # Get file stats
                     file_stats = analysis_path.stat()
                     age_hours = (time.time() - file_stats.st_mtime) / 3600
-                    
+
                     return {
                         "video_id": video_id,
                         "format": format,
@@ -886,9 +886,9 @@ async def get_markdown_analysis(video_id: str, format: str = "markdown"):
                         "file_size": file_stats.st_size,
                         "last_modified": datetime.fromtimestamp(file_stats.st_mtime).isoformat()
                     }
-        
+
         raise HTTPException(status_code=404, detail=f"Markdown analysis not found for video ID: {video_id}")
-    
+
     except HTTPException:
         raise
     except Exception as e:
@@ -900,32 +900,32 @@ async def process_video_endpoint(request: VideoProcessingRequest):
     """Handle video processing requests with real processing"""
     try:
         logger.info(f"Video processing request received: {request.video_url}")
-        
+
         if not request.video_url:
             raise HTTPException(status_code=400, detail="Video URL required")
-        
+
         # Get the video processor
         processor = get_video_processor()
-        
+
         if processor:
             try:
                 # Process the video with markdown processor
                 result = await processor.process_video(request.video_url)
-                
+
                 # Validate the result structure
                 if not isinstance(result, dict):
                     result = {"processed_data": result, "status": "processed"}
-                
+
                 response = VideoProcessingResponse(
                     result=result,
                     status="success",
                     progress=100.0,
                     timestamp=datetime.now()
                 )
-                
-                logger.info(f"Video processing completed successfully")
+
+                logger.info("Video processing completed successfully")
                 return response
-                
+
             except Exception as e:
                 logger.error(f"Error in video processing: {e}")
                 error_result = {
@@ -934,7 +934,7 @@ async def process_video_endpoint(request: VideoProcessingRequest):
                     "error": str(e),
                     "message": "Video processing failed"
                 }
-                
+
                 response = VideoProcessingResponse(
                     result=error_result,
                     status="error",
@@ -949,7 +949,7 @@ async def process_video_endpoint(request: VideoProcessingRequest):
                 "status": "unavailable",
                 "message": "Video processor not available - check configuration"
             }
-            
+
             response = VideoProcessingResponse(
                 result=error_result,
                 status="error",
@@ -957,7 +957,7 @@ async def process_video_endpoint(request: VideoProcessingRequest):
                 timestamp=datetime.now()
             )
             return response
-            
+
     except Exception as e:
         logger.error(f"Error in video processing endpoint: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -968,7 +968,7 @@ async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
     try:
         logger.info("WebSocket connection established")
-        
+
         # Send welcome message
         welcome_message = {
             "type": "connection",
@@ -977,31 +977,31 @@ async def websocket_endpoint(websocket: WebSocket):
             "message": "Connected to YouTube Extension API"
         }
         await manager.send_personal_message(json.dumps(welcome_message), websocket)
-        
+
         while True:
             try:
                 # Receive message from client
                 data = await websocket.receive_text()
                 message = json.loads(data)
-                
+
                 logger.info(f"WebSocket message received: {message.get('type', 'unknown')}")
-                
+
                 # Handle different message types
                 if message.get("type") == "chat":
                     response = await handle_chat_message(message)
                     await manager.send_personal_message(json.dumps(response), websocket)
-                    
+
                 elif message.get("type") == "video_processing":
                     response = await handle_video_processing_message(message)
                     await manager.send_personal_message(json.dumps(response), websocket)
-                    
+
                 elif message.get("type") == "ping":
                     pong_response = {
                         "type": "pong",
                         "timestamp": datetime.now().isoformat()
                     }
                     await manager.send_personal_message(json.dumps(pong_response), websocket)
-                    
+
                 else:
                     # Unknown message type
                     error_response = {
@@ -1010,7 +1010,7 @@ async def websocket_endpoint(websocket: WebSocket):
                         "timestamp": datetime.now().isoformat()
                     }
                     await manager.send_personal_message(json.dumps(error_response), websocket)
-                    
+
             except WebSocketDisconnect:
                 logger.info("WebSocket disconnected")
                 manager.disconnect(websocket)
@@ -1031,20 +1031,20 @@ async def websocket_endpoint(websocket: WebSocket):
                     "timestamp": datetime.now().isoformat()
                 }
                 await manager.send_personal_message(json.dumps(error_response), websocket)
-                
+
     except WebSocketDisconnect:
         logger.info("WebSocket disconnected")
         manager.disconnect(websocket)
 
-async def handle_chat_message(message: Dict[str, Any]) -> Dict[str, Any]:
+async def handle_chat_message(message: dict[str, Any]) -> dict[str, Any]:
     """Handle chat messages via WebSocket with real processing"""
     try:
         chat_text = message.get("message", "")
         session_id = message.get("session_id", "default")
-        
+
         # Get the video processor
         processor = get_video_processor()
-        
+
         if processor:
             try:
                 # For now, use a simple AI response since process_chat_message doesn't exist
@@ -1055,7 +1055,7 @@ async def handle_chat_message(message: Dict[str, Any]) -> Dict[str, Any]:
                 response_text = f"AI Assistant: I received your message: '{chat_text}'. (Processing error: {str(e)})"
         else:
             response_text = f"AI Assistant: I received your message: '{chat_text}'. (Video processor unavailable)"
-        
+
         return {
             "type": "chat_response",
             "response": response_text,
@@ -1063,7 +1063,7 @@ async def handle_chat_message(message: Dict[str, Any]) -> Dict[str, Any]:
             "timestamp": datetime.now().isoformat(),
             "status": "success"
         }
-        
+
     except Exception as e:
         logger.error(f"Error handling chat message: {e}")
         return {
@@ -1072,37 +1072,37 @@ async def handle_chat_message(message: Dict[str, Any]) -> Dict[str, Any]:
             "timestamp": datetime.now().isoformat()
         }
 
-async def handle_video_processing_message(message: Dict[str, Any]) -> Dict[str, Any]:
+async def handle_video_processing_message(message: dict[str, Any]) -> dict[str, Any]:
     """Handle video processing messages via WebSocket with real processing"""
     try:
         video_url = message.get("video_url", "")
-        
+
         if not video_url:
             return {
                 "type": "error",
                 "message": "Video URL required",
                 "timestamp": datetime.now().isoformat()
             }
-        
+
         # Get the video processor
         processor = get_video_processor()
-        
+
         if processor:
             try:
-                # Process the video with real functionality  
+                # Process the video with real functionality
                 result = await processor.process_video(video_url)
-                
+
                 # Validate the result structure
                 if not isinstance(result, dict):
                     result = {"processed_data": result, "status": "processed"}
-                
+
                 return {
                     "type": "video_processing_response",
                     "result": result,
                     "status": "success",
                     "timestamp": datetime.now().isoformat()
                 }
-                
+
             except Exception as e:
                 logger.error(f"Error in video processing: {e}")
                 return {
@@ -1126,7 +1126,7 @@ async def handle_video_processing_message(message: Dict[str, Any]) -> Dict[str, 
                 "status": "error",
                 "timestamp": datetime.now().isoformat()
             }
-            
+
     except Exception as e:
         logger.error(f"Error handling video processing message: {e}")
         return {
@@ -1143,7 +1143,7 @@ async def clear_video_cache(video_id: str):
         # Reconstruct video URL for cache clearing
         video_url = f"https://www.youtube.com/watch?v={video_id}"
         cache_manager.clear_cache(video_url)
-        
+
         return {
             "status": "success",
             "message": f"Cache cleared for video: {video_id}",
@@ -1158,7 +1158,7 @@ async def clear_all_cache():
     """Clear all cached results"""
     try:
         cache_manager.clear_cache()
-        
+
         return {
             "status": "success",
             "message": "All cache cleared",
@@ -1173,7 +1173,7 @@ async def get_cache_stats():
     """Get cache statistics"""
     try:
         cache_dir = Path("youtube_processed_videos/markdown_analysis")
-        
+
         stats = {
             "total_cached_videos": 0,
             "categories": {},
@@ -1181,26 +1181,26 @@ async def get_cache_stats():
             "oldest_cache": None,
             "newest_cache": None
         }
-        
+
         if cache_dir.exists():
             oldest_time = float('inf')
             newest_time = 0
-            
+
             for category_dir in cache_dir.iterdir():
                 if category_dir.is_dir():
                     category_name = category_dir.name
                     markdown_files = list(category_dir.glob("*_analysis.md"))
                     category_count = len(markdown_files)
                     category_size = sum(f.stat().st_size for f in markdown_files)
-                    
+
                     stats["categories"][category_name] = {
                         "count": category_count,
                         "size_mb": round(category_size / 1024 / 1024, 2)
                     }
-                    
+
                     stats["total_cached_videos"] += category_count
                     stats["total_size_mb"] += category_size
-                    
+
                     # Track oldest and newest
                     for f in markdown_files:
                         mtime = f.stat().st_mtime
@@ -1208,24 +1208,24 @@ async def get_cache_stats():
                             oldest_time = mtime
                         if mtime > newest_time:
                             newest_time = mtime
-            
+
             stats["total_size_mb"] = round(stats["total_size_mb"] / 1024 / 1024, 2)
-            
+
             if oldest_time != float('inf'):
                 stats["oldest_cache"] = datetime.fromtimestamp(oldest_time).isoformat()
             if newest_time > 0:
                 stats["newest_cache"] = datetime.fromtimestamp(newest_time).isoformat()
-        
+
         return stats
-        
+
     except Exception as e:
         logger.error(f"Error getting cache stats: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # Real Video-to-Software imports
 try:
-    from .code_generator import get_code_generator
     from .ai_code_generator import get_ai_code_generator
+    from .code_generator import get_code_generator
     from .deployment_manager import get_deployment_manager
     REAL_PIPELINE_AVAILABLE = True
     AI_GENERATION_AVAILABLE = True
@@ -1242,27 +1242,27 @@ async def video_to_software_endpoint(request: VideoToSoftwareRequest):
     Complete implementation using UVAI's real video processing pipeline
     """
     start_time = time.time()
-    
+
     try:
         logger.info(f"🚀 Real Video-to-Software request: {request.video_url}")
-        
+
         target_info = resolve_deployment_target(request.deployment_target)
         resolved_target = target_info["resolved"]
         features_list = list(request.features or ["responsive_design", "modern_ui"])
 
         if not REAL_PIPELINE_AVAILABLE:
             raise HTTPException(
-                status_code=503, 
+                status_code=503,
                 detail="Real video-to-software pipeline not available. Please check system configuration."
             )
-        
+
         # Phase 1: Real Video Processing
         logger.info("1️⃣ Processing video with real UVAI components...")
         processor = get_video_processor()
         video_analysis = await processor.process_video(request.video_url)
-        
+
         # Handle different processor output formats
-        if video_analysis.get("success") == True:
+        if video_analysis.get("success"):
             # Enhanced processor format
             extracted_info = {
                 "title": video_analysis.get("metadata", {}).get("title", "UVAI Generated Project"),
@@ -1278,10 +1278,10 @@ async def video_to_software_endpoint(request: VideoToSoftwareRequest):
             video_status = "success"
         else:
             raise HTTPException(
-                status_code=400, 
+                status_code=400,
                 detail=f"Video processing failed: {video_analysis.get('error', 'Unknown error')}"
             )
-        
+
         # Phase 2: AI-Powered Full-Stack Code Generation
         logger.info("2️⃣ Generating full-stack project with AI...")
 
@@ -1308,40 +1308,40 @@ async def video_to_software_endpoint(request: VideoToSoftwareRequest):
         else:
             code_generator = get_code_generator()
             generation_result = await code_generator.generate_project(video_analysis, project_config)
-        
+
         # Phase 3: Real Deployment
         logger.info("3️⃣ Deploying to platforms...")
         deployment_manager = get_deployment_manager()
-        
+
         deployment_config = {
             "target": resolved_target,
             "auto_deploy": True
         }
-        
+
         deployment_result = await deployment_manager.deploy_project(
             generation_result["project_path"],
             project_config,
             deployment_config
         )
-        
+
         # Phase 4: Compile Results
         processing_time = time.time() - start_time
         logger.info("4️⃣ Compiling final results...")
-        
+
         # Get primary deployment URL
         deployment_urls = deployment_result.get("urls", {})
         primary_url = (
-            deployment_urls.get(resolved_target) or 
-            deployment_urls.get("vercel") or 
-            deployment_urls.get("netlify") or 
+            deployment_urls.get(resolved_target) or
+            deployment_urls.get("vercel") or
+            deployment_urls.get("netlify") or
             deployment_urls.get("github_pages") or
             "https://deployment-pending.uvai.platform"
         )
-        
+
         # Get GitHub repository URL
         github_deployment = deployment_result.get("deployments", {}).get("github", {})
         github_url = github_deployment.get("url", "https://github.com/uvai-generated/project-pending")
-        
+
         # Compile comprehensive result
         result = {
             "video_url": request.video_url,
@@ -1353,14 +1353,14 @@ async def video_to_software_endpoint(request: VideoToSoftwareRequest):
             "build_status": "completed" if deployment_result.get("status") == "success" else "partial",
             "processing_time": f"{processing_time:.1f}s",
             "features_implemented": features_list + ["uvai_generated", "real_pipeline"],
-            
+
             # Real processing results
             "video_analysis": {
                 "status": video_status,
                 "extracted_info": extracted_info,
                 "processing_pipeline": video_analysis.get("processing_pipeline", [])
             },
-            
+
             "code_generation": {
                 "framework": generation_result.get("framework"),
                 "files_created": generation_result.get("files_created", []),
@@ -1368,7 +1368,7 @@ async def video_to_software_endpoint(request: VideoToSoftwareRequest):
                 "build_command": generation_result.get("build_command"),
                 "start_command": generation_result.get("start_command")
             },
-            
+
             "deployment": {
                 "status": deployment_result.get("status"),
                 "deployment_id": deployment_result.get("deployment_id"),
@@ -1376,12 +1376,12 @@ async def video_to_software_endpoint(request: VideoToSoftwareRequest):
                 "urls": deployment_urls,
                 "errors": deployment_result.get("errors", [])
             },
-            
+
             "status": "success",
             "timestamp": datetime.now().isoformat(),
             "real_implementation": True
         }
-        
+
         logger.info(f"✅ Real Video-to-Software completed in {processing_time:.1f}s")
         logger.info(f"📊 Generated {len(generation_result.get('files_created', []))} files")
         logger.info(f"🌐 Deployed to {len(deployment_urls)} platforms")
@@ -1424,7 +1424,7 @@ async def video_to_software_by_category(request: VideoCategoryRequest):
 
     max_results = max(1, min(request.max_results or 1, 25))
 
-    search_results: List[Any] = []
+    search_results: list[Any] = []
     search_error: Optional[str] = None
     try:
         service = get_youtube_service()
@@ -1515,31 +1515,31 @@ async def video_to_software_health():
                 "deployment_manager": False
             }
         }
-        
+
         if REAL_PIPELINE_AVAILABLE:
             try:
                 processor = get_video_processor()
                 health_status["components"]["video_processor"] = processor is not None
             except:
                 pass
-            
+
             try:
                 code_gen = get_code_generator()
                 health_status["components"]["code_generator"] = code_gen is not None
             except:
                 pass
-            
+
             try:
                 deploy_mgr = get_deployment_manager()
                 health_status["components"]["deployment_manager"] = deploy_mgr is not None
             except:
                 pass
-        
+
         overall_health = all(health_status["components"].values())
         health_status["overall"] = "healthy" if overall_health else "degraded"
-        
+
         return health_status
-        
+
     except Exception as e:
         logger.error(f"Health check failed: {e}")
         return {
@@ -1563,7 +1563,7 @@ async def get_learning_log():
 					metadata_file = next(category_dir.glob(f"{video_id}_*_metadata.json"), None)
 					metadata = {}
 					if metadata_file and metadata_file.exists():
-						with open(metadata_file, "r", encoding="utf-8") as f:
+						with open(metadata_file, encoding="utf-8") as f:
 							metadata = json.load(f)
 					stat = md_file.stat()
 					items.append({
@@ -1597,7 +1597,7 @@ async def get_videos_summary():
 					metadata_file = next(category_dir.glob(f"{video_id}_*_metadata.json"), None)
 					metadata = {}
 					if metadata_file and metadata_file.exists():
-						with open(metadata_file, "r", encoding="utf-8") as f:
+						with open(metadata_file, encoding="utf-8") as f:
 							metadata = json.load(f)
 					stat = md_file.stat()
 					results.append({
@@ -1628,9 +1628,9 @@ async def get_video_detail(video_id: str):
 				metadata_file = next(category_dir.glob(f"{video_id}_*_metadata.json"), None)
 				metadata = {}
 				if metadata_file and metadata_file.exists():
-					with open(metadata_file, "r", encoding="utf-8") as f:
+					with open(metadata_file, encoding="utf-8") as f:
 						metadata = json.load(f)
-				with open(md_file, "r", encoding="utf-8") as f:
+				with open(md_file, encoding="utf-8") as f:
 					markdown = f.read()
 				return {
 					"video_id": video_id,
@@ -1649,7 +1649,7 @@ async def get_video_detail(video_id: str):
 		raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/feedback")
-async def post_feedback(payload: Dict[str, Any]):
+async def post_feedback(payload: dict[str, Any]):
 	"""Accept feedback and append to a jsonl file."""
 	try:
 		feedback_dir = Path("youtube_processed_videos/feedback")
@@ -1676,7 +1676,7 @@ async def missing_dependency_handler(request, exc: MissingDependencyError):
 async def global_exception_handler(request, exc):
     """Global exception handler with enhanced error details"""
     logger.error(f"Unhandled exception: {exc}")
-    
+
     # Enhanced error response for development
     error_detail = {
         "error": "Internal server error",
@@ -1684,11 +1684,11 @@ async def global_exception_handler(request, exc):
         "timestamp": datetime.now().isoformat(),
         "path": str(request.url) if hasattr(request, 'url') else "unknown"
     }
-    
+
     # Add type information for debugging
     if hasattr(exc, '__class__'):
         error_detail["error_type"] = exc.__class__.__name__
-    
+
     return JSONResponse(
         status_code=500,
         content=error_detail

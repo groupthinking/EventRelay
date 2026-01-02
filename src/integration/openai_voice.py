@@ -9,11 +9,11 @@ Chained: gpt-4o-transcribe → gpt-4.1 → gpt-4o-mini-tts
 """
 
 import os
-import asyncio
-import httpx
-import base64
-from typing import Optional, Literal, AsyncGenerator
+from collections.abc import AsyncGenerator
 from dataclasses import dataclass
+from typing import Literal, Optional
+
+import httpx
 
 
 @dataclass
@@ -32,20 +32,20 @@ class SpeechResult:
 class OpenAIVoiceService:
     """
     OpenAI Voice Agents service supporting both architectures:
-    
+
     1. Speech-to-Speech (Realtime): Low latency, natural conversation
        - Model: gpt-4o-realtime-preview
        - Best for: Interactive voice apps, natural interruptions
-       
+
     2. Chained: High control, scriptable
        - Transcribe: gpt-4o-transcribe / gpt-4o-mini-transcribe
        - Process: gpt-4.1
        - Speak: gpt-4o-mini-tts
        - Best for: Strict responses, existing text agents
     """
-    
+
     BASE_URL = "https://api.openai.com/v1"
-    
+
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or os.environ.get("OPENAI_API_KEY")
         if not self.api_key:
@@ -54,9 +54,9 @@ class OpenAIVoiceService:
             timeout=60.0,
             headers={"Authorization": f"Bearer {self.api_key}"}
         )
-    
+
     # ============ Speech-to-Text (Transcription) ============
-    
+
     async def transcribe_audio(
         self,
         audio_data: bytes,
@@ -66,7 +66,7 @@ class OpenAIVoiceService:
     ) -> TranscriptionResult:
         """
         Transcribe audio using OpenAI's latest transcription models.
-        
+
         Models:
         - gpt-4o-transcribe: High accuracy
         - gpt-4o-mini-transcribe: Cost efficient
@@ -76,25 +76,25 @@ class OpenAIVoiceService:
             "model": (None, model),
             "response_format": (None, response_format)
         }
-        
+
         if language:
             files["language"] = (None, language)
-        
+
         response = await self.client.post(
             f"{self.BASE_URL}/audio/transcriptions",
             files=files
         )
         response.raise_for_status()
         data = response.json()
-        
+
         return TranscriptionResult(
             text=data.get("text", ""),
             language=data.get("language"),
             duration=data.get("duration")
         )
-    
+
     # ============ Text-to-Speech ============
-    
+
     async def text_to_speech(
         self,
         text: str,
@@ -105,12 +105,12 @@ class OpenAIVoiceService:
     ) -> SpeechResult:
         """
         Convert text to speech using OpenAI's TTS models.
-        
+
         Models:
         - gpt-4o-mini-tts: Latest, low latency
         - tts-1: Standard
         - tts-1-hd: High definition
-        
+
         Voices: alloy, echo, fable, onyx, nova, shimmer
         """
         response = await self.client.post(
@@ -124,12 +124,12 @@ class OpenAIVoiceService:
             }
         )
         response.raise_for_status()
-        
+
         return SpeechResult(
             audio_data=response.content,
             format=response_format
         )
-    
+
     async def text_to_speech_streaming(
         self,
         text: str,
@@ -154,9 +154,9 @@ class OpenAIVoiceService:
             response.raise_for_status()
             async for chunk in response.aiter_bytes():
                 yield chunk
-    
+
     # ============ Chained Pipeline ============
-    
+
     async def voice_to_voice_chained(
         self,
         audio_data: bytes,
@@ -171,24 +171,24 @@ class OpenAIVoiceService:
         1. Transcribe audio → text
         2. Process with GPT → response text
         3. Convert to speech → audio
-        
+
         Returns: (response_text, audio_result)
         """
         # Step 1: Transcribe
         transcription = await self.transcribe_audio(audio_data, transcription_model)
-        
+
         # Step 2: Process with GPT
         response_text = await self._generate_text_response(
             transcription.text,
             system_prompt,
             processing_model
         )
-        
+
         # Step 3: Text to Speech
         audio = await self.text_to_speech(response_text, tts_model, voice)
-        
+
         return response_text, audio
-    
+
     async def _generate_text_response(
         self,
         user_message: str,
@@ -210,9 +210,9 @@ class OpenAIVoiceService:
         response.raise_for_status()
         data = response.json()
         return data["choices"][0]["message"]["content"]
-    
+
     # ============ Utility Methods ============
-    
+
     async def close(self):
         await self.client.aclose()
 
@@ -223,14 +223,14 @@ class OpenAIVideoFallback:
     Fallback to OpenAI for video analysis when Gemini is unavailable.
     Uses GPT-4 Vision for frame analysis.
     """
-    
+
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or os.environ.get("OPENAI_API_KEY")
         self.client = httpx.AsyncClient(
             timeout=120.0,
             headers={"Authorization": f"Bearer {self.api_key}"}
         )
-    
+
     async def analyze_video_frames(
         self,
         frame_urls: list[str],
@@ -238,13 +238,13 @@ class OpenAIVideoFallback:
     ) -> str:
         """Analyze video frames using GPT-4 Vision."""
         content = [{"type": "text", "text": prompt}]
-        
+
         for url in frame_urls[:10]:  # Limit to 10 frames
             content.append({
                 "type": "image_url",
                 "image_url": {"url": url}
             })
-        
+
         response = await self.client.post(
             "https://api.openai.com/v1/chat/completions",
             json={
@@ -255,6 +255,6 @@ class OpenAIVideoFallback:
         )
         response.raise_for_status()
         return response.json()["choices"][0]["message"]["content"]
-    
+
     async def close(self):
         await self.client.aclose()

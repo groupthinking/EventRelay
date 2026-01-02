@@ -12,13 +12,12 @@ Notes:
 """
 
 import asyncio
+import importlib.util
 import json
 import os
-import importlib.util
 from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Optional
 
 
 @dataclass
@@ -55,8 +54,8 @@ class OpenAIDevTaskManager:
             raise ImportError("MCPVideoProcessor class not found in mcp_video_processor module")
         return module.MCPVideoProcessor()
 
-    async def run_videos(self, video_urls: List[str]) -> List[DevTaskResult]:
-        results: List[DevTaskResult] = []
+    async def run_videos(self, video_urls: list[str]) -> list[DevTaskResult]:
+        results: list[DevTaskResult] = []
         for url in video_urls:
             result = await self._process_single_video(url)
             results.append(result)
@@ -92,11 +91,11 @@ class OpenAIDevTaskManager:
             dest = self.output_root / video_id
             dest.mkdir(parents=True, exist_ok=True)
 
-            blueprint_path = await self._write_blueprint(dest, video_id, video_url, category)
-            spec_path = await self._write_subagent_spec(dest, video_id, category)
+            await self._write_blueprint(dest, video_id, video_url, category)
+            await self._write_subagent_spec(dest, video_id, category)
 
             # PR helper script (non-destructive)
-            pr_script = await self._write_pr_script(dest, video_id)
+            await self._write_pr_script(dest, video_id)
 
             # Return
             return DevTaskResult(

@@ -10,12 +10,13 @@ Endpoint: https://generativelanguage.googleapis.com/v1beta/models/
 Project: gen-lang-client-0209671908
 """
 
-import os
 import asyncio
-import httpx
 import json
-from typing import Optional, Literal
+import os
 from dataclasses import dataclass, field
+from typing import Literal, Optional
+
+import httpx
 
 
 @dataclass
@@ -32,24 +33,24 @@ class VideoAnalysisResult:
 class GeminiVideoService:
     """
     Gemini 2.5 Pro service for advanced video analysis.
-    
+
     Key capabilities:
     - Native YouTube URL support (preview)
     - Transcription with speaker detection
     - Visual OCR for on-screen text/code
     - Timestamping for events
     - Deep reasoning about video content
-    
+
     Available Models:
     - gemini-2.5-pro: Latest with best reasoning
     - gemini-2.5-flash: Fast, cost-effective
     - gemini-2.0-flash-thinking-exp: Experimental thinking
     """
-    
+
     BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
     DEFAULT_MODEL = "gemini-2.5-pro"
     FALLBACK_MODEL = "gemini-2.0-flash"
-    
+
     # Fallback API keys for rotation
     API_KEYS = [
         "AIzaSyDtYn1Sg9QnvrNm8P4AdazfhiqtzV9FL8k",
@@ -59,19 +60,19 @@ class GeminiVideoService:
         "AIzaSyDKA991w_reg2W5Z6Juw92mg9Nj86iQFaA",
         "AIzaSyA3CScjNNPRxe1K08PDMjDQyDRlzX-uIG0",
     ]
-    
+
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or os.environ.get("GEMINI_API_KEY") or self.API_KEYS[0]
         if not self.api_key:
             raise ValueError("GEMINI_API_KEY required")
         self.client = httpx.AsyncClient(timeout=180.0)  # Longer timeout for video
         self._key_index = 0
-    
+
     def _rotate_key(self):
         """Rotate to next API key on rate limit."""
         self._key_index = (self._key_index + 1) % len(self.API_KEYS)
         self.api_key = self.API_KEYS[self._key_index]
-    
+
     async def analyze_video(
         self,
         video_url: str,
@@ -82,7 +83,7 @@ class GeminiVideoService:
     ) -> VideoAnalysisResult:
         """
         Analyze video content using Gemini's multimodal capabilities.
-        
+
         Args:
             video_url: YouTube URL or file URI
             prompt: Analysis instructions
@@ -92,10 +93,10 @@ class GeminiVideoService:
             thinking_level: 'low' for simple tasks, 'high' for complex reasoning
         """
         model = model or self.DEFAULT_MODEL
-        
+
         # Determine if YouTube URL - pass as plain text (correct format per Google docs)
         is_youtube = "youtube.com" in video_url or "youtu.be" in video_url
-        
+
         if is_youtube:
             # YouTube URLs are passed as plain text strings in the contents array
             # NOT as file_data - this is the correct format per Google's documentation
@@ -134,10 +135,10 @@ class GeminiVideoService:
                     "maxOutputTokens": 8192
                 }
             }
-        
+
         response = await self._make_request(model, payload)
         text = response["candidates"][0]["content"]["parts"][0]["text"]
-        
+
         # Parse JSON response if possible
         try:
             parsed = json.loads(text)
@@ -152,12 +153,12 @@ class GeminiVideoService:
                 summary=text,
                 key_events=self._extract_events(text)
             )
-    
+
     async def _make_request(self, model: str, payload: dict, retries: int = 3) -> dict:
         """Make API request with key rotation on failure."""
         last_error = None
-        
-        for attempt in range(retries):
+
+        for _attempt in range(retries):
             try:
                 response = await self.client.post(
                     f"{self.BASE_URL}/models/{model}:generateContent",
@@ -180,7 +181,7 @@ class GeminiVideoService:
                             "maxOutputTokens": 8192
                         }
                     }
-                    
+
                     response = await self.client.post(
                         f"{self.BASE_URL}/models/{self.FALLBACK_MODEL}:generateContent",
                         params={"key": self.api_key},
@@ -190,9 +191,9 @@ class GeminiVideoService:
                     return response.json()
                 else:
                     raise
-        
+
         raise last_error
-    
+
     async def extract_technical_breakdown(
         self,
         video_url: str
@@ -203,7 +204,7 @@ class GeminiVideoService:
         """
         prompt = """
         Watch this video carefully. I need a comprehensive technical breakdown.
-        
+
         Extract and return as JSON:
         {
             "summary": "Brief summary of what the video covers",
@@ -224,24 +225,24 @@ class GeminiVideoService:
             ]
         }
         """
-        
+
         return await self.analyze_video(
-            video_url, 
+            video_url,
             prompt,
             media_resolution="high",  # Critical for reading code on screen
             thinking_level="high"     # Deep reasoning for technical content
         )
-    
+
     async def generate_code_from_video(
         self,
         video_url: str,
         target_framework: str = "nextjs"
     ) -> str:
         """Generate production-ready application code based on video content."""
-        
-        prompt = f"""Analyze this video tutorial and generate production-ready 
+
+        prompt = f"""Analyze this video tutorial and generate production-ready
         {target_framework} code that implements what's shown.
-        
+
         Include:
         1. Complete component structure with TypeScript
         2. API routes if applicable (Next.js App Router format)
@@ -249,7 +250,7 @@ class GeminiVideoService:
         4. Tailwind CSS styling
         5. Error handling and loading states
         6. Environment variable placeholders
-        
+
         Output as a JSON object with files:
         {{
             "files": [
@@ -258,23 +259,23 @@ class GeminiVideoService:
             ]
         }}
         """
-        
+
         result = await self.analyze_video(
-            video_url, 
+            video_url,
             prompt,
             media_resolution="high",
             thinking_level="high"
         )
         return result.summary
-    
+
     async def extract_transcript_with_timestamps(
         self,
         video_url: str
     ) -> list[dict]:
         """Extract timestamped transcript from video with speaker detection."""
-        
+
         prompt = """Extract a detailed transcript from this video.
-        
+
         Return as JSON:
         {
             "transcript": [
@@ -284,30 +285,30 @@ class GeminiVideoService:
             "speakers_detected": ["List of speakers"]
         }
         """
-        
+
         result = await self.analyze_video(
-            video_url, 
+            video_url,
             prompt,
             media_resolution="low",  # Audio focus doesn't need high visual tokens
             thinking_level="low"     # Transcription is straightforward
         )
         return result.transcript_segments or result.key_events
-    
+
     async def answer_video_question(
         self,
         video_url: str,
         question: str
     ) -> str:
         """Answer a specific question based on video content."""
-        
-        prompt = f"""Watch this video and answer the following question based on 
+
+        prompt = f"""Watch this video and answer the following question based on
         both visual and audio evidence:
-        
+
         Question: {question}
-        
+
         Provide a detailed answer with timestamps when relevant.
         """
-        
+
         result = await self.analyze_video(
             video_url,
             prompt,
@@ -315,7 +316,7 @@ class GeminiVideoService:
             thinking_level="high"
         )
         return result.summary
-    
+
     def _extract_events(self, text: str) -> list[dict]:
         """Parse events from analysis text."""
         events = []
@@ -327,6 +328,6 @@ class GeminiVideoService:
                 if event_text:
                     events.append({"event": event_text})
         return events
-    
+
     async def close(self):
         await self.client.aclose()

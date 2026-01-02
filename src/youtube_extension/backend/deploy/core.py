@@ -9,9 +9,10 @@ import logging
 import os
 import time
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional, List
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Any, Optional
+
 import httpx
 
 logger = logging.getLogger(__name__)
@@ -22,7 +23,7 @@ class DeploymentError(Exception):
     platform: str
     operation: str
     message: str
-    details: Dict[str, Any] = field(default_factory=dict)
+    details: dict[str, Any] = field(default_factory=dict)
     recoverable: bool = False
 
 @dataclass
@@ -34,8 +35,8 @@ class DeploymentResult:
     url: Optional[str] = None
     build_log_url: Optional[str] = None
     error_message: Optional[str] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
-    timestamps: Dict[str, datetime] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
+    timestamps: dict[str, datetime] = field(default_factory=dict)
 
 class EnvironmentValidator:
     """Centralized environment variable validation"""
@@ -54,7 +55,7 @@ class EnvironmentValidator:
     }
 
     @classmethod
-    def validate_for_platform(cls, platform: str) -> Dict[str, Any]:
+    def validate_for_platform(cls, platform: str) -> dict[str, Any]:
         """Validate environment for specific platform deployment"""
         result = {
             'valid': True,
@@ -99,7 +100,7 @@ class RetryConfig:
                  base_delay: float = 1.0,
                  max_delay: float = 60.0,
                  backoff_factor: float = 2.0,
-                 retryable_status_codes: List[int] = None):
+                 retryable_status_codes: list[int] = None):
         self.max_attempts = max_attempts
         self.base_delay = base_delay
         self.max_delay = max_delay
@@ -114,7 +115,7 @@ class BaseDeploymentAdapter(ABC):
         self.retry_config = retry_config or RetryConfig()
         self.logger = logging.getLogger(f"{__name__}.{platform}")
 
-    async def deploy(self, project_path: str, project_config: Dict[str, Any], env: Dict[str, Any]) -> DeploymentResult:
+    async def deploy(self, project_path: str, project_config: dict[str, Any], env: dict[str, Any]) -> DeploymentResult:
         """Main deployment entry point with error handling and validation"""
         start_time = datetime.now()
 
@@ -156,16 +157,16 @@ class BaseDeploymentAdapter(ABC):
             )
 
     @abstractmethod
-    async def _deploy_impl(self, project_path: str, project_config: Dict[str, Any], env: Dict[str, Any]) -> DeploymentResult:
+    async def _deploy_impl(self, project_path: str, project_config: dict[str, Any], env: dict[str, Any]) -> DeploymentResult:
         """Platform-specific deployment implementation"""
         pass
 
     async def _make_request_with_retry(self,
                                      method: str,
                                      url: str,
-                                     headers: Optional[Dict[str, str]] = None,
-                                     json_data: Optional[Dict] = None,
-                                     timeout: float = 30.0) -> Dict[str, Any]:
+                                     headers: Optional[dict[str, str]] = None,
+                                     json_data: Optional[dict] = None,
+                                     timeout: float = 30.0) -> dict[str, Any]:
         """Make HTTP request with retry logic"""
 
         for attempt in range(self.retry_config.max_attempts):
@@ -240,8 +241,8 @@ class BaseDeploymentAdapter(ABC):
 
     async def _poll_deployment_status(self,
                                     status_url: str,
-                                    success_statuses: List[str],
-                                    timeout_minutes: int = 10) -> Dict[str, Any]:
+                                    success_statuses: list[str],
+                                    timeout_minutes: int = 10) -> dict[str, Any]:
         """Poll deployment status until completion or timeout"""
 
         start_time = time.time()

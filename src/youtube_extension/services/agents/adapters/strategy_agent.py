@@ -4,17 +4,20 @@ Strategy Agent
 Generates actionable funnels and "Better Way" optimizations with A2UI support.
 """
 
-import os
 import asyncio
-import logging
 import json
-from datetime import datetime
-from typing import Any, Dict, Optional, List
+import logging
+import os
+from typing import Any, Optional
 
+from ...ai.hybrid_processor_service import (
+    HybridConfig,
+    HybridProcessorService,
+    TaskType,
+)
 from ..base_agent import BaseAgent
 from ..dto import AgentRequest, AgentResult
 from ..registry import register
-from ...ai.hybrid_processor_service import HybridProcessorService, HybridConfig, TaskType
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +26,7 @@ class StrategyAgent(BaseAgent):
     """Agent specialized in strategic analysis and A2UI funnel generation."""
     name = "strategy_agent"
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, config: Optional[dict[str, Any]] = None):
         cfg = config or {}
         gemini_cfg = cfg.get("gemini_config") or self._build_gemini_config()
         self._hybrid_processor = cfg.get("hybrid_processor") or HybridProcessorService(HybridConfig(gemini=gemini_cfg))
@@ -35,15 +38,15 @@ class StrategyAgent(BaseAgent):
         video_metadata = req.params.get("video_metadata") or {}
         personality_map = req.params.get("personality_map") or {}
         transcript = req.params.get("transcript")
-        
+
         if not transcript and not video_info:
             return self._failure("Missing transcript or video metadata", start_time)
 
         try:
             # Generate strategic analysis and A2UI payload
             strategy_data = await self._generate_strategy(transcript, video_info, personality_map)
-            
-            elapsed = asyncio.get_event_loop().time() - start_time
+
+            asyncio.get_event_loop().time() - start_time
             return AgentResult(
                 status="ok",
                 output={
@@ -60,9 +63,9 @@ class StrategyAgent(BaseAgent):
             logger.error("StrategyAgent failed: %s", exc, exc_info=True)
             return self._failure(str(exc), start_time)
 
-    async def _generate_strategy(self, transcript: Optional[str], video_metadata: Dict[str, Any], personality_map: Dict[str, Any]) -> Dict[str, Any]:
+    async def _generate_strategy(self, transcript: Optional[str], video_metadata: dict[str, Any], personality_map: dict[str, Any]) -> dict[str, Any]:
         """Call Gemini to generate strategic analysis and A2UI payload."""
-        
+
         prompt = (
             "You are a master strategist. Analyze the video data and personality mapping provided to generate a "
             "deep strategic analysis and an 'Actionable Funnel' for the user.\n\n"
@@ -76,7 +79,7 @@ class StrategyAgent(BaseAgent):
             f"Personality Map: {json.dumps(personality_map)}\n"
             f"Video Metadata: {json.dumps(video_metadata)}\n"
         )
-        
+
         if transcript:
             prompt += f"\nTranscript Snippet: {transcript[:2000]}\n"
 
@@ -88,10 +91,10 @@ class StrategyAgent(BaseAgent):
             response_mime_type="application/json",
             video_metadata=video_metadata
         )
-        
+
         if not result.success or not result.response:
             raise RuntimeError(f"Gemini strategic analysis failed: {result.error}")
-            
+
         return json.loads(result.response)
 
     def _failure(self, message: str, start_time: float) -> AgentResult:

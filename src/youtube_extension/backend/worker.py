@@ -7,14 +7,16 @@ Consumes video processing events from Pub/Sub and invokes the video processing s
 Designed to run as a standalone service.
 """
 
-import os
+import asyncio
 import json
 import logging
-import asyncio
+import os
 import threading
-from http.server import HTTPServer, BaseHTTPRequestHandler
 from concurrent.futures import TimeoutError
+from http.server import BaseHTTPRequestHandler, HTTPServer
+
 from google.cloud import pubsub_v1
+
 from youtube_extension.backend.containers.service_container import get_service_container
 
 # Configure logging
@@ -33,12 +35,12 @@ def process_message(message):
     Callback for handling Pub/Sub messages.
     """
     logger.info(f"Received message: {message.message_id}")
-    
+
     try:
         data = json.loads(message.data.decode("utf-8"))
         video_url = data.get("video_url")
         options = data.get("options", {})
-        
+
         if not video_url:
             logger.warning("Message missing video_url, acking to drop.")
             message.ack()
@@ -48,10 +50,10 @@ def process_message(message):
 
         # Run async processing in a new event loop for this thread
         # Note: In a production pull-subscriber, we might want to manage the loop differently
-        # or use an async-compatible client library if available. 
+        # or use an async-compatible client library if available.
         # For simplicity here, we run safe.
         asyncio.run(run_processing(video_url, options))
-        
+
         message.ack()
         logger.info(f"Message {message.message_id} acknowledged.")
 
@@ -66,7 +68,7 @@ async def run_processing(video_url, options):
     """
     container = get_service_container()
     service = container.get_service("video_processing_service")
-    
+
     try:
         result = await service.process_video_basic(video_url, options)
         logger.info(f"Processing complete for {video_url}. Status: {result.get('status', 'unknown')}")
@@ -83,7 +85,7 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.end_headers()
         self.wfile.write(b"OK")
-    
+
     # Suppress log messages for health checks to keep logs clean
     def log_message(self, format, *args):
         pass
@@ -105,10 +107,10 @@ def main():
     threading.Thread(target=start_health_check_server, daemon=True).start()
 
     logger.info(f"Starting worker for subscription: projects/{PROJECT_ID}/subscriptions/{SUBSCRIPTION_ID}")
-    
+
     subscriber = pubsub_v1.SubscriberClient()
     subscription_path = subscriber.subscription_path(PROJECT_ID, SUBSCRIPTION_ID)
-    
+
     streaming_pull_future = subscriber.subscribe(subscription_path, callback=process_message)
     logger.info(f"Listening for messages on {subscription_path}...")
 

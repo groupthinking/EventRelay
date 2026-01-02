@@ -4,11 +4,12 @@ YouTube API - Video Metadata & Transcripts
 Fetch video metadata, captions, and channel info from YouTube Data API v3.
 """
 
-import os
 import asyncio
-import httpx
-from typing import Optional
+import os
 from dataclasses import dataclass
+from typing import Optional
+
+import httpx
 from youtube_transcript_api import YouTubeTranscriptApi
 
 
@@ -38,18 +39,18 @@ class TranscriptSegment:
 
 class YouTubeAPIService:
     """YouTube Data API v3 service for metadata and transcripts."""
-    
+
     BASE_URL = "https://www.googleapis.com/youtube/v3"
-    
+
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or os.environ.get("YOUTUBE_API_KEY")
         if not self.api_key:
             raise ValueError("YOUTUBE_API_KEY required")
         self.client = httpx.AsyncClient(timeout=30.0)
-    
+
     async def get_video_metadata(self, video_id: str) -> VideoMetadata:
         """Fetch comprehensive video metadata."""
-        
+
         response = await self.client.get(
             f"{self.BASE_URL}/videos",
             params={
@@ -60,14 +61,14 @@ class YouTubeAPIService:
         )
         response.raise_for_status()
         data = response.json()
-        
+
         if not data.get("items"):
             raise ValueError(f"Video not found: {video_id}")
-        
+
         item = data["items"][0]
         snippet = item["snippet"]
         stats = item.get("statistics", {})
-        
+
         return VideoMetadata(
             video_id=video_id,
             title=snippet["title"],
@@ -81,21 +82,23 @@ class YouTubeAPIService:
             tags=snippet.get("tags", []),
             thumbnail_url=snippet["thumbnails"]["high"]["url"]
         )
-    
+
     async def get_transcript(
         self,
         video_id: str,
-        languages: list[str] = ["en"]
+        languages: list[str] = None
     ) -> list[TranscriptSegment]:
         """Fetch video transcript/captions."""
-        
+
         # youtube_transcript_api is sync, run in executor
+        if languages is None:
+            languages = ["en"]
         loop = asyncio.get_event_loop()
         transcript = await loop.run_in_executor(
             None,
             lambda: YouTubeTranscriptApi.get_transcript(video_id, languages=languages)
         )
-        
+
         return [
             TranscriptSegment(
                 text=seg["text"],
@@ -104,12 +107,12 @@ class YouTubeAPIService:
             )
             for seg in transcript
         ]
-    
+
     async def get_full_transcript_text(self, video_id: str) -> str:
         """Get transcript as single concatenated string."""
         segments = await self.get_transcript(video_id)
         return " ".join(seg.text for seg in segments)
-    
+
     async def search_videos(
         self,
         query: str,
@@ -117,7 +120,7 @@ class YouTubeAPIService:
         order: str = "relevance"
     ) -> list[dict]:
         """Search for videos by query."""
-        
+
         response = await self.client.get(
             f"{self.BASE_URL}/search",
             params={
@@ -131,7 +134,7 @@ class YouTubeAPIService:
         )
         response.raise_for_status()
         data = response.json()
-        
+
         return [
             {
                 "video_id": item["id"]["videoId"],
@@ -142,14 +145,14 @@ class YouTubeAPIService:
             }
             for item in data.get("items", [])
         ]
-    
+
     async def get_channel_videos(
         self,
         channel_id: str,
         max_results: int = 50
     ) -> list[dict]:
         """Get recent videos from a channel."""
-        
+
         response = await self.client.get(
             f"{self.BASE_URL}/search",
             params={
@@ -163,7 +166,7 @@ class YouTubeAPIService:
         )
         response.raise_for_status()
         return response.json().get("items", [])
-    
+
     @staticmethod
     def extract_video_id(url: str) -> str:
         """Extract video ID from various YouTube URL formats."""
@@ -178,6 +181,6 @@ class YouTubeAPIService:
             if match:
                 return match.group(1)
         raise ValueError(f"Could not extract video ID from: {url}")
-    
+
     async def close(self):
         await self.client.aclose()

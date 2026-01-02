@@ -9,10 +9,10 @@ shared adapters remain the single source of truth.
 """
 
 from src.shared.youtube import (
-    fetch_innertube_transcript,
+    CaptionSegment,
     InnertubeTranscriptError,
     InnertubeTranscriptNotFound,
-    CaptionSegment,
+    fetch_innertube_transcript,
 )
 
 __all__ = [

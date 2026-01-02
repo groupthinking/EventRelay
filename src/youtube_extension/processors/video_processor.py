@@ -8,15 +8,17 @@ strategy pattern to select the appropriate processing method based on
 the provided options.
 """
 
-from typing import Dict, Any, List, Optional
-from .strategies import get_strategy, ProcessorStrategy
+from typing import Any, Optional
+
+from .strategies import ProcessorStrategy, get_strategy
+
 
 class VideoProcessor:
     """
     A unified video processor that uses a strategy pattern to delegate
     the actual processing to a specific strategy.
     """
-    def __init__(self, strategy: str = "enhanced", config: Optional[Dict[str, Any]] = None):
+    def __init__(self, strategy: str = "enhanced", config: Optional[dict[str, Any]] = None):
         """
         Initialize the video processor with a specific strategy.
 
@@ -26,13 +28,13 @@ class VideoProcessor:
         """
         self.strategy: ProcessorStrategy = get_strategy(strategy)(config=config)
 
-    async def process_video(self, video_url: str, options: Dict[str, Any] = None) -> Dict[str, Any]:
+    async def process_video(self, video_url: str, options: dict[str, Any] = None) -> dict[str, Any]:
         """
         Process a single video using the selected strategy.
         """
         return await self.strategy.process_video(video_url, options)
 
-    async def process_batch(self, video_urls: List[str], options: Dict[str, Any] = None) -> List[Dict[str, Any]]:
+    async def process_batch(self, video_urls: list[str], options: dict[str, Any] = None) -> list[dict[str, Any]]:
         """
         Process a batch of videos using the selected strategy.
         """

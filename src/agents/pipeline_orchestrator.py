@@ -4,11 +4,10 @@ Pipeline Orchestrator - Routes video-to-software through agent network
 Coordinates 6 agents via MCP tools for end-to-end automation
 """
 
-import asyncio
 import logging
-from typing import Dict, Any, Optional
-from datetime import datetime
 from dataclasses import dataclass
+from datetime import datetime
+from typing import Any, Optional
 
 from .mcp_agent_network import get_agent_network
 from .skill_monitor_emitter import get_emitter
@@ -20,7 +19,7 @@ class PipelineResult:
     """Result from a pipeline stage"""
     agent_id: str
     success: bool
-    data: Dict[str, Any]
+    data: dict[str, Any]
     duration_ms: float
     error: Optional[str] = None
 
@@ -39,11 +38,11 @@ class VideoPipelineOrchestrator:
 
     def __init__(self):
         self.network = get_agent_network()
-        self.pipeline_state: Dict[str, Any] = {}
-        self.results: Dict[str, PipelineResult] = {}
+        self.pipeline_state: dict[str, Any] = {}
+        self.results: dict[str, PipelineResult] = {}
         self.emitter = get_emitter()
 
-    async def run_pipeline(self, video_url: str, options: Optional[Dict] = None) -> Dict:
+    async def run_pipeline(self, video_url: str, options: Optional[dict] = None) -> dict:
         """Execute full video-to-software pipeline"""
         options = options or {}
         run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -183,7 +182,7 @@ class VideoPipelineOrchestrator:
 
         return "unknown", {}
 
-    def _build_pipeline_report(self) -> Dict:
+    def _build_pipeline_report(self) -> dict:
         """Build final pipeline report"""
         successful_stages = sum(1 for r in self.results.values() if r.success)
         total_duration = sum(r.duration_ms for r in self.results.values())
@@ -208,7 +207,7 @@ class VideoPipelineOrchestrator:
             }
         }
 
-async def run_video_to_software(video_url: str, **options) -> Dict:
+async def run_video_to_software(video_url: str, **options) -> dict:
     """Convenience function to run pipeline"""
     orchestrator = VideoPipelineOrchestrator()
     return await orchestrator.run_pipeline(video_url, options)

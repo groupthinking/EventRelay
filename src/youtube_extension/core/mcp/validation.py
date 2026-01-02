@@ -16,13 +16,12 @@ import json
 import logging
 import re
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional, Set, Union
 from enum import Enum
-import hashlib
+from typing import Any, Optional, Union
 
-from pydantic import BaseModel, Field, ValidationError, validator
+from pydantic import BaseModel, Field, ValidationError
 
-from .context_manager import MCPContext, ContextStatus, ContextPriority
+from .context_manager import ContextPriority, ContextStatus, MCPContext
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -60,7 +59,7 @@ class ContextValidationError(Exception):
         field: Optional[str] = None,
         rule: Optional[ValidationRule] = None,
         severity: ValidationSeverity = ValidationSeverity.ERROR,
-        details: Optional[Dict[str, Any]] = None
+        details: Optional[dict[str, Any]] = None
     ):
         self.message = message
         self.field = field
@@ -70,7 +69,7 @@ class ContextValidationError(Exception):
 
         super().__init__(self.message)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert error to dictionary for serialization"""
         return {
             "message": self.message,
@@ -86,9 +85,9 @@ class ValidationResult(BaseModel):
     """Result of a validation operation"""
 
     is_valid: bool = Field(default=True)
-    errors: List[ContextValidationError] = Field(default_factory=list)
-    warnings: List[ContextValidationError] = Field(default_factory=list)
-    metadata: Dict[str, Any] = Field(default_factory=dict)
+    errors: list[ContextValidationError] = Field(default_factory=list)
+    warnings: list[ContextValidationError] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
     def add_error(
         self,
@@ -96,7 +95,7 @@ class ValidationResult(BaseModel):
         field: Optional[str] = None,
         rule: Optional[ValidationRule] = None,
         severity: ValidationSeverity = ValidationSeverity.ERROR,
-        details: Optional[Dict[str, Any]] = None
+        details: Optional[dict[str, Any]] = None
     ) -> None:
         """Add a validation error"""
         error = ContextValidationError(message, field, rule, severity, details)
@@ -109,7 +108,7 @@ class ValidationResult(BaseModel):
         message: str,
         field: Optional[str] = None,
         rule: Optional[ValidationRule] = None,
-        details: Optional[Dict[str, Any]] = None
+        details: Optional[dict[str, Any]] = None
     ) -> None:
         """Add a validation warning"""
         warning = ContextValidationError(message, field, rule, ValidationSeverity.WARNING, details)
@@ -123,7 +122,7 @@ class ValidationResult(BaseModel):
         """Check if there are any validation warnings"""
         return len(self.warnings) > 0
 
-    def get_error_summary(self) -> Dict[str, Any]:
+    def get_error_summary(self) -> dict[str, Any]:
         """Get a summary of validation results"""
         return {
             "is_valid": self.is_valid,
@@ -144,8 +143,8 @@ class MCPValidator:
 
     def __init__(self):
         """Initialize the MCP Validator"""
-        self.custom_rules: Dict[str, callable] = {}
-        self.validation_stats: Dict[str, int] = {}
+        self.custom_rules: dict[str, callable] = {}
+        self.validation_stats: dict[str, int] = {}
 
         # Initialize validation statistics
         for rule in ValidationRule:
@@ -153,7 +152,7 @@ class MCPValidator:
 
         logger.info("MCP Validator initialized")
 
-    def validate_context(self, context: Union[MCPContext, Dict[str, Any]]) -> ValidationResult:
+    def validate_context(self, context: Union[MCPContext, dict[str, Any]]) -> ValidationResult:
         """
         Perform comprehensive validation on an MCP context
 
@@ -215,7 +214,7 @@ class MCPValidator:
 
         return result
 
-    def validate_context_quick(self, context: Union[MCPContext, Dict[str, Any]]) -> bool:
+    def validate_context_quick(self, context: Union[MCPContext, dict[str, Any]]) -> bool:
         """
         Quick validation check - returns True if context is valid, False otherwise
 
@@ -255,7 +254,7 @@ class MCPValidator:
             return True
         return False
 
-    def get_validation_stats(self) -> Dict[str, Any]:
+    def get_validation_stats(self) -> dict[str, Any]:
         """
         Get validation statistics
 
@@ -462,11 +461,11 @@ def get_validator() -> MCPValidator:
     return _validator
 
 
-def validate_context(context: Union[MCPContext, Dict[str, Any]]) -> ValidationResult:
+def validate_context(context: Union[MCPContext, dict[str, Any]]) -> ValidationResult:
     """Convenience function to validate a context"""
     return get_validator().validate_context(context)
 
 
-def validate_context_quick(context: Union[MCPContext, Dict[str, Any]]) -> bool:
+def validate_context_quick(context: Union[MCPContext, dict[str, Any]]) -> bool:
     """Convenience function for quick validation check"""
     return get_validator().validate_context_quick(context)

@@ -4,25 +4,23 @@ Autonomous Video Processor
 Processes YouTube videos autonomously with cloud integration
 """
 
+import asyncio
 import json
 import logging
 import os
-import sys
-import time
-import asyncio
+import random
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Dict, List, Any, Optional
-import random
+from typing import Any, Optional
 
 # REMOVED: sys.path.insert for autonomous_processor
 
 # Import processors
 try:
-    from .simple_real_processor import process_video, extract_video_id
+    from .simple_real_processor import extract_video_id, process_video
 except ImportError:
     # Fallback for direct execution
-    from simple_real_processor import process_video, extract_video_id
+    from simple_real_processor import process_video
 
 # Configure logging
 logging.basicConfig(
@@ -39,7 +37,7 @@ logger = logging.getLogger(__name__)
 VIDEO_CATEGORIES = {
     "Educational_Content": [
         "machine learning tutorial",
-        "python programming guide", 
+        "python programming guide",
         "data science course",
         "web development tutorial",
         "cloud computing basics"
@@ -101,74 +99,74 @@ CATEGORY_VIDEO_IDS = {
 
 class AutonomousProcessor:
     """Manages autonomous video processing"""
-    
+
     def __init__(self, duration_hours: int = 4):
         self.duration_hours = duration_hours
         self.start_time = datetime.now()
         self.end_time = self.start_time + timedelta(hours=duration_hours)
         self.processed_count = 0
-        self.category_counts = {cat: 0 for cat in VIDEO_CATEGORIES}
+        self.category_counts = dict.fromkeys(VIDEO_CATEGORIES, 0)
         self.results = []
-    
+
     def should_continue(self) -> bool:
         """Check if processing should continue"""
         return datetime.now() < self.end_time and self.processed_count < 100
-    
+
     def get_next_video(self) -> tuple[str, str]:
         """Get next video to process"""
         # Select category with fewest processed videos
         category = min(self.category_counts, key=self.category_counts.get)
-        
+
         # Get random video from category
         videos = CATEGORY_VIDEO_IDS[category]
         video_id = random.choice(videos)
-        
+
         return video_id, category
-    
-    async def process_video_safe(self, video_id: str, category: str) -> Optional[Dict[str, Any]]:
+
+    async def process_video_safe(self, video_id: str, category: str) -> Optional[dict[str, Any]]:
         """Safely process a video with error handling"""
         try:
             logger.info(f"Processing video {video_id} from category: {category}")
-            
+
             result = process_video(video_id)
-            
+
             if result and result.get("status") == "success":
                 # Save to category folder
                 output_dir = Path(f"gdrive_results/{category}")
                 output_dir.mkdir(parents=True, exist_ok=True)
-                
+
                 # Save result
                 output_file = output_dir / f"{video_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
                 with open(output_file, 'w') as f:
                     json.dump(result, f, indent=2)
-                
+
                 logger.info(f"✅ Saved result to {output_file}")
-                
+
                 # Update counts
                 self.processed_count += 1
                 self.category_counts[category] += 1
-                
+
                 return result
             else:
                 logger.warning(f"Failed to process video {video_id}")
                 return None
-                
+
         except Exception as e:
             logger.error(f"Error processing video {video_id}: {e}")
             return None
-    
+
     async def run(self):
         """Run autonomous processing"""
         logger.info(f"🚀 Starting autonomous processing for {self.duration_hours} hours")
         logger.info(f"Target: 100 videos across {len(VIDEO_CATEGORIES)} categories")
-        
+
         while self.should_continue():
             # Get next video
             video_id, category = self.get_next_video()
-            
+
             # Process video
             result = await self.process_video_safe(video_id, category)
-            
+
             if result:
                 self.results.append({
                     "video_id": video_id,
@@ -176,28 +174,28 @@ class AutonomousProcessor:
                     "timestamp": datetime.now().isoformat(),
                     "summary": result.get("summary", "")[:100]
                 })
-            
+
             # Progress update
             if self.processed_count % 10 == 0:
                 self.log_progress()
-            
+
             # Rate limiting
             await asyncio.sleep(5)  # 5 seconds between videos
-        
+
         # Final report
         self.generate_report()
-    
+
     def log_progress(self):
         """Log current progress"""
         elapsed = datetime.now() - self.start_time
         rate = self.processed_count / (elapsed.total_seconds() / 3600) if elapsed.total_seconds() > 0 else 0
-        
-        logger.info(f"\n📊 PROGRESS UPDATE:")
+
+        logger.info("\n📊 PROGRESS UPDATE:")
         logger.info(f"   Processed: {self.processed_count}/100 videos")
         logger.info(f"   Rate: {rate:.1f} videos/hour")
         logger.info(f"   Time elapsed: {elapsed}")
         logger.info(f"   Categories: {self.category_counts}\n")
-    
+
     def generate_report(self):
         """Generate final processing report"""
         report = {
@@ -214,16 +212,16 @@ class AutonomousProcessor:
                 "success_rate": (self.processed_count / 100) * 100
             }
         }
-        
+
         # Save report
         report_file = f"autonomous_processing_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
         with open(report_file, 'w') as f:
             json.dump(report, f, indent=2)
-        
-        logger.info(f"\n🎯 AUTONOMOUS PROCESSING COMPLETE")
+
+        logger.info("\n🎯 AUTONOMOUS PROCESSING COMPLETE")
         logger.info(f"   Total videos processed: {self.processed_count}")
         logger.info(f"   Report saved to: {report_file}")
-        
+
         # Display category breakdown
         logger.info("\n📊 Category Breakdown:")
         for category, count in self.category_counts.items():
@@ -233,10 +231,10 @@ async def main():
     """Main function for autonomous processing"""
     # Get configuration from environment or defaults
     duration_hours = int(os.environ.get("DURATION_HOURS", "4"))
-    
+
     # Initialize processor
     processor = AutonomousProcessor(duration_hours)
-    
+
     # Run processing
     await processor.run()
 

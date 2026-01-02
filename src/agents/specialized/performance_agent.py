@@ -7,16 +7,14 @@ Specialized agent for performance analysis and optimization
 import asyncio
 import json
 import logging
-import time
-import psutil
-from datetime import datetime
-from typing import Dict, List, Any, Optional
-from pathlib import Path
 from dataclasses import dataclass
+from datetime import datetime
+from pathlib import Path
 
-import sys
+import psutil
+
 # REMOVED: sys.path.append removed
-from a2a_framework import BaseAgent, A2AMessage
+from a2a_framework import A2AMessage, BaseAgent
 
 # Configure logging
 logging.basicConfig(
@@ -44,14 +42,14 @@ class PerformanceIssue:
 
 class PerformanceAgent(BaseAgent):
     """Agent specialized in performance analysis and optimization"""
-    
+
     def __init__(self):
         super().__init__("performance_agent", ["analyze", "optimize", "benchmark", "monitor"])
-        
+
         self.project_path = None
         self.performance_issues = []
         self.benchmarks = {}
-        
+
         # Register message handlers
         self.register_handler("initialize", self.handle_initialize)
         self.register_handler("analyze_project", self.handle_analyze_project)
@@ -59,13 +57,13 @@ class PerformanceAgent(BaseAgent):
         self.register_handler("execute_task", self.handle_execute_task)
         self.register_handler("validate_fixes", self.handle_validate_fixes)
         self.register_handler("assess_grade", self.handle_assess_grade)
-        
+
         logger.info("⚡ PERFORMANCE AGENT INITIALIZED")
-    
-    async def process_intent(self, intent: Dict) -> Dict:
+
+    async def process_intent(self, intent: dict) -> dict:
         """Process performance intent"""
         action = intent.get("action")
-        
+
         if action == "analyze":
             return await self.analyze_performance(intent.get("path"))
         elif action == "optimize":
@@ -74,32 +72,32 @@ class PerformanceAgent(BaseAgent):
             return await self.run_benchmarks()
         else:
             return {"error": f"Unknown action: {action}"}
-    
-    async def analyze_performance(self, project_path: str) -> Dict:
+
+    async def analyze_performance(self, project_path: str) -> dict:
         """Comprehensive performance analysis"""
         logger.info(f"⚡ Starting performance analysis of {project_path}")
-        
+
         self.project_path = Path(project_path)
         self.performance_issues = []
-        
+
         # 1. Static performance analysis
         static_analysis = await self.analyze_static_performance()
-        
+
         # 2. Resource usage analysis
         resource_analysis = await self.analyze_resource_usage()
-        
+
         # 3. Algorithm complexity analysis
         complexity_analysis = await self.analyze_algorithm_complexity()
-        
+
         # 4. I/O operations analysis
         io_analysis = await self.analyze_io_operations()
-        
+
         # 5. Memory usage patterns
         memory_analysis = await self.analyze_memory_patterns()
-        
+
         # 6. Performance recommendations
         recommendations = await self.generate_recommendations()
-        
+
         analysis_results = {
             "timestamp": datetime.now().isoformat(),
             "project_path": str(self.project_path),
@@ -112,29 +110,29 @@ class PerformanceAgent(BaseAgent):
             "performance_grade": self.calculate_performance_grade(),
             "total_issues": len(self.performance_issues)
         }
-        
-        logger.info(f"✅ Performance analysis completed")
+
+        logger.info("✅ Performance analysis completed")
         return analysis_results
-    
-    async def analyze_static_performance(self) -> Dict:
+
+    async def analyze_static_performance(self) -> dict:
         """Analyze static performance characteristics"""
         logger.info("🔍 Analyzing static performance...")
-        
+
         analysis = {
             "large_functions": [],
             "nested_loops": [],
             "expensive_operations": [],
             "inefficient_patterns": []
         }
-        
+
         python_files = list(self.project_path.rglob("*.py"))
         python_files = [f for f in python_files if self.should_analyze_file(f)]
-        
+
         for py_file in python_files:
             try:
-                with open(py_file, 'r', encoding='utf-8', errors='ignore') as f:
+                with open(py_file, encoding='utf-8', errors='ignore') as f:
                     content = f.read()
-                
+
                 # Check for performance anti-patterns
                 if "sleep(" in content:
                     self.performance_issues.append(PerformanceIssue(
@@ -146,7 +144,7 @@ class PerformanceAgent(BaseAgent):
                         threshold=0,
                         suggestion="Use async sleep or non-blocking alternatives"
                     ))
-                
+
                 # Check for inefficient string operations
                 if "+=" in content and "str" in content:
                     analysis["inefficient_patterns"].append({
@@ -154,7 +152,7 @@ class PerformanceAgent(BaseAgent):
                         "file": str(py_file.relative_to(self.project_path)),
                         "suggestion": "Use join() or f-strings for multiple concatenations"
                     })
-                
+
                 # Check for potential N+1 queries
                 if content.count("for ") > 0 and ("query(" in content or "get(" in content):
                     analysis["expensive_operations"].append({
@@ -162,22 +160,22 @@ class PerformanceAgent(BaseAgent):
                         "file": str(py_file.relative_to(self.project_path)),
                         "suggestion": "Consider bulk operations or query optimization"
                     })
-                
+
             except Exception as e:
                 logger.warning(f"⚠️ Failed to analyze {py_file}: {e}")
-        
+
         return analysis
-    
-    async def analyze_resource_usage(self) -> Dict:
+
+    async def analyze_resource_usage(self) -> dict:
         """Analyze current resource usage"""
         logger.info("💾 Analyzing resource usage...")
-        
+
         # Get current system metrics
         try:
             cpu_percent = psutil.cpu_percent(interval=1)
             memory = psutil.virtual_memory()
             disk = psutil.disk_usage('/')
-            
+
             resource_analysis = {
                 "cpu_usage": cpu_percent,
                 "memory_usage": {
@@ -194,7 +192,7 @@ class PerformanceAgent(BaseAgent):
                 },
                 "load_average": psutil.getloadavg() if hasattr(psutil, 'getloadavg') else None
             }
-            
+
             # Flag high resource usage
             if cpu_percent > 80:
                 self.performance_issues.append(PerformanceIssue(
@@ -206,7 +204,7 @@ class PerformanceAgent(BaseAgent):
                     threshold=80,
                     suggestion="Investigate CPU-intensive operations"
                 ))
-            
+
             if memory.percent > 85:
                 self.performance_issues.append(PerformanceIssue(
                     issue_type="high_memory_usage",
@@ -217,32 +215,32 @@ class PerformanceAgent(BaseAgent):
                     threshold=85,
                     suggestion="Investigate memory leaks or optimize memory usage"
                 ))
-            
+
             return resource_analysis
-            
+
         except Exception as e:
             logger.warning(f"⚠️ Failed to analyze resource usage: {e}")
             return {"error": str(e)}
-    
-    async def analyze_algorithm_complexity(self) -> Dict:
+
+    async def analyze_algorithm_complexity(self) -> dict:
         """Analyze algorithm complexity patterns"""
         logger.info("🧮 Analyzing algorithm complexity...")
-        
+
         complexity_analysis = {
             "nested_loops": [],
             "recursive_functions": [],
             "linear_searches": [],
             "complexity_score": 0
         }
-        
+
         python_files = list(self.project_path.rglob("*.py"))
         python_files = [f for f in python_files if self.should_analyze_file(f)]
-        
+
         for py_file in python_files:
             try:
-                with open(py_file, 'r', encoding='utf-8', errors='ignore') as f:
+                with open(py_file, encoding='utf-8', errors='ignore') as f:
                     content = f.read()
-                
+
                 # Simple heuristics for complexity analysis
                 nested_for_count = content.count("for ") - content.count("for _ in")
                 if nested_for_count > 2:
@@ -251,38 +249,38 @@ class PerformanceAgent(BaseAgent):
                         "count": nested_for_count,
                         "estimated_complexity": "O(n²)" if nested_for_count == 2 else "O(n³+)"
                     })
-                
+
                 # Check for potential inefficient searches
                 if "in list" in content or "in range(" in content:
                     complexity_analysis["linear_searches"].append({
                         "file": str(py_file.relative_to(self.project_path)),
                         "suggestion": "Consider using sets or dictionaries for faster lookups"
                     })
-                
+
             except Exception as e:
                 logger.warning(f"⚠️ Failed to analyze complexity in {py_file}: {e}")
-        
+
         return complexity_analysis
-    
-    async def analyze_io_operations(self) -> Dict:
+
+    async def analyze_io_operations(self) -> dict:
         """Analyze I/O operations patterns"""
         logger.info("💿 Analyzing I/O operations...")
-        
+
         io_analysis = {
             "file_operations": [],
             "network_operations": [],
             "database_operations": [],
             "blocking_operations": []
         }
-        
+
         python_files = list(self.project_path.rglob("*.py"))
         python_files = [f for f in python_files if self.should_analyze_file(f)]
-        
+
         for py_file in python_files:
             try:
-                with open(py_file, 'r', encoding='utf-8', errors='ignore') as f:
+                with open(py_file, encoding='utf-8', errors='ignore') as f:
                     content = f.read()
-                
+
                 # Check for file I/O operations
                 if "open(" in content and "with open" not in content:
                     io_analysis["file_operations"].append({
@@ -290,45 +288,45 @@ class PerformanceAgent(BaseAgent):
                         "issue": "Non-context-managed file operations",
                         "suggestion": "Use 'with open()' for proper resource management"
                     })
-                
+
                 # Check for network operations
                 if any(term in content for term in ["requests.get", "urllib", "http.client"]):
                     io_analysis["network_operations"].append({
                         "file": str(py_file.relative_to(self.project_path)),
                         "suggestion": "Consider async operations and connection pooling"
                     })
-                
+
                 # Check for database operations
                 if any(term in content for term in ["cursor.execute", "query(", "SELECT"]):
                     io_analysis["database_operations"].append({
                         "file": str(py_file.relative_to(self.project_path)),
                         "suggestion": "Use connection pooling and prepared statements"
                     })
-                
+
             except Exception as e:
                 logger.warning(f"⚠️ Failed to analyze I/O in {py_file}: {e}")
-        
+
         return io_analysis
-    
-    async def analyze_memory_patterns(self) -> Dict:
+
+    async def analyze_memory_patterns(self) -> dict:
         """Analyze memory usage patterns"""
         logger.info("🧠 Analyzing memory patterns...")
-        
+
         memory_analysis = {
             "large_data_structures": [],
             "potential_leaks": [],
             "inefficient_collections": [],
             "memory_score": 0
         }
-        
+
         python_files = list(self.project_path.rglob("*.py"))
         python_files = [f for f in python_files if self.should_analyze_file(f)]
-        
+
         for py_file in python_files:
             try:
-                with open(py_file, 'r', encoding='utf-8', errors='ignore') as f:
+                with open(py_file, encoding='utf-8', errors='ignore') as f:
                     content = f.read()
-                
+
                 # Check for potential memory issues
                 if "global " in content and ("list" in content or "dict" in content):
                     memory_analysis["potential_leaks"].append({
@@ -336,28 +334,28 @@ class PerformanceAgent(BaseAgent):
                         "issue": "Global collections that may grow indefinitely",
                         "suggestion": "Implement size limits or periodic cleanup"
                     })
-                
+
                 # Check for inefficient list operations
                 if "list.append" in content and "for " in content:
                     memory_analysis["inefficient_collections"].append({
                         "file": str(py_file.relative_to(self.project_path)),
                         "suggestion": "Consider using list comprehensions or generators"
                     })
-                
+
             except Exception as e:
                 logger.warning(f"⚠️ Failed to analyze memory patterns in {py_file}: {e}")
-        
+
         return memory_analysis
-    
-    async def generate_recommendations(self) -> List[Dict]:
+
+    async def generate_recommendations(self) -> list[dict]:
         """Generate performance improvement recommendations"""
         logger.info("💡 Generating performance recommendations...")
-        
+
         recommendations = []
-        
+
         # Based on issues found
         high_priority_issues = [issue for issue in self.performance_issues if issue.severity == "high"]
-        
+
         for issue in high_priority_issues:
             recommendations.append({
                 "type": "fix_issue",
@@ -366,7 +364,7 @@ class PerformanceAgent(BaseAgent):
                 "suggestion": issue.suggestion,
                 "estimated_impact": "high"
             })
-        
+
         # General recommendations
         recommendations.extend([
             {
@@ -391,13 +389,13 @@ class PerformanceAgent(BaseAgent):
                 "estimated_impact": "low"
             }
         ])
-        
+
         return recommendations
-    
+
     def calculate_performance_grade(self) -> str:
         """Calculate performance grade"""
         score = 100
-        
+
         # Deduct for performance issues
         for issue in self.performance_issues:
             if issue.severity == "high":
@@ -406,7 +404,7 @@ class PerformanceAgent(BaseAgent):
                 score -= 10
             elif issue.severity == "low":
                 score -= 5
-        
+
         # Convert to letter grade
         if score >= 90:
             return "A"
@@ -418,33 +416,33 @@ class PerformanceAgent(BaseAgent):
             return "D"
         else:
             return "F"
-    
+
     def should_analyze_file(self, file_path: Path) -> bool:
         """Check if file should be analyzed"""
         skip_patterns = ['__pycache__', '.git', '.pytest_cache', 'node_modules', 'venv']
         path_str = str(file_path)
         return not any(pattern in path_str for pattern in skip_patterns)
-    
+
     # Message handlers
-    async def handle_initialize(self, message: A2AMessage) -> Dict:
+    async def handle_initialize(self, message: A2AMessage) -> dict:
         """Handle initialization"""
         content = message.content
         self.project_path = Path(content["project_path"])
-        
+
         logger.info(f"⚡ Performance Agent initialized for {self.project_path}")
-        
+
         await self.send_message(
             recipient="remediation_orchestrator",
             message_type="agent_ready",
             content={"agent_id": self.agent_id}
         )
-        
+
         return {"status": "initialized"}
-    
-    async def handle_analyze_project(self, message: A2AMessage) -> Dict:
+
+    async def handle_analyze_project(self, message: A2AMessage) -> dict:
         """Handle project analysis request"""
-        result = await self.analyze_performance(str(self.project_path))
-        
+        await self.analyze_performance(str(self.project_path))
+
         for issue in self.performance_issues:
             await self.send_message(
                 recipient="remediation_orchestrator",
@@ -459,13 +457,13 @@ class PerformanceAgent(BaseAgent):
                     }
                 }
             )
-        
+
         return {"analysis_completed": True, "issues_found": len(self.performance_issues)}
-    
-    async def handle_create_plan(self, message: A2AMessage) -> Dict:
+
+    async def handle_create_plan(self, message: A2AMessage) -> dict:
         """Handle plan creation request"""
         logger.info("📋 Creating performance improvement plan...")
-        
+
         plan = {
             "agent": self.agent_id,
             "total_issues": len(self.performance_issues),
@@ -488,16 +486,16 @@ class PerformanceAgent(BaseAgent):
                 }
             ]
         }
-        
+
         return plan
-    
-    async def handle_execute_task(self, message: A2AMessage) -> Dict:
+
+    async def handle_execute_task(self, message: A2AMessage) -> dict:
         """Handle task execution"""
         task_id = message.content.get("task_id")
         description = message.content.get("description")
-        
+
         logger.info(f"⚙️ Executing performance task: {description}")
-        
+
         result = {
             "task_id": task_id,
             "status": "completed",
@@ -508,29 +506,29 @@ class PerformanceAgent(BaseAgent):
             ],
             "grade_impact": "+0.4"
         }
-        
+
         await self.send_message(
             recipient="remediation_orchestrator",
             message_type="task_completed",
             content={"task_id": task_id, "result": result}
         )
-        
+
         return result
-    
-    async def handle_validate_fixes(self, message: A2AMessage) -> Dict:
+
+    async def handle_validate_fixes(self, message: A2AMessage) -> dict:
         """Handle fix validation"""
         logger.info("✅ Validating performance fixes...")
-        
+
         return {
             "validation_status": "passed",
             "performance_grade": self.calculate_performance_grade(),
             "issues_remaining": len(self.performance_issues)
         }
-    
-    async def handle_assess_grade(self, message: A2AMessage) -> Dict:
+
+    async def handle_assess_grade(self, message: A2AMessage) -> dict:
         """Handle grade assessment request"""
         logger.info("📊 Assessing performance grade...")
-        
+
         grade_assessment = {
             "agent": self.agent_id,
             "grade": self.calculate_performance_grade(),
@@ -548,13 +546,13 @@ class PerformanceAgent(BaseAgent):
                 "Monitor performance metrics"
             ]
         }
-        
+
         await self.send_message(
             recipient="remediation_orchestrator",
             message_type="grade_assessment",
             content={"assessment": grade_assessment}
         )
-        
+
         return grade_assessment
 
 
@@ -563,5 +561,5 @@ if __name__ == "__main__":
         agent = PerformanceAgent()
         result = await agent.analyze_performance("/Users/garvey/UVAI/src/core/youtube_extension")
         print(json.dumps(result, indent=2))
-    
+
     asyncio.run(main())

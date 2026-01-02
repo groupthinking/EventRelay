@@ -14,23 +14,23 @@ from typing import Optional
 def extract_video_id(url: str) -> str:
     """
     Extract video ID from YouTube URL or validate direct video ID.
-    
+
     This function supports multiple YouTube URL formats:
     - Standard watch URLs: https://www.youtube.com/watch?v=VIDEO_ID
     - Short URLs: https://youtu.be/VIDEO_ID
     - Embed URLs: https://www.youtube.com/embed/VIDEO_ID
     - Shorts URLs: https://www.youtube.com/shorts/VIDEO_ID
     - Direct video IDs: VIDEO_ID (11 characters)
-    
+
     Args:
         url: YouTube video URL or video ID
-        
+
     Returns:
         Extracted 11-character video ID
-        
+
     Raises:
         ValueError: If video ID cannot be extracted from the input
-        
+
     Examples:
         >>> extract_video_id("https://www.youtube.com/watch?v=auJzb1D-fag")
         'auJzb1D-fag'
@@ -56,7 +56,7 @@ def extract_video_id(url: str) -> str:
         # Direct 11-character ID
         r'^([0-9A-Za-z_-]{11})$'
     ]
-    
+
     # Try each pattern
     for pattern in patterns:
         match = re.search(pattern, url)
@@ -65,7 +65,7 @@ def extract_video_id(url: str) -> str:
             # Validate it's exactly 11 characters (YouTube standard)
             if len(video_id) == 11:
                 return video_id
-    
+
     raise ValueError(
         f"Could not extract valid YouTube video ID from: {url}. "
         f"Please provide a valid YouTube URL or 11-character video ID."
@@ -75,13 +75,13 @@ def extract_video_id(url: str) -> str:
 def is_valid_video_id(video_id: Optional[str]) -> bool:
     """
     Check if a string is a valid YouTube video ID format.
-    
+
     Args:
         video_id: String to validate
-        
+
     Returns:
         True if the string matches YouTube video ID format, False otherwise
-        
+
     Examples:
         >>> is_valid_video_id("auJzb1D-fag")
         True
@@ -92,7 +92,7 @@ def is_valid_video_id(video_id: Optional[str]) -> bool:
     """
     if not video_id or not isinstance(video_id, str):
         return False
-    
+
     # YouTube video IDs are exactly 11 characters: alphanumeric, underscore, hyphen
     pattern = r'^[0-9A-Za-z_-]{11}$'
     return bool(re.match(pattern, video_id))
@@ -101,13 +101,13 @@ def is_valid_video_id(video_id: Optional[str]) -> bool:
 def normalize_video_url(url: str) -> str:
     """
     Normalize a YouTube URL to standard format.
-    
+
     Args:
         url: YouTube video URL or video ID
-        
+
     Returns:
         Normalized YouTube watch URL
-        
+
     Examples:
         >>> normalize_video_url("auJzb1D-fag")
         'https://www.youtube.com/watch?v=auJzb1D-fag'
@@ -121,13 +121,13 @@ def normalize_video_url(url: str) -> str:
 def parse_duration_to_seconds(duration: str) -> int:
     """
     Parse ISO 8601 duration (YouTube format) to total seconds.
-    
+
     Args:
         duration: ISO 8601 duration string (e.g., "PT1H2M3S")
-        
+
     Returns:
         Total duration in seconds
-        
+
     Examples:
         >>> parse_duration_to_seconds("PT1H2M3S")
         3723
@@ -139,27 +139,27 @@ def parse_duration_to_seconds(duration: str) -> int:
     # Parse PT1H2M3S format
     pattern = r'PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?'
     match = re.match(pattern, duration)
-    
+
     if not match:
         return 0
-    
+
     hours = int(match.group(1) or 0)
     minutes = int(match.group(2) or 0)
     seconds = int(match.group(3) or 0)
-    
+
     return hours * 3600 + minutes * 60 + seconds
 
 
 def format_duration(duration: str) -> str:
     """
     Format ISO 8601 duration to human-readable string.
-    
+
     Args:
         duration: ISO 8601 duration string (e.g., "PT1H2M3S")
-        
+
     Returns:
         Human-readable duration string
-        
+
     Examples:
         >>> format_duration("PT1H2M3S")
         '1h 2m 3s'
@@ -171,14 +171,14 @@ def format_duration(duration: str) -> str:
     # Parse PT1H2M3S format
     pattern = r'PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?'
     match = re.match(pattern, duration)
-    
+
     if not match:
         return duration
-    
+
     hours = int(match.group(1) or 0)
     minutes = int(match.group(2) or 0)
     seconds = int(match.group(3) or 0)
-    
+
     if hours > 0:
         return f"{hours}h {minutes}m {seconds}s"
     elif minutes > 0:

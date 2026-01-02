@@ -10,11 +10,10 @@ import shutil
 import tempfile
 from dataclasses import asdict
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import TYPE_CHECKING, Any
 
-from youtube_extension.backend.services.metrics_service import MetricsService
 from src.shared.youtube import RobustYouTubeMetadata, RobustYouTubeService
-from typing import TYPE_CHECKING
+from youtube_extension.backend.services.metrics_service import MetricsService
 
 try:
     from youtube_extension.services.agents.adapters.agent_orchestrator import (
@@ -56,10 +55,10 @@ class TranscriptActionWorkflow:
         self,
         *,
         youtube_service_factory=None,
-        orchestrator: Optional[AgentOrchestrator] = None,
-        hybrid_processor: Optional["HybridProcessorService"] = None,
-        speech_service: Optional[SpeechToTextService] = None,
-        metrics_service: Optional[MetricsService] = None,
+        orchestrator: AgentOrchestrator | None = None,
+        hybrid_processor: HybridProcessorService | None = None,
+        speech_service: SpeechToTextService | None = None,
+        metrics_service: MetricsService | None = None,
     ):
         self._youtube_service_factory = youtube_service_factory or RobustYouTubeService
         self._orchestrator = orchestrator or AgentOrchestrator()
@@ -85,12 +84,12 @@ class TranscriptActionWorkflow:
         self,
         video_url: str,
         language: str = "en",
-        transcript_text: Optional[str] = None,
-        video_options: Optional[Any] = None,
-    ) -> Dict[str, Any]:
+        transcript_text: str | None = None,
+        video_options: Any | None = None,
+    ) -> dict[str, Any]:
         video_metadata = self._build_video_metadata(video_options)
 
-        gemini_transcript: Dict[str, Any] = {}
+        gemini_transcript: dict[str, Any] = {}
 
         async with self._youtube_service_factory() as yt_service:
             metadata = await yt_service.get_video_metadata(video_url)
@@ -187,11 +186,11 @@ class TranscriptActionWorkflow:
         self,
         video_url: str,
         metadata: RobustYouTubeMetadata,
-        transcript: Dict[str, Any],
+        transcript: dict[str, Any],
         language: str,
         *,
-        video_metadata: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
+        video_metadata: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         agent_input = {
             "video_url": video_url,
             "metadata": asdict(metadata),
@@ -245,7 +244,7 @@ class TranscriptActionWorkflow:
         return self._serialize_orchestration(final_result, metadata)
 
     @staticmethod
-    def _serialize_orchestration(result: OrchestrationResult, metadata: RobustYouTubeMetadata) -> Dict[str, Any]:
+    def _serialize_orchestration(result: OrchestrationResult, metadata: RobustYouTubeMetadata) -> dict[str, Any]:
         return {
             "success": result.success,
             "agents": {
@@ -259,18 +258,18 @@ class TranscriptActionWorkflow:
         }
 
     @staticmethod
-    def _serialize_agent(agent_result: AgentResult) -> Dict[str, Any]:
+    def _serialize_agent(agent_result: AgentResult) -> dict[str, Any]:
         success = getattr(agent_result, "success", None)
         if success is None and hasattr(agent_result, "status"):
-            success = getattr(agent_result, "status") == "ok"
+            success = agent_result.status == "ok"
 
         data = getattr(agent_result, "data", None)
         if data is None and hasattr(agent_result, "output"):
-            data = getattr(agent_result, "output")
+            data = agent_result.output
 
         errors = getattr(agent_result, "errors", None)
         if errors is None and hasattr(agent_result, "logs"):
-            errors = getattr(agent_result, "logs")
+            errors = agent_result.logs
 
         processing_time = getattr(agent_result, "processing_time", None)
         timestamp = getattr(agent_result, "timestamp", None)
@@ -293,7 +292,7 @@ class TranscriptActionWorkflow:
         video_url: str,
         *,
         language: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         start_time = asyncio.get_event_loop().time()
         result: SpeechToTextResult = await self._speech_service.transcribe_youtube_video(
             video_url,
@@ -337,7 +336,7 @@ class TranscriptActionWorkflow:
             "processing_time": latency,
         }
 
-    def _build_video_metadata(self, options: Optional[Any]) -> Optional[Dict[str, Any]]:
+    def _build_video_metadata(self, options: Any | None) -> dict[str, Any] | None:
         """Translate incoming request options into Gemini VideoMetadata payload."""
 
         if options is None:
@@ -352,7 +351,7 @@ class TranscriptActionWorkflow:
                 "fps": getattr(options, "fps", None),
             }
 
-        metadata: Dict[str, Any] = {}
+        metadata: dict[str, Any] = {}
 
         start_seconds = data.get("start_seconds")
         if start_seconds is not None:
@@ -373,8 +372,8 @@ class TranscriptActionWorkflow:
         video_url: str,
         *,
         language: str,
-        video_metadata: Optional[Dict[str, Any]],
-    ) -> Dict[str, Any]:
+        video_metadata: dict[str, Any] | None,
+    ) -> dict[str, Any]:
         """Attempt to transcribe via Gemini when Speech-to-Text cannot."""
 
         if self._hybrid_processor is None:
@@ -452,8 +451,8 @@ class TranscriptActionWorkflow:
         if primary_result.error:
             errors.append(primary_result.error)
 
-        video_path: Optional[Path] = None
-        temp_root: Optional[Path] = None
+        video_path: Path | None = None
+        temp_root: Path | None = None
         try:
             video_path, temp_root = await self._download_video_file(video_url)
         except Exception as exc:  # pragma: no cover - defensive guard
@@ -516,7 +515,7 @@ class TranscriptActionWorkflow:
         name: str,
         value: float,
         *,
-        tags: Optional[Dict[str, str]] = None,
+        tags: dict[str, str] | None = None,
     ) -> None:
         if not self._metrics_service:
             return
@@ -526,7 +525,7 @@ class TranscriptActionWorkflow:
             logger.debug("Metric %s recording failed", name, exc_info=True)
 
     @staticmethod
-    def _parse_gemini_transcript_payload(payload: str) -> Tuple[str, list[Dict[str, Any]]]:
+    def _parse_gemini_transcript_payload(payload: str) -> tuple[str, list[dict[str, Any]]]:
         """Extract transcript text and segments from Gemini response payload."""
 
         if not payload:
@@ -563,10 +562,10 @@ class TranscriptActionWorkflow:
         return str(parsed).strip(), []
 
     @staticmethod
-    def _normalise_segments(raw_segments: Any) -> list[Dict[str, Any]]:
+    def _normalise_segments(raw_segments: Any) -> list[dict[str, Any]]:
         """Coerce Gemini segment payloads into a consistent shape."""
 
-        normalised: list[Dict[str, Any]] = []
+        normalised: list[dict[str, Any]] = []
         if not isinstance(raw_segments, list):
             return normalised
 
@@ -636,7 +635,7 @@ class TranscriptActionWorkflow:
         trimmed = f"{value:.3f}".rstrip("0").rstrip(".")
         return f"{trimmed}s"
 
-    async def _download_video_file(self, video_url: str) -> Tuple[Optional[Path], Optional[Path]]:
+    async def _download_video_file(self, video_url: str) -> tuple[Path | None, Path | None]:
         """Download video content locally for Gemini File API processing."""
 
         try:
@@ -645,7 +644,7 @@ class TranscriptActionWorkflow:
             logger.warning("yt-dlp not available for Gemini file fallback: %s", exc)
             return None, None
 
-        def _download() -> Tuple[Optional[Path], Optional[Path]]:
+        def _download() -> tuple[Path | None, Path | None]:
             temp_dir = Path(tempfile.mkdtemp(prefix="gemini_video_"))
             output_template = str(temp_dir / "%(id)s.%(ext)s")
             ydl_opts = {

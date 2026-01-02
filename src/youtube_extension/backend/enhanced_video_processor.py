@@ -11,14 +11,14 @@ Integrates:
 """
 
 import asyncio
+import json
 import logging
 import os
-import json
-import aiohttp
-from typing import Dict, Any, Optional, List
-from pathlib import Path
 from datetime import datetime
-import hashlib
+from pathlib import Path
+from typing import Any, Optional
+
+import aiohttp
 from dotenv import load_dotenv
 
 from youtube_extension.utils import extract_video_id, format_duration
@@ -78,6 +78,7 @@ class EnhancedVideoProcessor:
         if not self.session:
             # Create SSL context that handles certificate verification
             import ssl
+
             import certifi
 
             ssl_context = ssl.create_default_context(cafile=certifi.where())
@@ -90,7 +91,7 @@ class EnhancedVideoProcessor:
                 connector=aiohttp.TCPConnector(ssl=ssl_context),
             )
 
-    async def process_video(self, video_url: str) -> Dict[str, Any]:
+    async def process_video(self, video_url: str) -> dict[str, Any]:
         """
         Enhanced video processing pipeline
         """
@@ -169,7 +170,7 @@ class EnhancedVideoProcessor:
 
     async def _get_gemini_transcript(
         self, video_id: str, video_url: str
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         [DEPRECATED] Get transcript using Google Gemini API (OpenAI-compatible endpoint). This method is now considered a fallback and may be removed in future versions.
         """
@@ -184,14 +185,14 @@ class EnhancedVideoProcessor:
             prompt = f"""
             Analyze this YouTube video: {video_url}
             Video ID: {video_id}
-            
+
             Please provide:
             1. A detailed transcript of the video content
             2. Key topics and concepts discussed
             3. Technical details and code examples mentioned
             4. Learning objectives and takeaways
             5. Difficulty level and prerequisites
-            
+
             Format the response as structured markdown.
             """
 
@@ -229,7 +230,7 @@ class EnhancedVideoProcessor:
             # Fallback to YouTube transcript API
             return await self._get_youtube_transcript_fallback(video_id)
 
-    async def _get_youtube_transcript_fallback(self, video_id: str) -> Dict[str, Any]:
+    async def _get_youtube_transcript_fallback(self, video_id: str) -> dict[str, Any]:
         """Fallback to YouTube transcript API"""
         try:
             from youtube_transcript_api import YouTubeTranscriptApi
@@ -274,8 +275,8 @@ class EnhancedVideoProcessor:
             }
 
     async def _analyze_with_gemini(
-        self, video_url: str, transcript: Dict, metadata: Dict
-    ) -> Dict[str, Any]:
+        self, video_url: str, transcript: dict, metadata: dict
+    ) -> dict[str, Any]:
         """
         Enhanced AI analysis using Gemini's multimodal capabilities
         """
@@ -299,14 +300,14 @@ class EnhancedVideoProcessor:
               "Prerequisites": string,
               "Related Topics": string[] | string
             }}
-            
+
             Video URL: {video_url}
             Title: {metadata.get('title', 'Unknown')}
             Channel: {metadata.get('channel', 'Unknown')}
             Duration: {metadata.get('duration', 'Unknown')}
-            
+
             Transcript excerpt (truncate as needed): {transcript.get('text', '')[:2000]}...
-            
+
             Rules:
             - Respond with JSON only. Do not include markdown fences.
             - If a field cannot be determined, provide a best-effort concise summary.
@@ -361,8 +362,8 @@ class EnhancedVideoProcessor:
             return {"error": str(e), "source": "failed", "fallback": True}
 
     async def _analyze_with_gemini_direct_url(
-        self, video_url: str, metadata: Dict
-    ) -> Dict[str, Any]:
+        self, video_url: str, metadata: dict
+    ) -> dict[str, Any]:
         """
         Direct YouTube URL analysis using new google-genai SDK.
         No video download required - passes URL directly to Gemini for multimodal analysis.
@@ -448,7 +449,7 @@ class EnhancedVideoProcessor:
             return {"error": str(e), "source": "direct_url_failed", "fallback": True}
 
     async def _generate_enhanced_markdown(
-        self, video_id: str, metadata: Dict, transcript: Dict, ai_analysis: Dict
+        self, video_id: str, metadata: dict, transcript: dict, ai_analysis: dict
     ) -> str:
         """
         Generate comprehensive markdown using all available data
@@ -501,7 +502,7 @@ class EnhancedVideoProcessor:
             logger.error(f"Markdown generation failed: {e}")
             return f"# Video Analysis\n\nError generating markdown: {str(e)}"
 
-    def _coerce_analysis_to_structured_dict(self, text: str) -> Dict[str, Any]:
+    def _coerce_analysis_to_structured_dict(self, text: str) -> dict[str, Any]:
         """Best-effort conversion of freeform Gemini text into structured fields expected by UI."""
         try:
             # Try to extract a JSON snippet if present in the text
@@ -520,7 +521,7 @@ class EnhancedVideoProcessor:
         lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
         summary = lines[0] if lines else ""
         # Group bullets as key concepts if present
-        key_concepts: List[str] = [
+        key_concepts: list[str] = [
             ln.lstrip("-* ").strip() for ln in lines if ln.startswith(("-", "*"))
         ]
         return {
@@ -540,7 +541,7 @@ class EnhancedVideoProcessor:
         }
 
     async def _save_enhanced_result(
-        self, video_id: str, metadata: Dict, markdown: str
+        self, video_id: str, metadata: dict, markdown: str
     ) -> str:
         """Save enhanced results to organized directory structure or GCS"""
         try:
@@ -557,22 +558,22 @@ class EnhancedVideoProcessor:
                     from google.cloud import storage
                     client = storage.Client()
                     bucket = client.bucket(gcs_bucket_name)
-                    
+
                     # Upload Markdown
                     blob_md = bucket.blob(f"enhanced_analysis/{category}/{filename}")
                     blob_md.upload_from_string(markdown, content_type="text/markdown")
-                    
+
                     # Upload Metadata
                     blob_meta = bucket.blob(f"enhanced_analysis/{category}/{metadata_filename}")
                     blob_meta.upload_from_string(
                         json.dumps(metadata, indent=2, default=str),
                         content_type="application/json"
                     )
-                    
+
                     gcs_path = f"gs://{gcs_bucket_name}/enhanced_analysis/{category}/{filename}"
                     logger.info(f"✅ Enhanced results uploaded to GCS: {gcs_path}")
                     return gcs_path
-                    
+
                 except ImportError:
                     logger.warning("google-cloud-storage not installed, falling back to local storage")
                 except Exception as e:
@@ -598,7 +599,7 @@ class EnhancedVideoProcessor:
             logger.error(f"Failed to save enhanced results: {e}")
             return ""
 
-    def get_cached_result(self, video_url: str) -> Optional[Dict[str, Any]]:
+    def get_cached_result(self, video_url: str) -> Optional[dict[str, Any]]:
         """Return a previously cached processing result for the given URL if available.
 
         Note: Caching is orchestrated by higher-level services. This method exists to
@@ -606,8 +607,8 @@ class EnhancedVideoProcessor:
         processor during tests or specialized deployments.
         """
         return None
-    
-    async def _get_video_metadata(self, video_id: str) -> Dict[str, Any]:
+
+    async def _get_video_metadata(self, video_id: str) -> dict[str, Any]:
         """Get comprehensive video metadata"""
         try:
             if not self.youtube_api_key:
@@ -632,7 +633,7 @@ class EnhancedVideoProcessor:
                     # Parse duration
                     duration = video['contentDetails']['duration']
                     duration_readable = format_duration(duration)
-                    
+
                     return {
                         "video_id": video_id,
                         "title": video["snippet"]["title"],
@@ -660,8 +661,8 @@ class EnhancedVideoProcessor:
                 'title': 'Unknown Video',
                 'error': str(e)
             }
-    
-    def _categorize_video(self, snippet: Dict) -> str:
+
+    def _categorize_video(self, snippet: dict) -> str:
         """Categorize video based on title and description"""
         text = (snippet.get("title", "") + " " + snippet.get("description", "")).lower()
 
@@ -708,7 +709,7 @@ async def test_enhanced_processor():
             "https://www.youtube.com/watch?v=aircAruvnKk"
         )
 
-        print(f"✅ Enhanced processing successful!")
+        print("✅ Enhanced processing successful!")
         print(f"📺 Video: {result['metadata']['title']}")
         print(f"🔑 Source: {result['transcript']['source']}")
         print(f"📁 Saved to: {result['save_path']}")

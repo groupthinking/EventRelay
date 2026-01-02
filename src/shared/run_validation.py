@@ -7,7 +7,7 @@ import subprocess
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 @dataclass
@@ -18,9 +18,9 @@ class StepConfig:
     status: str
     start_offset: float
     end_offset: float
-    inputs: Optional[List[Dict[str, Any]]] = None
-    outputs: Optional[List[Dict[str, Any]]] = None
-    artifacts: Optional[List[Dict[str, Any]]] = None
+    inputs: list[dict[str, Any]] | None = None
+    outputs: list[dict[str, Any]] | None = None
+    artifacts: list[dict[str, Any]] | None = None
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -32,12 +32,12 @@ def _iso(base: datetime, offset_seconds: float) -> str:
     return (base + timedelta(seconds=offset_seconds)).isoformat(timespec="seconds") + "Z"
 
 
-def _make_steps(video_result: Dict[str, Any], base_time: datetime) -> List[Dict[str, Any]]:
+def _make_steps(video_result: dict[str, Any], base_time: datetime) -> list[dict[str, Any]]:
     metadata = video_result.get("metadata") or {}
     transcript = video_result.get("transcript_data") or []
     actions = (video_result.get("actionable_content") or {}).get("actions") or []
 
-    configs: List[StepConfig] = [
+    configs: list[StepConfig] = [
         StepConfig(
             step_id="context-intake",
             display_name="Context Intake Agent",
@@ -152,7 +152,7 @@ def _make_steps(video_result: Dict[str, Any], base_time: datetime) -> List[Dict[
     ]
 
 
-def _build_step_graph(video_result: Dict[str, Any], run_id: str, base_time: datetime) -> Dict[str, Any]:
+def _build_step_graph(video_result: dict[str, Any], run_id: str, base_time: datetime) -> dict[str, Any]:
     metadata = video_result.get("metadata") or {}
     video_url = video_result.get("video_url") or f"https://www.youtube.com/watch?v={metadata.get('video_id', run_id)}"
 
@@ -174,11 +174,11 @@ def _build_step_graph(video_result: Dict[str, Any], run_id: str, base_time: date
     }
 
 
-def _build_trace_events(step_graph: Dict[str, Any], video_result: Dict[str, Any], base_time: datetime, run_id: str) -> List[Dict[str, Any]]:
+def _build_trace_events(step_graph: dict[str, Any], video_result: dict[str, Any], base_time: datetime, run_id: str) -> list[dict[str, Any]]:
     transcript = video_result.get("transcript_data") or []
     actions = (video_result.get("actionable_content") or {}).get("actions") or []
 
-    events: List[Dict[str, Any]] = [
+    events: list[dict[str, Any]] = [
         {
             "event_id": f"{run_id}-evt-0",
             "run_id": run_id,
@@ -302,7 +302,7 @@ def _run_validator(run_dir: Path) -> None:
     subprocess.run(["npm", "run", "validate:run", "--", str(run_dir)], cwd=VALIDATOR_ROOT, check=True)
 
 
-def persist_run_artifacts(video_result: Dict[str, Any], *, source: str = "unknown", logger: Optional[Any] = None) -> Path:
+def persist_run_artifacts(video_result: dict[str, Any], *, source: str = "unknown", logger: Any | None = None) -> Path:
     video_id = (
         video_result.get("metadata", {}).get("video_id")
         or video_result.get("video_id")

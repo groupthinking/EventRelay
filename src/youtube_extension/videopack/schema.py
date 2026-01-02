@@ -1,9 +1,11 @@
 from __future__ import annotations
-from typing import List, Optional, Dict, Any
-from datetime import datetime
-from pydantic import BaseModel, Field, HttpUrl, constr, validator
-from enum import Enum
+
 import uuid as _uuid
+from datetime import datetime
+from enum import Enum
+from typing import Any
+
+from pydantic import BaseModel, Field, HttpUrl, constr, validator
 
 
 class VPVersion(str, Enum):
@@ -18,66 +20,66 @@ class TranscriptSegment(BaseModel):
 
 
 class Transcript(BaseModel):
-    language: Optional[str] = None
+    language: str | None = None
     full_text: str
-    segments: List[TranscriptSegment] = Field(default_factory=list)
+    segments: list[TranscriptSegment] = Field(default_factory=list)
 
 
 class Keyframe(BaseModel):
     t_s: float = Field(ge=0)
-    image_path: Optional[str] = None
-    desc: Optional[str] = None
+    image_path: str | None = None
+    desc: str | None = None
 
 
 class Requirement(BaseModel):
     id: str
     title: str
-    detail: Optional[str] = None
-    priority: Optional[str] = Field(default="normal")  # low|normal|high
-    tags: List[str] = Field(default_factory=list)
+    detail: str | None = None
+    priority: str | None = Field(default="normal")  # low|normal|high
+    tags: list[str] = Field(default_factory=list)
 
 
 class CodeSnippet(BaseModel):
-    path_hint: Optional[str] = None
-    lang: Optional[str] = None
+    path_hint: str | None = None
+    lang: str | None = None
     content: str
 
 
 class ArtifactRef(BaseModel):
     kind: str  # e.g., "repo", "file", "url"
-    path: Optional[str] = None  # repo/file path
-    url: Optional[HttpUrl] = None
-    meta: Dict[str, Any] = Field(default_factory=dict)
+    path: str | None = None  # repo/file path
+    url: HttpUrl | None = None
+    meta: dict[str, Any] = Field(default_factory=dict)
 
 
 class Metrics(BaseModel):
-    cost_usd: Optional[float] = None
-    latency_ms: Optional[int] = None
-    tokens_in: Optional[int] = None
-    tokens_out: Optional[int] = None
+    cost_usd: float | None = None
+    latency_ms: int | None = None
+    tokens_in: int | None = None
+    tokens_out: int | None = None
 
 
 class Provenance(BaseModel):
     created_at: datetime
-    tool_versions: Dict[str, str] = Field(
+    tool_versions: dict[str, str] = Field(
         default_factory=dict
     )  # {"yt_api":"X", "mcp":"Y"}
-    source_hash: Optional[str] = None
-    notes: Optional[str] = None
+    source_hash: str | None = None
+    notes: str | None = None
 
 
 class VideoPackV0(BaseModel):
     version: VPVersion = VPVersion.v0
     id: str = Field(default_factory=lambda: str(_uuid.uuid4()))
     video_id: constr(strip_whitespace=True, min_length=3)
-    source_url: Optional[HttpUrl] = None
+    source_url: HttpUrl | None = None
 
     transcript: Transcript
-    keyframes: List[Keyframe] = Field(default_factory=list)
-    concepts: List[str] = Field(default_factory=list)
-    requirements: List[Requirement] = Field(default_factory=list)
-    code_snippets: List[CodeSnippet] = Field(default_factory=list)
-    artifacts: List[ArtifactRef] = Field(default_factory=list)
+    keyframes: list[Keyframe] = Field(default_factory=list)
+    concepts: list[str] = Field(default_factory=list)
+    requirements: list[Requirement] = Field(default_factory=list)
+    code_snippets: list[CodeSnippet] = Field(default_factory=list)
+    artifacts: list[ArtifactRef] = Field(default_factory=list)
 
     metrics: Metrics = Field(default_factory=Metrics)
     provenance: Provenance

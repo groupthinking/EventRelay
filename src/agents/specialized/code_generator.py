@@ -3,7 +3,7 @@
 
 import textwrap
 from datetime import datetime
-from typing import Dict, Any
+from typing import Any
 
 
 class CodeGeneratorAgent:
@@ -13,7 +13,7 @@ class CodeGeneratorAgent:
         self.name = "code_generator"
         self.templates = self._load_templates()
 
-    def _load_templates(self) -> Dict[str, str]:
+    def _load_templates(self) -> dict[str, str]:
         """Load code generation templates"""
         return {
             "fastapi_endpoint": textwrap.dedent(
@@ -88,7 +88,7 @@ class CodeGeneratorAgent:
             ),
         }
 
-    async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
+    async def execute(self, inputs: dict[str, Any]) -> dict[str, Any]:
         """Execute code generation based on inputs"""
         intent = inputs.get("intent", "")
         context = inputs.get("context", {})
@@ -128,7 +128,7 @@ class CodeGeneratorAgent:
         else:
             return "generic"
 
-    def _generate_api_endpoint(self, context: Dict) -> str:
+    def _generate_api_endpoint(self, context: dict) -> str:
         """Generate a single API endpoint"""
         endpoint_name = context.get("endpoint_name", "process")
         function_name = context.get("function_name", endpoint_name.replace("-", "_"))
@@ -171,7 +171,7 @@ class CodeGeneratorAgent:
             processing_logic=processing_logic,
         )
 
-    def _generate_crud_api(self, context: Dict) -> str:
+    def _generate_crud_api(self, context: dict) -> str:
         """Generate CRUD API endpoints"""
         entity = context.get("entity", "item")
         entity_plural = context.get("entity_plural", f"{entity}s")
@@ -199,7 +199,7 @@ class {model_name}(BaseModel):
             endpoints=crud_code,
         )
 
-    def _generate_data_model(self, context: Dict) -> str:
+    def _generate_data_model(self, context: dict) -> str:
         """Generate Pydantic data models"""
         model_name = context.get("model_name", "DataModel")
         fields = context.get(
@@ -217,7 +217,7 @@ class {model_name}(BaseModel):
 
         return model_code
 
-    def _generate_generic_api(self, context: Dict) -> str:
+    def _generate_generic_api(self, context: dict) -> str:
         """Generate a generic API structure"""
         return self.templates["rest_api"].format(
             title="Generated API",

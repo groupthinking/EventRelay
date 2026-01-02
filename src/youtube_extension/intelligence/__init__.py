@@ -16,8 +16,8 @@ Architecture:
 - Comprehensive error handling and fallback mechanisms
 """
 
-from .gemini import GeminiProcessor
 from .agents import SpecializedAgentRegistry
+from .gemini import GeminiProcessor
 from .multimodal import MultiModalProcessor
 
 __all__ = [

@@ -8,12 +8,14 @@ centralised adapters.
 """
 
 from src.shared.youtube import (
-    RobustYouTubeService as _RobustYouTubeService,
-    RobustYouTubeMetadata,
-    get_video_transcript_robust,
-    fetch_innertube_transcript,
     InnertubeTranscriptError,
     InnertubeTranscriptNotFound,
+    RobustYouTubeMetadata,
+    fetch_innertube_transcript,
+    get_video_transcript_robust,
+)
+from src.shared.youtube import (
+    RobustYouTubeService as _RobustYouTubeService,
 )
 
 RobustYouTubeService = _RobustYouTubeService

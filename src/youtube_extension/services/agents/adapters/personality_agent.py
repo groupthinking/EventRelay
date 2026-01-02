@@ -4,17 +4,20 @@ Personality Agent
 Maps creator character, intent, and community personality.
 """
 
-import os
 import asyncio
-import logging
 import json
-from datetime import datetime
-from typing import Any, Dict, Optional, List
+import logging
+import os
+from typing import Any, Optional
 
+from ...ai.hybrid_processor_service import (
+    HybridConfig,
+    HybridProcessorService,
+    TaskType,
+)
 from ..base_agent import BaseAgent
 from ..dto import AgentRequest, AgentResult
 from ..registry import register
-from ...ai.hybrid_processor_service import HybridProcessorService, HybridConfig, TaskType
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +26,7 @@ class PersonalityAgent(BaseAgent):
     """Agent specialized in mapping persona, intent, and character."""
     name = "personality_agent"
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, config: Optional[dict[str, Any]] = None):
         cfg = config or {}
         gemini_cfg = cfg.get("gemini_config") or self._build_gemini_config()
         self._hybrid_processor = cfg.get("hybrid_processor") or HybridProcessorService(HybridConfig(gemini=gemini_cfg))
@@ -35,15 +38,15 @@ class PersonalityAgent(BaseAgent):
         video_info = req.params.get("metadata") or {}
         video_metadata = req.params.get("video_metadata") or {}
         transcript = req.params.get("transcript")
-        
+
         if not transcript and not video_info:
             return self._failure("Missing transcript or video metadata", start_time)
 
         try:
             # Map personality using Gemini
             persona_mapping = await self._map_personality(transcript, video_info)
-            
-            elapsed = asyncio.get_event_loop().time() - start_time
+
+            asyncio.get_event_loop().time() - start_time
             return AgentResult(
                 status="ok",
                 output={
@@ -59,11 +62,11 @@ class PersonalityAgent(BaseAgent):
             logger.error("PersonalityAgent failed: %s", exc, exc_info=True)
             return self._failure(str(exc), start_time)
 
-    async def _map_personality(self, transcript: Optional[str], video_metadata: Dict[str, Any]) -> Dict[str, Any]:
+    async def _map_personality(self, transcript: Optional[str], video_metadata: dict[str, Any]) -> dict[str, Any]:
         """Call Gemini to map the personality and intent."""
         comments = video_metadata.get("comments", [])
         channel_context = video_metadata.get("channel_context", {})
-        
+
         prompt = (
             "You are a strategic personality analyst. Analyze the following video content and community interaction "
             "to map the creator's character, the underlying intent, and the community vibe.\n\n"
@@ -74,7 +77,7 @@ class PersonalityAgent(BaseAgent):
             f"Channel Context: {json.dumps(channel_context)}\n"
             f"Recent Comments: {json.dumps(comments[:10])}\n"
         )
-        
+
         if transcript:
             prompt += f"\nTranscript Snippet: {transcript[:2000]}\n"
 
@@ -86,14 +89,14 @@ class PersonalityAgent(BaseAgent):
             response_mime_type="application/json",
             video_metadata=video_metadata
         )
-        
+
         if not result.success or not result.response:
             raise RuntimeError(f"Gemini personality mapping failed: {result.error}")
-            
+
         return json.loads(result.response)
 
     def _failure(self, message: str, start_time: float) -> AgentResult:
-        elapsed = asyncio.get_event_loop().time() - start_time
+        asyncio.get_event_loop().time() - start_time
         return AgentResult(
             status="error",
             output={},

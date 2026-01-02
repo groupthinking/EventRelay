@@ -6,9 +6,9 @@ A simplified interface to the real video processing capabilities.
 This module provides basic video processing and ID extraction functions.
 """
 
-import re
-from typing import Dict, Any, Optional
 import logging
+import re
+from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +41,7 @@ def extract_video_id(url: str) -> Optional[str]:
 
     return None
 
-async def process_video(video_url: str, force_refresh: bool = False) -> Dict[str, Any]:
+async def process_video(video_url: str, force_refresh: bool = False) -> dict[str, Any]:
     """
     Process a YouTube video using real APIs
 
@@ -87,7 +87,7 @@ async def process_video(video_url: str, force_refresh: bool = False) -> Dict[str
         }
 
 # Synchronous wrapper for compatibility
-def process_video_sync(video_url: str, force_refresh: bool = False) -> Dict[str, Any]:
+def process_video_sync(video_url: str, force_refresh: bool = False) -> dict[str, Any]:
     """
     Synchronous wrapper for process_video
     Note: This is a placeholder - real async processing should be used
@@ -96,7 +96,7 @@ def process_video_sync(video_url: str, force_refresh: bool = False) -> Dict[str,
 
     try:
         # Try to get running event loop
-        loop = asyncio.get_running_loop()
+        asyncio.get_running_loop()
         # If we have a running loop, this would be problematic
         # For now, return error
         return {

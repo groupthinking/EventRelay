@@ -14,18 +14,17 @@ Features:
 - Error-proof file structure creation
 """
 
-import os
-import shutil
-import zipfile
 import asyncio
-import logging
-import json
 import hashlib
+import json
+import logging
+import os
 import re
+import shutil
 import sys
+import zipfile
 from datetime import datetime
-from typing import Dict, Any, List, Optional, Tuple
-from pathlib import Path
+from typing import Any, Optional
 
 from utils.path_utils import get_project_root, resolve_path
 
@@ -69,7 +68,7 @@ class InfrastructurePackagingAgent:
 
         return logger
 
-    def _load_security_patterns(self) -> Dict[str, List[str]]:
+    def _load_security_patterns(self) -> dict[str, list[str]]:
         """Load security patterns for validation"""
         return {
             'secrets': [
@@ -98,7 +97,7 @@ class InfrastructurePackagingAgent:
             ]
         }
 
-    async def codex_validate_content(self, content: str, file_path: str) -> Tuple[bool, List[str]]:
+    async def codex_validate_content(self, content: str, file_path: str) -> tuple[bool, list[str]]:
         """
         Codex validation step for security and code quality
         """
@@ -128,8 +127,8 @@ class InfrastructurePackagingAgent:
 
     async def create_secure_project_structure(self,
                                             project_name: str,
-                                            project_structure: Dict[str, Any],
-                                            flat_files: Dict[str, str],
+                                            project_structure: dict[str, Any],
+                                            flat_files: dict[str, str],
                                             output_dir: str = str(resolve_path('temp', 'packaged_projects'))) -> str:
         """
         Create secure project structure with validation
@@ -256,7 +255,7 @@ class InfrastructurePackagingAgent:
             self.logger.info(f"📦 Creating deployment ZIP: {zip_path}")
 
             with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zipf:
-                for root, dirs, files in os.walk(base_dir):
+                for root, _dirs, files in os.walk(base_dir):
                     for file in files:
                         file_path = os.path.join(root, file)
                         arcname = os.path.relpath(file_path, base_dir)
@@ -297,11 +296,11 @@ class InfrastructurePackagingAgent:
         return sha256_hash.hexdigest()
 
     async def agent_triggered_packaging(self,
-                                      trigger_data: Dict[str, Any]) -> Dict[str, Any]:
+                                      trigger_data: dict[str, Any]) -> dict[str, Any]:
         """
         Main agent-triggered packaging workflow
         """
-        self.logger.info(f"🤖 Agent-triggered packaging initiated")
+        self.logger.info("🤖 Agent-triggered packaging initiated")
 
         try:
             project_name = trigger_data.get('project_name', 'eventrelay_project')
@@ -341,7 +340,7 @@ class InfrastructurePackagingAgent:
                 'metadata': zip_path.replace('.zip', '_metadata.json')
             }
 
-            self.logger.info(f"🎯 Agent-triggered packaging completed successfully")
+            self.logger.info("🎯 Agent-triggered packaging completed successfully")
             return result
 
         except Exception as e:
@@ -354,7 +353,7 @@ class InfrastructurePackagingAgent:
                 'timestamp': datetime.now().isoformat()
             }
 
-    def get_packaging_status(self) -> Dict[str, Any]:
+    def get_packaging_status(self) -> dict[str, Any]:
         """Get current packaging agent status"""
         return {
             'agent_name': 'InfrastructurePackagingAgent',
@@ -393,7 +392,7 @@ if __name__ == "__main__":
         }
 
         result = await agent.agent_triggered_packaging(trigger_data)
-        print(f"\n📦 Packaging Result:")
+        print("\n📦 Packaging Result:")
         print(json.dumps(result, indent=2))
 
         return result

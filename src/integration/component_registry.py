@@ -1,6 +1,5 @@
-import asyncio
 import logging
-from typing import Dict, Any
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -9,7 +8,7 @@ class IntelligenceComponentRegistry:
         self.components = {}
         self.dependencies = {}
         self.processing_order = []
-        
+
     def register_component(self, component_name: str, component_class: Any, dependencies: list = None):
         self.components[component_name] = {
             'class': component_class,
@@ -19,7 +18,7 @@ class IntelligenceComponentRegistry:
             'last_health_check': None
         }
         self._update_processing_order()
-        
+
     async def initialize_components(self):
         for component_name in self.processing_order:
             component_info = self.components[component_name]

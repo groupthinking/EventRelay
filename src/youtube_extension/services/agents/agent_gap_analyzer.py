@@ -12,12 +12,12 @@ This system detects when:
 - Patterns emerge that warrant dedicated agent support
 """
 
+import json
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Set
-import json
+from typing import Optional
 
 
 @dataclass
@@ -26,7 +26,7 @@ class AgentGap:
     domain: str
     confidence: float  # 0.0 to 1.0
     reason: str
-    examples: List[str] = field(default_factory=list)
+    examples: list[str] = field(default_factory=list)
     frequency: int = 1
     first_detected: datetime = field(default_factory=datetime.now)
     last_detected: datetime = field(default_factory=datetime.now)
@@ -37,26 +37,26 @@ class AgentRecommendation:
     """Recommendation for creating a new custom agent"""
     name: str
     description: str
-    domains: List[str]
-    tools: List[str]
-    expertise_areas: List[str]
-    example_scenarios: List[str]
+    domains: list[str]
+    tools: list[str]
+    expertise_areas: list[str]
+    example_scenarios: list[str]
     priority: str  # "high", "medium", "low"
     confidence: float
-    supporting_gaps: List[AgentGap] = field(default_factory=list)
+    supporting_gaps: list[AgentGap] = field(default_factory=list)
 
 
 class AgentGapAnalyzer:
     """
     Analyzes system usage to identify when new custom agents should be created.
-    
+
     This analyzer tracks:
     - File types and technologies frequently edited without agent support
     - Repeated error patterns that could benefit from specialized guidance
     - Domain-specific tasks that lack dedicated agent coverage
     - Performance issues that specialized agents could address
     """
-    
+
     # Existing agent domains (from current .github/agents/*.agent.md files)
     EXISTING_AGENTS = {
         "python-backend": ["python", "fastapi", "backend", "api", "asyncio", "sqlalchemy"],
@@ -66,7 +66,7 @@ class AgentGapAnalyzer:
         "documentation": ["markdown", "docs", "api-docs", "technical-writing"],
         "video-processing": ["video", "youtube", "transcription", "ai-analysis", "rag"],
     }
-    
+
     # Technology/domain keywords to monitor
     TECHNOLOGY_KEYWORDS = {
         "infrastructure": ["docker", "kubernetes", "k8s", "helm", "terraform", "ansible"],
@@ -79,25 +79,25 @@ class AgentGapAnalyzer:
         "blockchain": ["web3", "ethereum", "solidity", "smart-contract"],
         "ai-ml": ["machine-learning", "neural-network", "tensorflow", "pytorch", "llm"],
     }
-    
+
     # Minimum confidence threshold for recommendations
     RECOMMENDATION_THRESHOLD = 0.7
-    
+
     # Minimum frequency before recommending new agent
     MIN_FREQUENCY = 3
 
     def __init__(self, storage_dir: Optional[Path] = None):
         """
         Initialize agent gap analyzer.
-        
+
         Args:
             storage_dir: Directory to store gap analysis data
         """
         self.logger = logging.getLogger("agent_gap_analyzer")
         self.storage_dir = storage_dir or Path.home() / ".eventrelay" / "agent_gaps"
         self.storage_dir.mkdir(parents=True, exist_ok=True)
-        
-        self.gaps: Dict[str, AgentGap] = {}
+
+        self.gaps: dict[str, AgentGap] = {}
         self.load_gaps()
 
     def load_gaps(self) -> None:
@@ -105,7 +105,7 @@ class AgentGapAnalyzer:
         gaps_file = self.storage_dir / "gaps.json"
         if gaps_file.exists():
             try:
-                with open(gaps_file, 'r') as f:
+                with open(gaps_file) as f:
                     data = json.load(f)
                     for domain, gap_data in data.items():
                         self.gaps[domain] = AgentGap(
@@ -143,34 +143,34 @@ class AgentGapAnalyzer:
         except Exception as e:
             self.logger.error(f"Failed to save gaps: {e}")
 
-    def detect_domain_from_context(self, context: str) -> Set[str]:
+    def detect_domain_from_context(self, context: str) -> set[str]:
         """
         Detect technology domains from context (file path, content, etc.)
-        
+
         Args:
             context: Context string to analyze (file path, code snippet, etc.)
-            
+
         Returns:
             Set of detected domain keywords
         """
         context_lower = context.lower()
         detected = set()
-        
+
         for domain, keywords in self.TECHNOLOGY_KEYWORDS.items():
             for keyword in keywords:
                 if keyword in context_lower:
                     detected.add(domain)
                     break
-        
+
         return detected
 
     def is_domain_covered(self, domain: str) -> bool:
         """
         Check if a domain is adequately covered by existing agents.
-        
+
         Args:
             domain: Domain to check
-            
+
         Returns:
             True if domain is covered by existing agents
         """
@@ -182,7 +182,7 @@ class AgentGapAnalyzer:
     def record_gap(self, domain: str, reason: str, example: str, confidence: float = 0.5) -> None:
         """
         Record a detected gap in agent coverage.
-        
+
         Args:
             domain: Technology domain with insufficient coverage
             reason: Explanation of why this gap exists
@@ -203,20 +203,20 @@ class AgentGapAnalyzer:
                 reason=reason,
                 examples=[example]
             )
-        
+
         self.save_gaps()
         self.logger.info(f"Recorded gap for domain '{domain}' (frequency: {self.gaps[domain].frequency})")
 
     def analyze_file_access(self, file_path: str, task_description: str = "") -> None:
         """
         Analyze file access to detect potential gaps in agent coverage.
-        
+
         Args:
             file_path: Path of file being accessed
             task_description: Description of task being performed
         """
         domains = self.detect_domain_from_context(file_path + " " + task_description)
-        
+
         for domain in domains:
             if not self.is_domain_covered(domain):
                 reason = f"Frequent work in {domain} without dedicated agent support"
@@ -228,14 +228,14 @@ class AgentGapAnalyzer:
     def analyze_error_pattern(self, error_type: str, context: str, frequency: int = 1) -> None:
         """
         Analyze error patterns to identify gaps that specialized agents could address.
-        
+
         Args:
             error_type: Type/category of error
             context: Context where error occurred
             frequency: How many times this error has occurred
         """
         domains = self.detect_domain_from_context(error_type + " " + context)
-        
+
         for domain in domains:
             if not self.is_domain_covered(domain) and frequency >= 2:
                 reason = f"Repeated {error_type} errors in {domain} domain"
@@ -243,25 +243,25 @@ class AgentGapAnalyzer:
                 confidence = min(0.9, 0.5 + (frequency * 0.1))
                 self.record_gap(domain, reason, example, confidence=confidence)
 
-    def get_recommendations(self) -> List[AgentRecommendation]:
+    def get_recommendations(self) -> list[AgentRecommendation]:
         """
         Generate recommendations for new agents based on detected gaps.
-        
+
         Returns:
             List of agent recommendations, sorted by priority
         """
         recommendations = []
-        
+
         for domain, gap in self.gaps.items():
             # Only recommend if gap meets thresholds
             if gap.confidence < self.RECOMMENDATION_THRESHOLD:
                 continue
             if gap.frequency < self.MIN_FREQUENCY:
                 continue
-            
+
             # Generate agent recommendation
             agent_name = domain.replace("_", "-")
-            
+
             # Determine priority based on confidence and frequency
             if gap.confidence >= 0.9 and gap.frequency >= 5:
                 priority = "high"
@@ -269,10 +269,10 @@ class AgentGapAnalyzer:
                 priority = "medium"
             else:
                 priority = "low"
-            
+
             # Get specific keywords for this domain
             domains_list = self.TECHNOLOGY_KEYWORDS.get(domain, [domain])
-            
+
             recommendation = AgentRecommendation(
                 name=agent_name,
                 description=f"Expert guidance for {domain} development in EventRelay",
@@ -284,18 +284,18 @@ class AgentGapAnalyzer:
                 confidence=gap.confidence,
                 supporting_gaps=[gap]
             )
-            
+
             recommendations.append(recommendation)
-        
+
         # Sort by priority and confidence
         priority_order = {"high": 0, "medium": 1, "low": 2}
         recommendations.sort(
             key=lambda r: (priority_order[r.priority], -r.confidence)
         )
-        
+
         return recommendations
 
-    def _generate_expertise_areas(self, domain: str) -> List[str]:
+    def _generate_expertise_areas(self, domain: str) -> list[str]:
         """Generate expertise areas for a given domain"""
         base_areas = [
             f"{domain.replace('-', ' ').title()} best practices",
@@ -304,7 +304,7 @@ class AgentGapAnalyzer:
             "Performance optimization",
             "Testing strategies"
         ]
-        
+
         # Add domain-specific areas
         if domain == "infrastructure":
             base_areas.extend([
@@ -330,16 +330,16 @@ class AgentGapAnalyzer:
                 "Deployment automation",
                 "GitHub Actions workflows"
             ])
-        
+
         return base_areas
 
     def generate_agent_markdown(self, recommendation: AgentRecommendation) -> str:
         """
         Generate markdown content for a new agent based on recommendation.
-        
+
         Args:
             recommendation: Agent recommendation to generate from
-            
+
         Returns:
             Markdown content for .agent.md file
         """
@@ -358,7 +358,7 @@ metadata:
   priority: {recommendation.priority}
 ---
 """
-        
+
         # Generate agent content
         content = f"""
 # {recommendation.name.replace('-', ' ').title()} Agent for EventRelay
@@ -450,44 +450,44 @@ When tasks span multiple domains, collaborate by deferring to the appropriate ag
 **Note**: This agent was automatically generated based on detected patterns in repository usage.
 Review and refine as needed for optimal performance.
 """
-        
+
         return frontmatter + content
 
     def export_recommendation(self, recommendation: AgentRecommendation, output_dir: Optional[Path] = None) -> Path:
         """
         Export agent recommendation to a markdown file for review.
-        
+
         Args:
             recommendation: Recommendation to export
             output_dir: Directory to export to (defaults to storage_dir/recommendations)
-            
+
         Returns:
             Path to exported file
         """
         if output_dir is None:
             output_dir = self.storage_dir / "recommendations"
         output_dir.mkdir(parents=True, exist_ok=True)
-        
+
         filename = f"{recommendation.name}.agent.md"
         filepath = output_dir / filename
-        
+
         content = self.generate_agent_markdown(recommendation)
-        
+
         with open(filepath, 'w') as f:
             f.write(content)
-        
+
         self.logger.info(f"Exported agent recommendation to {filepath}")
         return filepath
 
     def generate_summary_report(self) -> str:
         """
         Generate a summary report of detected gaps and recommendations.
-        
+
         Returns:
             Markdown report
         """
         recommendations = self.get_recommendations()
-        
+
         report = f"""# Agent Gap Analysis Report
 
 Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
@@ -504,19 +504,19 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 | Domain | Confidence | Frequency | Status |
 |--------|-----------|-----------|--------|
 """
-        
+
         for domain, gap in sorted(self.gaps.items(), key=lambda x: x[1].confidence, reverse=True):
             status = "✅ Recommended" if gap.confidence >= self.RECOMMENDATION_THRESHOLD and gap.frequency >= self.MIN_FREQUENCY else "⏳ Monitoring"
             report += f"| {domain} | {gap.confidence:.2f} | {gap.frequency} | {status} |\n"
-        
+
         if recommendations:
-            report += f"\n## Recommended New Agents\n\n"
+            report += "\n## Recommended New Agents\n\n"
             for i, rec in enumerate(recommendations, 1):
                 report += f"""
 ### {i}. {rec.name.title()} Agent
 
-**Priority**: {rec.priority.upper()}  
-**Confidence**: {rec.confidence:.2f}  
+**Priority**: {rec.priority.upper()}
+**Confidence**: {rec.confidence:.2f}
 **Domains**: {', '.join(rec.domains)}
 
 **Description**: {rec.description}
@@ -530,7 +530,7 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 """
         else:
             report += "\n## No New Agents Recommended\n\nAll detected gaps are either covered by existing agents or below recommendation thresholds.\n"
-        
+
         return report
 
 

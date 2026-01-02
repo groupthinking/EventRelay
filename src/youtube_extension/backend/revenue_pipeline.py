@@ -15,13 +15,14 @@ import asyncio
 import logging
 import os
 import subprocess
-from typing import Dict, Any, Optional
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
+from typing import Any, Optional
+
+from .ai_code_generator import get_ai_code_generator
 
 # Import our components
 from .enhanced_video_processor import EnhancedVideoProcessor
-from .ai_code_generator import get_ai_code_generator
 
 logger = logging.getLogger(__name__)
 
@@ -69,8 +70,8 @@ class RevenuePipeline:
     async def process_video_to_deployment(
         self,
         youtube_url: str,
-        project_config: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
+        project_config: Optional[dict[str, Any]] = None
+    ) -> dict[str, Any]:
         """
         Complete pipeline: YouTube URL → Live Deployment
 
@@ -154,7 +155,7 @@ class RevenuePipeline:
                 'timestamp': datetime.now().isoformat()
             }
 
-    def _transform_to_generator_format(self, video_result: Dict[str, Any]) -> Dict[str, Any]:
+    def _transform_to_generator_format(self, video_result: dict[str, Any]) -> dict[str, Any]:
         """
         Transform video processor output to AI code generator input format
         """
@@ -211,7 +212,7 @@ class RevenuePipeline:
             }
         }
 
-    def _infer_project_type(self, ai_analysis: Dict[str, Any]) -> str:
+    def _infer_project_type(self, ai_analysis: dict[str, Any]) -> str:
         """Infer project type from AI analysis"""
         content = str(ai_analysis).lower()
 
@@ -226,7 +227,7 @@ class RevenuePipeline:
         else:
             return 'fullstack_app'
 
-    def _infer_stack(self, ai_analysis: Dict[str, Any], technologies: list) -> str:
+    def _infer_stack(self, ai_analysis: dict[str, Any], technologies: list) -> str:
         """Infer technology stack from analysis"""
         tech_str = ' '.join(str(t).lower() for t in technologies)
         content = str(ai_analysis).lower()
@@ -241,7 +242,7 @@ class RevenuePipeline:
         else:
             return 'TypeScript + Next.js + Supabase'  # Default
 
-    def _extract_key_features(self, ai_analysis: Dict[str, Any]) -> list:
+    def _extract_key_features(self, ai_analysis: dict[str, Any]) -> list:
         """Extract key features for implementation"""
         features = []
 
@@ -262,7 +263,7 @@ class RevenuePipeline:
 
         return features[:5] if features else ['Full-stack application']
 
-    def _create_project_config(self, video_result: Dict[str, Any]) -> Dict[str, Any]:
+    def _create_project_config(self, video_result: dict[str, Any]) -> dict[str, Any]:
         """Create project configuration from video result"""
         metadata = video_result.get('metadata', {})
         video_id = video_result.get('video_id', 'unknown')
@@ -375,7 +376,7 @@ async def main():
     result = await pipeline.process_video_to_deployment(youtube_url)
 
     if result['success']:
-        print(f"✅ SUCCESS!")
+        print("✅ SUCCESS!")
         print(f"Video: {result['video_title']}")
         print(f"Project: {result['project_path']}")
         if result['deployment_url']:

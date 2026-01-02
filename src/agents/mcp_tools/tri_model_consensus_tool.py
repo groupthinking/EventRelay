@@ -7,10 +7,9 @@ Consensus voting for architecture and code generation decisions
 import asyncio
 import logging
 import os
-import json
-from typing import Dict, Any, List, Optional
 from dataclasses import dataclass
 from enum import Enum
+from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +61,7 @@ class ConsensusResult:
     consensus_response: str
     consensus_confidence: float
     strategy_used: ConsensusStrategy
-    model_responses: List[ModelResponse]
+    model_responses: list[ModelResponse]
     agreement_score: float  # 0-1, how much models agreed
     reasoning: str
 
@@ -113,7 +112,7 @@ class TriModelConsensusTool:
         task_type: str = "architecture",
         strategy: ConsensusStrategy = ConsensusStrategy.WEIGHTED_CONFIDENCE,
         require_all: bool = False
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Get consensus decision from all three models.
 
@@ -348,7 +347,7 @@ class TriModelConsensusTool:
 
     def _compute_consensus(
         self,
-        responses: List[ModelResponse],
+        responses: list[ModelResponse],
         strategy: ConsensusStrategy
     ) -> ConsensusResult:
         """Compute consensus from model responses"""
@@ -419,7 +418,7 @@ class TriModelConsensusTool:
                 reasoning=f"Default strategy: highest confidence ({best_response.model_name})"
             )
 
-    def _calculate_agreement(self, responses: List[ModelResponse]) -> float:
+    def _calculate_agreement(self, responses: list[ModelResponse]) -> float:
         """
         Calculate agreement score between responses.
         Returns 0.0-1.0 indicating how similar the responses are.

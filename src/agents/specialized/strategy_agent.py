@@ -4,25 +4,22 @@ STRATEGY AGENT
 Generates actionable funnels and "Better Way" optimizations from video and personal analysis.
 """
 
-import os
-import json
 import logging
-import asyncio
-from typing import Dict, List, Any, Optional
+
 from ..a2a_framework import BaseAgent
 
 logger = logging.getLogger("strategy_agent")
 
 class StrategyAgent(BaseAgent):
     """Agent specialized in strategic analysis and funnel generation"""
-    
+
     def __init__(self):
         super().__init__("strategy_agent", ["generate_funnel", "optimize_action", "identify_principle"])
-        
-    async def process_intent(self, intent: Dict) -> Dict:
+
+    async def process_intent(self, intent: dict) -> dict:
         """Process strategic analysis intent"""
         action = intent.get("action")
-        
+
         if action == "generate_strategic_analysis":
             return await self.generate_strategic_analysis(
                 intent.get("video_metadata"),
@@ -30,19 +27,19 @@ class StrategyAgent(BaseAgent):
             )
         else:
             return {"error": f"Unknown action: {action}"}
-            
-    async def generate_strategic_analysis(self, video_metadata: Dict, personality_mapping: Dict) -> Dict:
+
+    async def generate_strategic_analysis(self, video_metadata: dict, personality_mapping: dict) -> dict:
         """Generate comprehensive strategic analysis and actionable funnel"""
         logger.info(f"📈 Generating strategic analysis for video: {video_metadata.get('video_id')}")
-        
+
         # This agent would typically be powered by Gemini 1.5 Pro with high "Thinking" depth.
-        
+
         # Strategic Prompts:
         # 1. "What is the core principle or 'Atomic Unit' of value being taught here?"
         # 2. "Why is a user likely watching this? What is their immediate obstacle?"
         # 3. "Analyze the action in the video. Is it efficient? What is 'The Better Way' using modern AI or automation?"
         # 4. "Create a 3-stage funnel: Info -> Application -> Mastery."
-        
+
         # Mock result for now
         return {
             "core_principle": "Universal Context Injection (UCI) - the ability to map any unstructured data into structured action handles.",

@@ -8,7 +8,6 @@ import logging
 import re
 from dataclasses import dataclass
 from html import unescape
-from typing import Iterable, List, Optional
 from xml.etree import ElementTree
 
 import httpx
@@ -44,8 +43,8 @@ class CaptionSegment:
 async def fetch_innertube_transcript(
     video_id: str,
     language: str = "en",
-    client: Optional[httpx.AsyncClient] = None,
-) -> List[CaptionSegment]:
+    client: httpx.AsyncClient | None = None,
+) -> list[CaptionSegment]:
     """Retrieve captions via the Innertube player endpoint.
 
     Args:
@@ -110,7 +109,7 @@ async def _fetch_watch_page(client: httpx.AsyncClient, video_id: str) -> str:
     return response.text
 
 
-def _extract_api_key(html: str) -> Optional[str]:
+def _extract_api_key(html: str) -> str | None:
     match = _API_KEY_PATTERN.search(html)
     return match.group("key") if match else None
 
@@ -140,7 +139,7 @@ async def _fetch_player_response(
     return response.json()
 
 
-def _select_caption_track(player_response: dict, language: str) -> Optional[str]:
+def _select_caption_track(player_response: dict, language: str) -> str | None:
     tracks = (
         player_response.get("captions", {})
         .get("playerCaptionsTracklistRenderer", {})
@@ -167,7 +166,7 @@ async def _fetch_caption_xml(client: httpx.AsyncClient, url: str) -> str:
     return response.text
 
 
-def parse_transcript_xml(xml_text: str) -> List[CaptionSegment]:
+def parse_transcript_xml(xml_text: str) -> list[CaptionSegment]:
     """Convert YouTube XML transcript into ``CaptionSegment`` entries."""
 
     if not xml_text.strip():
@@ -179,7 +178,7 @@ def parse_transcript_xml(xml_text: str) -> List[CaptionSegment]:
         logger.warning("Failed to parse caption XML: %s", exc)
         return []
 
-    segments: List[CaptionSegment] = []
+    segments: list[CaptionSegment] = []
     for node in root.findall("text"):
         raw_text = node.text or ""
         text = _normalize_caption_text(raw_text)
@@ -194,14 +193,14 @@ def _normalize_caption_text(text: str) -> str:
     return unescape(text.replace("\n", " ").strip())
 
 
-def _safe_float(value: Optional[str]) -> float:
+def _safe_float(value: str | None) -> float:
     try:
         return float(value) if value is not None else 0.0
     except (TypeError, ValueError):
         return 0.0
 
 
-def sync_fetch_innertube_transcript(video_id: str, language: str = "en") -> List[CaptionSegment]:
+def sync_fetch_innertube_transcript(video_id: str, language: str = "en") -> list[CaptionSegment]:
     """Synchronous helper for contexts without an event loop."""
 
     return asyncio.run(fetch_innertube_transcript(video_id, language))

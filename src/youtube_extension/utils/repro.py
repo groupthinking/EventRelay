@@ -1,6 +1,6 @@
 import os
 import uuid
-from typing import Dict, Optional
+from typing import Optional
 
 
 def get_repro_id(default: Optional[str] = None) -> str:
@@ -19,12 +19,12 @@ def get_repro_id(default: Optional[str] = None) -> str:
     return str(uuid.uuid4())
 
 
-def attach_repro_id_to_payload(payload: Dict[str, object], repro_id: Optional[str] = None) -> Dict[str, object]:
+def attach_repro_id_to_payload(payload: dict[str, object], repro_id: Optional[str] = None) -> dict[str, object]:
     """Return a copy of payload including a 'repro-id' field.
 
     If repro_id is not provided, it is resolved via get_repro_id().
     """
     resolved = repro_id or get_repro_id()
-    merged: Dict[str, object] = dict(payload)
+    merged: dict[str, object] = dict(payload)
     merged["repro-id"] = resolved
     return merged

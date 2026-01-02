@@ -7,9 +7,9 @@ Both `EnhancedVideoProcessor` and `RealVideoProcessor` should implement
 
 from __future__ import annotations
 
-from typing import Protocol, Dict, Any
+from typing import Any, Protocol
 
 
 class VideoProcessor(Protocol):
-	async def process_video(self, video_url: str) -> Dict[str, Any]:
+	async def process_video(self, video_url: str) -> dict[str, Any]:
 		...

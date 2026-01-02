@@ -8,35 +8,31 @@ Provides actionable task generation and implementation planning with clean servi
 """
 
 import asyncio
-import json
-import logging
-from datetime import datetime
-from typing import Dict, Any, List, Optional
 from dataclasses import dataclass
+from typing import Any, Optional
 
-from ..dto import AgentRequest, AgentResult
-from ..registry import register
 from ..base_agent import BaseAgent
+from ..dto import AgentRequest, AgentResult
 from ..registry import register
 
 
 @dataclass
 class ActionPlan:
     """Structured action plan result"""
-    primary_actions: List[Dict[str, Any]]
-    supplementary_actions: List[Dict[str, Any]]
-    learning_path: List[str]
-    prerequisites: List[str]
-    resources: List[Dict[str, Any]]
+    primary_actions: list[dict[str, Any]]
+    supplementary_actions: list[dict[str, Any]]
+    learning_path: list[str]
+    prerequisites: list[str]
+    resources: list[dict[str, Any]]
     estimated_total_time: str
-    difficulty_progression: List[str]
+    difficulty_progression: list[str]
 
 
 @register
 class ActionImplementerAgent(BaseAgent):
     name = "action_implementer"
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, config: Optional[dict[str, Any]] = None):
         """
         Initialize Action Implementer Agent.
 
@@ -45,7 +41,7 @@ class ActionImplementerAgent(BaseAgent):
         """
         self._action_templates = self._load_action_templates()
 
-    def _load_action_templates(self) -> Dict[str, Dict[str, Any]]:
+    def _load_action_templates(self) -> dict[str, dict[str, Any]]:
         """Load action templates for different content types"""
         return {
             "tutorial": {
@@ -128,7 +124,7 @@ class ActionImplementerAgent(BaseAgent):
                 logs=[error_msg, f"Processing time: {processing_time:.2f}s"],
             )
 
-    def _create_basic_analysis(self, video_data: Dict[str, Any]) -> Dict[str, Any]:
+    def _create_basic_analysis(self, video_data: dict[str, Any]) -> dict[str, Any]:
         """Create basic analysis from video metadata"""
         title = video_data.get("title", "")
         description = video_data.get("description", "")
@@ -141,7 +137,7 @@ class ActionImplementerAgent(BaseAgent):
             "quality_score": 0.5
         }
 
-    def _extract_key_points_from_text(self, text: str) -> List[str]:
+    def _extract_key_points_from_text(self, text: str) -> list[str]:
         """Extract key points from text using simple heuristics"""
         # Simple keyword-based extraction
         keywords = ["learn", "build", "create", "develop", "implement", "tutorial", "guide", "how to"]
@@ -159,7 +155,7 @@ class ActionImplementerAgent(BaseAgent):
 
         return key_points[:5]  # Limit to 5 key points
 
-    def _determine_content_type(self, analysis: Dict[str, Any]) -> str:
+    def _determine_content_type(self, analysis: dict[str, Any]) -> str:
         """Determine content type from analysis"""
         title = analysis.get("title", "").lower()
         summary = analysis.get("summary", "").lower()
@@ -175,7 +171,7 @@ class ActionImplementerAgent(BaseAgent):
         else:
             return "educational"
 
-    async def _generate_action_plan(self, analysis: Dict[str, Any], content_type: str) -> ActionPlan:
+    async def _generate_action_plan(self, analysis: dict[str, Any], content_type: str) -> ActionPlan:
         """Generate comprehensive action plan based on analysis and content type"""
 
         template = self._action_templates.get(content_type, self._action_templates["educational"])
@@ -211,7 +207,7 @@ class ActionImplementerAgent(BaseAgent):
             difficulty_progression=difficulty_progression
         )
 
-    def _generate_primary_actions(self, analysis: Dict[str, Any], template: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def _generate_primary_actions(self, analysis: dict[str, Any], template: dict[str, Any]) -> list[dict[str, Any]]:
         """Generate primary actionable tasks"""
         actions = []
         title = analysis.get("title", "")
@@ -221,7 +217,7 @@ class ActionImplementerAgent(BaseAgent):
         main_action = {
             "id": "primary_001",
             "title": f"Complete: {title}",
-            "description": f"Follow along with the video content and implement the main concepts",
+            "description": "Follow along with the video content and implement the main concepts",
             "priority": "high",
             "estimated_time": "30-60 minutes",
             "category": "implementation",
@@ -250,7 +246,7 @@ class ActionImplementerAgent(BaseAgent):
 
         return actions
 
-    def _generate_supplementary_actions(self, analysis: Dict[str, Any], template: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def _generate_supplementary_actions(self, analysis: dict[str, Any], template: dict[str, Any]) -> list[dict[str, Any]]:
         """Generate supplementary learning actions"""
         actions = []
 
@@ -286,7 +282,7 @@ class ActionImplementerAgent(BaseAgent):
 
         return actions
 
-    def _create_learning_path(self, primary_actions: List[Dict[str, Any]], supplementary_actions: List[Dict[str, Any]]) -> List[str]:
+    def _create_learning_path(self, primary_actions: list[dict[str, Any]], supplementary_actions: list[dict[str, Any]]) -> list[str]:
         """Create ordered learning path"""
         path = []
 
@@ -300,7 +296,7 @@ class ActionImplementerAgent(BaseAgent):
 
         return path
 
-    def _identify_prerequisites(self, analysis: Dict[str, Any], content_type: str) -> List[str]:
+    def _identify_prerequisites(self, analysis: dict[str, Any], content_type: str) -> list[str]:
         """Identify prerequisites for the content"""
         difficulty = analysis.get("difficulty_level", "intermediate")
 
@@ -320,7 +316,7 @@ class ActionImplementerAgent(BaseAgent):
         content_prereqs = prereq_map.get(content_type, prereq_map["educational"])
         return content_prereqs.get(difficulty, ["Basic knowledge"])
 
-    def _gather_resources(self, analysis: Dict[str, Any], content_type: str) -> List[Dict[str, Any]]:
+    def _gather_resources(self, analysis: dict[str, Any], content_type: str) -> list[dict[str, Any]]:
         """Gather relevant resources"""
         resources = [
             {
@@ -345,7 +341,7 @@ class ActionImplementerAgent(BaseAgent):
 
         return resources
 
-    def _calculate_total_time(self, primary_actions: List[Dict[str, Any]], supplementary_actions: List[Dict[str, Any]]) -> str:
+    def _calculate_total_time(self, primary_actions: list[dict[str, Any]], supplementary_actions: list[dict[str, Any]]) -> str:
         """Calculate estimated total time"""
         # Simple time estimation based on action count
         primary_time = len(primary_actions) * 30  # 30 min average per primary action
@@ -360,7 +356,7 @@ class ActionImplementerAgent(BaseAgent):
         else:
             return f"{minutes}m"
 
-    def _create_difficulty_progression(self, primary_actions: List[Dict[str, Any]]) -> List[str]:
+    def _create_difficulty_progression(self, primary_actions: list[dict[str, Any]]) -> list[str]:
         """Create difficulty progression path"""
         difficulties = ["beginner", "intermediate", "advanced"]
         progression = []

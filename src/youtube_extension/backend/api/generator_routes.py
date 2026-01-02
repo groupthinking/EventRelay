@@ -1,7 +1,9 @@
-from fastapi import APIRouter, HTTPException, BackgroundTasks
-from pydantic import BaseModel
-from typing import Optional, Dict, Any
 import logging
+from typing import Any, Optional
+
+from fastapi import APIRouter, BackgroundTasks, HTTPException
+from pydantic import BaseModel
+
 from ..revenue_pipeline import get_revenue_pipeline
 
 router = APIRouter(prefix="/api/v1", tags=["generator"])
@@ -15,10 +17,10 @@ class GenerateResponse(BaseModel):
     job_id: str
     status: str
     message: str
-    details: Optional[Dict[str, Any]] = None
+    details: Optional[dict[str, Any]] = None
 
 # In-memory job store for MVP (replace with Redis/Database later)
-jobs: Dict[str, Dict[str, Any]] = {}
+jobs: dict[str, dict[str, Any]] = {}
 
 @router.post("/generate", response_model=GenerateResponse)
 async def generate_infrastructure(request: GenerateRequest, background_tasks: BackgroundTasks):
@@ -28,14 +30,14 @@ async def generate_infrastructure(request: GenerateRequest, background_tasks: Ba
     try:
         job_id = f"job_{len(jobs) + 1}"
         jobs[job_id] = {"status": "processing", "url": request.url}
-        
+
         # for MVP, we'll run it synchronously or background task?
-        # The user wants "real-time logs" in the UI eventually. 
-        # For this step, let's keep it simple and await it if it's not too long, 
+        # The user wants "real-time logs" in the UI eventually.
+        # For this step, let's keep it simple and await it if it's not too long,
         # BUT revenue pipeline takes minutes. Background task is better.
-        
+
         background_tasks.add_task(run_pipeline_background, job_id, request.url, request.auto_deploy)
-        
+
         return GenerateResponse(
             job_id=job_id,
             status="queued",
@@ -54,7 +56,7 @@ async def get_generation_status(job_id: str):
     """
     if job_id not in jobs:
         raise HTTPException(status_code=404, detail="Job not found")
-    
+
     return jobs[job_id]
 
 async def run_pipeline_background(job_id: str, url: str, auto_deploy: bool):
@@ -64,10 +66,10 @@ async def run_pipeline_background(job_id: str, url: str, auto_deploy: bool):
     try:
         logger.info(f"Starting pipeline for job {job_id}")
         pipeline = get_revenue_pipeline(auto_deploy=auto_deploy)
-        
+
         # This is a long-running process
         result = await pipeline.process_video_to_deployment(url)
-        
+
         if result['success']:
             jobs[job_id]['status'] = 'completed'
             jobs[job_id]['result'] = result
@@ -76,7 +78,7 @@ async def run_pipeline_background(job_id: str, url: str, auto_deploy: bool):
             jobs[job_id]['status'] = 'failed'
             jobs[job_id]['error'] = result.get('error')
             logger.error(f"Job {job_id} failed: {result.get('error')}")
-            
+
     except Exception as e:
         jobs[job_id]['status'] = 'failed'
         jobs[job_id]['error'] = str(e)

@@ -13,20 +13,21 @@ Usage:
 
 import asyncio
 import json
-import uuid
-from datetime import datetime
-from typing import Dict, Any, List, Optional
-from mcp.server import Server, NotificationOptions
-from mcp.server.models import InitializationOptions
-import mcp.server.stdio
-import mcp.types as types
 import re
 import shlex
+import uuid
+from datetime import datetime
+from typing import Any
+
+import mcp.server.stdio
+import mcp.types as types
+from mcp.server import NotificationOptions, Server
+from mcp.server.models import InitializationOptions
 
 
 class ValidationScopeTracker:
     def __init__(self):
-        self.sessions: Dict[str, Dict[str, Any]] = {}
+        self.sessions: dict[str, dict[str, Any]] = {}
 
     def _normalize_command(self, command: str) -> str:
         """Normalize command for scope comparison"""
@@ -52,7 +53,7 @@ class ValidationScopeTracker:
             and not parts[part_index].endswith(".ts")
             and not parts[part_index].endswith(".js")
             and not parts[part_index].endswith("/")
-            and not parts[part_index] in ["agents/", "utils/", "src/", "tests/"]
+            and parts[part_index] not in ["agents/", "utils/", "src/", "tests/"]
         ):
             if not parts[part_index].startswith("--"):
                 tool_parts.append(parts[part_index])
@@ -129,7 +130,7 @@ tracker = ValidationScopeTracker()
 
 
 @server.list_tools()
-async def handle_list_tools() -> List[types.Tool]:
+async def handle_list_tools() -> list[types.Tool]:
     """List available validation scope tracking tools"""
     return [
         types.Tool(
@@ -205,7 +206,7 @@ async def handle_list_tools() -> List[types.Tool]:
 
 
 @server.call_tool()
-async def handle_call_tool(name: str, arguments: dict) -> List[types.TextContent]:
+async def handle_call_tool(name: str, arguments: dict) -> list[types.TextContent]:
     """Handle tool calls for validation scope tracking"""
 
     if name == "start_validation_session":
@@ -290,7 +291,7 @@ Use `check_scope_before_success` before declaring any fixes complete.""",
 **Missing Targets:** {', '.join(missing)}
 
 ❌ **Cannot declare success on reduced scope**
-✅ **Must run:** `{original_command}` 
+✅ **Must run:** `{original_command}`
 
 **Progress:** {original_errors} → {current_errors} errors (on reduced scope)""",
                     )
@@ -397,7 +398,7 @@ Checks: {len(session.get('scope_checks', []))}"""
         return [
             types.TextContent(
                 type="text",
-                text=f"📋 **Active Validation Sessions**\n\n"
+                text="📋 **Active Validation Sessions**\n\n"
                 + "\n\n".join(session_list),
             )
         ]

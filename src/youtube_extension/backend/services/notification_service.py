@@ -9,14 +9,12 @@ Provides centralized notification management with multiple channels.
 
 import json
 import logging
-import smtplib
-from datetime import datetime
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-from pathlib import Path
-from typing import Dict, Any, List, Optional, Union
-import asyncio
 from dataclasses import dataclass
+from datetime import datetime
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from pathlib import Path
+from typing import Any, Optional, Union
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +26,7 @@ class NotificationMessage:
     priority: str = "normal"  # low, normal, high, urgent
     category: str = "system"  # system, user, alert, info
     recipient: Optional[str] = None
-    metadata: Optional[Dict[str, Any]] = None
+    metadata: Optional[dict[str, Any]] = None
     timestamp: datetime = None
 
     def __post_init__(self):
@@ -43,7 +41,7 @@ class NotificationService:
     Supports email, file logging, and in-memory storage.
     """
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, config: Optional[dict[str, Any]] = None):
         """
         Initialize notification service.
 
@@ -51,7 +49,7 @@ class NotificationService:
             config: Configuration dictionary with notification settings
         """
         self.config = config or {}
-        self.notifications: List[NotificationMessage] = []
+        self.notifications: list[NotificationMessage] = []
         self.notification_log = Path("logs/notifications.log")
 
         # Create logs directory if it doesn't exist
@@ -68,7 +66,7 @@ class NotificationService:
 
         logger.info("Notification service initialized")
 
-    async def send_notification(self, message: Union[NotificationMessage, Dict[str, Any]]) -> bool:
+    async def send_notification(self, message: Union[NotificationMessage, dict[str, Any]]) -> bool:
         """
         Send a notification through configured channels.
 
@@ -166,7 +164,7 @@ class NotificationService:
 
     async def get_notifications(self, category: Optional[str] = None,
                                priority: Optional[str] = None,
-                               limit: int = 50) -> List[NotificationMessage]:
+                               limit: int = 50) -> list[NotificationMessage]:
         """
         Get notifications with optional filtering.
 
@@ -188,7 +186,7 @@ class NotificationService:
 
         return filtered[-limit:]
 
-    async def get_notification_stats(self) -> Dict[str, Any]:
+    async def get_notification_stats(self) -> dict[str, Any]:
         """
         Get notification statistics.
 
@@ -297,7 +295,7 @@ Metadata:
 
     # Slack sending removed
 
-    async def health_check(self) -> Dict[str, Any]:
+    async def health_check(self) -> dict[str, Any]:
         """
         Health check for notification service.
 

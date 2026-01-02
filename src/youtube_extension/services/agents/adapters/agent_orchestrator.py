@@ -9,26 +9,26 @@ parallel processing, and intelligent routing.
 
 import asyncio
 import logging
-from typing import Dict, Any, List, Optional, Type
-from datetime import datetime
 from dataclasses import dataclass, field
+from datetime import datetime
+from typing import Any, Optional
 
-from ..base_agent import BaseAgent, AgentResult, AgentRequest
-from .transcript_action_agent import TranscriptActionAgent
+from ..base_agent import AgentRequest, AgentResult, BaseAgent
 
 
 @dataclass
 class OrchestrationResult:
     """Result from agent orchestration"""
     success: bool
-    results: Dict[str, AgentResult] = field(default_factory=dict)
-    errors: List[str] = field(default_factory=list)
+    results: dict[str, AgentResult] = field(default_factory=dict)
+    errors: list[str] = field(default_factory=list)
     total_processing_time: float = 0.0
-    agents_used: List[str] = field(default_factory=list)
+    agents_used: list[str] = field(default_factory=list)
     timestamp: datetime = field(default_factory=datetime.now)
 
 
 from ..registry import get as get_agent_class
+
 
 class AgentOrchestrator:
     """
@@ -39,9 +39,9 @@ class AgentOrchestrator:
     def __init__(self):
         """Initialize agent orchestrator"""
         self.logger = logging.getLogger("agent_orchestrator")
-        self._agents: Dict[str, BaseAgent] = {}
-        self._agent_types: Dict[str, Type[BaseAgent]] = {}
-        self._task_mappings: Dict[str, List[str]] = {
+        self._agents: dict[str, BaseAgent] = {}
+        self._agent_types: dict[str, type[BaseAgent]] = {}
+        self._task_mappings: dict[str, list[str]] = {
             "video_analysis": ["video_master", "action_implementer", "personality_agent", "strategy_agent"],
             "content_generation": ["video_master"],
             "action_planning": ["action_implementer"],
@@ -49,7 +49,7 @@ class AgentOrchestrator:
             "strategic_analysis": ["personality_agent", "strategy_agent"],
         }
 
-    def register_agent_type(self, name: str, agent_class: Type[BaseAgent]):
+    def register_agent_type(self, name: str, agent_class: type[BaseAgent]):
         """
         Register a new agent type.
 
@@ -60,7 +60,7 @@ class AgentOrchestrator:
         self._agent_types[name] = agent_class
         self.logger.info(f"Registered agent type: {name}")
 
-    async def get_agent(self, name: str, config: Optional[Dict[str, Any]] = None) -> Optional[BaseAgent]:
+    async def get_agent(self, name: str, config: Optional[dict[str, Any]] = None) -> Optional[BaseAgent]:
         """
         Get agent instance, creating if needed.
 
@@ -98,8 +98,8 @@ class AgentOrchestrator:
     async def execute_task(
         self,
         task_type: str,
-        input_data: Dict[str, Any],
-        agent_configs: Optional[Dict[str, Dict[str, Any]]] = None
+        input_data: dict[str, Any],
+        agent_configs: Optional[dict[str, dict[str, Any]]] = None
     ) -> OrchestrationResult:
         """
         Execute a task using appropriate agents.
@@ -180,9 +180,9 @@ class AgentOrchestrator:
 
     async def execute_agents_sequentially(
         self,
-        agent_names: List[str],
-        input_data: Dict[str, Any],
-        agent_configs: Optional[Dict[str, Dict[str, Any]]] = None
+        agent_names: list[str],
+        input_data: dict[str, Any],
+        agent_configs: Optional[dict[str, dict[str, Any]]] = None
     ) -> OrchestrationResult:
         """
         Execute agents sequentially, passing results between them.
@@ -225,15 +225,15 @@ class AgentOrchestrator:
         orchestration_result.total_processing_time = asyncio.get_event_loop().time() - start_time
         return orchestration_result
 
-    def list_agents(self) -> List[str]:
+    def list_agents(self) -> list[str]:
         """List all registered agents"""
         return list(self._agents.keys()) + list(self._agent_types.keys())
 
-    def list_task_types(self) -> List[str]:
+    def list_task_types(self) -> list[str]:
         """List all available task types"""
         return list(self._task_mappings.keys())
 
-    def add_task_mapping(self, task_type: str, agent_names: List[str]):
+    def add_task_mapping(self, task_type: str, agent_names: list[str]):
         """
         Add a new task mapping.
 

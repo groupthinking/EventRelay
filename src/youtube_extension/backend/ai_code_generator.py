@@ -7,14 +7,13 @@ Uses Gemini 3 Pro Preview to generate complete full-stack applications
 based on video analysis. Produces monetizable products, not templates.
 """
 
-import os
-import sys
 import json
 import logging
-import tempfile
-from typing import Dict, Any, List, Optional
-from pathlib import Path
+import os
+import sys
 from datetime import datetime
+from pathlib import Path
+from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -70,9 +69,9 @@ class AICodeGenerator:
 
     async def generate_fullstack_project(
         self,
-        video_analysis: Dict[str, Any],
-        project_config: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        video_analysis: dict[str, Any],
+        project_config: dict[str, Any]
+    ) -> dict[str, Any]:
         """
         Generate a complete full-stack project using AI.
 
@@ -91,11 +90,11 @@ class AICodeGenerator:
 
         # Extract information from video analysis
         extracted = video_analysis.get("extracted_info", {})
-        ai_analysis = video_analysis.get("ai_analysis", {})
+        video_analysis.get("ai_analysis", {})
 
         title = extracted.get("title", "AI Generated Project")
         technologies = extracted.get("technologies", [])
-        features = extracted.get("features", [])
+        extracted.get("features", [])
 
         # Capture technologies to knowledge base for continuous learning
         if KNOWLEDGE_BASE_AVAILABLE and technologies:
@@ -145,9 +144,9 @@ class AICodeGenerator:
 
     async def _determine_architecture(
         self,
-        video_analysis: Dict[str, Any],
-        project_config: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        video_analysis: dict[str, Any],
+        project_config: dict[str, Any]
+    ) -> dict[str, Any]:
         """Use AI to determine optimal project architecture"""
 
         extracted = video_analysis.get("extracted_info", {})
@@ -239,7 +238,7 @@ Choose "fullstack_app" for most cases, "agent" for MCP/workflow systems, "infras
             logger.warning(f"Architecture determination failed: {e}, using defaults")
             return self._default_architecture()
 
-    def _default_architecture(self) -> Dict[str, Any]:
+    def _default_architecture(self) -> dict[str, Any]:
         """Return default infrastructure platform architecture with all packages"""
         return {
             "type": "infrastructure_platform",
@@ -293,9 +292,9 @@ Choose "fullstack_app" for most cases, "agent" for MCP/workflow systems, "infras
     async def _generate_project_files(
         self,
         project_path: Path,
-        architecture: Dict[str, Any],
-        video_analysis: Dict[str, Any]
-    ) -> List[str]:
+        architecture: dict[str, Any],
+        video_analysis: dict[str, Any]
+    ) -> list[str]:
         """Generate all project files using AI"""
 
         files_created = []
@@ -324,9 +323,9 @@ Choose "fullstack_app" for most cases, "agent" for MCP/workflow systems, "infras
     async def _generate_nextjs_project(
         self,
         project_path: Path,
-        architecture: Dict[str, Any],
-        video_analysis: Dict[str, Any]
-    ) -> List[str]:
+        architecture: dict[str, Any],
+        video_analysis: dict[str, Any]
+    ) -> list[str]:
         """Generate a complete Next.js full-stack project"""
 
         files_created = []
@@ -545,8 +544,8 @@ Return ONLY the code."""
     async def _ai_generate_file(
         self,
         description: str,
-        architecture: Dict[str, Any],
-        video_analysis: Dict[str, Any],
+        architecture: dict[str, Any],
+        video_analysis: dict[str, Any],
         specific_prompt: str
     ) -> str:
         """Use AI to generate a specific file"""
@@ -606,8 +605,8 @@ TASK: Generate {description}
     async def _generate_package_json(
         self,
         title: str,
-        architecture: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        architecture: dict[str, Any]
+    ) -> dict[str, Any]:
         """Generate package.json with appropriate dependencies"""
 
         name = title.lower().replace(' ', '-').replace("'", '')[:50]
@@ -780,8 +779,8 @@ body {
     def _generate_readme(
         self,
         title: str,
-        architecture: Dict[str, Any],
-        video_analysis: Dict[str, Any]
+        architecture: dict[str, Any],
+        video_analysis: dict[str, Any]
     ) -> str:
         """Generate comprehensive README"""
 
@@ -895,7 +894,7 @@ MIT
 *Generated with UVAI - Transform videos into products*
 '''
 
-    def _generate_env_example(self, architecture: Dict[str, Any]) -> str:
+    def _generate_env_example(self, architecture: dict[str, Any]) -> str:
         """Generate .env.example file"""
 
         env_vars = [
@@ -947,7 +946,7 @@ MIT
 
         return "\n".join(env_vars)
 
-    def _generate_env_local(self, architecture: Dict[str, Any]) -> str:
+    def _generate_env_local(self, architecture: dict[str, Any]) -> str:
         """Generate .env.local file with actual production keys for immediate deployment"""
 
         env_vars = [
@@ -1130,9 +1129,9 @@ jobs:
     async def fix_build_errors(
         self,
         project_path: Path,
-        errors: List[str],
-        suggested_fixes: List[str]
-    ) -> Dict[str, Any]:
+        errors: list[str],
+        suggested_fixes: list[str]
+    ) -> dict[str, Any]:
         """
         Use AI to fix build errors in generated code.
 
@@ -1249,9 +1248,9 @@ Return ONLY the fixed code, no explanations. Ensure:
     async def _generate_turborepo_monorepo(
         self,
         project_path: Path,
-        architecture: Dict[str, Any],
-        video_analysis: Dict[str, Any]
-    ) -> List[str]:
+        architecture: dict[str, Any],
+        video_analysis: dict[str, Any]
+    ) -> list[str]:
         """Generate Turborepo monorepo infrastructure platform"""
         logger.info("🏗️  Generating Turborepo monorepo structure...")
 
@@ -1367,7 +1366,7 @@ Return ONLY the fixed code, no explanations. Ensure:
         logger.info(f"✅ Generated Turborepo monorepo with {len(files_created)} files")
         return files_created
 
-    async def _generate_ui_package(self, package_path: Path, architecture: Dict[str, Any]) -> List[str]:
+    async def _generate_ui_package(self, package_path: Path, architecture: dict[str, Any]) -> list[str]:
         """Generate shared UI components package"""
         files_created = []
 
@@ -1462,7 +1461,7 @@ export const Card: React.FC<CardProps> = ({ children, className }) => {
 
         return files_created
 
-    def _generate_eslint_config_package(self, package_path: Path) -> List[str]:
+    def _generate_eslint_config_package(self, package_path: Path) -> list[str]:
         """Generate shared ESLint config package"""
         files_created = []
 
@@ -1494,7 +1493,7 @@ export const Card: React.FC<CardProps> = ({ children, className }) => {
 
         return files_created
 
-    def _generate_tsconfig_package(self, package_path: Path) -> List[str]:
+    def _generate_tsconfig_package(self, package_path: Path) -> list[str]:
         """Generate shared TypeScript config package"""
         files_created = []
 
@@ -1563,7 +1562,7 @@ export const Card: React.FC<CardProps> = ({ children, className }) => {
 
         return files_created
 
-    def _generate_monorepo_readme(self, title: str, architecture: Dict[str, Any], video_analysis: Dict[str, Any]) -> str:
+    def _generate_monorepo_readme(self, title: str, architecture: dict[str, Any], video_analysis: dict[str, Any]) -> str:
         """Generate Turborepo monorepo README"""
         video_url = video_analysis.get("video_data", {}).get("video_url", "Unknown")
 
@@ -1633,7 +1632,7 @@ vercel --prod
 *Generated with EventRelay AI Infrastructure Generator*
 '''
 
-    async def _generate_mcp_connectors_package(self, package_path: Path, architecture: Dict[str, Any]) -> List[str]:
+    async def _generate_mcp_connectors_package(self, package_path: Path, architecture: dict[str, Any]) -> list[str]:
         """Generate MCP connectors package with Postgres, GitHub, and Slack connectors"""
         logger.info("🔌 Generating MCP connectors package...")
         files_created = []
@@ -2464,7 +2463,7 @@ export class SlackConnector {
 }
 '''
 
-    async def _generate_workflows_package(self, package_path: Path, architecture: Dict[str, Any]) -> List[str]:
+    async def _generate_workflows_package(self, package_path: Path, architecture: dict[str, Any]) -> list[str]:
         """Generate Workflow.dev durable workflows package"""
         logger.info("⚡ Generating Workflow.dev durable workflows package...")
         files_created = []
@@ -2807,7 +2806,7 @@ Mark units of work that auto-retry:
         logger.info(f"✅ Generated Workflow.dev package with {len(files_created)} files")
         return files_created
 
-    async def _generate_observability_package(self, package_path: Path, architecture: Dict[str, Any]) -> List[str]:
+    async def _generate_observability_package(self, package_path: Path, architecture: dict[str, Any]) -> list[str]:
         """Generate OpenTelemetry observability package (based on existing EventRelay implementation)"""
         logger.info("📊 Generating OpenTelemetry observability package...")
         files_created = []
@@ -3296,7 +3295,7 @@ Based on EventRelay's `agents/observability_setup.py`:
         logger.info(f"✅ Generated OpenTelemetry observability package with {len(files_created)} files")
         return files_created
 
-    async def _generate_ai_gateway_package(self, package_path: Path, architecture: Dict[str, Any]) -> List[str]:
+    async def _generate_ai_gateway_package(self, package_path: Path, architecture: dict[str, Any]) -> list[str]:
         """Generate Vercel AI SDK multi-model gateway package (Phase 1.4)"""
         logger.info("🤖 Generating Vercel AI Gateway package with multi-model failover...")
 
@@ -3889,7 +3888,7 @@ OPENAI_API_KEY=your_openai_api_key
         logger.info(f"✅ Generated AI Gateway package with {len(files_created)} files")
         return files_created
 
-    async def _generate_logger_package(self, package_path: Path, architecture: Dict[str, Any]) -> List[str]:
+    async def _generate_logger_package(self, package_path: Path, architecture: dict[str, Any]) -> list[str]:
         """Generate comprehensive structured logging package (Phase 1.5)"""
         logger.info("📝 Generating structured logging package with OpenTelemetry integration...")
 
@@ -4427,7 +4426,7 @@ LOG_LEVEL=debug      # Override default log level
         logger.info(f"✅ Generated structured logging package with {len(files_created)} files")
         return files_created
 
-    async def _generate_error_handling_package(self, package_path: Path, architecture: Dict[str, Any]) -> List[str]:
+    async def _generate_error_handling_package(self, package_path: Path, architecture: dict[str, Any]) -> list[str]:
         """Generate error handling package with boundaries + retry logic (Phase 3.1)"""
         logger.info("🛡️ Generating error handling package with retry logic and circuit breakers...")
 
@@ -4868,7 +4867,7 @@ EventRelay production implementations:
         logger.info(f"✅ Generated error handling package with {len(files_created)} files")
         return files_created
 
-    async def _generate_database_package(self, package_path: Path, architecture: Dict[str, Any]) -> List[str]:
+    async def _generate_database_package(self, package_path: Path, architecture: dict[str, Any]) -> list[str]:
         """Generate Prisma + Supabase database package (Phase 3.2)"""
         logger.info("🗄️ Generating Prisma + Supabase database package...")
 
@@ -5395,7 +5394,7 @@ const { data } = supabase.storage
         logger.info(f"✅ Generated Prisma + Supabase database package with {len(files_created)} files")
         return files_created
 
-    async def _generate_config_package(self, package_path: Path, architecture: Dict[str, Any]) -> List[str]:
+    async def _generate_config_package(self, package_path: Path, architecture: dict[str, Any]) -> list[str]:
         """Generate environment configuration package (Phase 3.3)"""
         logger.info("⚙️ Generating environment configuration package...")
 
@@ -5716,9 +5715,9 @@ vercel env add ANTHROPIC_API_KEY
     async def _generate_fastapi_project(
         self,
         project_path: Path,
-        architecture: Dict[str, Any],
-        video_analysis: Dict[str, Any]
-    ) -> List[str]:
+        architecture: dict[str, Any],
+        video_analysis: dict[str, Any]
+    ) -> list[str]:
         """Generate Python FastAPI project - placeholder for future"""
         # For now, delegate to Next.js
         return await self._generate_nextjs_project(
