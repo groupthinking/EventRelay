@@ -21,10 +21,7 @@ mcp = FastMCP("PerformanceOptimizer")
 # Reset to slow implementation for the demo
 def slow_fibonacci(n: int) -> int:
     if n <= 1: return n
-    a, b = 0, 1
-    for _ in range(2, n + 1):
-        a, b = b, a + b
-    return b
+    return slow_fibonacci(n - 1) + slow_fibonacci(n - 2)
 
 # Registry for executable functions
 FUNCTION_REGISTRY = {
@@ -58,7 +55,7 @@ def _perform_ast_rewrite(function_name: str, target_file: str) -> str:
             source_content = f.read()
     except IOError as e:
          raise ValueError(f"Error reading file: {e}")
-        
+
     # 3. Parse AST
     try:
         tree = ast.parse(source_content)
@@ -70,7 +67,7 @@ def _perform_ast_rewrite(function_name: str, target_file: str) -> str:
         if isinstance(node, ast.FunctionDef) and node.name == function_name:
             target_node = node
             break
-    
+
     if not target_node:
         raise ValueError(f"Error: Could not find definition of '{function_name}' in {target_file}.")
 
@@ -78,7 +75,7 @@ def _perform_ast_rewrite(function_name: str, target_file: str) -> str:
     lines = source_content.splitlines(keepends=True)
     start_index = target_node.lineno - 1
     end_index = target_node.end_lineno
-    
+
     if not new_source.endswith('\n'):
         new_source += '\n'
 
@@ -88,15 +85,15 @@ def _perform_ast_rewrite(function_name: str, target_file: str) -> str:
 
     print(f"Replacing lines {start_index+1} to {end_index} in {target_file}")
     lines[start_index:end_index] = [new_source]
-    
+
     # 5. Write to Disk
     with open(target_file, 'w') as f:
         f.writelines(lines)
-        
+
     # Cleanup staging
     if function_name in PENDING_PATCHES:
         del PENDING_PATCHES[function_name]
-        
+
     return f"Success: Optimized source code written to {target_file}."
 
 # --- MCP Tools ---
@@ -104,12 +101,12 @@ def _perform_ast_rewrite(function_name: str, target_file: str) -> str:
 @mcp.tool()
 def load_target_module(file_path: str) -> str:
     """
-    INNOVATION: Dynamically imports any Python file from disk and 
+    INNOVATION: Dynamically imports any Python file from disk and
     registers its functions into the FUNCTION_REGISTRY for profiling.
     """
     if not os.path.exists(file_path):
         return f"Error: File {file_path} not found."
-    
+
     try:
         # In this demo, we can just treat the file as a module.
         # But importlib.util.spec_from_file_location needs a module name.
@@ -117,18 +114,18 @@ def load_target_module(file_path: str) -> str:
         spec = importlib.util.spec_from_file_location(module_name, file_path)
         if not spec or not spec.loader:
             return "Error: Could not create module spec."
-            
+
         module = importlib.util.module_from_spec(spec)
         sys.modules[module_name] = module
         spec.loader.exec_module(module)
-        
+
         count = 0
         for name, func in inspect.getmembers(module, inspect.isfunction):
             # Only register functions defined in the file (ignore imports)
             if func.__module__ == module_name:
                 FUNCTION_REGISTRY[name] = func
                 count += 1
-                
+
         return f"Success: Loaded module '{module_name}'. Registered {count} functions: {list(FUNCTION_REGISTRY.keys())}"
     except Exception as e:
         return f"Load Failed: {str(e)}"
@@ -142,9 +139,9 @@ def audit_codebase(file_path: str) -> str:
     try:
         with open(file_path, "r") as f:
             tree = ast.parse(f.read())
-            
+
         candidates = []
-        
+
         class BottleneckFinder(ast.NodeVisitor):
             def visit_FunctionDef(self, node):
                 # 1. Detect Recursion
@@ -154,7 +151,7 @@ def audit_codebase(file_path: str) -> str:
                         if isinstance(child.func, ast.Name) and child.func.id == node.name:
                             is_recursive = True
                             break
-                
+
                 # 2. Detect High Complexity (Nested Loops)
                 loop_depth = 0
                 has_nested_loops = False
@@ -217,7 +214,7 @@ def submit_patch(function_name: str, python_code: str) -> str:
         exec_globals = globals().copy()
         local_scope = {}
         exec(python_code, exec_globals, local_scope)
-        
+
         # Enforce that the patch defines the correct function name to prevent registry drift
         if function_name in local_scope and isinstance(local_scope[function_name], types.FunctionType):
             new_func = local_scope[function_name]
@@ -226,9 +223,9 @@ def submit_patch(function_name: str, python_code: str) -> str:
 
         FUNCTION_REGISTRY[function_name] = new_func
         PENDING_PATCHES[function_name] = python_code
-        
+
         return f"Success: '{function_name}' has been hot-patched and staged for commit."
-        
+
     except Exception as e:
         return f"Patch Failed: {str(e)}"
 
@@ -240,18 +237,18 @@ def generate_parity_tests(function_name: str, test_inputs: list[int]) -> str:
     """
     if function_name not in FUNCTION_REGISTRY:
         return f"Error: '{function_name}' not found."
-    
+
     func = FUNCTION_REGISTRY[function_name]
     global PARITY_TEST_SUITE
     PARITY_TEST_SUITE = [] # Clear previous tests
-    
+
     results = []
     try:
         for val in test_inputs:
             output = func(val)
             PARITY_TEST_SUITE.append((val, output))
             results.append(f"f({val})={output}")
-            
+
         return f"Generated {len(results)} parity tests: {', '.join(results[:3])}..."
     except Exception as e:
         return f"Error generating tests: {str(e)}"
@@ -264,13 +261,13 @@ def verify_parity(function_name: str) -> str:
     """
     if function_name not in FUNCTION_REGISTRY:
         return f"Error: '{function_name}' not found."
-    
+
     if not PARITY_TEST_SUITE:
         return "Error: No tests found. Run 'generate_parity_tests' first."
-        
+
     func = FUNCTION_REGISTRY[function_name]
     failures = []
-    
+
     for input_val, expected in PARITY_TEST_SUITE:
         try:
             actual = func(input_val)
@@ -278,10 +275,10 @@ def verify_parity(function_name: str) -> str:
                 failures.append(f"Input {input_val}: Expected {expected}, Got {actual}")
         except Exception as e:
             failures.append(f"Input {input_val}: Crashed with {str(e)}")
-            
+
     if failures:
         return f"❌ Parity Check Failed ({len(failures)} errors):\n" + "\n".join(failures[:5])
-    
+
     return f"✅ Parity Check Passed: {len(PARITY_TEST_SUITE)}/{len(PARITY_TEST_SUITE)} outputs match baseline."
 
 @mcp.tool()
@@ -297,14 +294,14 @@ def persist_optimization_safe(function_name: str) -> str:
     A safer version of persist that creates a .bak file before overwriting.
     """
     target_file = __file__
-    
+
     # 1. Create Backup
     backup_file = target_file + ".bak"
     try:
         shutil.copy2(target_file, backup_file)
     except IOError as e:
         return f"Safety Error: Could not create backup. Aborting persist. {e}"
-        
+
     # 2. Perform Rewrite
     try:
         result = _perform_ast_rewrite(function_name, target_file)
@@ -319,10 +316,10 @@ def restore_backup() -> str:
     """
     target_file = __file__
     backup_file = target_file + ".bak"
-    
+
     if not os.path.exists(backup_file):
         return "Error: No backup file found."
-        
+
     try:
         shutil.copy2(backup_file, target_file)
         return "Success: Server source code restored from backup. Restart required."
@@ -352,7 +349,7 @@ def git_commit_optimization(function_name: str, baseline_time: float, optimized_
     """
     if optimized_time == 0: optimized_time = 0.000001 # Prevent div by zero
     speedup = baseline_time / optimized_time
-    
+
     message = (
         f"perf({function_name}): Optimize {speedup:.1f}x speedup\n\n"
         f"Autonomous Optimization Report:\n"
@@ -360,12 +357,12 @@ def git_commit_optimization(function_name: str, baseline_time: float, optimized_
         f"- Optimized: {optimized_time:.6f}s\n"
         f"- Logic Parity: Verified via TDD\n"
     )
-    
+
     repo_dir = os.path.dirname(os.path.abspath(__file__))
     try:
         # Stage the specific file (assuming we know it, or just -a for all tracked)
         subprocess.run(["git", "add", "-u"], cwd=repo_dir, check=True, capture_output=True)
-        
+
         # Commit
         subprocess.run(["git", "commit", "-m", message], cwd=repo_dir, check=True, capture_output=True)
 
@@ -424,20 +421,20 @@ def list_tools() -> str:
     # List of known tools wrapped by @mcp.tool
     # We access them from globals() to ensure we get the decorated versions or raw functions
     # Note: Decorators might wrap them.
-    
+
     tools = [
         load_target_module, audit_codebase, run_benchmark, get_profile_stats,
         submit_patch, generate_parity_tests, verify_parity, persist_optimization,
-        persist_optimization_safe, restore_backup, git_create_branch, 
+        persist_optimization_safe, restore_backup, git_create_branch,
         git_commit_optimization, benchmark_and_commit, git_reset_hard, list_tools
     ]
-    
+
     output = []
     for func in tools:
         name = func.__name__
         doc = inspect.getdoc(func) or "No documentation."
         output.append(f"Tool: {name}\nDoc: {doc}")
-        
+
     return "\n---\n".join(output)
 
 if __name__ == "__main__":

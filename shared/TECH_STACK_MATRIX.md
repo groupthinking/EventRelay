@@ -1,58 +1,23 @@
 # Tech Stack Matrix
 
-**Last Updated:** December 21, 2024
-**Status:** Active
+| Component    | Directory                       | Stack           | Version              | Notes                     |
+| ------------ | ------------------------------- | --------------- | -------------------- | ------------------------- |
+| **Frontend** | `apps/web`                      | Next.js / React | Next 14.2 / React 18 | Main Platform UI          |
+| **VibeSDK**  | `projects/netmesh-production`   | Vite / React    | React 19.1           | Cloudflare Worker + UI    |
+| **Backend**  | `src/`                          | Python          | 3.9+                 | Main API (FastAPI/Agents) |
+| **Firebase** | `apps/firebase`                 | Node.js         | -                    | Functions / Integrations  |
+| **MCP**      | `mcp-servers/python-suite`      | Python          | -                    | Core Agent Logic          |
+| **MCP**      | `mcp-servers/gcp-vector-db`     | Node.js         | TS 5.3               | Vector Search             |
+| **MCP**      | `mcp-servers/unified-analytics` | Node.js         | TS 5.0               | Analytics                 |
 
----
+## Standardization Goals
 
-## Project Comparison
+1. **TypeScript**: Target v5.x (Achieved for known active servers).
+2. **React**: EventRelay (v18) vs Netmesh (v19). Keep distinct for now.
+3. **Python**: Ensure 3.10+ where possible (Currently 3.9 detected in env).
 
-| Feature | EventRelay | netmesh-production | MCP Servers | self-correcting-executor |
-|---------|------------|-------------------|-------------|--------------------------|
-| **Core Type** | Monorepo (Turbo) | Standalone App | Distributed | Docker Container |
-| **Backend** | Python (FastAPI) | Cloudflare Workers (Hono) | Express / Python | Python (FastAPI) |
-| **Frontend** | React 18.2.0 (Vite) | React 19.1.1 (Vite) | N/A | React (Unknown ver) |
-| **Styling** | MUI v7 + Tailwind v3 | Tailwind v4 + shadcn | N/A | TBD |
-| **Database** | Postgres / SQLite | D1 (SQLite) | SQLite | Postgres / Redis |
-| **ORM** | SQLAlchemy / Prisma | Drizzle | N/A | SQLAlchemy |
-| **Language** | Python / TypeScript | TypeScript | TS / Python | Python / TS |
+## Infrastructure
 
----
-
-## Version Consistency Check
-
-| Library | Version A (EventRelay) | Version B (netmesh) | Status | Recommendation |
-|---------|------------------------|---------------------|--------|----------------|
-| **React** | `18.2.0` | `19.1.1` | ⚠️ Mixed | Standardize on **18.x** for stability |
-| **TypeScript** | `4.9.5` | `5.9.2` | ⚠️ Mixed | Upgrade EventRelay to **5.x** |
-| **Tailwind** | `3.4.17` | `4.1.13` | ⚠️ Mixed | Plan migration to **v4** long-term |
-| **Build Tool** | Vite 5 | Vite 6 | ✅ Aligned | Kept modern |
-| **Express** | N/A | N/A | v4/v5 Mixed | Standardize MCP on **v5** |
-
----
-
-## Tech Debt Scorecard
-
-### EventRelay
-- **Score:** 8/10 (B+)
-- **Issues:** Mixed React versions, complex styling (3 systems).
-- **Plan:** Upgrade TS -> Standardize React.
-
-### netmesh-production
-- **Score:** 9/10 (A)
-- **Issues:** None major. Bleeding edge stack (React 19, Tailwind v4).
-- **Role:** Reference implementation for modern standards.
-
-### MCP Ecosystem
-- **Score:** 5/10 (D)
-- **Issues:** lack of standardization, mixed Express versions, folder bloat (genkit).
-- **Plan:** Consolidate into monorepo, remove bloat.
-
----
-
-## Standards Definition
-
-- **Frontend:** React 18, Vite, Tailwind, TypeScript 5.x
-- **Backend (Serverless):** Cloudflare Workers, Hono, Drizzle
-- **Backend (Service):** Python FastAPI, SQLAlchemy, Pydantic
-- **Agent Communication:** MCP Protocol (standardized SDKs)
+- **Orchestration**: Kubernetes + KEDA (Planned)
+- **Database**: Cloud SQL (Postgres + pgvector)
+- **Messaging**: Redis / NATS (Planned)
