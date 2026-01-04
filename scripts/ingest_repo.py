@@ -1,10 +1,19 @@
 import os
 import json
-import sys
 import subprocess
-import fnmatch
 import google.generativeai as genai
+from dotenv import load_dotenv
+
+load_dotenv(override=True)
+
 print("DEBUG: Imports done", flush=True)
+
+# Google Gemini Configuration
+GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
+if GOOGLE_API_KEY:
+    print(f"DEBUG: Using GOOGLE_API_KEY starting with {GOOGLE_API_KEY[:10]}...", flush=True)
+else:
+    print("DEBUG: GOOGLE_API_KEY is missing", flush=True)
 
 # Configuration
 MCP_SERVER_EXECUTABLE = "/usr/local/bin/node"
@@ -12,8 +21,11 @@ MCP_SERVER_SCRIPT = os.path.abspath("mcp-servers/gcp-vector-db/build/index.js")
 ROOT_DIR = os.getcwd()
 
 # Google Gemini Configuration
-# Using one of the keys provided in the RTF
-GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY", "AIzaSyAy4ywrl9sP4E-S0I07rAixgrVg1xKjFIM")
+GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
+if not GOOGLE_API_KEY:
+    print("Error: GOOGLE_API_KEY not found in environment.")
+    exit(1)
+
 genai.configure(api_key=GOOGLE_API_KEY)
 # Use the latest embedding model
 EMBEDDING_MODEL = "models/text-embedding-004"
@@ -38,9 +50,7 @@ class MCPClient:
     def __init__(self):
         env = os.environ.copy()
         if "DATABASE_URL" not in env:
-            # Fallback or error - assume user has it set or we can default for dev?
-            # For now, let's rely on the process running it to have it.
-            pass
+             pass
 
         self.process = subprocess.Popen(
             [MCP_SERVER_EXECUTABLE, MCP_SERVER_SCRIPT],
@@ -100,7 +110,7 @@ def get_embedding(text):
         model=EMBEDDING_MODEL,
         content=text,
         task_type="retrieval_document",
-        title="Code Snippet" # Optional but helps quality
+        title="Code Snippet"
     )
     return result['embedding']
 
