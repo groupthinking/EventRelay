@@ -56,6 +56,9 @@ tmp/
 *.temp
 *.bak
 .cache/
+cost_report.json
+api_usage_data.json
+GAP_FIXING_WORKFLOW_REPORT.json
 .mypy_cache/
 .dmypy.json
 dmypy.json
