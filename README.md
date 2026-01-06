@@ -46,7 +46,7 @@ Implementation details, coding standards, and testing workflows for EventRelay l
 2. **Install frontend dependencies**
 
    ```bash
-   npm install --prefix frontend
+   npm install --prefix apps/web
    ```
 
 3. **Setup API keys** (choose one method):
@@ -58,6 +58,7 @@ Implementation details, coding standards, and testing workflows for EventRelay l
    ```
 
    This guided CLI will:
+
    - Create `.env` from template
    - Prompt for each API key with help URLs
    - Validate your configuration
@@ -71,10 +72,12 @@ Implementation details, coding standards, and testing workflows for EventRelay l
    ```
 
    **Required Keys** (need at least ONE):
+
    - `GEMINI_API_KEY` - Get from [Google AI Studio](https://aistudio.google.com/app/apikey) (recommended)
    - `OPENAI_API_KEY` - Get from [OpenAI Platform](https://platform.openai.com/api-keys)
 
    **Optional Keys** (recommended):
+
    - `YOUTUBE_API_KEY` - Get from [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
    - `ANTHROPIC_API_KEY` - Get from [Anthropic Console](https://console.anthropic.com/settings/keys)
 
@@ -95,7 +98,7 @@ Implementation details, coding standards, and testing workflows for EventRelay l
 5. **Boot the frontend**
 
    ```bash
-   npm start --prefix frontend
+   npm start --prefix apps/web
    ```
 
 ## 🔧 Configuration
@@ -121,6 +124,7 @@ Implementation details, coding standards, and testing workflows for EventRelay l
   - `youtube-extension test -v --coverage` – run pytest with optional coverage (expects `tests/` directory)
   - `youtube-extension lint` / `format` – run Ruff + mypy, or Black + isort
 - **REST APIs:** Once the backend is running, visit `http://localhost:8000/docs` for FastAPI Swagger UI.
+
   - Transcript workflow example:
 
     ```bash
@@ -138,7 +142,8 @@ Implementation details, coding standards, and testing workflows for EventRelay l
     ```
 
   - Cloud AI analysis endpoints live under `/api/v1/cloud-ai/*` (see [API Reference](#-api-reference)).
-- **Frontend dashboard:** `npm start --prefix frontend` launches the React UI with hot reload and proxying to the backend.
+
+- **Frontend dashboard:** `npm start --prefix apps/web` launches the React UI with hot reload and proxying to the backend.
 - **Sample payloads:** `transcript_action_sample.json` illustrates the end-to-end response (event log, execution graph, task dispatch) for the transcript workflow.
 
 ## 🤖 GitHub Copilot Custom Agents
@@ -245,11 +250,12 @@ youtube_extension/
 │   ├── integrations/            # Cloud AI, external providers
 │   ├── mcp/                     # MCP ecosystem coordinator and servers
 │   └── main.py                  # FastAPI entry point
-├── frontend/                    # React dashboard + MCP-aware hooks
+├── apps/web/                    # Next.js frontend + MCP-aware hooks
 │   └── src/
 │       ├── components/          # UI components + tests
 │       ├── hooks/               # Data fetching & integration hooks
 │       └── services/            # API clients / stores
+│   └── (Note: `frontend/` references in legacy code point here)
 ├── docs/                        # Living documentation & status reports
 ├── deployment/                  # Production assembly tooling
 ├── scripts/                     # Credential checks, monitoring, utilities
@@ -292,13 +298,15 @@ youtube_extension/
   ```
 
   _Heads-up: the repository currently references `tests/` in several scripts, but the folder may be missing in some branches—recreate or restore before running the suite._
+
 - **Frontend:**
 
   ```bash
-  npm test -- --watch=false --prefix frontend
+  npm test -- --watch=false --prefix apps/web
   ```
 
-  Unit specs live under `frontend/src/components/__tests__/` and smoke tests under `frontend/src/__tests__/`.
+  Unit specs live under `apps/web/src/components/__tests__/` and smoke tests under `apps/web/src/__tests__/`.
+
 - **Lint & type-check:**
 
   ```bash
@@ -315,6 +323,7 @@ youtube_extension/
   ```
 
   Or run tailored stacks (e.g., `docker-compose.youtube-packager.yml`) for scoped deployments.
+
 - **Containers:** Dockerfiles exist for backend, orchestrator, MCP server, and frontend (`Dockerfile.production`, `Dockerfile.youtube-packager`, etc.).
 - **Environments:** Keep secrets in your orchestrator (Fly.io, Vercel, etc.) and mirror the environment variables from the setup section.
 
@@ -323,7 +332,7 @@ youtube_extension/
 - **`ModuleNotFoundError` on startup:** Verify the virtual environment is active before running CLI commands.
 - **`GOOGLE_SPEECH_*` errors:** Re-export credentials or copy `.env.example` to `.env` and populate required keys.
 - **Port 8000/3000 already in use:** Stop existing services (`lsof -i :8000`) or override the port flags.
-- **Frontend `npm start` fails:** Remove `node_modules`, clear npm cache, and reinstall with `npm install --prefix frontend`.
+- **Frontend `npm start` fails:** Remove `node_modules`, clear npm cache, and reinstall with `npm install --prefix apps/web`.
 - **Missing tests directory:** Some branches omit `tests/`; recreate from templates in `docs/status/` before running pytest.
 
 ## 🤝 Contributing
@@ -374,5 +383,6 @@ Released under the MIT License. See `LICENSE` for full terms.
 _Add CI/Test/Coverage badges here once your pipelines are active._
 
 ---
+
 Built for agentic video understanding, transcript automation, and actionable execution planning.
 Supports deployment to Google Cloud Run. See [CLOUD_RUN_DEPLOYMENT.md](CLOUD_RUN_DEPLOYMENT.md) for details.

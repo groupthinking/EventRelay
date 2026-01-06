@@ -261,6 +261,7 @@ filterwarnings = [
     "ignore::UserWarning",
     "ignore::DeprecationWarning",
     "ignore::PendingDeprecationWarning",
+    "ignore::FutureWarning",  # google.generativeai deprecated, migration pending
 ]
 
 [tool.coverage.run]

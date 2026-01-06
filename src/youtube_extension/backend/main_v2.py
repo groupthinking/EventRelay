@@ -83,12 +83,6 @@ except Exception as _env_err:  # noqa: F841 - best-effort only
 # Initialize service container
 service_container = None
 
-# Put this before app creation to debug
-try:
-    print("DEBUG: LOADING MAIN_V2.py NOW!!!! CHECKING TITLE...")
-except:
-    pass
-
 # Create FastAPI application
 app = FastAPI(
     title="UVAI API",
