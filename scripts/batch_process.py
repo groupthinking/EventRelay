@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import List
+from typing import List, Any
 from pathlib import Path
 import sys
 
@@ -22,12 +22,12 @@ VIDEO_IDS: List[str] = [
     "8aGhZQkoFbQ", "GQp1zzTwrIg",
 ]
 
-async def process_one(video_id: str):
+async def process_one(video_id: str) -> Any:
     proc = RealVideoProcessor(real_mode_only=False)
     url = f"https://www.youtube.com/watch?v={video_id}"
     return await proc.process_video_real(url)
 
-async def main():
+async def main() -> None:
     results = []
     for i in range(0, len(VIDEO_IDS), 5):
         batch = VIDEO_IDS[i:i+5]
@@ -41,4 +41,3 @@ async def main():
 
 if __name__ == '__main__':
     asyncio.run(main())
-

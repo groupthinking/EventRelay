@@ -9,7 +9,7 @@ os.environ.setdefault("PYTHONPATH", "/workspace/src")
 from youtube_extension.backend.services.performance_benchmark_system import run_performance_benchmark
 
 
-async def main():
+async def main() -> None:
     start = time.time()
     results = await run_performance_benchmark(iterations=1)
     assessment = results.get('overall_assessment', {})
@@ -25,4 +25,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-

@@ -24,24 +24,24 @@ BOLD = '\033[1m'
 RESET = '\033[0m'
 
 
-def print_header(text: str):
+def print_header(text: str) -> None:
     """Print a colored header"""
     print(f"\n{BOLD}{BLUE}{'='*60}{RESET}")
     print(f"{BOLD}{BLUE}{text}{RESET}")
     print(f"{BOLD}{BLUE}{'='*60}{RESET}\n")
 
 
-def print_success(text: str):
+def print_success(text: str) -> None:
     """Print success message"""
     print(f"{GREEN}✓ {text}{RESET}")
 
 
-def print_warning(text: str):
+def print_warning(text: str) -> None:
     """Print warning message"""
     print(f"{YELLOW}⚠ {text}{RESET}")
 
 
-def print_error(text: str):
+def print_error(text: str) -> None:
     """Print error message"""
     print(f"{RED}✗ {text}{RESET}")
 
@@ -117,20 +117,20 @@ def copy_env_template(project_root: Path) -> bool:
     """Copy .env.example to .env if it doesn't exist"""
     env_example = project_root / '.env.example'
     env_file = project_root / '.env'
-    
+
     if not env_example.exists():
         print_error(f".env.example not found at {env_example}")
         return False
-    
+
     if env_file.exists():
         response = input(f".env already exists. Overwrite? (y/N): ").lower()
         if response != 'y':
             print_warning("Keeping existing .env file")
             return True
-    
+
     with open(env_example, 'r') as src, open(env_file, 'w') as dst:
         dst.write(src.read())
-    
+
     print_success(f"Created .env from template at {env_file}")
     return True
 
@@ -139,29 +139,29 @@ def get_api_key_input(key_name: str, key_info: dict, existing_value: Optional[st
     """Interactively get an API key from the user"""
     print(f"\n{BOLD}{key_info['name']}{RESET}")
     print(f"Description: {key_info['description']}")
-    
+
     if key_info['required']:
         print(f"{RED}Required: Yes{RESET}")
     else:
         print(f"{YELLOW}Required: No (optional){RESET}")
-    
+
     print(f"Get your key from: {BLUE}{key_info['url']}{RESET}")
-    
+
     if existing_value and existing_value not in PLACEHOLDER_VALUES:
         print(f"{GREEN}Current value: {existing_value[:20]}...{RESET}")
         response = input("Keep existing value? (Y/n): ").lower()
         if response != 'n':
             return existing_value
-    
+
     value = input(f"Enter {key_name} (or press Enter to skip): ").strip()
     return value if value else None
 
 
-def update_env_file(env_path: Path, key: str, value: str):
+def update_env_file(env_path: Path, key: str, value: str) -> None:
     """Update a specific key in the .env file"""
     lines = []
     key_found = False
-    
+
     with open(env_path, 'r') as f:
         for line in f:
             stripped = line.strip()
@@ -171,25 +171,25 @@ def update_env_file(env_path: Path, key: str, value: str):
                 key_found = True
             else:
                 lines.append(line)
-    
+
     if not key_found:
         lines.append(f"{key}={value}\n")
-    
+
     with open(env_path, 'w') as f:
         f.writelines(lines)
 
 
-def main():
+def main() -> int:
     """Main setup flow"""
     print_header("🔑 EventRelay Environment Setup")
-    
+
     # Check project structure
     project_root = Path(__file__).parent.parent
     print(f"Project root: {project_root}")
-    
+
     # Check for existing .env
     env_exists, env_path = check_existing_env()
-    
+
     if env_exists:
         print_warning(f".env file already exists at {env_path}")
         response = input("Do you want to update it? (Y/n): ").lower()
@@ -200,43 +200,43 @@ def main():
         print("No .env file found. Creating from template...")
         if not copy_env_template(project_root):
             return 1
-    
+
     # Load existing values
     existing_env = load_existing_env(env_path)
-    
+
     # Interactive setup
     print_header("📝 API Key Configuration")
     print("Let's set up your API keys. You need at least one AI provider key.")
     print("Press Enter to skip optional keys.\n")
-    
+
     # Sort by priority
     sorted_keys = sorted(API_KEYS.items(), key=lambda x: x[1]['priority'])
-    
+
     updated_keys = []
     has_required = False
-    
+
     for key_name, key_info in sorted_keys:
         existing_value = existing_env.get(key_name)
         new_value = get_api_key_input(key_name, key_info, existing_value)
-        
+
         if new_value:
             update_env_file(env_path, key_name, new_value)
             updated_keys.append(key_name)
             print_success(f"Set {key_name}")
-            
+
             if key_name in REQUIRED_AI_KEYS:
                 has_required = True
-    
+
     # Summary
     print_header("✅ Setup Complete")
-    
+
     if updated_keys:
         print("Updated keys:")
         for key in updated_keys:
             print(f"  • {key}")
     else:
         print_warning("No keys were updated")
-    
+
     # Validation
     if not has_required:
         print_error(f"\n⚠️  WARNING: You need at least ONE of the following:")
@@ -244,13 +244,13 @@ def main():
             print(f"  • {key}")
         print("\nThe application will not work without at least one AI provider key.")
         return 1
-    
+
     print(f"\n{GREEN}✓ Your .env file is ready!{RESET}")
     print(f"\nNext steps:")
     print(f"  1. Review your .env file: {env_path}")
     print(f"  2. Validate your setup: python3 scripts/validate_env.py")
     print(f"  3. Start the application: uvicorn uvai.api.main:app --reload")
-    
+
     return 0
 
 

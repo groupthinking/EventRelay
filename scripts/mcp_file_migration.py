@@ -8,7 +8,7 @@ import os
 import shutil
 import json
 from pathlib import Path
-from typing import Dict, List, Set
+from typing import Dict, List, Set, Any
 from dataclasses import dataclass, asdict
 
 @dataclass
@@ -32,7 +32,7 @@ class MigrationContext:
 class MCPFileMigrator:
     """MCP-compliant file migration system"""
 
-    def __init__(self, root_path: str):
+    def __init__(self, root_path: str) -> None:
         self.root_path = Path(root_path)
         self.context = MigrationContext(source_root=str(root_path))
 
@@ -111,7 +111,7 @@ class MCPFileMigrator:
 
         return categorized
 
-    def _matches_category(self, filename: str, rules: Dict) -> bool:
+    def _matches_category(self, filename: str, rules: Dict[str, Any]) -> bool:
         """Check if file matches category rules"""
         # Check include patterns
         if 'patterns' in rules:
@@ -136,7 +136,7 @@ class MCPFileMigrator:
 
         return False
 
-    def execute_migration(self, dry_run: bool = True) -> Dict[str, any]:
+    def execute_migration(self, dry_run: bool = True) -> Dict[str, Any]:
         """Execute file migration with MCP context tracking"""
         results = {
             'migrated': [],
@@ -206,7 +206,7 @@ class MCPFileMigrator:
 
         return report
 
-def main():
+def main() -> None:
     """Main migration execution"""
     import argparse
 

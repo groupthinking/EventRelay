@@ -12,6 +12,7 @@ Automatically fixes all identified GitHub workflow bottlenecks:
 import os
 import re
 from pathlib import Path
+from typing import Dict, Any, List
 import logging
 
 logging.basicConfig(
@@ -21,7 +22,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 class WorkflowFixer:
-    def __init__(self):
+    def __init__(self) -> None:
         self.workflow_dir = Path(".github/workflows")
         self.fixed_files = []
         self.errors = []
@@ -144,7 +145,7 @@ concurrency:
             self.errors.append(error_msg)
             return False
 
-    def fix_all_workflows(self) -> dict:
+    def fix_all_workflows(self) -> Dict[str, Any]:
         """Fix all workflow files"""
         logger.info("🚀 Starting workflow bottleneck fixes...")
         logger.info("=" * 50)
@@ -258,7 +259,7 @@ jobs:
             logger.error(f"❌ Failed to create emergency stop: {e}")
             return False
 
-def main():
+def main() -> int:
     """Main fix function"""
     fixer = WorkflowFixer()
 
@@ -291,5 +292,3 @@ def main():
 if __name__ == "__main__":
     import sys
     sys.exit(main())
-
-

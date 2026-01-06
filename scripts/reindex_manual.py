@@ -18,7 +18,7 @@ IGNORE_EXTENSIONS = {
     '.exe', '.bin', '.lock', 'package-lock.json', 'yarn.lock'
 }
 
-def should_ignore(path):
+def should_ignore(path: str) -> bool:
     parts = path.split(os.sep)
     for part in parts:
         if part in IGNORE_DIRS:
@@ -30,7 +30,7 @@ def should_ignore(path):
 
     return False
 
-def get_description(filepath):
+def get_description(filepath: str) -> str:
     try:
         with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
             for line in f:
@@ -41,7 +41,7 @@ def get_description(filepath):
     except Exception:
         return "[Error reading]"
 
-def main():
+def main() -> None:
     print(f"Indexing {ROOT_DIR} to {INDEX_FILE}...")
 
     with open(INDEX_FILE, 'w', encoding='utf-8') as index:

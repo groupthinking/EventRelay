@@ -12,18 +12,18 @@ from typing import Dict, List, Any, Optional
 KNOWLEDGE_DB = Path(__file__).parent / "knowledge_database.json"
 
 class KnowledgeBase:
-    def __init__(self):
+    def __init__(self) -> None:
         self.data = self._load()
 
-    def _load(self) -> Dict:
+    def _load(self) -> Dict[str, Any]:
         if KNOWLEDGE_DB.exists():
             return json.loads(KNOWLEDGE_DB.read_text())
         return {"technologies": {}, "videos": [], "capabilities": [], "stats": {"total_videos": 0, "unique_techs": 0}}
 
-    def _save(self):
+    def _save(self) -> None:
         KNOWLEDGE_DB.write_text(json.dumps(self.data, indent=2))
 
-    def capture_from_video(self, video_id: str, video_title: str, technologies: List[str], video_url: str = "") -> Dict:
+    def capture_from_video(self, video_id: str, video_title: str, technologies: List[str], video_url: str = "") -> Dict[str, int]:
         """Capture technologies from a processed video"""
         # Store video record
         video_record = {
@@ -49,7 +49,7 @@ class KnowledgeBase:
         self._save()
         return {"captured": len(technologies), "total_unique": self.data["stats"]["unique_techs"]}
 
-    def _check_capability_generation(self, threshold: int = 3):
+    def _check_capability_generation(self, threshold: int = 3) -> None:
         """Generate capability skills when technology appears in multiple videos"""
         for tech_key, tech_data in self.data["technologies"].items():
             if tech_data["count"] >= threshold:
@@ -66,7 +66,7 @@ class KnowledgeBase:
                     }
                     self.data["capabilities"].append(capability)
 
-    def get_relevant_capabilities(self, technologies: List[str]) -> List[Dict]:
+    def get_relevant_capabilities(self, technologies: List[str]) -> List[Dict[str, Any]]:
         """Get capabilities relevant to given technologies"""
         relevant = []
         for tech in technologies:
@@ -91,7 +91,7 @@ class KnowledgeBase:
                 context += f"- {cap['name']}\n"
         return context
 
-    def get_stats(self) -> Dict:
+    def get_stats(self) -> Dict[str, Any]:
         return {**self.data["stats"], "capabilities": len(self.data["capabilities"])}
 
 # Global instance

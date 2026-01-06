@@ -56,7 +56,7 @@ async def process_id(video_id: str) -> Dict[str, Any]:
     url = f"https://www.youtube.com/watch?v={video_id}"
     return await proc.process_video_real(url)
 
-async def main():
+async def main() -> None:
     queue_path = Path("workflow_results/video_queue.json")
     queue_path.parent.mkdir(parents=True, exist_ok=True)
     if not queue_path.exists():

@@ -45,7 +45,7 @@ logger = logging.getLogger(__name__)
 class RealAPIIntegrationVerifier:
     """
     Comprehensive verification of real API integration
-    
+
     Tests:
     - Environment variable configuration
     - YouTube Data API connectivity and functionality
@@ -54,22 +54,22 @@ class RealAPIIntegrationVerifier:
     - Error handling and fallback mechanisms
     - Rate limiting and optimization
     """
-    
-    def __init__(self):
+
+    def __init__(self) -> None:
         self.test_results = []
         self.total_cost = 0.0
         self.start_time = datetime.now(timezone.utc)
-        
+
         # Test video URLs (various types for comprehensive testing)
         self.test_videos = [
             "https://www.youtube.com/watch?v=jNQXAC9IVRw",  # Me at the zoo - compliance-safe
             "https://www.youtube.com/watch?v=jNQXAC9IVRw",  # Me at the zoo - first YouTube video
             "https://youtu.be/jNQXAC9IVRw",                 # Short URL format
         ]
-        
+
         logger.info("🧪 Real API Integration Verifier initialized")
-    
-    def record_test_result(self, test_name: str, success: bool, details: Dict[str, Any], cost: float = 0.0):
+
+    def record_test_result(self, test_name: str, success: bool, details: Dict[str, Any], cost: float = 0.0) -> None:
         """Record test result"""
         result = {
             'test_name': test_name,
@@ -80,14 +80,14 @@ class RealAPIIntegrationVerifier:
         }
         self.test_results.append(result)
         self.total_cost += cost
-        
+
         status = "✅ PASS" if success else "❌ FAIL"
         cost_info = f" (${cost:.4f})" if cost > 0 else ""
         logger.info(f"{status} {test_name}{cost_info}")
-        
+
         if details and not success:
             logger.error(f"   Details: {details}")
-    
+
     async def test_environment_configuration(self) -> bool:
         """Test that all required environment variables are configured"""
         try:
@@ -97,10 +97,10 @@ class RealAPIIntegrationVerifier:
                 'ANTHROPIC_API_KEY': 'Anthropic API access',
                 'GEMINI_API_KEY': 'Google Gemini API access'
             }
-            
+
             results = {}
             all_configured = True
-            
+
             for var_name, description in required_vars.items():
                 value = os.getenv(var_name)
                 configured = bool(value and len(value) > 10)  # Basic validation
@@ -111,7 +111,7 @@ class RealAPIIntegrationVerifier:
                 }
                 if not configured:
                     all_configured = False
-            
+
             # Optional but recommended variables
             optional_vars = {
                 'API_COST_TRACKING': os.getenv('API_COST_TRACKING', 'true').lower() == 'true',
@@ -119,15 +119,15 @@ class RealAPIIntegrationVerifier:
                 'FALLBACK_TO_CACHE': os.getenv('FALLBACK_TO_CACHE', 'true').lower() == 'true'
             }
             results['optional_config'] = optional_vars
-            
+
             self.record_test_result(
                 "Environment Configuration",
                 all_configured,
                 results
             )
-            
+
             return all_configured
-            
+
         except Exception as e:
             self.record_test_result(
                 "Environment Configuration",
@@ -135,13 +135,13 @@ class RealAPIIntegrationVerifier:
                 {'error': str(e)}
             )
             return False
-    
+
     async def test_youtube_api_service(self) -> bool:
         """Test YouTube Data API service functionality"""
         try:
             service = get_youtube_service()
             test_url = self.test_videos[0]
-            
+
             # Test 1: Video ID extraction
             try:
                 video_id = service.extract_video_id(test_url)
@@ -149,7 +149,7 @@ class RealAPIIntegrationVerifier:
             except Exception as e:
                 id_extraction_success = False
                 video_id = None
-            
+
             # Test 2: Video metadata retrieval
             metadata_success = False
             metadata = None
@@ -159,7 +159,7 @@ class RealAPIIntegrationVerifier:
                     metadata_success = bool(metadata and metadata.title)
                 except Exception as e:
                     logger.warning(f"Metadata retrieval failed: {e}")
-            
+
             # Test 3: Transcript extraction
             transcript_success = False
             transcript_segments = 0
@@ -170,7 +170,7 @@ class RealAPIIntegrationVerifier:
                     transcript_segments = len(transcript)
                 except Exception as e:
                     logger.warning(f"Transcript extraction failed: {e}")
-            
+
             # Test 4: Comprehensive data retrieval
             comprehensive_success = False
             if video_id:
@@ -182,7 +182,7 @@ class RealAPIIntegrationVerifier:
                     )
                 except Exception as e:
                     logger.warning(f"Comprehensive data retrieval failed: {e}")
-            
+
             # Test 5: Video validation
             validation_success = False
             try:
@@ -190,7 +190,7 @@ class RealAPIIntegrationVerifier:
                 validation_success = is_valid and vid == video_id
             except Exception as e:
                 logger.warning(f"Video validation failed: {e}")
-            
+
             # Test 6: Search functionality
             search_success = False
             try:
@@ -198,14 +198,14 @@ class RealAPIIntegrationVerifier:
                 search_success = len(search_results) > 0
             except Exception as e:
                 logger.warning(f"Search functionality failed: {e}")
-            
+
             overall_success = all([
                 id_extraction_success,
                 metadata_success,
                 comprehensive_success,
                 validation_success
             ])
-            
+
             test_details = {
                 'video_id_extraction': id_extraction_success,
                 'metadata_retrieval': metadata_success,
@@ -218,16 +218,16 @@ class RealAPIIntegrationVerifier:
                 'extracted_video_id': video_id,
                 'video_title': metadata.title if metadata else None
             }
-            
+
             self.record_test_result(
                 "YouTube Data API Service",
                 overall_success,
                 test_details,
                 cost=0.001  # Estimated API quota cost
             )
-            
+
             return overall_success
-            
+
         except Exception as e:
             self.record_test_result(
                 "YouTube Data API Service",
@@ -235,18 +235,18 @@ class RealAPIIntegrationVerifier:
                 {'error': str(e)}
             )
             return False
-    
+
     async def test_ai_processing_service(self) -> bool:
         """Test AI processing service with multiple providers"""
         try:
             processor = get_ai_processor()
-            
+
             test_content = """
             This is a test video about machine learning fundamentals.
             The video covers linear regression, neural networks, and practical examples in Python.
             It's designed for beginners with 15 minutes of educational content.
             """
-            
+
             # Test different AI providers and processing types
             test_cases = [
                 ('openai', 'analysis'),
@@ -254,30 +254,30 @@ class RealAPIIntegrationVerifier:
                 ('gemini', 'actions'),
                 ('auto', 'categorization')
             ]
-            
+
             results = {}
             total_test_cost = 0.0
             successful_tests = 0
-            
+
             for provider, processing_type in test_cases:
                 try:
                     from services.real_ai_processor import AIProcessingRequest, AIProvider, ProcessingType
-                    
+
                     request = AIProcessingRequest(
                         content=test_content,
                         processing_type=ProcessingType(processing_type),
                         provider=AIProvider(provider),
                         video_id='test_video'
                     )
-                    
+
                     result = await processor.process_content(request)
-                    
+
                     test_success = result.success and bool(result.result)
                     if test_success:
                         successful_tests += 1
-                    
+
                     total_test_cost += result.cost
-                    
+
                     results[f"{provider}_{processing_type}"] = {
                         'success': test_success,
                         'provider_used': result.provider,
@@ -288,13 +288,13 @@ class RealAPIIntegrationVerifier:
                         'has_result': bool(result.result),
                         'error': result.error_message if not result.success else None
                     }
-                    
+
                 except Exception as e:
                     results[f"{provider}_{processing_type}"] = {
                         'success': False,
                         'error': str(e)
                     }
-            
+
             # Test comprehensive video analysis
             try:
                 test_video_data = {
@@ -311,27 +311,27 @@ class RealAPIIntegrationVerifier:
                         'segment_count': 10
                     }
                 }
-                
+
                 comprehensive_result = await processor.analyze_video_content(test_video_data)
                 comprehensive_success = comprehensive_result.get('success', False)
                 total_test_cost += comprehensive_result.get('total_cost', 0.0)
-                
+
                 results['comprehensive_analysis'] = {
                     'success': comprehensive_success,
-                    'analyses_completed': sum(1 for k in ['content_analysis', 'summary', 'actions', 'categorization'] 
+                    'analyses_completed': sum(1 for k in ['content_analysis', 'summary', 'actions', 'categorization']
                                             if comprehensive_result.get(k) is not None),
                     'total_cost': comprehensive_result.get('total_cost', 0.0),
                     'providers_used': comprehensive_result.get('processing_providers', [])
                 }
-                
+
             except Exception as e:
                 results['comprehensive_analysis'] = {
                     'success': False,
                     'error': str(e)
                 }
-            
+
             overall_success = successful_tests >= 2  # At least 2 out of 4 providers working
-            
+
             self.record_test_result(
                 "AI Processing Service",
                 overall_success,
@@ -343,9 +343,9 @@ class RealAPIIntegrationVerifier:
                 },
                 cost=total_test_cost
             )
-            
+
             return overall_success
-            
+
         except Exception as e:
             self.record_test_result(
                 "AI Processing Service",
@@ -353,12 +353,12 @@ class RealAPIIntegrationVerifier:
                 {'error': str(e)}
             )
             return False
-    
+
     async def test_cost_monitoring_service(self) -> bool:
         """Test cost monitoring and tracking functionality"""
         try:
             monitor = cost_monitor
-            
+
             # Test cost tracking
             try:
                 # Record a test usage
@@ -371,12 +371,12 @@ class RealAPIIntegrationVerifier:
                     request_type="test",
                     video_id="test_video"
                 )
-                
+
                 usage_recorded = test_record is not None
             except Exception as e:
                 usage_recorded = False
                 logger.warning(f"Usage recording failed: {e}")
-            
+
             # Test analytics
             try:
                 analytics = await monitor.get_usage_analytics(days=1)
@@ -384,7 +384,7 @@ class RealAPIIntegrationVerifier:
             except Exception as e:
                 analytics_working = False
                 logger.warning(f"Analytics failed: {e}")
-            
+
             # Test cost dashboard
             try:
                 dashboard = await monitor.get_cost_dashboard()
@@ -392,7 +392,7 @@ class RealAPIIntegrationVerifier:
             except Exception as e:
                 dashboard_working = False
                 logger.warning(f"Dashboard failed: {e}")
-            
+
             # Test optimization recommendations
             try:
                 optimization = await monitor.optimize_api_usage()
@@ -400,7 +400,7 @@ class RealAPIIntegrationVerifier:
             except Exception as e:
                 optimization_working = False
                 logger.warning(f"Optimization failed: {e}")
-            
+
             # Test rate limiting
             try:
                 allowed, wait_time = monitor.check_rate_limit("openai")
@@ -408,14 +408,14 @@ class RealAPIIntegrationVerifier:
             except Exception as e:
                 rate_limiting_working = False
                 logger.warning(f"Rate limiting failed: {e}")
-            
+
             overall_success = all([
                 usage_recorded,
                 analytics_working,
                 dashboard_working,
                 rate_limiting_working
             ])
-            
+
             self.record_test_result(
                 "Cost Monitoring Service",
                 overall_success,
@@ -429,9 +429,9 @@ class RealAPIIntegrationVerifier:
                     'daily_budget': monitor.daily_budget
                 }
             )
-            
+
             return overall_success
-            
+
         except Exception as e:
             self.record_test_result(
                 "Cost Monitoring Service",
@@ -439,40 +439,40 @@ class RealAPIIntegrationVerifier:
                 {'error': str(e)}
             )
             return False
-    
+
     async def test_integrated_video_processor(self) -> bool:
         """Test the integrated real video processor"""
         try:
             processor = get_real_video_processor()
             test_url = self.test_videos[0]
-            
+
             # Test video processing
             start_time = time.time()
             result = await processor.process_video(test_url)
             processing_time = time.time() - start_time
-            
+
             success = result.get('success', False)
             video_id = result.get('video_id')
             has_metadata = bool(result.get('metadata'))
             has_transcript = result.get('transcript', {}).get('has_transcript', False)
             has_ai_analysis = result.get('ai_analysis', {}).get('success', False)
             processing_cost = result.get('cost_breakdown', {}).get('total_cost', 0.0)
-            
+
             # Test validation
             validation_result = await processor.validate_and_process(test_url)
             validation_success = validation_result.get('valid', False)
-            
+
             # Test status
             status = await processor.get_processing_status()
             status_success = status.get('service_status') == 'operational'
-            
+
             overall_success = all([
                 success,
                 has_metadata,
                 validation_success,
                 status_success
             ])
-            
+
             self.record_test_result(
                 "Integrated Video Processor",
                 overall_success,
@@ -490,9 +490,9 @@ class RealAPIIntegrationVerifier:
                 },
                 cost=processing_cost
             )
-            
+
             return overall_success
-            
+
         except Exception as e:
             self.record_test_result(
                 "Integrated Video Processor",
@@ -500,21 +500,21 @@ class RealAPIIntegrationVerifier:
                 {'error': str(e)}
             )
             return False
-    
+
     async def test_error_handling_and_fallbacks(self) -> bool:
         """Test error handling and fallback mechanisms"""
         try:
             # Test invalid video URL
             processor = get_real_video_processor()
-            
+
             invalid_urls = [
                 "https://www.youtube.com/watch?v=invalidvideoid",
                 "not_a_url_at_all",
                 "https://www.youtube.com/watch?v=",
             ]
-            
+
             error_handling_results = {}
-            
+
             for i, invalid_url in enumerate(invalid_urls):
                 try:
                     result = await processor.validate_and_process(invalid_url)
@@ -530,39 +530,39 @@ class RealAPIIntegrationVerifier:
                         'handled_gracefully': False,
                         'unhandled_exception': str(e)
                     }
-            
+
             # Test API failure simulation (without valid keys)
             try:
                 # Temporarily disable API key to test fallback
                 original_key = os.getenv('YOUTUBE_API_KEY')
                 os.environ['YOUTUBE_API_KEY'] = 'invalid_key_for_testing'
-                
+
                 # This should fail gracefully
                 failed_result = await processor.process_video(self.test_videos[0])
                 fallback_handled = not failed_result.get('success') and 'error' in failed_result
-                
+
                 # Restore original key
                 if original_key:
                     os.environ['YOUTUBE_API_KEY'] = original_key
-                
+
                 error_handling_results['api_failure_fallback'] = {
                     'handled_gracefully': fallback_handled,
                     'error_message': failed_result.get('error', 'No error message')
                 }
-                
+
             except Exception as e:
                 error_handling_results['api_failure_fallback'] = {
                     'handled_gracefully': False,
                     'unhandled_exception': str(e)
                 }
-            
+
             graceful_handling_count = sum(
-                1 for result in error_handling_results.values() 
+                1 for result in error_handling_results.values()
                 if result.get('handled_gracefully', False)
             )
-            
+
             overall_success = graceful_handling_count >= len(error_handling_results) * 0.8  # 80% success rate
-            
+
             self.record_test_result(
                 "Error Handling & Fallbacks",
                 overall_success,
@@ -572,9 +572,9 @@ class RealAPIIntegrationVerifier:
                     'success_rate_percent': round((graceful_handling_count / len(error_handling_results)) * 100, 1)
                 }
             )
-            
+
             return overall_success
-            
+
         except Exception as e:
             self.record_test_result(
                 "Error Handling & Fallbacks",
@@ -582,27 +582,27 @@ class RealAPIIntegrationVerifier:
                 {'error': str(e)}
             )
             return False
-    
+
     def generate_final_report(self) -> Dict[str, Any]:
         """Generate comprehensive final report"""
         total_time = (datetime.now(timezone.utc) - self.start_time).total_seconds()
-        
+
         successful_tests = sum(1 for result in self.test_results if result['success'])
         total_tests = len(self.test_results)
         success_rate = (successful_tests / total_tests) * 100 if total_tests > 0 else 0
-        
+
         # Categorize results
         critical_tests = [
             "Environment Configuration",
-            "YouTube Data API Service", 
+            "YouTube Data API Service",
             "AI Processing Service"
         ]
-        
+
         critical_success = all(
-            result['success'] for result in self.test_results 
+            result['success'] for result in self.test_results
             if result['test_name'] in critical_tests
         )
-        
+
         report = {
             'verification_summary': {
                 'overall_success': success_rate >= 80 and critical_success,
@@ -618,18 +618,18 @@ class RealAPIIntegrationVerifier:
             'report_timestamp': datetime.now(timezone.utc).isoformat(),
             'system_status': 'OPERATIONAL' if (success_rate >= 80 and critical_success) else 'NEEDS_ATTENTION'
         }
-        
+
         return report
-    
+
     def _generate_recommendations(self) -> List[str]:
         """Generate recommendations based on test results"""
         recommendations = []
-        
+
         for result in self.test_results:
             if not result['success']:
                 test_name = result['test_name']
                 details = result['details']
-                
+
                 if test_name == "Environment Configuration":
                     recommendations.append("Configure missing API keys in .env file")
                 elif test_name == "YouTube Data API Service":
@@ -645,20 +645,20 @@ class RealAPIIntegrationVerifier:
                     success_rate = float(details.get('success_rate_percent', 0))
                     if success_rate < 80:
                         recommendations.append("Improve error handling - some edge cases not handled gracefully")
-        
+
         if self.total_cost > 1.0:
             recommendations.append(f"High testing cost (${self.total_cost:.4f}) - consider optimizing API usage")
-        
+
         if not recommendations:
             recommendations.append("All systems operational - real API integration successful!")
-        
+
         return recommendations
-    
+
     async def run_full_verification(self) -> Dict[str, Any]:
         """Run complete verification suite"""
         logger.info("🚀 Starting Real API Integration Verification")
         logger.info("=" * 60)
-        
+
         # Run all tests
         test_functions = [
             self.test_environment_configuration,
@@ -668,7 +668,7 @@ class RealAPIIntegrationVerifier:
             self.test_integrated_video_processor,
             self.test_error_handling_and_fallbacks
         ]
-        
+
         for test_func in test_functions:
             try:
                 await test_func()
@@ -679,39 +679,39 @@ class RealAPIIntegrationVerifier:
                     False,
                     {'error': f'Test function failed: {str(e)}'}
                 )
-        
+
         # Generate and return final report
         final_report = self.generate_final_report()
-        
+
         logger.info("=" * 60)
         logger.info("🏁 Verification Complete")
         logger.info(f"Overall Success: {final_report['verification_summary']['overall_success']}")
         logger.info(f"Success Rate: {final_report['verification_summary']['success_rate_percent']}%")
         logger.info(f"Total Cost: ${final_report['verification_summary']['total_cost']}")
         logger.info(f"System Status: {final_report['system_status']}")
-        
+
         if final_report['recommendations']:
             logger.info("\n📋 Recommendations:")
             for i, rec in enumerate(final_report['recommendations'], 1):
                 logger.info(f"   {i}. {rec}")
-        
+
         return final_report
 
-async def main():
+async def main() -> int:
     """Main verification function"""
     try:
         verifier = RealAPIIntegrationVerifier()
         report = await verifier.run_full_verification()
-        
+
         # Save report to file
         report_file = Path(__file__).parent.parent / "reports" / "real_api_verification_report.json"
         report_file.parent.mkdir(exist_ok=True)
-        
+
         with open(report_file, 'w', encoding='utf-8') as f:
             json.dump(report, f, indent=2, ensure_ascii=False, default=str)
-        
+
         logger.info(f"📄 Full report saved to: {report_file}")
-        
+
         # Return appropriate exit code
         if report['verification_summary']['overall_success']:
             logger.info("🎉 Real API Integration Verification PASSED")
@@ -719,7 +719,7 @@ async def main():
         else:
             logger.error("❌ Real API Integration Verification FAILED")
             return 1
-            
+
     except Exception as e:
         logger.error(f"Verification failed with exception: {e}")
         return 1

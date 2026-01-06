@@ -7,7 +7,7 @@ from pathlib import Path
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - [MONITOR] %(message)s')
 logger = logging.getLogger(__name__)
 
-def monitor_mcp_performance():
+def monitor_mcp_performance() -> None:
     """Monitor MCP server performance"""
     while True:
         try:

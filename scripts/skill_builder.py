@@ -8,23 +8,24 @@ import json
 from datetime import datetime
 from pathlib import Path
 
+from typing import Dict, Any, List, Optional
 SKILLS_DB = Path(__file__).parent / "skills_database.json"
 
 class SkillBuilder:
-    def __init__(self):
+    def __init__(self) -> None:
         self.skills = self._load_skills()
 
-    def _load_skills(self):
+    def _load_skills(self) -> Dict[str, Any]:
         """Load existing skills"""
         if SKILLS_DB.exists():
             return json.loads(SKILLS_DB.read_text())
         return {"skills": [], "stats": {"total_errors_handled": 0, "auto_resolved": 0}}
 
-    def _save_skills(self):
+    def _save_skills(self) -> None:
         """Persist skills"""
         SKILLS_DB.write_text(json.dumps(self.skills, indent=2))
 
-    def capture_error_resolution(self, error_type, error_msg, resolution, context=""):
+    def capture_error_resolution(self, error_type: str, error_msg: str, resolution: str, context: str = "") -> Dict[str, Any]:
         """Capture new skill from error resolution"""
         skill = {
             "id": len(self.skills["skills"]) + 1,
@@ -41,14 +42,14 @@ class SkillBuilder:
         self._save_skills()
         return skill
 
-    def find_matching_skill(self, error_type, error_msg):
+    def find_matching_skill(self, error_type: str, error_msg: str) -> Optional[Dict[str, Any]]:
         """Find skill that matches current error"""
         for skill in self.skills["skills"]:
             if skill["error_type"] == error_type and skill["pattern"] in error_msg:
                 return skill
         return None
 
-    def apply_skill(self, skill_id, success=True):
+    def apply_skill(self, skill_id: int, success: bool = True) -> bool:
         """Apply skill and track success"""
         for skill in self.skills["skills"]:
             if skill["id"] == skill_id:
@@ -64,7 +65,7 @@ class SkillBuilder:
                 return True
         return False
 
-    def get_top_skills(self, limit=5):
+    def get_top_skills(self, limit: int = 5) -> List[Dict[str, Any]]:
         """Get most used skills"""
         return sorted(
             self.skills["skills"],
@@ -72,11 +73,11 @@ class SkillBuilder:
             reverse=True
         )[:limit]
 
-    def get_stats(self):
+    def get_stats(self) -> Dict[str, Any]:
         """Get resolution statistics"""
         return self.skills["stats"]
 
-def auto_resolve(error_type, error_msg, context=""):
+def auto_resolve(error_type: str, error_msg: str, context: str = "") -> Optional[str]:
     """Autonomous error resolution with skill learning"""
     builder = SkillBuilder()
 

@@ -10,19 +10,19 @@ import sys
 from pathlib import Path
 
 
-def validate_copilot_instructions():
+def validate_copilot_instructions() -> bool:
     """Validate the Copilot instructions file."""
-    
+
     # Path to instructions file
     instructions_file = Path(__file__).parent.parent / ".github" / "copilot-instructions.md"
-    
+
     if not instructions_file.exists():
         print("❌ ERROR: .github/copilot-instructions.md file not found")
         return False
-    
+
     # Read content
     content = instructions_file.read_text()
-    
+
     # Required sections
     required_sections = {
         "Project Overview": "## 🎯 Project Overview",
@@ -36,7 +36,7 @@ def validate_copilot_instructions():
         "Development Guidelines": "## 💻 Development Guidelines",
         "Troubleshooting": "## 🐛 Common Troubleshooting",
     }
-    
+
     # Required keywords/topics
     required_keywords = {
         "environment variable": "Environment variables documentation",
@@ -51,12 +51,12 @@ def validate_copilot_instructions():
         "react": "React framework",
         "typescript": "TypeScript",
     }
-    
+
     # Validation results
     all_valid = True
-    
+
     print("🔍 Validating GitHub Copilot Instructions...\n")
-    
+
     # Check file size
     line_count = len(content.split('\n'))
     print(f"📄 File size: {line_count} lines")
@@ -65,7 +65,7 @@ def validate_copilot_instructions():
     else:
         print("   ✓ Good file size")
     print()
-    
+
     # Check required sections
     print("📋 Checking Required Sections:")
     for section_name, section_marker in required_sections.items():
@@ -75,7 +75,7 @@ def validate_copilot_instructions():
             print(f"   ❌ Missing: {section_name}")
             all_valid = False
     print()
-    
+
     # Check required keywords
     print("🔑 Checking Required Keywords:")
     content_lower = content.lower()
@@ -86,7 +86,7 @@ def validate_copilot_instructions():
             print(f"   ❌ Missing: {keyword} - {description}")
             all_valid = False
     print()
-    
+
     # Check for specific environment variables
     print("🔐 Checking Environment Variable Documentation:")
     env_vars = [
@@ -101,7 +101,7 @@ def validate_copilot_instructions():
         else:
             print(f"   ⚠️  {var} not explicitly documented")
     print()
-    
+
     # Check for code examples
     print("💻 Checking Code Examples:")
     code_markers = ["```python", "```typescript", "```bash"]
@@ -112,7 +112,7 @@ def validate_copilot_instructions():
         else:
             print(f"   ⚠️  No {marker[3:]} code examples")
     print()
-    
+
     # Final result
     if all_valid:
         print("✅ SUCCESS: All validations passed!")

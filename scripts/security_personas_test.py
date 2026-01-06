@@ -35,18 +35,18 @@ class TestResult:
     vulnerabilities: List[str]
 
 class SecurityPersonasTester:
-    def __init__(self, base_url: str = "http://localhost:8000"):
+    def __init__(self, base_url: str = "http://localhost:8000") -> None:
         self.base_url = base_url
         self.results = []
-        
-    async def test_free_user(self):
+
+    async def test_free_user(self) -> None:
         """Test system as a free tier user"""
         print("\n🆓 Testing as FREE USER...")
-        
+
         # Test 1: Rate limiting
         result = await self._test_rate_limiting("free_user")
         self.results.append(result)
-        
+
         # Test 2: Feature access
         features_to_test = [
             "/api/chat",
@@ -54,7 +54,7 @@ class SecurityPersonasTester:
             "/api/process-video-markdown",
             "/api/video-to-software"
         ]
-        
+
         for feature in features_to_test:
             async with aiohttp.ClientSession() as session:
                 try:
@@ -65,7 +65,7 @@ class SecurityPersonasTester:
                     ) as resp:
                         status = resp.status
                         content = await resp.text()
-                        
+
                         self.results.append(TestResult(
                             persona=UserPersona.FREE_USER,
                             test_name=f"Access to {feature}",
@@ -81,25 +81,25 @@ class SecurityPersonasTester:
                         details={"error": str(e)},
                         vulnerabilities=[]
                     ))
-                    
-    async def test_paid_user(self):
+
+    async def test_paid_user(self) -> None:
         """Test system as a paid user"""
         print("\n💳 Testing as PAID USER...")
-        
+
         # Simulate paid user with API key
         headers = {"X-API-Key": "test-paid-user-key-123"}
-        
+
         # Test 1: Enhanced rate limits
         result = await self._test_rate_limiting("paid_user", headers)
         self.results.append(result)
-        
+
         # Test 2: Premium features
         premium_features = [
             "/api/batch-process",
             "/api/export",
             "/results/download"
         ]
-        
+
         for feature in premium_features:
             async with aiohttp.ClientSession() as session:
                 try:
@@ -108,7 +108,7 @@ class SecurityPersonasTester:
                         headers=headers
                     ) as resp:
                         status = resp.status
-                        
+
                         self.results.append(TestResult(
                             persona=UserPersona.PAID_USER,
                             test_name=f"Premium feature: {feature}",
@@ -124,13 +124,13 @@ class SecurityPersonasTester:
                         details={"error": str(e)},
                         vulnerabilities=[]
                     ))
-                    
-    async def test_hacker(self):
+
+    async def test_hacker(self) -> None:
         """Test system as a malicious actor"""
         print("\n🔴 Testing as HACKER...")
-        
+
         vulnerabilities = []
-        
+
         # Test 1: SQL Injection attempts
         sql_payloads = [
             "'; DROP TABLE users; --",
@@ -138,7 +138,7 @@ class SecurityPersonasTester:
             "admin'--",
             "1; SELECT * FROM credentials"
         ]
-        
+
         for payload in sql_payloads:
             async with aiohttp.ClientSession() as session:
                 try:
@@ -152,14 +152,14 @@ class SecurityPersonasTester:
                                 vulnerabilities.append(f"Potential SQL injection with payload: {payload}")
                 except:
                     pass
-                    
+
         # Test 2: Path traversal
         path_payloads = [
             "../../../etc/passwd",
             "..\\..\\..\\windows\\system32\\config\\sam",
             "%2e%2e%2f%2e%2e%2f%2e%2e%2fetc%2fpasswd"
         ]
-        
+
         for payload in path_payloads:
             async with aiohttp.ClientSession() as session:
                 try:
@@ -170,14 +170,14 @@ class SecurityPersonasTester:
                             vulnerabilities.append(f"Path traversal vulnerability with: {payload}")
                 except:
                     pass
-                    
+
         # Test 3: XSS attempts
         xss_payloads = [
             "<script>alert('XSS')</script>",
             "javascript:alert('XSS')",
             "<img src=x onerror=alert('XSS')>"
         ]
-        
+
         for payload in xss_payloads:
             async with aiohttp.ClientSession() as session:
                 try:
@@ -191,7 +191,7 @@ class SecurityPersonasTester:
                                 vulnerabilities.append(f"Potential XSS vulnerability with: {payload}")
                 except:
                     pass
-                    
+
         # Test 4: API key extraction
         sensitive_endpoints = [
             "/env",
@@ -201,7 +201,7 @@ class SecurityPersonasTester:
             "/api/keys",
             "/.git/config"
         ]
-        
+
         for endpoint in sensitive_endpoints:
             async with aiohttp.ClientSession() as session:
                 try:
@@ -210,7 +210,7 @@ class SecurityPersonasTester:
                             vulnerabilities.append(f"Exposed sensitive endpoint: {endpoint}")
                 except:
                     pass
-                    
+
         # Test 5: Authentication bypass
         auth_bypass_headers = [
             {"X-Forwarded-For": "127.0.0.1"},
@@ -219,7 +219,7 @@ class SecurityPersonasTester:
             {"Authorization": "Bearer null"},
             {"X-API-Key": ""},
         ]
-        
+
         for headers in auth_bypass_headers:
             async with aiohttp.ClientSession() as session:
                 try:
@@ -231,7 +231,7 @@ class SecurityPersonasTester:
                             vulnerabilities.append(f"Auth bypass with headers: {headers}")
                 except:
                     pass
-                    
+
         self.results.append(TestResult(
             persona=UserPersona.HACKER,
             test_name="Security vulnerability scan",
@@ -239,13 +239,13 @@ class SecurityPersonasTester:
             details={"vulnerabilities_found": len(vulnerabilities)},
             vulnerabilities=vulnerabilities
         ))
-        
-    async def test_competitor(self):
+
+    async def test_competitor(self) -> None:
         """Test system as a competitor trying to extract business logic"""
         print("\n🕵️ Testing as COMPETITOR...")
-        
+
         findings = []
-        
+
         # Test 1: API documentation exposure
         doc_endpoints = [
             "/docs",
@@ -254,7 +254,7 @@ class SecurityPersonasTester:
             "/api-docs",
             "/openapi.json"
         ]
-        
+
         for endpoint in doc_endpoints:
             async with aiohttp.ClientSession() as session:
                 try:
@@ -263,7 +263,7 @@ class SecurityPersonasTester:
                             findings.append(f"API documentation exposed at: {endpoint}")
                 except:
                     pass
-                    
+
         # Test 2: Source code exposure
         source_patterns = [
             "/.git/",
@@ -274,7 +274,7 @@ class SecurityPersonasTester:
             "/package.json",
             "/requirements.txt"
         ]
-        
+
         for pattern in source_patterns:
             async with aiohttp.ClientSession() as session:
                 try:
@@ -283,7 +283,7 @@ class SecurityPersonasTester:
                             findings.append(f"Potential source exposure: {pattern}")
                 except:
                     pass
-                    
+
         # Test 3: Business logic extraction
         async with aiohttp.ClientSession() as session:
             try:
@@ -301,13 +301,13 @@ class SecurityPersonasTester:
                                 "remaining": headers.get('X-RateLimit-Remaining'),
                                 "reset": headers.get('X-RateLimit-Reset')
                             })
-                            
+
                 if rate_limit_info:
                     findings.append(f"Rate limit information exposed: {rate_limit_info[0]}")
-                    
+
             except:
                 pass
-                
+
         self.results.append(TestResult(
             persona=UserPersona.COMPETITOR,
             test_name="Business intelligence gathering",
@@ -315,12 +315,12 @@ class SecurityPersonasTester:
             details={"findings": len(findings)},
             vulnerabilities=findings
         ))
-        
+
     async def _test_rate_limiting(self, user_type: str, headers: Optional[Dict] = None):
         """Test rate limiting for different user types"""
         request_times = []
         blocked_at = None
-        
+
         async with aiohttp.ClientSession() as session:
             for i in range(30):  # Try 30 requests
                 start_time = time.time()
@@ -336,7 +336,7 @@ class SecurityPersonasTester:
                         request_times.append(time.time() - start_time)
                 except:
                     break
-                    
+
         return TestResult(
             persona=UserPersona(user_type),
             test_name="Rate limiting test",
@@ -347,39 +347,39 @@ class SecurityPersonasTester:
             },
             vulnerabilities=["No rate limiting detected"] if not blocked_at else []
         )
-        
-    def generate_report(self):
+
+    def generate_report(self) -> bool:
         """Generate security testing report"""
         print("\n\n=== SECURITY PERSONAS TEST REPORT ===\n")
-        
+
         for persona in UserPersona:
             persona_results = [r for r in self.results if r.persona == persona]
             if not persona_results:
                 continue
-                
+
             print(f"\n{persona.value.upper().replace('_', ' ')} TESTS:")
             print("-" * 50)
-            
+
             for result in persona_results:
                 status_icon = "✅" if result.status in ["PASS", "SECURE", "PROTECTED", "CONFIGURED"] else "❌"
                 print(f"{status_icon} {result.test_name}: {result.status}")
-                
+
                 if result.vulnerabilities:
                     print("   ⚠️  Vulnerabilities found:")
                     for vuln in result.vulnerabilities[:5]:  # Show first 5
                         print(f"      - {vuln}")
                     if len(result.vulnerabilities) > 5:
                         print(f"      ... and {len(result.vulnerabilities) - 5} more")
-                        
+
         # Summary
         total_vulnerabilities = sum(len(r.vulnerabilities) for r in self.results)
         secure_tests = len([r for r in self.results if r.status in ["SECURE", "PROTECTED", "CONFIGURED"]])
-        
+
         print("\n\n=== SUMMARY ===")
         print(f"Total tests run: {len(self.results)}")
         print(f"Secure tests: {secure_tests}/{len(self.results)}")
         print(f"Total vulnerabilities found: {total_vulnerabilities}")
-        
+
         # Save detailed report
         report_data = {
             "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
@@ -399,22 +399,22 @@ class SecurityPersonasTester:
                 "vulnerabilities": total_vulnerabilities
             }
         }
-        
+
         report_path = Path("results/security_personas_report.json")
         report_path.parent.mkdir(exist_ok=True)
-        
+
         with open(report_path, 'w') as f:
             json.dump(report_data, f, indent=2)
-            
+
         print(f"\nDetailed report saved to: {report_path}")
-        
+
         return total_vulnerabilities == 0
-        
-    async def run_all_tests(self):
+
+    async def run_all_tests(self) -> bool:
         """Run all persona tests"""
         print("Starting security personas testing...")
         print("Note: This assumes the backend is running on http://localhost:8000")
-        
+
         # Check if backend is running
         try:
             async with aiohttp.ClientSession() as session:
@@ -426,24 +426,24 @@ class SecurityPersonasTester:
             print("❌ Cannot connect to backend at http://localhost:8000")
             print("Please run: python backend/main.py")
             return False
-            
+
         # Run all persona tests
         await self.test_free_user()
         await self.test_paid_user()
         await self.test_hacker()
         await self.test_competitor()
-        
+
         # Generate report
         return self.generate_report()
-        
+
 
 if __name__ == "__main__":
     tester = SecurityPersonasTester()
-    
+
     # Run async tests
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    
+
     try:
         success = loop.run_until_complete(tester.run_all_tests())
         exit(0 if success else 1)

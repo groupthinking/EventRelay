@@ -48,7 +48,7 @@ def parse_deps(lines: List[str]) -> Dict[str, str]:
             deps[pkg.lower()] = ver
     return deps
 
-async def push_alert(signal: Dict[str, Any]):
+async def push_alert(signal: Dict[str, Any]) -> None:
     if not alerts_config.get("webhook_url"): return
     signal_type = signal.get("type")
     if alerts_config.get("filters") and signal_type not in alerts_config["filters"]: return
@@ -71,11 +71,11 @@ async def push_alert(signal: Dict[str, Any]):
         logger.error(f"Failed to send alert: {e}")
 
 # --- Core Logic Functions ---
-def diff_requirements() -> dict:
+def diff_requirements() -> Dict[str, Any]:
     if not REQ_FILE.exists(): return {}
     wanted = parse_deps(REQ_FILE.read_text().splitlines())
     frozen = parse_deps(run_cmd(["pip", "freeze"]).splitlines())
-    
+
     added = {k: v for k, v in frozen.items() if k not in wanted}
     removed = {k: v for k, v in wanted.items() if k not in frozen}
     changed = {k: {"wanted": wanted[k], "actual": frozen[k]} for k in wanted.keys() & frozen.keys() if wanted[k] != frozen[k]}
@@ -83,11 +83,11 @@ def diff_requirements() -> dict:
 
 # --- Endpoints ---
 @app.get("/status")
-async def status():
+async def status() -> Dict[str, Any]:
     return {"alive": True, "base_dir": str(BASE_DIR)}
 
 @app.get("/list")
-async def list_files():
+async def list_files() -> List[Dict[str, Any]]:
     files = []
     for path in BASE_DIR.rglob("*"):
         if path.is_file():
@@ -103,21 +103,21 @@ async def list_files():
     return files
 
 @app.get("/file")
-async def read_file(path: str):
+async def read_file(path: str) -> Dict[str, str]:
     file_path = BASE_DIR.joinpath(path)
     if not file_path.is_file() or not str(file_path.resolve()).startswith(str(BASE_DIR.resolve())):
         raise HTTPException(status_code=404, detail="File not found or access denied")
     return {"path": path, "content": file_path.read_text(errors="ignore")}
 
 @app.post("/alerts/config")
-async def configure_alerts(config: Dict[str, Any]):
+async def configure_alerts(config: Dict[str, Any]) -> Dict[str, Any]:
     alerts_config.update(config)
     last_sent.clear()
     logger.info(f"Alerts configured: {config}")
     return {"configured": True, "config": alerts_config}
 
 @app.get("/signals")
-async def get_signals():
+async def get_signals() -> List[Dict[str, Any]]:
     drift = diff_requirements()
     signals = []
     if any(drift.values()):
@@ -126,24 +126,24 @@ async def get_signals():
     return signals
 
 @app.post("/dependencies/sync")
-async def sync_deps():
+async def sync_deps() -> Dict[str, str]:
     timestamp = datetime.utcnow().strftime("%Y-%m-%dT%H%M%S")
     backup_file = BACKUP_DIR / f"requirements.{timestamp}.txt"
     if REQ_FILE.exists():
         shutil.copy2(REQ_FILE, backup_file)
     REQ_FILE.write_text(run_cmd(["pip", "freeze"]) + "\n")
-    
+
     signal = {"type": "dependency_drift", "details": diff_requirements()}
     await push_alert(signal)
     return {"status": "synced", "backup_created": str(backup_file)}
 
 @app.get("/dependencies/backups")
-async def list_backups():
+async def list_backups() -> List[Dict[str, str]]:
     backups = sorted(BACKUP_DIR.glob("*.txt"), key=os.path.getmtime, reverse=True)
     return [{"file": b.name, "timestamp": b.stem.split('.')[-1]} for b in backups[:MAX_BACKUPS]]
 
 @app.post("/dependencies/restore/{timestamp}")
-async def restore_deps(timestamp: str):
+async def restore_deps(timestamp: str) -> Dict[str, str]:
     backup_file = BACKUP_DIR / f"requirements.{timestamp}.txt"
     if not backup_file.exists():
         raise HTTPException(status_code=404, detail="Backup not found")
@@ -152,7 +152,7 @@ async def restore_deps(timestamp: str):
     return {"restored": backup_file.name}
 
 @app.post("/api/analyze")
-async def analyze_video(request: Request):
+async def analyze_video(request: Request) -> Dict[str, str]:
     data = await request.json()
     video_url = data.get("videoUrl")
     if not video_url:
@@ -162,14 +162,14 @@ async def analyze_video(request: Request):
     return {"analysis": f"Analysis of {video_url} is complete."}
 
 @app.post("/api/upload")
-async def upload_video(file: UploadFile = File(...)):
+async def upload_video(file: UploadFile = File(...)) -> Dict[str, str]:
     # Mock upload
     await asyncio.sleep(2)
     return {"message": f"File '{file.filename}' uploaded successfully."}
 
 # --- Startup Hook ---
 @app.on_event("startup")
-async def startup_check():
+async def startup_check() -> None:
     logger.info("Server starting up...")
     drift = diff_requirements()
     if any(drift.values()):

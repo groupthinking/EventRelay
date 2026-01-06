@@ -5,19 +5,21 @@ Maintains flow with minimal attention by auto-applying learned resolutions
 """
 import sys
 import traceback
+from typing import Optional, Any, Callable, Type
+from types import TracebackType
 from skill_builder import SkillBuilder, auto_resolve
 
 class AutoHealContext:
     """Context manager for automatic error resolution"""
 
-    def __init__(self, operation_name="operation"):
+    def __init__(self, operation_name: str = "operation") -> None:
         self.operation = operation_name
         self.builder = SkillBuilder()
 
-    def __enter__(self):
+    def __enter__(self) -> 'AutoHealContext':
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self, exc_type: Optional[Type[BaseException]], exc_val: Optional[BaseException], exc_tb: Optional[TracebackType]) -> bool:
         if exc_type is None:
             return False  # No error occurred
 
@@ -37,9 +39,9 @@ class AutoHealContext:
             print(f"   Error: {error_type}: {error_msg}")
             return False  # Propagate error for manual handling
 
-def with_auto_heal(func):
+def with_auto_heal(func: Callable[..., Any]) -> Callable[..., Any]:
     """Decorator for automatic error handling"""
-    def wrapper(*args, **kwargs):
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
         with AutoHealContext(func.__name__):
             return func(*args, **kwargs)
     return wrapper

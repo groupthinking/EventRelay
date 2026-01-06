@@ -37,7 +37,7 @@ class Colors:
 class RepositoryCleanup:
     """Manages safe cleanup of repository."""
 
-    def __init__(self, repo_root: Path, dry_run: bool = True, backup: bool = True):
+    def __init__(self, repo_root: Path, dry_run: bool = True, backup: bool = True) -> None:
         self.repo_root = repo_root
         self.dry_run = dry_run
         self.backup = backup
@@ -438,7 +438,7 @@ class RepositoryCleanup:
         return len(self.errors) == 0
 
 
-def main():
+def main() -> None:
     """Main entry point."""
     parser = argparse.ArgumentParser(
         description="Safely cleanup EventRelay repository",

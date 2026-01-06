@@ -10,7 +10,7 @@ from collections import defaultdict
 from typing import Dict, Set, List
 
 class ImportMapper:
-    def __init__(self, root_path: str):
+    def __init__(self, root_path: str) -> None:
         self.root_path = Path(root_path)
         self.import_map: Dict[str, Set[str]] = defaultdict(set)
         self.reverse_map: Dict[str, Set[str]] = defaultdict(set)
@@ -51,7 +51,7 @@ class ImportMapper:
 
         return result
 
-    def _analyze_file_imports(self, file_path: Path):
+    def _analyze_file_imports(self, file_path: Path) -> None:
         """Analyze imports in a single file"""
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
@@ -167,7 +167,7 @@ class ImportMapper:
 
         return report
 
-def main():
+def main() -> bool:
     project_root = Path(__file__).resolve().parent.parent
     mapper = ImportMapper(str(project_root))
     mapping_data = mapper.build_import_map()

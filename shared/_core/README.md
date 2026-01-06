@@ -1,5 +1,6 @@
 # Shared Documentation Folder
-**Location:** `/Users/garvey/Dev/shared/`  
+
+**Location:** `/Users/garvey/Dev/shared/`
 **Purpose:** Work-in-progress documentation and session handoff materials
 
 ---
@@ -8,13 +9,14 @@
 
 ### Core Documentation
 
-| File | Purpose | Update Frequency |
-|------|---------|------------------|
-| **REPOSITORY_ANALYSIS.md** | Complete repository investigation report | After major discoveries |
-| **PROJECT_DECISIONS.md** | Decision matrix and action plans | When decisions are made |
-| **TECH_STACK_MATRIX.md** | Technology comparison across projects | When tech changes |
-| **CHANGELOG.md** | Session-by-session progress tracking | Every session |
-| **README.md** | This file - folder overview | As needed |
+| File                         | Purpose                                                    | Update Frequency        |
+| ---------------------------- | ---------------------------------------------------------- | ----------------------- |
+| **REPOSITORY_ANALYSIS.md**   | Complete repository investigation report                   | After major discoveries |
+| **PROJECT_DECISIONS.md**     | Decision matrix and action plans                           | When decisions are made |
+| **TECH_STACK_MATRIX.md**     | Technology comparison across projects                      | When tech changes       |
+| **CHANGELOG.md**             | Session-by-session progress tracking                       | Every session           |
+| **README.md**                | This file - folder overview                                | As needed               |
+| **MISSION_BLUEPRINT_REF.md** | Core mission, axioms, and hybrid intelligence architecture | As needed               |
 
 ---
 
@@ -35,24 +37,28 @@ This folder serves as the **single source of truth** for:
 ### When to Update
 
 **CHANGELOG.md** - Update at:
+
 - ✅ End of each work session
 - ✅ When completing major tasks
 - ✅ When encountering blockers
 - ✅ When making important decisions
 
 **REPOSITORY_ANALYSIS.md** - Update when:
+
 - ✅ New projects are discovered
 - ✅ Projects are archived or removed
 - ✅ Major findings are uncovered
 - ✅ Metrics change significantly
 
 **PROJECT_DECISIONS.md** - Update when:
+
 - ✅ New decisions are made
 - ✅ Action items are completed
 - ✅ Plans change or pivot
 - ✅ Risks are identified
 
 **TECH_STACK_MATRIX.md** - Update when:
+
 - ✅ Dependencies are upgraded
 - ✅ New technologies are adopted
 - ✅ Tech debt is resolved
@@ -86,18 +92,21 @@ This folder serves as the **single source of truth** for:
 **As of:** December 20, 2024
 
 ### Repository Overview
+
 - **Total Projects:** 10
 - **Active Production:** 3 (EventRelay, netmesh-production, mcp-servers)
 - **Under Investigation:** 2 (self-correcting-executor, agents-marketplace)
-- **Archived:** 1 (multiple projects in _archive/)
+- **Archived:** 1 (multiple projects in \_archive/)
 - **Reference:** 2 (Vision-Agents, docs)
 
 ### Critical Metrics
+
 - **Directories:** 33,342 (target: <10,000)
 - **Disk Usage:** ~500MB (target: <300MB)
 - **Tech Debt Score:** 6.5/10 (target: 8.5/10)
 
 ### Top Priorities
+
 1. 🔴 Extract genkit-mcp wrapper (save 200MB)
 2. 🟡 Investigate self-correcting-executor-PRODUCTION
 3. 🟡 Upgrade EventRelay TypeScript to 5.x
@@ -133,6 +142,7 @@ shared/
 ## 🎨 Documentation Standards
 
 ### Markdown Formatting
+
 - Use **bold** for emphasis
 - Use `code` for file paths, commands, and technical terms
 - Use tables for structured data
@@ -140,6 +150,7 @@ shared/
 - Use emojis sparingly for visual navigation
 
 ### Status Indicators
+
 - ✅ Complete
 - 🔄 In Progress
 - ⏳ Pending
@@ -150,6 +161,7 @@ shared/
 - 🗄️ Archive Candidate
 
 ### File Naming
+
 - Use SCREAMING_SNAKE_CASE for major docs (CHANGELOG.md)
 - Use descriptive names (REPOSITORY_ANALYSIS.md not ANALYSIS.md)
 - Include dates in session-specific docs if needed
@@ -163,16 +175,19 @@ shared/
 The following changes should **automatically trigger documentation updates**:
 
 1. **File Operations**
+
    - Moving/renaming projects → Update REPOSITORY_ANALYSIS.md
    - Archiving projects → Update CHANGELOG.md + REPOSITORY_ANALYSIS.md
    - Creating new projects → Update all relevant docs
 
 2. **Dependency Changes**
+
    - npm install/upgrade → Update TECH_STACK_MATRIX.md
    - Package.json changes → Update TECH_STACK_MATRIX.md
    - Framework migrations → Update all docs
 
 3. **Decision Making**
+
    - Any "we should..." decision → Update PROJECT_DECISIONS.md
    - Any "let's do..." action → Update CHANGELOG.md
    - Any "this is blocked" → Update CHANGELOG.md
@@ -189,18 +204,21 @@ The following changes should **automatically trigger documentation updates**:
 ### Common Tasks
 
 **Starting Work:**
+
 ```bash
 cd /Users/garvey/Dev
 cat shared/CHANGELOG.md | head -100  # Read recent changes
 ```
 
 **After Making Changes:**
+
 ```bash
 # Update CHANGELOG.md with what you did
 # Commit changes to preserve state
 ```
 
 **Finding Information:**
+
 - Project details → `REPOSITORY_ANALYSIS.md`
 - What to do next → `PROJECT_DECISIONS.md`
 - Tech stack info → `TECH_STACK_MATRIX.md`
@@ -223,6 +241,7 @@ Based on current state, the next session should:
 ## 📞 Support
 
 If documentation is unclear or missing information:
+
 1. Check CHANGELOG.md for recent context
 2. Review REPOSITORY_ANALYSIS.md for project details
 3. Consult PROJECT_DECISIONS.md for rationale
@@ -230,7 +249,7 @@ If documentation is unclear or missing information:
 
 ---
 
-**Maintained By:** AI Assistant (Kombai)  
-**Last Updated:** December 20, 2024  
-**Version:** 1.0.0  
+**Maintained By:** AI Assistant (Kombai)
+**Last Updated:** December 20, 2024
+**Version:** 1.0.0
 **Status:** ✅ Active

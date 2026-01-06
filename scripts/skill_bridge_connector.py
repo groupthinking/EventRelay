@@ -20,7 +20,7 @@ from skill_builder import SkillBuilder
 class CollectiveSkillBuilder(SkillBuilder):
     """Extended SkillBuilder with multi-agent network sharing"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.connection_id = f"eventrelay_{int(time.time())}"
         self.bridge_available = self._check_bridge()
@@ -31,12 +31,12 @@ class CollectiveSkillBuilder(SkillBuilder):
         else:
             print("⚠️  Running in isolated mode (bridge unavailable)")
 
-    def _check_bridge(self):
+    def _check_bridge(self) -> bool:
         """Verify bridge database exists"""
         bridge_db = Path.home() / ".claude" / "claude_bridge_enhanced.db"
         return bridge_db.exists()
 
-    def capture_error_resolution(self, error_type, error_msg, resolution, context=""):
+    def capture_error_resolution(self, error_type: str, error_msg: str, resolution: str, context: str = "") -> Dict[str, Any]:
         """Capture skill locally and broadcast to network"""
         # Local capture
         skill = super().capture_error_resolution(error_type, error_msg, resolution, context)
@@ -47,7 +47,7 @@ class CollectiveSkillBuilder(SkillBuilder):
 
         return skill
 
-    def _broadcast_skill(self, skill):
+    def _broadcast_skill(self, skill: Dict[str, Any]) -> None:
         """Broadcast skill to all agents via bridge"""
         try:
             import sqlite3
@@ -77,12 +77,12 @@ class CollectiveSkillBuilder(SkillBuilder):
         except Exception as e:
             print(f"⚠️  Broadcast failed: {e}")
 
-    def _start_listener(self):
+    def _start_listener(self) -> None:
         """Start background thread to receive skills from network"""
         listener_thread = threading.Thread(target=self._listen_for_skills, daemon=True)
         listener_thread.start()
 
-    def _listen_for_skills(self):
+    def _listen_for_skills(self) -> None:
         """Background process to receive skills from other agents"""
         import sqlite3
         bridge_db = Path.home() / ".claude" / "claude_bridge_enhanced.db"
@@ -120,7 +120,7 @@ class CollectiveSkillBuilder(SkillBuilder):
                 print(f"⚠️  Listener error: {e}")
                 time.sleep(5)
 
-    def _receive_skill(self, skill, from_connection):
+    def _receive_skill(self, skill: Dict[str, Any], from_connection: str) -> None:
         """Apply skill learned by another agent"""
         # Check if we already have this skill
         existing = self.find_matching_skill(skill["error_type"], skill["pattern"])
@@ -136,7 +136,7 @@ class CollectiveSkillBuilder(SkillBuilder):
 # Global instance for easy access
 collective_builder = CollectiveSkillBuilder()
 
-def collective_auto_resolve(error_type, error_msg, context=""):
+def collective_auto_resolve(error_type: str, error_msg: str, context: str = "") -> Optional[str]:
     """Auto-resolve using collective knowledge"""
     skill = collective_builder.find_matching_skill(error_type, error_msg)
 

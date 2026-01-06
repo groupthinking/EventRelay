@@ -18,7 +18,7 @@ import subprocess
 import requests
 
 
-def play_audio_bytes(data: bytes, fmt: str):
+def play_audio_bytes(data: bytes, fmt: str) -> None:
     suffix = ".wav" if fmt == "wav" else ".mp3"
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as f:
         f.write(data)
@@ -39,7 +39,7 @@ def play_audio_bytes(data: bytes, fmt: str):
             pass
 
 
-def main():
+def main() -> None:
     if len(sys.argv) < 2:
         print("Provide text to speak.")
         sys.exit(1)
@@ -87,5 +87,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-

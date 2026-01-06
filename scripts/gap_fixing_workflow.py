@@ -65,7 +65,7 @@ class GapFix:
 class GapFixingWorkflow:
     """Systematic gap fixing with validation gates"""
 
-    def __init__(self, project_root: str):
+    def __init__(self, project_root: str) -> None:
         self.project_root = Path(project_root)
         self.gaps: List[GapFix] = []
         self.workflow_log: List[Dict[str, Any]] = []
@@ -73,7 +73,7 @@ class GapFixingWorkflow:
         # Initialize gap fixes
         self._initialize_gaps()
 
-    def _initialize_gaps(self):
+    def _initialize_gaps(self) -> None:
         """Initialize all identified gaps with their fixes and validation gates"""
 
         # MCP Ecosystem Gap
@@ -448,7 +448,7 @@ class GapFixingWorkflow:
 
         return recommendations
 
-def main():
+def main() -> None:
     """Main entry point for gap fixing workflow"""
 
     # Get project root

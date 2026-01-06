@@ -39,17 +39,17 @@ class AlertRule:
 
 class AlertManager:
     """Alert management system"""
-    
-    def __init__(self):
+
+    def __init__(self) -> None:
         self.rules = {}
         self.active_alerts = {}
         self.alert_history = deque(maxlen=1000)
         self.notification_handlers = []
-        
+
         # Default alert rules
         self._setup_default_rules()
-    
-    def _setup_default_rules(self):
+
+    def _setup_default_rules(self) -> None:
         """Setup default alert rules"""
         default_rules = [
             AlertRule("high_cpu", "system.cpu_percent", 80.0, "greater", "warning"),
@@ -58,35 +58,35 @@ class AlertManager:
             AlertRule("high_error_rate", "errors_per_minute", 10.0, "greater", "warning"),
             AlertRule("low_success_rate", "success_rate", 95.0, "less", "warning")
         ]
-        
+
         for rule in default_rules:
             self.rules[rule.name] = rule
             logger.info(f"🚨 Alert rule '{rule.name}' configured")
-    
-    def add_rule(self, rule: AlertRule):
+
+    def add_rule(self, rule: AlertRule) -> None:
         """Add custom alert rule"""
         self.rules[rule.name] = rule
         logger.info(f"➕ Alert rule '{rule.name}' added")
-    
-    def evaluate_alerts(self, metrics: Dict[str, float]):
+
+    def evaluate_alerts(self, metrics: Dict[str, float]) -> List[Dict[str, Any]]:
         """Evaluate all alert rules against current metrics"""
         current_time = time.time()
         new_alerts = []
-        
+
         for rule_name, rule in self.rules.items():
             if not rule.enabled:
                 continue
-            
+
             metric_value = metrics.get(rule.metric, 0)
             triggered = False
-            
+
             if rule.condition == "greater" and metric_value > rule.threshold:
                 triggered = True
             elif rule.condition == "less" and metric_value < rule.threshold:
                 triggered = True
             elif rule.condition == "equal" and metric_value == rule.threshold:
                 triggered = True
-            
+
             if triggered:
                 if rule_name not in self.active_alerts:
                     # New alert
@@ -111,48 +111,48 @@ class AlertManager:
                     resolved_alert["resolved_at"] = current_time
                     self.alert_history.append(resolved_alert)
                     logger.info(f"✅ RESOLVED: {rule_name}")
-        
+
         return new_alerts
-    
+
     def get_active_alerts(self) -> List[Dict]:
         """Get all active alerts"""
         return list(self.active_alerts.values())
-    
+
     def get_alert_history(self, hours: int = 24) -> List[Dict]:
         """Get alert history for specified hours"""
         cutoff_time = time.time() - (hours * 3600)
-        return [alert for alert in self.alert_history 
+        return [alert for alert in self.alert_history
                 if alert.get("triggered_at", 0) > cutoff_time]
 
 class MCPMonitoringDashboard:
     """Real-time monitoring dashboard"""
-    
-    def __init__(self, mcp_server=None):
+
+    def __init__(self, mcp_server: Any = None) -> None:
         self.app = FastAPI(title="MCP Server Monitoring Dashboard")
         self.mcp_server = mcp_server
         self.alert_manager = AlertManager()
-        
+
         # Real-time data storage
         self.metrics_history = defaultdict(lambda: deque(maxlen=1000))
         self.connected_clients = set()
-        
+
         # Setup routes
         self._setup_routes()
-        
+
         # Start background monitoring
         asyncio.create_task(self._monitoring_loop())
-        
+
         logger.info("📊 Monitoring Dashboard initialized")
-    
-    def _setup_routes(self):
+
+    def _setup_routes(self) -> None:
         """Setup FastAPI routes"""
-        
+
         @self.app.get("/", response_class=HTMLResponse)
         async def dashboard_home(request: Request):
             """Main dashboard page"""
             html_content = self._generate_dashboard_html()
             return HTMLResponse(content=html_content)
-        
+
         @self.app.get("/api/metrics")
         async def get_metrics():
             """Get current metrics"""
@@ -166,7 +166,7 @@ class MCPMonitoringDashboard:
             except Exception as e:
                 logger.error(f"Metrics collection error: {e}")
                 return {"error": str(e)}
-        
+
         @self.app.get("/api/health")
         async def get_health():
             """Get comprehensive health status"""
@@ -179,7 +179,7 @@ class MCPMonitoringDashboard:
             except Exception as e:
                 logger.error(f"Health check error: {e}")
                 return {"overall_status": "error", "error": str(e)}
-        
+
         @self.app.get("/api/alerts")
         async def get_alerts():
             """Get alert information"""
@@ -194,14 +194,14 @@ class MCPMonitoringDashboard:
                     "enabled": rule.enabled
                 } for name, rule in self.alert_manager.rules.items()}
             }
-        
+
         @self.app.websocket("/ws")
         async def websocket_endpoint(websocket: WebSocket):
             """WebSocket for real-time updates"""
             await websocket.accept()
             self.connected_clients.add(websocket)
             logger.info("👤 Client connected to real-time monitoring")
-            
+
             try:
                 while True:
                     await websocket.receive_text()  # Keep connection alive
@@ -209,7 +209,7 @@ class MCPMonitoringDashboard:
                 logger.info("👋 Client disconnected from monitoring")
             finally:
                 self.connected_clients.discard(websocket)
-    
+
     def _generate_dashboard_html(self) -> str:
         """Generate dashboard HTML"""
         return '''
@@ -231,7 +231,7 @@ class MCPMonitoringDashboard:
 <body class="bg-gray-100">
     <div class="container mx-auto p-6">
         <h1 class="text-3xl font-bold mb-6">🚀 Enterprise MCP Server Monitoring</h1>
-        
+
         <!-- Status Overview -->
         <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
             <div class="bg-white p-6 rounded-lg shadow">
@@ -251,7 +251,7 @@ class MCPMonitoringDashboard:
                 <div id="success-rate" class="text-2xl font-bold">Loading...</div>
             </div>
         </div>
-        
+
         <!-- Charts -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
             <div class="bg-white p-6 rounded-lg shadow">
@@ -263,28 +263,28 @@ class MCPMonitoringDashboard:
                 <canvas id="request-chart" height="200"></canvas>
             </div>
         </div>
-        
+
         <!-- Alerts Panel -->
         <div class="bg-white p-6 rounded-lg shadow mb-6">
             <h3 class="text-lg font-semibold mb-4">🚨 Active Alerts</h3>
             <div id="alerts-container">No active alerts</div>
         </div>
-        
+
         <!-- Health Checks -->
         <div class="bg-white p-6 rounded-lg shadow">
             <h3 class="text-lg font-semibold mb-4">💊 Health Checks</h3>
             <div id="health-checks-container">Loading...</div>
         </div>
     </div>
-    
+
     <script>
         // WebSocket connection for real-time updates
         const ws = new WebSocket(`ws://${window.location.host}/ws`);
-        
+
         // Charts
         const systemCtx = document.getElementById('system-chart').getContext('2d');
         const requestCtx = document.getElementById('request-chart').getContext('2d');
-        
+
         const systemChart = new Chart(systemCtx, {
             type: 'line',
             data: {
@@ -306,7 +306,7 @@ class MCPMonitoringDashboard:
                 scales: { y: { beginAtZero: true, max: 100 } }
             }
         });
-        
+
         const requestChart = new Chart(requestCtx, {
             type: 'line',
             data: {
@@ -328,67 +328,67 @@ class MCPMonitoringDashboard:
                 scales: { y: { beginAtZero: true } }
             }
         });
-        
+
         // Update dashboard data
         async function updateDashboard() {
             try {
                 // Get metrics
                 const metricsResponse = await fetch('/api/metrics');
                 const metricsData = await metricsResponse.json();
-                
+
                 // Get health
                 const healthResponse = await fetch('/api/health');
                 const healthData = await healthResponse.json();
-                
+
                 // Get alerts
                 const alertsResponse = await fetch('/api/alerts');
                 const alertsData = await alertsResponse.json();
-                
+
                 // Update status overview
                 document.getElementById('overall-status').textContent = healthData.overall_status || 'Unknown';
                 document.getElementById('overall-status').className = `text-2xl font-bold status-${healthData.overall_status}`;
-                
+
                 document.getElementById('active-alerts-count').textContent = alertsData.active_alerts.length;
-                
+
                 // Update charts
                 updateCharts(metricsData);
-                
+
                 // Update alerts
                 updateAlerts(alertsData.active_alerts);
-                
+
                 // Update health checks
                 updateHealthChecks(healthData.checks || {});
-                
+
             } catch (error) {
                 console.error('Failed to update dashboard:', error);
             }
         }
-        
+
         function updateCharts(data) {
             const now = new Date().toLocaleTimeString();
             const metrics = data.metrics || {};
-            
+
             // System chart
             systemChart.data.labels.push(now);
             systemChart.data.datasets[0].data.push(metrics['system.cpu_percent'] || 0);
             systemChart.data.datasets[1].data.push(metrics['system.memory_percent'] || 0);
-            
+
             if (systemChart.data.labels.length > 50) {
                 systemChart.data.labels.shift();
                 systemChart.data.datasets.forEach(dataset => dataset.data.shift());
             }
-            
+
             systemChart.update();
         }
-        
+
         function updateAlerts(alerts) {
             const container = document.getElementById('alerts-container');
-            
+
             if (alerts.length === 0) {
                 container.innerHTML = '<p class="text-gray-500">No active alerts</p>';
                 return;
             }
-            
+
             container.innerHTML = alerts.map(alert => `
                 <div class="p-4 mb-4 border-l-4 alert-${alert.severity}">
                     <div class="flex justify-between items-start">
@@ -404,10 +404,10 @@ class MCPMonitoringDashboard:
                 </div>
             `).join('');
         }
-        
+
         function updateHealthChecks(checks) {
             const container = document.getElementById('health-checks-container');
-            
+
             container.innerHTML = Object.entries(checks).map(([name, check]) => `
                 <div class="flex justify-between items-center p-3 border-b">
                     <span class="font-medium">${name}</span>
@@ -421,11 +421,11 @@ class MCPMonitoringDashboard:
                 </div>
             `).join('');
         }
-        
+
         // Initial load and periodic updates
         updateDashboard();
         setInterval(updateDashboard, 5000); // Update every 5 seconds
-        
+
         ws.onmessage = function(event) {
             updateDashboard(); // Real-time update on WebSocket message
         };
@@ -433,23 +433,23 @@ class MCPMonitoringDashboard:
 </body>
 </html>
         '''
-    
+
     async def _collect_metrics(self) -> Dict[str, float]:
         """Collect current system and application metrics"""
         metrics = {}
-        
+
         try:
             # System metrics
             cpu_percent = psutil.cpu_percent(interval=0.1)
             memory = psutil.virtual_memory()
-            
+
             metrics.update({
                 "system.cpu_percent": cpu_percent,
                 "system.memory_percent": memory.percent,
                 "system.memory_available": memory.available,
                 "system.timestamp": time.time()
             })
-            
+
             # MCP server metrics (if available)
             if self.mcp_server:
                 server_metrics = self.mcp_server.metrics.get_summary()
@@ -457,36 +457,36 @@ class MCPMonitoringDashboard:
                     "mcp.uptime": server_metrics.get("uptime_seconds", 0),
                     "mcp.total_metrics": server_metrics.get("total_metrics", 0)
                 })
-                
+
                 # Circuit breaker metrics
                 for name, cb in self.mcp_server.circuit_breakers.items():
                     cb_metrics = cb.get_metrics()
                     metrics[f"circuit_breaker.{name}.success_rate"] = cb_metrics["success_rate"]
                     metrics[f"circuit_breaker.{name}.failure_count"] = cb_metrics["failure_count"]
-            
+
             # Store metrics history
             for key, value in metrics.items():
                 self.metrics_history[key].append({
                     "timestamp": time.time(),
                     "value": value
                 })
-            
+
         except Exception as e:
             logger.error(f"Error collecting metrics: {e}")
             metrics["error"] = str(e)
-        
+
         return metrics
-    
-    async def _monitoring_loop(self):
+
+    async def _monitoring_loop(self) -> None:
         """Background monitoring loop"""
         while True:
             try:
                 # Collect current metrics
                 current_metrics = await self._collect_metrics()
-                
+
                 # Evaluate alerts
                 new_alerts = self.alert_manager.evaluate_alerts(current_metrics)
-                
+
                 # Send real-time updates to connected clients
                 if self.connected_clients and (new_alerts or len(self.connected_clients) > 0):
                     message = {
@@ -495,7 +495,7 @@ class MCPMonitoringDashboard:
                         "alerts": new_alerts,
                         "timestamp": time.time()
                     }
-                    
+
                     # Send to all connected clients
                     disconnected_clients = set()
                     for client in self.connected_clients:
@@ -503,23 +503,23 @@ class MCPMonitoringDashboard:
                             await client.send_text(json.dumps(message))
                         except:
                             disconnected_clients.add(client)
-                    
+
                     # Remove disconnected clients
                     self.connected_clients -= disconnected_clients
-                
+
                 await asyncio.sleep(5)  # Monitor every 5 seconds
-                
+
             except Exception as e:
                 logger.error(f"Monitoring loop error: {e}")
                 await asyncio.sleep(10)
-    
-    def run(self, host: str = "0.0.0.0", port: int = 8080):
+
+    def run(self, host: str = "0.0.0.0", port: int = 8080) -> None:
         """Run the monitoring dashboard"""
         logger.info(f"🌐 Starting monitoring dashboard on http://{host}:{port}")
         uvicorn.run(self.app, host=host, port=port, log_level="info")
 
 # Standalone execution
-async def main():
+async def main() -> None:
     """Run monitoring dashboard standalone"""
     dashboard = MCPMonitoringDashboard()
     dashboard.run()

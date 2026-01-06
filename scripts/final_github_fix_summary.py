@@ -13,7 +13,7 @@ import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-def generate_fix_summary():
+def generate_fix_summary() -> str:
     """Generate comprehensive fix summary"""
 
     summary = f"""
@@ -175,7 +175,7 @@ If processing issues persist:
 
     return summary
 
-def save_summary_report():
+def save_summary_report() -> Path:
     """Save the comprehensive summary report"""
     summary = generate_fix_summary()
 
@@ -191,5 +191,3 @@ def save_summary_report():
 
 if __name__ == "__main__":
     save_summary_report()
-
-

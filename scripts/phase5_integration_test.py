@@ -35,13 +35,13 @@ logger = logging.getLogger(__name__)
 class IntegrationTestSuite:
     """Comprehensive integration test suite for YouTube Extension"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.test_results = {}
         self.performance_metrics = {}
         self.test_count = 0
         self.pass_count = 0
 
-    def log_test_result(self, test_name: str, success: bool, message: str = "", duration: float = 0.0):
+    def log_test_result(self, test_name: str, success: bool, message: str = "", duration: float = 0.0) -> None:
         """Log individual test results"""
         self.test_count += 1
         if success:
@@ -342,7 +342,7 @@ class IntegrationTestSuite:
             'success_rate': f"{(passed / len(test_names) * 100):.1f}%" if test_names else "0%"
         }
 
-async def main():
+async def main() -> bool:
     """Main integration test function"""
     logger.info("🚀 Starting Phase 5: Integration Testing & End-to-End Validation...")
 

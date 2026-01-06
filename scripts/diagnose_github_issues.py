@@ -11,6 +11,7 @@ import sys
 import subprocess
 from pathlib import Path
 from datetime import datetime
+from typing import Dict, List, Any
 import logging
 
 logging.basicConfig(
@@ -20,7 +21,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 class GitHubDiagnostic:
-    def __init__(self):
+    def __init__(self) -> None:
         self.project_root = Path(".")
         self.issues_found = []
         self.recommendations = []
@@ -296,7 +297,7 @@ class GitHubDiagnostic:
         else:
             return "CRITICAL - Major configuration problems"
 
-def main():
+def main() -> int:
     """Main diagnostic function"""
     diagnostic = GitHubDiagnostic()
     summary = diagnostic.run_comprehensive_diagnostic()
@@ -312,5 +313,3 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
-
-

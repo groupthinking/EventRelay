@@ -52,13 +52,13 @@ class DeploymentConfig:
 
 class SecretsManager:
     """Secure secrets management"""
-    
-    def __init__(self, key_file: Path = None):
+
+    def __init__(self, key_file: Path = None) -> None:
         self.key_file = key_file or Path("secrets.key")
         self.secrets_file = Path("secrets.encrypted")
         self.cipher_suite = self._get_cipher_suite()
-        
-    def _get_cipher_suite(self):
+
+    def _get_cipher_suite(self) -> Any:
         """Initialize encryption cipher"""
         if self.key_file.exists():
             # Load existing key
@@ -71,53 +71,53 @@ class SecretsManager:
                 f.write(key)
             os.chmod(self.key_file, 0o600)  # Restrict permissions
             logger.info("🔐 Generated new encryption key")
-        
+
         return Fernet(key)
-    
+
     def encrypt_secret(self, secret: str) -> str:
         """Encrypt a secret"""
         encrypted_secret = self.cipher_suite.encrypt(secret.encode())
         return base64.b64encode(encrypted_secret).decode()
-    
+
     def decrypt_secret(self, encrypted_secret: str) -> str:
         """Decrypt a secret"""
         encrypted_data = base64.b64decode(encrypted_secret.encode())
         decrypted_secret = self.cipher_suite.decrypt(encrypted_data)
         return decrypted_secret.decode()
-    
-    def store_secrets(self, secrets: Dict[str, str]):
+
+    def store_secrets(self, secrets: Dict[str, str]) -> None:
         """Store encrypted secrets"""
         encrypted_secrets = {}
         for key, value in secrets.items():
             encrypted_secrets[key] = self.encrypt_secret(value)
-        
+
         with open(self.secrets_file, 'w') as f:
             json.dump(encrypted_secrets, f, indent=2)
-        
+
         os.chmod(self.secrets_file, 0o600)
         logger.info(f"🔒 Stored {len(secrets)} encrypted secrets")
-    
+
     def load_secrets(self) -> Dict[str, str]:
         """Load and decrypt secrets"""
         if not self.secrets_file.exists():
             return {}
-        
+
         with open(self.secrets_file, 'r') as f:
             encrypted_secrets = json.load(f)
-        
+
         secrets = {}
         for key, encrypted_value in encrypted_secrets.items():
             secrets[key] = self.decrypt_secret(encrypted_value)
-        
+
         return secrets
 
 class ProductionHardening:
     """Production security hardening utilities"""
-    
-    def __init__(self):
+
+    def __init__(self) -> None:
         self.security_config = SecurityConfig()
         self.hardening_checks = []
-        
+
     def run_security_audit(self) -> Dict[str, Any]:
         """Run comprehensive security audit"""
         audit_results = {
@@ -126,17 +126,17 @@ class ProductionHardening:
             "vulnerabilities": [],
             "recommendations": []
         }
-        
+
         # File permissions check
         sensitive_files = [
             "secrets.key", "secrets.encrypted", ".env", "config.json"
         ]
-        
+
         for file_path in sensitive_files:
             if Path(file_path).exists():
                 stat = os.stat(file_path)
                 permissions = oct(stat.st_mode)[-3:]
-                
+
                 if permissions != "600":
                     audit_results["vulnerabilities"].append({
                         "type": "insecure_file_permissions",
@@ -147,12 +147,12 @@ class ProductionHardening:
                     audit_results["recommendations"].append(f"Set secure permissions for {file_path}: chmod 600 {file_path}")
                 else:
                     audit_results["checks"].append(f"✅ {file_path} has secure permissions")
-        
+
         # Environment variables check
         sensitive_env_vars = [
             "API_KEY", "SECRET_KEY", "DATABASE_PASSWORD", "JWT_SECRET"
         ]
-        
+
         for var in sensitive_env_vars:
             if var in os.environ:
                 value = os.environ[var]
@@ -165,16 +165,16 @@ class ProductionHardening:
                     audit_results["recommendations"].append(f"Use stronger secret for {var} (minimum 32 characters)")
                 else:
                     audit_results["checks"].append(f"✅ {var} has sufficient length")
-        
+
         # Network security check
         audit_results["checks"].extend([
             "✅ HTTPS enforcement enabled" if self.security_config.require_https else "❌ HTTPS not enforced",
             f"✅ Rate limiting configured: {self.security_config.rate_limit_per_ip} req/hour",
             f"✅ Request size limit: {self.security_config.max_request_size} bytes"
         ])
-        
+
         return audit_results
-    
+
     def generate_security_headers(self) -> Dict[str, str]:
         """Generate security headers for HTTP responses"""
         return {
@@ -186,8 +186,8 @@ class ProductionHardening:
             "Referrer-Policy": "strict-origin-when-cross-origin",
             "Permissions-Policy": "geolocation=(), microphone=(), camera=()",
         }
-    
-    def setup_log_rotation(self, log_dir: Path, max_size: str = "100MB", max_files: int = 10):
+
+    def setup_log_rotation(self, log_dir: Path, max_size: str = "100MB", max_files: int = 10) -> None:
         """Setup log rotation configuration"""
         logrotate_config = f"""
 {log_dir}/*.log {{
@@ -204,7 +204,7 @@ class ProductionHardening:
     endscript
 }}
         """
-        
+
         config_path = Path("/etc/logrotate.d/enterprise-mcp-server")
         try:
             with open(config_path, 'w') as f:
@@ -218,21 +218,21 @@ class ProductionHardening:
             logger.info("📜 Log rotation config written to logrotate.conf")
 
 # CLI interface
-def main():
+def main() -> None:
     """CLI for production deployment"""
     import argparse
-    
+
     parser = argparse.ArgumentParser(description="Enterprise MCP Server Production Deployment")
-    parser.add_argument("--environment", choices=["development", "staging", "production"], 
+    parser.add_argument("--environment", choices=["development", "staging", "production"],
                        default="production", help="Deployment environment")
     parser.add_argument("--target", choices=["docker-compose", "kubernetes", "systemd"],
                        default="docker-compose", help="Deployment target")
     parser.add_argument("--replicas", type=int, default=3, help="Number of replicas")
     parser.add_argument("--cpu-limit", default="2", help="CPU limit")
     parser.add_argument("--memory-limit", default="4Gi", help="Memory limit")
-    
+
     args = parser.parse_args()
-    
+
     # Create deployment configuration
     config = DeploymentConfig(
         environment=args.environment,
@@ -240,10 +240,10 @@ def main():
         cpu_limit=args.cpu_limit,
         memory_limit=args.memory_limit
     )
-    
+
     # Initialize deployment manager
     deploy_manager = DeploymentManager(config)
-    
+
     # Setup secrets (example)
     secrets = {
         "YOUTUBE_API_KEY": "your-youtube-api-key-here",
@@ -251,7 +251,7 @@ def main():
         "JWT_SECRET": secrets.token_hex(32)
     }
     deploy_manager.secrets_manager.store_secrets(secrets)
-    
+
     # Deploy
     deploy_dir = deploy_manager.deploy(args.target)
     print(f"✅ Deployment configuration ready in: {deploy_dir}")

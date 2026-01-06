@@ -52,7 +52,7 @@ logger = logging.getLogger(__name__)
 class ScheduledCleanupRunner:
     """Runner for scheduled database cleanup operations"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.dry_run = os.getenv('CLEANUP_DRY_RUN', 'false').lower() == 'true'
         self.report_email = os.getenv('CLEANUP_REPORT_EMAIL')
         self.results = {}
@@ -215,7 +215,7 @@ class ScheduledCleanupRunner:
 
         return "\n".join(report_lines)
 
-    def save_report(self, report: str, results: Dict[str, Any]):
+    def save_report(self, report: str, results: Dict[str, Any]) -> None:
         """Save cleanup report to file"""
         try:
             reports_dir = Path(__file__).parent.parent / "logs"
@@ -238,7 +238,7 @@ class ScheduledCleanupRunner:
         except Exception as e:
             logger.error(f"Failed to save reports: {e}")
 
-    async def run_scheduled_cleanup(self, interval_hours: int = 24):
+    async def run_scheduled_cleanup(self, interval_hours: int = 24) -> None:
         """Run cleanup on a schedule"""
         logger.info(f"Starting scheduled cleanup every {interval_hours} hours")
 

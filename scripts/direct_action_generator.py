@@ -6,13 +6,13 @@ Bypasses complex agent coordination to generate actions immediately.
 
 import json
 import sys
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 from datetime import datetime
 
 class DirectActionGenerator:
     """Simple, direct action generator without complex coordination."""
-    
-    def __init__(self):
+
+    def __init__(self) -> None:
         self.content_categories = {
             "educational": self._generate_educational_actions,
             "business": self._generate_business_actions,
@@ -20,16 +20,16 @@ class DirectActionGenerator:
             "health": self._generate_health_actions,
             "programming": self._generate_programming_actions
         }
-    
-    def generate_actions(self, transcript: str, video_id: str = None) -> Dict[str, Any]:
+
+    def generate_actions(self, transcript: str, video_id: Optional[str] = None) -> Dict[str, Any]:
         """Generate actions directly from transcript without complex processing."""
-        
+
         # Simple category detection
         category = self._detect_category(transcript)
-        
+
         # Generate category-specific actions
         actions = self.content_categories.get(category, self._generate_default_actions)(transcript)
-        
+
         return {
             "video_id": video_id or "unknown",
             "category": category,
@@ -38,11 +38,11 @@ class DirectActionGenerator:
             "total_actions": len(actions),
             "estimated_total_time": sum(action.get("estimated_minutes", 5) for action in actions)
         }
-    
+
     def _detect_category(self, transcript: str) -> str:
         """Simple keyword-based category detection."""
         text = transcript.lower()
-        
+
         if any(word in text for word in ["learn", "teach", "education", "lesson", "course"]):
             return "educational"
         elif any(word in text for word in ["business", "strategy", "marketing", "sales"]):
@@ -55,7 +55,7 @@ class DirectActionGenerator:
             return "creative"
         else:
             return "general"
-    
+
     def _generate_educational_actions(self, transcript: str) -> List[Dict[str, Any]]:
         """Generate educational content actions."""
         return [
@@ -68,7 +68,7 @@ class DirectActionGenerator:
                 "deliverables": ["study_schedule", "learning_modules", "progress_tracker"]
             },
             {
-                "type": "practice_exercises", 
+                "type": "practice_exercises",
                 "title": "Generate practice problems",
                 "description": "Create hands-on exercises to reinforce learning",
                 "estimated_minutes": 20,
@@ -84,7 +84,7 @@ class DirectActionGenerator:
                 "deliverables": ["quiz_questions", "grading_rubric"]
             }
         ]
-    
+
     def _generate_business_actions(self, transcript: str) -> List[Dict[str, Any]]:
         """Generate business content actions."""
         return [
@@ -105,7 +105,7 @@ class DirectActionGenerator:
                 "deliverables": ["automation_candidates", "roi_analysis", "implementation_plan"]
             }
         ]
-    
+
     def _generate_programming_actions(self, transcript: str) -> List[Dict[str, Any]]:
         """Generate programming content actions."""
         return [
@@ -126,7 +126,7 @@ class DirectActionGenerator:
                 "deliverables": ["setup_guide", "requirements_file", "docker_config"]
             }
         ]
-    
+
     def _generate_creative_actions(self, transcript: str) -> List[Dict[str, Any]]:
         """Generate creative/DIY content actions."""
         return [
@@ -147,7 +147,7 @@ class DirectActionGenerator:
                 "deliverables": ["timeline", "milestones", "checkpoint_reviews"]
             }
         ]
-    
+
     def _generate_health_actions(self, transcript: str) -> List[Dict[str, Any]]:
         """Generate health/fitness/cooking actions."""
         return [
@@ -168,7 +168,7 @@ class DirectActionGenerator:
                 "deliverables": ["tracking_sheet", "progress_metrics", "goal_milestones"]
             }
         ]
-    
+
     def _generate_default_actions(self, transcript: str) -> List[Dict[str, Any]]:
         """Generate general actions for uncategorized content."""
         return [
@@ -190,23 +190,23 @@ class DirectActionGenerator:
             }
         ]
 
-def main():
+def main() -> None:
     """CLI interface for direct action generation."""
     if len(sys.argv) < 2:
         print("Usage: python direct_action_generator.py <transcript_file>")
         sys.exit(1)
-    
+
     transcript_file = sys.argv[1]
-    
+
     try:
         with open(transcript_file, 'r') as f:
             transcript = f.read()
-        
+
         generator = DirectActionGenerator()
         result = generator.generate_actions(transcript)
-        
+
         print(json.dumps(result, indent=2))
-        
+
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)

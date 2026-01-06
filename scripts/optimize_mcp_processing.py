@@ -25,7 +25,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 class MCPOptimizer:
-    def __init__(self, config_dir: str = "config"):
+    def __init__(self, config_dir: str = "config") -> None:
         self.config_dir = Path(config_dir)
         self.optimized_config_path = self.config_dir / "mcp_config_optimized.json"
         self.original_config_path = self.config_dir / "llama_agent_config.json"
@@ -169,7 +169,7 @@ if __name__ == "__main__":
             logger.error(f"❌ Failed to create env file: {e}")
             return False
 
-def main():
+def main() -> int:
     """Main optimization function"""
     optimizer = MCPOptimizer()
 

@@ -20,7 +20,7 @@ class ImportIssue:
     code_line: str
 
 class ImportAnalyzer:
-    def __init__(self, root_path: str):
+    def __init__(self, root_path: str) -> None:
         self.root_path = Path(root_path)
         self.issues: List[ImportIssue] = []
         self.files_processed = 0
@@ -164,7 +164,7 @@ class ImportAnalyzer:
 
         return report
 
-def main():
+def main() -> bool:
     analyzer = ImportAnalyzer("/Users/garvey/UVAI/src/core/youtube_extension")
     print("Starting Phase 1.1: Core Package Import Analysis...")
 

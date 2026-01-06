@@ -22,7 +22,7 @@ import subprocess
 import requests
 
 
-def read_env_file_if_present():
+def read_env_file_if_present() -> None:
     # Light best-effort .env loader without external deps
     env_path_candidates = [
         os.path.join(os.getcwd(), ".env"),
@@ -73,7 +73,7 @@ def tts_request(api_key: str, text: str, voice: str, fmt: str, model: str) -> by
     return r.content
 
 
-def play_audio(data: bytes, fmt: str):
+def play_audio(data: bytes, fmt: str) -> None:
     suffix = ".wav" if fmt == "wav" else ".mp3"
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as f:
         f.write(data)
@@ -100,7 +100,7 @@ def play_audio(data: bytes, fmt: str):
             pass
 
 
-def main():
+def main() -> None:
     read_env_file_if_present()
     if len(sys.argv) < 2:
         print("Provide text to speak.")
@@ -119,5 +119,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-

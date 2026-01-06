@@ -26,16 +26,16 @@ def check_api_keys() -> Tuple[bool, List[str]]:
     """Check if required API keys are set"""
     required_keys = ['GEMINI_API_KEY', 'GOOGLE_API_KEY', 'OPENAI_API_KEY']
     optional_keys = ['YOUTUBE_API_KEY', 'ANTHROPIC_API_KEY', 'ASSEMBLYAI_API_KEY']
-    
+
     issues = []
     has_primary_key = False
-    
+
     # Check for at least one primary AI key
     for key in required_keys:
         if os.getenv(key):
             has_primary_key = True
             break
-    
+
     if not has_primary_key:
         issues.append(
             "At least one AI API key required. Set one of:\n"
@@ -49,12 +49,12 @@ def check_api_keys() -> Tuple[bool, List[str]]:
         for key in optional_keys:
             if not os.getenv(key):
                 optional_status.append(f"  - {key} (optional, provides enhanced features)")
-        
+
         if optional_status:
             issues.append(
                 "Optional API keys not set:\n" + "\n".join(optional_status)
             )
-    
+
     return has_primary_key, issues
 
 
@@ -62,11 +62,11 @@ def check_python_version() -> Tuple[bool, List[str]]:
     """Check Python version"""
     issues = []
     version_info = sys.version_info
-    
+
     if version_info.major < 3 or (version_info.major == 3 and version_info.minor < 9):
         issues.append(f"Python 3.9+ required, found {version_info.major}.{version_info.minor}")
         return False, issues
-    
+
     return True, issues
 
 
@@ -78,13 +78,13 @@ def check_dependencies() -> Tuple[bool, List[str]]:
         ('fastapi', 'FastAPI not installed. Run: pip install fastapi'),
         ('aiohttp', 'aiohttp not installed. Run: pip install aiohttp'),
     ]
-    
+
     for module, error_msg in required_modules:
         try:
             __import__(module)
         except ImportError:
             issues.append(error_msg)
-    
+
     return len(issues) == 0, issues
 
 
@@ -104,7 +104,7 @@ def check_vercel_cli() -> Tuple[bool, List[str]]:
     except (FileNotFoundError, subprocess.TimeoutExpired):
         issues.append("Vercel CLI not found. Install with: npm i -g vercel (optional for deployment)")
         return False, issues
-    
+
     return True, issues
 
 
@@ -119,7 +119,7 @@ def check_disk_space() -> Tuple[bool, List[str]]:
             # Windows doesn't have statvfs, skip this check
             return True, []
         available_gb = (stat.f_bavail * stat.f_frsize) / (1024 ** 3)
-        
+
         if available_gb < 2:
             issues.append(f"Low disk space: {available_gb:.2f}GB available. Recommend at least 2GB free.")
             return False, issues
@@ -127,7 +127,7 @@ def check_disk_space() -> Tuple[bool, List[str]]:
             issues.append(f"Only {available_gb:.2f}GB available. Recommend at least 5GB for full testing.")
     except Exception as e:
         issues.append(f"Could not check disk space: {e}")
-    
+
     return True, issues
 
 
@@ -136,7 +136,7 @@ def check_env_file() -> Tuple[bool, List[str]]:
     issues = []
     env_path = Path('.env')
     env_example = Path('.env.example')
-    
+
     if not env_path.exists():
         if env_example.exists():
             issues.append(
@@ -150,7 +150,7 @@ def check_env_file() -> Tuple[bool, List[str]]:
                 "  GEMINI_API_KEY=your_key_here"
             )
         return False, issues
-    
+
     return True, issues
 
 
@@ -167,11 +167,11 @@ def get_check_title(check_name: str) -> str:
     return titles.get(check_name, check_name.replace('_', ' ').title())
 
 
-def print_section(title: str, passed: bool, issues: List[str]):
+def print_section(title: str, passed: bool, issues: List[str]) -> None:
     """Print a check section"""
     status = f"{GREEN}✓ PASS{RESET}" if passed else f"{RED}✗ FAIL{RESET}"
     print(f"\n{BOLD}[{status}] {title}{RESET}")
-    
+
     if issues:
         for issue in issues:
             # Handle multi-line issues
@@ -181,21 +181,21 @@ def print_section(title: str, passed: bool, issues: List[str]):
                 print(f"{YELLOW}{prefix}{line}{RESET}")
 
 
-def print_summary(checks: Dict[str, Tuple[bool, List[str]]]):
+def print_summary(checks: Dict[str, Tuple[bool, List[str]]]) -> bool:
     """Print overall summary"""
     critical_checks = ['python', 'dependencies', 'api_keys']
     critical_passed = all(checks[key][0] for key in critical_checks if key in checks)
-    
+
     print(f"\n{'=' * 60}")
     print(f"{BOLD}PREREQUISITE CHECK SUMMARY{RESET}")
     print(f"{'=' * 60}")
-    
+
     for check_name, (passed, _) in checks.items():
         status = f"{GREEN}✓{RESET}" if passed else f"{RED}✗{RESET}"
         print(f"  {status} {get_check_title(check_name)}")
-    
+
     print(f"{'=' * 60}\n")
-    
+
     if critical_passed:
         print(f"{GREEN}{BOLD}✓ All critical prerequisites met!{RESET}")
         print(f"\n{BLUE}You can now run the revenue pipeline test:{RESET}")
@@ -207,7 +207,7 @@ def print_summary(checks: Dict[str, Tuple[bool, List[str]]]):
         return False
 
 
-def print_quick_setup_guide():
+def print_quick_setup_guide() -> None:
     """Print a quick setup guide"""
     print(f"\n{BLUE}{BOLD}QUICK SETUP GUIDE{RESET}")
     print(f"{BLUE}{'=' * 60}{RESET}")
@@ -231,12 +231,12 @@ def print_quick_setup_guide():
 """)
 
 
-def main():
+def main() -> None:
     """Main prerequisite checker"""
     print(f"\n{BOLD}{BLUE}Revenue Pipeline Prerequisites Checker{RESET}")
     print(f"{BLUE}{'=' * 60}{RESET}\n")
     print("Checking system requirements for revenue pipeline testing...\n")
-    
+
     checks = {
         'python': check_python_version(),
         'dependencies': check_dependencies(),
@@ -245,16 +245,16 @@ def main():
         'vercel_cli': check_vercel_cli(),
         'disk_space': check_disk_space(),
     }
-    
+
     for check_name, (passed, issues) in checks.items():
         print_section(get_check_title(check_name), passed, issues)
-    
+
     success = print_summary(checks)
-    
+
     if not success:
         print_quick_setup_guide()
         sys.exit(1)
-    
+
     sys.exit(0)
 
 

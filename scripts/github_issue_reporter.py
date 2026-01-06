@@ -109,7 +109,7 @@ async def report_issue(args: argparse.Namespace) -> int:
         return 1
 
 
-def main():
+def main() -> None:
     """Main CLI entry point"""
     parser = argparse.ArgumentParser(description="GitHub Actions Issue Reporter")
     parser.add_argument('--title', help='Issue title')

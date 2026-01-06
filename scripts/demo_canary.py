@@ -6,7 +6,7 @@ import sys
 from ...src.canary_router import route_user
 
 
-def main():
+def main() -> None:
     user = sys.argv[1] if len(sys.argv) > 1 else "guest"
     lane = route_user(user, "canary", "mcp_video_processor")
     print(f"user={user} lane={lane}")
@@ -14,5 +14,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-

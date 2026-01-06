@@ -2,6 +2,7 @@ import os
 import json
 import sys
 import subprocess
+from typing import Optional, Any, Dict, List, Union
 import google.generativeai as genai
 
 # Configuration
@@ -15,7 +16,7 @@ EMBEDDING_MODEL = "models/text-embedding-004"
 CHAT_MODEL = "gemini-2.0-flash-exp" # Or gemini-1.5-pro
 
 class MCPClient:
-    def __init__(self):
+    def __init__(self) -> None:
         env = os.environ.copy()
         if "DATABASE_URL" not in env:
              pass
@@ -32,7 +33,7 @@ class MCPClient:
         self.req_id = 0
         self.initialize()
 
-    def rpc_request(self, method, params=None):
+    def rpc_request(self, method: str, params: Optional[Dict[str, Any]] = None) -> str:
         self.req_id += 1
         msg = {
             "jsonrpc": "2.0",
@@ -43,7 +44,7 @@ class MCPClient:
             msg["params"] = params
         return json.dumps(msg)
 
-    def initialize(self):
+    def initialize(self) -> None:
         init_req = self.rpc_request("initialize", {"protocolVersion": "2024-11-05", "capabilities": {}, "clientInfo": {"name": "repo-chatter", "version": "1.0"}})
         self.process.stdin.write(init_req + "\n")
         self.process.stdin.flush()
@@ -56,7 +57,7 @@ class MCPClient:
         self.process.stdin.flush()
         self.process.stdout.readline()
 
-    def call_tool(self, tool_name, arguments):
+    def call_tool(self, tool_name: str, arguments: Dict[str, Any]) -> Union[Dict[str, Any], str]:
         req = self.rpc_request("tools/call", {"name": tool_name, "arguments": arguments})
         self.process.stdin.write(req + "\n")
         self.process.stdin.flush()
@@ -70,10 +71,10 @@ class MCPClient:
         except json.JSONDecodeError:
             return f"Error decoding: {response_line}"
 
-    def close(self):
+    def close(self) -> None:
         self.process.terminate()
 
-def get_embedding(text):
+def get_embedding(text: str) -> List[float]:
     result = genai.embed_content(
         model=EMBEDDING_MODEL,
         content=text,
@@ -81,7 +82,7 @@ def get_embedding(text):
     )
     return result['embedding']
 
-def main():
+def main() -> None:
     if len(sys.argv) < 2:
         print("Usage: python chat_repo.py \"Your question here\"")
         return

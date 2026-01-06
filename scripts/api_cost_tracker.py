@@ -7,7 +7,7 @@ import json
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 
 # Cost per 1M tokens (as of 2025-10-27)
 API_COSTS = {
@@ -64,7 +64,7 @@ class CostTracker:
         }
         self.load_historical_data()
 
-    def load_historical_data(self):
+    def load_historical_data(self) -> None:
         """Load historical usage data"""
         if self.data_file.exists():
             with open(self.data_file, 'r') as f:
@@ -158,13 +158,13 @@ class CostTracker:
             "remaining": limit - calls_last_minute
         }
 
-    def save_session(self):
+    def save_session(self) -> None:
         """Save current session to historical data"""
         self.historical_data["sessions"].append(self.current_session)
         with open(self.data_file, 'w') as f:
             json.dump(self.historical_data, f, indent=2)
 
-    def export_report(self, output_file: str = "cost_report.json"):
+    def export_report(self, output_file: str = "cost_report.json") -> Dict[str, Any]:
         """Export detailed cost report"""
         report = {
             "generated_at": datetime.now().isoformat(),

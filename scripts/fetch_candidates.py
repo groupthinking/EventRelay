@@ -4,7 +4,7 @@ from __future__ import annotations
 import os
 import json
 from pathlib import Path
-from typing import List, Dict
+from typing import List, Dict, Any
 
 from googleapiclient.discovery import build  # type: ignore
 
@@ -23,7 +23,7 @@ QUERIES = [
 ]
 
 
-def search_videos(youtube, query: str, max_results: int = 50) -> List[str]:
+def search_videos(youtube: Any, query: str, max_results: int = 50) -> List[str]:
     res = youtube.search().list(
         q=query,
         part="id",
@@ -40,7 +40,7 @@ def search_videos(youtube, query: str, max_results: int = 50) -> List[str]:
     return ids
 
 
-def filter_available(youtube, ids: List[str]) -> List[str]:
+def filter_available(youtube: Any, ids: List[str]) -> List[str]:
     out: List[str] = []
     for i in range(0, len(ids), 50):
         chunk = ids[i:i+50]
@@ -52,7 +52,7 @@ def filter_available(youtube, ids: List[str]) -> List[str]:
     return out
 
 
-def main():
+def main() -> None:
     key = os.getenv("YOUTUBE_API_KEY") or os.getenv("REACT_APP_YOUTUBE_API_KEY")
     if not key:
         raise SystemExit("Missing YOUTUBE_API_KEY")
@@ -82,6 +82,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-

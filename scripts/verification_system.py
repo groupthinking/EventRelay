@@ -33,7 +33,7 @@ class VerificationResult:
 class UVaiVerificationSystem:
     """Comprehensive verification system for UVAI platform claims"""
 
-    def __init__(self, project_root: str):
+    def __init__(self, project_root: str) -> None:
         self.project_root = Path(project_root)
         self.results: List[VerificationResult] = []
 
@@ -362,7 +362,7 @@ class UVaiVerificationSystem:
 
         print("\n" + "="*60)
 
-def main():
+def main() -> None:
     """Main entry point for verification system"""
 
     # Get project root

@@ -24,21 +24,21 @@ BASE_URL = "http://localhost:8000"
 # Read API key from environment to avoid committing secrets. Prefer PROD_API_KEY or UVAI_API_KEY.
 API_KEY = os.getenv('PROD_API_KEY') or os.getenv('UVAI_API_KEY') or os.getenv('API_KEY')
 
-def print_header(title):
+def print_header(title: str) -> None:
     """Print a formatted header."""
     print(f"\n{'='*60}")
     print(f"🚀 {title}")
     print(f"{'='*60}")
 
-def print_section(title):
+def print_section(title: str) -> None:
     """Print a formatted section."""
     print(f"\n📋 {title}")
     print(f"{'-'*40}")
 
-def test_health_endpoints():
+def test_health_endpoints() -> None:
     """Test all health and monitoring endpoints."""
     print_section("System Health & Monitoring")
-    
+
     # Test main health endpoint
     try:
         response = requests.get(f"{BASE_URL}/health")
@@ -49,7 +49,7 @@ def test_health_endpoints():
             print(f"❌ Main Health: HTTP {response.status_code}")
     except Exception as e:
         print(f"❌ Main Health: {e}")
-    
+
     # Test connectors health
     try:
         response = requests.get(f"{BASE_URL}/connectors/health")
@@ -64,7 +64,7 @@ def test_health_endpoints():
             print(f"❌ Connectors Health: HTTP {response.status_code}")
     except Exception as e:
         print(f"❌ Connectors Health: {e}")
-    
+
     # Test metrics endpoint
     try:
         response = requests.get(f"{BASE_URL}/metrics")
@@ -78,33 +78,33 @@ def test_health_endpoints():
     except Exception as e:
         print(f"❌ Metrics: {e}")
 
-def test_workflow_management():
+def test_workflow_management() -> None:
     """Test workflow creation and management."""
     print_section("Workflow Management")
-    
+
     # Create a test workflow
     workflow_data = {
         "name": "Production Demo Workflow",
         "description": "Demonstrating production capabilities",
         "goal": "Showcase AI Software Factory functionality"
     }
-    
+
     try:
         response = requests.post(
             f"{BASE_URL}/workflows",
             json=workflow_data,
             headers={"Content-Type": "application/json"}
         )
-        
+
         if response.status_code == 200:
             data = response.json()
             workflow_id = data['workflow_id']
             print(f"✅ Workflow Created: ID {workflow_id}")
             print(f"   Status: {data['status']}")
-            
+
             # Wait a moment for processing
             time.sleep(2)
-            
+
             # Check workflow status
             status_response = requests.get(f"{BASE_URL}/workflows/{workflow_id}")
             if status_response.status_code == 200:
@@ -120,10 +120,10 @@ def test_workflow_management():
     except Exception as e:
         print(f"❌ Workflow Management: {e}")
 
-def test_security_monitoring():
+def test_security_monitoring() -> None:
     """Test security and monitoring features."""
     print_section("Security & Monitoring")
-    
+
     # Test security events endpoint
     try:
         response = requests.get(f"{BASE_URL}/security/events")
@@ -137,7 +137,7 @@ def test_security_monitoring():
             print(f"❌ Security Events: HTTP {response.status_code}")
     except Exception as e:
         print(f"❌ Security Events: {e}")
-    
+
     # Test rate limiting by making multiple requests
     print(f"   🔄 Testing rate limiting...")
     for i in range(5):
@@ -151,10 +151,10 @@ def test_security_monitoring():
             print(f"      Request {i+1}: ❌ {e}")
         time.sleep(0.1)
 
-def test_api_functionality():
+def test_api_functionality() -> None:
     """Test various API endpoints."""
     print_section("API Functionality")
-    
+
     # Test cache endpoint
     try:
         response = requests.get(f"{BASE_URL}/api/cache/stats")
@@ -167,7 +167,7 @@ def test_api_functionality():
             print(f"❌ Cache Stats: HTTP {response.status_code}")
     except Exception as e:
         print(f"❌ Cache Stats: {e}")
-    
+
     # Test video processing endpoint (will show as unavailable, which is expected)
     try:
         response = requests.post(
@@ -178,7 +178,7 @@ def test_api_functionality():
             },
             headers={"Content-Type": "application/json"}
         )
-        
+
         if response.status_code == 200:
             data = response.json()
             status = data.get('status', 'unknown')
@@ -189,12 +189,12 @@ def test_api_functionality():
     except Exception as e:
         print(f"❌ Video Processing: {e}")
 
-def generate_performance_report():
+def generate_performance_report() -> None:
     """Generate a performance summary report."""
     print_section("Performance Summary")
-    
+
     start_time = time.time()
-    
+
     # Test response times for key endpoints
     endpoints = [
         ("/health", "GET"),
@@ -202,9 +202,9 @@ def generate_performance_report():
         ("/metrics", "GET"),
         ("/api/cache/stats", "GET")
     ]
-    
+
     response_times = {}
-    
+
     for endpoint, method in endpoints:
         try:
             start = time.time()
@@ -212,10 +212,10 @@ def generate_performance_report():
                 response = requests.get(f"{BASE_URL}{endpoint}")
             else:
                 response = requests.post(f"{BASE_URL}{endpoint}")
-            
+
             end_time = time.time()
             response_time = (end_time - start) * 1000  # Convert to milliseconds
-            
+
             if response.status_code == 200:
                 response_times[endpoint] = response_time
                 print(f"✅ {endpoint}: {response_time:.2f}ms")
@@ -223,9 +223,9 @@ def generate_performance_report():
                 print(f"❌ {endpoint}: HTTP {response.status_code}")
         except Exception as e:
             print(f"❌ {endpoint}: {e}")
-    
+
     total_time = time.time() - start_time
-    
+
     if response_times:
         avg_response_time = sum(response_times.values()) / len(response_times)
         print(f"\n📊 Performance Metrics:")
@@ -233,7 +233,7 @@ def generate_performance_report():
         print(f"   Total Test Time: {total_time:.2f}s")
         print(f"   Endpoints Tested: {len(response_times)}")
 
-def main():
+def main() -> bool:
     """Main demonstration function."""
     print_header("UVAI AI Software Factory - Production Demonstration")
     print(f"🎯 Target: $200M Acquisition Presentation")
@@ -241,7 +241,7 @@ def main():
     # Do not print the full API key in logs. Show present/missing state only.
     print(f"🔑 API Key Present: {'✅' if API_KEY else '❌ (missing)'}")
     print(f"⏰ Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    
+
     try:
         # Run all demonstration tests
         test_health_endpoints()
@@ -249,18 +249,18 @@ def main():
         test_security_monitoring()
         test_api_functionality()
         generate_performance_report()
-        
+
         print_header("🎉 DEMONSTRATION COMPLETED SUCCESSFULLY")
         print("✅ All core systems operational")
         print("✅ Production monitoring active")
         print("✅ Security features enabled")
         print("✅ API endpoints responding")
         print("✅ Ready for investor presentation")
-        
+
     except Exception as e:
         print(f"\n❌ Demonstration failed: {e}")
         return False
-    
+
     return True
 
 if __name__ == "__main__":

@@ -133,7 +133,7 @@ def mac_say(text: str) -> None:
             pass
 
 
-def main():
+def main() -> None:
     p = argparse.ArgumentParser()
     g = p.add_mutually_exclusive_group(required=True)
     g.add_argument("--audio", help="Path to input audio (wav/mp3)")
@@ -165,5 +165,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-

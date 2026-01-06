@@ -18,7 +18,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 class OptimizationVerifier:
-    def __init__(self):
+    def __init__(self) -> None:
         self.project_root = Path(".")
         self.passed_checks = 0
         self.total_checks = 0
@@ -240,7 +240,7 @@ class OptimizationVerifier:
 
         return success_rate >= 75  # Consider successful if 75%+ checks pass
 
-def main():
+def main() -> int:
     """Main verification function"""
     verifier = OptimizationVerifier()
     success = verifier.run_verification()

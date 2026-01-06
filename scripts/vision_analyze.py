@@ -37,7 +37,7 @@ def encode_image_to_data_url(path: str) -> str:
     return f"data:{mime};base64,{b64}"
 
 
-def main():
+def main() -> None:
     if len(sys.argv) < 2:
         print("Usage: vision_analyze.py <image_path_or_url> [detail]")
         sys.exit(1)
@@ -97,5 +97,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-

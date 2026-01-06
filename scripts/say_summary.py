@@ -13,7 +13,7 @@ import subprocess
 import requests  # kept for future health checks
 
 
-def main():
+def main() -> None:
     if len(sys.argv) < 2:
         print("Provide summary text.")
         sys.exit(1)
@@ -41,5 +41,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-

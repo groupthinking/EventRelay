@@ -27,23 +27,23 @@ class Colors:
     BOLD = '\033[1m'
     END = '\033[0m'
 
-def print_status(message: str, color: str = Colors.BLUE):
+def print_status(message: str, color: str = Colors.BLUE) -> None:
     """Print a status message with color"""
     print(f"{color}{message}{Colors.END}")
 
-def print_success(message: str):
+def print_success(message: str) -> None:
     """Print a success message"""
     print(f"{Colors.GREEN}✅ {message}{Colors.END}")
 
-def print_warning(message: str):
+def print_warning(message: str) -> None:
     """Print a warning message"""
     print(f"{Colors.YELLOW}⚠️  {message}{Colors.END}")
 
-def print_error(message: str):
+def print_error(message: str) -> None:
     """Print an error message"""
     print(f"{Colors.RED}❌ {message}{Colors.END}")
 
-def print_header(message: str):
+def print_header(message: str) -> None:
     """Print a header message"""
     print(f"\n{Colors.BOLD}{Colors.BLUE}{'='*60}")
     print(f"  {message}")
@@ -67,7 +67,7 @@ def run_command(command: List[str], description: str) -> bool:
 def install_python_packages() -> bool:
     """Install required Python packages"""
     print_header("Installing Python Dependencies")
-    
+
     packages = [
         "llama-cpp-python[server]>=0.2.0",
         "sentence-transformers>=2.2.0",
@@ -75,18 +75,18 @@ def install_python_packages() -> bool:
         "huggingface_hub>=0.16.0",
         "mcp>=1.0.0"
     ]
-    
+
     success = True
     for package in packages:
         if not run_command([sys.executable, "-m", "pip", "install", package], f"Installing {package}"):
             success = False
-    
+
     return success
 
 def create_directories() -> bool:
     """Create necessary directories"""
     print_header("Creating Directory Structure")
-    
+
     directories = [
         "models/llama-3.1-8b-instruct",
         "workflow_results",
@@ -97,27 +97,27 @@ def create_directories() -> bool:
         "logs",
         "config"
     ]
-    
+
     for directory in directories:
         Path(directory).mkdir(parents=True, exist_ok=True)
         print_success(f"Created directory: {directory}")
-    
+
     return True
 
 def download_llama_model() -> bool:
     """Download the Llama 3.1 8B model"""
     print_header("Downloading Llama 3.1 8B Model")
-    
+
     try:
         from huggingface_hub import hf_hub_download
-        
+
         model_dir = Path("models/llama-3.1-8b-instruct")
         model_file = model_dir / "model.gguf"
-        
+
         if model_file.exists():
             print_success(f"Model already exists: {model_file}")
             return True
-        
+
         print_status("Downloading model (this may take a while)...")
         downloaded_file = hf_hub_download(
             repo_id="TheBloke/Llama-3.1-8B-Instruct-GGUF",
@@ -125,10 +125,10 @@ def download_llama_model() -> bool:
             local_dir=model_dir,
             local_dir_use_symlinks=False
         )
-        
+
         print_success(f"Model downloaded successfully: {downloaded_file}")
         return True
-        
+
     except ImportError:
         print_error("huggingface_hub not available. Please install it first.")
         return False
@@ -139,12 +139,12 @@ def download_llama_model() -> bool:
 def create_environment_file() -> bool:
     """Create .env file with required environment variables"""
     print_header("Creating Environment Configuration")
-    
+
     env_file = Path(".env")
     if env_file.exists():
         print_warning(".env file already exists, skipping creation")
         return True
-    
+
     env_content = """# Llama Background Agent Configuration
 USE_LLAMA=true
 BATCH_SIZE=10
@@ -163,7 +163,7 @@ LLAMA_MODEL_PATH=models/llama-3.1-8b-instruct/model.gguf
 REAL_MODE_ONLY=false
 USE_PROXY_ONLY=false
 """
-    
+
     try:
         env_file.write_text(env_content)
         print_success("Created .env file")
@@ -176,13 +176,13 @@ USE_PROXY_ONLY=false
 def test_installation() -> bool:
     """Test the Llama agent installation"""
     print_header("Testing Installation")
-    
+
     try:
         # Test imports
         print_status("Testing imports...")
         from agents.llama_background_agent import LlamaBackgroundAgent
         print_success("Llama agent imports successfully")
-        
+
         # Test model loading (if model exists)
         model_path = Path("models/llama-3.1-8b-instruct/model.gguf")
         if model_path.exists():
@@ -191,9 +191,9 @@ def test_installation() -> bool:
             print_success("Model file exists and is accessible")
         else:
             print_warning("Model file not found, skipping model test")
-        
+
         return True
-        
+
     except ImportError as e:
         print_error(f"Import test failed: {e}")
         return False
@@ -204,7 +204,7 @@ def test_installation() -> bool:
 def create_startup_script() -> bool:
     """Create a startup script for the enhanced runner"""
     print_header("Creating Startup Scripts")
-    
+
     # Create enhanced runner startup script
     startup_script = """#!/bin/bash
 # Enhanced Continuous Runner Startup Script
@@ -224,13 +224,13 @@ export SLEEP_INTERVAL=60
 # Start the enhanced runner
 python3 scripts/enhanced_continuous_runner.py
 """
-    
+
     try:
         startup_file = Path("start_enhanced_runner.sh")
         startup_file.write_text(startup_script)
         startup_file.chmod(0o755)  # Make executable
         print_success("Created startup script: start_enhanced_runner.sh")
-        
+
         # Create MCP server startup script
         mcp_script = """#!/bin/bash
 # Llama Agent MCP Server Startup Script
@@ -245,22 +245,22 @@ fi
 # Start the MCP server
 python3 mcp_servers/llama_agent_mcp_server.py
 """
-        
+
         mcp_file = Path("start_llama_mcp_server.sh")
         mcp_file.write_text(mcp_script)
         mcp_file.chmod(0o755)
         print_success("Created MCP server script: start_llama_mcp_server.sh")
-        
+
         return True
-        
+
     except Exception as e:
         print_error(f"Failed to create startup scripts: {e}")
         return False
 
-def print_next_steps():
+def print_next_steps() -> None:
     """Print next steps for the user"""
     print_header("Setup Complete! Next Steps")
-    
+
     print(f"{Colors.GREEN}🎉 Llama Background Agent has been installed successfully!{Colors.END}")
     print()
     print(f"{Colors.BOLD}Next steps:{Colors.END}")
@@ -279,19 +279,19 @@ def print_next_steps():
     print("• Modify .env for environment-specific configuration")
     print("• Check logs/llama_agent.log for runtime information")
 
-async def main():
+async def main() -> bool:
     """Main setup function"""
     print_header("Llama Background Agent Setup")
-    
+
     print(f"{Colors.BLUE}This script will install and configure the Llama 3.1 8B Background Agent{Colors.END}")
     print(f"{Colors.BLUE}for enhanced video processing with MCP integration.{Colors.END}")
     print()
-    
+
     # Check if running in test mode
     if "--test" in sys.argv:
         print_status("Running in test mode...")
         return test_installation()
-    
+
     # Run setup steps
     steps = [
         ("Installing Python packages", install_python_packages),
@@ -301,7 +301,7 @@ async def main():
         ("Creating startup scripts", create_startup_script),
         ("Testing installation", test_installation)
     ]
-    
+
     success = True
     for step_name, step_func in steps:
         print(f"\n{Colors.BOLD}Step: {step_name}{Colors.END}")
@@ -309,7 +309,7 @@ async def main():
             success = False
             print_error(f"Setup step failed: {step_name}")
             break
-    
+
     if success:
         print_next_steps()
         return True

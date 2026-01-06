@@ -39,7 +39,7 @@ def fix_syspath_in_file(file_path: Path) -> bool:
 
     return False
 
-def main():
+def main() -> bool:
     project_root = Path(__file__).resolve().parent.parent
 
     # Files identified in Phase 1.1 analysis with active sys.path issues

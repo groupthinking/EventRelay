@@ -1,11 +1,12 @@
 import os
 import json
 import glob
+from typing import Dict, Any
 
 ROOT_DIR = os.getcwd()
 CATALOG_FILE = os.path.join(ROOT_DIR, "shared/PROJECT_CATALOG.md")
 
-def get_project_info(path):
+def get_project_info(path: str) -> Dict[str, Any]:
     info = {
         "name": os.path.basename(path),
         "path": os.path.relpath(path, ROOT_DIR),
@@ -57,7 +58,7 @@ def get_project_info(path):
 
     return info
 
-def main():
+def main() -> None:
     projects = []
 
     # Scan locations

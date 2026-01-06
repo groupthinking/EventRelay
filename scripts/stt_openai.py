@@ -14,7 +14,7 @@ import sys
 import requests
 
 
-def main():
+def main() -> None:
     if len(sys.argv) < 2:
         print("Provide an audio file path.")
         sys.exit(1)
@@ -42,5 +42,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-

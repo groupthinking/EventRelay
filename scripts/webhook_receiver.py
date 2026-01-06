@@ -11,7 +11,7 @@ logging.basicConfig(
 )
 
 @app.post("/webhook")
-async def webhook_receiver(request: Request):
+async def webhook_receiver(request: Request) -> dict:
     """
     Receives alerts from the main proxy via webhook.
     Logs them and returns acknowledgement.

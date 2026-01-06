@@ -1,6 +1,8 @@
 import os
 import json
 import subprocess
+import time
+from typing import Optional, Any, Dict, List, Union
 import google.generativeai as genai
 from dotenv import load_dotenv
 
@@ -32,7 +34,7 @@ EMBEDDING_MODEL = "models/text-embedding-004"
 
 # Filters
 IGNORE_DIRS = {
-    '.git', '__pycache__', 'node_modules', 'dist', 'build', '.venv',
+    '.git', '__pycache__', 'node_modules', 'dist', 'build', '.build', '.venv',
     'venv', 'coverage', '.idea', '.vscode', 'tmp', 'logs',
     'mcp-servers/gcp-vector-db/build', 'Gemini_Brain', '.gemini',
     '.venv_prod_verify', 'ai-edge-torch', 'video_representations_extractor-1.14.0',
@@ -47,10 +49,10 @@ IGNORE_EXTENSIONS = {
 MAX_FILE_SIZE = 100 * 1024
 
 class MCPClient:
-    def __init__(self):
+    def __init__(self) -> None:
         env = os.environ.copy()
         if "DATABASE_URL" not in env:
-             pass
+            print("Warning: DATABASE_URL not found in environment, proceeding anyway...", flush=True)
 
         self.process = subprocess.Popen(
             [MCP_SERVER_EXECUTABLE, MCP_SERVER_SCRIPT],
@@ -64,7 +66,7 @@ class MCPClient:
         self.req_id = 0
         self.initialize()
 
-    def rpc_request(self, method, params=None):
+    def rpc_request(self, method: str, params: Optional[Dict[str, Any]] = None) -> str:
         self.req_id += 1
         msg = {
             "jsonrpc": "2.0",
@@ -75,7 +77,7 @@ class MCPClient:
             msg["params"] = params
         return json.dumps(msg)
 
-    def initialize(self):
+    def initialize(self) -> None:
         init_req = self.rpc_request("initialize", {"protocolVersion": "2024-11-05", "capabilities": {}, "clientInfo": {"name": "repo-ingester", "version": "1.0"}})
         self.process.stdin.write(init_req + "\n")
         self.process.stdin.flush()
@@ -88,7 +90,7 @@ class MCPClient:
         self.process.stdin.flush()
         self.process.stdout.readline()
 
-    def call_tool(self, tool_name, arguments):
+    def call_tool(self, tool_name: str, arguments: Dict[str, Any]) -> Union[Dict[str, Any], str]:
         req = self.rpc_request("tools/call", {"name": tool_name, "arguments": arguments})
         self.process.stdin.write(req + "\n")
         self.process.stdin.flush()
@@ -102,10 +104,10 @@ class MCPClient:
         except json.JSONDecodeError:
             return f"Error decoding: {response_line}"
 
-    def close(self):
+    def close(self) -> None:
         self.process.terminate()
 
-def get_embedding(text):
+def get_embedding(text: str) -> List[float]:
     result = genai.embed_content(
         model=EMBEDDING_MODEL,
         content=text,
@@ -114,7 +116,7 @@ def get_embedding(text):
     )
     return result['embedding']
 
-def should_ignore(path):
+def should_ignore(path: str) -> bool:
     parts = path.split(os.sep)
     for part in parts:
         if part in IGNORE_DIRS:
@@ -132,19 +134,26 @@ def should_ignore(path):
 
     return False
 
-def main():
-    print("--- Starting Repository Ingestion (Gemini Embeddings) ---")
+def main() -> None:
+    print("DEBUG: Calling main()", flush=True)
+    print("--- Starting Repository Ingestion (Gemini Embeddings) ---", flush=True)
 
     try:
+        print("DEBUG: Instantiating MCPClient...", flush=True)
         mcp = MCPClient()
+        print("DEBUG: MCPClient instantiated.", flush=True)
     except Exception as e:
-        print(f"Failed to start MCP server: {e}")
+        print(f"Failed to start MCP server: {e}", flush=True)
         return
 
-    print("Initializing Database (pgvector)...")
-    mcp.call_tool("init_vector_extension", {})
+    print("Initializing Database (pgvector)...", flush=True)
+    try:
+        mcp.call_tool("init_vector_extension", {})
+        print("DEBUG: Database initialized.", flush=True)
+    except Exception as e:
+        print(f"DEBUG: Failed init_vector_extension: {e}", flush=True)
 
-    print(f"Scanning {ROOT_DIR}...")
+    print(f"Scanning {ROOT_DIR}...", flush=True)
 
     count = 0
     for root, dirs, files in os.walk(ROOT_DIR):
@@ -182,6 +191,7 @@ def main():
                     })
                 })
                 count += 1
+                time.sleep(0.1)  # Rate limit
 
             except UnicodeDecodeError:
                 continue

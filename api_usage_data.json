@@ -1,0 +1,33 @@
+{
+  "sessions": [
+    {
+      "session_id": "2026-01-06T03:29:28.780861",
+      "start_time": 1767691768.780923,
+      "api_calls": [
+        {
+          "timestamp": "2026-01-06T03:29:28.781002",
+          "api_name": "YouTube Transcript API",
+          "model": "youtube-transcript-api",
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "total_tokens": 0,
+          "cost_usd": 0.0,
+          "latency_seconds": 1.56,
+          "status": "success"
+        },
+        {
+          "timestamp": "2026-01-06T03:29:28.781056",
+          "api_name": "Gemini 2.0 Flash",
+          "model": "gemini-2.0-flash-exp",
+          "input_tokens": 750,
+          "output_tokens": 328,
+          "total_tokens": 1078,
+          "cost_usd": 0.0,
+          "latency_seconds": 2.71,
+          "status": "success"
+        }
+      ],
+      "total_cost": 0.0
+    }
+  ]
+}
