@@ -38,7 +38,8 @@ IGNORE_DIRS = {
     'venv', 'coverage', '.idea', '.vscode', 'tmp', 'logs',
     'mcp-servers/gcp-vector-db/build', 'Gemini_Brain', '.gemini',
     '.venv_prod_verify', 'ai-edge-torch', 'video_representations_extractor-1.14.0',
-    '.mypy_cache', '.ruff_cache', '.pytest_cache'
+    '.mypy_cache', '.ruff_cache', '.pytest_cache',
+    'projects', 'examples', '_archive', 'supabase', 'youtube_processed_videos'
 }
 IGNORE_EXTENSIONS = {
     '.pyc', '.pyo', '.pyd', '.so', '.dll', '.dylib', '.class', '.jar',
@@ -51,8 +52,12 @@ MAX_FILE_SIZE = 100 * 1024
 class MCPClient:
     def __init__(self) -> None:
         env = os.environ.copy()
-        if "DATABASE_URL" not in env:
-            print("Warning: DATABASE_URL not found in environment, proceeding anyway...", flush=True)
+        # Prefer VECTOR_DATABASE_URL for vector operations
+        db_url = env.get("VECTOR_DATABASE_URL") or env.get("DATABASE_URL")
+        if not db_url:
+            print("Warning: No DATABASE_URL found in environment, proceeding anyway...", flush=True)
+        else:
+            env["DATABASE_URL"] = db_url
 
         self.process = subprocess.Popen(
             [MCP_SERVER_EXECUTABLE, MCP_SERVER_SCRIPT],
@@ -116,18 +121,19 @@ def get_embedding(text: str) -> List[float]:
     )
     return result['embedding']
 
-def should_ignore(path: str) -> bool:
-    parts = path.split(os.sep)
+def should_ignore(relpath: str, abspath: str) -> bool:
+    """Check if file should be ignored based on relative path and absolute path for size."""
+    parts = relpath.split(os.sep)
     for part in parts:
         if part in IGNORE_DIRS:
             return True
 
-    _, ext = os.path.splitext(path)
+    _, ext = os.path.splitext(relpath)
     if ext.lower() in IGNORE_EXTENSIONS:
         return True
 
     try:
-        if os.path.getsize(path) > MAX_FILE_SIZE:
+        if os.path.getsize(abspath) > MAX_FILE_SIZE:
              return True
     except OSError:
         return True
@@ -163,7 +169,7 @@ def main() -> None:
             filepath = os.path.join(root, file)
             relpath = os.path.relpath(filepath, ROOT_DIR)
 
-            if should_ignore(filepath):
+            if should_ignore(relpath, filepath):
                 continue
 
             try:
