@@ -104,11 +104,26 @@ async def run_async_migrations() -> None:
     """Run migrations in async mode"""
 
     # Create async engine
+    url = db_settings.database_url
+    connect_args = {}
+
+    # Fix driver for async
+    if not url.startswith("postgresql+asyncpg://") and url.startswith("postgresql://"):
+        url = url.replace("postgresql://", "postgresql+asyncpg://")
+
+    # Handle sslmode incompatibility with asyncpg URL params
+    if "sslmode=require" in url:
+        # Strip sslmode from URL parameters
+        url = url.replace("?sslmode=require", "").replace("&sslmode=require", "")
+        # Pass SSL requirement via connect_args instead
+        connect_args["ssl"] = "require"
+
     connectable = create_async_engine(
-        db_settings.database_url,
+        url,
         poolclass=pool.NullPool,  # Don't use connection pooling for migrations
         echo=False,  # Set to True for SQL logging during migrations
-        future=True
+        future=True,
+        connect_args=connect_args
     )
 
     async with connectable.connect() as connection:
