@@ -159,9 +159,28 @@ class DatabaseManager:
         try:
             logger.info("Initializing Thenile PostgreSQL database connection...")
 
+            # Prepare async URL and connect_args
+            async_url = self.settings.database_url
+            async_connect_args = {
+                "command_timeout": self.settings.connection_timeout,
+                "statement_timeout": self.settings.statement_timeout,
+                "server_settings": {
+                    "jit": "off",  # Disable JIT for faster query starts
+                    "application_name": "UVAI-Platform"
+                }
+            }
+
+            # Handle sslmode incompatibility with asyncpg URL params
+            if "sslmode=require" in async_url:
+                async_url = async_url.replace("?sslmode=require", "").replace("&sslmode=require", "")
+                # Handle trailing ?
+                if async_url.endswith("?"):
+                    async_url = async_url[:-1]
+                async_connect_args["ssl"] = "require"
+
             # Create async engine with optimized settings
             self.async_engine = create_async_engine(
-                self.settings.database_url,
+                async_url,
                 poolclass=QueuePool,
                 pool_size=self.settings.pool_size,
                 max_overflow=self.settings.max_overflow,
@@ -170,14 +189,7 @@ class DatabaseManager:
                 pool_pre_ping=self.settings.pool_pre_ping,
                 echo=False,  # Set to True for SQL logging in development
                 future=True,
-                connect_args={
-                    "command_timeout": self.settings.connection_timeout,
-                    "statement_timeout": self.settings.statement_timeout,
-                    "server_settings": {
-                        "jit": "off",  # Disable JIT for faster query starts
-                        "application_name": "UVAI-Platform"
-                    }
-                }
+                connect_args=async_connect_args
             )
 
             # Create sync engine for migrations and admin tasks
