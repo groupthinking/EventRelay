@@ -16,8 +16,12 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Any, Optional
+try:
+    from pydantic_settings import BaseSettings
+except ImportError:
+    from pydantic import BaseSettings
 
-from pydantic import BaseSettings, Field
+from pydantic import Field
 from sqlalchemy import MetaData, create_engine, event, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -32,32 +36,32 @@ class DatabaseSettings(BaseSettings):
     """Database configuration settings"""
 
     # Thenile PostgreSQL Configuration
-    thenile_host: str = Field(..., env='THENILE_DB_HOST')
-    thenile_port: int = Field(5432, env='THENILE_DB_PORT')
-    thenile_database: str = Field(..., env='THENILE_DB_NAME')
-    thenile_username: str = Field(..., env='THENILE_DB_USERNAME')
-    thenile_password: str = Field(..., env='THENILE_DB_PASSWORD')
-    thenile_ssl_mode: str = Field('require', env='THENILE_SSL_MODE')
+    thenile_host: str = Field(..., alias='THENILE_DB_HOST')
+    thenile_port: int = Field(5432, alias='THENILE_DB_PORT')
+    thenile_database: str = Field(..., alias='THENILE_DB_NAME')
+    thenile_username: str = Field(..., alias='THENILE_DB_USERNAME')
+    thenile_password: str = Field(..., alias='THENILE_DB_PASSWORD')
+    thenile_ssl_mode: str = Field('require', alias='THENILE_SSL_MODE')
 
     # Connection Pool Settings
-    pool_size: int = Field(20, env='DB_POOL_SIZE')
-    max_overflow: int = Field(30, env='DB_MAX_OVERFLOW')
-    pool_timeout: int = Field(30, env='DB_POOL_TIMEOUT')
-    pool_recycle: int = Field(3600, env='DB_POOL_RECYCLE')  # 1 hour
-    pool_pre_ping: bool = Field(True, env='DB_POOL_PRE_PING')
+    pool_size: int = Field(20, alias='DB_POOL_SIZE')
+    max_overflow: int = Field(30, alias='DB_MAX_OVERFLOW')
+    pool_timeout: int = Field(30, alias='DB_POOL_TIMEOUT')
+    pool_recycle: int = Field(3600, alias='DB_POOL_RECYCLE')  # 1 hour
+    pool_pre_ping: bool = Field(True, alias='DB_POOL_PRE_PING')
 
     # Performance Settings
-    statement_timeout: int = Field(30000, env='DB_STATEMENT_TIMEOUT')  # 30 seconds
-    query_timeout: int = Field(120000, env='DB_QUERY_TIMEOUT')  # 2 minutes
-    connection_timeout: int = Field(10, env='DB_CONNECTION_TIMEOUT')  # 10 seconds
+    statement_timeout: int = Field(30000, alias='DB_STATEMENT_TIMEOUT')  # 30 seconds
+    query_timeout: int = Field(120000, alias='DB_QUERY_TIMEOUT')  # 2 minutes
+    connection_timeout: int = Field(10, alias='DB_CONNECTION_TIMEOUT')  # 10 seconds
 
     # Multi-tenant Settings
-    default_tenant_id: str = Field('default', env='DEFAULT_TENANT_ID')
-    enable_row_level_security: bool = Field(True, env='ENABLE_RLS')
+    default_tenant_id: str = Field('default', alias='DEFAULT_TENANT_ID')
+    enable_row_level_security: bool = Field(True, alias='ENABLE_RLS')
 
     # Monitoring Settings
-    enable_monitoring: bool = Field(True, env='DB_ENABLE_MONITORING')
-    slow_query_threshold: float = Field(1.0, env='SLOW_QUERY_THRESHOLD')  # 1 second
+    enable_monitoring: bool = Field(True, alias='DB_ENABLE_MONITORING')
+    slow_query_threshold: float = Field(1.0, alias='SLOW_QUERY_THRESHOLD')  # 1 second
 
     class Config:
         env_file = '.env'
@@ -81,7 +85,7 @@ class DatabaseSettings(BaseSettings):
         return (
             f"postgresql+asyncpg://{self.thenile_username}:{self.thenile_password}"
             f"@{self.thenile_host}:{self.thenile_port}/{self.thenile_database}"
-            f"?sslmode={self.thenile_ssl_mode}"
+            # f"?sslmode={self.thenile_ssl_mode}"  # asyncpg handles ssl via connect_args or different param
         )
 
     @property

@@ -62,7 +62,7 @@ class TenantMixin:
         """Add tenant-based indexes and constraints"""
         return (
             # Add tenant-based index for performance
-            {'postgresql_with': {'tenant_id': 'btree'}},
+            # {'postgresql_with': {'tenant_id': 'btree'}},
         )
 
 class UUIDMixin:

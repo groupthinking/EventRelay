@@ -16,6 +16,8 @@ from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import create_async_engine
 
 # Path setup for imports
+from pathlib import Path
+
 backend_path = Path(__file__).parent.parent
 
 from youtube_extension.backend.config.database import Base, DatabaseSettings

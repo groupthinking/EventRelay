@@ -8,7 +8,7 @@ Models for intelligent caching, cache statistics, and performance optimization.
 
 from datetime import datetime, timedelta
 from enum import Enum as PyEnum
-from typing import Any, Optional
+from typing import Any, List, Optional
 
 from sqlalchemy import BigInteger, Boolean, Enum, Float, Index, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB

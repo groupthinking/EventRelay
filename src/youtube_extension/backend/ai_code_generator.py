@@ -18,9 +18,12 @@ from typing import Any, Optional
 logger = logging.getLogger(__name__)
 
 # Add project root for knowledge_base import
-PROJECT_ROOT = Path(__file__).parent.parent.parent.parent.parent
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
+# Add scripts directory for knowledge_base import
+# ai_code_generator.py is in src/youtube_extension/backend/
+PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
+SCRIPTS_DIR = PROJECT_ROOT / "scripts"
+if str(SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_DIR))
 
 # Import knowledge base for accumulated learning
 try:

@@ -94,7 +94,7 @@ if "DATABASE_URL" not in _os.environ:
 
 try:
     # Re-export the production-ready FastAPI app
-    from youtube_extension.backend.main_v2 import app as app  # noqa: F401
+    from youtube_extension.backend.main import app as app  # noqa: F401
 except Exception as import_error:
     # Surface import errors clearly when running uvicorn
     raise RuntimeError(f"Failed to import canonical app: {import_error}")

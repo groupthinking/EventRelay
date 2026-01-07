@@ -28,29 +28,13 @@ def upgrade() -> None:
     op.execute("CREATE EXTENSION IF NOT EXISTS \"btree_gin\"")
 
     # Create custom types
-    op.execute("""
-        CREATE TYPE user_status AS ENUM (
-            'active', 'inactive', 'suspended', 'pending_verification'
-        )
-    """)
+    # op.execute("CREATE TYPE user_status ...") - Removed to use sa.Enum
 
-    op.execute("""
-        CREATE TYPE auth_provider AS ENUM (
-            'local', 'google', 'github', 'microsoft', 'apple'
-        )
-    """)
+    # op.execute("CREATE TYPE auth_provider ...") - Removed to use sa.Enum
 
-    op.execute("""
-        CREATE TYPE tenant_status AS ENUM (
-            'active', 'suspended', 'cancelled', 'trial', 'pending'
-        )
-    """)
+    # op.execute("CREATE TYPE tenant_status ...") - Removed to use sa.Enum
 
-    op.execute("""
-        CREATE TYPE subscription_tier AS ENUM (
-            'free', 'basic', 'pro', 'enterprise'
-        )
-    """)
+    # op.execute("CREATE TYPE subscription_tier ...") - Removed to use sa.Enum
 
     op.execute("""
         CREATE TYPE video_status AS ENUM (
@@ -146,14 +130,14 @@ def upgrade() -> None:
     # Create tenants table
     op.create_table('tenants',
         sa.Column('id', postgresql.UUID(as_uuid=True), server_default=sa.text('gen_random_uuid()'), primary_key=True),
-        sa.Column('tenant_id', sa.String(255), nullable=False, index=True),
+        sa.Column('tenant_id', sa.String(255), nullable=False, unique=True, index=True),
         sa.Column('name', sa.String(255), nullable=False),
         sa.Column('slug', sa.String(100), nullable=False, unique=True, index=True),
         sa.Column('domain', sa.String(255), nullable=True, unique=True),
-        sa.Column('status', sa.Enum(name='tenant_status'), nullable=False, default='trial', index=True),
+        sa.Column('status', sa.Enum('active', 'suspended', 'cancelled', 'trial', 'pending', name='tenant_status'), nullable=False, default='trial', index=True),
         sa.Column('contact_name', sa.String(255), nullable=True),
         sa.Column('contact_email', sa.String(255), nullable=False, index=True),
-        sa.Column('subscription_tier', sa.Enum(name='subscription_tier'), nullable=False, default='free'),
+        sa.Column('subscription_tier', sa.Enum('free', 'basic', 'pro', 'enterprise', name='subscription_tier'), nullable=False, default='free'),
         sa.Column('subscription_expires_at', sa.DateTime(timezone=True), nullable=True),
         sa.Column('video_processing_quota', sa.Integer, nullable=False, default=100),
         sa.Column('storage_quota_gb', sa.Integer, nullable=False, default=10),
@@ -179,13 +163,13 @@ def upgrade() -> None:
         sa.Column('email', sa.String(255), nullable=False, unique=True, index=True),
         sa.Column('username', sa.String(50), nullable=True, unique=True, index=True),
         sa.Column('password_hash', sa.String(255), nullable=True),
-        sa.Column('auth_provider', sa.Enum(name='auth_provider'), nullable=False, default='local'),
+        sa.Column('auth_provider', sa.Enum('local', 'google', 'github', 'microsoft', 'apple', name='auth_provider'), nullable=False, default='local'),
         sa.Column('external_id', sa.String(255), nullable=True),
         sa.Column('first_name', sa.String(100), nullable=True),
         sa.Column('last_name', sa.String(100), nullable=True),
         sa.Column('full_name', sa.String(200), nullable=True),
         sa.Column('avatar_url', sa.String(500), nullable=True),
-        sa.Column('status', sa.Enum(name='user_status'), nullable=False, default='pending_verification', index=True),
+        sa.Column('status', sa.Enum('active', 'inactive', 'suspended', 'pending_verification', name='user_status'), nullable=False, default='pending_verification', index=True),
         sa.Column('is_verified', sa.Boolean, nullable=False, default=False),
         sa.Column('verified_at', sa.DateTime(timezone=True), nullable=True),
         sa.Column('two_factor_enabled', sa.Boolean, nullable=False, default=False),
@@ -212,7 +196,7 @@ def upgrade() -> None:
     op.create_table('user_profiles',
         sa.Column('id', postgresql.UUID(as_uuid=True), server_default=sa.text('gen_random_uuid()'), primary_key=True),
         sa.Column('tenant_id', sa.String(255), nullable=False, index=True),
-        sa.Column('user_id', sa.String(255), sa.ForeignKey('users.id'), nullable=False, unique=True, index=True),
+        sa.Column('user_id', postgresql.UUID(as_uuid=True), sa.ForeignKey('users.id'), nullable=False, unique=True, index=True),
         sa.Column('job_title', sa.String(100), nullable=True),
         sa.Column('company', sa.String(100), nullable=True),
         sa.Column('industry', sa.String(50), nullable=True),
@@ -242,7 +226,7 @@ def upgrade() -> None:
         sa.Column('id', postgresql.UUID(as_uuid=True), server_default=sa.text('gen_random_uuid()'), primary_key=True),
         sa.Column('tenant_id', sa.String(255), nullable=False, index=True),
         sa.Column('tenant_id_fk', sa.String(255), sa.ForeignKey('tenants.tenant_id'), nullable=False, index=True),
-        sa.Column('user_id', sa.String(255), sa.ForeignKey('users.id'), nullable=False, index=True),
+        sa.Column('user_id', postgresql.UUID(as_uuid=True), sa.ForeignKey('users.id'), nullable=False, index=True),
         sa.Column('role', sa.String(50), nullable=False, default='member'),
         sa.Column('permissions', postgresql.JSONB(), nullable=False, default=[]),
         sa.Column('is_active', sa.Boolean, nullable=False, default=True),
@@ -263,7 +247,7 @@ def upgrade() -> None:
     # (This is getting quite long - I'll create a more focused migration)
 
     # Create essential indexes
-    op.create_index('ix_tenants_tenant_id', 'tenants', ['tenant_id'], unique=True)
+    # op.create_index('ix_tenants_tenant_id', 'tenants', ['tenant_id'], unique=True) - Handled in create table
     op.create_index('ix_users_email_status', 'users', ['email', 'status'])
     op.create_index('ix_users_tenant_email', 'users', ['tenant_id', 'email'], unique=True)
 

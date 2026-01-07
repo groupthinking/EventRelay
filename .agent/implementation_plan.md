@@ -2,10 +2,11 @@
 
 ## Phase 1: Critical Fixes (The "It Runs" Milestone)
 
-- [ ] **Fix Docker Compose Paths**: Correct the volume mapping for `infrastructure/database/init.sql` in `docker-compose.full.yml`. <!-- owner: DevOps, effort: S -->
-- [ ] **Docker Entrypoint Fix**: Update `Dockerfile` to correctly use `$PORT` in `CMD`. <!-- owner: DevOps, effort: S -->
-- [ ] **Dependency Bootstrap Script**: Create `scripts/dev_services.sh` to start only Postgres/Redis via Docker for local dev. <!-- owner: Backend, effort: S -->
-- [ ] **Database Initialization**: Ensure `alembic` migrations run automatically on startup or via mapped init script. <!-- owner: Backend, effort: M -->
+- [x] **Fix Docker Compose Paths**: Correct the volume mapping for `infrastructure/database/init.sql` in `docker-compose.full.yml`. <!-- owner: DevOps, effort: S -->
+- [x] **Docker Entrypoint Fix**: Update `Dockerfile` to correctly use `$PORT` in `CMD`. <!-- owner: DevOps, effort: S -->
+- [x] **Dependency Bootstrap Script**: Create `scripts/dev_services.sh` to start only Postgres/Redis via Docker for local dev. <!-- owner: Backend, effort: S -->
+- [x] **Database Initialization**: Ensure `alembic` migrations run automatically on startup or via mapped init script. <!-- owner: Backend, effort: M -->
+- [x] **Frontend Verification**: Start and verify `apps/web` frontend application. <!-- owner: Frontend, effort: S -->
 
 ## Phase 2: Security & Configuration
 

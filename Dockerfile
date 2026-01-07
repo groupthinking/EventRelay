@@ -45,4 +45,4 @@ EXPOSE 8000
 
 # Start the application with PORT environment variable support
 # Cloud Run sets $PORT dynamically, default to 8000 for local testing
-CMD ["python", "-m", "uvicorn", "uvai.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+CMD sh -c "uvicorn uvai.api.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1"

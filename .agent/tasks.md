@@ -1,12 +1,12 @@
 # Production Readiness & Verify Task List
 
-- [-] **Phase 1: Discovery & Analysis** <!-- id: 1 -->
-  - [-] Map repository structure and identify key components (Backend, Frontend, Infra). <!-- id: 2 -->
-  - [-] Analyze build system and dependencies (`pyproject.toml`, `package.json`, `Dockerfile`). <!-- id: 3 -->
-  - [-] Identify external services and configuration requirements. <!-- id: 4 -->
-- [-] **Phase 2: Bootstrap & Local Run** <!-- id: 5 -->
-  - [-] Attempt standard installation and startup. <!-- id: 6 -->
-  - [-] Document failures and required fixes. <!-- id: 7 -->
+- [x] **Phase 1: Discovery & Analysis** <!-- id: 1 -->
+  - [x] Map repository structure and identify key components (Backend, Frontend, Infra). <!-- id: 2 -->
+  - [x] Analyze build system and dependencies (`pyproject.toml`, `package.json`, `Dockerfile`). <!-- id: 3 -->
+  - [x] Identify external services and configuration requirements. <!-- id: 4 -->
+- [x] **Phase 2: Bootstrap & Local Run** <!-- id: 5 -->
+  - [x] Attempt standard installation and startup. <!-- id: 6 -->
+  - [x] Document failures and required fixes. <!-- id: 7 -->
 - [-] **Phase 3: Deep Dive (Security, Data, Obs)** <!-- id: 8 -->
   - [-] Scan for security vulnerabilities and hardcoded secrets. <!-- id: 9 -->
   - [-] Verify database migrations and data layer health. <!-- id: 10 -->
