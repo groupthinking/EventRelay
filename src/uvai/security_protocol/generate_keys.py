@@ -1,32 +1,37 @@
+from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives import serialization
 import os
 
-def generate_keys():
-    # 1. Generate Keys
+def generate_key_pair():
+    # 1. Generate the Private Key (using NIST P-256 curve)
     private_key = ec.generate_private_key(ec.SECP256R1())
+
+    # 2. Serialize Private Key (Save to file)
+    pem_private = private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption() # In production, add a password here!
+    )
+
+    with open("quantomcode_private.pem", "wb") as f:
+        f.write(pem_private)
+
+    # 3. Generate Public Key
     public_key = private_key.public_key()
 
-    # Determine paths (save in current directory or specific keys dir)
-    # Using current working directory for simplicity as per snippet
+    # 4. Serialize Public Key (Save to file)
+    pem_public = public_key.public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo
+    )
 
-    # 2. Save Private Key (For YOU only - used to sign videos)
-    with open("uvai_private.pem", "wb") as f:
-        f.write(private_key.private_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PrivateFormat.PKCS8,
-            encryption_algorithm=serialization.NoEncryption()
-        ))
+    with open("quantomcode_public.pem", "wb") as f:
+        f.write(pem_public)
 
-    # 3. Save Public Key (For USERS - used to verify you)
-    with open("uvai_public.pem", "wb") as f:
-        f.write(public_key.public_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PublicFormat.SubjectPublicKeyInfo
-        ))
-
-    print(f"✅ Keys Generated in {os.getcwd()}.")
-    print("'uvai_private.pem' is your stamp. 'uvai_public.pem' goes to the user.")
+    print("✅ KEYS GENERATED!")
+    print(f"🔒 Private Key: {os.path.abspath('quantomcode_private.pem')} (KEEP SAFE)")
+    print(f"🌍 Public Key:  {os.path.abspath('quantomcode_public.pem')} (DISTRIBUTE)")
 
 if __name__ == "__main__":
-    generate_keys()
+    generate_key_pair()

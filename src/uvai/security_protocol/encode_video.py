@@ -7,7 +7,7 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives import serialization
 
-def sign_and_encode_video(input_video, output_video, action_payload, private_key_path="uvai_private.pem"):
+def sign_and_encode_video(input_video, output_video, action_payload, private_key_path="quantomcode_private.pem"):
     # --- STEP A: SIGN THE PAYLOAD ---
     print("🔐 Signing Payload...")
     if not os.path.exists(private_key_path):

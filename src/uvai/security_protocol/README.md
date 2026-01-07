@@ -32,8 +32,8 @@ python generate_keys.py
 
 This generates:
 
-- `uvai_private.pem`: **KEEP SECRET**. Used to sign videos.
-- `uvai_public.pem`: **DISTRIBUTE**. Used by agents to verify you.
+- `quantomcode_private.pem`: **KEEP SECRET**. Used to sign videos.
+- `quantomcode_public.pem`: **DISTRIBUTE**. Used by agents to verify you.
 
 ### 2. Sign and Encode a Video
 
@@ -60,4 +60,4 @@ Point your camera at `output_signed.mp4` playing on a screen. If the signature i
 
 - **Algorithm**: ECDSA (NIST P-256 curve) with SHA-256.
 - **Efficiency**: ECDSA signatures are small (~64 bytes), allowing for denser QR codes suitable for video scanning.
-- **Trust Model**: The agent only executes actions signed by a key in its local "Trusted Signers" list (currently `uvai_public.pem`).
+- **Trust Model**: The agent only executes actions signed by a key in its local "Trusted Signers" list (currently `quantomcode_public.pem`).
