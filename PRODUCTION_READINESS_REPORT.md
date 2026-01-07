@@ -64,7 +64,24 @@ The `EventRelay` repository (aka `youtube_extension`) is a sophisticated monorep
   - **Issue:** `ImportError` for `BaseSettings`.
   - **Fix:** Switched to `pydantic-settings`.
 
-## 4. Production Readiness Gaps
+## 4. Cloud Consolidation Strategy
+
+The explicit goal is to **Run Without Local Docker**. We will move the "Heavy Lift" infrastructure to a consolidated Cloud stack.
+
+**Selected Stack: GCP + GITHUB + SUPABASE**
+
+- **GCP**: Backend Compute (Cloud Run) + Vector DB (Cloud SQL).
+- **Supabase**: Main Relational DB (Postgres) + Auth.
+- **GitHub**: Source Control + CI/CD.
+- **Frontend**: Vercel/Cloudflare (TBD, verify `apps/web` deployment).
+
+**Migration Steps:**
+
+1.  **Switch Database**: Update `.env` `DATABASE_URL` to point to Supabase.
+2.  **Externalize Queues**: Replace local RabbitMQ/Redis with CloudAMQP/Upstash (or GCP equivalents).
+3.  **Decommission Docker**: `scripts/dev_services.sh` becomes obsolete; we run nothing locally except code.
+
+## 5. Production Readiness Gaps
 
 - **Secrets Management**: Current relies on `.env`. Production should migrate to Google Secret Manager.
 - **Frontend Dependency Isolation**: The `apps/web` project does not currently utilize the monorepo's shared packages (`@repo/database`, etc.), leading to potential code duplication or inconsistency.

@@ -36,11 +36,11 @@ class DatabaseSettings(BaseSettings):
     """Database configuration settings"""
 
     # Thenile PostgreSQL Configuration
-    thenile_host: str = Field(..., alias='THENILE_DB_HOST')
+    thenile_host: Optional[str] = Field(None, alias='THENILE_DB_HOST')
     thenile_port: int = Field(5432, alias='THENILE_DB_PORT')
-    thenile_database: str = Field(..., alias='THENILE_DB_NAME')
-    thenile_username: str = Field(..., alias='THENILE_DB_USERNAME')
-    thenile_password: str = Field(..., alias='THENILE_DB_PASSWORD')
+    thenile_database: Optional[str] = Field(None, alias='THENILE_DB_NAME')
+    thenile_username: Optional[str] = Field(None, alias='THENILE_DB_USERNAME')
+    thenile_password: Optional[str] = Field(None, alias='THENILE_DB_PASSWORD')
     thenile_ssl_mode: str = Field('require', alias='THENILE_SSL_MODE')
 
     # Connection Pool Settings
@@ -64,7 +64,11 @@ class DatabaseSettings(BaseSettings):
     slow_query_threshold: float = Field(1.0, alias='SLOW_QUERY_THRESHOLD')  # 1 second
 
     class Config:
-        env_file = '.env'
+        # src/youtube_extension/backend/config/database.py -> 5 dirs up to root?
+        # db.py -> config -> backend -> youtube_extension -> src -> project_root
+        env_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))), '.env')
+        env_file_encoding = 'utf-8'
+        extra = 'ignore'
         case_sensitive = False
 
     @property
@@ -75,12 +79,18 @@ class DatabaseSettings(BaseSettings):
             return os.getenv('DATABASE_URL')
 
         # Handle Unix socket (Cloud SQL)
-        if self.thenile_host.startswith('/'):
+        if self.thenile_host and self.thenile_host.startswith('/'):
             return (
                 f"postgresql+asyncpg://{self.thenile_username}:{self.thenile_password}"
                 f"@/{self.thenile_database}"
                 f"?host={self.thenile_host}"
             )
+
+        if not self.thenile_host:
+             url = os.getenv('DATABASE_URL')
+             if url:
+                 return url
+             raise ValueError("DATABASE_URL or THENILE_DB_HOST must be set")
 
         return (
             f"postgresql+asyncpg://{self.thenile_username}:{self.thenile_password}"
