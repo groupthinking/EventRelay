@@ -537,11 +537,15 @@ class MCPStateCoordinator:
                     cached = await self.cache.get(cache_key)
                     if cached:
                         logger.info(f"📦 Cache hit: {cache_key}")
-                        await websocket.send(json.dumps({
-                            "type": "vision_result",
-                            "result": cached,
-                            "cached": True
-                        }))
+                        await websocket.send(
+                            json.dumps(
+                                {
+                                    "type": "vision_result",
+                                    "result": cached,
+                                    "cached": True,
+                                }
+                            )
+                        )
                         return
 
                 # Process frame
@@ -554,37 +558,47 @@ class MCPStateCoordinator:
                 if use_cache:
                     await self.cache.set(cache_key, result_dict)
 
-                await websocket.send(json.dumps({
-                    "type": "vision_result",
-                    "result": result_dict,
-                    "cached": False
-                }))
+                await websocket.send(
+                    json.dumps(
+                        {
+                            "type": "vision_result",
+                            "result": result_dict,
+                            "cached": False,
+                        }
+                    )
+                )
 
             except Exception as e:
                 logger.error(f"Vision frame processing error: {e}")
-                await websocket.send(json.dumps({
-                    "type": "vision_error",
-                    "error": str(e)
-                }))
+                await websocket.send(
+                    json.dumps({"type": "vision_error", "error": str(e)})
+                )
 
         elif msg_type == "vision_process_video":
             # Submit async video processing job
             video_uri = data.get("video_uri")  # GCS path: gs://bucket/path
-            features = data.get("features", ["labels"])  # labels, transcription, ocr, shots
+            features = data.get(
+                "features", ["labels"]
+            )  # labels, transcription, ocr, shots
 
             try:
-                job_id = await self.vision_processor.submit_video_job(video_uri, features)
-                await websocket.send(json.dumps({
-                    "type": "vision_job_submitted",
-                    "job_id": job_id,
-                    "video_uri": video_uri
-                }))
+                job_id = await self.vision_processor.submit_video_job(
+                    video_uri, features
+                )
+                await websocket.send(
+                    json.dumps(
+                        {
+                            "type": "vision_job_submitted",
+                            "job_id": job_id,
+                            "video_uri": video_uri,
+                        }
+                    )
+                )
             except Exception as e:
                 logger.error(f"Vision video job error: {e}")
-                await websocket.send(json.dumps({
-                    "type": "vision_error",
-                    "error": str(e)
-                }))
+                await websocket.send(
+                    json.dumps({"type": "vision_error", "error": str(e)})
+                )
 
         elif msg_type == "vision_job_status":
             # Get status of async video job
@@ -592,18 +606,27 @@ class MCPStateCoordinator:
             job = self.vision_processor.get_job_status(job_id)
 
             if job:
-                await websocket.send(json.dumps({
-                    "type": "vision_job_status",
-                    "job_id": job_id,
-                    "status": job.status,
-                    "results": [r.to_dict() for r in job.results] if job.results else None,
-                    "error": job.error
-                }))
+                await websocket.send(
+                    json.dumps(
+                        {
+                            "type": "vision_job_status",
+                            "job_id": job_id,
+                            "status": job.status,
+                            "results": (
+                                [r.to_dict() for r in job.results]
+                                if job.results
+                                else None
+                            ),
+                            "error": job.error,
+                        }
+                    )
+                )
             else:
-                await websocket.send(json.dumps({
-                    "type": "vision_error",
-                    "error": f"Job not found: {job_id}"
-                }))
+                await websocket.send(
+                    json.dumps(
+                        {"type": "vision_error", "error": f"Job not found: {job_id}"}
+                    )
+                )
 
         elif msg_type == "vision_cache_stats":
             # Get cache statistics
@@ -611,10 +634,9 @@ class MCPStateCoordinator:
             stats["signer_available"] = self.signer.is_signing_available()
             stats["vision_available"] = self.vision_processor.is_available()
 
-            await websocket.send(json.dumps({
-                "type": "vision_cache_stats",
-                "stats": stats
-            }))
+            await websocket.send(
+                json.dumps({"type": "vision_cache_stats", "stats": stats})
+            )
 
         elif msg_type == "vision_verify_signature":
             # Verify QuantomCode signature on data
@@ -623,15 +645,59 @@ class MCPStateCoordinator:
 
             try:
                 valid = self.signer.verify_signature_b64(result_data, signature)
-                await websocket.send(json.dumps({
-                    "type": "vision_signature_verified",
-                    "valid": valid
-                }))
+                await websocket.send(
+                    json.dumps({"type": "vision_signature_verified", "valid": valid})
+                )
             except Exception as e:
-                await websocket.send(json.dumps({
-                    "type": "vision_error",
-                    "error": f"Signature verification failed: {e}"
-                }))
+                await websocket.send(
+                    json.dumps(
+                        {
+                            "type": "vision_error",
+                            "error": f"Signature verification failed: {e}",
+                        }
+                    )
+                )
+
+        elif msg_type == "vision_analyze_vlm":
+            # Analyze video using NVIDIA VLM
+            video_uri = data.get("video_uri")
+            prompt = data.get("prompt")
+
+            try:
+                result = await self.vision_processor.nvidia.analyze_video_vlm(
+                    video_uri, prompt
+                )
+                await websocket.send(
+                    json.dumps({"type": "vision_vlm_result", "result": result})
+                )
+            except Exception as e:
+                logger.error(f"NVIDIA VLM error: {e}")
+                await websocket.send(
+                    json.dumps({"type": "vision_error", "error": str(e)})
+                )
+
+        elif msg_type == "vision_get_embedding":
+            # Get Cosmos embedding for video content
+            video_data_b64 = data.get("video_data")
+
+            try:
+                import base64
+
+                video_data = base64.b64decode(video_data_b64)
+                embedding = await self.vision_processor.nvidia.get_video_embedding(
+                    video_data
+                )
+
+                await websocket.send(
+                    json.dumps(
+                        {"type": "vision_embedding_result", "embedding": embedding}
+                    )
+                )
+            except Exception as e:
+                logger.error(f"NVIDIA embedding error: {e}")
+                await websocket.send(
+                    json.dumps({"type": "vision_error", "error": str(e)})
+                )
 
     async def start_server(self):
         """Start the WebSocket server for MCP coordination"""

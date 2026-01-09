@@ -72,9 +72,10 @@ class TaskType(Enum):
 class AIProvider(Enum):
     """Available AI providers with benchmarking"""
 
+    # Gemini 2.5 Flash - confirmed working for video understanding
     GEMINI_2_5_FLASH = "models/gemini-2.5-flash"
     GEMINI_2_0_FLASH = "models/gemini-2.0-flash-exp"
-    GEMINI_1_5_PRO = "models/gemini-1.5-flash"  # 1.5-pro not available, use flash
+    # External providers (text-only, no video context)
     GROK_4 = "grok-4-0709"
     CLAUDE_3_5_SONNET = "claude-3-5-sonnet-20241022"
     GPT_4O = "gpt-4o"
@@ -120,16 +121,16 @@ class GeminiVideoMasterAgent:
             self.gemini_client = None
             logger.warning("⚠️ Google AI not available - using fallback methods")
 
-        # Task delegation mapping
+        # Task delegation - Using gemini-2.5-flash for video understanding (per Google docs)
         self.task_delegation = {
-            TaskType.TRANSCRIPTION: AIProvider.GEMINI_2_5_FLASH,  # Best for audio
-            TaskType.SUMMARIZATION: AIProvider.GEMINI_2_0_FLASH,  # Best for summaries
-            TaskType.VISUAL_ANALYSIS: AIProvider.GEMINI_2_5_FLASH,  # Best for visual
-            TaskType.ACTION_GENERATION: AIProvider.GROK_4,  # Best for actions
-            TaskType.CONTENT_CATEGORIZATION: AIProvider.GEMINI_1_5_PRO,  # Best for categorization
-            TaskType.TIMESTAMP_ANALYSIS: AIProvider.GEMINI_2_5_FLASH,  # Best for temporal
-            TaskType.KEY_INSIGHTS: AIProvider.CLAUDE_3_5_SONNET,  # Best for insights
-            TaskType.IMPLEMENTATION_PLAN: AIProvider.GPT_4O,  # Best for planning
+            TaskType.TRANSCRIPTION: AIProvider.GEMINI_2_5_FLASH,
+            TaskType.SUMMARIZATION: AIProvider.GEMINI_2_5_FLASH,
+            TaskType.VISUAL_ANALYSIS: AIProvider.GEMINI_2_5_FLASH,
+            TaskType.ACTION_GENERATION: AIProvider.GEMINI_2_5_FLASH,
+            TaskType.CONTENT_CATEGORIZATION: AIProvider.GEMINI_2_5_FLASH,
+            TaskType.TIMESTAMP_ANALYSIS: AIProvider.GEMINI_2_5_FLASH,
+            TaskType.KEY_INSIGHTS: AIProvider.GEMINI_2_5_FLASH,
+            TaskType.IMPLEMENTATION_PLAN: AIProvider.GEMINI_2_5_FLASH,
         }
 
         # Benchmarking results
@@ -302,7 +303,6 @@ class GeminiVideoMasterAgent:
             if provider in [
                 AIProvider.GEMINI_2_5_FLASH,
                 AIProvider.GEMINI_2_0_FLASH,
-                AIProvider.GEMINI_1_5_PRO,
             ]:
                 content = await self._execute_with_gemini(prompt, provider, video_url)
             elif provider == AIProvider.GROK_4:
@@ -580,7 +580,6 @@ class GeminiVideoMasterAgent:
         costs = {
             AIProvider.GEMINI_2_5_FLASH: 0.00015,
             AIProvider.GEMINI_2_0_FLASH: 0.00010,
-            AIProvider.GEMINI_1_5_PRO: 0.00020,
             AIProvider.GROK_4: 0.00025,
             AIProvider.CLAUDE_3_5_SONNET: 0.00030,
             AIProvider.GPT_4O: 0.00040,
@@ -779,14 +778,26 @@ class GeminiVideoMasterAgent:
 async def main():
     """Main execution function"""
 
-    if len(sys.argv) < 2:
-        print("Usage: python gemini_video_master_agent.py <video_url>")
-        print(
-            "Example: python gemini_video_master_agent.py https://www.youtube.com/watch?v=aircAruvnKk"
-        )
-        sys.exit(1)
+    video_url = None
+    default_video = (
+        "https://www.youtube.com/watch?v=FHOujnBfwvk"  # Google DeepMind: Gemini 1.5 Pro
+    )
 
-    video_url = sys.argv[1]
+    if len(sys.argv) > 1:
+        video_url = sys.argv[1]
+    else:
+        print("\n🎥 Gemini Video Master Agent")
+        print("===========================")
+        print(f"No video URL provided. Using default technical video:\n{default_video}")
+        print("---------------------------")
+        choice = input(
+            "Press [Enter] to process default, or paste a YouTube URL: "
+        ).strip()
+
+        if choice:
+            video_url = choice
+        else:
+            video_url = default_video
 
     # Check for banned video IDs
     from urllib.parse import urlparse, parse_qs

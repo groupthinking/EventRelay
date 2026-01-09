@@ -71,26 +71,93 @@ class VideoJob:
     error: Optional[str] = None
 
 
+class NvidiaProcessor:
+    """Processor for NVIDIA Cosmos/VLM capabilities via NIM API"""
+
+    def __init__(self, api_key: Optional[str] = None):
+        self.api_key = api_key or os.getenv("NVIDIA_API_KEY")
+        self.base_url = "https://integrate.api.nvidia.com/v1"
+        self.available = bool(self.api_key)
+
+    async def get_video_embedding(self, video_data: bytes) -> list[float]:
+        """Get Cosmos video embedding for semantic search"""
+        if not self.available:
+            return []
+
+        import aiohttp
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    f"{self.base_url}/embeddings",
+                    headers={"Authorization": f"Bearer {self.api_key}"},
+                    json={
+                        "input": [base64.b64encode(video_data).decode("utf-8")],
+                        "model": "nvidia/cosmos-nemotron-34b",
+                        "encoding_format": "float",
+                    },
+                ) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        return data["data"][0]["embedding"]
+                    else:
+                        logger.error(f"NVIDIA API error: {await response.text()}")
+                        return []
+        except Exception as e:
+            logger.error(f"NIM embedding error: {e}")
+            return []
+
+    async def analyze_video_vlm(self, video_uri: str, prompt: str) -> str:
+        """Analyze video using NVIDIA VLM (VILA / Cosmos)"""
+        if not self.available:
+            return "NVIDIA API key not configured"
+
+        # VLM Implementation via NIM (chat completions format)
+        import aiohttp
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    f"{self.base_url}/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {self.api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "model": "nvidia/vila-1.5-40b",  # Using VILA for video QA
+                        "messages": [
+                            {
+                                "role": "user",
+                                "content": f"{prompt} <video_url>{video_uri}</video_url>",
+                            }
+                        ],
+                        "temperature": 0.2,
+                        "top_p": 0.7,
+                        "max_tokens": 1024,
+                    },
+                ) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        return data["choices"][0]["message"]["content"]
+                    else:
+                        error_text = await response.text()
+                        logger.error(f"NVIDIA VLM error: {error_text}")
+                        return f"Error: {error_text}"
+        except Exception as e:
+            logger.error(f"NIM VLM error: {e}")
+            return f"Error: {str(e)}"
+
+
+# Update VisionProcessor to include NvidiaProcessor
 class VisionProcessor:
     """
     Production vision processor with dual-capability:
-
-    1. Frame Processing (sync) - OCR/label detection on single frames
-    2. Video Processing (async) - Full video analysis with speech transcription
-
-    Implements Globo workflow:
-    - Extract proxy frames containing clapperboard
-    - Run OCR to extract scene/take metadata
-    - Return signed results for tamper-proof verification
+    1. Google Video Intelligence (Classic)
+    2. NVIDIA Cosmos/VLM (New - Cognitive)
     """
 
     def __init__(self, gcs_bucket: Optional[str] = None):
-        """
-        Initialize vision processor.
-
-        Args:
-            gcs_bucket: GCS bucket for video uploads (optional)
-        """
+        """Initialize vision processor."""
         self._video_client = None
         self._vision_client = None
         self._storage_client = None
@@ -100,19 +167,29 @@ class VisionProcessor:
         )
         self._pending_jobs: dict[str, VideoJob] = {}
 
+        # Initialize NVIDIA processor
+        self.nvidia = NvidiaProcessor()
+
         self._init_clients()
 
     def _init_clients(self):
         """Initialize Google Cloud clients."""
         if not HAS_VISION_DEPS:
             logger.warning("Vision dependencies not available")
-            return
+            # Don't return here so we initialize NVIDIA even if Google deps fail
 
         try:
-            self._video_client = videointelligence.VideoIntelligenceServiceClient()
-            self._vision_client = vision.ImageAnnotatorClient()
-            self._storage_client = storage.Client()
-            logger.info("✅ Vision processor clients initialized")
+            if HAS_VISION_DEPS:
+                self._video_client = videointelligence.VideoIntelligenceServiceClient()
+                self._vision_client = vision.ImageAnnotatorClient()
+                self._storage_client = storage.Client()
+                logger.info("✅ Google Vision clients initialized")
+
+            if self.nvidia.available:
+                logger.info("✅ NVIDIA Cosmos/VLM initialized")
+            else:
+                logger.warning("⚠️ NVIDIA API key not found - Cosmos disabled")
+
         except Exception as e:
             logger.error(f"❌ Failed to initialize clients: {e}")
 
