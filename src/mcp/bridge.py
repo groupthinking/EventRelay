@@ -27,7 +27,7 @@ from agents.a2a_mcp_integration import (
     MCPEnabledA2AAgent,
 )
 from connectors.mcp_base import MCPContext
-from model_router import ModelRouter, RoutingDecision
+from core.model_router import ModelRouter, RoutingDecision
 
 # Import core components
 from unified_ai_sdk.rate_limiter import ModelProvider, RateLimiter
@@ -35,24 +35,30 @@ from unified_ai_sdk.unified_ai_sdk import AIRequest, AIResponse, TaskType, Unifi
 
 logger = logging.getLogger(__name__)
 
+
 class SystemMode(Enum):
     """System operation modes"""
+
     AUTONOMOUS = "autonomous"
     GUIDED = "guided"
     HYBRID = "hybrid"
     EMERGENCY = "emergency"
 
+
 class ProcessingPriority(Enum):
     """Processing priority levels"""
+
     CRITICAL = 0
     HIGH = 1
     NORMAL = 2
     LOW = 3
     BACKGROUND = 4
 
+
 @dataclass
 class MCPBridgeRequest:
     """Unified request format for the MCP bridge"""
+
     request_id: str
     task_type: TaskType
     content: dict[str, Any]
@@ -63,6 +69,7 @@ class MCPBridgeRequest:
     context: Optional[MCPContext] = None
     deadline_ms: Optional[float] = None
     system_mode: SystemMode = SystemMode.AUTONOMOUS
+
 
 class MCPBridge:
     """
@@ -85,7 +92,7 @@ class MCPBridge:
             "failed_requests": 0,
             "avg_processing_time_ms": 0.0,
             "by_provider": {provider.value: 0 for provider in ModelProvider},
-            "by_task_type": {task.value: 0 for task in TaskType}
+            "by_task_type": {task.value: 0 for task in TaskType},
         }
 
         # Centralized routing engine (Claude + Grok + OpenAI)
@@ -102,11 +109,14 @@ class MCPBridge:
 
     def _init_rate_limiter(self):
         """Initialize the intelligent rate limiter"""
-        rate_config = self.config.get("rate_limits", {
-            "claude": {"requests_per_minute": 100, "tokens_per_minute": 50000},
-            "grok": {"requests_per_minute": 120, "tokens_per_minute": 32000},
-            "openai": {"requests_per_minute": 500, "tokens_per_minute": 100000}
-        })
+        rate_config = self.config.get(
+            "rate_limits",
+            {
+                "claude": {"requests_per_minute": 100, "tokens_per_minute": 50000},
+                "grok": {"requests_per_minute": 120, "tokens_per_minute": 32000},
+                "openai": {"requests_per_minute": 500, "tokens_per_minute": 100000},
+            },
+        )
 
         self.rate_limiter = RateLimiter(rate_config)
         logger.info("✅ Rate limiter initialized with intelligent throttling")
@@ -124,7 +134,7 @@ class MCPBridge:
             "select_optimal_provider",
             "plan_execution_strategy",
             "evaluate_results",
-            "make_autonomous_decisions"
+            "make_autonomous_decisions",
         ]
         logger.info("✅ Claude Autonomy Engine initialized")
 
@@ -136,7 +146,7 @@ class MCPBridge:
             "context_retrieval",
             "knowledge_augmentation",
             "fact_verification",
-            "content_synthesis"
+            "content_synthesis",
         ]
         logger.info("✅ RAG Pipeline initialized")
 
@@ -148,7 +158,7 @@ class MCPBridge:
             "task_delegation",
             "context_sharing",
             "collaborative_processing",
-            "consensus_building"
+            "consensus_building",
         ]
         logger.info("✅ A2A Communication Hub initialized")
 
@@ -175,7 +185,7 @@ class MCPBridge:
             if processing_plan["provider"]:
                 await self.rate_limiter.wait_if_needed(
                     processing_plan["provider"],
-                    processing_plan.get("estimated_tokens", 1000)
+                    processing_plan.get("estimated_tokens", 1000),
                 )
 
             # Step 3: Execute Based on Plan
@@ -188,8 +198,9 @@ class MCPBridge:
             processing_time = (time.time() - start_time) * 1000
             self.processing_stats["successful_requests"] += 1
             self.processing_stats["avg_processing_time_ms"] = (
-                self.processing_stats["avg_processing_time_ms"] *
-                (self.processing_stats["successful_requests"] - 1) + processing_time
+                self.processing_stats["avg_processing_time_ms"]
+                * (self.processing_stats["successful_requests"] - 1)
+                + processing_time
             ) / self.processing_stats["successful_requests"]
 
             self.processing_stats["by_task_type"][request.task_type.value] += 1
@@ -201,11 +212,15 @@ class MCPBridge:
                 "processing_time_ms": processing_time,
                 "processing_plan": processing_plan,
                 "metadata": {
-                    "provider_used": processing_plan["provider"].value if processing_plan["provider"] else None,
+                    "provider_used": (
+                        processing_plan["provider"].value
+                        if processing_plan["provider"]
+                        else None
+                    ),
                     "tools_used": processing_plan.get("tools_used", []),
                     "a2a_agents_involved": processing_plan.get("a2a_agents", []),
-                    "rag_queries": processing_plan.get("rag_queries", 0)
-                }
+                    "rag_queries": processing_plan.get("rag_queries", 0),
+                },
             }
 
         except Exception as e:
@@ -218,10 +233,12 @@ class MCPBridge:
                 "request_id": request.request_id,
                 "error": str(e),
                 "processing_time_ms": (time.time() - start_time) * 1000,
-                "fallback_attempted": await self._attempt_fallback_processing(request)
+                "fallback_attempted": await self._attempt_fallback_processing(request),
             }
 
-    async def _create_processing_plan(self, request: MCPBridgeRequest) -> dict[str, Any]:
+    async def _create_processing_plan(
+        self, request: MCPBridgeRequest
+    ) -> dict[str, Any]:
         """
         Use Claude Autonomy to create intelligent processing plan
         This is where the AI decides HOW to process the request
@@ -250,7 +267,7 @@ class MCPBridge:
             provider=ModelProvider.CLAUDE,
             task_type=TaskType.STRATEGIC_PLANNING,
             structured_output=True,
-            temperature=0.3
+            temperature=0.3,
         )
 
         claude_response = await self.ai_sdk.unified_request(analysis_request)
@@ -258,6 +275,7 @@ class MCPBridge:
         # Parse Claude's autonomous decision
         try:
             import json
+
             plan = json.loads(claude_response.content)
         except:
             # Fallback plan if Claude response isn't valid JSON
@@ -268,7 +286,9 @@ class MCPBridge:
 
         return enhanced_plan
 
-    async def _enhance_processing_plan(self, base_plan: dict, request: MCPBridgeRequest) -> dict[str, Any]:
+    async def _enhance_processing_plan(
+        self, base_plan: dict, request: MCPBridgeRequest
+    ) -> dict[str, Any]:
         """Enhance the processing plan with system intelligence"""
 
         routing_decision = self._select_optimal_provider(request, base_plan)
@@ -289,48 +309,60 @@ class MCPBridge:
 
         # Add task-specific enhancements
         if request.task_type == TaskType.VIDEO_ANALYSIS:
-            enhanced_plan["tools_used"].extend(["analyze_content_structure", "generate_tutorial_steps"])
+            enhanced_plan["tools_used"].extend(
+                ["analyze_content_structure", "generate_tutorial_steps"]
+            )
         elif request.task_type == TaskType.CODE_GENERATION:
             enhanced_plan["use_rag"] = True  # Always use RAG for code generation
             enhanced_plan["tools_used"].append("code_analyzer")
         elif request.task_type == TaskType.TREND_ANALYSIS:
-            enhanced_plan["provider"] = ModelProvider.GROK  # Grok is better for real-time trends
+            enhanced_plan["provider"] = (
+                ModelProvider.GROK
+            )  # Grok is better for real-time trends
             enhanced_plan["use_a2a"] = True  # Use multiple agents for trend analysis
 
         return enhanced_plan
 
-    async def _execute_processing_plan(self, plan: dict[str, Any], request: MCPBridgeRequest) -> dict[str, Any]:
+    async def _execute_processing_plan(
+        self, plan: dict[str, Any], request: MCPBridgeRequest
+    ) -> dict[str, Any]:
         """Execute the processing plan using all available systems"""
 
         results = {
             "primary_result": None,
             "rag_augmentation": None,
             "a2a_collaboration": None,
-            "tools_executed": []
+            "tools_executed": [],
         }
 
         # Step 1: Primary AI Processing
         if plan["provider"]:
             ai_request = AIRequest(
                 prompt=self._build_enhanced_prompt(request, plan),
-                model=self._select_model_for_provider(plan["provider"], request.task_type),
+                model=self._select_model_for_provider(
+                    plan["provider"], request.task_type
+                ),
                 provider=plan["provider"],
                 task_type=request.task_type,
                 temperature=0.7,
-                max_tokens=min(plan["estimated_tokens"], 4000)
+                max_tokens=min(plan["estimated_tokens"], 4000),
             )
 
             results["primary_result"] = await self.ai_sdk.unified_request(ai_request)
 
         # Step 2: RAG Augmentation (if enabled)
         if plan["use_rag"]:
-            rag_result = await self._execute_rag_augmentation(request, results["primary_result"])
+            rag_result = await self._execute_rag_augmentation(
+                request, results["primary_result"]
+            )
             results["rag_augmentation"] = rag_result
             plan["rag_queries"] = rag_result.get("queries_made", 0)
 
         # Step 3: A2A Collaboration (if enabled)
         if plan["use_a2a"]:
-            a2a_result = await self._execute_a2a_collaboration(request, results["primary_result"])
+            a2a_result = await self._execute_a2a_collaboration(
+                request, results["primary_result"]
+            )
             results["a2a_collaboration"] = a2a_result
             plan["a2a_agents"] = a2a_result.get("agents_involved", [])
 
@@ -341,7 +373,9 @@ class MCPBridge:
 
         return results
 
-    async def _execute_rag_augmentation(self, request: MCPBridgeRequest, primary_result: AIResponse) -> dict[str, Any]:
+    async def _execute_rag_augmentation(
+        self, request: MCPBridgeRequest, primary_result: AIResponse
+    ) -> dict[str, Any]:
         """Execute RAG pipeline for knowledge augmentation"""
         try:
             # Extract key concepts for search
@@ -360,14 +394,16 @@ class MCPBridge:
                 "sources_found": len(search_results),
                 "augmented_content": augmented_content,
                 "queries_made": 1,
-                "status": "success"
+                "status": "success",
             }
 
         except Exception as e:
             logger.error(f"RAG augmentation failed: {e}")
             return {"status": "failed", "error": str(e), "queries_made": 0}
 
-    async def _execute_a2a_collaboration(self, request: MCPBridgeRequest, primary_result: AIResponse) -> dict[str, Any]:
+    async def _execute_a2a_collaboration(
+        self, request: MCPBridgeRequest, primary_result: AIResponse
+    ) -> dict[str, Any]:
         """Execute A2A agent collaboration"""
         try:
             # Create specialized agents for the task
@@ -378,19 +414,23 @@ class MCPBridge:
                 self.a2a_hub.register_agent(agent)
 
             # Start collaboration
-            collaboration_result = await self._orchestrate_collaboration(agents, request, primary_result)
+            collaboration_result = await self._orchestrate_collaboration(
+                agents, request, primary_result
+            )
 
             return {
                 "agents_involved": [agent.agent_id for agent in agents],
                 "collaboration_result": collaboration_result,
-                "status": "success"
+                "status": "success",
             }
 
         except Exception as e:
             logger.error(f"A2A collaboration failed: {e}")
             return {"status": "failed", "error": str(e), "agents_involved": []}
 
-    def _select_optimal_provider(self, request: MCPBridgeRequest, plan: dict) -> RoutingDecision:
+    def _select_optimal_provider(
+        self, request: MCPBridgeRequest, plan: dict
+    ) -> RoutingDecision:
         """Select optimal AI provider based on task and context"""
         decision = self.model_router.select_provider(
             task_type=request.task_type,
@@ -407,7 +447,9 @@ class MCPBridge:
         )
         return decision
 
-    def _build_enhanced_prompt(self, request: MCPBridgeRequest, plan: dict[str, Any]) -> str:
+    def _build_enhanced_prompt(
+        self, request: MCPBridgeRequest, plan: dict[str, Any]
+    ) -> str:
         """Build enhanced prompt with context and system intelligence"""
 
         base_prompt = str(request.content.get("prompt", ""))
@@ -430,11 +472,15 @@ class MCPBridge:
 
         return system_context
 
-    async def _post_process_result(self, result: dict[str, Any], request: MCPBridgeRequest) -> dict[str, Any]:
+    async def _post_process_result(
+        self, result: dict[str, Any], request: MCPBridgeRequest
+    ) -> dict[str, Any]:
         """Post-process and quality assurance"""
 
         final_result = {
-            "primary_response": result["primary_result"].content if result["primary_result"] else None,
+            "primary_response": (
+                result["primary_result"].content if result["primary_result"] else None
+            ),
             "enhanced_with_rag": bool(result["rag_augmentation"]),
             "collaborative_input": bool(result["a2a_collaboration"]),
             "tools_used": [tool["tool"] for tool in result["tools_executed"]],
@@ -442,17 +488,25 @@ class MCPBridge:
             "processing_metadata": {
                 "timestamp": datetime.now().isoformat(),
                 "system_mode": request.system_mode.value,
-                "task_type": request.task_type.value
-            }
+                "task_type": request.task_type.value,
+            },
         }
 
         # Merge RAG augmentation if available
-        if result["rag_augmentation"] and result["rag_augmentation"].get("augmented_content"):
-            final_result["rag_enhanced_response"] = result["rag_augmentation"]["augmented_content"]
+        if result["rag_augmentation"] and result["rag_augmentation"].get(
+            "augmented_content"
+        ):
+            final_result["rag_enhanced_response"] = result["rag_augmentation"][
+                "augmented_content"
+            ]
 
         # Merge A2A collaboration if available
-        if result["a2a_collaboration"] and result["a2a_collaboration"].get("collaboration_result"):
-            final_result["collaborative_insights"] = result["a2a_collaboration"]["collaboration_result"]
+        if result["a2a_collaboration"] and result["a2a_collaboration"].get(
+            "collaboration_result"
+        ):
+            final_result["collaborative_insights"] = result["a2a_collaboration"][
+                "collaboration_result"
+            ]
 
         return final_result
 
@@ -465,11 +519,17 @@ class MCPBridge:
             score += 0.3
 
         # RAG enhancement bonus
-        if result["rag_augmentation"] and result["rag_augmentation"].get("status") == "success":
+        if (
+            result["rag_augmentation"]
+            and result["rag_augmentation"].get("status") == "success"
+        ):
             score += 0.1
 
         # A2A collaboration bonus
-        if result["a2a_collaboration"] and result["a2a_collaboration"].get("status") == "success":
+        if (
+            result["a2a_collaboration"]
+            and result["a2a_collaboration"].get("status") == "success"
+        ):
             score += 0.1
 
         return min(score, 1.0)
@@ -483,7 +543,7 @@ class MCPBridge:
             "ai_sdk_health": await self.ai_sdk.health_check(),
             "a2a_agents": self.a2a_hub.list_agents(),
             "uptime": "active",
-            "last_updated": datetime.now().isoformat()
+            "last_updated": datetime.now().isoformat(),
         }
 
     # Placeholder methods for missing components (to be implemented)
@@ -494,10 +554,12 @@ class MCPBridge:
             "use_rag": False,
             "use_a2a": False,
             "estimated_tokens": 1000,
-            "strategy": "fallback"
+            "strategy": "fallback",
         }
 
-    def _select_model_for_provider(self, provider: ModelProvider, task_type: TaskType) -> str:
+    def _select_model_for_provider(
+        self, provider: ModelProvider, task_type: TaskType
+    ) -> str:
         """Select optimal model for provider and task"""
         if provider == ModelProvider.CLAUDE:
             return "claude-3-5-sonnet-20241022"
@@ -506,19 +568,27 @@ class MCPBridge:
         else:
             return "gpt-4o"
 
-    async def _extract_search_concepts(self, request: MCPBridgeRequest, primary_result: AIResponse) -> str:
+    async def _extract_search_concepts(
+        self, request: MCPBridgeRequest, primary_result: AIResponse
+    ) -> str:
         """Extract search concepts for RAG"""
         return str(request.content.get("search_terms", ""))
 
-    async def _create_task_agents(self, task_type: TaskType) -> list[MCPEnabledA2AAgent]:
+    async def _create_task_agents(
+        self, task_type: TaskType
+    ) -> list[MCPEnabledA2AAgent]:
         """Create specialized agents for task type"""
         return []
 
-    async def _orchestrate_collaboration(self, agents: list, request: MCPBridgeRequest, primary_result: AIResponse) -> dict[str, Any]:
+    async def _orchestrate_collaboration(
+        self, agents: list, request: MCPBridgeRequest, primary_result: AIResponse
+    ) -> dict[str, Any]:
         """Orchestrate agent collaboration"""
         return {"status": "simulated", "agents": len(agents)}
 
-    async def _execute_mcp_tool(self, tool_name: str, request: MCPBridgeRequest) -> dict[str, Any]:
+    async def _execute_mcp_tool(
+        self, tool_name: str, request: MCPBridgeRequest
+    ) -> dict[str, Any]:
         """Execute MCP tool"""
         return {"tool": tool_name, "status": "executed", "result": "simulated"}
 
@@ -530,11 +600,14 @@ class MCPBridge:
 # Placeholder classes for missing components
 class ClaudeAutonomyEngine:
     """Claude Autonomy Engine - Autonomous AI decision making"""
+
     def __init__(self, config):
         self.config = config
 
+
 class RAGPipeline:
     """RAG Pipeline - Retrieval Augmented Generation"""
+
     def __init__(self, config):
         self.config = config
 
@@ -552,6 +625,7 @@ def create_mcp_bridge(config_path: str = None, **kwargs) -> MCPBridge:
     """
     if config_path:
         import json
+
         with open(config_path) as f:
             config = json.load(f)
     else:
@@ -561,10 +635,10 @@ def create_mcp_bridge(config_path: str = None, **kwargs) -> MCPBridge:
 
     # Set defaults
     default_config = {
-                "anthropic_api_key": os.getenv("ANTHROPIC_API_KEY"),
+        "anthropic_api_key": os.getenv("ANTHROPIC_API_KEY"),
         "xai_api_key": os.getenv("XAI_GROK4_API"),
         "openai_api_key": os.getenv("OPENAI_API_KEY"),
-        "mcp_server_url": "http://localhost:8080"
+        "mcp_server_url": "http://localhost:8080",
     }
 
     for key, value in default_config.items():
@@ -579,7 +653,7 @@ async def main():
     """Example usage of the MCP Bridge - Primary Engine"""
 
     print("🧠 MCP BRIDGE - PRIMARY ENGINE DEMO")
-    print("="*50)
+    print("=" * 50)
 
     # Initialize the bridge
     bridge = create_mcp_bridge()
@@ -590,12 +664,12 @@ async def main():
         task_type=TaskType.VIDEO_ANALYSIS,
         content={
             "video_url": "https://youtube.com/watch?v=example",
-            "prompt": "Analyze this video and create intelligent action recommendations"
+            "prompt": "Analyze this video and create intelligent action recommendations",
         },
         priority=ProcessingPriority.HIGH,
         use_rag=True,
         use_a2a=True,
-        system_mode=SystemMode.AUTONOMOUS
+        system_mode=SystemMode.AUTONOMOUS,
     )
 
     # Process through the primary engine
@@ -611,7 +685,9 @@ async def main():
     print("\n📊 System Status:")
     print(f"   Mode: {status['system_mode']}")
     print(f"   Total requests: {status['processing_stats']['total_requests']}")
-    print(f"   Success rate: {status['processing_stats']['successful_requests']}/{status['processing_stats']['total_requests']}")
+    print(
+        f"   Success rate: {status['processing_stats']['successful_requests']}/{status['processing_stats']['total_requests']}"
+    )
 
     print("\n🎉 MCP Bridge Demo Complete!")
 
