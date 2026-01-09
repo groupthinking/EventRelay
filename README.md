@@ -8,6 +8,7 @@ AI-powered transcript capture, event extraction, and agent execution for YouTube
 - **Why it matters:** Eliminates manual note-taking, keeps teams aligned on factual video-derived events, and exposes a programmable API for dispatching agents that act on what was actually said and shown.
 - **Status:** Production-ready backend + frontend with ongoing instrumentation and MCP ecosystem integration.
 - **Learning loop:** Every transcript is grounded into the RAG store and fed back into agents’ skill adapters so subsequent runs refine their prompts, tooling choices, and dispatch heuristics.
+- **Implementation Guide:** See [`docs/MASTER_IMPLEMENTATION_GUIDE.md`](docs/MASTER_IMPLEMENTATION_GUIDE.md) for the complete "Framework First" prompt-driven implementation plan.
 
 ## 🔍 Mandatory Context Verification
 
