@@ -17,6 +17,9 @@
     "[python]": {
         "editor.defaultFormatter": "ms-python.black-formatter"
     },
+    "[json]": {
+        "editor.defaultFormatter": "vscode.json-language-features"
+    },
     "editor.formatOnPaste": true,
     "editor.allowVariableFontsInAccessibilityMode": true,
     "editor.autoIndentOnPaste": true,
