@@ -16,9 +16,8 @@ The primary intelligence suite for video processing and code analysis.
 
 ## Specialized Servers
 
-- **`gcp-vector-db/`**: Integration with Google Cloud SQL for RAG capabilities.
 - **`genkit-wrapper/`**: Firebase Genkit integration for model orchestration.
-- **`puppeteer-server/`**: Browser automation and web scraping.
+- **`puppeteer-server/`**: Browser automation and web scraping. (External)
 - **`metacognition-tools/`**: Advanced reasoning tools (Fermi estimation, Red Teaming).
 - **`mcp-profiling/`**: Internal performance profiling and verification.
 - **`unified-analytics/`**: sophisticated metrics collection and graph analysis engine.
