@@ -1,11 +1,25 @@
-import cv2
+import sys
+
+try:
+    import cv2
+except ImportError:
+    print("❌ Error: 'opencv-python' is not installed.")
+    print("Run: pip install opencv-python")
+    sys.exit(1)
+
 import json
 import base64
 import os
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.asymmetric import ec
-from cryptography.hazmat.primitives import serialization
-from cryptography.exceptions import InvalidSignature
+
+try:
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.exceptions import InvalidSignature
+except ImportError:
+    print("❌ Error: 'cryptography' is not installed.")
+    print("Run: pip install cryptography")
+    sys.exit(1)
 
 def verify_and_execute(json_data, public_key):
     try:

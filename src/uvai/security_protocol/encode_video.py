@@ -1,11 +1,31 @@
-import ffmpeg
-import qrcode
+import sys
+
+try:
+    import ffmpeg
+except ImportError:
+    print("❌ Error: 'ffmpeg-python' is not installed.")
+    print("Run: pip install ffmpeg-python")
+    sys.exit(1)
+
+try:
+    import qrcode
+except ImportError:
+    print("❌ Error: 'qrcode' is not installed.")
+    print("Run: pip install qrcode[pil]")
+    sys.exit(1)
+
 import json
 import os
 import base64
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.asymmetric import ec
-from cryptography.hazmat.primitives import serialization
+
+try:
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from cryptography.hazmat.primitives import serialization
+except ImportError:
+    print("❌ Error: 'cryptography' is not installed.")
+    print("Run: pip install cryptography")
+    sys.exit(1)
 
 def sign_and_encode_video(input_video, output_video, action_payload, private_key_path="quantomcode_private.pem"):
     # --- STEP A: SIGN THE PAYLOAD ---

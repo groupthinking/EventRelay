@@ -1,0 +1,4 @@
+cryptography
+ffmpeg-python
+qrcode[pil]
+opencv-python
