@@ -15,6 +15,7 @@
 - [x] Added `YOUTUBE_API_KEY` to `.env`
 - [x] Fixed .env garbage text causing parse warnings
 - [x] Created `shared/__init__.py` and `shared/libs/__init__.py` (fixed `No module named 'shared.libs'`)
+- [x] Migrated 6 files from deprecated `google.generativeai` to `google.genai` SDK
 
 ---
 
