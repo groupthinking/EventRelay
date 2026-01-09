@@ -64,6 +64,7 @@ GAP_FIXING_WORKFLOW_REPORT.json
 dmypy.json
 .pyre/
 .pytest_cache/
+.ruff_cache/
 
 # --- Frameworks ---
 instance/

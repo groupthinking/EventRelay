@@ -15,7 +15,7 @@
   "workspaces": [
     "apps/*",
     "packages/*",
-    "frontend"
+    "mcp-servers/*"
   ],
   "engines": {
     "node": ">=18.0.0",
