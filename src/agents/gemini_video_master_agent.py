@@ -34,9 +34,16 @@ except ImportError:
 try:
     from dotenv import load_dotenv
 
-    load_dotenv()
+    load_dotenv(override=True)  # Ensure latest .env values are used
 except ImportError:
     logging.warning("python-dotenv not available")
+
+# Banned video IDs (memes, inappropriate content, etc.)
+BANNED_VIDEO_IDS = frozenset(
+    [
+        "dQw4w9WgXcQ",  # Rickroll - not a business/technical video
+    ]
+)
 
 # Configure logging
 logging.basicConfig(
@@ -67,7 +74,7 @@ class AIProvider(Enum):
 
     GEMINI_2_5_FLASH = "models/gemini-2.5-flash"
     GEMINI_2_0_FLASH = "models/gemini-2.0-flash-exp"
-    GEMINI_1_5_PRO = "models/gemini-1.5-pro"
+    GEMINI_1_5_PRO = "models/gemini-1.5-flash"  # 1.5-pro not available, use flash
     GROK_4 = "grok-4-0709"
     CLAUDE_3_5_SONNET = "claude-3-5-sonnet-20241022"
     GPT_4O = "gpt-4o"
@@ -748,9 +755,16 @@ class GeminiVideoMasterAgent:
             "processing_method": "gemini_master_agent",
         }
 
-        # Save to file
+        # Save to file - use custom encoder for Enum types
+        def json_serializer(obj):
+            if isinstance(obj, Enum):
+                return obj.value
+            raise TypeError(
+                f"Object of type {type(obj).__name__} is not JSON serializable"
+            )
+
         with open(result_file, "w") as f:
-            json.dump(result_data, f, indent=2)
+            json.dump(result_data, f, indent=2, default=json_serializer)
 
         logger.info(f"✅ Gemini results saved to: {result_file}")
 
@@ -773,6 +787,22 @@ async def main():
         sys.exit(1)
 
     video_url = sys.argv[1]
+
+    # Check for banned video IDs
+    from urllib.parse import urlparse, parse_qs
+
+    parsed = urlparse(video_url)
+    video_id = None
+    if parsed.hostname in ("youtube.com", "www.youtube.com"):
+        video_id = parse_qs(parsed.query).get("v", [None])[0]
+    elif parsed.hostname == "youtu.be":
+        video_id = parsed.path.lstrip("/")
+
+    if video_id and video_id in BANNED_VIDEO_IDS:
+        print(f"❌ Video ID '{video_id}' is banned (meme/non-business content)")
+        print("   Please use a business or technical video for analysis.")
+        sys.exit(1)
+
     master_agent = GeminiVideoMasterAgent()
 
     try:
