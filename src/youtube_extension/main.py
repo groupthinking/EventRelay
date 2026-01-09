@@ -48,6 +48,14 @@ try:
 except ImportError as e:
     logger.error(f"Failed to load generator routes: {e}")
 
+# Include Event Routes
+try:
+    from .backend.api.event_routes import router as event_router
+    app.include_router(event_router)
+    logger.info("Event routes loaded successfully")
+except ImportError as e:
+    logger.error(f"Failed to load event routes: {e}")
+
 
 # Health check endpoint
 @app.get("/health")
