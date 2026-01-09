@@ -23,16 +23,18 @@ load_dotenv(override=True)
 BQ_PROJECT_ID = "uvai-730bb"
 BQ_DATASET_ID = "eventrelay_metadata"
 BQ_TABLE_ID = "repository_tree"
-DB_HOST = "localhost"
+DB_HOST = "127.0.0.1"
 DB_PORT = "5433"  # Cloud SQL Proxy
-DB_NAME = "postgres" # Default or from env
-DB_USER = "postgres" # Default or from env (uvai user might be better if set)
+DB_NAME = "uvai_vector_db"  # Updated from mcp_config.json
+DB_USER = "postgres"
 
 # Get DB credentials from env if available, else standard defaults for proxy
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
+
 def get_bq_client():
     return bigquery.Client(project=BQ_PROJECT_ID)
+
 
 def get_pg_connection():
     if DATABASE_URL:
@@ -43,8 +45,11 @@ def get_pg_connection():
         port=DB_PORT,
         dbname=DB_NAME,
         user=DB_USER,
-        password=os.environ.get("DB_PASSWORD", "postgres") # Weak default, relies on proxy auth usually
+        password=os.environ.get(
+            "DB_PASSWORD", "ChangeMe123!"
+        ),  # Updated default password
     )
+
 
 def run_bq_query(client, query, description):
     print(f"--- {description} ---")
@@ -52,11 +57,12 @@ def run_bq_query(client, query, description):
     results = query_job.result()
     rows = list(results)
     print(f"Result Count: {len(rows)}")
-    for row in rows[:5]: # Show first 5
+    for row in rows[:5]:  # Show first 5
         print(dict(row))
     if len(rows) > 5:
         print("...")
     return rows
+
 
 def check_cross_reference():
     print("\n--- Cross-Reference: BigQuery Repo Tree vs Cloud SQL Vector DB ---")
@@ -82,8 +88,8 @@ def check_cross_reference():
             rel_path = path.split("/EventRelay/")[-1]
             bq_files.add(rel_path)
         else:
-             # Fallback or assumption
-             bq_files.add(path)
+            # Fallback or assumption
+            bq_files.add(path)
 
     print(f"Found {len(bq_files)} files in Repository Tree (BigQuery).")
 
@@ -106,7 +112,13 @@ def check_cross_reference():
 
         print(f"\nFiles in Repo but NOT in Vector DB: {len(missing_in_vector_db)}")
         # Filter out common ignored files to see meaningful gaps
-        meaningful_missing = [f for f in missing_in_vector_db if not f.startswith(".") and not f.endswith(".pyc") and "/node_modules/" not in f]
+        meaningful_missing = [
+            f
+            for f in missing_in_vector_db
+            if not f.startswith(".")
+            and not f.endswith(".pyc")
+            and "/node_modules/" not in f
+        ]
         print(f"Meaningful Missing (approx): {len(meaningful_missing)}")
         if meaningful_missing:
             print("First 10 missing:")
@@ -121,6 +133,7 @@ def check_cross_reference():
 
     except Exception as e:
         print(f"Error connecting to Cloud SQL: {e}")
+
 
 def main():
     print("Starting Repository Health Check...")
@@ -147,6 +160,7 @@ def main():
 
     # Cross Reference
     check_cross_reference()
+
 
 if __name__ == "__main__":
     main()
