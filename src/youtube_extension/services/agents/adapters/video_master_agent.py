@@ -15,19 +15,21 @@ from typing import Any, Optional
 
 from ..base_agent import AgentResult, BaseAgent
 
-# Google AI imports
+# Google AI imports - using new google.genai SDK
 try:
-    import google.generativeai as genai
-    from google.generativeai import types
+    from google import genai
+
     GEMINI_AVAILABLE = True
 except ImportError:
+    genai = None
     GEMINI_AVAILABLE = False
-    logging.warning("Google AI not available - install: pip install google-generativeai")
+    logging.warning("Google AI not available - install: pip install google-genai")
 
 
 @dataclass
 class VideoAnalysisResult:
     """Structured result from video analysis"""
+
     title: str
     summary: str
     key_points: list[str]
@@ -56,20 +58,21 @@ class VideoMasterAgent(BaseAgent):
         self._setup_gemini()
 
     def _setup_gemini(self):
-        """Setup Gemini AI client"""
+        """Setup Gemini AI client using new google.genai SDK"""
         if not GEMINI_AVAILABLE:
             self.logger.error("Gemini AI not available")
             return
 
-        api_key = self.get_config("gemini_api_key") or self.get_config("GOOGLE_AI_API_KEY")
+        api_key = self.get_config("gemini_api_key") or self.get_config(
+            "GOOGLE_AI_API_KEY"
+        )
         if not api_key:
             self.logger.error("No Gemini API key provided")
             return
 
         try:
-            genai.configure(api_key=api_key)
-            self._gemini_client = genai.GenerativeModel('gemini-pro')
-            self.logger.info("Gemini AI client initialized successfully")
+            self._gemini_client = genai.Client(api_key=api_key)
+            self.logger.info("Gemini AI client initialized with new SDK")
         except Exception as e:
             self.logger.error(f"Failed to setup Gemini client: {e}")
 
@@ -120,7 +123,7 @@ class VideoMasterAgent(BaseAgent):
                 output={
                     "video_analysis": analysis_result,
                     "raw_response": response,
-                    "model_used": "gemini-pro"
+                    "model_used": "gemini-pro",
                 },
                 logs=[f"Processing time: {processing_time:.2f}s"],
             )
@@ -136,7 +139,9 @@ class VideoMasterAgent(BaseAgent):
                 logs=[error_msg, f"Processing time: {processing_time:.2f}s"],
             )
 
-    def _create_analysis_prompt(self, video_data: dict[str, Any], transcript: list[dict[str, Any]]) -> str:
+    def _create_analysis_prompt(
+        self, video_data: dict[str, Any], transcript: list[dict[str, Any]]
+    ) -> str:
         """Create comprehensive analysis prompt for Gemini"""
         transcript_text = self._format_transcript(transcript)
 
@@ -184,8 +189,8 @@ class VideoMasterAgent(BaseAgent):
         formatted = []
         for entry in transcript[:50]:  # Limit to first 50 entries
             if isinstance(entry, dict):
-                text = entry.get('text', '')
-                start = entry.get('start', 0)
+                text = entry.get("text", "")
+                start = entry.get("start", 0)
                 formatted.append(f"[{start:.1f}s] {text}")
             else:
                 formatted.append(str(entry))
@@ -193,12 +198,15 @@ class VideoMasterAgent(BaseAgent):
         return "\n".join(formatted)
 
     async def _call_gemini_async(self, prompt: str) -> str:
-        """Call Gemini API asynchronously"""
+        """Call Gemini API asynchronously using new google.genai SDK"""
         loop = asyncio.get_event_loop()
 
         def _sync_call():
             try:
-                response = self._gemini_client.generate_content(prompt)
+                response = self._gemini_client.models.generate_content(
+                    model="models/gemini-2.0-flash",
+                    contents=prompt,
+                )
                 return response.text
             except Exception as e:
                 self.logger.error(f"Gemini API call failed: {e}")
@@ -228,7 +236,7 @@ class VideoMasterAgent(BaseAgent):
                 actions=data.get("actions", []),
                 difficulty_level=data.get("difficulty_level", "intermediate"),
                 estimated_duration=data.get("estimated_duration", "Unknown"),
-                quality_score=float(data.get("quality_score", 0.5))
+                quality_score=float(data.get("quality_score", 0.5)),
             )
 
         except (json.JSONDecodeError, KeyError, ValueError) as e:
@@ -239,16 +247,18 @@ class VideoMasterAgent(BaseAgent):
                 title="Video Analysis",
                 summary=response[:200] + "..." if len(response) > 200 else response,
                 key_points=["Analysis completed with fallback parsing"],
-                actions=[{
-                    "title": "Review video analysis",
-                    "description": "Manual review required due to parsing issues",
-                    "priority": "medium",
-                    "estimated_time": "5-10 minutes",
-                    "category": "review"
-                }],
+                actions=[
+                    {
+                        "title": "Review video analysis",
+                        "description": "Manual review required due to parsing issues",
+                        "priority": "medium",
+                        "estimated_time": "5-10 minutes",
+                        "category": "review",
+                    }
+                ],
                 difficulty_level="intermediate",
                 estimated_duration="Variable",
-                quality_score=0.3
+                quality_score=0.3,
             )
 
     def is_available(self) -> bool:

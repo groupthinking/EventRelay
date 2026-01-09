@@ -23,18 +23,21 @@ from youtube_extension.utils import extract_video_id
 
 try:
     from google.cloud import videointelligence
+
     HAS_VIDEO_DEPS = True
 except ImportError as e:
     HAS_VIDEO_DEPS = False
     logging.error(f"Video dependencies not available: {e}")
 
-# AI processing imports
+# AI processing imports - using new google.genai SDK
 try:
-    import google.generativeai as genai
+    from google import genai
+
     HAS_AI_DEPS = True
 except ImportError:
+    genai = None
     HAS_AI_DEPS = False
-    logging.warning("AI dependencies (google-generativeai) not available")
+    logging.warning("AI dependencies (google-genai) not available")
 
 # Data processing
 from dataclasses import asdict, dataclass
@@ -43,27 +46,33 @@ from enum import Enum
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - [VideoExtractor] %(message)s'
+    format="%(asctime)s - %(levelname)s - [VideoExtractor] %(message)s",
 )
 logger = logging.getLogger(__name__)
 
 # Simple cache implementation for optimized strategy
 _cache = {}
 
+
 async def cache_get(key: str) -> Optional[dict[str, Any]]:
     """Simple in-memory cache get operation"""
     return _cache.get(key)
 
-async def cache_set(key: str, value: dict[str, Any], ttl: int = 3600, tags: list[str] = None) -> None:
+
+async def cache_set(
+    key: str, value: dict[str, Any], ttl: int = 3600, tags: list[str] = None
+) -> None:
     """Simple in-memory cache set operation"""
     _cache[key] = value
     # In production, implement proper TTL and tag management
+
 
 class VideoSource(Enum):
     YOUTUBE = "youtube"
     VIMEO = "vimeo"
     LOCAL_FILE = "local"
     URL = "url"
+
 
 class ProcessingStage(Enum):
     EXTRACTION = "extraction"
@@ -72,9 +81,11 @@ class ProcessingStage(Enum):
     TRANSFER = "transfer"
     COMPLETE = "complete"
 
+
 @dataclass
 class VideoMetadata:
     """Comprehensive video metadata structure"""
+
     video_id: str
     title: str
     description: str
@@ -89,9 +100,11 @@ class VideoMetadata:
     language: str = "en"
     source: VideoSource = VideoSource.YOUTUBE
 
+
 @dataclass
 class TranscriptSegment:
     """Individual transcript segment with timing"""
+
     text: str
     start: float
     duration: float
@@ -101,9 +114,11 @@ class TranscriptSegment:
         if self.end is None:
             self.end = self.start + self.duration
 
+
 @dataclass
 class VideoContent:
     """Complete video content package"""
+
     metadata: VideoMetadata
     transcript: list[TranscriptSegment]
     summary: Optional[str] = None
@@ -114,17 +129,22 @@ class VideoContent:
     processing_time: float = 0.0
     error_log: list[str] = None
 
+
 from abc import ABC, abstractmethod
 
 # A simple registry for the strategies
 _processor_strategies = {}
 
+
 def register_strategy(name: str):
     """A decorator to register a new processing strategy."""
+
     def decorator(cls):
         _processor_strategies[name] = cls
         return cls
+
     return decorator
+
 
 def get_strategy(name: str):
     """Retrieves a processing strategy from the registry."""
@@ -132,18 +152,24 @@ def get_strategy(name: str):
         raise ValueError(f"Unknown processing strategy: {name}")
     return _processor_strategies[name]
 
+
 class ProcessorStrategy(ABC):
     """
     Abstract base class for a video processing strategy.
     """
+
     @abstractmethod
-    async def process_video(self, video_url: str, options: dict[str, Any] = None) -> dict[str, Any]:
+    async def process_video(
+        self, video_url: str, options: dict[str, Any] = None
+    ) -> dict[str, Any]:
         """
         Process a single video and return the results.
         """
         pass
 
-    async def process_batch(self, video_urls: list[str], options: dict[str, Any] = None) -> list[dict[str, Any]]:
+    async def process_batch(
+        self, video_urls: list[str], options: dict[str, Any] = None
+    ) -> list[dict[str, Any]]:
         """
         Process a batch of videos.
         The default implementation processes them concurrently.
@@ -153,41 +179,50 @@ class ProcessorStrategy(ABC):
         )
         return results
 
+
 @register_strategy("optimized")
 class OptimizedStrategy(ProcessorStrategy):
     """
     A high-performance video processing strategy that uses parallelism,
     caching, and other optimizations.
     """
+
     def __init__(self, config: Optional[dict[str, Any]] = None):
         self.config = config or {}
         self.processing_stats = {
-            'cache_hits': 0,
-            'cache_misses': 0,
-            'total_processed': 0
+            "cache_hits": 0,
+            "cache_misses": 0,
+            "total_processed": 0,
         }
         # Initialize enhanced strategy for delegation
         self._enhanced_strategy = None
-    async def process_video(self, video_url: str, options: dict[str, Any] = None) -> dict[str, Any]:
+
+    async def process_video(
+        self, video_url: str, options: dict[str, Any] = None
+    ) -> dict[str, Any]:
         """
         Process video with all optimizations enabled
         """
         start_time = time.time()
-        processing_id = hashlib.md5(f"{video_url}_{time.time()}".encode()).hexdigest()[:8]
+        processing_id = hashlib.md5(f"{video_url}_{time.time()}".encode()).hexdigest()[
+            :8
+        ]
 
-        logger.info(f"🎯 Processing video (optimized): {video_url[:50]}... [ID: {processing_id}]")
+        logger.info(
+            f"🎯 Processing video (optimized): {video_url[:50]}... [ID: {processing_id}]"
+        )
 
         try:
             # Check cache first
             cache_key = f"optimized_video:{hashlib.md5(video_url.encode()).hexdigest()}"
             cached_result = await cache_get(cache_key)
 
-            if cached_result and self.config.get('enable_intelligent_caching', True):
-                self.processing_stats['cache_hits'] += 1
+            if cached_result and self.config.get("enable_intelligent_caching", True):
+                self.processing_stats["cache_hits"] += 1
                 logger.info(f"✅ Cache hit for video processing [ID: {processing_id}]")
                 return cached_result
 
-            self.processing_stats['cache_misses'] += 1
+            self.processing_stats["cache_misses"] += 1
 
             # Initialize enhanced strategy if not already done
             if self._enhanced_strategy is None:
@@ -198,30 +233,35 @@ class OptimizedStrategy(ProcessorStrategy):
 
             # Add optimization metadata
             if result:
-                result['optimization_applied'] = True
-                result['processing_id'] = processing_id
+                result["optimization_applied"] = True
+                result["processing_id"] = processing_id
 
             # Cache successful results
-            if result and not result.get('error_log'):
+            if result and not result.get("error_log"):
                 await cache_set(cache_key, result, ttl=3600, tags=["video_processing"])
 
             processing_time = time.time() - start_time
-            self.processing_stats['total_processed'] += 1
+            self.processing_stats["total_processed"] += 1
 
-            logger.info(f"✅ Video processed in {processing_time:.2f}s [ID: {processing_id}]")
+            logger.info(
+                f"✅ Video processed in {processing_time:.2f}s [ID: {processing_id}]"
+            )
 
             return result
 
         except Exception as e:
             processing_time = time.time() - start_time
-            logger.error(f"❌ Video processing failed after {processing_time:.2f}s: {e} [ID: {processing_id}]")
+            logger.error(
+                f"❌ Video processing failed after {processing_time:.2f}s: {e} [ID: {processing_id}]"
+            )
 
             return {
-                'success': False,
-                'error': str(e),
-                'processing_time': processing_time,
-                'processing_id': processing_id
+                "success": False,
+                "error": str(e),
+                "processing_time": processing_time,
+                "processing_id": processing_id,
             }
+
 
 @register_strategy("parallel")
 class ParallelStrategy(ProcessorStrategy):
@@ -229,6 +269,7 @@ class ParallelStrategy(ProcessorStrategy):
     A video processing strategy that uses a task queue and a pool of workers
     to process videos in parallel.
     """
+
     def __init__(self, config: Optional[dict[str, Any]] = None):
         self.config = config or {}
         self.max_workers = self.config.get("max_workers", 4)
@@ -236,7 +277,9 @@ class ParallelStrategy(ProcessorStrategy):
         # Use enhanced strategy for actual processing
         self._enhanced_strategy = None
 
-    async def process_video(self, video_url: str, options: dict[str, Any] = None) -> dict[str, Any]:
+    async def process_video(
+        self, video_url: str, options: dict[str, Any] = None
+    ) -> dict[str, Any]:
         """Process a single video with resource limiting."""
         async with self.semaphore:
             # Initialize enhanced strategy if not already done
@@ -244,39 +287,51 @@ class ParallelStrategy(ProcessorStrategy):
                 self._enhanced_strategy = EnhancedStrategy(self.config)
 
             start_time = time.time()
-            processing_id = hashlib.md5(f"{video_url}_{time.time()}".encode()).hexdigest()[:8]
+            processing_id = hashlib.md5(
+                f"{video_url}_{time.time()}".encode()
+            ).hexdigest()[:8]
 
-            logger.info(f"🔄 Processing video (parallel): {video_url[:50]}... [ID: {processing_id}] [Workers: {self.max_workers}]")
+            logger.info(
+                f"🔄 Processing video (parallel): {video_url[:50]}... [ID: {processing_id}] [Workers: {self.max_workers}]"
+            )
 
             try:
                 result = await self._enhanced_strategy.process_video(video_url, options)
 
                 # Add parallel processing metadata
                 if result:
-                    result['parallel_processed'] = True
-                    result['processing_id'] = processing_id
-                    result['max_workers'] = self.max_workers
+                    result["parallel_processed"] = True
+                    result["processing_id"] = processing_id
+                    result["max_workers"] = self.max_workers
 
                 processing_time = time.time() - start_time
-                logger.info(f"✅ Parallel video processed in {processing_time:.2f}s [ID: {processing_id}]")
+                logger.info(
+                    f"✅ Parallel video processed in {processing_time:.2f}s [ID: {processing_id}]"
+                )
 
                 return result
 
             except Exception as e:
                 processing_time = time.time() - start_time
-                logger.error(f"❌ Parallel video processing failed after {processing_time:.2f}s: {e} [ID: {processing_id}]")
+                logger.error(
+                    f"❌ Parallel video processing failed after {processing_time:.2f}s: {e} [ID: {processing_id}]"
+                )
 
                 return {
-                    'success': False,
-                    'error': str(e),
-                    'processing_time': processing_time,
-                    'processing_id': processing_id,
-                    'parallel_processed': True
+                    "success": False,
+                    "error": str(e),
+                    "processing_time": processing_time,
+                    "processing_id": processing_id,
+                    "parallel_processed": True,
                 }
 
-    async def process_batch(self, video_urls: list[str], options: dict[str, Any] = None) -> list[dict[str, Any]]:
+    async def process_batch(
+        self, video_urls: list[str], options: dict[str, Any] = None
+    ) -> list[dict[str, Any]]:
         """Process a batch of videos in parallel with controlled concurrency."""
-        logger.info(f"🚀 Starting parallel batch processing: {len(video_urls)} videos, max {self.max_workers} workers")
+        logger.info(
+            f"🚀 Starting parallel batch processing: {len(video_urls)} videos, max {self.max_workers} workers"
+        )
 
         start_time = time.time()
 
@@ -289,21 +344,26 @@ class ParallelStrategy(ProcessorStrategy):
         for i, result in enumerate(results):
             if isinstance(result, Exception):
                 logger.error(f"Exception processing video {video_urls[i]}: {result}")
-                processed_results.append({
-                    'success': False,
-                    'error': str(result),
-                    'video_url': video_urls[i],
-                    'parallel_processed': True
-                })
+                processed_results.append(
+                    {
+                        "success": False,
+                        "error": str(result),
+                        "video_url": video_urls[i],
+                        "parallel_processed": True,
+                    }
+                )
             else:
                 processed_results.append(result)
 
         total_time = time.time() - start_time
-        successful = sum(1 for r in processed_results if not r.get('error'))
+        successful = sum(1 for r in processed_results if not r.get("error"))
 
-        logger.info(f"✅ Parallel batch completed: {successful}/{len(video_urls)} successful in {total_time:.2f}s")
+        logger.info(
+            f"✅ Parallel batch completed: {successful}/{len(video_urls)} successful in {total_time:.2f}s"
+        )
 
         return processed_results
+
 
 @register_strategy("enhanced")
 class EnhancedStrategy(ProcessorStrategy):
@@ -311,17 +371,22 @@ class EnhancedStrategy(ProcessorStrategy):
     An enhanced video processing strategy that extracts metadata,
     transcript, and performs AI analysis.
     """
+
     def __init__(self, config: Optional[dict[str, Any]] = None):
         self.config = config or {}
         if HAS_VIDEO_DEPS:
             self.video_client = videointelligence.VideoIntelligenceServiceClient()
-        if HAS_AI_DEPS:
-            gemini_api_key = self.config.get("gemini_api_key") or os.getenv("GEMINI_API_KEY")
+        if HAS_AI_DEPS and genai:
+            gemini_api_key = self.config.get("gemini_api_key") or os.getenv(
+                "GEMINI_API_KEY"
+            )
             if not gemini_api_key:
                 raise ValueError("Gemini API key is not configured.")
-            genai.configure(api_key=gemini_api_key)
-            self.gemini_model = genai.GenerativeModel('gemini-pro')
-    async def process_video(self, video_url: str, options: dict[str, Any] = None) -> dict[str, Any]:
+            self.gemini_client = genai.Client(api_key=gemini_api_key)
+
+    async def process_video(
+        self, video_url: str, options: dict[str, Any] = None
+    ) -> dict[str, Any]:
         """Complete video processing pipeline"""
         start_time = time.time()
 
@@ -337,7 +402,9 @@ class EnhancedStrategy(ProcessorStrategy):
             metadata = await self.extract_video_metadata(video_id)
 
             # Extract transcript
-            transcript = await self.extract_transcript(video_id, options.get("languages"))
+            transcript = await self.extract_transcript(
+                video_id, options.get("languages")
+            )
 
             # Analyze content
             analysis = await self.analyze_content(transcript)
@@ -346,15 +413,17 @@ class EnhancedStrategy(ProcessorStrategy):
             content = VideoContent(
                 metadata=metadata,
                 transcript=transcript,
-                summary=analysis.get('summary'),
-                key_points=analysis.get('key_points', []),
-                topics=analysis.get('topics', []),
-                sentiment=analysis.get('sentiment'),
+                summary=analysis.get("summary"),
+                key_points=analysis.get("key_points", []),
+                topics=analysis.get("topics", []),
+                sentiment=analysis.get("sentiment"),
                 processing_stage=ProcessingStage.COMPLETE,
-                processing_time=time.time() - start_time
+                processing_time=time.time() - start_time,
             )
 
-            logger.info(f"Successfully processed video {video_id} in {content.processing_time:.2f}s")
+            logger.info(
+                f"Successfully processed video {video_id} in {content.processing_time:.2f}s"
+            )
             return asdict(content)
 
         except Exception as e:
@@ -369,12 +438,12 @@ class EnhancedStrategy(ProcessorStrategy):
                     duration=0,
                     upload_date="",
                     uploader="",
-                    view_count=0
+                    view_count=0,
                 ),
                 transcript=[],
                 processing_stage=ProcessingStage.EXTRACTION,
                 processing_time=time.time() - start_time,
-                error_log=[str(e)]
+                error_log=[str(e)],
             )
 
             return asdict(content)
@@ -408,15 +477,28 @@ class EnhancedStrategy(ProcessorStrategy):
             video_id=video_id,
             title=Path(video_uri).stem,
             description="",
-            duration=int(annotation_results.shot_annotations[-1].end_time_offset.total_seconds()) if annotation_results.shot_annotations else 0,
+            duration=(
+                int(
+                    annotation_results.shot_annotations[
+                        -1
+                    ].end_time_offset.total_seconds()
+                )
+                if annotation_results.shot_annotations
+                else 0
+            ),
             upload_date="",
             uploader="",
             view_count=0,
-            tags=[label.entity.description for label in annotation_results.segment_label_annotations],
+            tags=[
+                label.entity.description
+                for label in annotation_results.segment_label_annotations
+            ],
         )
         return metadata
 
-    async def extract_transcript(self, video_id: str, languages: list[str] = None) -> list[TranscriptSegment]:
+    async def extract_transcript(
+        self, video_id: str, languages: list[str] = None
+    ) -> list[TranscriptSegment]:
         """Extract transcript using Vertex AI Video Intelligence"""
         if not HAS_VIDEO_DEPS:
             raise ValueError("Video dependencies not available")
@@ -448,12 +530,16 @@ class EnhancedStrategy(ProcessorStrategy):
                             TranscriptSegment(
                                 text=word.word,
                                 start=word.start_time.total_seconds(),
-                                duration=(word.end_time - word.start_time).total_seconds(),
+                                duration=(
+                                    word.end_time - word.start_time
+                                ).total_seconds(),
                             )
                         )
         return segments
 
-    async def analyze_content(self, transcript: list[TranscriptSegment]) -> dict[str, Any]:
+    async def analyze_content(
+        self, transcript: list[TranscriptSegment]
+    ) -> dict[str, Any]:
         """Analyze video content using Gemini"""
         if not HAS_AI_DEPS:
             logger.warning("AI components not available for content analysis")
@@ -475,7 +561,10 @@ class EnhancedStrategy(ProcessorStrategy):
         """
 
         try:
-            response = self.gemini_model.generate_content(prompt)
+            response = self.gemini_client.models.generate_content(
+                model="models/gemini-2.0-flash",
+                contents=prompt,
+            )
             return json.loads(response.text)
         except Exception as e:
             logger.error(f"Content analysis failed: {e}")
@@ -483,15 +572,25 @@ class EnhancedStrategy(ProcessorStrategy):
 
     def _extract_key_points(self, text: str) -> list[str]:
         """Extract key points from text using simple heuristics"""
-        sentences = text.split('.')
+        sentences = text.split(".")
         key_points = []
 
         # Look for sentences with key indicators
-        indicators = ['important', 'key', 'main', 'primary', 'essential', 'crucial', 'significant']
+        indicators = [
+            "important",
+            "key",
+            "main",
+            "primary",
+            "essential",
+            "crucial",
+            "significant",
+        ]
 
         for sentence in sentences:
             sentence = sentence.strip()
-            if len(sentence) > 20 and any(indicator in sentence.lower() for indicator in indicators):
+            if len(sentence) > 20 and any(
+                indicator in sentence.lower() for indicator in indicators
+            ):
                 key_points.append(sentence)
 
         return key_points[:5]  # Limit to top 5
@@ -499,12 +598,67 @@ class EnhancedStrategy(ProcessorStrategy):
     def _extract_topics(self, text: str) -> list[str]:
         """Extract topics using simple keyword frequency"""
         # Simple topic extraction - in production, use more sophisticated NLP
-        words = re.findall(r'\b[a-zA-Z]{4,}\b', text.lower())
+        words = re.findall(r"\b[a-zA-Z]{4,}\b", text.lower())
 
         # Filter common words
-        stop_words = {'this', 'that', 'with', 'have', 'will', 'from', 'they', 'been', 'were', 'said', 'what', 'when', 'where', 'more', 'some', 'like', 'into', 'time', 'very', 'make', 'than', 'many', 'over', 'such', 'only', 'know', 'just', 'first', 'also', 'after', 'back', 'other', 'well', 'come', 'could', 'would', 'should', 'think', 'people', 'really', 'going', 'about', 'because', 'through', 'before', 'being', 'between', 'during', 'without', 'around', 'something', 'everything'}
+        stop_words = {
+            "this",
+            "that",
+            "with",
+            "have",
+            "will",
+            "from",
+            "they",
+            "been",
+            "were",
+            "said",
+            "what",
+            "when",
+            "where",
+            "more",
+            "some",
+            "like",
+            "into",
+            "time",
+            "very",
+            "make",
+            "than",
+            "many",
+            "over",
+            "such",
+            "only",
+            "know",
+            "just",
+            "first",
+            "also",
+            "after",
+            "back",
+            "other",
+            "well",
+            "come",
+            "could",
+            "would",
+            "should",
+            "think",
+            "people",
+            "really",
+            "going",
+            "about",
+            "because",
+            "through",
+            "before",
+            "being",
+            "between",
+            "during",
+            "without",
+            "around",
+            "something",
+            "everything",
+        }
 
-        filtered_words = [word for word in words if word not in stop_words and len(word) > 4]
+        filtered_words = [
+            word for word in words if word not in stop_words and len(word) > 4
+        ]
 
         # Count frequency
         word_freq = {}

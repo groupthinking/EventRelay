@@ -16,8 +16,7 @@ from abc import ABC, abstractmethod
 
 # Ensure the lib directory is in sys.path FIRST before any relative imports
 _lib_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-if _lib_dir not in sys.path:
-    sys.path.insert(0, _lib_dir)
+sys.path.insert(0, _lib_dir)
 
 # Clear any cached connectors module to avoid conflicts
 if "connectors" in sys.modules:

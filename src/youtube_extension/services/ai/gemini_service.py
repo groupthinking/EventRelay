@@ -21,40 +21,45 @@ from typing import Any, Optional, Union
 
 from PIL import Image
 
+# Google AI imports - migrated to new google.genai SDK
 try:
-    import google.generativeai as genai
+    from google import genai
+    from google.genai import types as genai_types
+
     GEMINI_AVAILABLE = True
 except ImportError:
     genai = None
-    GEMINI_AVAILABLE = False
-    logging.warning("Google Gemini not available - install: pip install google-generativeai")
-
-try:
-    from google.generativeai import types as genai_types
-except ImportError:
     genai_types = None
+    GEMINI_AVAILABLE = False
+    logging.warning("Google Gemini not available - install: pip install google-genai")
 
 try:
     import vertexai
     from vertexai.generative_models import GenerativeModel, Part
+
     VERTEX_AVAILABLE = True
 except ImportError:
     VERTEX_AVAILABLE = False
-    logging.warning("Vertex AI not available - install: pip install google-cloud-aiplatform")
+    logging.warning(
+        "Vertex AI not available - install: pip install google-cloud-aiplatform"
+    )
 
-TRANSFORMERS_DISABLE_FLAG = os.getenv("YOUTUBE_EXTENSION_DISABLE_TRANSFORMERS", "0").lower() in {"1", "true", "yes"}
+TRANSFORMERS_DISABLE_FLAG = os.getenv(
+    "YOUTUBE_EXTENSION_DISABLE_TRANSFORMERS", "0"
+).lower() in {"1", "true", "yes"}
 
 try:
     if TRANSFORMERS_DISABLE_FLAG:
-        raise ImportError("Transformers import disabled via YOUTUBE_EXTENSION_DISABLE_TRANSFORMERS")
+        raise ImportError(
+            "Transformers import disabled via YOUTUBE_EXTENSION_DISABLE_TRANSFORMERS"
+        )
     from transformers import pipeline as hf_pipeline  # type: ignore
+
     TRANSFORMERS_AVAILABLE = True
 except Exception as exc:  # pragma: no cover - optional dependency
     hf_pipeline = None
     TRANSFORMERS_AVAILABLE = False
-    logging.warning(
-        "Transformers unavailable for Gemma support: %s", exc
-    )
+    logging.warning("Transformers unavailable for Gemma support: %s", exc)
 
 
 class _TextOnlyResponse(SimpleNamespace):
@@ -214,7 +219,9 @@ class VeoVideoClient:
         """Proxy to Veo's content generation (text or structured control)."""
 
         cfg = self._merge_generation_config(generation_config)
-        return self._model.generate_content(contents, generation_config=cfg, **request_kwargs)
+        return self._model.generate_content(
+            contents, generation_config=cfg, **request_kwargs
+        )
 
     def generate_video(
         self,
@@ -234,8 +241,12 @@ class VeoVideoClient:
                 **request_kwargs,
             )
 
-        self.logger.debug("Veo client falling back to generate_content for video prompt")
-        return self._model.generate_content(prompt, generation_config=cfg, **request_kwargs)
+        self.logger.debug(
+            "Veo client falling back to generate_content for video prompt"
+        )
+        return self._model.generate_content(
+            prompt, generation_config=cfg, **request_kwargs
+        )
 
     def _merge_generation_config(
         self,
@@ -250,6 +261,7 @@ class VeoVideoClient:
 @dataclass
 class GeminiConfig:
     """Configuration for Gemini service"""
+
     api_key: Optional[str] = os.getenv("GEMINI_API_KEY")
     model_name: str = "gemini-1.5-flash"
     project_id: Optional[str] = os.getenv("GOOGLE_CLOUD_PROJECT")
@@ -271,6 +283,7 @@ class GeminiConfig:
 @dataclass
 class GeminiResult:
     """Result from Gemini processing"""
+
     success: bool
     response: Optional[str]
     latency: float
@@ -313,19 +326,25 @@ class GeminiService:
             if self.config.project_id and VERTEX_AVAILABLE:
                 # Use Vertex AI
                 self.logger.info("Initializing Gemini via Vertex AI")
-                vertexai.init(project=self.config.project_id, location=self.config.location)
+                vertexai.init(
+                    project=self.config.project_id, location=self.config.location
+                )
                 self._model = GenerativeModel(self.config.model_name)
                 self._use_vertex = True
 
             elif self.config.api_key and GEMINI_AVAILABLE:
                 # Use direct API
-                self.logger.info(f"Initializing Gemini via API key: {self.config.api_key[:8]}...")
+                self.logger.info(
+                    f"Initializing Gemini via API key: {self.config.api_key[:8]}..."
+                )
                 genai.configure(api_key=self.config.api_key)
 
                 # Verify key visibility
                 try:
                     models = [m.name for m in genai.list_models()]
-                    self.logger.info(f"Gemini API key verified. Available models matching flash: {[m for m in models if 'flash' in m]}")
+                    self.logger.info(
+                        f"Gemini API key verified. Available models matching flash: {[m for m in models if 'flash' in m]}"
+                    )
                 except Exception as ve:
                     self.logger.error(f"Gemini API key verification FAILED: {ve}")
                     self._verification_failed = True
@@ -338,7 +357,7 @@ class GeminiService:
                         "top_k": self.config.top_k,
                         "max_output_tokens": self.config.max_output_tokens,
                     },
-                    safety_settings=self.config.safety_settings
+                    safety_settings=self.config.safety_settings,
                 )
                 self._use_vertex = False
             else:
@@ -346,7 +365,9 @@ class GeminiService:
                 return
 
             self._is_initialized = True
-            self.logger.info(f"Gemini service initialized with {self.config.model_name}")
+            self.logger.info(
+                f"Gemini service initialized with {self.config.model_name}"
+            )
 
             if self._model:
                 self._register_model(
@@ -380,40 +401,44 @@ class GeminiService:
         self._use_vertex = use_vertex
         self._is_initialized = True
 
-    def _prepare_generation_args(self, kwargs: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    def _prepare_generation_args(
+        self, kwargs: dict[str, Any]
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
         """Split kwargs into generation_config and request kwargs."""
 
         generation_config = {
-            "temperature": kwargs.pop('temperature', self.config.temperature),
-            "top_p": kwargs.pop('top_p', self.config.top_p),
-            "top_k": kwargs.pop('top_k', self.config.top_k),
-            "max_output_tokens": kwargs.pop('max_tokens', self.config.max_output_tokens),
+            "temperature": kwargs.pop("temperature", self.config.temperature),
+            "top_p": kwargs.pop("top_p", self.config.top_p),
+            "top_k": kwargs.pop("top_k", self.config.top_k),
+            "max_output_tokens": kwargs.pop(
+                "max_tokens", self.config.max_output_tokens
+            ),
         }
 
         request_kwargs: dict[str, Any] = {}
 
-        response_schema = kwargs.pop('response_schema', self.config.response_schema)
+        response_schema = kwargs.pop("response_schema", self.config.response_schema)
         if response_schema is not None:
-            request_kwargs['response_schema'] = response_schema
-            mime_type = kwargs.pop('response_mime_type', self.config.response_mime_type)
+            request_kwargs["response_schema"] = response_schema
+            mime_type = kwargs.pop("response_mime_type", self.config.response_mime_type)
             if mime_type:
-                request_kwargs['response_mime_type'] = mime_type
+                request_kwargs["response_mime_type"] = mime_type
 
-        tools = kwargs.pop('tools', self.config.tools)
+        tools = kwargs.pop("tools", self.config.tools)
         if tools:
-            request_kwargs['tools'] = tools
+            request_kwargs["tools"] = tools
 
-        tool_choice = kwargs.pop('tool_choice', self.config.tool_choice)
+        tool_choice = kwargs.pop("tool_choice", self.config.tool_choice)
         if tool_choice:
-            request_kwargs['tool_choice'] = tool_choice
+            request_kwargs["tool_choice"] = tool_choice
 
-        thinking = kwargs.pop('thinking', self.config.thinking)
+        thinking = kwargs.pop("thinking", self.config.thinking)
         if thinking:
-            request_kwargs['thinking'] = thinking
+            request_kwargs["thinking"] = thinking
 
-        safety_settings = kwargs.pop('safety_settings', self.config.safety_settings)
+        safety_settings = kwargs.pop("safety_settings", self.config.safety_settings)
         if safety_settings:
-            request_kwargs['safety_settings'] = safety_settings
+            request_kwargs["safety_settings"] = safety_settings
 
         return generation_config, request_kwargs
 
@@ -442,7 +467,9 @@ class GeminiService:
                 top_p=self.config.top_p,
                 logger=self.logger,
             )
-            self._register_model(model_name, gemma_client, backend="gemma", use_vertex=False)
+            self._register_model(
+                model_name, gemma_client, backend="gemma", use_vertex=False
+            )
             self.logger.info("Switched to Gemma model %s", model_name)
             return
 
@@ -460,10 +487,14 @@ class GeminiService:
                     logger=self.logger,
                 )
             except Exception as exc:
-                self.logger.error("Failed to initialize Veo client %s: %s", model_name, exc)
+                self.logger.error(
+                    "Failed to initialize Veo client %s: %s", model_name, exc
+                )
                 return
 
-            self._register_model(model_name, veo_client, backend="veo", use_vertex=False)
+            self._register_model(
+                model_name, veo_client, backend="veo", use_vertex=False
+            )
             self.logger.info("Switched to Veo model %s", model_name)
             return
 
@@ -487,7 +518,9 @@ class GeminiService:
                 backend = "gemini"
                 use_vertex = False
 
-            self._register_model(model_name, model, backend=backend, use_vertex=use_vertex)
+            self._register_model(
+                model_name, model, backend=backend, use_vertex=use_vertex
+            )
             self.logger.info("Switched Gemini model to %s", model_name)
 
         except Exception as exc:
@@ -496,7 +529,7 @@ class GeminiService:
     def _prepare_image(self, image: Union[str, Path, Image.Image]) -> Any:
         """Prepare image for Gemini API"""
         if isinstance(image, (str, Path)):
-            image = Image.open(image).convert('RGB')
+            image = Image.open(image).convert("RGB")
 
         if self._use_vertex:
             # Vertex AI format
@@ -508,10 +541,7 @@ class GeminiService:
             return image
 
     async def process_image(
-        self,
-        image: Union[str, Path, Image.Image],
-        prompt: str,
-        **kwargs
+        self, image: Union[str, Path, Image.Image], prompt: str, **kwargs
     ) -> GeminiResult:
         """
         Process an image with Gemini.
@@ -533,7 +563,7 @@ class GeminiService:
                 latency=time.time() - start_time,
                 model_name=self.config.model_name,
                 backend="none",
-                error="Gemini not available or not initialized"
+                error="Gemini not available or not initialized",
             )
 
         if self._backend_kind != "gemini":
@@ -552,7 +582,9 @@ class GeminiService:
             prepared_image = self._prepare_image(image)
             loop = asyncio.get_event_loop()
             temp_kwargs = dict(kwargs)
-            generation_config, request_kwargs = self._prepare_generation_args(temp_kwargs)
+            generation_config, request_kwargs = self._prepare_generation_args(
+                temp_kwargs
+            )
 
             response = await loop.run_in_executor(
                 None,
@@ -570,7 +602,7 @@ class GeminiService:
                 response=response.text,
                 latency=latency,
                 model_name=self.config.model_name,
-                backend="vertex" if self._use_vertex else "api"
+                backend="vertex" if self._use_vertex else "api",
             )
 
         except Exception as e:
@@ -581,7 +613,7 @@ class GeminiService:
                 latency=time.time() - start_time,
                 model_name=self.config.model_name,
                 backend="vertex" if self._use_vertex else "api",
-                error=str(e)
+                error=str(e),
             )
 
     def _process_image_sync(
@@ -641,7 +673,9 @@ class GeminiService:
         try:
             loop = asyncio.get_event_loop()
             temp_kwargs = dict(kwargs)
-            generation_config, request_kwargs = self._prepare_generation_args(temp_kwargs)
+            generation_config, request_kwargs = self._prepare_generation_args(
+                temp_kwargs
+            )
 
             response = await loop.run_in_executor(
                 None,
@@ -661,7 +695,9 @@ class GeminiService:
             )
 
         except Exception as exc:
-            self.logger.error("Error processing text with %s backend: %s", self._backend_kind, exc)
+            self.logger.error(
+                "Error processing text with %s backend: %s", self._backend_kind, exc
+            )
             return GeminiResult(
                 success=False,
                 response=None,
@@ -714,7 +750,7 @@ class GeminiService:
         prompt: str,
         *,
         video_metadata: Optional[dict[str, Any]] = None,
-        **kwargs
+        **kwargs,
     ) -> GeminiResult:
         """
         Process a video with Gemini.
@@ -736,7 +772,7 @@ class GeminiService:
                 latency=time.time() - start_time,
                 model_name=self.config.model_name,
                 backend="none",
-                error="Gemini not available or not initialized"
+                error="Gemini not available or not initialized",
             )
 
         if self._backend_kind == "gemma":
@@ -754,7 +790,9 @@ class GeminiService:
             try:
                 loop = asyncio.get_event_loop()
                 temp_kwargs = dict(kwargs)
-                generation_config, request_kwargs = self._prepare_generation_args(temp_kwargs)
+                generation_config, request_kwargs = self._prepare_generation_args(
+                    temp_kwargs
+                )
 
                 response = await loop.run_in_executor(
                     None,
@@ -788,7 +826,9 @@ class GeminiService:
         try:
             loop = asyncio.get_event_loop()
             temp_kwargs = dict(kwargs)
-            generation_config, request_kwargs = self._prepare_generation_args(temp_kwargs)
+            generation_config, request_kwargs = self._prepare_generation_args(
+                temp_kwargs
+            )
 
             response = await loop.run_in_executor(
                 None,
@@ -807,7 +847,7 @@ class GeminiService:
                 response=response.text,
                 latency=latency,
                 model_name=self.config.model_name,
-                backend="vertex" if self._use_vertex else "api"
+                backend="vertex" if self._use_vertex else "api",
             )
 
         except Exception as e:
@@ -818,7 +858,7 @@ class GeminiService:
                 latency=time.time() - start_time,
                 model_name=self.config.model_name,
                 backend="vertex" if self._use_vertex else "api",
-                error=str(e)
+                error=str(e),
             )
 
     async def process_audio(
@@ -855,7 +895,9 @@ class GeminiService:
         try:
             loop = asyncio.get_event_loop()
             temp_kwargs = dict(kwargs)
-            generation_config, request_kwargs = self._prepare_generation_args(temp_kwargs)
+            generation_config, request_kwargs = self._prepare_generation_args(
+                temp_kwargs
+            )
 
             response = await loop.run_in_executor(
                 None,
@@ -898,11 +940,11 @@ class GeminiService:
         """Synchronous video processing in executor"""
         video_path = Path(video_path)
         mime_type, _ = mimetypes.guess_type(str(video_path))
-        if not mime_type or not mime_type.startswith('video/'):
+        if not mime_type or not mime_type.startswith("video/"):
             mime_type = "video/mp4"  # Default fallback
 
         if self._use_vertex:
-            with open(video_path, 'rb') as f:
+            with open(video_path, "rb") as f:
                 video_part = Part.from_data(f.read(), mime_type=mime_type)
 
             if video_metadata:
@@ -943,11 +985,15 @@ class GeminiService:
 
             if genai_types and metadata_obj:
                 video_part = genai_types.Part(
-                    file_data=genai_types.FileData(file_uri=getattr(video_file, 'uri', video_file.name)),
+                    file_data=genai_types.FileData(
+                        file_uri=getattr(video_file, "uri", video_file.name)
+                    ),
                     video_metadata=metadata_obj,
                 )
                 prompt_part = genai_types.Part(text=prompt)
-                content = genai_types.Content(role="user", parts=[video_part, prompt_part])
+                content = genai_types.Content(
+                    role="user", parts=[video_part, prompt_part]
+                )
                 response = self._model.generate_content(
                     [content],
                     generation_config=generation_config,
@@ -976,11 +1022,11 @@ class GeminiService:
 
         audio_path = Path(audio_path)
         mime_type, _ = mimetypes.guess_type(str(audio_path))
-        if not mime_type or not mime_type.startswith('audio/'):
+        if not mime_type or not mime_type.startswith("audio/"):
             mime_type = "audio/mpeg"
 
         if self._use_vertex:
-            with open(audio_path, 'rb') as f:
+            with open(audio_path, "rb") as f:
                 audio_part = Part.from_data(f.read(), mime_type=mime_type)
 
             return self._model.generate_content(
@@ -1005,7 +1051,9 @@ class GeminiService:
 
         if genai_types:
             audio_part = genai_types.Part(
-                file_data=genai_types.FileData(file_uri=getattr(audio_file, 'uri', audio_file.name))
+                file_data=genai_types.FileData(
+                    file_uri=getattr(audio_file, "uri", audio_file.name)
+                )
             )
             prompt_part = genai_types.Part(text=prompt)
             content = genai_types.Content(role="user", parts=[audio_part, prompt_part])
@@ -1082,7 +1130,7 @@ class GeminiService:
         prompt: str,
         *,
         video_metadata: Optional[dict[str, Any]] = None,
-        **kwargs
+        **kwargs,
     ) -> GeminiResult:
         """
         Process a YouTube video directly (preview feature).
@@ -1104,7 +1152,7 @@ class GeminiService:
                 latency=time.time() - start_time,
                 model_name=self.config.model_name,
                 backend="none",
-                error="Gemini not available or not initialized"
+                error="Gemini not available or not initialized",
             )
 
         if self._use_vertex:
@@ -1114,7 +1162,7 @@ class GeminiService:
                 latency=time.time() - start_time,
                 model_name=self.config.model_name,
                 backend="vertex",
-                error="YouTube URL processing not supported in Vertex AI"
+                error="YouTube URL processing not supported in Vertex AI",
             )
 
         if self._backend_kind != "gemini":
@@ -1131,7 +1179,9 @@ class GeminiService:
         try:
             loop = asyncio.get_event_loop()
             temp_kwargs = dict(kwargs)
-            generation_config, request_kwargs = self._prepare_generation_args(temp_kwargs)
+            generation_config, request_kwargs = self._prepare_generation_args(
+                temp_kwargs
+            )
 
             response = await loop.run_in_executor(
                 None,
@@ -1150,7 +1200,7 @@ class GeminiService:
                 response=response.text,
                 latency=latency,
                 model_name=self.config.model_name,
-                backend="api"
+                backend="api",
             )
 
         except Exception as e:
@@ -1161,7 +1211,7 @@ class GeminiService:
                 latency=time.time() - start_time,
                 model_name=self.config.model_name,
                 backend="api",
-                error=str(e)
+                error=str(e),
             )
 
     def _process_youtube_sync(
@@ -1179,14 +1229,18 @@ class GeminiService:
                 try:
                     metadata_obj = genai_types.VideoMetadata(**video_metadata)
                 except Exception as exc:
-                    self.logger.warning("Invalid YouTube video metadata supplied: %s", exc)
+                    self.logger.warning(
+                        "Invalid YouTube video metadata supplied: %s", exc
+                    )
 
             youtube_part = genai_types.Part(
                 file_data=genai_types.FileData(file_uri=youtube_url),
                 video_metadata=metadata_obj,
             )
             prompt_part = genai_types.Part(text=prompt)
-            content = genai_types.Content(role="user", parts=[youtube_part, prompt_part])
+            content = genai_types.Content(
+                role="user", parts=[youtube_part, prompt_part]
+            )
             return self._model.generate_content(
                 [content],
                 generation_config=generation_config,
@@ -1195,10 +1249,7 @@ class GeminiService:
 
         # Fallback to inline_data preview format if types module unavailable
         youtube_part = {
-            "inline_data": {
-                "mime_type": "video/youtube",
-                "data": youtube_url
-            }
+            "inline_data": {"mime_type": "video/youtube", "data": youtube_url}
         }
         return self._model.generate_content(
             [prompt, youtube_part],
@@ -1307,12 +1358,17 @@ class GeminiService:
             completed = bool(getattr(operation, "done", False))
 
             if wait and not completed:
+
                 def _wait_for_completion():
-                    return self._wait_for_batch_completion(operation, poll_interval, timeout)
+                    return self._wait_for_batch_completion(
+                        operation, poll_interval, timeout
+                    )
 
                 final_operation = await loop.run_in_executor(None, _wait_for_completion)
                 op_serialized = self._serialize_google_object(final_operation)
-                result_payload = self._serialize_google_object(getattr(final_operation, "result", None))
+                result_payload = self._serialize_google_object(
+                    getattr(final_operation, "result", None)
+                )
                 completed = True
 
             return {
@@ -1418,8 +1474,7 @@ class GeminiService:
 
         if isinstance(value, dict):
             return {
-                key: self._serialize_google_object(val)
-                for key, val in value.items()
+                key: self._serialize_google_object(val) for key, val in value.items()
             }
 
         if isinstance(value, list):
@@ -1444,7 +1499,7 @@ class GeminiService:
         self,
         items: list[Union[str, Path, Image.Image]],
         prompts: Union[str, list[str]],
-        **kwargs
+        **kwargs,
     ) -> list[GeminiResult]:
         """
         Process multiple items.
@@ -1468,9 +1523,23 @@ class GeminiService:
                 # Determine if video or image
                 if isinstance(item, (str, Path)):
                     lower_item = str(item).lower()
-                    if lower_item.endswith(('.mp4', '.avi', '.mov', '.mkv', '.webm', '.mpg', '.mpeg', '.wmv', '.3gp')):
+                    if lower_item.endswith(
+                        (
+                            ".mp4",
+                            ".avi",
+                            ".mov",
+                            ".mkv",
+                            ".webm",
+                            ".mpg",
+                            ".mpeg",
+                            ".wmv",
+                            ".3gp",
+                        )
+                    ):
                         return await self.process_video(item, prompt, **kwargs)
-                    if lower_item.endswith(('.mp3', '.wav', '.m4a', '.aac', '.flac', '.ogg', '.opus')):
+                    if lower_item.endswith(
+                        (".mp3", ".wav", ".m4a", ".aac", ".flac", ".ogg", ".opus")
+                    ):
                         return await self.process_audio(item, prompt, **kwargs)
                 else:
                     return await self.process_image(item, prompt, **kwargs)
@@ -1500,7 +1569,7 @@ class GeminiService:
             "location": self.config.location,
             "max_tokens": self.config.max_output_tokens,
             "has_vertex": VERTEX_AVAILABLE,
-            "has_api": GEMINI_AVAILABLE
+            "has_api": GEMINI_AVAILABLE,
         }
 
     async def test_connection(self) -> GeminiResult:
@@ -1508,7 +1577,7 @@ class GeminiService:
         test_prompt = "Say 'Hello, I am Gemini and I am working correctly!'"
 
         # Create a simple test image (1x1 pixel)
-        test_image = Image.new('RGB', (1, 1), color='white')
+        test_image = Image.new("RGB", (1, 1), color="white")
 
         return await self.process_image(test_image, test_prompt)
 

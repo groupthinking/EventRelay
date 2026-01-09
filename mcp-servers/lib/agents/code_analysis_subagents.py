@@ -11,8 +11,15 @@ import asyncio
 import ast
 import json
 import logging
+import sys
+import os
 from typing import Dict, List, Any, Optional
 from datetime import datetime
+
+# Ensure the lib directory is in sys.path FIRST before any relative imports
+_lib_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if _lib_dir not in sys.path:
+    sys.path.insert(0, _lib_dir)
 
 from a2a import MCPEnabledA2AAgent, MessagePriority
 
