@@ -1,7 +1,5 @@
 # Project: Antigravity Framework
-
-**Developer:** Hayden Garvey
-**Ambition Protocol:** Active
+The Antigravity Framework (UVAI) is a comprehensive platform designed to transform video and audio content into actionable intelligence and automated workflows using multi-modal intelligence and real-time processing.
 
 ## Coding Standards
 

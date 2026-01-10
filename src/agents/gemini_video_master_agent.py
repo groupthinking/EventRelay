@@ -30,6 +30,18 @@ except ImportError:
     GEMINI_AVAILABLE = False
     logging.warning("Google AI not available - install: pip install google-genai")
 
+# Add shared modules to path
+import sys
+from pathlib import Path
+
+sys.path.append(str(Path(__file__).parents[2] / "mcp-servers" / "shared-state"))
+
+# Import Vision Processor for NVIDIA integration
+try:
+    from vision_processor import get_processor
+except ImportError:
+    logging.warning("Could not import VisionProcessor - NVIDIA capabilities disabled")
+
 # Load environment variables
 try:
     from dotenv import load_dotenv
@@ -75,10 +87,12 @@ class AIProvider(Enum):
     # Gemini 2.5 Flash - confirmed working for video understanding
     GEMINI_2_5_FLASH = "models/gemini-2.5-flash"
     GEMINI_2_0_FLASH = "models/gemini-2.0-flash-exp"
-    # External providers (text-only, no video context)
+    # External providers
     GROK_4 = "grok-4-0709"
     CLAUDE_3_5_SONNET = "claude-3-5-sonnet-20241022"
     GPT_4O = "gpt-4o"
+    # NVIDIA Cosmos/VLM (New - Cognitive Video)
+    NVIDIA_VILA = "nvidia/vila-1.5-40b"
 
 
 @dataclass
@@ -121,7 +135,19 @@ class GeminiVideoMasterAgent:
             self.gemini_client = None
             logger.warning("⚠️ Google AI not available - using fallback methods")
 
-        # Task delegation - Using gemini-2.5-flash for video understanding (per Google docs)
+        # Initialize Vision Processor for NVIDIA VLM
+        try:
+            self.vision_processor = get_processor()
+            if self.vision_processor.nvidia.available:
+                logger.info("✅ NVIDIA Processor initialized for VLM tasks")
+            else:
+                logger.warning("⚠️ NVIDIA Processor available but key missing")
+        except Exception as e:
+            self.vision_processor = None
+            logger.warning(f"⚠️ Vision Processor could not be initialized: {e}")
+
+        # Task delegation - Enforcing Gemini 2.5 Flash for all video operations
+        # Ping-Pong Strategy: Parallel execution for Visual Analysis (Gemini + NVIDIA)
         self.task_delegation = {
             TaskType.TRANSCRIPTION: AIProvider.GEMINI_2_5_FLASH,
             TaskType.SUMMARIZATION: AIProvider.GEMINI_2_5_FLASH,
@@ -251,44 +277,43 @@ class GeminiVideoMasterAgent:
     async def _execute_tasks_with_delegation(
         self, tasks: list[tuple[TaskType, str]], video_url: str
     ) -> list[TaskResult]:
-        """Execute tasks with appropriate AI provider delegation"""
+        """Execute tasks with appropriate AI provider delegation in PARALLEL"""
 
-        task_results = []
+        coroutines = []
+        logger.info(f"🔄 Starting parallel execution of {len(tasks)} tasks...")
 
         for task_type, prompt in tasks:
             # Get the best AI provider for this task
             provider = self.task_delegation[task_type]
 
-            logger.info(f"🤖 Executing {task_type.value} with {provider.value}")
+            # Create coroutine for primary task
+            logger.info(f"✨ Scheduled {task_type.value} with {provider.value}")
+            coroutines.append(
+                self._execute_task_with_provider(task_type, prompt, provider, video_url)
+            )
 
-            try:
-                # Execute task with appropriate provider
-                result = await self._execute_task_with_provider(
-                    task_type, prompt, provider, video_url
+            # PING PONG: Add parallel NVIDIA task for Visual Analysis
+            if task_type == TaskType.VISUAL_ANALYSIS:
+                logger.info(
+                    f"✨ Scheduled {task_type.value} (Parallel) with NVIDIA VILA"
                 )
-                task_results.append(result)
+                coroutines.append(
+                    self._execute_task_with_provider(
+                        task_type, prompt, AIProvider.NVIDIA_VILA, video_url
+                    )
+                )
 
-            except Exception as e:
-                logger.error(
-                    f"❌ Task {task_type.value} failed with {provider.value}: {e}"
-                )
-                # Create fallback result
-                fallback_result = TaskResult(
-                    task_type=task_type,
-                    provider=provider,
-                    content=f"Task failed: {str(e)}",
-                    metadata={"error": str(e)},
-                    benchmark=BenchmarkResult(
-                        provider=provider,
-                        task_type=task_type,
-                        processing_time=0.0,
-                        quality_score=0.0,
-                        cost_estimate=0.0,
-                        success=False,
-                        error_message=str(e),
-                    ),
-                )
-                task_results.append(fallback_result)
+        # Run all tasks in parallel
+        results = await asyncio.gather(*coroutines, return_exceptions=True)
+
+        # Process results
+        task_results = []
+        for res in results:
+            if isinstance(res, TaskResult):
+                task_results.append(res)
+            elif isinstance(res, Exception):
+                logger.error(f"Task failed during parallel execution: {res}")
+                # We could add a failed TaskResult here for completeness if needed
 
         return task_results
 
@@ -311,6 +336,8 @@ class GeminiVideoMasterAgent:
                 content = await self._execute_with_claude(prompt)
             elif provider == AIProvider.GPT_4O:
                 content = await self._execute_with_gpt4o(prompt)
+            elif provider == AIProvider.NVIDIA_VILA:
+                content = await self._execute_with_nvidia(prompt, video_url)
             else:
                 raise ValueError(f"Unknown provider: {provider}")
 
@@ -368,6 +395,13 @@ class GeminiVideoMasterAgent:
                 metadata={"error": str(e)},
                 benchmark=benchmark,
             )
+
+    async def _execute_with_nvidia(self, prompt: str, video_url: str) -> str:
+        """Execute task with NVIDIA VILA/Cosmos"""
+        if not self.vision_processor or not self.vision_processor.nvidia.available:
+            raise Exception("NVIDIA Processor not available")
+
+        return await self.vision_processor.nvidia.analyze_video_vlm(video_url, prompt)
 
     async def _execute_with_gemini(
         self, prompt: str, provider: AIProvider, video_url: str
