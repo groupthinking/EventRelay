@@ -114,36 +114,49 @@ export default function APIPlaygroundPage() {
 }`);
   const [response, setResponse] = useState<APIResponse>({ status: null, data: null });
 
+  // Dynamic BASE_URL: Use local backend in development, production URL otherwise
+  const getBaseUrl = () => {
+    if (typeof window !== 'undefined') {
+      const hostname = window.location.hostname;
+      if (hostname === 'localhost' || hostname === '127.0.0.1') {
+        return 'http://localhost:8000';
+      }
+    }
+    return 'https://api.uvai.io';
+  };
+
+  const BASE_URL = getBaseUrl();
+
   const endpoints = [
     {
       method: 'POST',
-      endpoint: '/api/v1/video/analyze',
-      description: 'Analyze a video and extract intelligence',
-      baseUrl: 'https://api.uvai.io',
-    },
-    {
-      method: 'GET',
-      endpoint: '/api/v1/video/{id}',
-      description: 'Get analysis results for a processed video',
-      baseUrl: 'https://api.uvai.io',
+      endpoint: '/analyze_video',
+      description: 'Analyze a video URL with Gemini AI',
+      realBody: '{"video_url": "https://youtube.com/watch?v=example", "task": "Summarize this video"}',
     },
     {
       method: 'POST',
-      endpoint: '/api/v1/evolve',
+      endpoint: '/dogfood',
+      description: 'Self-improvement: Extract suggestions from a tutorial video',
+      realBody: '{"video_url": "https://youtube.com/watch?v=example", "target_component": "frontend"}',
+    },
+    {
+      method: 'POST',
+      endpoint: '/evolve',
       description: 'Execute a task with the Prescient Twin AI',
-      baseUrl: 'https://api.uvai.io',
+      realBody: '{"task": "Analyze this code and suggest improvements"}',
     },
     {
       method: 'GET',
-      endpoint: '/api/v1/stats',
+      endpoint: '/stats',
       description: 'Get current system statistics and active agents',
-      baseUrl: 'https://api.uvai.io',
+      realBody: null,
     },
     {
-      method: 'POST',
-      endpoint: '/api/v1/execute',
-      description: 'Execute code in a sandboxed environment',
-      baseUrl: 'https://api.uvai.io',
+      method: 'GET',
+      endpoint: '/lessons',
+      description: 'Get recent lessons learned by the AI',
+      realBody: null,
     },
   ];
 
@@ -151,64 +164,42 @@ export default function APIPlaygroundPage() {
     setResponse({ status: 'loading', data: null });
 
     const start = Date.now();
+    const currentEndpoint = endpoints[selectedEndpoint];
+    const url = `${BASE_URL}${currentEndpoint.endpoint}`;
 
     try {
-      // Simulate API call (in production, this would make a real request)
-      await new Promise(resolve => setTimeout(resolve, 1200));
-
-      const latency = Date.now() - start;
-
-      // Mock response based on endpoint
-      const mockResponses: Record<string, any> = {
-        '/api/v1/video/analyze': {
-          id: 'vid_' + Math.random().toString(36).substring(7),
-          status: 'complete',
-          processing_time_ms: 2341,
-          result: {
-            summary: 'This video demonstrates advanced React patterns including hooks, context, and performance optimization techniques.',
-            actions: [
-              'Implement useState for local component state',
-              'Use useCallback for memoized event handlers',
-              'Create custom hooks for reusable logic'
-            ],
-            topics: ['React', 'JavaScript', 'Frontend Development'],
-            sentiment: 'educational',
-            code_snippets: [
-              {
-                language: 'typescript',
-                description: 'Custom useAPI hook',
-                code: 'const useAPI = (url) => { ... }'
-              }
-            ]
-          }
+      const fetchOptions: RequestInit = {
+        method: currentEndpoint.method,
+        headers: {
+          'Content-Type': 'application/json',
         },
-        '/api/v1/stats': {
-          status: 'ok',
-          agents_active: ['gemini-2.5-flash', 'claude-3-opus', 'grok-2'],
-          videos_processed_today: 156,
-          avg_processing_time_ms: 2300,
-          uptime_percent: 99.97
-        },
-        '/api/v1/evolve': {
-          task_id: 'task_' + Math.random().toString(36).substring(7),
-          status: 'queued',
-          estimated_completion_ms: 5000,
-          assigned_agent: 'gemini-2.5-flash'
-        }
       };
 
-      const endpoint = endpoints[selectedEndpoint].endpoint;
-      const mockData = mockResponses[endpoint] || { message: 'Request processed successfully' };
+      // Add body for POST requests
+      if (currentEndpoint.method === 'POST') {
+        // Use the request body from the editor if it's valid JSON
+        try {
+          const parsedBody = JSON.parse(requestBody);
+          fetchOptions.body = JSON.stringify(parsedBody);
+        } catch {
+          // Fall back to the realBody template
+          fetchOptions.body = currentEndpoint.realBody || '{}';
+        }
+      }
+
+      const res = await fetch(url, fetchOptions);
+      const data = await res.json();
+      const latency = Date.now() - start;
 
       setResponse({
-        status: 'success',
-        data: mockData,
+        status: res.ok ? 'success' : 'error',
+        data,
         latency
       });
     } catch (error) {
       setResponse({
         status: 'error',
-        data: { error: 'Request failed', message: String(error) },
+        data: { error: 'Request failed', message: String(error), url },
         latency: Date.now() - start
       });
     }
@@ -281,7 +272,7 @@ export default function APIPlaygroundPage() {
                 {currentEndpoint.method}
               </span>
               <code className="flex-1 text-white/80 font-mono">
-                {currentEndpoint.baseUrl}{currentEndpoint.endpoint}
+                {BASE_URL}{currentEndpoint.endpoint}
               </code>
               <button
                 onClick={handleSendRequest}

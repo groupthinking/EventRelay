@@ -140,6 +140,10 @@ Video URL: {video_url}"""
         """Extract structured suggestions from analysis text."""
         suggestions = []
 
+        # Null check
+        if not analysis:
+            return suggestions
+
         # Look for numbered items or bullet points
         lines = analysis.split("\n")
         current_suggestion = None
