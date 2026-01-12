@@ -294,3 +294,8 @@ exclude_lines = [
 
 [tool.coverage.lcov]
 output = "reports/lcov.info"
+
+[tool.uv.workspace]
+members = [
+    "prescient-twin",
+]

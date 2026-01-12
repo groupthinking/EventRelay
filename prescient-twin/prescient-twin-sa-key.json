@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "uvai-730bb",
+  "private_key_id": "793108bfc117235796378918e852d856bead3bee",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC2daakDsq03PT1\nBsFjaYg/pTucAY05RdNfDHipAjhNWIF4qit4VBPqc79l4VrJ9IE5Kv6kGsgOsq0i\nXKwihRH2XFWtaVkHHK1b8sE60kpq33r8a9M9urIjCZUVN4ubvYLlGDS1LIxUXCHw\nUXv6RnYQqZ445J2j+3T7VVSuiN+norJD3jnWHqshNA+eQIFKwcwF/3ZeEs3cIBZ8\nA/+SBmFhLh3Vr4QZzhLA2eJbcQ576/r3h4OHbeSW/Y37wg6REov4fgdyUYwjz4sJ\nnmRn2jrcbi5r36G6vBGuYeof0oBYG53gpSX+zBCgEqJJeAgkRx5BeNTVLx67e1oQ\nl1F8kmCjAgMBAAECggEACQyzy65KIodVBPQlUltxHQsCdl3jVcRfU/cH4wYPqdJq\ndYQnLMwqwrWj+BchzCN65015HMWRR51YFfy3suybs/bnbvbrKf2joYxcRiEY/M0B\nyhRFAWpJnJBEmy1KmNpg7CDzuEqx2RtKuaMo/YRSJchr5xF7uh7mMfMNBK0YPrWv\nJUpi7VlQ9R6h37zPjlkXC3OzfbyEtgYvEUsgt1hcavs6d2fLpP4MqSnNzF58tajK\nZrrIiinQA5EEUpl9Yd4ibEvAsT45GHJukDWm07acicxhGmpDuDh8rHeo6la3UGDl\ni0TkSvE64Yg88jFs4GPF7WC4nWSfQ/jvt9Xvzxiw9QKBgQDcj4VgBmf4+TlaHuio\npwsrrex8x6zl0zvH75mrEuq7vbEpxe4ub1ro/dp2E/TUvqfV9fEDy69qw43aCOQa\nYP+lg3cZdgJ//g8hl0klXqGLhrh45E93otHPTUN/xVbaS19trAtFBLK0M+4jdgxb\nUt1lEir89ienNJ+yNIXB73NbPwKBgQDTxuRQAdzedkvUTT00Bk5IF+g23Y3rTL/V\nxrg4V81XfA8DNjUaiTL2ygKJcfPFzBykoWkxQZBjlikvRe5gSwv8b5Q4h47aekuT\nLT7+lX4g/Qko9tt8KNTiky6b+HWcl2jopD6OGSCo9CWPcvQJm8SBX5wg3rwfjDKW\nq05FZhjVnQKBgF3O5SlcUCiCx7Pe5ZGlyoh/ZtADlTQCzbBR5gfu+ctz+MANoSo6\nzm2+WoZSIpXBqVzFSAcXQLqmBdUwZuQZUWIyMhuwJ4wMoJ7m24N7ZjYTzK4OXQZD\nR/1lnUngwvoBiMr6m6h1QRSH6cdHVCYbbnKocYQ5pc/l/+4pjKJZl7S9AoGAOyDa\n+iOrAUnSHjJ6lh30mVhjc34kc7/4B732DXUmVfjDUEhAR2prGlCIqMtyHpXAoY6X\nijMeF1ADq7lAtw39CLw2jBn9Hq7qjushHX+ruZYsio1x9paH6cLiTpXucIwttFa3\nSIFnhwSzv/t+e3hMQzroopzNtZk1PrARqHq7EFkCgYEA2xFVfg8zNF/ZhDUPQTi/\niRiAKEwTUlKWOkHzfh79JnQssrzxhOIxsg1tn9dUhHq8ogLsquv8fX1/NwhpjqOs\nJ4mOdLjWM8BdW2F/KLUm5rbxZs7nzG5FIYR4WXL6zkmsUeFVb5RE6qFg023G8nIV\ni4RTMf//wxYqjB+PqLx728E=\n-----END PRIVATE KEY-----\n",
+  "client_email": "prescient-twin-sa@uvai-730bb.iam.gserviceaccount.com",
+  "client_id": "116861744971557768326",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/prescient-twin-sa%40uvai-730bb.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}

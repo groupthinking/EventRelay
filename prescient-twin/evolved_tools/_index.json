@@ -1,0 +1,45 @@
+{
+  "tools": {},
+  "lessons": [
+    {
+      "lesson": "Processed video: Unknown Video",
+      "context": {
+        "url": "https://www.youtube.com/watch?v=n4IQOBka7bc",
+        "result_keys": [
+          "video_id",
+          "video_url",
+          "metadata",
+          "transcript",
+          "ai_analysis",
+          "markdown_analysis",
+          "save_path",
+          "processing_time",
+          "success",
+          "pipeline"
+        ]
+      },
+      "timestamp": "2026-01-10T10:30:17.110187"
+    },
+    {
+      "lesson": "Processed video: Unknown Video",
+      "context": {
+        "url": "https://www.youtube.com/watch?v=n4IQOBka7bc",
+        "result_keys": [
+          "video_id",
+          "video_url",
+          "metadata",
+          "transcript",
+          "ai_analysis",
+          "markdown_analysis",
+          "save_path",
+          "processing_time",
+          "success",
+          "pipeline"
+        ]
+      },
+      "timestamp": "2026-01-10T10:31:02.355381"
+    }
+  ],
+  "created_at": "2026-01-10T10:30:17.110161",
+  "updated_at": "2026-01-10T10:31:02.355445"
+}
