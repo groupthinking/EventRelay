@@ -275,6 +275,88 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* Testimonials Section - Social Proof */}
+      <section className="relative z-10 max-w-6xl mx-auto px-6 py-20 border-t border-white/5">
+        <div className="text-center mb-12">
+          <h2 className="text-3xl font-bold mb-4">Trusted by Forward-Thinking Teams</h2>
+          <p className="text-white/60">See how teams are transforming their video workflows</p>
+        </div>
+
+        <div className="grid md:grid-cols-3 gap-6">
+          {/* Testimonial 1 */}
+          <div className="bg-gradient-to-br from-violet-500/10 to-purple-500/10 backdrop-blur-xl rounded-2xl border border-white/10 p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 rounded-full bg-gradient-to-br from-violet-400 to-purple-500 flex items-center justify-center text-lg font-bold">
+                SK
+              </div>
+              <div>
+                <div className="font-medium text-white">Sarah Kim</div>
+                <div className="text-sm text-white/60">VP of Product, TechFlow</div>
+              </div>
+            </div>
+            <p className="text-white/80 italic">
+              &ldquo;We process 50+ hours of customer calls weekly. UVAI cut our analysis time from
+              days to minutes. The action item extraction is incredibly accurate.&rdquo;
+            </p>
+            <div className="flex gap-1 mt-4">
+              {[1,2,3,4,5].map(i => <span key={i} className="text-yellow-400">★</span>)}
+            </div>
+          </div>
+
+          {/* Testimonial 2 */}
+          <div className="bg-gradient-to-br from-indigo-500/10 to-blue-500/10 backdrop-blur-xl rounded-2xl border border-white/10 p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 rounded-full bg-gradient-to-br from-indigo-400 to-blue-500 flex items-center justify-center text-lg font-bold">
+                JM
+              </div>
+              <div>
+                <div className="font-medium text-white">James Mitchell</div>
+                <div className="text-sm text-white/60">Engineering Lead, DevScale</div>
+              </div>
+            </div>
+            <p className="text-white/80 italic">
+              &ldquo;The video-to-code feature is mind-blowing. I paste a tutorial URL and get
+              working prototypes in seconds. It&apos;s changed how we onboard new team members.&rdquo;
+            </p>
+            <div className="flex gap-1 mt-4">
+              {[1,2,3,4,5].map(i => <span key={i} className="text-yellow-400">★</span>)}
+            </div>
+          </div>
+
+          {/* Testimonial 3 */}
+          <div className="bg-gradient-to-br from-cyan-500/10 to-teal-500/10 backdrop-blur-xl rounded-2xl border border-white/10 p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 rounded-full bg-gradient-to-br from-cyan-400 to-teal-500 flex items-center justify-center text-lg font-bold">
+                AR
+              </div>
+              <div>
+                <div className="font-medium text-white">Alex Rodriguez</div>
+                <div className="text-sm text-white/60">Content Director, MediaPro</div>
+              </div>
+            </div>
+            <p className="text-white/80 italic">
+              &ldquo;We repurpose webinar recordings into blog posts, social clips, and newsletters.
+              What took a week now takes an hour. ROI was immediate.&rdquo;
+            </p>
+            <div className="flex gap-1 mt-4">
+              {[1,2,3,4,5].map(i => <span key={i} className="text-yellow-400">★</span>)}
+            </div>
+          </div>
+        </div>
+
+        {/* Company Logos */}
+        <div className="mt-12 pt-8 border-t border-white/5">
+          <p className="text-center text-white/40 text-sm mb-6">Powering video intelligence at</p>
+          <div className="flex justify-center items-center gap-12 flex-wrap opacity-60">
+            <span className="text-2xl font-bold text-white/60">TechFlow</span>
+            <span className="text-2xl font-bold text-white/60">DevScale</span>
+            <span className="text-2xl font-bold text-white/60">MediaPro</span>
+            <span className="text-2xl font-bold text-white/60">StartupAI</span>
+            <span className="text-2xl font-bold text-white/60">CloudNine</span>
+          </div>
+        </div>
+      </section>
+
       {/* API Preview Section */}
       <section className="relative z-10 max-w-6xl mx-auto px-6 py-20">
         <div className="grid md:grid-cols-2 gap-12 items-center">

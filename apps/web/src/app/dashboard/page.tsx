@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { Suspense, useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 
@@ -168,7 +168,7 @@ function ActivityFeed({ activities }: { activities: { time: string; event: strin
   );
 }
 
-export default function DashboardPage() {
+function DashboardContent() {
   const searchParams = useSearchParams();
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const [loading, setLoading] = useState(true);
@@ -496,5 +496,26 @@ export default function DashboardPage() {
         </div>
       )}
     </div>
+  );
+}
+
+// Loading fallback for Suspense
+function DashboardLoading() {
+  return (
+    <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+      <div className="text-center">
+        <div className="w-16 h-16 rounded-full border-4 border-violet-500 border-t-transparent animate-spin mx-auto mb-4" />
+        <p className="text-white/60">Loading dashboard...</p>
+      </div>
+    </div>
+  );
+}
+
+// Export with Suspense boundary (required for useSearchParams in Next.js 14+)
+export default function DashboardPage() {
+  return (
+    <Suspense fallback={<DashboardLoading />}>
+      <DashboardContent />
+    </Suspense>
   );
 }
