@@ -1,4 +1,4 @@
-MISSION: ALLOWING AI TO PLAN, REASON, AND EXECUTE ABOUT 'THIS IS WHAT TO DO AND HOW BASED ON THE VIDEO INTAKE'
+# MISSION: ALLOWING AI TO PLAN, REASON, AND EXECUTE ABOUT 'THIS IS WHAT TO DO AND HOW BASED ON THE VIDEO INTAKE'
 
 BACKED WITH AN LLM / MACHINE LEARNING FRAME WORK THAT CONTINUES TO LEARN
 
@@ -255,6 +255,8 @@ You need to process visual data, extract semantic meaning, and run reasoning loo
 
 Here is the best architecture for a multi-instance Video Intelligence Agent system in 2025:
 
+## Video Intelligence Architecture
+
 ### 1. The "Vision-Reasoning" Stack
 
 To interpret video, you can no longer rely on simple scripts. You need a **Multimodal Pipeline**:
@@ -269,10 +271,10 @@ To interpret video, you can no longer rely on simple scripts. You need a **Multi
 
 When analyzing video for "intelligence," one agent isn't enough. You need a **Council of Agents** (using **LangGraph** or **CrewAI**):
 
-1.  **The Watcher (Perception Agent):** Scans the video and creates a "Visual Log" (e.g., "00:02 - Person enters room, 00:15 - Person places object on table").
-2.  **The Contextualizer (Knowledge Agent):** Pulls external data (e.g., "Cross-reference person’s face with database" or "Identify the object model").
-3.  **The Analyst (Reasoning Agent):** Looks for patterns. (e.g., "The person in this video is the same person from Video B last week; this indicates a recurring scouting pattern").
-4.  **The Reporter (Node.js layer):** Streams these insights to your dashboard in real-time via WebSockets.
+1. **The Watcher (Perception Agent):** Scans the video and creates a "Visual Log" (e.g., "00:02 - Person enters room, 00:15 - Person places object on table").
+2. **The Contextualizer (Knowledge Agent):** Pulls external data (e.g., "Cross-reference person’s face with database" or "Identify the object model").
+3. **The Analyst (Reasoning Agent):** Looks for patterns. (e.g., "The person in this video is the same person from Video B last week; this indicates a recurring scouting pattern").
+4. **The Reporter (Node.js layer):** Streams these insights to your dashboard in real-time via WebSockets.
 
 ### 3. Scaling Multiple Instances (The Infrastructure)
 
@@ -295,24 +297,24 @@ Running multiple instances of video intelligence agents is hardware-demanding be
 | **Local Inference** | **vLLM**               | If you need to run your own models on your own hardware for privacy.                        |
 | **Data Buffer**     | **Redis**              | To pass frame data and agent states between Node and Python.                                |
 
-### Why Node.js is still vital here:
+### Why Node.js is Still Vital Here
 
 While Python does the heavy lifting (AI/Vision), **Node.js** is far superior at handling the **I/O saturation** that comes with video intelligence.
 
 - Node.js can handle 10,000 concurrent WebSocket connections showing "Live Intelligence Alerts."
 - Python would struggle to manage those connections while simultaneously crunching video frames.
 
-### Summary of Recommendation:
+### Summary of Recommendation
 
-1.  **Use LangGraph (Python)** for the agent logic—it allows the agent to "go back and double-check" a specific timestamp in the video if it's unsure.
-2.  **Use Modal or Kubernetes with GPUs** to scale the Python workers.
-3.  **Use Node.js** as the "Central Command" to distribute video chunks to the workers and aggregate the intelligence for the user.
+1. **Use LangGraph (Python)** for the agent logic—it allows the agent to "go back and double-check" a specific timestamp in the video if it's unsure.
+2. **Use Modal or Kubernetes with GPUs** to scale the Python workers.
+3. **Use Node.js** as the "Central Command" to distribute video chunks to the workers and aggregate the intelligence for the user.
 
 ---
 
 ### Technical + Executive Summary
 
-**Technical Summary**
+#### Technical Summary
 
 - **Technology Stack:**
 
@@ -337,7 +339,7 @@ While Python does the heavy lifting (AI/Vision), **Node.js** is far superior at 
 
 - **Total:** ~8 weeks for a production-ready SDK.
 
-**Business Summary**
+#### Business Summary
 
 - **Scalability:** Modular nodes allow dynamic scaling and updates
 - **Extensibility:** Easy to add audio, anomaly detection, ML, or new analytics nodes
