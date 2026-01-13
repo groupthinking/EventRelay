@@ -105,12 +105,8 @@ function EndpointCard({
 export default function APIPlaygroundPage() {
   const [selectedEndpoint, setSelectedEndpoint] = useState(0);
   const [requestBody, setRequestBody] = useState(`{
-  "url": "https://youtube.com/watch?v=example",
-  "options": {
-    "extract": ["summary", "actions", "code"],
-    "deploy": false,
-    "format": "json"
-  }
+  "video_url": "https://youtube.com/watch?v=example",
+  "task": "Summarize this video and extract key insights"
 }`);
   const [response, setResponse] = useState<APIResponse>({ status: null, data: null });
 
@@ -130,8 +126,20 @@ export default function APIPlaygroundPage() {
   const endpoints = [
     {
       method: 'POST',
+      endpoint: '/execute_video',
+      description: '🚀 E2E AUTONOMOUS EXECUTION - Builds the app from video (NEW!)',
+      realBody: '{"video_url": "https://www.youtube.com/watch?v=e2DA_btFSlM", "goal": "Build the app shown in this video", "auto_deploy": false}',
+    },
+    {
+      method: 'POST',
+      endpoint: '/analyze_video_v2',
+      description: 'Analyze video with transcript extraction',
+      realBody: '{"video_url": "https://www.youtube.com/watch?v=e2DA_btFSlM", "task": "Summarize this video and extract key insights"}',
+    },
+    {
+      method: 'POST',
       endpoint: '/analyze_video',
-      description: 'Analyze a video URL with Gemini AI',
+      description: 'Analyze a video URL (metadata only)',
       realBody: '{"video_url": "https://youtube.com/watch?v=example", "task": "Summarize this video"}',
     },
     {
