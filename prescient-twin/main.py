@@ -60,6 +60,24 @@ except ImportError as e:
     DOGFOODING_AVAILABLE = False
     print(f"⚠️  Dogfooding pipeline not available: {e}")
 
+# Try to import Gemini Agent Orchestrator (Function Calling)
+try:
+    from gemini_agent_orchestrator import get_orchestrator
+
+    ORCHESTRATOR_AVAILABLE = True
+except ImportError as e:
+    ORCHESTRATOR_AVAILABLE = False
+    print(f"⚠️  Gemini Agent Orchestrator not available: {e}")
+
+# Try to import TaskLoop (Ralph-style execution)
+try:
+    from task_loop import get_task_loop
+
+    TASK_LOOP_AVAILABLE = True
+except ImportError as e:
+    TASK_LOOP_AVAILABLE = False
+    print(f"⚠️  TaskLoop not available: {e}")
+
 
 # --- Request/Response Models ---
 
@@ -104,6 +122,27 @@ class DogfoodRequest(BaseModel):
 
     video_url: str
     target_component: str = "frontend"  # frontend, backend, or shared
+
+
+class VideoExecuteRequest(BaseModel):
+    """Request body for /execute_video endpoint (E2E autonomous execution)"""
+
+    video_url: str
+    goal: Optional[str] = "Build the application shown in the video"
+    target_project: str = "uvai-730bb"
+    auto_deploy: bool = False
+
+
+class LearnAndApplyRequest(BaseModel):
+    """Request body for /learn_and_apply endpoint (Ralph-style learning)
+
+    This endpoint LEARNS from video content and APPLIES changes to UVAI itself.
+    Unlike execute_video which deploys external apps, this improves UVAI.
+    """
+
+    video_url: str
+    target_component: str = "prescient-twin"
+    auto_commit: bool = False  # Set True to commit changes automatically
 
 
 # --- Lifespan Management ---
@@ -320,6 +359,67 @@ async def analyze_video_with_gemini(request: VideoAnalyzeRequest):
         raise HTTPException(status_code=500, detail=f"Video analysis failed: {str(e)}")
 
 
+@app.post("/analyze_video_v2")
+async def analyze_video_with_orchestrator(request: VideoAnalyzeRequest):
+    """
+    Analyze a video URL using Gemini Function Calling with MCP Agent pipeline.
+
+    This is the enhanced version that:
+    1. Extracts YouTube transcript (if available)
+    2. Uses Gemini Function Calling to orchestrate analysis
+    3. Generates actionable tasks from video content
+
+    Use this for full video-to-action transformation.
+    """
+    if not ORCHESTRATOR_AVAILABLE:
+        raise HTTPException(
+            status_code=503,
+            detail="Gemini Agent Orchestrator not available. Check installation.",
+        )
+
+    try:
+        orchestrator = get_orchestrator()
+
+        if not orchestrator.available:
+            raise HTTPException(
+                status_code=503,
+                detail="Orchestrator not initialized. Check API key.",
+            )
+
+        # Use the orchestrator for function calling based analysis
+        result = await orchestrator.analyze_video(
+            request.video_url,
+            request.task or "summarize this video and extract key insights",
+        )
+
+        if result["success"]:
+            # Record lesson
+            record_lesson(
+                f"Analyzed video with Function Calling: {request.video_url[:50]}",
+                {
+                    "video_url": request.video_url,
+                    "method": result.get("method"),
+                    "function_calls": len(result.get("function_calls", [])),
+                },
+            )
+
+        return {
+            "status": "completed" if result["success"] else "failed",
+            "video_url": request.video_url,
+            "method": result.get("method", "gemini_function_calling"),
+            "model": result.get("model", "gemini-2.5-flash"),
+            "analysis": result.get("analysis"),
+            "function_calls": result.get("function_calls", []),
+            "processing_time_ms": result.get("processing_time_ms"),
+            "error": result.get("error"),
+        }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Video analysis v2 failed: {str(e)}"
+        )
+
+
 @app.post("/dogfood")
 async def run_dogfooding(request: DogfoodRequest):
     """
@@ -380,7 +480,160 @@ async def get_dogfood_summary():
     return pipeline.get_enhancement_summary()
 
 
-# --- Main ---
+# --- E2E Autonomous Execution (The "Advisory Hump" Breaker) ---
+
+
+@app.post("/execute_video")
+async def execute_video(request: VideoExecuteRequest):
+    """
+    🚀 E2E AUTONOMOUS EXECUTION - This endpoint BUILDS, not advises.
+
+    Unlike /analyze_video which provides summaries and suggestions,
+    this endpoint:
+    1. Watches the tutorial video
+    2. Extracts what needs to be built
+    3. GENERATES THE ACTUAL CODE
+    4. Optionally deploys to Cloud Run
+    5. Returns deployment-ready assets or live URL
+
+    This is the "Advisory Hump" breaker - transforming advice into action.
+
+    Example:
+    - Input: YouTube tutorial URL
+    - Output: Generated code + deployment URL
+
+    Set auto_deploy=true to deploy immediately to Cloud Run.
+    """
+    if not ORCHESTRATOR_AVAILABLE:
+        raise HTTPException(
+            status_code=503,
+            detail="Gemini Agent Orchestrator not available. Check google-genai installation.",
+        )
+
+    try:
+        orchestrator = get_orchestrator()
+        if not orchestrator.available:
+            raise HTTPException(
+                status_code=503,
+                detail="Orchestrator not initialized. Check GOOGLE_API_KEY.",
+            )
+
+        result = await orchestrator.execute_video(
+            video_url=request.video_url,
+            goal=request.goal,
+            target_project=request.target_project,
+            auto_deploy=request.auto_deploy,
+        )
+
+        if not result.get("success"):
+            return {
+                "status": "failed",
+                "error": result.get("error"),
+                "video_url": request.video_url,
+                "method": result.get("method"),
+            }
+
+        return {
+            "status": "completed",
+            "mode": "E2E_AUTONOMOUS_EXECUTION",
+            "video_url": request.video_url,
+            "goal": request.goal,
+            "steps_executed": result.get("steps_executed", []),
+            "generated_app": result.get("generated_app"),
+            "code_content": result.get("code_content"),
+            "deployment": result.get("deployment"),
+            "revenue_stream": result.get("revenue_stream"),
+            "processing_time_ms": result.get("processing_time_ms"),
+            "model": result.get("model"),
+        }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Autonomous execution failed: {str(e)}"
+        )
+
+
+# --- Ralph-Style Learning (The Correct Pattern) ---
+
+
+@app.post("/learn_and_apply")
+async def learn_and_apply(request: LearnAndApplyRequest):
+    """
+    🎓 LEARN AND APPLY - Ralph-style autonomous improvement.
+
+    This endpoint LEARNS from video content and APPLIES changes to UVAI itself.
+    Unlike /execute_video which deploys external apps, this IMPROVES UVAI.
+
+    The key insight: Don't deploy summary pages about what we learned.
+    Instead, IMPLEMENT the learnings directly in our codebase.
+
+    Flow:
+    1. Extract video transcript
+    2. Identify actionable implementation tasks
+    3. For each task: Implement → Test → (Commit)
+    4. Return results with actual code changes made
+
+    Example use case:
+    - Video about new Google UCP protocol
+    - Output: New UCP integration code in prescient-twin
+    - NOT: HTML landing page about UCP
+    """
+    if not TASK_LOOP_AVAILABLE:
+        raise HTTPException(
+            status_code=503,
+            detail="TaskLoop not available. Check google-genai installation.",
+        )
+
+    try:
+        # Get transcript first
+        from youtube_transcript_api import YouTubeTranscriptApi
+        import re
+
+        # Extract video ID
+        video_id_match = re.search(
+            r"(?:v=|youtu\.be/)([a-zA-Z0-9_-]{11})", request.video_url
+        )
+        if not video_id_match:
+            raise HTTPException(status_code=400, detail="Invalid YouTube URL")
+
+        video_id = video_id_match.group(1)
+
+        # Get transcript
+        api = YouTubeTranscriptApi()
+        transcript_data = api.fetch(video_id)
+        transcript_text = " ".join([entry.text for entry in transcript_data])
+
+        # Run the TaskLoop
+        task_loop = get_task_loop()
+        result = await task_loop.run(
+            content=transcript_text,
+            content_type="video_transcript",
+            target_component=request.target_component,
+            auto_commit=request.auto_commit,
+        )
+
+        return {
+            "status": "completed" if result.success else "partial",
+            "mode": "LEARN_AND_APPLY",
+            "video_url": request.video_url,
+            "target_component": request.target_component,
+            "tasks_completed": result.tasks_completed,
+            "tasks_failed": result.tasks_failed,
+            "total_tasks": result.total_tasks,
+            "files_modified": result.files_modified,
+            "commits_made": result.commits_made,
+            "lessons_learned": result.lessons_learned,
+            "duration_seconds": result.duration_seconds,
+            "message": (
+                f"Applied {result.tasks_completed} improvements to {request.target_component}"
+                if result.success
+                else f"Partially applied: {result.tasks_completed}/{result.total_tasks} tasks"
+            ),
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Learn and apply failed: {str(e)}")
+
 
 if __name__ == "__main__":
     import uvicorn
