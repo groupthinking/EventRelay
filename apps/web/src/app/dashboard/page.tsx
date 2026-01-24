@@ -257,47 +257,71 @@ function DashboardContent() {
     const targetUrl = url || videoUrl;
     if (!targetUrl.trim()) return;
 
-    // Add new video to list
+    // Add new video to list with processing state
     const newVideo: Video = {
       id: Date.now().toString(),
-      title: `Processing: ${targetUrl.substring(0, 40)}...`,
+      title: `Analyzing: ${targetUrl.length > 50 ? targetUrl.substring(0, 47) + '...' : targetUrl}`,
       url: targetUrl,
       status: 'processing',
-      progress: 0,
+      progress: 10,
     };
     setVideos(prev => [newVideo, ...prev]);
     setVideoUrl('');
 
-    // Simulate processing (in real app, this would call the API)
-    let progress = 0;
+    // Update progress while waiting
     const progressInterval = setInterval(() => {
-      progress += Math.random() * 15;
-      if (progress >= 100) {
-        progress = 100;
-        clearInterval(progressInterval);
-        setVideos(prev => prev.map(v =>
-          v.id === newVideo.id
-            ? {
-                ...v,
-                status: 'complete',
-                progress: 100,
-                title: 'Analyzed Video',
-                processedAt: 'Just now',
-                insights: {
-                  summary: 'AI-generated summary of the video content...',
-                  actions: ['Action item 1', 'Action item 2', 'Action item 3'],
-                  sentiment: 'Neutral',
-                  topics: ['Topic 1', 'Topic 2']
-                }
-              }
-            : v
-        ));
-      } else {
-        setVideos(prev => prev.map(v =>
-          v.id === newVideo.id ? { ...v, progress: Math.min(progress, 99) } : v
-        ));
+      setVideos(prev => prev.map(v =>
+        v.id === newVideo.id && v.status === 'processing'
+          ? { ...v, progress: Math.min(v.progress + 5, 95) }
+          : v
+      ));
+    }, 1000);
+
+    try {
+      // Call the real backend API
+      const response = await fetch('/api/video', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: targetUrl })
+      });
+
+      clearInterval(progressInterval);
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`);
       }
-    }, 500);
+
+      const result = await response.json();
+
+      // Update video with real results
+      setVideos(prev => prev.map(v =>
+        v.id === newVideo.id
+          ? {
+              ...v,
+              status: result.status === 'complete' ? 'complete' : 'failed',
+              progress: 100,
+              title: result.result?.insights?.summary?.substring(0, 50) + '...' || 'Analyzed Video',
+              processedAt: 'Just now',
+              duration: `${result.result?.transcript_segments || 0} segments`,
+              insights: {
+                summary: result.result?.insights?.summary || 'Analysis complete',
+                actions: result.result?.insights?.actions || [],
+                sentiment: result.result?.insights?.sentiment || 'Neutral',
+                topics: result.result?.insights?.topics || ['Analyzed']
+              }
+            }
+          : v
+      ));
+    } catch (error) {
+      clearInterval(progressInterval);
+      console.error('Video analysis failed:', error);
+
+      setVideos(prev => prev.map(v =>
+        v.id === newVideo.id
+          ? { ...v, status: 'failed', progress: 0 }
+          : v
+      ));
+    }
   }, [videoUrl]);
 
   return (

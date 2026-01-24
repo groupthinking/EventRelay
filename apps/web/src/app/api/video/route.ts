@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-const PRESCIENT_TWIN_URL = process.env.PRESCIENT_TWIN_URL || 'http://localhost:8000';
+const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000';
 
 export async function POST(request: Request) {
   try {
@@ -11,37 +11,53 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Video URL is required' }, { status: 400 });
     }
 
-    // Call the Prescient Twin /evolve endpoint for video analysis
-    const response = await fetch(`${PRESCIENT_TWIN_URL}/evolve`, {
+    // Call the EventRelay backend /api/v1/transcript-action endpoint
+    const response = await fetch(`${BACKEND_URL}/api/v1/transcript-action`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        task: `Analyze this video and extract: summary, key actions, topics, and any code examples: ${url}`,
-        context: {
-          video_url: url,
-          extract_types: options?.extract || ['summary', 'actions', 'code'],
-          deploy: options?.deploy || false
-        }
+        video_url: url,
+        language: 'en'
       }),
     });
 
     if (!response.ok) {
       const error = await response.text();
-      return NextResponse.json({ error: `Prescient Twin error: ${error}` }, { status: response.status });
+      return NextResponse.json(
+        { error: `Backend error: ${error}` },
+        { status: response.status }
+      );
     }
 
     const result = await response.json();
 
-    // Transform the response to match our API format
+    // Extract insights from the agent responses
+    const transcriptAction = result.outputs?.transcript_action?.data || {};
+    const personalityAgent = result.outputs?.personality_agent?.data || {};
+    const strategyAgent = result.outputs?.strategy_agent?.data || {};
+
+    // Build structured response
+    const insights = {
+      summary: transcriptAction.summary?.content || transcriptAction.summary || 'Video analyzed successfully',
+      actions: transcriptAction.task_board?.tasks?.map((t: { title?: string }) => t.title) || [],
+      topics: transcriptAction.metadata?.topics || [],
+      sentiment: personalityAgent.personality_map?.video_intent?.primary || 'Neutral',
+      strategy: strategyAgent.strategic_analysis || null,
+      project_scaffold: transcriptAction.project_scaffold || null,
+    };
+
     return NextResponse.json({
       id: `vid_${Date.now().toString(36)}`,
-      status: 'complete',
-      processing_time_ms: result.execution_time_ms || 2300,
+      status: result.success ? 'complete' : 'failed',
+      processing_time_ms: Math.round((result.orchestration_meta?.processing_time || 0) * 1000),
       result: {
-        summary: result.result || 'Video analyzed successfully',
-        brain_used: result.brain_used || 'gemini',
+        success: result.success,
+        insights,
+        transcript_segments: result.transcript?.length || 0,
+        agents_used: result.orchestration_meta?.agents_used || [],
+        errors: result.errors || [],
         raw_response: result
       }
     });
@@ -55,11 +71,30 @@ export async function POST(request: Request) {
 }
 
 export async function GET() {
-  return NextResponse.json({
-    name: 'UVAI Video Analysis API',
-    version: '1.0.0',
-    endpoints: {
-      analyze: 'POST /api/video - Analyze a video URL',
-    }
-  });
+  // Health check - verify backend is available
+  try {
+    const response = await fetch(`${BACKEND_URL}/api/v1/health`);
+    const health = await response.json();
+
+    return NextResponse.json({
+      name: 'UVAI Video Analysis API',
+      version: '2.0.0',
+      backend_status: health.status,
+      backend_components: health.components,
+      endpoints: {
+        analyze: 'POST /api/video - Analyze a video URL',
+        health: 'GET /api/video - Check API status',
+      }
+    });
+  } catch (error) {
+    return NextResponse.json({
+      name: 'UVAI Video Analysis API',
+      version: '2.0.0',
+      backend_status: 'unavailable',
+      error: String(error),
+      endpoints: {
+        analyze: 'POST /api/video - Analyze a video URL',
+      }
+    });
+  }
 }
