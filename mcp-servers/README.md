@@ -6,13 +6,14 @@ This directory contains the Model Context Protocol (MCP) servers used in the Eve
 
 The primary intelligence suite for video processing and code analysis.
 
-| Server                             | Description                 | Key Tools                                             |
-| ---------------------------------- | --------------------------- | ----------------------------------------------------- |
-| `youtube_uvai_mcp.py`              | Primary UVAI Processor      | `process_video`, `get_transcript`, `ai_reasoning`     |
-| `video_agent_server.py`            | Video Pipeline Orchestrator | `transcribe_media`, `generate_actions`                |
-| `code_analysis_server.py`          | Automated Code Review       | `scan_security`, `analyze_performance`, `check_style` |
-| `cloudflare_server.py`             | Cloudflare Gateway Proxy    | `get_gateway_url`                                     |
-| `learning_analytics_mcp_server.py` | Analytics Engine            | `get_learning_stats`, `track_event`                   |
+| Server                             | Description                      | Key Tools                                              |
+| ---------------------------------- | -------------------------------- | ------------------------------------------------------ |
+| `youtube_uvai_mcp.py`              | Primary UVAI Processor           | `process_video`, `get_transcript`, `ai_reasoning`      |
+| `video_agent_server.py`            | Video Pipeline Orchestrator      | `transcribe_media`, `generate_actions`                 |
+| `code_analysis_server.py`          | Automated Code Review            | `scan_security`, `analyze_performance`, `check_style`  |
+| `cloudflare_server.py`             | Cloudflare Gateway Proxy         | `get_gateway_url`                                      |
+| `learning_analytics_mcp_server.py` | Analytics Engine                 | `get_learning_stats`, `track_event`                    |
+| `embeddings_mcp_server.py`         | **NEW** pgvector Semantic Search | `embed_text`, `search_similar`, `embed_video_analysis` |
 
 ## Specialized Servers
 

@@ -1,0 +1,36 @@
+# Video Analysis Jobs Schema
+# This is the REAL persistent state for video processing jobs
+
+type VideoJob @table {
+  videoUrl: String!
+  source: String! # youtube, direct, github_asset, loom, vimeo
+  taskType: String! # transcription, code_extraction, full_analysis
+  status: String! # QUEUED, DOWNLOADING, ANALYZING, GENERATING, VALIDATING, COMPLETED, FAILED
+  executedAgents: [String!]! # Array of agent IDs that processed this job
+  resultJson: String # AgenticOutput JSON stored as string
+  error: String # Error message if failed
+  title: String # Extracted video title
+  duration: Int # Video duration in seconds
+  fileSize: Int # File size in bytes
+  createdAt: Timestamp! @default(expr: "request.time")
+  updatedAt: Timestamp! @default(expr: "request.time")
+}
+
+type JobEvent @table {
+  job: VideoJob!
+  eventType: String! # STATUS_CHANGE, AGENT_START, AGENT_COMPLETE, ERROR
+  agent: String # VTTA, CSDAA, OFSA
+  details: String # Additional context
+  timestamp: Timestamp! @default(expr: "request.time")
+}
+
+# Vector embeddings for semantic search (RAG)
+# Uses pgvector extension for similarity search
+type VideoEmbedding @table {
+  job: VideoJob!
+  segmentType: String! # summary, step, insight, code
+  segmentIndex: Int! # Position within type (e.g., step 3 of 12)
+  content: String! # Original text content that was embedded
+  embedding: Vector! @col(size: 768) # text-embedding-004 produces 768-dim vectors
+  createdAt: Timestamp! @default(expr: "request.time")
+}

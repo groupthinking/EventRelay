@@ -1,0 +1,13 @@
+specVersion: "v1"
+serviceId: "uvai-730bb-service"
+location: "us-central1"
+schema:
+  source: "./schema"
+  datasource:
+    postgresql:
+      database: "uvai-730bb-database"
+      cloudSql:
+        instanceId: "uvai-vector-db"
+        # schemaValidation: "STRICT"     # STRICT mode makes Postgres schema match Data Connect exactly.
+        # schemaValidation: "COMPATIBLE" # COMPATIBLE mode makes Postgres schema compatible with Data Connect.
+connectorDirs: ["./jobs"]

@@ -1,0 +1,5 @@
+connectorId: "jobs"
+generate:
+  javascriptSdk:
+    outputDir: "../../src/dataconnect-generated"
+    package: "@video-analyzer/dataconnect"

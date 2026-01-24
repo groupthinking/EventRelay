@@ -1,0 +1,158 @@
+# Job Queries and Mutations for Video Analysis Pipeline
+
+# Create a new video analysis job
+mutation createVideoJob(
+  $videoUrl: String!
+  $source: String!
+  $taskType: String!
+) @auth(level: PUBLIC) {
+  videoJob_insert(
+    data: {
+      videoUrl: $videoUrl
+      source: $source
+      taskType: $taskType
+      status: "QUEUED"
+      executedAgents: []
+    }
+  )
+}
+
+# Update job status
+mutation updateJobStatus(
+  $id: UUID!
+  $status: String!
+  $executedAgents: [String!]
+) @auth(level: PUBLIC) {
+  videoJob_update(
+    id: $id
+    data: {
+      status: $status
+      executedAgents: $executedAgents
+      updatedAt_expr: "request.time"
+    }
+  )
+}
+
+# Complete a job with result
+mutation completeJob($id: UUID!, $resultJson: String!, $title: String)
+@auth(level: PUBLIC) {
+  videoJob_update(
+    id: $id
+    data: {
+      status: "COMPLETED"
+      resultJson: $resultJson
+      title: $title
+      updatedAt_expr: "request.time"
+    }
+  )
+}
+
+# Fail a job with error
+mutation failJob($id: UUID!, $error: String!) @auth(level: PUBLIC) {
+  videoJob_update(
+    id: $id
+    data: { status: "FAILED", error: $error, updatedAt_expr: "request.time" }
+  )
+}
+
+# Record a job event
+mutation recordJobEvent(
+  $jobId: UUID!
+  $eventType: String!
+  $agent: String
+  $details: String
+) @auth(level: PUBLIC) {
+  jobEvent_insert(
+    data: {
+      job: { id: $jobId }
+      eventType: $eventType
+      agent: $agent
+      details: $details
+    }
+  )
+}
+
+# Get job by ID
+query getJob($id: UUID!) @auth(level: PUBLIC) {
+  videoJob(id: $id) {
+    id
+    videoUrl
+    source
+    taskType
+    status
+    executedAgents
+    resultJson
+    error
+    title
+    createdAt
+    updatedAt
+  }
+}
+
+# List all jobs
+query listJobs($limit: Int = 50) @auth(level: PUBLIC) {
+  videoJobs(orderBy: [{ createdAt: DESC }], limit: $limit) {
+    id
+    videoUrl
+    source
+    taskType
+    status
+    title
+    createdAt
+    updatedAt
+  }
+}
+
+# Get job events
+query getJobEvents($jobId: UUID!) @auth(level: PUBLIC) {
+  jobEvents(
+    where: { job: { id: { eq: $jobId } } }
+    orderBy: [{ timestamp: ASC }]
+  ) {
+    id
+    eventType
+    agent
+    details
+    timestamp
+  }
+}
+
+# =============================================================================
+# EMBEDDING OPERATIONS (pgvector)
+# Note: Storing embeddings (INSERT with Vector) is done via raw SQL in the
+# embedding service because the SDK generator doesn't support Vector arguments.
+# =============================================================================
+
+# List recent embeddings (similarity search done in application layer)
+query listEmbeddings($limit: Int = 100) @auth(level: PUBLIC) {
+  videoEmbeddings(orderBy: [{ createdAt: DESC }], limit: $limit) {
+    id
+    segmentType
+    segmentIndex
+    content
+    job {
+      id
+      title
+      videoUrl
+    }
+  }
+}
+
+# Get all embeddings for a specific job
+query getJobEmbeddings($jobId: UUID!) @auth(level: PUBLIC) {
+  videoEmbeddings(
+    where: { job: { id: { eq: $jobId } } }
+    orderBy: [{ segmentType: ASC }, { segmentIndex: ASC }]
+  ) {
+    id
+    segmentType
+    segmentIndex
+    content
+    createdAt
+  }
+}
+
+# Delete embeddings for a job (for re-processing)
+mutation deleteJobEmbeddings($jobId: UUID!) @auth(level: PUBLIC) {
+  videoEmbedding_deleteMany(where: { job: { id: { eq: $jobId } } })
+}
