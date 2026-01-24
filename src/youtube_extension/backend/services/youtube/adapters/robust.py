@@ -128,7 +128,55 @@ class RobustYouTubeService:
             except Exception as e:
                 logger.warning(f"YouTube Search fallback failed: {e}")
 
+        # Final fallback: yt-dlp (most reliable, no API key needed)
+        try:
+            return await self._get_metadata_ytdlp(video_url, video_id)
+        except Exception as e:
+            logger.warning(f"yt-dlp fallback failed: {e}")
+
         raise Exception("All YouTube metadata APIs failed")
+
+    async def _get_metadata_ytdlp(self, video_url: str, video_id: str) -> RobustYouTubeMetadata:
+        """Fallback metadata using yt-dlp (most reliable, no API key needed)"""
+        import subprocess
+        import json
+
+        def _get_ytdlp_metadata():
+            result = subprocess.run(
+                ['yt-dlp', '--dump-json', '--skip-download', video_url],
+                capture_output=True, text=True, timeout=30
+            )
+            if result.returncode != 0:
+                raise Exception(f"yt-dlp failed: {result.stderr}")
+            return json.loads(result.stdout)
+
+        data = await asyncio.get_event_loop().run_in_executor(None, _get_ytdlp_metadata)
+
+        # Check for transcript availability
+        transcript_available, transcript_segments = await self._check_transcript_availability(video_id)
+
+        return RobustYouTubeMetadata(
+            video_id=video_id,
+            title=data.get('title', 'Unknown Title'),
+            description=data.get('description', ''),
+            channel_id=data.get('channel_id', 'unknown'),
+            channel_title=data.get('uploader', data.get('channel', 'Unknown Channel')),
+            published_at=data.get('upload_date', datetime.now(timezone.utc).strftime('%Y%m%d')),
+            duration=f"PT{data.get('duration', 0)}S",
+            view_count=data.get('view_count'),
+            like_count=data.get('like_count'),
+            comment_count=data.get('comment_count'),
+            thumbnail_urls={'default': data.get('thumbnail', '')},
+            tags=data.get('tags', []),
+            category_id=str(data.get('categories', ['0'])[0]) if data.get('categories') else '0',
+            default_language=data.get('language'),
+            default_audio_language=data.get('language'),
+            live_broadcast_content='none',
+            transcript_available=transcript_available,
+            transcript_segments=transcript_segments,
+            source_api='yt-dlp'
+        )
+
 
     async def _get_metadata_youtube_api(self, video_id: str) -> RobustYouTubeMetadata:
         """Get metadata using YouTube Data API v3"""

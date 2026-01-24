@@ -44,9 +44,12 @@ src/backend/__init__.py
 src/backend/main_v2.py
 src/backend/repositories/__init__.py
 src/backend/repositories/action_repository.py
+src/connectors/__init__.py
 src/connectors/mcp_base.py
 src/core/__init__.py
-src/integration/__init__ copy.py
+src/core/canary_router.py
+src/core/feature_flags.py
+src/core/model_router.py
 src/integration/__init__.py
 src/integration/api_gateway.py
 src/integration/component_registry.py
@@ -62,6 +65,7 @@ src/integration/stripe_payments.py
 src/integration/supabase_db.py
 src/integration/vercel_deploy.py
 src/integration/youtube_api.py
+src/mcp/bridge.py
 src/mcp/mcp_ecosystem_coordinator.py
 src/mcp/mcp_video_processor.py
 src/mcp/test_integrated_servers.py
@@ -74,12 +78,16 @@ src/unified_ai_sdk/rate_limiter.py
 src/unified_ai_sdk/unified_ai_sdk.py
 src/utils/__init__.py
 src/utils/path_utils.py
+src/uvai/main_v2.py
+src/uvai/server.py
 src/uvai/api/__init__.py
 src/uvai/api/main.py
 src/uvai/api/server.py
 src/uvai/api/v1/services/issue_tracker.py
-src/uvai/core/main_v2.py
-src/uvai/core/server.py
+src/uvai/security_protocol/__init__.py
+src/uvai/security_protocol/encode_video.py
+src/uvai/security_protocol/generate_keys.py
+src/uvai/security_protocol/video_listener.py
 src/youtube_extension/__init__.py
 src/youtube_extension/cli.py
 src/youtube_extension/main.py
@@ -98,8 +106,8 @@ src/youtube_extension/backend/deployment_manager.py
 src/youtube_extension/backend/enhanced_video_processor.py
 src/youtube_extension/backend/http_server.py
 src/youtube_extension/backend/main.py
+src/youtube_extension/backend/main_legacy.py
 src/youtube_extension/backend/main_refactored.py
-src/youtube_extension/backend/main_v2.py
 src/youtube_extension/backend/real_api_endpoints.py
 src/youtube_extension/backend/real_video_processor.py
 src/youtube_extension/backend/revenue_pipeline.py
@@ -108,6 +116,7 @@ src/youtube_extension/backend/video_processor_factory.py
 src/youtube_extension/backend/video_processor_interface.py
 src/youtube_extension/backend/worker.py
 src/youtube_extension/backend/api/__init__.py
+src/youtube_extension/backend/api/event_routes.py
 src/youtube_extension/backend/api/generator_routes.py
 src/youtube_extension/backend/api/mcp_bridge.py
 src/youtube_extension/backend/api/v1/__init__.py
@@ -117,7 +126,6 @@ src/youtube_extension/backend/config/database.py
 src/youtube_extension/backend/config/logging_config.py
 src/youtube_extension/backend/config/production_config.py
 src/youtube_extension/backend/containers/service_container.py
-src/youtube_extension/backend/deepmcp/deepmcp_processor.py
 src/youtube_extension/backend/deepmcp/orchestrator.py
 src/youtube_extension/backend/deploy/__init__.py
 src/youtube_extension/backend/deploy/core.py
@@ -130,6 +138,7 @@ src/youtube_extension/backend/middleware/rate_limiting.py
 src/youtube_extension/backend/middleware/security_headers.py
 src/youtube_extension/backend/migrations/env.py
 src/youtube_extension/backend/migrations/versions/20241231_1200_001_initial_schema.py
+src/youtube_extension/backend/migrations/versions/20260107_0057_002_secure_alembic_secure_alembic_version_table.py
 src/youtube_extension/backend/models/__init__.py
 src/youtube_extension/backend/models/analytics.py
 src/youtube_extension/backend/models/audit.py
@@ -199,6 +208,7 @@ src/youtube_extension/orchestrator/main.py
 src/youtube_extension/processors/__init__.py
 src/youtube_extension/processors/autonomous_processor.py
 src/youtube_extension/processors/enhanced_extractor.py
+src/youtube_extension/processors/scoring_engine.py
 src/youtube_extension/processors/simple_real_processor.py
 src/youtube_extension/processors/strategies.py
 src/youtube_extension/processors/video_processor.py

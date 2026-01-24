@@ -30,7 +30,7 @@ class PersonalityAgent(BaseAgent):
         cfg = config or {}
         gemini_cfg = cfg.get("gemini_config") or self._build_gemini_config()
         self._hybrid_processor = cfg.get("hybrid_processor") or HybridProcessorService(HybridConfig(gemini=gemini_cfg))
-        self._model = cfg.get("model") or "gemini-1.5-pro"
+        self._model = cfg.get("model") or "gemini-2.0-flash"
 
     async def run(self, req: AgentRequest) -> AgentResult:
         start_time = asyncio.get_event_loop().time()
@@ -64,8 +64,8 @@ class PersonalityAgent(BaseAgent):
 
     async def _map_personality(self, transcript: Optional[str], video_metadata: dict[str, Any]) -> dict[str, Any]:
         """Call Gemini to map the personality and intent."""
-        comments = video_metadata.get("comments", [])
-        channel_context = video_metadata.get("channel_context", {})
+        comments = video_metadata.get("comments") or []
+        channel_context = video_metadata.get("channel_context") or {}
 
         prompt = (
             "You are a strategic personality analyst. Analyze the following video content and community interaction "
@@ -75,7 +75,7 @@ class PersonalityAgent(BaseAgent):
             "2. 'video_intent': { 'primary': str, 'secondary': str, 'likely_user_goal': str }\n"
             "3. 'community_sentiment': { 'vibe': str, 'common_themes': [str], 'intent_alignment': str }\n\n"
             f"Channel Context: {json.dumps(channel_context)}\n"
-            f"Recent Comments: {json.dumps(comments[:10])}\n"
+            f"Recent Comments: {json.dumps(comments[:10] if comments else [])}\n"
         )
 
         if transcript:
@@ -93,7 +93,15 @@ class PersonalityAgent(BaseAgent):
         if not result.success or not result.response:
             raise RuntimeError(f"Gemini personality mapping failed: {result.error}")
 
-        return json.loads(result.response)
+        try:
+            return json.loads(result.response)
+        except json.JSONDecodeError:
+            # Return structured fallback
+            return {
+                "creator_persona": {"type": "Unknown", "raw": result.response},
+                "video_intent": {},
+                "community_sentiment": {}
+            }
 
     def _failure(self, message: str, start_time: float) -> AgentResult:
         asyncio.get_event_loop().time() - start_time

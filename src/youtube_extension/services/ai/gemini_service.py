@@ -263,7 +263,7 @@ class GeminiConfig:
     """Configuration for Gemini service"""
 
     api_key: Optional[str] = os.getenv("GEMINI_API_KEY")
-    model_name: str = "gemini-1.5-flash"
+    model_name: str = "gemini-2.0-flash"
     project_id: Optional[str] = os.getenv("GOOGLE_CLOUD_PROJECT")
     location: str = "us-central1"
     max_output_tokens: int = 8192
@@ -333,33 +333,18 @@ class GeminiService:
                 self._use_vertex = True
 
             elif self.config.api_key and GEMINI_AVAILABLE:
-                # Use direct API
+                # Use new google.genai Client-based SDK
                 self.logger.info(
                     f"Initializing Gemini via API key: {self.config.api_key[:8]}..."
                 )
-                genai.configure(api_key=self.config.api_key)
-
-                # Verify key visibility
-                try:
-                    models = [m.name for m in genai.list_models()]
-                    self.logger.info(
-                        f"Gemini API key verified. Available models matching flash: {[m for m in models if 'flash' in m]}"
-                    )
-                except Exception as ve:
-                    self.logger.error(f"Gemini API key verification FAILED: {ve}")
-                    self._verification_failed = True
-
-                self._model = genai.GenerativeModel(
-                    model_name=self.config.model_name,
-                    generation_config={
-                        "temperature": self.config.temperature,
-                        "top_p": self.config.top_p,
-                        "top_k": self.config.top_k,
-                        "max_output_tokens": self.config.max_output_tokens,
-                    },
-                    safety_settings=self.config.safety_settings,
-                )
+                # New SDK uses Client - stores client for model access
+                self._client = genai.Client(api_key=self.config.api_key)
+                # Store model name, actual calls will use client.models
+                self._model = self._client  # Use client as model proxy
                 self._use_vertex = False
+                self.logger.info(
+                    f"Gemini Client initialized for model {self.config.model_name}"
+                )
             else:
                 self.logger.warning("Gemini API key or project ID not configured")
                 return
@@ -726,23 +711,39 @@ class GeminiService:
             )
 
         if backend == "veo":
-            # Veo supports prompt engineering for planning scripts; use generate_content.
+            # Veo supports prompt engineering for planning scripts
             return self._model.generate_content(
                 text_payload,
                 generation_config=generation_config,
                 **request_kwargs,
             )
 
-        # Default Gemini path
-        contents: list[Any] = [prompt]
+        # Default Gemini path - use new Client API
+        contents = prompt
         if text_payload and text_payload != prompt:
-            contents.append(text_payload)
+            contents = f"{prompt}\n\n{text_payload}"
 
-        return self._model.generate_content(
-            contents,
-            generation_config=generation_config,
-            **request_kwargs,
-        )
+        # New SDK uses client.models.generate_content
+        if hasattr(self, '_client') and self._client:
+            config_dict = {
+                "temperature": generation_config.get("temperature", 1.0),
+                "top_p": generation_config.get("top_p", 0.95),
+                "top_k": generation_config.get("top_k", 40),
+                "max_output_tokens": generation_config.get("max_output_tokens", 8192),
+            }
+            response = self._client.models.generate_content(
+                model=self.config.model_name,
+                contents=contents,
+                config=config_dict,
+            )
+            return response
+        else:
+            # Fallback to old API (Vertex)
+            return self._model.generate_content(
+                [contents],
+                generation_config=generation_config,
+                **request_kwargs,
+            )
 
     async def process_video(
         self,
