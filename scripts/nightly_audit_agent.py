@@ -19,7 +19,7 @@ import argparse
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Any, Optional
-
+from typing import Dict, Any
 # Add src to python path to allow imports
 sys.path.append(str(Path(__file__).parent.parent / "src"))
 
