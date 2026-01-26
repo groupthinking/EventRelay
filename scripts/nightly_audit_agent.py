@@ -14,7 +14,6 @@ Frequency: Nightly Execution (02:00 UTC)
 import asyncio
 import json
 import logging
-import os
 import sys
 import argparse
 from datetime import datetime, timezone
