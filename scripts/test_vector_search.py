@@ -1,16 +1,20 @@
 #!/usr/bin/env python3
 """Test vector similarity search."""
-import google.generativeai as genai
-import psycopg2
 import os
+import psycopg2
+from google import genai
 from dotenv import load_dotenv
 
 load_dotenv(override=True)
-genai.configure(api_key=os.environ['GOOGLE_API_KEY'])
+client = genai.Client(api_key=os.environ['GOOGLE_API_KEY'])
 
 query = 'How does the video processing pipeline work?'
-result = genai.embed_content(model='models/text-embedding-004', content=query, task_type='retrieval_query')
-embedding = result['embedding']
+result = client.models.embed_content(
+    model='text-embedding-004',
+    contents=query,
+    config={'title': "Query"}
+)
+embedding = result.embeddings[0].values
 vector_str = '[' + ','.join(map(str, embedding)) + ']'
 
 conn = psycopg2.connect(os.environ['VECTOR_DATABASE_URL'])
