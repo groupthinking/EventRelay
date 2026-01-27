@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>EventRelay Video Intelligence Dashboard</title>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Fonts -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=JetBrains+Mono:wght@300;400;500;600&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Theme Configuration -->
+<script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#137fec",
+                        "background-light": "#f6f7f8",
+                        "background-dark": "#101922",
+                        "surface-dark": "#16202a",
+                        "border-dark": "#2a3b4d",
+                    },
+                    fontFamily: {
+                        "display": ["Space Grotesk", "sans-serif"],
+                        "mono": ["JetBrains Mono", "monospace"],
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.125rem",
+                        "sm": "0.125rem",
+                        "md": "0.25rem", 
+                        "lg": "0.375rem",
+                    },
+                },
+            },
+        }
+    </script>
+<style>
+        /* Custom scrollbar for brutalist feel */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #101922;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #2a3b4d;
+            border-radius: 2px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #137fec;
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-200 font-display min-h-screen flex flex-col overflow-hidden">
+<!-- Header -->
+<header class="h-14 shrink-0 border-b border-border-dark bg-surface-dark flex items-center justify-between px-6 z-10">
+<div class="flex items-center gap-3">
+<div class="size-8 bg-primary/20 flex items-center justify-center rounded text-primary border border-primary/30">
+<span class="material-symbols-outlined text-lg">hub</span>
+</div>
+<h1 class="font-bold text-lg tracking-tight text-white">EventRelay <span class="text-slate-500 font-mono text-xs font-normal ml-2">v2.4.0-beta</span></h1>
+</div>
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-2 px-3 py-1.5 bg-black/20 rounded border border-green-900/50">
+<div class="relative flex h-2.5 w-2.5">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+<span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500"></span>
+</div>
+<span class="text-green-400 text-xs font-mono font-medium tracking-wide">SYSTEM: ONLINE</span>
+</div>
+<button class="flex items-center gap-2 text-slate-400 hover:text-white transition-colors">
+<div class="size-8 rounded bg-slate-800 border border-slate-700 flex items-center justify-center">
+<span class="material-symbols-outlined text-sm">person</span>
+</div>
+</button>
+</div>
+</header>
+<!-- Main Content Grid -->
+<main class="flex-1 grid grid-cols-12 h-[calc(100vh-3.5rem)]">
+<!-- Left Sidebar (40%) -->
+<aside class="col-span-12 lg:col-span-5 flex flex-col border-r border-border-dark bg-[#0d141c] overflow-y-auto">
+<!-- URL Input Section -->
+<div class="p-6 border-b border-border-dark">
+<label class="block text-xs font-mono text-slate-500 mb-2 uppercase tracking-wider">Source Input</label>
+<div class="flex gap-0">
+<div class="relative flex-1 group">
+<div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+<span class="material-symbols-outlined text-slate-500 text-lg">link</span>
+</div>
+<input class="block w-full pl-10 pr-3 py-3 bg-[#16202a] border border-border-dark text-slate-200 font-mono text-sm rounded-l focus:ring-1 focus:ring-primary focus:border-primary placeholder-slate-600 transition-all" type="text" value="https://www.youtube.com/watch?v=dQw4w9WgXcQ"/>
+</div>
+<button class="bg-primary hover:bg-blue-600 text-white px-5 py-2 font-bold text-sm tracking-wide transition-colors rounded-r border-y border-r border-primary shadow-[0_0_10px_rgba(19,127,236,0.2)]">
+                        FETCH
+                    </button>
+</div>
+</div>
+<!-- Video Player Placeholder -->
+<div class="px-6 py-6 border-b border-border-dark bg-black/20">
+<div class="relative aspect-video w-full bg-slate-900 rounded border border-border-dark overflow-hidden group shadow-lg">
+<!-- Thumbnail Background -->
+<div class="absolute inset-0 bg-cover bg-center opacity-80 group-hover:opacity-60 transition-opacity" data-alt="Rick Astley music video thumbnail showing a young man dancing" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuBH8WZgXopOdpHw1xgthHrLq-DNQzGsoKkvZxjLWFxebVHKoGXwm9nkdc_G1A_YYOiTvqKokfIQzrE-WrOJ7R9NB0IzOuBG149dBTPpVqUYFSPpTzVDbLUE-dyEOPHJQ7jwiV-yZChct0T-Q2BCoxyR9h-kIx7CUzGcnpWWiEpvxkMKfslj4R6vsUhl4P3L7XhEOrIJ7TYS7LJzNRTrDNRLjlIf-tR0nSka1VJGOH8SmY9Gw6P3pPZG3HxlOU9O_sbcQUYSd46mSwf8');"></div>
+<!-- Play Overlay -->
+<div class="absolute inset-0 flex items-center justify-center">
+<button class="size-14 bg-primary/90 text-white rounded-full flex items-center justify-center backdrop-blur-sm shadow-xl hover:scale-105 transition-transform">
+<span class="material-symbols-outlined text-3xl ml-1">play_arrow</span>
+</button>
+</div>
+<!-- Overlay Data -->
+<div class="absolute bottom-2 right-2 bg-black/80 px-2 py-0.5 rounded text-[10px] font-mono text-white border border-white/10">
+                        HD 1080p
+                    </div>
+</div>
+</div>
+<!-- Metadata Scrollable Area -->
+<div class="flex-1 p-6 overflow-y-auto">
+<div class="flex items-center justify-between mb-4">
+<h3 class="text-sm font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2">
+<span class="material-symbols-outlined text-base text-primary">data_object</span>
+                        Metadata
+                    </h3>
+<span class="text-[10px] font-mono text-slate-500 bg-slate-900 border border-slate-800 px-2 py-0.5 rounded">ID: dQw4w9WgXcQ</span>
+</div>
+<div class="border border-border-dark rounded bg-[#16202a] divide-y divide-border-dark">
+<!-- Row -->
+<div class="grid grid-cols-[120px_1fr] p-3 hover:bg-white/5 transition-colors">
+<div class="text-[11px] font-mono text-slate-500 uppercase tracking-wide pt-0.5">Title</div>
+<div class="text-sm text-slate-200 font-mono break-words leading-tight">Rick Astley - Never Gonna Give You Up (Official Music Video)</div>
+</div>
+<!-- Row -->
+<div class="grid grid-cols-[120px_1fr] p-3 hover:bg-white/5 transition-colors">
+<div class="text-[11px] font-mono text-slate-500 uppercase tracking-wide pt-0.5">Channel</div>
+<div class="text-sm text-primary font-mono flex items-center gap-1">
+                            RickAstleyVEVO
+                            <span class="material-symbols-outlined text-[14px] text-slate-500">verified</span>
+</div>
+</div>
+<!-- Row -->
+<div class="grid grid-cols-[120px_1fr] p-3 hover:bg-white/5 transition-colors">
+<div class="text-[11px] font-mono text-slate-500 uppercase tracking-wide pt-0.5">Statistics</div>
+<div class="text-sm text-slate-200 font-mono space-y-1">
+<div class="flex justify-between w-full max-w-[200px]">
+<span class="text-slate-400">Views:</span> <span>1.4B</span>
+</div>
+<div class="flex justify-between w-full max-w-[200px]">
+<span class="text-slate-400">Likes:</span> <span>16M</span>
+</div>
+</div>
+</div>
+<!-- Row -->
+<div class="grid grid-cols-[120px_1fr] p-3 hover:bg-white/5 transition-colors">
+<div class="text-[11px] font-mono text-slate-500 uppercase tracking-wide pt-0.5">Published</div>
+<div class="text-sm text-slate-200 font-mono">2009-10-25T07:58:34Z</div>
+</div>
+<!-- Row -->
+<div class="grid grid-cols-[120px_1fr] p-3 hover:bg-white/5 transition-colors">
+<div class="text-[11px] font-mono text-slate-500 uppercase tracking-wide pt-0.5">Duration</div>
+<div class="text-sm text-slate-200 font-mono">3:32 (212s)</div>
+</div>
+<!-- Row -->
+<div class="grid grid-cols-[120px_1fr] p-3 hover:bg-white/5 transition-colors">
+<div class="text-[11px] font-mono text-slate-500 uppercase tracking-wide pt-0.5">Dimensions</div>
+<div class="text-sm text-slate-200 font-mono">1920x1080 (Landscape)</div>
+</div>
+</div>
+</div>
+</aside>
+<!-- Right Panel (60%) -->
+<section class="col-span-12 lg:col-span-7 flex flex-col bg-surface-dark border-l border-border-dark relative">
+<!-- Tabs -->
+<div class="flex border-b border-border-dark bg-[#0d141c]">
+<button class="px-6 py-3 text-sm font-bold border-r border-border-dark border-t-2 border-t-primary text-white bg-surface-dark flex items-center gap-2">
+<span class="material-symbols-outlined text-lg text-primary">analytics</span>
+                    Analysis
+                </button>
+<button class="px-6 py-3 text-sm font-medium border-r border-border-dark border-t-2 border-t-transparent text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors flex items-center gap-2">
+<span class="material-symbols-outlined text-lg">description</span>
+                    Transcript
+                </button>
+<button class="px-6 py-3 text-sm font-medium border-r border-border-dark border-t-2 border-t-transparent text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors flex items-center gap-2">
+<span class="material-symbols-outlined text-lg">event_list</span>
+                    Events
+                    <span class="ml-1 bg-slate-800 text-[10px] px-1.5 py-0.5 rounded-full">0</span>
+</button>
+<button class="px-6 py-3 text-sm font-medium border-r border-border-dark border-t-2 border-t-transparent text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors flex items-center gap-2">
+<span class="material-symbols-outlined text-lg">build</span>
+                    Build
+                </button>
+<div class="flex-1"></div>
+<!-- Action Tools -->
+<div class="flex items-center px-4 gap-2">
+<button class="p-1.5 text-slate-400 hover:text-white rounded hover:bg-white/10" title="Copy Raw JSON">
+<span class="material-symbols-outlined text-lg">content_copy</span>
+</button>
+<button class="p-1.5 text-slate-400 hover:text-white rounded hover:bg-white/10" title="Download Report">
+<span class="material-symbols-outlined text-lg">download</span>
+</button>
+</div>
+</div>
+<!-- Analysis View Content -->
+<div class="flex-1 p-8 overflow-y-auto bg-surface-dark font-mono text-sm relative">
+<!-- Background grid decoration -->
+<div class="absolute inset-0 pointer-events-none opacity-[0.03]" style="background-image: linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px); background-size: 40px 40px;">
+</div>
+<div class="relative max-w-4xl mx-auto space-y-6">
+<!-- Alert Box -->
+<div class="border border-orange-500/30 bg-orange-500/5 p-4 rounded flex gap-4 items-start">
+<span class="material-symbols-outlined text-orange-400 mt-0.5">warning</span>
+<div>
+<h4 class="text-orange-400 font-bold mb-1">Content Warning: Unsupported Type</h4>
+<p class="text-slate-400 text-xs leading-relaxed">
+                                The ingestion engine detected <code class="text-orange-300 bg-orange-900/30 px-1 rounded border border-orange-500/20">music_video_content</code> which limits automatic speech recognition accuracy. Instrumental segments may be flagged as silence.
+                            </p>
+</div>
+</div>
+<!-- Markdown Content Simulator -->
+<div class="space-y-4 text-slate-300">
+<div class="flex items-center gap-2 pb-2 border-b border-border-dark">
+<span class="text-primary text-xl font-bold">#</span>
+<h2 class="text-lg font-bold text-white">Content Summary</h2>
+</div>
+<div class="bg-[#0d141c] p-4 rounded border border-border-dark">
+<table class="w-full text-left border-collapse">
+<tbody>
+<tr class="border-b border-slate-800">
+<td class="py-2 pr-4 text-slate-500 w-32">classification</td>
+<td class="py-2 text-green-400">"music_video"</td>
+</tr>
+<tr class="border-b border-slate-800">
+<td class="py-2 pr-4 text-slate-500">copyright_claim</td>
+<td class="py-2 text-red-400">true</td>
+</tr>
+<tr class="border-b border-slate-800">
+<td class="py-2 pr-4 text-slate-500">license_owner</td>
+<td class="py-2 text-blue-300">"Sony Music Entertainment"</td>
+</tr>
+<tr>
+<td class="py-2 pr-4 text-slate-500">sentiment</td>
+<td class="py-2 text-slate-200">
+<span class="inline-block w-20 h-1.5 bg-slate-700 rounded-full overflow-hidden align-middle mr-2">
+<span class="block h-full w-[85%] bg-green-500"></span>
+</span>
+                                            0.85 (Positive)
+                                        </td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="pt-4">
+<div class="flex items-center gap-2 mb-3">
+<span class="text-primary text-lg font-bold">##</span>
+<h3 class="text-base font-bold text-white">System Note</h3>
+</div>
+<blockquote class="border-l-2 border-slate-600 pl-4 py-1 italic text-slate-400 bg-white/5 rounded-r">
+                                "Analysis completed in 1.4s. Cached result served from edge node <span class="text-primary not-italic">us-east-1a</span>."
+                            </blockquote>
+</div>
+<div class="pt-4">
+<div class="flex items-center gap-2 mb-3">
+<span class="text-primary text-lg font-bold">##</span>
+<h3 class="text-base font-bold text-white">Detected Segments</h3>
+</div>
+<!-- Timeline Visualization -->
+<div class="h-12 w-full bg-[#0d141c] border border-border-dark rounded relative mt-2 mb-6 overflow-hidden flex items-center px-1">
+<!-- Intro -->
+<div class="h-8 bg-blue-500/20 border-l border-blue-500/50 absolute left-[0%] w-[12%] top-2 hover:bg-blue-500/40 cursor-help" title="Intro [00:00 - 00:43]"></div>
+<!-- Verse 1 -->
+<div class="h-8 bg-green-500/20 border-l border-green-500/50 absolute left-[12%] w-[25%] top-2 hover:bg-green-500/40 cursor-help" title="Verse 1"></div>
+<!-- Chorus -->
+<div class="h-8 bg-purple-500/20 border-l border-purple-500/50 absolute left-[37%] w-[20%] top-2 hover:bg-purple-500/40 cursor-help" title="Chorus"></div>
+<!-- Bridge -->
+<div class="h-8 bg-slate-500/20 border-l border-slate-500/50 absolute left-[57%] w-[15%] top-2 hover:bg-slate-500/40 cursor-help" title="Bridge"></div>
+<!-- Outro -->
+<div class="h-8 bg-blue-500/20 border-l border-blue-500/50 absolute left-[72%] w-[28%] top-2 hover:bg-blue-500/40 cursor-help" title="Outro"></div>
+</div>
+<div class="space-y-2">
+<div class="flex items-start gap-4 p-3 rounded hover:bg-white/5 transition-colors border border-transparent hover:border-border-dark cursor-pointer group">
+<span class="text-xs font-mono text-slate-500 mt-1 min-w-[50px]">00:00</span>
+<div>
+<p class="text-slate-200 font-bold mb-1 group-hover:text-primary">Intro Sequence</p>
+<p class="text-xs text-slate-500">Percussion intro detected. BPM: 113. No vocals detected.</p>
+</div>
+</div>
+<div class="flex items-start gap-4 p-3 rounded hover:bg-white/5 transition-colors border border-transparent hover:border-border-dark cursor-pointer group">
+<span class="text-xs font-mono text-slate-500 mt-1 min-w-[50px]">00:43</span>
+<div>
+<p class="text-slate-200 font-bold mb-1 group-hover:text-primary">Vocal Onset</p>
+<p class="text-xs text-slate-500">Male vocals enter. Key: Db Major. Confidence: 98%.</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Sticky Footer for Panel -->
+<div class="border-t border-border-dark bg-[#0d141c] p-3 flex justify-between items-center text-xs font-mono text-slate-500">
+<div>JOB_ID: 88f7-22a9-c001</div>
+<div class="flex gap-4">
+<span>CPU: 12ms</span>
+<span>MEM: 44MB</span>
+</div>
+</div>
+</section>
+</main>
+</body></html>
