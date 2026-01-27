@@ -267,8 +267,7 @@ async def main():
                         except (AttributeError, BrokenPipeError) as drain_error:
                             # Non-fatal issues when flushing output (e.g., client closed pipe or writer lacks drain).
                             # We disable async writer and fall back to sys.stdout to prevent repeated errors.
-                            LOGGER.warning("Error while draining writer (%s): %s. Falling back to sys.stdout.write().", 
-                                         type(drain_error).__name__, drain_error)
+                            LOGGER.warning(f"Error while draining writer ({type(drain_error).__name__}): {drain_error}. Falling back to sys.stdout.write().")
                             writer = None
                     else:
                         sys.stdout.write(response_str)
