@@ -44,9 +44,8 @@ Runs inference using the configured LiteRT-LM model.
 {
   "name": "run_inference",
   "arguments": {
-    "prompt": "Describe this image.",
-    "image_path": "/path/to/image.jpg",
-    "backend": "gpu"
+    "prompt": "What is the capital of France?",
+    "backend": "cpu"
   }
 }
 ```

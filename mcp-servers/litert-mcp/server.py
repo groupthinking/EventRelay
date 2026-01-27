@@ -11,7 +11,7 @@ import json
 import logging
 import sys
 import os
-import subprocess
+import shutil
 from typing import Dict, Any, Optional
 
 # Configure logging
@@ -44,9 +44,13 @@ class MCPServer:
             elif method == "notifications/initialized":
                 return None  # No response needed
             else:
-                # For unknown methods, we might want to return an error or ignore if it's a notification
+                # For unknown methods, proper JSON-RPC error code -32601
                 if request_id is not None:
-                    raise Exception(f"Unknown method: {method}")
+                    return {
+                        "jsonrpc": "2.0",
+                        "id": request_id,
+                        "error": {"code": -32601, "message": f"Method not found: {method}"},
+                    }
                 return None
 
         except Exception as e:
@@ -148,24 +152,41 @@ class MCPServer:
         audio_path = args.get("audio_path")
         backend = args.get("backend", "cpu")
 
+        # Validate Prompt
+        if not prompt:
+            return {
+                "status": "error",
+                "message": "Prompt is required and cannot be empty."
+            }
+
+        # Validate Backend
+        valid_backends = {"cpu", "gpu", "npu"}
+        if backend not in valid_backends:
+            return {
+                "status": "error",
+                "message": f"Invalid backend '{backend}'. Must be one of {sorted(list(valid_backends))}."
+            }
+
         if not model_path:
             return {
                 "status": "error",
                 "message": "No model path provided. Set LIT_MODEL_PATH env var or pass model_path argument."
             }
 
-        # Check if binary exists (simple check)
-        try:
-            # We assume the binary handles --help or similar to check existence,
-            # but simpler to just try running it or check existence if it's a path.
-            # If it's just 'lit' in PATH, shutil.which would be needed, but let's just try-catch execution.
-            pass
-        except Exception:
-            pass
+        # Check if binary exists
+        binary_path = shutil.which(self.lit_binary)
+        # If it's a direct path (e.g. ./lit), shutil.which might return None if not in PATH, so check explicitly
+        if not binary_path and os.path.exists(self.lit_binary):
+            binary_path = self.lit_binary
+
+        if not binary_path:
+             return {
+                 "status": "error",
+                 "message": f"LiteRT binary '{self.lit_binary}' not found. Please set LIT_BINARY_PATH or install LiteRT-LM."
+             }
 
         # Construct command
-        # We assume the binary accepts flags similar to litert_lm_main demo
-        cmd = [self.lit_binary]
+        cmd = [binary_path]
         cmd.extend(["--backend", backend])
         cmd.extend(["--model_path", model_path])
 
@@ -173,16 +194,12 @@ class MCPServer:
         # The current 'lit' CLI wrapper does not support verified multimodal input flags.
         # We restrict to text-only to avoid speculative errors.
         if image_path or audio_path:
-             return {
-                 "status": "error",
-                 "message": "Multimodal input (image/audio) is not yet supported via the 'lit' CLI wrapper. Please use the LiteRT-LM C++ or Python API directly, or update this server implementation once CLI flags are verified."
-             }
+            return {
+                "status": "error",
+                "message": "Multimodal input (image/audio) is not yet supported via the 'lit' CLI wrapper. Please use the LiteRT-LM C++ or Python API directly, or update this server implementation once CLI flags are verified."
+            }
 
         cmd.extend(["--input_prompt", prompt])
-
-        # Add non-interactive flags if needed (e.g. --async=false to ensure we get output?)
-        # The demo defaults async=true but that might be for C++ API usage.
-        # For CLI, we probably want it to print and exit.
 
         LOGGER.info(f"Executing command: {' '.join(cmd)}")
 
@@ -212,11 +229,6 @@ class MCPServer:
                 "debug_stderr": stderr_str
             }
 
-        except FileNotFoundError:
-             return {
-                 "status": "error",
-                 "message": f"LiteRT binary '{self.lit_binary}' not found. Please set LIT_BINARY_PATH or install LiteRT-LM."
-             }
         except Exception as e:
             return {
                 "status": "error",
@@ -242,9 +254,11 @@ async def main():
             LOGGER.warning(f"Could not connect write pipe to stdout: {e}. Falling back to print.")
             writer = None
     else:
-        # Windows fallback (simplified, might not work perfectly with async stdio without extra loop config)
-        # But matches common patterns.
-        pass
+        # Windows fallback:
+        # On Windows, connecting a pipe to stdout using asyncio can be problematic with the default loop.
+        # We fall back to standard print() which works for basic JSON-RPC over stdio.
+        LOGGER.info("Windows detected: Using print() fallback for stdout.")
+        writer = None
 
     while True:
         try:
@@ -263,9 +277,9 @@ async def main():
                         try:
                             await writer.drain()
                         except (AttributeError, BrokenPipeError) as e:
-                            LOGGER.warning(f"Error while draining writer ({type(e).__name__}): {e}. "
-                                           "Disabling async writer and falling back to print().")
+                            LOGGER.warning(f"Error draining writer: {e}. Switching to print fallback.")
                             writer = None
+                            print(response_str, flush=True)
                     else:
                         print(response_str, flush=True)
 
