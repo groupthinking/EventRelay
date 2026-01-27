@@ -582,7 +582,7 @@ export default function HomePage() {
                   type="submit"
                   disabled={isAnalyzing}
                   className={clsx(
-                    'px-8 py-4 rounded-xl font-bold text-lg',
+                    'group px-8 py-4 rounded-xl font-bold text-lg',
                     'bg-gradient-to-r from-primary-500 via-primary-600 to-primary-500 bg-[length:200%_100%]',
                     'shadow-lg shadow-primary-500/30',
                     'hover:shadow-xl hover:shadow-primary-500/40',
@@ -601,7 +601,7 @@ export default function HomePage() {
                   ) : (
                     <>
                       Generate app
-                      <span className="text-xl transition-transform hover:translate-x-1">→</span>
+                      <span className="text-xl transition-transform group-hover:translate-x-1">→</span>
                     </>
                   )}
                 </button>

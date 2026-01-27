@@ -119,10 +119,9 @@ const SuggestedPrompts = forwardRef<HTMLDivElement, SuggestedPromptsProps>(
           className
         )}
         style={{ 
-          '--animation-delay': '200ms',
-          animationDelay: 'var(--animation-delay)',
+          animationDelay: '200ms',
           opacity: 0 
-        } as React.CSSProperties}
+        }}
         {...props}
       >
         <p className="text-xs font-semibold tracking-widest text-white/40 mb-4 text-center">
@@ -135,11 +134,10 @@ const SuggestedPrompts = forwardRef<HTMLDivElement, SuggestedPromptsProps>(
               topic={topic}
               onSelect={onSelectTopic}
               style={{
-                '--animation-delay': `${300 + index * 100}ms`,
-                animationDelay: 'var(--animation-delay)',
+                animationDelay: `${300 + index * 100}ms`,
                 animationFillMode: 'forwards',
                 opacity: 0
-              } as React.CSSProperties}
+              }}
               className="animate-fade-in-up motion-reduce:animate-none motion-reduce:opacity-100"
             />
           ))}

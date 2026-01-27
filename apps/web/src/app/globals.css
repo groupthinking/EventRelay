@@ -560,15 +560,6 @@ pre {
    Skeleton Loading
    ============================================ */
 
-@keyframes skeleton-shimmer {
-  0% {
-    background-position: -200% 0;
-  }
-  100% {
-    background-position: 200% 0;
-  }
-}
-
 .skeleton {
   background: linear-gradient(
     90deg,
@@ -577,7 +568,7 @@ pre {
     rgba(255, 255, 255, 0.03) 100%
   );
   background-size: 200% 100%;
-  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+  animation: shimmer 1.5s ease-in-out infinite;
   border-radius: 0.5rem;
 }
 
