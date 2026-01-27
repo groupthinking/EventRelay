@@ -601,7 +601,7 @@ export default function HomePage() {
                   ) : (
                     <>
                       Generate app
-                      <span className="text-xl transition-transform group-hover:translate-x-1">→</span>
+                      <span className="text-xl transition-transform hover:translate-x-1">→</span>
                     </>
                   )}
                 </button>
@@ -613,13 +613,19 @@ export default function HomePage() {
           <div className="mb-16">
             <SuggestedPrompts
               onSelectTopic={(query) => {
-                setVideoUrl(`https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`);
+                const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
+                if (typeof window !== 'undefined') {
+                  window.open(searchUrl, '_blank', 'noopener,noreferrer');
+                }
               }}
             />
           </div>
 
           {/* Video Preview Card */}
           <div className="max-w-lg mx-auto mb-16">
+            <p className="text-xs font-semibold tracking-widest text-white/40 mb-4 text-center">
+              EXAMPLE OUTPUT PREVIEW
+            </p>
             <div className="relative group">
               {/* Glow effect */}
               <div className="absolute -inset-4 bg-gradient-to-r from-primary-500/10 via-accent-500/10 to-primary-500/10 rounded-3xl blur-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
@@ -628,14 +634,7 @@ export default function HomePage() {
                 {/* Video thumbnail placeholder */}
                 <div className="relative aspect-video bg-gradient-to-br from-surface-800 to-surface-900 flex items-center justify-center">
                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
-                  <div className="text-6xl opacity-50 group-hover:opacity-70 transition-opacity">🎬</div>
-
-                  {/* Play button overlay */}
-                  <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300">
-                    <div className="w-16 h-16 rounded-full bg-white/10 backdrop-blur-sm border border-white/20 flex items-center justify-center hover:scale-110 transition-transform cursor-pointer">
-                      <span className="text-2xl ml-1">▶</span>
-                    </div>
-                  </div>
+                  <div className="text-6xl opacity-50 transition-opacity">🎬</div>
 
                   {/* Video info overlay */}
                   <div className="absolute bottom-4 left-4 right-4">

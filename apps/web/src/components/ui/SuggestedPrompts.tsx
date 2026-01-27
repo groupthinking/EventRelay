@@ -63,6 +63,7 @@ const TopicChip = forwardRef<HTMLButtonElement, TopicChipProps>(
       <button
         ref={ref}
         onClick={() => onSelect?.(topic.query)}
+        aria-label={`Search for ${topic.label} videos`}
         className={clsx(
           'group inline-flex items-center gap-2.5 px-4 py-2.5',
           'rounded-xl',
@@ -76,6 +77,7 @@ const TopicChip = forwardRef<HTMLButtonElement, TopicChipProps>(
           'hover:border-white/20',
           'active:scale-100',
           'focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/50',
+          'motion-reduce:transition-none motion-reduce:hover:scale-100',
           className
         )}
         {...props}
@@ -113,9 +115,14 @@ const SuggestedPrompts = forwardRef<HTMLDivElement, SuggestedPromptsProps>(
         className={clsx(
           'w-full max-w-2xl mx-auto',
           'animate-fade-in-up',
+          'motion-reduce:animate-none motion-reduce:opacity-100',
           className
         )}
-        style={{ animationDelay: '200ms', opacity: 0 }}
+        style={{ 
+          '--animation-delay': '200ms',
+          animationDelay: 'var(--animation-delay)',
+          opacity: 0 
+        } as React.CSSProperties}
         {...props}
       >
         <p className="text-xs font-semibold tracking-widest text-white/40 mb-4 text-center">
@@ -128,11 +135,12 @@ const SuggestedPrompts = forwardRef<HTMLDivElement, SuggestedPromptsProps>(
               topic={topic}
               onSelect={onSelectTopic}
               style={{
-                animationDelay: `${300 + index * 100}ms`,
+                '--animation-delay': `${300 + index * 100}ms`,
+                animationDelay: 'var(--animation-delay)',
                 animationFillMode: 'forwards',
                 opacity: 0
-              }}
-              className="animate-fade-in-up"
+              } as React.CSSProperties}
+              className="animate-fade-in-up motion-reduce:animate-none motion-reduce:opacity-100"
             />
           ))}
         </div>
