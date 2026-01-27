@@ -15,7 +15,7 @@ import base64
 import sys
 import os
 from typing import Dict, List, Any, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 # Ensure the lib directory is in sys.path FIRST before any relative imports
 _lib_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -76,7 +76,7 @@ class TranscriptionAgent(MCPEnabledA2AAgent):
 
     async def _transcribe_media(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Transcribe audio/video content using MCP tools and processing pipeline"""
-        start_time = datetime.utcnow()
+        start_time = datetime.now(timezone.utc)
 
         try:
             media_url = data.get("url")
@@ -118,7 +118,7 @@ class TranscriptionAgent(MCPEnabledA2AAgent):
                 "transcription_type": "audio_video",
                 "status": "completed",
                 "start_time": start_time.isoformat(),
-                "completion_time": datetime.utcnow().isoformat(),
+                "completion_time": datetime.now(timezone.utc).isoformat(),
                 "media_info": media_info,
                 "pipeline_validation": validation_result.get("result", {}),
                 "transcription": transcription_result,
@@ -128,7 +128,7 @@ class TranscriptionAgent(MCPEnabledA2AAgent):
                 "language": transcription_result.get("detected_language", "unknown"),
                 "confidence": transcription_result.get("confidence", 0.0),
                 "word_count": len(transcription_result.get("text", "").split()),
-                "processing_time_ms": (datetime.utcnow() - start_time).total_seconds()
+                "processing_time_ms": (datetime.now(timezone.utc) - start_time).total_seconds()
                 * 1000,
             }
 
@@ -138,7 +138,7 @@ class TranscriptionAgent(MCPEnabledA2AAgent):
                 "transcription_type": "transcription_failed",
                 "status": "error",
                 "error": str(e),
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
     def _extract_media_info(self, data: Dict[str, Any]) -> Dict[str, Any]:
@@ -305,7 +305,7 @@ async def speech_to_text(audio_data):
                 "detected_language": detected_lang,
                 "confidence": confidence,
                 "supported_languages": self.supported_languages,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
         except Exception as e:
@@ -333,7 +333,7 @@ async def speech_to_text(audio_data):
             "subtitle_format": format_type,
             "content": subtitle_content,
             "segment_count": len(transcription["segments"]),
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
     async def _identify_speakers(self, data: Dict[str, Any]) -> Dict[str, Any]:
@@ -449,7 +449,7 @@ class ActionGeneratorAgent(MCPEnabledA2AAgent):
 
     async def _generate_actions(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Generate actionable items from video content"""
-        start_time = datetime.utcnow()
+        start_time = datetime.now(timezone.utc)
 
         try:
             transcript = data.get("transcript", {})
@@ -488,7 +488,7 @@ class ActionGeneratorAgent(MCPEnabledA2AAgent):
                 "generation_type": "video_to_actions",
                 "status": "completed",
                 "start_time": start_time.isoformat(),
-                "completion_time": datetime.utcnow().isoformat(),
+                "completion_time": datetime.now(timezone.utc).isoformat(),
                 "content_type": content_type,
                 "validation_result": validation_result.get("result", {}),
                 "extracted_actions": actions,
@@ -507,7 +507,7 @@ class ActionGeneratorAgent(MCPEnabledA2AAgent):
                 "generation_type": "action_generation_failed",
                 "status": "error",
                 "error": str(e),
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
     def _generate_action_extraction_code(self, content_type: str) -> str:
@@ -813,7 +813,7 @@ def extract_actions_from_transcript(transcript: str, content_type: str = "{conte
                 }
 
             workflow = {
-                "id": f"workflow_{datetime.utcnow().timestamp()}",
+                "id": f"workflow_{datetime.now(timezone.utc).timestamp()}",
                 "steps": [
                     {"action": action, "step": i + 1}
                     for i, action in enumerate(actions)
@@ -896,7 +896,7 @@ class QualityAssessorAgent(MCPEnabledA2AAgent):
 
     async def _assess_quality(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Perform comprehensive quality assessment"""
-        start_time = datetime.utcnow()
+        start_time = datetime.now(timezone.utc)
 
         try:
             video_data = data.get("video", {})
@@ -930,7 +930,7 @@ class QualityAssessorAgent(MCPEnabledA2AAgent):
                 "assessment_type": "comprehensive_quality",
                 "status": "completed",
                 "start_time": start_time.isoformat(),
-                "completion_time": datetime.utcnow().isoformat(),
+                "completion_time": datetime.now(timezone.utc).isoformat(),
                 "validation_result": validation_result.get("result", {}),
                 "video_quality": video_quality,
                 "transcription_quality": transcription_quality,
@@ -953,7 +953,7 @@ class QualityAssessorAgent(MCPEnabledA2AAgent):
                 "assessment_type": "quality_assessment_failed",
                 "status": "error",
                 "error": str(e),
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
     def _generate_quality_assessment_code(self) -> str:
