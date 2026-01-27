@@ -7,6 +7,8 @@
 
 ## ✅ COMPLETED (This Session)
 
+- [x] **Stitch MCP Configuration**: Recovered config from archive and added to `.github/mcp-servers.json` (Requires `STITCH_ACCESS_TOKEN`).
+- [x] **VibeVoice Evaluation**: Completed. See `docs/VIBEVOICE_EVALUATION.md`.
 - [x] MCP import path configuration fixed (`a2a.py`, `video_subagents.py`, `code_analysis_subagents.py`)
 - [x] Installed `mcp` package in venv
 - [x] Fixed `real_mcp_client.py` default server path

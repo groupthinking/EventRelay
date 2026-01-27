@@ -5,7 +5,7 @@ import json
 import time
 import psycopg2
 from typing import List
-import google.generativeai as genai
+from google import genai
 from dotenv import load_dotenv
 
 load_dotenv(override=True)
@@ -16,8 +16,8 @@ if not GOOGLE_API_KEY:
     print("Error: GOOGLE_API_KEY not found")
     exit(1)
 
-genai.configure(api_key=GOOGLE_API_KEY)
-EMBEDDING_MODEL = "models/text-embedding-004"
+client = genai.Client(api_key=GOOGLE_API_KEY)
+EMBEDDING_MODEL = "text-embedding-004"
 
 # Database connection
 DATABASE_URL = os.environ.get("VECTOR_DATABASE_URL") or os.environ.get("DATABASE_URL")
@@ -48,13 +48,12 @@ MAX_FILE_SIZE = 100 * 1024
 
 def get_embedding(text: str) -> List[float]:
     """Get Gemini embedding for text."""
-    result = genai.embed_content(
+    result = client.models.embed_content(
         model=EMBEDDING_MODEL,
-        content=text,
-        task_type="retrieval_document",
-        title="Code Snippet"
+        contents=text,
+        config={'title': "Code Snippet"}
     )
-    return result['embedding']
+    return result.embeddings[0].values
 
 
 def should_ignore(relpath: str, abspath: str) -> bool:
