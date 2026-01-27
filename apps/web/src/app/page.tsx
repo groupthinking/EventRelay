@@ -484,9 +484,9 @@ export default function HomePage() {
       <nav className="relative z-50 flex items-center justify-between px-6 lg:px-12 py-5 border-b border-white/[0.06]">
         <div className="flex items-center gap-3">
           <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center font-black text-lg shadow-lg shadow-primary-500/30 transition-transform hover:scale-105">
-            V
+            U
           </div>
-          <span className="font-bold text-xl tracking-tight bg-gradient-to-r from-white to-white/80 bg-clip-text text-transparent">Video2Learn</span>
+          <span className="font-bold text-xl tracking-tight bg-gradient-to-r from-white to-white/80 bg-clip-text text-transparent">UVAI.io</span>
         </div>
 
         {/* Desktop Navigation */}
@@ -890,9 +890,9 @@ console.log(result.deployedUrl);
             <div className="col-span-2 md:col-span-1">
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center font-bold shadow-lg shadow-primary-500/25">
-                  V
+                  U
                 </div>
-                <span className="font-bold text-lg">Video2Learn</span>
+                <span className="font-bold text-lg">UVAI.io</span>
               </div>
               <p className="text-white/40 text-sm leading-relaxed mb-4">
                 Transform any video into interactive learning experiences with AI.
@@ -972,7 +972,7 @@ console.log(result.deployedUrl);
           {/* Footer Bottom */}
           <div className="pt-8 border-t border-white/[0.05] flex flex-col md:flex-row justify-between items-center gap-4">
             <p className="text-white/30 text-sm">
-              © 2026 Video2Learn. Built with AI by <span className="text-primary-400">Aaron Wade</span>
+              © 2026 UVAI.io. Built with AI by <span className="text-primary-400">Aaron Wade</span>
             </p>
             <div className="flex items-center gap-2 text-white/30 text-sm">
               <span className="relative flex h-2 w-2">
