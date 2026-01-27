@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useState, useEffect, useRef } from 'react';
 import { clsx } from 'clsx';
+import { SuggestedPrompts } from '@/components/ui';
 
 // ============================================
 // Animated Counter Component
@@ -310,29 +311,29 @@ export default function HomePage() {
       <FloatingOrbs />
 
       {/* Navigation */}
-      <nav className="relative z-50 flex items-center justify-between px-6 lg:px-12 py-4 border-b border-white/[0.05]">
+      <nav className="relative z-50 flex items-center justify-between px-6 lg:px-12 py-5 border-b border-white/[0.06]">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center font-black text-lg shadow-lg shadow-primary-500/25">
-            U
+          <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center font-black text-lg shadow-lg shadow-primary-500/30 transition-transform hover:scale-105">
+            V
           </div>
-          <span className="font-bold text-xl tracking-tight">UVAI.io</span>
+          <span className="font-bold text-xl tracking-tight bg-gradient-to-r from-white to-white/80 bg-clip-text text-transparent">Video2Learn</span>
         </div>
         <div className="hidden md:flex items-center gap-8">
-          <Link href="/dashboard" className="text-white/60 hover:text-white transition-colors font-medium">
+          <Link href="/dashboard" className="text-white/50 hover:text-white transition-all duration-200 font-medium hover:-translate-y-0.5">
             Dashboard
           </Link>
-          <Link href="/playground" className="text-white/60 hover:text-white transition-colors font-medium">
+          <Link href="/playground" className="text-white/50 hover:text-white transition-all duration-200 font-medium hover:-translate-y-0.5">
             API
           </Link>
-          <Link href="/docs" className="text-white/60 hover:text-white transition-colors font-medium">
+          <Link href="/docs" className="text-white/50 hover:text-white transition-all duration-200 font-medium hover:-translate-y-0.5">
             Docs
           </Link>
           <Link
             href="/dashboard"
-            className="btn btn-primary"
+            className="btn btn-primary px-5 py-2.5"
           >
             Get Started
-            <span className="ml-1">→</span>
+            <span className="ml-1 transition-transform group-hover:translate-x-1">→</span>
           </Link>
         </div>
       </nav>
@@ -356,48 +357,107 @@ export default function HomePage() {
           </div>
 
           {/* Main Headline */}
-          <h1 className="text-5xl md:text-7xl lg:text-8xl font-black leading-[0.95] mb-8 tracking-tight">
-            <span className="block text-white">
-              Transform Video into
+          <h1 className="text-5xl md:text-7xl lg:text-8xl font-black leading-[0.9] mb-6 tracking-tighter">
+            <span className="block text-white drop-shadow-lg">
+              VIDEO TO
             </span>
-            <span className="block bg-gradient-to-r from-primary-400 via-accent-400 to-primary-400 bg-clip-text text-transparent bg-[length:200%_auto] animate-gradient">
-              Actionable Intelligence
+            <span className="block text-white drop-shadow-lg">
+              LEARNING
+            </span>
+            <span className="block bg-gradient-to-r from-primary-400 via-accent-400 to-primary-400 bg-clip-text text-transparent bg-[length:200%_auto] animate-gradient drop-shadow-lg">
+              APP
             </span>
           </h1>
 
           {/* Subheadline */}
-          <p className="text-xl md:text-2xl text-white/50 max-w-2xl mx-auto mb-12 leading-relaxed font-light">
-            Stop watching. Start acting. UVAI extracts insights, generates action items,
-            and deploys live applications from any video in{' '}
-            <strong className="text-accent-400 font-semibold">2.3 seconds</strong>.
+          <p className="text-lg md:text-xl text-white/60 max-w-xl mx-auto mb-10 leading-relaxed">
+            Generate interactive learning apps from
+            <br />
+            <span className="text-white/80">YouTube content</span>
+          </p>
+
+          {/* Attribution */}
+          <p className="text-sm text-white/40 mb-10">
+            An experiment by <span className="text-primary-400 hover:text-primary-300 transition-colors cursor-pointer">Aaron Wade</span>
           </p>
 
           {/* Main CTA Input */}
-          <form onSubmit={handleAnalyze} className="max-w-2xl mx-auto mb-16">
-            <div className="flex gap-3 p-2 rounded-2xl bg-white/[0.03] border border-white/[0.08] backdrop-blur-xl shadow-2xl shadow-primary-500/5">
-              <input
-                type="text"
-                value={videoUrl}
-                onChange={(e) => setVideoUrl(e.target.value)}
-                placeholder="Paste any YouTube URL or video link..."
-                className="flex-1 px-5 py-4 bg-transparent text-white placeholder:text-white/30 focus:outline-none text-lg"
-              />
-              <button
-                type="submit"
-                className="px-8 py-4 rounded-xl bg-gradient-to-r from-primary-500 to-primary-600 font-bold text-lg hover:shadow-xl hover:shadow-primary-500/25 transition-all hover:-translate-y-0.5 flex items-center gap-2"
-              >
-                Analyze Now
-                <span className="text-xl">→</span>
-              </button>
+          <form onSubmit={handleAnalyze} className="max-w-2xl mx-auto mb-8">
+            <div className="relative group">
+              {/* Glow effect */}
+              <div className="absolute -inset-1 bg-gradient-to-r from-primary-500/20 via-accent-500/20 to-primary-500/20 rounded-3xl blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+
+              <div className="relative flex gap-3 p-2.5 rounded-2xl bg-surface-900/80 border border-white/[0.1] backdrop-blur-xl shadow-2xl shadow-primary-500/10 transition-all duration-300 group-hover:border-primary-500/30">
+                <input
+                  type="text"
+                  value={videoUrl}
+                  onChange={(e) => setVideoUrl(e.target.value)}
+                  placeholder="Paste a URL from YouTube..."
+                  className="flex-1 px-6 py-4 bg-transparent text-white text-lg placeholder:text-white/40 focus:outline-none"
+                />
+                <button
+                  type="submit"
+                  className={clsx(
+                    'px-8 py-4 rounded-xl font-bold text-lg',
+                    'bg-gradient-to-r from-primary-500 via-primary-600 to-primary-500 bg-[length:200%_100%]',
+                    'shadow-lg shadow-primary-500/30',
+                    'hover:shadow-xl hover:shadow-primary-500/40',
+                    'hover:-translate-y-0.5 active:translate-y-0',
+                    'transition-all duration-300',
+                    'flex items-center gap-2',
+                    'animate-gradient'
+                  )}
+                >
+                  Generate app
+                  <span className="text-xl transition-transform group-hover:translate-x-1">→</span>
+                </button>
+              </div>
             </div>
           </form>
 
+          {/* Suggested Topics */}
+          <div className="mb-16">
+            <SuggestedPrompts
+              onSelectTopic={(query) => {
+                setVideoUrl(`https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`);
+              }}
+            />
+          </div>
+
+          {/* Video Preview Card */}
+          <div className="max-w-lg mx-auto mb-16">
+            <div className="relative group">
+              {/* Glow effect */}
+              <div className="absolute -inset-4 bg-gradient-to-r from-primary-500/10 via-accent-500/10 to-primary-500/10 rounded-3xl blur-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
+
+              <div className="relative overflow-hidden rounded-2xl border border-white/[0.1] bg-surface-900/80 backdrop-blur-xl shadow-2xl transition-all duration-500 group-hover:border-white/[0.15]">
+                {/* Video thumbnail placeholder */}
+                <div className="relative aspect-video bg-gradient-to-br from-surface-800 to-surface-900 flex items-center justify-center">
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+                  <div className="text-6xl opacity-50 group-hover:opacity-70 transition-opacity">🎬</div>
+
+                  {/* Play button overlay */}
+                  <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300">
+                    <div className="w-16 h-16 rounded-full bg-white/10 backdrop-blur-sm border border-white/20 flex items-center justify-center hover:scale-110 transition-transform cursor-pointer">
+                      <span className="text-2xl ml-1">▶</span>
+                    </div>
+                  </div>
+
+                  {/* Video info overlay */}
+                  <div className="absolute bottom-4 left-4 right-4">
+                    <p className="text-sm text-white/70 font-medium">Sample: How to build a startup</p>
+                    <p className="text-xs text-white/40 mt-1">12:34 • Ready to transform</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* Stats */}
-          <div className="flex justify-center gap-16 md:gap-24">
+          <div className="flex justify-center gap-12 md:gap-20">
             <AnimatedCounter value="50K" suffix="+" label="Videos Processed" />
-            <AnimatedCounter value="2.3" suffix="s" label="Avg Processing Time" />
-            <AnimatedCounter value="7" label="AI Brains Connected" />
-            <AnimatedCounter value="99.9" suffix="%" label="Uptime SLA" />
+            <AnimatedCounter value="2.3" suffix="s" label="Avg Processing" />
+            <AnimatedCounter value="7" label="AI Models" />
           </div>
         </div>
       </section>

@@ -30,24 +30,28 @@ const Card = forwardRef<HTMLDivElement, CardProps>(
 
     const variants = {
       default: clsx(
-        'bg-surface-900/50',
+        'bg-surface-900/60',
         'border border-white/[0.08]',
-        'backdrop-blur-xl'
+        'backdrop-blur-xl',
+        'hover:bg-surface-900/70'
       ),
       glass: clsx(
         'bg-white/[0.03]',
         'border border-white/[0.08]',
-        'backdrop-blur-2xl'
+        'backdrop-blur-2xl',
+        'hover:bg-white/[0.05]'
       ),
       gradient: clsx(
-        'bg-gradient-to-br from-white/[0.08] to-white/[0.02]',
+        'bg-gradient-to-br from-white/[0.06] to-white/[0.02]',
         'border border-white/[0.08]',
-        'backdrop-blur-xl'
+        'backdrop-blur-xl',
+        'hover:from-white/[0.08] hover:to-white/[0.03]'
       ),
       elevated: clsx(
         'bg-surface-900',
         'border border-white/[0.08]',
-        'shadow-xl shadow-black/20'
+        'shadow-xl shadow-black/25',
+        'hover:shadow-2xl hover:shadow-black/30'
       ),
     };
 
@@ -61,10 +65,11 @@ const Card = forwardRef<HTMLDivElement, CardProps>(
     const hoverStyles = hoverable
       ? clsx(
           'cursor-pointer',
-          'hover:border-primary-500/30',
-          'hover:shadow-lg hover:shadow-primary-500/10',
-          'hover:-translate-y-1',
-          'active:translate-y-0'
+          'hover:border-primary-500/40',
+          'hover:shadow-xl hover:shadow-primary-500/15',
+          'hover:-translate-y-1.5',
+          'active:translate-y-0 active:shadow-lg',
+          'will-change-transform'
         )
       : '';
 
