@@ -239,10 +239,14 @@ async def main():
 
     writer = None
     if sys.platform != "win32":
-        w_transport, w_protocol = await asyncio.get_event_loop().connect_write_pipe(
-            asyncio.Protocol, sys.stdout
-        )
-        writer = asyncio.StreamWriter(w_transport, w_protocol, None, asyncio.get_event_loop())
+        try:
+            w_transport, w_protocol = await asyncio.get_event_loop().connect_write_pipe(
+                asyncio.Protocol, sys.stdout
+            )
+            writer = asyncio.StreamWriter(w_transport, w_protocol, None, asyncio.get_event_loop())
+        except Exception as e:
+            LOGGER.warning(f"Could not connect write pipe to stdout: {e}. Falling back to sys.stdout.write().")
+            writer = None
 
     while True:
         try:
@@ -262,8 +266,10 @@ async def main():
                             await writer.drain()
                         except (AttributeError, BrokenPipeError) as drain_error:
                             # Non-fatal issues when flushing output (e.g., client closed pipe or writer lacks drain).
-                            # We log at debug level and continue to preserve existing behavior.
-                            LOGGER.debug("Non-fatal error while draining writer: %s", drain_error)
+                            # We disable async writer and fall back to sys.stdout to prevent repeated errors.
+                            LOGGER.warning("Error while draining writer (%s): %s. Falling back to sys.stdout.write().", 
+                                         type(drain_error).__name__, drain_error)
+                            writer = None
                     else:
                         sys.stdout.write(response_str)
                         sys.stdout.flush()
