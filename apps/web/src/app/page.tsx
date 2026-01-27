@@ -330,7 +330,7 @@ export default function HomePage() {
           </Link>
           <Link
             href="/dashboard"
-            className="btn btn-primary px-5 py-2.5"
+            className="btn btn-primary px-5 py-2.5 group"
           >
             Get Started
             <span className="ml-1 transition-transform group-hover:translate-x-1">→</span>
