@@ -16,7 +16,7 @@ START NOW /yolo-claude.md
 
 ## Project Context: EventRelay / UVAI
 
-Video intelligence platform — Creating a video intelligence platform that processes video, extracts transcripts, and enables actionable AI workflows from the video.Architectural Components for Video Intelligence
+Creating a video intelligence platform that processes video, extracts transcripts, and enables actionable AI workflows from the video.Architectural Components for Video Intelligence
 
 Real limitations involve multi-modal video input (beyond YouTube) and low-latency edge cases. Incorporating streaming and multi-modal training architectures, like CLIP or MediaPipe, would be next steps. Start here: ai-edge-torch, accessible through gcp project - just1-482108, request api when ready.
 

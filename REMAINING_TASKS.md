@@ -13,6 +13,9 @@
   - [x] `Vision-Agents`: Analyzed structure (Python agent framework).
 - [x] Evaluate `VibeVoice` (Completed: Identified as TTS, not STT).
 - [x] Research competitors (Completed: Loom, Descript, Otter analyzed).
+- [x] **Functional Verification:**
+  - [x] Submit a real non-music video (`docs/BACKEND_VERIFICATION_REPORT.md`).
+  - [x] Verify agent workflow output is produced.
 
 ### 🔲 Phase 4: Design Rebuild with Stitch
 
