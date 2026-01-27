@@ -7,7 +7,12 @@ description: PRIOR TO PROCESSING A VIDEO
 
 > **When to use**: Before processing any video URL or video content analysis task.
 
-## Quick Reference
+## Quick Reference: NEVER USE Rick Astley video OR ANIMAL ZOO VIDEO FOR TESTING = INVALID TEST. FIND A A RECENT VIDEO FROM GOOGLE OR ANTROPIC
+
+https://www.youtube.com/@anthropic-ai/videos
+https://www.youtube.com/@googlecloudtech/videos
+
+AFTER YOU HAVE VIDEO URL LINK START HERE:
 
 **Full catalog**: `docs/video-prompts-catalog.md`
 
