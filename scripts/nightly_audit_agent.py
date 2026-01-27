@@ -27,6 +27,12 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional
 
 # Set up path to include src
+import sys
+import traceback
+from pathlib import Path
+from typing import Dict, Any, List, Optional
+
+from typing import Dict, Any
 sys.path.append(str(Path(__file__).parent.parent / "src"))
 
 try:
