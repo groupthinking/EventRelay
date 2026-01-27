@@ -262,8 +262,10 @@ async def main():
                         writer.write(response_str.encode())
                         try:
                             await writer.drain()
-                        except (AttributeError, BrokenPipeError):
-                            pass
+                        except (AttributeError, BrokenPipeError) as e:
+                            LOGGER.warning(f"Error while draining writer ({type(e).__name__}): {e}. "
+                                           "Disabling async writer and falling back to print().")
+                            writer = None
                     else:
                         print(response_str, flush=True)
 
