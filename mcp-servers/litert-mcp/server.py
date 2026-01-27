@@ -155,13 +155,10 @@ class MCPServer:
             }
 
         # Check if binary exists (simple check)
-        try:
-            # We assume the binary handles --help or similar to check existence,
-            # but simpler to just try running it or check existence if it's a path.
-            # If it's just 'lit' in PATH, shutil.which would be needed, but let's just try-catch execution.
-            pass
-        except Exception:
-            pass
+        # We assume the binary handles --help or similar to check existence,
+        # but simpler to just try running it or check existence if it's a path.
+        # If it's just 'lit' in PATH, shutil.which would be needed, but let's just try-catch execution.
+        # (Currently no pre-execution binary check is implemented.)
 
         # Construct command
         # We assume the binary accepts flags similar to litert_lm_main demo
