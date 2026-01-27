@@ -11,7 +11,6 @@ import json
 import logging
 import sys
 import os
-import subprocess
 from typing import Dict, Any, Optional
 
 # Configure logging
@@ -143,25 +142,32 @@ class MCPServer:
 
     async def _run_inference(self, args: Dict[str, Any]) -> Dict[str, Any]:
         prompt = args.get("prompt")
+        
+        # Validate prompt parameter
+        if not prompt or not isinstance(prompt, str) or not prompt.strip():
+            return {
+                "status": "error",
+                "message": "Invalid or empty prompt. Please provide a non-empty text prompt."
+            }
+        
         model_path = args.get("model_path") or self.default_model_path
         image_path = args.get("image_path")
         audio_path = args.get("audio_path")
         backend = args.get("backend", "cpu")
+        
+        # Validate backend parameter
+        valid_backends = {"cpu", "gpu", "npu"}
+        if backend not in valid_backends:
+            return {
+                "status": "error",
+                "message": f"Invalid backend '{backend}'. Must be one of {sorted(valid_backends)}."
+            }
 
         if not model_path:
             return {
                 "status": "error",
                 "message": "No model path provided. Set LIT_MODEL_PATH env var or pass model_path argument."
             }
-
-        # Check if binary exists (simple check)
-        try:
-            # We assume the binary handles --help or similar to check existence,
-            # but simpler to just try running it or check existence if it's a path.
-            # If it's just 'lit' in PATH, shutil.which would be needed, but let's just try-catch execution.
-            pass
-        except Exception:
-            pass
 
         # Construct command
         # We assume the binary accepts flags similar to litert_lm_main demo
@@ -173,10 +179,10 @@ class MCPServer:
         # The current 'lit' CLI wrapper does not support verified multimodal input flags.
         # We restrict to text-only to avoid speculative errors.
         if image_path or audio_path:
-             return {
-                 "status": "error",
-                 "message": "Multimodal input (image/audio) is not yet supported via the 'lit' CLI wrapper. Please use the LiteRT-LM C++ or Python API directly, or update this server implementation once CLI flags are verified."
-             }
+            return {
+                "status": "error",
+                "message": "Multimodal input (image/audio) is not yet supported via the 'lit' CLI wrapper. Please use the LiteRT-LM C++ or Python API directly, or update this server implementation once CLI flags are verified."
+            }
 
         cmd.extend(["--input_prompt", prompt])
 
@@ -213,10 +219,10 @@ class MCPServer:
             }
 
         except FileNotFoundError:
-             return {
-                 "status": "error",
-                 "message": f"LiteRT binary '{self.lit_binary}' not found. Please set LIT_BINARY_PATH or install LiteRT-LM."
-             }
+            return {
+                "status": "error",
+                "message": f"LiteRT binary '{self.lit_binary}' not found. Please set LIT_BINARY_PATH or install LiteRT-LM."
+            }
         except Exception as e:
             return {
                 "status": "error",
@@ -233,18 +239,10 @@ async def main():
 
     writer = None
     if sys.platform != "win32":
-        try:
-            w_transport, w_protocol = await asyncio.get_event_loop().connect_write_pipe(
-                asyncio.Protocol, sys.stdout
-            )
-            writer = asyncio.StreamWriter(w_transport, w_protocol, None, asyncio.get_event_loop())
-        except Exception as e:
-            LOGGER.warning(f"Could not connect write pipe to stdout: {e}. Falling back to print.")
-            writer = None
-    else:
-        # Windows fallback (simplified, might not work perfectly with async stdio without extra loop config)
-        # But matches common patterns.
-        pass
+        w_transport, w_protocol = await asyncio.get_event_loop().connect_write_pipe(
+            asyncio.Protocol, sys.stdout
+        )
+        writer = asyncio.StreamWriter(w_transport, w_protocol, None, asyncio.get_event_loop())
 
     while True:
         try:
@@ -262,12 +260,13 @@ async def main():
                         writer.write(response_str.encode())
                         try:
                             await writer.drain()
-                        except (AttributeError, BrokenPipeError) as e:
-                            LOGGER.warning(f"Error while draining writer ({type(e).__name__}): {e}. "
-                                           "Disabling async writer and falling back to print().")
-                            writer = None
+                        except (AttributeError, BrokenPipeError) as drain_error:
+                            # Non-fatal issues when flushing output (e.g., client closed pipe or writer lacks drain).
+                            # We log at debug level and continue to preserve existing behavior.
+                            LOGGER.debug("Non-fatal error while draining writer: %s", drain_error)
                     else:
-                        print(response_str, flush=True)
+                        sys.stdout.write(response_str)
+                        sys.stdout.flush()
 
             except json.JSONDecodeError:
                 LOGGER.error(f"Invalid JSON received: {line}")

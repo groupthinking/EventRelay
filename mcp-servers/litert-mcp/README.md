@@ -44,12 +44,13 @@ Runs inference using the configured LiteRT-LM model.
 {
   "name": "run_inference",
   "arguments": {
-    "prompt": "Describe this image.",
-    "image_path": "/path/to/image.jpg",
-    "backend": "gpu"
+    "prompt": "Explain the theory of relativity in simple terms.",
+    "backend": "cpu"
   }
 }
 ```
+
+**Note**: The current CLI wrapper only supports text-only inference. For multimodal capabilities (image/audio), use the LiteRT-LM C++ or Python API directly.
 
 ## Setup for Development
 
