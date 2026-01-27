@@ -20,22 +20,22 @@ type LoadingPhase =
 
 const EXAMPLE_VIDEOS = [
   {
-    id: '1',
-    url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
-    title: 'Never Gonna Give You Up',
-    thumbnail: 'https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg',
+    id: 'wa0MT8S_99E',
+    url: 'https://www.youtube.com/watch?v=wa0MT8S_99E',
+    title: 'Gemini 1.5 Pro: Video Intelligence',
+    thumbnail: 'https://img.youtube.com/vi/wa0MT8S_99E/mqdefault.jpg',
   },
   {
-    id: '2',
-    url: 'https://www.youtube.com/watch?v=jNQXAC9IVRw',
-    title: 'Me at the zoo',
-    thumbnail: 'https://i.ytimg.com/vi/jNQXAC9IVRw/hqdefault.jpg',
+    id: 'ScMzIvxBSi4',
+    url: 'https://www.youtube.com/watch?v=ScMzIvxBSi4',
+    title: 'Descript Product Walkthrough',
+    thumbnail: 'https://img.youtube.com/vi/ScMzIvxBSi4/mqdefault.jpg',
   },
   {
-    id: '3',
-    url: 'https://www.youtube.com/watch?v=9bZkp7q19f0',
-    title: 'PSY - GANGNAM STYLE',
-    thumbnail: 'https://i.ytimg.com/vi/9bZkp7q19f0/hqdefault.jpg',
+    id: 'aircAruvnKk',
+    url: 'https://www.youtube.com/watch?v=aircAruvnKk',
+    title: 'Google I/O Keynote',
+    thumbnail: 'https://img.youtube.com/vi/aircAruvnKk/mqdefault.jpg',
   },
 ];
 
