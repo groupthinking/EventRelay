@@ -3,7 +3,11 @@
 import { Suspense, useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
+import { clsx } from 'clsx';
 
+// ============================================
+// Types
+// ============================================
 interface Video {
   id: string;
   title: string;
@@ -31,71 +35,140 @@ interface DashboardMetrics {
   };
 }
 
-// Processing stage indicator
-function ProcessingStage({ stage, isActive, isComplete }: { stage: string; isActive: boolean; isComplete: boolean }) {
+// ============================================
+// Processing Stage Indicator
+// ============================================
+function ProcessingStage({
+  stage,
+  isActive,
+  isComplete
+}: {
+  stage: string;
+  isActive: boolean;
+  isComplete: boolean;
+}) {
   return (
-    <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-      isComplete ? 'bg-green-500/20 text-green-400' :
-      isActive ? 'bg-violet-500/20 text-violet-400 animate-pulse' :
-      'bg-white/5 text-white/40'
-    }`}>
-      {isComplete && <span>✓</span>}
-      {isActive && <span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-ping" />}
+    <div
+      className={clsx(
+        'flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-300',
+        isComplete && 'bg-green-500/15 text-green-400 border border-green-500/20',
+        isActive && 'bg-primary-500/15 text-primary-400 border border-primary-500/20',
+        !isComplete && !isActive && 'bg-white/[0.03] text-white/30 border border-white/[0.05]'
+      )}
+    >
+      {isComplete && <span className="text-green-400">✓</span>}
+      {isActive && (
+        <span className="relative flex h-2 w-2">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary-400 opacity-75" />
+          <span className="relative inline-flex rounded-full h-2 w-2 bg-primary-400" />
+        </span>
+      )}
       {stage}
     </div>
   );
 }
 
-// Video card component
-function VideoCard({ video, onClick }: { video: Video; onClick: () => void }) {
+// ============================================
+// Video Card Component
+// ============================================
+function VideoCard({
+  video,
+  onClick
+}: {
+  video: Video;
+  onClick: () => void;
+}) {
   const stages = ['Ingest', 'Transcribe', 'Analyze', 'Generate'];
   const currentStage = Math.floor((video.progress / 100) * stages.length);
 
   return (
     <div
       onClick={onClick}
-      className="group bg-slate-900/50 backdrop-blur-xl rounded-xl border border-white/10 hover:border-violet-500/50 transition-all cursor-pointer overflow-hidden"
+      className={clsx(
+        'group relative overflow-hidden rounded-2xl cursor-pointer',
+        'bg-surface-900/50 backdrop-blur-xl',
+        'border border-white/[0.08] hover:border-primary-500/30',
+        'transition-all duration-300 hover:-translate-y-1',
+        'hover:shadow-xl hover:shadow-primary-500/10'
+      )}
     >
       {/* Thumbnail */}
-      <div className="relative aspect-video bg-slate-800">
+      <div className="relative aspect-video bg-surface-800 overflow-hidden">
         {video.thumbnail ? (
-          <img src={video.thumbnail} alt={video.title} className="w-full h-full object-cover" />
+          <img
+            src={video.thumbnail}
+            alt={video.title}
+            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+          />
         ) : (
-          <div className="w-full h-full flex items-center justify-center text-4xl">🎬</div>
+          <div className="w-full h-full flex items-center justify-center text-5xl bg-gradient-to-br from-surface-800 to-surface-900">
+            🎬
+          </div>
         )}
-        {/* Progress overlay */}
+
+        {/* Processing overlay */}
         {video.status === 'processing' && (
-          <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center">
             <div className="text-center">
-              <div className="w-16 h-16 rounded-full border-4 border-violet-500 border-t-transparent animate-spin mb-2" />
-              <span className="text-sm text-white/80">{video.progress}%</span>
+              <div className="relative w-16 h-16 mx-auto mb-3">
+                <svg className="w-16 h-16 animate-spin" viewBox="0 0 24 24">
+                  <circle
+                    className="opacity-20"
+                    cx="12" cy="12" r="10"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    fill="none"
+                  />
+                  <circle
+                    className="text-primary-500"
+                    cx="12" cy="12" r="10"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    fill="none"
+                    strokeDasharray="62.83"
+                    strokeDashoffset={62.83 * (1 - video.progress / 100)}
+                    strokeLinecap="round"
+                    transform="rotate(-90 12 12)"
+                  />
+                </svg>
+                <span className="absolute inset-0 flex items-center justify-center text-sm font-bold">
+                  {video.progress}%
+                </span>
+              </div>
             </div>
           </div>
         )}
+
         {/* Duration badge */}
         {video.duration && (
-          <div className="absolute bottom-2 right-2 px-2 py-1 bg-black/80 rounded text-xs text-white/80">
+          <div className="absolute bottom-2 right-2 px-2 py-1 bg-black/80 backdrop-blur-sm rounded-lg text-xs text-white/80 font-medium">
             {video.duration}
           </div>
         )}
+
         {/* Status badge */}
-        <div className={`absolute top-2 left-2 px-2 py-1 rounded text-xs font-medium ${
-          video.status === 'complete' ? 'bg-green-500/80 text-white' :
-          video.status === 'failed' ? 'bg-red-500/80 text-white' :
-          'bg-violet-500/80 text-white'
-        }`}>
-          {video.status}
+        <div
+          className={clsx(
+            'absolute top-3 left-3 px-2.5 py-1 rounded-lg text-xs font-semibold backdrop-blur-sm',
+            video.status === 'complete' && 'bg-green-500/90 text-white',
+            video.status === 'failed' && 'bg-red-500/90 text-white',
+            video.status === 'processing' && 'bg-primary-500/90 text-white'
+          )}
+        >
+          {video.status.charAt(0).toUpperCase() + video.status.slice(1)}
         </div>
       </div>
 
       {/* Info */}
-      <div className="p-4">
-        <h3 className="font-medium text-white truncate group-hover:text-violet-400 transition">{video.title}</h3>
-        <p className="text-sm text-white/40 truncate mt-1">{video.url}</p>
+      <div className="p-5">
+        <h3 className="font-semibold text-white truncate group-hover:text-primary-400 transition-colors">
+          {video.title}
+        </h3>
+        <p className="text-sm text-white/40 truncate mt-1.5">{video.url}</p>
 
         {/* Processing stages */}
         {video.status === 'processing' && (
-          <div className="flex flex-wrap gap-2 mt-3">
+          <div className="flex flex-wrap gap-2 mt-4">
             {stages.map((stage, i) => (
               <ProcessingStage
                 key={stage}
@@ -109,10 +182,13 @@ function VideoCard({ video, onClick }: { video: Video; onClick: () => void }) {
 
         {/* Quick insights */}
         {video.status === 'complete' && video.insights && (
-          <div className="mt-3 pt-3 border-t border-white/5">
+          <div className="mt-4 pt-4 border-t border-white/[0.05]">
             <div className="flex flex-wrap gap-2">
-              {video.insights.topics.slice(0, 3).map(topic => (
-                <span key={topic} className="px-2 py-1 bg-violet-500/10 text-violet-400 rounded text-xs">
+              {video.insights.topics.slice(0, 3).map((topic) => (
+                <span
+                  key={topic}
+                  className="px-2.5 py-1 bg-primary-500/10 text-primary-400 border border-primary-500/20 rounded-lg text-xs font-medium"
+                >
                   {topic}
                 </span>
               ))}
@@ -124,42 +200,83 @@ function VideoCard({ video, onClick }: { video: Video; onClick: () => void }) {
   );
 }
 
-// Metric card component
-function MetricCard({ value, label, icon, trend }: { value: string | number; label: string; icon: string; trend?: string }) {
+// ============================================
+// Metric Card Component
+// ============================================
+function MetricCard({
+  value,
+  label,
+  icon,
+  trend,
+  trendUp = true,
+}: {
+  value: string | number;
+  label: string;
+  icon: string;
+  trend?: string;
+  trendUp?: boolean;
+}) {
   return (
-    <div className="bg-slate-900/50 backdrop-blur-xl rounded-xl border border-white/10 p-6">
+    <div className={clsx(
+      'bg-surface-900/50 backdrop-blur-xl rounded-2xl p-6',
+      'border border-white/[0.08]',
+      'transition-all duration-300 hover:border-primary-500/20',
+      'hover:shadow-lg hover:shadow-primary-500/5'
+    )}>
       <div className="flex items-start justify-between">
         <div>
-          <p className="text-white/40 text-sm">{label}</p>
-          <p className="text-3xl font-bold text-white mt-1">{value}</p>
+          <p className="text-white/40 text-sm font-medium">{label}</p>
+          <p className="text-4xl font-bold text-white mt-2 tracking-tight">{value}</p>
           {trend && (
-            <p className={`text-sm mt-2 ${trend.startsWith('+') ? 'text-green-400' : 'text-red-400'}`}>
+            <p className={clsx(
+              'text-sm mt-3 font-medium flex items-center gap-1',
+              trendUp ? 'text-green-400' : 'text-red-400'
+            )}>
+              <span>{trendUp ? '↑' : '↓'}</span>
               {trend} vs last week
             </p>
           )}
         </div>
-        <div className="text-3xl">{icon}</div>
+        <div className="text-4xl opacity-80">{icon}</div>
       </div>
     </div>
   );
 }
 
-// Real-time activity feed
-function ActivityFeed({ activities }: { activities: { time: string; event: string; type: 'success' | 'info' | 'error' }[] }) {
+// ============================================
+// Activity Feed
+// ============================================
+function ActivityFeed({
+  activities,
+}: {
+  activities: { time: string; event: string; type: 'success' | 'info' | 'error' }[];
+}) {
   return (
-    <div className="bg-slate-900/50 backdrop-blur-xl rounded-xl border border-white/10 p-6">
-      <h3 className="font-medium text-white mb-4">Activity Feed</h3>
-      <div className="space-y-3 max-h-64 overflow-y-auto">
+    <div className={clsx(
+      'bg-surface-900/50 backdrop-blur-xl rounded-2xl p-6',
+      'border border-white/[0.08]'
+    )}>
+      <h3 className="font-semibold text-white mb-5">Activity Feed</h3>
+      <div className="space-y-4 max-h-72 overflow-y-auto pr-2">
         {activities.map((activity, i) => (
-          <div key={i} className="flex items-start gap-3 text-sm">
-            <div className={`w-2 h-2 rounded-full mt-1.5 ${
-              activity.type === 'success' ? 'bg-green-400' :
-              activity.type === 'error' ? 'bg-red-400' :
-              'bg-blue-400'
-            }`} />
-            <div>
-              <p className="text-white/80">{activity.event}</p>
-              <p className="text-white/30 text-xs">{activity.time}</p>
+          <div
+            key={i}
+            className="flex items-start gap-3 text-sm animate-fade-in-up opacity-0"
+            style={{ animationDelay: `${i * 50}ms`, animationFillMode: 'forwards' }}
+          >
+            <div className="relative mt-1.5">
+              <div
+                className={clsx(
+                  'w-2.5 h-2.5 rounded-full',
+                  activity.type === 'success' && 'bg-green-400',
+                  activity.type === 'error' && 'bg-red-400',
+                  activity.type === 'info' && 'bg-blue-400'
+                )}
+              />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-white/80 leading-snug">{activity.event}</p>
+              <p className="text-white/30 text-xs mt-1">{activity.time}</p>
             </div>
           </div>
         ))}
@@ -168,6 +285,148 @@ function ActivityFeed({ activities }: { activities: { time: string; event: strin
   );
 }
 
+// ============================================
+// Quick Actions
+// ============================================
+function QuickActions() {
+  const actions = [
+    { icon: '📊', label: 'Generate Weekly Report', primary: true },
+    { icon: '🔗', label: 'Connect Integration', primary: false },
+    { icon: '📤', label: 'Export All Insights', primary: false },
+  ];
+
+  return (
+    <div className={clsx(
+      'bg-surface-900/50 backdrop-blur-xl rounded-2xl p-6',
+      'border border-white/[0.08]'
+    )}>
+      <h3 className="font-semibold text-white mb-5">Quick Actions</h3>
+      <div className="space-y-3">
+        {actions.map((action, i) => (
+          <button
+            key={i}
+            className={clsx(
+              'w-full px-4 py-3.5 rounded-xl text-sm font-medium text-left transition-all duration-200',
+              'flex items-center gap-3',
+              action.primary
+                ? 'bg-primary-500/10 border border-primary-500/20 text-primary-400 hover:bg-primary-500/20'
+                : 'bg-white/[0.03] border border-white/[0.08] text-white/80 hover:bg-white/[0.06]'
+            )}
+          >
+            <span className="text-lg">{action.icon}</span>
+            {action.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ============================================
+// Video Detail Modal
+// ============================================
+function VideoDetailModal({
+  video,
+  onClose,
+}: {
+  video: Video;
+  onClose: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in-up"
+      onClick={onClose}
+    >
+      <div
+        className={clsx(
+          'bg-surface-900 rounded-3xl border border-white/[0.08]',
+          'max-w-2xl w-full max-h-[85vh] overflow-y-auto',
+          'shadow-2xl shadow-black/50',
+          'animate-scale-in'
+        )}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="p-6 border-b border-white/[0.08]">
+          <div className="flex items-start justify-between">
+            <div className="flex-1 min-w-0 pr-4">
+              <h2 className="text-xl font-bold text-white truncate">{video.title}</h2>
+              <p className="text-white/40 text-sm mt-1.5 truncate">{video.url}</p>
+            </div>
+            <button
+              onClick={onClose}
+              className="w-10 h-10 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] flex items-center justify-center text-white/60 hover:text-white transition-all"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+
+        {/* Content */}
+        {video.insights && (
+          <div className="p-6 space-y-6">
+            {/* Summary */}
+            <div>
+              <h3 className="text-sm font-semibold text-white/50 uppercase tracking-wider mb-3">
+                Summary
+              </h3>
+              <p className="text-white/80 leading-relaxed">{video.insights.summary}</p>
+            </div>
+
+            {/* Action Items */}
+            <div>
+              <h3 className="text-sm font-semibold text-white/50 uppercase tracking-wider mb-3">
+                Action Items
+              </h3>
+              <ul className="space-y-2">
+                {video.insights.actions.map((action, i) => (
+                  <li
+                    key={i}
+                    className="flex items-start gap-3 p-3.5 rounded-xl bg-white/[0.03] border border-white/[0.05] hover:bg-white/[0.05] transition-colors"
+                  >
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 h-4 w-4 rounded border-white/20 bg-white/5 text-primary-500 focus:ring-primary-500/50"
+                    />
+                    <span className="text-white/80">{action}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Topics */}
+            <div>
+              <h3 className="text-sm font-semibold text-white/50 uppercase tracking-wider mb-3">
+                Topics
+              </h3>
+              <div className="flex flex-wrap gap-2">
+                {video.insights.topics.map((topic) => (
+                  <span
+                    key={topic}
+                    className="px-4 py-2 rounded-full bg-primary-500/15 text-primary-400 border border-primary-500/25 text-sm font-medium"
+                  >
+                    {topic}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex gap-3 pt-6 border-t border-white/[0.08]">
+              <button className="flex-1 btn btn-primary py-3">Deploy as App</button>
+              <button className="btn btn-secondary py-3 px-6">Export</button>
+              <button className="btn btn-secondary py-3 px-6">Share</button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ============================================
+// Dashboard Content
+// ============================================
 function DashboardContent() {
   const searchParams = useSearchParams();
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
@@ -183,11 +442,16 @@ function DashboardContent() {
       duration: '45:32',
       processedAt: '2 hours ago',
       insights: {
-        summary: 'Comprehensive guide to React hooks including useState, useEffect, useCallback, and custom hooks.',
-        actions: ['Implement useState for form handling', 'Add useEffect for API calls', 'Create custom useAuth hook'],
+        summary:
+          'Comprehensive guide to React hooks including useState, useEffect, useCallback, and custom hooks.',
+        actions: [
+          'Implement useState for form handling',
+          'Add useEffect for API calls',
+          'Create custom useAuth hook',
+        ],
         sentiment: 'Educational',
-        topics: ['React', 'Hooks', 'JavaScript', 'Frontend']
-      }
+        topics: ['React', 'Hooks', 'JavaScript', 'Frontend'],
+      },
     },
     {
       id: '2',
@@ -206,12 +470,17 @@ function DashboardContent() {
       duration: '12:08',
       processedAt: '1 day ago',
       insights: {
-        summary: 'Product demonstration showcasing key features for enterprise deployment.',
-        actions: ['Follow up with client on pricing', 'Schedule technical deep-dive', 'Send case studies'],
+        summary:
+          'Product demonstration showcasing key features for enterprise deployment.',
+        actions: [
+          'Follow up with client on pricing',
+          'Schedule technical deep-dive',
+          'Send case studies',
+        ],
         sentiment: 'Positive',
-        topics: ['Sales', 'Demo', 'Enterprise', 'Features']
-      }
-    }
+        topics: ['Sales', 'Demo', 'Enterprise', 'Features'],
+      },
+    },
   ]);
 
   const [activities] = useState([
@@ -225,11 +494,9 @@ function DashboardContent() {
   const [selectedVideo, setSelectedVideo] = useState<Video | null>(null);
 
   useEffect(() => {
-    // Check for video URL from query params
     const video = searchParams.get('video');
     if (video) {
       setVideoUrl(video);
-      // Auto-submit if URL provided
       handleAddVideo(video);
     }
   }, [searchParams]);
@@ -247,133 +514,144 @@ function DashboardContent() {
       }
     }
     fetchMetrics();
-
-    // Poll for updates
     const interval = setInterval(fetchMetrics, 10000);
     return () => clearInterval(interval);
   }, []);
 
-  const handleAddVideo = useCallback(async (url?: string) => {
-    const targetUrl = url || videoUrl;
-    if (!targetUrl.trim()) return;
+  const handleAddVideo = useCallback(
+    async (url?: string) => {
+      const targetUrl = url || videoUrl;
+      if (!targetUrl.trim()) return;
 
-    // Add new video to list with processing state
-    const newVideo: Video = {
-      id: Date.now().toString(),
-      title: `Analyzing: ${targetUrl.length > 50 ? targetUrl.substring(0, 47) + '...' : targetUrl}`,
-      url: targetUrl,
-      status: 'processing',
-      progress: 10,
-    };
-    setVideos(prev => [newVideo, ...prev]);
-    setVideoUrl('');
+      const newVideo: Video = {
+        id: Date.now().toString(),
+        title: `Analyzing: ${targetUrl.length > 50 ? targetUrl.substring(0, 47) + '...' : targetUrl}`,
+        url: targetUrl,
+        status: 'processing',
+        progress: 10,
+      };
+      setVideos((prev) => [newVideo, ...prev]);
+      setVideoUrl('');
 
-    // Update progress while waiting
-    const progressInterval = setInterval(() => {
-      setVideos(prev => prev.map(v =>
-        v.id === newVideo.id && v.status === 'processing'
-          ? { ...v, progress: Math.min(v.progress + 5, 95) }
-          : v
-      ));
-    }, 1000);
+      const progressInterval = setInterval(() => {
+        setVideos((prev) =>
+          prev.map((v) =>
+            v.id === newVideo.id && v.status === 'processing'
+              ? { ...v, progress: Math.min(v.progress + 5, 95) }
+              : v
+          )
+        );
+      }, 1000);
 
-    try {
-      // Call the real backend API
-      const response = await fetch('/api/video', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: targetUrl })
-      });
+      try {
+        const response = await fetch('/api/video', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: targetUrl }),
+        });
 
-      clearInterval(progressInterval);
+        clearInterval(progressInterval);
 
-      if (!response.ok) {
-        throw new Error(`API error: ${response.status}`);
+        if (!response.ok) {
+          throw new Error(`API error: ${response.status}`);
+        }
+
+        const result = await response.json();
+
+        setVideos((prev) =>
+          prev.map((v) =>
+            v.id === newVideo.id
+              ? {
+                  ...v,
+                  status: result.status === 'complete' ? 'complete' : 'failed',
+                  progress: 100,
+                  title: result.result?.insights?.summary?.substring(0, 50) + '...' || 'Analyzed Video',
+                  processedAt: 'Just now',
+                  duration: `${result.result?.transcript_segments || 0} segments`,
+                  insights: {
+                    summary: result.result?.insights?.summary || 'Analysis complete',
+                    actions: result.result?.insights?.actions || [],
+                    sentiment: result.result?.insights?.sentiment || 'Neutral',
+                    topics: result.result?.insights?.topics || ['Analyzed'],
+                  },
+                }
+              : v
+          )
+        );
+      } catch (error) {
+        clearInterval(progressInterval);
+        console.error('Video analysis failed:', error);
+
+        setVideos((prev) =>
+          prev.map((v) =>
+            v.id === newVideo.id ? { ...v, status: 'failed', progress: 0 } : v
+          )
+        );
       }
-
-      const result = await response.json();
-
-      // Update video with real results
-      setVideos(prev => prev.map(v =>
-        v.id === newVideo.id
-          ? {
-              ...v,
-              status: result.status === 'complete' ? 'complete' : 'failed',
-              progress: 100,
-              title: result.result?.insights?.summary?.substring(0, 50) + '...' || 'Analyzed Video',
-              processedAt: 'Just now',
-              duration: `${result.result?.transcript_segments || 0} segments`,
-              insights: {
-                summary: result.result?.insights?.summary || 'Analysis complete',
-                actions: result.result?.insights?.actions || [],
-                sentiment: result.result?.insights?.sentiment || 'Neutral',
-                topics: result.result?.insights?.topics || ['Analyzed']
-              }
-            }
-          : v
-      ));
-    } catch (error) {
-      clearInterval(progressInterval);
-      console.error('Video analysis failed:', error);
-
-      setVideos(prev => prev.map(v =>
-        v.id === newVideo.id
-          ? { ...v, status: 'failed', progress: 0 }
-          : v
-      ));
-    }
-  }, [videoUrl]);
+    },
+    [videoUrl]
+  );
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white">
-      {/* Gradient background */}
-      <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-violet-900/10 via-slate-950 to-slate-950" />
-
+    <div className="min-h-screen text-white">
       {/* Navigation */}
-      <nav className="relative z-50 flex items-center justify-between px-6 py-4 border-b border-white/5">
+      <nav className="relative z-50 flex items-center justify-between px-6 lg:px-12 py-4 border-b border-white/[0.05]">
         <div className="flex items-center gap-6">
-          <Link href="/" className="flex items-center gap-2">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center font-black text-lg">
+          <Link href="/" className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center font-black text-lg shadow-lg shadow-primary-500/25">
               U
             </div>
-            <span className="font-bold text-xl">UVAI.io</span>
+            <span className="font-bold text-xl tracking-tight">UVAI.io</span>
           </Link>
-          <div className="h-6 w-px bg-white/10" />
-          <span className="text-white/60">Dashboard</span>
+          <div className="h-6 w-px bg-white/[0.08]" />
+          <span className="text-white/50 font-medium">Dashboard</span>
         </div>
         <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-green-500/10 border border-green-500/20">
-            <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-            <span className="text-sm text-green-400">System Online</span>
+          <div className="flex items-center gap-2.5 px-4 py-2 rounded-xl bg-green-500/10 border border-green-500/20">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-green-400" />
+            </span>
+            <span className="text-sm text-green-400 font-medium">System Online</span>
           </div>
           <Link
-            href="https://api.uvai.io/docs"
-            target="_blank"
-            className="px-4 py-2 rounded-lg bg-white/5 border border-white/10 text-sm hover:bg-white/10 transition"
+            href="/playground"
+            className="btn btn-secondary py-2"
           >
             API Docs
           </Link>
         </div>
       </nav>
 
-      <div className="relative z-10 max-w-7xl mx-auto p-6">
-        {/* Header with video input */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold mb-2">Video Intelligence Dashboard</h1>
-          <p className="text-white/60 mb-6">Process, analyze, and extract insights from any video</p>
+      <div className="relative z-10 max-w-7xl mx-auto p-6 lg:p-8">
+        {/* Header */}
+        <div className="mb-10">
+          <h1 className="text-3xl md:text-4xl font-bold mb-3 tracking-tight">
+            Video Intelligence Dashboard
+          </h1>
+          <p className="text-white/50 text-lg mb-8">
+            Process, analyze, and extract insights from any video
+          </p>
 
-          <form onSubmit={(e) => { e.preventDefault(); handleAddVideo(); }} className="flex gap-3 max-w-2xl">
-            <div className="flex-1 flex gap-3 p-2 rounded-xl bg-white/5 border border-white/10">
+          {/* Video Input */}
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleAddVideo();
+            }}
+            className="flex gap-3 max-w-2xl"
+          >
+            <div className="flex-1 flex gap-3 p-2 rounded-2xl bg-white/[0.03] border border-white/[0.08] backdrop-blur-xl">
               <input
                 type="text"
                 value={videoUrl}
                 onChange={(e) => setVideoUrl(e.target.value)}
                 placeholder="Paste YouTube URL, Google Drive link, or upload..."
-                className="flex-1 px-4 py-2 bg-transparent text-white placeholder:text-white/40 focus:outline-none"
+                className="flex-1 px-5 py-3 bg-transparent text-white placeholder:text-white/30 focus:outline-none"
               />
               <button
                 type="submit"
-                className="px-6 py-2 rounded-lg bg-gradient-to-r from-violet-600 to-purple-600 font-medium hover:opacity-90 transition"
+                className="btn btn-primary py-3 px-8"
               >
                 Analyze
               </button>
@@ -382,24 +660,27 @@ function DashboardContent() {
         </div>
 
         {/* Metrics Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-10">
           <MetricCard
             value={metrics?.metrics.activeWorkflows ?? 0}
             label="Active Workflows"
             icon="⚡"
             trend="+12%"
+            trendUp={true}
           />
           <MetricCard
             value={metrics?.metrics.totalProcessed ?? 0}
             label="Videos Processed"
             icon="🎬"
             trend="+28%"
+            trendUp={true}
           />
           <MetricCard
             value="2.3s"
             label="Avg Processing Time"
             icon="⏱️"
             trend="-15%"
+            trendUp={true}
           />
           <MetricCard
             value={`${metrics?.metrics.errorRate ?? 0}%`}
@@ -408,20 +689,31 @@ function DashboardContent() {
           />
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Main Content */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Video Library */}
           <div className="lg:col-span-2">
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-bold">Video Library</h2>
               <div className="flex gap-2">
-                <button className="px-3 py-1.5 rounded-lg bg-violet-500/20 text-violet-400 text-sm">All</button>
-                <button className="px-3 py-1.5 rounded-lg bg-white/5 text-white/60 text-sm hover:bg-white/10 transition">Processing</button>
-                <button className="px-3 py-1.5 rounded-lg bg-white/5 text-white/60 text-sm hover:bg-white/10 transition">Complete</button>
+                {['All', 'Processing', 'Complete'].map((filter, i) => (
+                  <button
+                    key={filter}
+                    className={clsx(
+                      'px-4 py-2 rounded-xl text-sm font-medium transition-all',
+                      i === 0
+                        ? 'bg-primary-500/15 text-primary-400 border border-primary-500/20'
+                        : 'bg-white/[0.03] text-white/50 border border-white/[0.05] hover:bg-white/[0.06]'
+                    )}
+                  >
+                    {filter}
+                  </button>
+                ))}
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {videos.map(video => (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              {videos.map((video) => (
                 <VideoCard
                   key={video.id}
                   video={video}
@@ -433,109 +725,43 @@ function DashboardContent() {
 
           {/* Sidebar */}
           <div className="space-y-6">
-            {/* Activity Feed */}
             <ActivityFeed activities={activities} />
-
-            {/* Quick Actions */}
-            <div className="bg-slate-900/50 backdrop-blur-xl rounded-xl border border-white/10 p-6">
-              <h3 className="font-medium text-white mb-4">Quick Actions</h3>
-              <div className="space-y-3">
-                <button className="w-full px-4 py-3 rounded-lg bg-violet-500/10 border border-violet-500/20 text-violet-400 text-sm font-medium hover:bg-violet-500/20 transition text-left">
-                  📊 Generate Weekly Report
-                </button>
-                <button className="w-full px-4 py-3 rounded-lg bg-white/5 border border-white/10 text-white/80 text-sm font-medium hover:bg-white/10 transition text-left">
-                  🔗 Connect Integration
-                </button>
-                <button className="w-full px-4 py-3 rounded-lg bg-white/5 border border-white/10 text-white/80 text-sm font-medium hover:bg-white/10 transition text-left">
-                  📤 Export All Insights
-                </button>
-              </div>
-            </div>
+            <QuickActions />
           </div>
         </div>
       </div>
 
-      {/* Video Detail Modal */}
+      {/* Modal */}
       {selectedVideo && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setSelectedVideo(null)}>
-          <div className="bg-slate-900 rounded-2xl border border-white/10 max-w-2xl w-full max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-            <div className="p-6 border-b border-white/10">
-              <div className="flex items-start justify-between">
-                <div>
-                  <h2 className="text-xl font-bold text-white">{selectedVideo.title}</h2>
-                  <p className="text-white/40 text-sm mt-1">{selectedVideo.url}</p>
-                </div>
-                <button onClick={() => setSelectedVideo(null)} className="text-white/40 hover:text-white">✕</button>
-              </div>
-            </div>
-
-            {selectedVideo.insights && (
-              <div className="p-6 space-y-6">
-                {/* Summary */}
-                <div>
-                  <h3 className="text-sm font-medium text-white/60 mb-2">Summary</h3>
-                  <p className="text-white/80">{selectedVideo.insights.summary}</p>
-                </div>
-
-                {/* Action Items */}
-                <div>
-                  <h3 className="text-sm font-medium text-white/60 mb-2">Action Items</h3>
-                  <ul className="space-y-2">
-                    {selectedVideo.insights.actions.map((action, i) => (
-                      <li key={i} className="flex items-start gap-3 p-3 rounded-lg bg-white/5">
-                        <input type="checkbox" className="mt-1" />
-                        <span className="text-white/80">{action}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-
-                {/* Topics */}
-                <div>
-                  <h3 className="text-sm font-medium text-white/60 mb-2">Topics</h3>
-                  <div className="flex flex-wrap gap-2">
-                    {selectedVideo.insights.topics.map(topic => (
-                      <span key={topic} className="px-3 py-1 rounded-full bg-violet-500/20 text-violet-400 text-sm">
-                        {topic}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Actions */}
-                <div className="flex gap-3 pt-4 border-t border-white/10">
-                  <button className="flex-1 px-4 py-2 rounded-lg bg-gradient-to-r from-violet-600 to-purple-600 font-medium">
-                    Deploy as App
-                  </button>
-                  <button className="px-4 py-2 rounded-lg bg-white/5 border border-white/10">
-                    Export
-                  </button>
-                  <button className="px-4 py-2 rounded-lg bg-white/5 border border-white/10">
-                    Share
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
+        <VideoDetailModal
+          video={selectedVideo}
+          onClose={() => setSelectedVideo(null)}
+        />
       )}
     </div>
   );
 }
 
-// Loading fallback for Suspense
+// ============================================
+// Loading Fallback
+// ============================================
 function DashboardLoading() {
   return (
-    <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+    <div className="min-h-screen flex items-center justify-center">
       <div className="text-center">
-        <div className="w-16 h-16 rounded-full border-4 border-violet-500 border-t-transparent animate-spin mx-auto mb-4" />
-        <p className="text-white/60">Loading dashboard...</p>
+        <div className="relative w-20 h-20 mx-auto mb-6">
+          <div className="absolute inset-0 rounded-full border-4 border-primary-500/20" />
+          <div className="absolute inset-0 rounded-full border-4 border-primary-500 border-t-transparent animate-spin" />
+        </div>
+        <p className="text-white/50 font-medium">Loading dashboard...</p>
       </div>
     </div>
   );
 }
 
-// Export with Suspense boundary (required for useSearchParams in Next.js 14+)
+// ============================================
+// Export with Suspense
+// ============================================
 export default function DashboardPage() {
   return (
     <Suspense fallback={<DashboardLoading />}>
