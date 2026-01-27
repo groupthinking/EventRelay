@@ -1,0 +1,35 @@
+name: Verify LiteRT-LM MCP
+
+on:
+  push:
+    paths:
+      - 'mcp-servers/litert-mcp/**'
+      - '.github/workflows/verify-litert-mcp.yml'
+  pull_request:
+    paths:
+      - 'mcp-servers/litert-mcp/**'
+      - '.github/workflows/verify-litert-mcp.yml'
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Verify Server Startup (Initialize)
+        run: |
+          echo '{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}' | python3 mcp-servers/litert-mcp/server.py
+
+      - name: Verify Tools List
+        run: |
+          OUTPUT=$(echo '{"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}}' | python3 mcp-servers/litert-mcp/server.py)
+          echo "$OUTPUT"
+          if [[ "$OUTPUT" != *"run_inference"* ]]; then
+            echo "Error: run_inference tool not found in output"
+            exit 1
+          fi
