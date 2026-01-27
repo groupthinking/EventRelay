@@ -1,145 +1,55 @@
-# UVAI Video-to-Agent Platform - Remaining Tasks
+# EventRelay Project — Status Report
 
-**Project:** Video-Instruction-to-Agent Pipeline Application
-**Generated:** 2026-01-09T11:27:47
-
----
-
-## ✅ COMPLETED (This Session)
-
-- [x] **Stitch MCP Configuration**: Recovered config from archive and added to `.github/mcp-servers.json` (Requires `STITCH_ACCESS_TOKEN`).
-- [x] **VibeVoice Evaluation**: Completed. See `docs/VIBEVOICE_EVALUATION.md`.
-- [x] MCP import path configuration fixed (`a2a.py`, `video_subagents.py`, `code_analysis_subagents.py`)
-- [x] Installed `mcp` package in venv
-- [x] Fixed `real_mcp_client.py` default server path
-- [x] `verify_integration.py` passes for all 3 servers
-- [x] Installed video/AI dependencies (`openai`, `youtube-transcript-api`, etc.)
-- [x] Added `YOUTUBE_API_KEY` to `.env`
-- [x] Fixed .env garbage text causing parse warnings
-- [x] Created `shared/__init__.py` and `shared/libs/__init__.py` (fixed `No module named 'shared.libs'`)
-- [x] Migrated 6 files from deprecated `google.generativeai` to `google.genai` SDK
+**Project:** `dev/projects/EventRelay` (Antigravity)
+**Current Date:** 2026-01-27
+**Mode:** YOLO Ultra (Correctness over Velocity)
 
 ---
 
-## 🔴 CRITICAL - Blocking Execution
+## 📋 Phase Status
 
-### 1. State Coordinator Not Running
+### ✅ Phase 0: Protocol & Definition
+- [x] Defined YOLO Ultra Mode
+- [x] Established operating rules
 
-- WebSocket server expected at `localhost:8005`
-- Required for MCP shared state coordination
-- **File:** `mcp-servers/shared-state/`
+### ✅ Phase 1: Verification & Testing
+- [x] **Backend Router Fixed:** `prescient-twin/main.py` -> `/api/v1` mounted.
+- [x] **Stitch MCP Setup:** Service enabled, token in `.env`, connection verified (405).
+- [x] **MCP Cleanup:** Unused servers removed.
+- [x] **Env Fix:** Fixed `.env` syntax.
+- [x] **Test Pipeline:** `tests/verify_router_integration.py` Passed.
+    - `/api/v1/health`: 200 OK.
+    - `/api/v1/transcript-action`: 422 (Validation OK).
+    - `/process_video`: 200 OK (Rick Roll video processed via transcript fallback).
+- [x] **NotebookLM MCP:** Verified via `npx` (available).
 
----
+### 🔲 Phase 2: Organization & Setup
+- [x] Review/Update full task list (Done).
+- [ ] Clear remaining unused artifacts (Ongoing).
 
-## 🟡 CODE FIXES REQUIRED
+### 🔄 Phase 3: Competitive Analysis & Research
+- [x] **Analyze Reference Repos:**
+    - [x] `software-on-demand/samples`: Analyzed `step_graph.sample.json` (workflow) and `video-to-learning-app` (React frontend).
+    - [x] `Vision-Agents`: Analyzed structure (Python agent framework).
+- [ ] Evaluate `VibeVoice`.
+- [ ] Research competitors.
 
-### 4. Deprecated API Usage (`datetime.utcnow()`)
+### 🔲 Phase 4: Design Rebuild with Stitch
+- [ ] Create design brief (Based on `video-to-learning-app` reference).
+- [ ] Generate frontend with Stitch.
 
-**Affects:** 8+ locations in `video_subagents.py`, `code_analysis_subagents.py`
-
-```python
-# Old (deprecated in Python 3.12+):
-datetime.utcnow()
-# New:
-datetime.now(datetime.UTC)
-```
-
-### 5. Deprecated Google AI Package
-
-**File:** `src/agents/gemini_video_master_agent.py:25`
-
-```python
-# Migrate from:
-import google.generativeai as genai
-# To:
-import google.genai as genai
-```
-
-### 6. Missing Module: `shared.libs`
-
-**Error:** `No module named 'shared.libs'`
-
-- Need to create or fix import path for shared library
-
-### 7. Unused Imports (Lint Cleanup)
-
-- `a2a.py`: `json`, `time`, `MCPClient` unused
-- `video_subagents.py`: `hashlib`, `base64`, `Optional`, `timedelta`, `MessagePriority` unused
-- Multiple `Dict` → `dict`, `List` → `list` modernization needed
+### 🔲 Phase 5: Production Sandbox Testing
+- [ ] Full E2E testing.
 
 ---
 
-## 🟠 INFRASTRUCTURE - Setup Required
+## 🛠️ Technical Details
 
-### 8. MCP Servers Not Running at Runtime
+- **Router:** `/api/v1` mounted.
+- **Stitch:** Token active.
+- **Gemini Config:** Fixed `gemini-3-pro/flash` -> `gemini-2.0-flash` in `enhanced_video_processor.py`.
 
-The test scripts try to spawn MCP servers but fail. Need either:
-
-- Running MCP server instances, OR
-- Mock/stub implementation for testing
-
-### 9. Documentation Update
-
-- Update `mcp-servers/README.md` with new `lib/` structure
-- Document required environment variables
-- Document startup sequence
-
----
-
-## 🔵 MISSION BLUEPRINT - Full System Roadmap
-
-### 10. Vision-Reasoning Stack (Per Blueprint)
-
-- [ ] Video Processing Pipeline (FFmpeg + keyframe extraction)
-- [ ] Integration with Gemini 1.5 Pro (2M token context)
-- [ ] Vector Database setup (LanceDB or Pinecone for Visual RAG)
-
-### 11. Multi-Agent Council System
-
-| Agent                      | Purpose                         |
-| -------------------------- | ------------------------------- |
-| Watcher (Perception)       | Scan video, create Visual Log   |
-| Contextualizer (Knowledge) | Cross-reference external data   |
-| Analyst (Reasoning)        | Pattern detection across videos |
-| Reporter (Node.js)         | Real-time WebSocket alerts      |
-
-### 12. Scaling Infrastructure
-
-- [ ] Modal.com or RunPod GPU orchestration
-- [ ] Parallel video chunking pipeline
-- [ ] FastStream + Kafka for live feeds
-
-### 13. Hybrid Node.js + Python Architecture
-
-Per blueprint:
-
-- **Node.js (Fastify):** Orchestrator, uploads, auth, alerts
-- **Python (LangGraph):** Agent logic, cyclic reasoning
-- **Redis:** Frame data buffer between Node/Python
-
----
-
-## 🟣 CONSOLIDATION - Still Pending
-
-### 14. Project Cleanup (From Blueprint)
-
-| Item                                   | Status     | Action                 |
-| -------------------------------------- | ---------- | ---------------------- |
-| `genkit-mcp/`                          | ⚠️ Bloated | Reduce to wrapper only |
-| `self-correcting-executor-PRODUCTION/` | Unknown    | Archive or merge       |
-| `software-on-demand/`                  | Unknown    | Investigate            |
-| `Zero to Launch Bundle/`               | Unknown    | Investigate            |
-| Express v4/v5 inconsistency            | Mixed      | Standardize            |
-
----
-
-## Priority Order (Suggested)
-
-1. **Install missing dependencies** (5 min)
-2. **Set `YOUTUBE_API_KEY` in `.env`** (1 min)
-3. **Start state coordinator** (`mcp-servers/shared-state/`) (2 min)
-4. **Fix `datetime.utcnow()` deprecations** (10 min)
-5. **Migrate `google.generativeai` → `google.genai`** (15 min)
-6. **Create/fix `shared.libs` module** (varies)
-7. **Run full test suite again**
-8. **Begin Vision-Reasoning Stack implementation**
+## 📝 Next Actions
+1. **Design Brief:** Create a design brief for Stitch based on the `video-to-learning-app` reference (React/Vite, URL input, generated content area).
+2. **Stitch Generation:** Use the brief to generate the new frontend.
+3. **Integration:** Connect the new frontend to the `/process_video` or `/api/v1/transcript-action` endpoint.

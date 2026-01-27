@@ -78,6 +78,14 @@ except ImportError as e:
     TASK_LOOP_AVAILABLE = False
     print(f"⚠️  TaskLoop not available: {e}")
 
+# Try to import API v1 Router (from src/youtube_extension)
+try:
+    from youtube_extension.backend.api.v1.router import router as api_v1_router
+    API_V1_AVAILABLE = True
+except ImportError as e:
+    API_V1_AVAILABLE = False
+    print(f"⚠️  API v1 Router not available: {e}")
+
 
 # --- Request/Response Models ---
 
@@ -190,6 +198,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Mount API v1 Router
+if API_V1_AVAILABLE:
+    app.include_router(api_v1_router)
+    print("✅ API v1 Router mounted at /api/v1")
 
 
 # --- Endpoints ---
