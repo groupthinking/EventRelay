@@ -12,7 +12,7 @@ import logging
 import sys
 import os
 import subprocess
-from typing import Dict, List, Any, Optional
+from typing import Dict, Any, Optional
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, stream=sys.stderr)
