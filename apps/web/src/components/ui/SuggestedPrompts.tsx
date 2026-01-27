@@ -82,7 +82,7 @@ const TopicChip = forwardRef<HTMLButtonElement, TopicChipProps>(
       >
         <span className={clsx(
           'text-lg font-medium',
-          topic.id === 'ancient-greece' ? 'font-serif' : ''
+          topic.iconClassName
         )}>
           {topic.icon}
         </span>
