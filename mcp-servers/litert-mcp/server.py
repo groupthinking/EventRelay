@@ -12,6 +12,7 @@ import logging
 import sys
 import os
 from typing import Dict, List, Any, Optional
+import shutil
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, stream=sys.stderr)
@@ -155,13 +156,21 @@ class MCPServer:
 
         # Check if binary exists (simple check)
         # We assume the binary handles --help or similar to check existence,
-        # but simpler to just try running it or check existence if it's a path.
-        # If it's just 'lit' in PATH, shutil.which would be needed, but let's just try-catch execution.
-        # (Currently no pre-execution binary check is implemented.)
-
-        # Construct command
-        # We assume the binary accepts flags similar to litert_lm_main demo
-        cmd = [self.lit_binary]
+        # If self.lit_binary contains a path separator, treat it as a direct path; otherwise, look it up in PATH.
+        if os.path.sep in self.lit_binary:
+            binary_path = self.lit_binary
+            if not os.path.exists(binary_path):
+                return {
+                    "status": "error",
+                    "message": f"LiteRT binary '{self.lit_binary}' not found. Please set LIT_BINARY_PATH or install LiteRT-LM."
+                }
+        else:
+            binary_path = shutil.which(self.lit_binary)
+            if binary_path is None:
+                return {
+                    "status": "error",
+                    "message": f"LiteRT binary '{self.lit_binary}' not found. Please set LIT_BINARY_PATH or install LiteRT-LM."
+                }
         cmd.extend(["--backend", backend])
         cmd.extend(["--model_path", model_path])
 
