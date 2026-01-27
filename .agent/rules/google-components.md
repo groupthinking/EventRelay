@@ -27,8 +27,6 @@ Should We Integrate These Repositories?
 
 Repository\
 
-groupthinking/voicevibe Yes useful for enhancing transcription/NLP layers or automating audio-driven workflows.
-
 NVIDIA-AI-IOT/deepstream_tao_apps Yes DeepStream is ideal for video input pipelines, object detection, and real-time AI event streaming.
 
 NVIDIA/DALI Yes DALI specializes in data loading and augmentation pipelines for video, perfect for optimizing inputs/platform scalability.
@@ -53,16 +51,6 @@ Integrating voicevibe may augment the transcription and voice-processing layers,
 2. If you encounter an ARM64/x86_64 conflict during work, **stop immediately**
 3. Implement the required fix before proceeding (as done previously)
 4. After completing the todo/task list, we will audit for any remaining large-scale architecture updates
-
-## ⚠️ Critical: ARM64 vs x86_64 Architecture Mismatch
-
-This issue was previously thought resolved — **it is not**.
-
-**Previous Fix Applied (Phase 3):**
-
-- Root cause: `pydantic_core` x86_64 vs ARM64 architecture conflict
-- Solution: Restart with `.venv` (native ARM64 deps)
-- Result: 3 endpoints → 34 endpoints after fix
 
 ---
 

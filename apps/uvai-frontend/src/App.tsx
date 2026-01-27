@@ -1,13 +1,9 @@
 import { useState, useRef, useCallback } from 'react';
 import './styles/App.css';
-import { validateYoutubeUrl, getYoutubeEmbedUrl, analyzeVideo } from './lib/api';
+import { validateYoutubeUrl, analyzeVideo } from './lib/api';
 import type { VideoAnalysis } from './lib/api';
-import VideoInput from './components/VideoInput';
-import VideoPreview from './components/VideoPreview';
-import ContentTabs from './components/ContentTabs';
-import ExampleGallery from './components/ExampleGallery';
 import ThemeToggle from './components/ThemeToggle';
-import LoadingState from './components/LoadingState';
+import HomeDashboard from './components/HomeDashboard';
 
 type LoadingPhase =
   | 'idle'
@@ -18,39 +14,17 @@ type LoadingPhase =
   | 'complete'
   | 'error';
 
-const EXAMPLE_VIDEOS = [
-  {
-    id: 'wa0MT8S_99E',
-    url: 'https://www.youtube.com/watch?v=wa0MT8S_99E',
-    title: 'Gemini 1.5 Pro: Video Intelligence',
-    thumbnail: 'https://img.youtube.com/vi/wa0MT8S_99E/mqdefault.jpg',
-  },
-  {
-    id: 'ScMzIvxBSi4',
-    url: 'https://www.youtube.com/watch?v=ScMzIvxBSi4',
-    title: 'Descript Product Walkthrough',
-    thumbnail: 'https://img.youtube.com/vi/ScMzIvxBSi4/mqdefault.jpg',
-  },
-  {
-    id: 'aircAruvnKk',
-    url: 'https://www.youtube.com/watch?v=aircAruvnKk',
-    title: 'Google I/O Keynote',
-    thumbnail: 'https://img.youtube.com/vi/aircAruvnKk/mqdefault.jpg',
-  },
-];
-
 export default function App() {
-  const [videoUrl, setVideoUrl] = useState('');
   const [loadingPhase, setLoadingPhase] = useState<LoadingPhase>('idle');
   const [analysis, setAnalysis] = useState<VideoAnalysis | null>(null);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const handleSubmit = useCallback(async () => {
-    const url = inputRef.current?.value.trim() || '';
+  const handleSubmit = useCallback(async (urlInput?: string) => {
+    const url = urlInput || inputRef.current?.value.trim() || '';
 
     if (!url) {
-      inputRef.current?.focus();
+      // In a real app, we'd open a modal here if triggered by FAB
       return;
     }
 
@@ -67,13 +41,9 @@ export default function App() {
       return;
     }
 
-    setVideoUrl(url);
-
-    // Simulate loading phases for UX
     setLoadingPhase('fetching-transcript');
 
     try {
-      // Small delay for phase transitions
       await new Promise(resolve => setTimeout(resolve, 500));
       setLoadingPhase('analyzing');
 
@@ -99,106 +69,46 @@ export default function App() {
     }
   }, []);
 
-  const handleExampleSelect = useCallback((url: string) => {
-    if (inputRef.current) {
-      inputRef.current.value = url;
-    }
-    setVideoUrl(url);
-    handleSubmit();
+  const handleNewAnalysis = useCallback(() => {
+    const url = prompt("Enter YouTube URL:");
+    if (url) handleSubmit(url);
   }, [handleSubmit]);
-
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && loadingPhase === 'idle') {
-      handleSubmit();
-    }
-  }, [handleSubmit, loadingPhase]);
 
   const isLoading = loadingPhase !== 'idle' && loadingPhase !== 'complete' && loadingPhase !== 'error';
 
   return (
     <div className="app">
-      <header className="header">
-        <div className="header-brand">
-          <span className="logo">✦</span>
-          <span className="brand-name">UVAI</span>
-        </div>
+      <HomeDashboard
+        analysis={analysis}
+        isLoading={isLoading}
+        loadingPhase={loadingPhase}
+        onNewAnalysis={handleNewAnalysis}
+      />
+
+      {/*
+        Keep ThemeToggle for now, maybe integrate into Settings later
+      */}
+      <div style={{ position: 'fixed', top: '1rem', right: '1rem', zIndex: 100 }}>
         <ThemeToggle />
-      </header>
+      </div>
 
-      <main className="main-container">
-        <div className="left-panel">
-          <div className="hero">
-            <h1 className="headline">
-              Transform Videos Into
-              <span className="gradient-text"> Intelligence</span>
-            </h1>
-            <p className="subtitle">
-              Paste any YouTube URL and unlock AI-powered insights, summaries, and actionable workflows.
-            </p>
-          </div>
-
-          <VideoInput
-            ref={inputRef}
-            onSubmit={handleSubmit}
-            onKeyDown={handleKeyDown}
-            isLoading={isLoading}
-            loadingPhase={loadingPhase}
-          />
-
-          <VideoPreview
-            url={videoUrl}
-            embedUrl={videoUrl ? getYoutubeEmbedUrl(videoUrl) : ''}
-            isLoading={isLoading}
-          />
-
-          <div className="desktop-gallery">
-            <ExampleGallery
-              examples={EXAMPLE_VIDEOS}
-              onSelect={handleExampleSelect}
-            />
-          </div>
+      {error && (
+        <div className="error-toast" style={{
+          position: 'fixed',
+          bottom: '8rem',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          backgroundColor: '#ef4444',
+          color: 'white',
+          padding: '0.75rem 1.5rem',
+          borderRadius: '0.5rem',
+          boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
+          zIndex: 1000
+        }}>
+          {error}
+          <button onClick={() => setError(null)} style={{ marginLeft: '1rem', background: 'none', border: 'none', color: 'white', fontWeight: 'bold' }}>×</button>
         </div>
-
-        <div className="right-panel">
-          <div className="content-area">
-            {loadingPhase === 'idle' && !analysis && (
-              <div className="content-placeholder">
-                <div className="placeholder-icon">✦</div>
-                <p>Paste a YouTube URL or select an example to begin</p>
-              </div>
-            )}
-
-            {isLoading && (
-              <LoadingState phase={loadingPhase} />
-            )}
-
-            {loadingPhase === 'error' && error && (
-              <div className="error-state">
-                <div className="error-icon">⚠</div>
-                <h3>Something went wrong</h3>
-                <p>{error}</p>
-                <button
-                  className="btn btn-secondary"
-                  onClick={() => setLoadingPhase('idle')}
-                >
-                  Try Again
-                </button>
-              </div>
-            )}
-
-            {loadingPhase === 'complete' && analysis && (
-              <ContentTabs analysis={analysis} />
-            )}
-          </div>
-
-          <div className="mobile-gallery">
-            <ExampleGallery
-              examples={EXAMPLE_VIDEOS}
-              onSelect={handleExampleSelect}
-            />
-          </div>
-        </div>
-      </main>
+      )}
     </div>
   );
 }
