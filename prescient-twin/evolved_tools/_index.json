@@ -259,8 +259,27 @@
         ]
       },
       "timestamp": "2026-01-27T03:42:54.022768"
+    },
+    {
+      "lesson": "Processed video: Rick Astley - Never Gonna Give You Up (Official Video) (4K Remaster)",
+      "context": {
+        "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        "result_keys": [
+          "video_id",
+          "video_url",
+          "metadata",
+          "transcript",
+          "ai_analysis",
+          "markdown_analysis",
+          "save_path",
+          "processing_time",
+          "success",
+          "pipeline"
+        ]
+      },
+      "timestamp": "2026-01-27T06:12:32.025281"
     }
   ],
   "created_at": "2026-01-10T10:30:17.110161",
-  "updated_at": "2026-01-27T03:42:54.022771"
+  "updated_at": "2026-01-27T06:12:32.025286"
 }
