@@ -11,7 +11,6 @@ import json
 import logging
 import sys
 import os
-import subprocess
 from typing import Dict, List, Any, Optional
 
 # Configure logging
