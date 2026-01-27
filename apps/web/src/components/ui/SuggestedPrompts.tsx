@@ -115,7 +115,7 @@ const SuggestedPrompts = forwardRef<HTMLDivElement, SuggestedPromptsProps>(
           'animate-fade-in-up',
           className
         )}
-        style={{ animationDelay: '200ms', animationFillMode: 'forwards', opacity: 0 }}
+        style={{ animationDelay: '200ms', opacity: 0 }}
         {...props}
       >
         <p className="text-xs font-semibold tracking-widest text-white/40 mb-4 text-center">
