@@ -156,11 +156,11 @@ class MCPServer:
         backend = args.get("backend", "cpu")
         
         # Validate backend parameter
-        valid_backends = {"cpu", "gpu", "npu"}
+        valid_backends = ["cpu", "gpu", "npu"]
         if backend not in valid_backends:
             return {
                 "status": "error",
-                "message": f"Invalid backend '{backend}'. Must be one of {sorted(valid_backends)}."
+                "message": f"Invalid backend '{backend}'. Must be one of {valid_backends}."
             }
 
         if not model_path:
