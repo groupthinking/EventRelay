@@ -63,13 +63,11 @@ def main() -> None:
 
     # Scan locations
     scan_paths = [
-        "projects/*",
-        "mcp-servers/*",
-        "agents-marketplace",
-        "xai-grok-wrapper",
-        "backend",
         "apps/*",
-        "packages/*"
+        "packages/*",
+        "mcp-servers/*",
+        "shared/libs/*",
+        "infrastructure/*"
     ]
 
     for pattern in scan_paths:
