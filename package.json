@@ -28,7 +28,8 @@
   "overrides": {
     "nth-check": "^2.0.1",
     "postcss": "^8.4.31",
-    "undici": "^6.22.0"
+    "undici": "^6.22.0",
+    "esbuild": "^0.27.2"
   },
   "dependencies": {
     "@langchain/core": "^0.3.77",
