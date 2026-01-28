@@ -502,10 +502,10 @@ export default function HomePage() {
           </Link>
           <Link
             href="/dashboard"
-            className="btn btn-primary px-5 py-2.5 group"
+            className="btn btn-primary px-5 py-2.5 group inline-flex items-center gap-1"
           >
             Get Started
-            <span className="ml-1 transition-transform group-hover:translate-x-1">→</span>
+            <span className="ml-1 transition-transform duration-200 group-hover:translate-x-1">→</span>
           </Link>
         </div>
 
@@ -613,34 +613,47 @@ export default function HomePage() {
           <div className="mb-16">
             <SuggestedPrompts
               onSelectTopic={(query) => {
-                setVideoUrl(`https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`);
+                const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
+                if (typeof window !== 'undefined') {
+                  window.open(searchUrl, '_blank', 'noopener,noreferrer');
+                }
               }}
             />
           </div>
 
-          {/* Video Preview Card */}
+          {/* Video Preview Card - Example */}
           <div className="max-w-lg mx-auto mb-16">
-            <div className="relative group">
-              {/* Glow effect */}
-              <div className="absolute -inset-4 bg-gradient-to-r from-primary-500/10 via-accent-500/10 to-primary-500/10 rounded-3xl blur-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
+            <div className="relative">
+              {/* "Example" Badge */}
+              <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-10">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 backdrop-blur-sm border border-white/20 text-xs font-medium text-white/80">
+                  <span className="w-1.5 h-1.5 rounded-full bg-primary-400 animate-pulse"></span>
+                  Example Preview
+                </span>
+              </div>
 
-              <div className="relative overflow-hidden rounded-2xl border border-white/[0.1] bg-surface-900/80 backdrop-blur-xl shadow-2xl transition-all duration-500 group-hover:border-white/[0.15]">
-                {/* Video thumbnail placeholder */}
-                <div className="relative aspect-video bg-gradient-to-br from-surface-800 to-surface-900 flex items-center justify-center">
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
-                  <div className="text-6xl opacity-50 group-hover:opacity-70 transition-opacity">🎬</div>
+              <div className="relative group">
+                {/* Glow effect */}
+                <div className="absolute -inset-4 bg-gradient-to-r from-primary-500/10 via-accent-500/10 to-primary-500/10 rounded-3xl blur-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
 
-                  {/* Play button overlay */}
-                  <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300">
-                    <div className="w-16 h-16 rounded-full bg-white/10 backdrop-blur-sm border border-white/20 flex items-center justify-center hover:scale-110 transition-transform cursor-pointer">
-                      <span className="text-2xl ml-1">▶</span>
+                <div className="relative overflow-hidden rounded-2xl border border-white/[0.1] bg-surface-900/80 backdrop-blur-xl shadow-2xl transition-all duration-500 group-hover:border-white/[0.15]">
+                  {/* Video thumbnail placeholder */}
+                  <div className="relative aspect-video bg-gradient-to-br from-surface-800 to-surface-900 flex items-center justify-center">
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+                    <div className="text-6xl opacity-50 group-hover:opacity-70 transition-opacity">🎬</div>
+
+                    {/* Play button overlay */}
+                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300">
+                      <div className="w-16 h-16 rounded-full bg-white/10 backdrop-blur-sm border border-white/20 flex items-center justify-center transition-transform">
+                        <span className="text-2xl ml-1">▶</span>
+                      </div>
                     </div>
-                  </div>
 
-                  {/* Video info overlay */}
-                  <div className="absolute bottom-4 left-4 right-4">
-                    <p className="text-sm text-white/70 font-medium">Sample: How to build a startup</p>
-                    <p className="text-xs text-white/40 mt-1">12:34 • Ready to transform</p>
+                    {/* Video info overlay */}
+                    <div className="absolute bottom-4 left-4 right-4">
+                      <p className="text-sm text-white/70 font-medium">Sample: How to build a startup</p>
+                      <p className="text-xs text-white/40 mt-1">12:34 • Ready to transform</p>
+                    </div>
                   </div>
                 </div>
               </div>

@@ -63,6 +63,7 @@ const TopicChip = forwardRef<HTMLButtonElement, TopicChipProps>(
       <button
         ref={ref}
         onClick={() => onSelect?.(topic.query)}
+        aria-label={`Search for ${topic.label} videos`}
         className={clsx(
           'group inline-flex items-center gap-2.5 px-4 py-2.5',
           'rounded-xl',
@@ -115,7 +116,11 @@ const SuggestedPrompts = forwardRef<HTMLDivElement, SuggestedPromptsProps>(
           'animate-fade-in-up',
           className
         )}
-        style={{ animationDelay: '200ms', opacity: 0 }}
+        style={{ 
+          '--animation-delay': '200ms',
+          animationDelay: 'var(--animation-delay)',
+          opacity: 0 
+        } as React.CSSProperties}
         {...props}
       >
         <p className="text-xs font-semibold tracking-widest text-white/40 mb-4 text-center">
@@ -128,10 +133,11 @@ const SuggestedPrompts = forwardRef<HTMLDivElement, SuggestedPromptsProps>(
               topic={topic}
               onSelect={onSelectTopic}
               style={{
-                animationDelay: `${300 + index * 100}ms`,
+                '--animation-delay': `${300 + index * 100}ms`,
+                animationDelay: 'var(--animation-delay)',
                 animationFillMode: 'forwards',
                 opacity: 0
-              }}
+              } as React.CSSProperties}
               className="animate-fade-in-up"
             />
           ))}
