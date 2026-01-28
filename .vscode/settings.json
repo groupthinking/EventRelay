@@ -73,5 +73,10 @@
     "geminicodeassist.agentDebugMode": true,
     "githubPullRequests.codingAgent.uiIntegration": true,
     "gitlab.duoAgentPlatform.connectionType": "grpc",
-    "geminicodeassist.rules": ""
+    "geminicodeassist.rules": "",
+    "workbench.editor.enablePreviewFromCodeNavigation": true,
+    "dart.previewFlutterUiGuides": true,
+    "mediaPreview.video.autoPlay": true,
+    "terminal.integrated.suggest.enabled": true,
+    "dart.enableCompletionCommitCharacters": true
 }

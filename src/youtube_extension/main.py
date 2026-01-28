@@ -20,7 +20,7 @@ app = FastAPI(
     description="EventRelay - AI Infrastructure Automation Platform Generator",
     version="1.0.0",
     docs_url="/docs",
-    redoc_url="/redoc"
+    redoc_url="/redoc",
 )
 
 # Configure CORS
@@ -35,6 +35,7 @@ app.add_middleware(
 # Include Cloud AI routes
 try:
     from .backend.cloud_ai_routes import router as cloud_ai_router
+
     app.include_router(cloud_ai_router)
     logger.info("Cloud AI routes loaded successfully")
 except ImportError as e:
@@ -43,6 +44,7 @@ except ImportError as e:
 # Include Generator routes (Revenue Pipeline)
 try:
     from .backend.api.generator_routes import router as generator_router
+
     app.include_router(generator_router)
     logger.info("Generator routes loaded successfully")
 except ImportError as e:
@@ -51,10 +53,20 @@ except ImportError as e:
 # Include Event Routes
 try:
     from .backend.api.event_routes import router as event_router
+
     app.include_router(event_router)
     logger.info("Event routes loaded successfully")
 except ImportError as e:
     logger.error(f"Failed to load event routes: {e}")
+
+# Include API v1 Router (production endpoints - transcript-action, health, etc.)
+try:
+    from .backend.api.v1.router import router as api_v1_router
+
+    app.include_router(api_v1_router)
+    logger.info("API v1 router loaded successfully")
+except ImportError as e:
+    logger.error(f"Failed to load API v1 router: {e}")
 
 
 # Health check endpoint
@@ -62,6 +74,7 @@ except ImportError as e:
 async def health_check():
     """Health check endpoint"""
     return {"status": "healthy", "service": "uvai-youtube-extension"}
+
 
 # Root endpoint
 @app.get("/")
@@ -75,9 +88,10 @@ async def root():
             "YouTube video processing",
             "Cloud AI integration (Google, AWS, Azure, Apple)",
             "Multi-provider video analysis",
-            "Batch processing support"
-        ]
+            "Batch processing support",
+        ],
     }
+
 
 # Video processing endpoint (placeholder)
 @app.post("/api/v1/process-video")
@@ -88,11 +102,12 @@ async def process_video(video_url: str):
         return {
             "status": "success",
             "video_url": video_url,
-            "message": "Video processing initiated"
+            "message": "Video processing initiated",
         }
     except Exception as e:
         logger.error(f"Error processing video: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 if __name__ == "__main__":
     uvicorn.run(
@@ -100,5 +115,5 @@ if __name__ == "__main__":
         host="0.0.0.0",
         port=8000,
         reload=True,
-        log_level="info"
+        log_level="info",
     )
