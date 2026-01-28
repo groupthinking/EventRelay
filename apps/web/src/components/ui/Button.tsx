@@ -64,6 +64,7 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         'bg-gradient-to-r from-red-500 via-red-600 to-red-500 bg-[length:200%_100%]',
         'text-white shadow-lg shadow-red-500/30',
         'hover:shadow-xl hover:shadow-red-500/40 hover:-translate-y-0.5',
+        'hover:bg-[position:100%_0]',
         'active:translate-y-0',
         'transition-all duration-300'
       ),
@@ -71,6 +72,7 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         'bg-gradient-to-r from-green-500 via-green-600 to-green-500 bg-[length:200%_100%]',
         'text-white shadow-lg shadow-green-500/30',
         'hover:shadow-xl hover:shadow-green-500/40 hover:-translate-y-0.5',
+        'hover:bg-[position:100%_0]',
         'active:translate-y-0',
         'transition-all duration-300'
       ),
