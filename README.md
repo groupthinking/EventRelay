@@ -274,19 +274,33 @@ youtube_extension/
 
 ## 🧾 API Reference
 
+### Core APIs
 - `GET /` – server metadata and feature list
 - `GET /health` – service heartbeat
-- `POST /api/video-to-software` – legacy endpoint (deprecated)
 - `POST /api/v1/generate` – **Primary**: Transform YouTube video into deployed infrastructure (Revenue Pipeline)
 - `POST /api/video-to-software/by-category` – auto-discover a fresh video within a category and run the same pipeline
 - `POST /api/v1/transcript-action` – transcript → event extraction → agent dispatch
 - `POST /api/v1/process-video` – placeholder for legacy workflow
+
+### Cloud AI APIs
 - `GET /api/v1/cloud-ai/providers/status` – provider availability snapshot
 - `POST /api/v1/cloud-ai/analyze/video` – single video multi-provider analysis
 - `POST /api/v1/cloud-ai/analyze/batch` – batch analysis with provider fallback
 - `POST /api/v1/cloud-ai/analyze/multi-provider` – parallel provider invocation
 - `GET /api/v1/cloud-ai/analysis-types` – supported analysis enumerations
-- Full REST schema is discoverable via FastAPI docs (`/docs`, `/redoc`).
+
+### Advanced Video Analysis APIs (NEW)
+- `POST /api/v1/video/temporal/segment` – analyze specific time segments with timestamps
+- `POST /api/v1/video/temporal/events` – extract timestamped events with CloudEvents publishing
+- `POST /api/v1/video/temporal/question` – temporal question answering with time context
+- `POST /api/v1/video/temporal/timeline` – create detailed video timeline
+- `POST /api/v1/video/temporal/compare-segments` – compare multiple video segments
+- `POST /api/v1/video/temporal/tutorial-steps` – extract tutorial steps with timestamps
+- `POST /api/v1/video/analyze/structured` – analyze with enforced JSON schema
+- `POST /api/v1/video/publish-event` – publish CloudEvents to EventMesh/OpenWhisk
+
+Full REST schema is discoverable via FastAPI docs (`/docs`, `/redoc`).
+See [Advanced Video Features Guide](docs/ADVANCED_VIDEO_FEATURES.md) for detailed usage.
 
 ## 🧪 Testing
 
