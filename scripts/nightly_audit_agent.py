@@ -14,12 +14,15 @@ Frequency: Nightly Execution (02:00 UTC)
 import asyncio
 import json
 import logging
+import os
 import sys
 import argparse
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, List, Any, Optional
+
 # Add src to python path to allow imports
+sys.path.append(str(Path(__file__).parent.parent / "src"))
 sys.path.append(str(Path(__file__).parent.parent / "src"))
 
 # Imports - Fail fast if missing dependencies
