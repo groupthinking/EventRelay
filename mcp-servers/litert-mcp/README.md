@@ -44,7 +44,7 @@ Runs inference using the configured LiteRT-LM model.
 {
   "name": "run_inference",
   "arguments": {
-    "prompt": "Explain the theory of relativity in simple terms.",
+    "prompt": "What is the capital of France?",
     "backend": "cpu"
   }
 }
