@@ -19,16 +19,15 @@ import argparse
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Any
+
 # Add src to python path to allow imports
-sys.path.append(str(Path(__file__).parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 # Imports - Fail fast if missing dependencies
 from youtube_extension.backend.services.health_monitoring_service import (
     HealthMonitoringService,
     HealthStatus
 )
-from youtube_extension.backend.services.metrics_service import MetricsService
-from youtube_extension.backend.services.logging_service import LoggingService
 from youtube_extension.backend.services.database_cleanup_service import run_database_cleanup
 
 # Configure logging
@@ -48,17 +47,16 @@ class AuditAgent:
         self.issues = []
         self.remediations = []
         self.fortifications = []
-        self.log_dir = Path("logs")
-        self.report_dir = Path("audit_reports")
+        # Anchor paths to project root
+        project_root = Path(__file__).resolve().parent.parent
+        self.log_dir = project_root / "logs"
+        self.report_dir = project_root / "audit_reports"
 
         # Ensure directories exist
         self.report_dir.mkdir(parents=True, exist_ok=True)
 
-        # Initialize services
+        # Initialize services (only those needed)
         self.health_service = HealthMonitoringService()
-        self.metrics_service = MetricsService()
-        # Logging service is usually a singleton
-        self.logging_service = LoggingService()
 
     async def run_audit(self):
         """Main execution loop."""
@@ -105,7 +103,7 @@ class AuditAgent:
             })
 
     async def analyze_logs(self):
-        """Analyze logs for status codes > 400."""
+        """Analyze logs for status codes >= 400."""
         logger.info("Analyzing logs...")
         log_file = self.log_dir / "structured_logs.jsonl"
 
@@ -190,7 +188,8 @@ class AuditAgent:
 
     async def ruthless_remediation(self, diagnosis: Dict[str, Any]):
         """
-        Execute ruthless solutions.
+        Execute ruthless solutions (pre-approved maintenance tasks only).
+        Structural changes and schema updates are advisory-only.
         """
         fix = diagnosis['proposed_fix']
         logger.info(f"Executing remediation: {fix}")
@@ -203,21 +202,26 @@ class AuditAgent:
         # "Ruthless" Actions implementation
         if "Restart" in fix:
             # In a real env, this might trigger a k8s restart or systemctl
-            self.remediations.append(f"Triggered restart for components related to {diagnosis['issue']['type']}")
+            self.remediations.append(f"[ADVISORY] Triggered restart for components related to {diagnosis['issue']['type']}")
 
         elif "Review" in fix:
-             self.remediations.append(f"Flagged {diagnosis['issue']['type']} for immediate manual review (Ticket created)")
+             self.remediations.append(f"[ADVISORY] Flagged {diagnosis['issue']['type']} for immediate manual review (Ticket created)")
 
         elif "Optimize" in fix:
-             self.remediations.append("Triggered auto-optimization (e.g., ANALYZE DB)")
+             self.remediations.append("[ADVISORY] Triggered auto-optimization (e.g., ANALYZE DB)")
 
-        # Always run DB cleanup if it's a health issue, just in case
+        # Only run DB cleanup if database component is specifically unhealthy
         if diagnosis['issue']['type'] == 'health_check':
-            try:
-                results = await run_database_cleanup()
-                self.remediations.append(f"Ran database cleanup: {len(results)} databases cleaned")
-            except Exception as e:
-                self.remediations.append(f"Database cleanup failed: {e}")
+            unhealthy_components = diagnosis['issue'].get('components', [])
+            db_components = [c for c in unhealthy_components if 'database' in c.lower() or 'db' in c.lower()]
+            
+            if db_components:
+                try:
+                    results = await run_database_cleanup()
+                    self.remediations.append(f"Ran database cleanup for unhealthy DB components {db_components}: {len(results)} databases cleaned")
+                except Exception as e:
+                    logger.error(f"Database cleanup failed: {e}")
+                    self.remediations.append(f"Database cleanup failed: {e}")
 
     async def fortify(self, diagnosis: Dict[str, Any]):
         """
