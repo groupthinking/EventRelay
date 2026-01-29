@@ -205,10 +205,10 @@ class AuditAgent:
             self.remediations.append(f"[ADVISORY] Triggered restart for components related to {diagnosis['issue']['type']}")
 
         elif "Review" in fix:
-             self.remediations.append(f"[ADVISORY] Flagged {diagnosis['issue']['type']} for immediate manual review (Ticket created)")
+            self.remediations.append(f"[ADVISORY] Flagged {diagnosis['issue']['type']} for immediate manual review (Ticket created)")
 
         elif "Optimize" in fix:
-             self.remediations.append("[ADVISORY] Triggered auto-optimization (e.g., ANALYZE DB)")
+            self.remediations.append("[ADVISORY] Triggered auto-optimization (e.g., ANALYZE DB)")
 
         # Only run DB cleanup if database component is specifically unhealthy
         if diagnosis['issue']['type'] == 'health_check':
@@ -231,9 +231,9 @@ class AuditAgent:
         logger.info(f"Applying fortification: {measure}")
 
         if self.dry_run:
-             logger.info("[DRY RUN] Fortification skipped.")
-             self.fortifications.append(f"[DRY RUN] {measure}")
-             return
+            logger.info("[DRY RUN] Fortification skipped.")
+            self.fortifications.append(f"[DRY RUN] {measure}")
+            return
 
         self.fortifications.append(f"Applied: {measure}")
         # In a real system, this might write to a 'constraints.json' or update WAF rules.
