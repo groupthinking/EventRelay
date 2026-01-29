@@ -118,7 +118,7 @@ class AuditAgent:
                 for line in f:
                     try:
                         entry = json.loads(line)
-                        if entry.get('status_code', 0) >= 400:
+                        if entry.get('status_code', 0) > 400:
                             self.issues.append({
                                 "type": "http_error",
                                 "severity": "medium" if entry.get('status_code') < 500 else "high",
