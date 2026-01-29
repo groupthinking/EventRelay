@@ -51,8 +51,10 @@ class AuditAgent:
         self.issues = []
         self.remediations = []
         self.fortifications = []
-        self.log_dir = Path("logs")
-        self.report_dir = Path("audit_reports")
+        # Anchor paths to project root to avoid issues when run from cron or outside repo
+        project_root = Path(__file__).resolve().parent.parent
+        self.log_dir = project_root / "logs"
+        self.report_dir = project_root / "audit_reports"
 
         # Ensure directories exist
         self.report_dir.mkdir(parents=True, exist_ok=True)
