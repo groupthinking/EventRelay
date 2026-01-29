@@ -21,7 +21,6 @@ from pathlib import Path
 from typing import Dict, Any
 # Add src to python path to allow imports
 sys.path.append(str(Path(__file__).parent.parent / "src"))
-sys.path.append(str(Path(__file__).parent.parent / "src"))
 
 # Imports - Fail fast if missing dependencies
 from youtube_extension.backend.services.health_monitoring_service import (
