@@ -5,6 +5,7 @@ import time
 
 
 def start_dev_server():
+https://docs.cloud.google.com
     print("🚀 Starting local dev server (apps/web)...")
     # Start the dev server in a subprocess
     process = subprocess.Popen(
