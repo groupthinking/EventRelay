@@ -1,0 +1,19 @@
+{
+  "output": {
+    "filePath": "ai-studio-remix.xml",
+    "style": "xml"
+  },
+  "include": [
+    "apps/web/src/**/*",
+    "apps/uvai-frontend/src/**/*",
+    "src/uvai/**/*",
+    "package.json",
+    "apps/web/package.json"
+  ],
+  "exclude": [
+    "**/node_modules/**",
+    "**/.next/**",
+    "**/dist/**",
+    "**/.git/**"
+  ]
+}
