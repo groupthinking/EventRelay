@@ -5,12 +5,12 @@ import asyncio
 from httpx import AsyncClient, ASGITransport
 from unittest.mock import MagicMock
 
-# Setup path to import prescient-twin/main.py
-sys.path.append(os.path.join(os.getcwd(), "prescient-twin"))
+# Setup path to import src
+sys.path.append(os.path.join(os.getcwd(), "src"))
 
 # Import app
 try:
-    from main import app
+    from youtube_extension.backend.main import app
     # Import the specific dependency to override
     from youtube_extension.backend.api.v1.router import get_health_monitoring_service
 except ImportError as e:

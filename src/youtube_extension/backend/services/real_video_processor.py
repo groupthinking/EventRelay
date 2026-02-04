@@ -22,6 +22,8 @@ from .real_ai_processor import (
     get_ai_processor,
 )
 
+from youtube_extension.utils import extract_video_id
+
 # Import our real API services
 from .real_youtube_api import get_youtube_service
 
@@ -124,7 +126,7 @@ class RealVideoProcessor:
 
         try:
             # Extract video ID
-            video_id = self.youtube_service.extract_video_id(video_url)
+            video_id = extract_video_id(video_url)
 
             processing_steps.append({
                 'step': 'video_id_extraction',
