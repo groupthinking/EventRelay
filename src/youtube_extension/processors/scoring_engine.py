@@ -1,5 +1,6 @@
-from typing import Dict, Any, List
 import re
+from typing import Any, Dict, List
+
 
 class ScoringEngine:
     """
@@ -17,11 +18,11 @@ class ScoringEngine:
             "world_class_indicators": self._identify_world_class_indicators(video_info, transcript),
             "recommendations": self._generate_world_class_recommendations(video_info, transcript)
         }
-    
+
     def generate_actions(self, analysis: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Generate actionable insights based on world-class analysis"""
         actions = []
-        
+
         # Learning pathway actions
         if analysis.get('learning_potential', {}).get('educational_value', 0) > 7:
             actions.append({
@@ -32,7 +33,7 @@ class ScoringEngine:
                 "estimated_time": "45 minutes",
                 "impact": "Increase learning retention by 80%"
             })
-        
+
         # Implementation actions
         if analysis.get('technical_depth', {}).get('technical_density', 0) > 0.15:
             actions.append({
@@ -43,7 +44,7 @@ class ScoringEngine:
                 "estimated_time": "90 minutes",
                 "impact": "Reinforce technical concepts through practice"
             })
-        
+
         # Community building actions
         if analysis.get('world_class_indicators', {}).get('community_impact', {}).get('score', 0) > 7:
             actions.append({
@@ -54,7 +55,7 @@ class ScoringEngine:
                 "estimated_time": "30 minutes",
                 "impact": "Build knowledge-sharing community"
             })
-        
+
         return actions
 
     def _analyze_content_quality(self, video_info: Dict, transcript: List) -> Dict[str, Any]:
@@ -62,11 +63,11 @@ class ScoringEngine:
         view_count = int(video_info.get('statistics', {}).get('viewCount', 0))
         like_count = int(video_info.get('statistics', {}).get('likeCount', 0))
         comment_count = int(video_info.get('statistics', {}).get('commentCount', 0))
-        
+
         engagement_rate = (like_count + comment_count) / max(view_count, 1) * 100
         transcript_length = sum(len(segment.get('text', '')) for segment in transcript)
         avg_segment_length = transcript_length / max(len(transcript), 1)
-        
+
         return {
             "duration_seconds": self._parse_duration(duration),
             "view_count": view_count,
@@ -84,7 +85,7 @@ class ScoringEngine:
         view_count = int(stats.get('viewCount', 0))
         like_count = int(stats.get('likeCount', 0))
         comment_count = int(stats.get('commentCount', 0))
-        
+
         return {
             "view_count": view_count,
             "like_count": like_count,
@@ -102,7 +103,7 @@ class ScoringEngine:
         full_text = ' '.join(segment.get('text', '').lower() for segment in transcript)
         learning_score = sum(1 for keyword in learning_keywords if keyword in full_text)
         learning_density = learning_score / max(len(transcript), 1)
-        
+
         return {
             "learning_score": learning_score,
             "learning_density": round(learning_density, 3),
@@ -119,7 +120,7 @@ class ScoringEngine:
         full_text = ' '.join(segment.get('text', '').lower() for segment in transcript)
         technical_score = sum(1 for keyword in technical_keywords if keyword in full_text)
         technical_density = technical_score / max(len(transcript), 1)
-        
+
         return {
             "technical_score": technical_score,
             "technical_density": round(technical_density, 3),
@@ -145,10 +146,10 @@ class ScoringEngine:
                 "suggestion": "Add more detailed explanations and examples",
                 "impact": "Increase learning effectiveness by 40%"
             })
-        
+
         stats = video_info.get('statistics', {})
         engagement_rate = (int(stats.get('likeCount', 0)) + int(stats.get('commentCount', 0))) / max(int(stats.get('viewCount', 1)), 1)
-        
+
         if engagement_rate < 0.05:
             recommendations.append({
                 "type": "engagement_optimization",
@@ -156,7 +157,7 @@ class ScoringEngine:
                 "suggestion": "Add interactive elements and call-to-actions",
                 "impact": "Increase engagement by 60%"
             })
-            
+
         technical_score = self._analyze_technical_depth(transcript)
         if technical_score['technical_density'] < 0.1:
             recommendations.append({
@@ -181,7 +182,7 @@ class ScoringEngine:
         view_count = int(stats.get('viewCount', 0))
         like_count = int(stats.get('likeCount', 0))
         comment_count = int(stats.get('commentCount', 0))
-        
+
         engagement_score = min((like_count + comment_count) / max(view_count, 1) * 100, 10)
         content_score = min(len(transcript) / 20, 5)
         duration = self._parse_duration(video_info.get('contentDetails', {}).get('duration', 'PT0S'))

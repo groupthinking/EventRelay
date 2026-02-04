@@ -27,18 +27,16 @@ from fastapi.responses import JSONResponse, RedirectResponse
 project_root = Path(__file__).parent.parent
 
 # Import services and container
+# from ..processors.video_processor import default_processor as video_processor
+# Import API routers
+# Import API routers
+from .api.v1.router import router as v1_router
 from .containers.service_container import get_service_container
 from .services.database_optimizer import (
     initialize_database_optimization,
     shutdown_database_optimization,
 )
 from .services.websocket_service import WebSocketService
-
-# from ..processors.video_processor import default_processor as video_processor
-
-# Import API routers
-# Import API routers
-from .api.v1.router import router as v1_router
 
 # Import integrations router
 # Import integrations router

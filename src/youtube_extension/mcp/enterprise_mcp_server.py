@@ -25,7 +25,6 @@ import psutil
 
 # MCP imports
 try:
-    from mcp import McpServer
     from mcp.types import (
         CallToolResult,
         GetPromptResult,
@@ -34,6 +33,8 @@ try:
         TextContent,
         Tool,
     )
+
+    from mcp import McpServer
     HAS_MCP = True
 except ImportError:
     HAS_MCP = False

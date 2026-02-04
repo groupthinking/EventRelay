@@ -834,7 +834,7 @@ async def main():
             video_url = default_video
 
     # Check for banned video IDs
-    from urllib.parse import urlparse, parse_qs
+    from urllib.parse import parse_qs, urlparse
 
     parsed = urlparse(video_url)
     video_id = None
