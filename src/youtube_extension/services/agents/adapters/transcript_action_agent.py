@@ -40,7 +40,9 @@ class TranscriptActionAgent(BaseAgent):
     def __init__(self, config: dict[str, Any] | None = None):
         cfg = config or {}
         hybrid_cfg = cfg.get("hybrid_config") or self._build_hybrid_config()
-        self._hybrid_processor: HybridProcessorService = cfg.get("hybrid_processor") or HybridProcessorService(hybrid_cfg)
+        self._hybrid_processor: HybridProcessorService = cfg.get(
+            "hybrid_processor"
+        ) or HybridProcessorService(hybrid_cfg)
         self._summary_model = cfg.get("summary_model")
         self._project_model = cfg.get("project_model")
         self._task_model = cfg.get("task_model")
@@ -48,6 +50,11 @@ class TranscriptActionAgent(BaseAgent):
 
     async def run(self, req: AgentRequest) -> AgentResult:
         start_time = asyncio.get_event_loop().time()
+
+        # Branch based on task type
+        if req.task == "chat_assistance":
+            return await self._handle_chat_assistance(req, start_time)
+
         transcript_text = req.params.get("transcript")
         metadata = req.params.get("metadata", {})
         video_metadata = req.params.get("video_metadata") or {}
@@ -56,14 +63,19 @@ class TranscriptActionAgent(BaseAgent):
             return self._failure("Missing transcript text", start_time)
 
         try:
-            summary = await self._generate_summary(transcript_text, metadata, video_metadata)
+            summary = await self._generate_summary(
+                transcript_text, metadata, video_metadata
+            )
             if not summary.parsed:
                 logger.debug("Summary JSON parsing failed; falling back to raw text")
 
-            scaffold = await self._generate_project_scaffold(transcript_text, metadata, video_metadata)
-            tasks = await self._generate_task_board(transcript_text, metadata, video_metadata)
+            scaffold = await self._generate_project_scaffold(
+                transcript_text, metadata, video_metadata
+            )
+            tasks = await self._generate_task_board(
+                transcript_text, metadata, video_metadata
+            )
 
-            asyncio.get_event_loop().time() - start_time
             return AgentResult(
                 status="ok",
                 output={
@@ -72,9 +84,12 @@ class TranscriptActionAgent(BaseAgent):
                     "task_board": tasks.parsed or {"raw": tasks.raw_text},
                     "metadata": metadata,
                     "processing_notes": {
-                        "summary_model": self._summary_model or self._default_model(TaskType.COMPLEX_REASONING),
-                        "project_model": self._project_model or self._default_model(TaskType.BATCH_PROCESSING),
-                        "task_model": self._task_model or self._default_model(TaskType.BATCH_PROCESSING),
+                        "summary_model": self._summary_model
+                        or self._default_model(TaskType.COMPLEX_REASONING),
+                        "project_model": self._project_model
+                        or self._default_model(TaskType.BATCH_PROCESSING),
+                        "task_model": self._task_model
+                        or self._default_model(TaskType.BATCH_PROCESSING),
                         "language": self._language,
                         "clip_window": self._clip_window_notes(video_metadata),
                     },
@@ -83,6 +98,62 @@ class TranscriptActionAgent(BaseAgent):
             )
         except Exception as exc:
             logger.error("TranscriptActionAgent failed: %s", exc, exc_info=True)
+            return self._failure(str(exc), start_time)
+
+    async def _handle_chat_assistance(
+        self, req: AgentRequest, start_time: float
+    ) -> AgentResult:
+        """Handle general chat assistance queries."""
+        message = req.params.get("message")
+        transcript = req.params.get("transcript")
+        context = req.params.get("context", {})
+
+        if not message:
+            return self._failure("Missing chat message", start_time)
+
+        try:
+            prompt = (
+                "You are a helpful AI assistant for the EventRelay (UVAI) platform. "
+                "Your goal is to help users process, analyze, and understand video content. "
+            )
+
+            if transcript:
+                prompt += (
+                    "\nBelow is the transcript of the video the user is currently looking at. "
+                    "Use it to provide specific, context-aware answers if relevant."
+                )
+                content = f"Transcript:\n{transcript}\n\nUser Message: {message}"
+            else:
+                content = f"User Message: {message}"
+
+            if context:
+                prompt += f"\nAdditional Context: {json.dumps(context)}"
+
+            result = await self._hybrid_processor.process(
+                content,
+                prompt,
+                task_type=TaskType.COMPLEX_REASONING,
+                model_name=self._default_model(TaskType.COMPLEX_REASONING),
+            )
+
+            if not result.success:
+                return self._failure(
+                    result.error or "Gemini processing failed", start_time
+                )
+
+            return AgentResult(
+                status="ok",
+                output={
+                    "response": result.response,
+                    "processing_notes": {
+                        "model": self._default_model(TaskType.COMPLEX_REASONING),
+                        "has_transcript": bool(transcript),
+                    },
+                },
+                logs=[],
+            )
+        except Exception as exc:
+            logger.error("Chat assistance failed: %s", exc, exc_info=True)
             return self._failure(str(exc), start_time)
 
     async def _generate_summary(
@@ -99,7 +170,9 @@ class TranscriptActionAgent(BaseAgent):
         )
         if clip_hint:
             prompt += f" Focus on {clip_hint}."
-        return await self._invoke_gemini(prompt, transcript, self._summary_model, fail_message="summary generation")
+        return await self._invoke_gemini(
+            prompt, transcript, self._summary_model, fail_message="summary generation"
+        )
 
     async def _generate_project_scaffold(
         self,
@@ -107,7 +180,11 @@ class TranscriptActionAgent(BaseAgent):
         metadata: dict[str, Any],
         video_metadata: dict[str, Any],
     ) -> PromptResult:
-        context = metadata.get("title") or metadata.get("video_id") or "the referenced content"
+        context = (
+            metadata.get("title")
+            or metadata.get("video_id")
+            or "the referenced content"
+        )
         clip_hint = self._build_prompt_clip_context(metadata, video_metadata)
         prompt = (
             f"Create a deployment-ready project scaffold for {context}. Return JSON with keys"
@@ -118,7 +195,12 @@ class TranscriptActionAgent(BaseAgent):
         )
         if clip_hint:
             prompt += f" Anchor recommendations to {clip_hint}."
-        return await self._invoke_gemini(prompt, transcript, self._project_model, fail_message="project scaffold generation")
+        return await self._invoke_gemini(
+            prompt,
+            transcript,
+            self._project_model,
+            fail_message="project scaffold generation",
+        )
 
     async def _generate_task_board(
         self,
@@ -134,7 +216,9 @@ class TranscriptActionAgent(BaseAgent):
         )
         if clip_hint:
             prompt += f" Prioritise work relevant to {clip_hint}."
-        return await self._invoke_gemini(prompt, transcript, self._task_model, fail_message="task board generation")
+        return await self._invoke_gemini(
+            prompt, transcript, self._task_model, fail_message="task board generation"
+        )
 
     async def _invoke_gemini(
         self,
@@ -159,7 +243,9 @@ class TranscriptActionAgent(BaseAgent):
         return PromptResult(raw_text=result.response, parsed=parsed)
 
     def _default_model(self, task_type: TaskType) -> str:
-        return self._hybrid_processor.config.model_routing.get(task_type, self._hybrid_processor.config.gemini.model_name)
+        return self._hybrid_processor.config.model_routing.get(
+            task_type, self._hybrid_processor.config.gemini.model_name
+        )
 
     @staticmethod
     def _safe_parse_json(payload: str) -> dict[str, Any] | None:
@@ -172,7 +258,9 @@ class TranscriptActionAgent(BaseAgent):
     def _clip_window_notes(video_metadata: dict[str, Any]) -> dict[str, Any] | None:
         if not video_metadata:
             return None
-        if not any(key in video_metadata for key in ("start_offset", "end_offset", "fps")):
+        if not any(
+            key in video_metadata for key in ("start_offset", "end_offset", "fps")
+        ):
             return None
         return {
             key: value
@@ -235,11 +323,7 @@ class TranscriptActionAgent(BaseAgent):
         return f"{minutes:02d}:{secs:06.3f}".rstrip("0").rstrip(".")
 
     def _failure(self, message: str, start_time: float) -> AgentResult:
-        return AgentResult(
-            status="error",
-            output={},
-            logs=[message]
-        )
+        return AgentResult(status="error", output={}, logs=[message])
 
     @staticmethod
     def _build_hybrid_config() -> HybridConfig:
