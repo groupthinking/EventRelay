@@ -78,7 +78,7 @@ class TaskType(Enum):
     KEY_INSIGHTS = "key_insights"
     IMPLEMENTATION_PLAN = "implementation_plan"
     STRATEGIC_ANALYSIS = "strategic_analysis"
-    PERSONALITY_MAPPING = "personality_mapping"
+    PRECISION_EXTRACTION = "precision_extraction"
 
 
 class AIProvider(Enum):
@@ -157,6 +157,7 @@ class GeminiVideoMasterAgent:
             TaskType.TIMESTAMP_ANALYSIS: AIProvider.GEMINI_2_5_FLASH,
             TaskType.KEY_INSIGHTS: AIProvider.GEMINI_2_5_FLASH,
             TaskType.IMPLEMENTATION_PLAN: AIProvider.GEMINI_2_5_FLASH,
+            TaskType.PRECISION_EXTRACTION: AIProvider.GEMINI_2_0_FLASH,
         }
 
         # Benchmarking results
@@ -269,6 +270,10 @@ class GeminiVideoMasterAgent:
             (
                 TaskType.IMPLEMENTATION_PLAN,
                 f"Create a detailed implementation plan with timelines, resources needed, and success metrics based on this video content. Video: {video_url}",
+            ),
+            (
+                TaskType.PRECISION_EXTRACTION,
+                f"Extract physical entities (ingredients, tools, parts, steps) with high precision, noticing what is visually present even if not verbally mentioned. Video: {video_url}",
             ),
         ]
 

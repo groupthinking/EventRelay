@@ -59,9 +59,7 @@ class GeminiVideoService:
         # Load keys from environment
         env_keys = os.environ.get("GEMINI_API_KEYS", "")
         if env_keys:
-            self.API_KEYS = [
-                k.strip() for k in env_keys.split(",") if k.strip()
-            ]
+            self.API_KEYS = [k.strip() for k in env_keys.split(",") if k.strip()]
 
         # Fallback to single GEMINI_API_KEY
         single_key = api_key or os.environ.get("GEMINI_API_KEY")
@@ -100,7 +98,7 @@ class GeminiVideoService:
                              'high' (280 tokens/frame).
                              Use 'high' for text-heavy videos.
             thinking_level: 'low' for simple tasks,
-                            'high' for complex reasoning
+                           'high' for complex reasoning
         """
         model = model or self.DEFAULT_MODEL
 
@@ -169,9 +167,7 @@ class GeminiVideoService:
                 summary=text, key_events=self._extract_events(text)
             )
 
-    async def _make_request(
-        self, model: str, payload: dict, retries: int = 3
-    ) -> dict:
+    async def _make_request(self, model: str, payload: dict, retries: int = 3) -> dict:
         """Make API request with key rotation on failure."""
         last_error = None
 
@@ -219,9 +215,7 @@ class GeminiVideoService:
             raise last_error
         raise RuntimeError("API request failed after retries")
 
-    async def extract_technical_breakdown(
-        self, video_url: str
-    ) -> VideoAnalysisResult:
+    async def extract_technical_breakdown(self, video_url: str) -> VideoAnalysisResult:
         """
         Extract technical breakdown from video including
         APIs, endpoints, and capabilities.
@@ -312,9 +306,7 @@ class GeminiVideoService:
         )
         return result.summary
 
-    async def extract_transcript_with_timestamps(
-        self, video_url: str
-    ) -> list[dict]:
+    async def extract_transcript_with_timestamps(self, video_url: str) -> list[dict]:
         """Extract timestamped transcript from video with speaker detection."""
 
         prompt = """Extract a detailed transcript from this video.
@@ -341,9 +333,7 @@ class GeminiVideoService:
         )
         return result.transcript_segments or result.key_events
 
-    async def answer_video_question(
-        self, video_url: str, question: str
-    ) -> str:
+    async def answer_video_question(self, video_url: str, question: str) -> str:
         """Answer a specific question based on video content."""
 
         prompt = f"""

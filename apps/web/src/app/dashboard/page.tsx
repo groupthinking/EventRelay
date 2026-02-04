@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { clsx } from 'clsx';
+import AnalysisPanel from '@/components/AnalysisPanel';
 
 // ============================================
 // Types
@@ -332,91 +333,124 @@ function VideoDetailModal({
   video: Video;
   onClose: () => void;
 }) {
+  const [showAssistant, setShowAssistant] = useState(false);
+
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in-up"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md"
       onClick={onClose}
     >
       <div
         className={clsx(
-          'bg-surface-900 rounded-3xl border border-white/[0.08]',
-          'max-w-2xl w-full max-h-[85vh] overflow-y-auto',
-          'shadow-2xl shadow-black/50',
-          'animate-scale-in'
+          'bg-surface-900 rounded-3xl border border-white/[0.08] flex overflow-hidden transition-all duration-500',
+          showAssistant ? 'max-w-5xl w-full h-[85vh]' : 'max-w-2xl w-full max-h-[85vh]',
+          'shadow-2xl shadow-black/50 animate-scale-in'
         )}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
-        <div className="p-6 border-b border-white/[0.08]">
-          <div className="flex items-start justify-between">
-            <div className="flex-1 min-w-0 pr-4">
-              <h2 className="text-xl font-bold text-white truncate">{video.title}</h2>
-              <p className="text-white/40 text-sm mt-1.5 truncate">{video.url}</p>
+        {/* Main Content */}
+        <div className={clsx(
+          "flex flex-col flex-1 min-w-0 transition-opacity duration-300",
+          showAssistant ? "border-r border-white/[0.08]" : ""
+        )}>
+          {/* Header */}
+          <div className="p-6 border-b border-white/[0.08]">
+            <div className="flex items-start justify-between">
+              <div className="flex-1 min-w-0 pr-4">
+                <h2 className="text-xl font-bold text-white truncate">{video.title}</h2>
+                <div className="flex items-center gap-2 mt-1.5">
+                  <p className="text-white/40 text-sm truncate">{video.url}</p>
+                </div>
+              </div>
+              <button
+                onClick={onClose}
+                className="w-10 h-10 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] flex items-center justify-center text-white/60 hover:text-white transition-all"
+              >
+                ✕
+              </button>
             </div>
-            <button
-              onClick={onClose}
-              className="w-10 h-10 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] flex items-center justify-center text-white/60 hover:text-white transition-all"
-            >
-              ✕
-            </button>
+          </div>
+
+          {/* Scrollable Content */}
+          <div className="flex-1 overflow-y-auto p-6 space-y-6">
+            {video.insights && (
+              <>
+                {/* Summary */}
+                <div>
+                  <h3 className="text-sm font-semibold text-white/50 uppercase tracking-wider mb-3">
+                    Summary
+                  </h3>
+                  <p className="text-white/80 leading-relaxed">{video.insights.summary}</p>
+                </div>
+
+                {/* Action Items */}
+                <div>
+                  <h3 className="text-sm font-semibold text-white/50 uppercase tracking-wider mb-3">
+                    Action Items
+                  </h3>
+                  <ul className="space-y-2">
+                    {video.insights.actions.map((action, i) => (
+                      <li
+                        key={i}
+                        className="flex items-start gap-3 p-3.5 rounded-xl bg-white/[0.03] border border-white/[0.05] hover:bg-white/[0.05] transition-colors"
+                      >
+                        <input
+                          type="checkbox"
+                          className="mt-0.5 h-4 w-4 rounded border-white/20 bg-white/5 text-primary-500 focus:ring-primary-500/50"
+                        />
+                        <span className="text-white/80">{action}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                {/* Topics */}
+                <div>
+                  <h3 className="text-sm font-semibold text-white/50 uppercase tracking-wider mb-3">
+                    Topics
+                  </h3>
+                  <div className="flex flex-wrap gap-2">
+                    {video.insights.topics.map((topic) => (
+                      <span
+                        key={topic}
+                        className="px-4 py-2 rounded-full bg-primary-500/15 text-primary-400 border border-primary-500/25 text-sm font-medium"
+                      >
+                        {topic}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Footer Actions */}
+          <div className="p-6 border-t border-white/[0.08] bg-surface-900/50">
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowAssistant(!showAssistant)}
+                className={clsx(
+                  "flex-1 btn py-3 transition-all flex items-center justify-center gap-2",
+                  showAssistant ? "btn-secondary" : "btn-primary animate-pulse-glow"
+                )}
+              >
+                <span className="text-xl">🤖</span>
+                {showAssistant ? "Hide Assistant" : "Ask Assistant"}
+              </button>
+              <button className="btn btn-secondary py-3 px-6">Deploy</button>
+              <button className="btn btn-secondary py-3 px-6">Export</button>
+            </div>
           </div>
         </div>
 
-        {/* Content */}
-        {video.insights && (
-          <div className="p-6 space-y-6">
-            {/* Summary */}
-            <div>
-              <h3 className="text-sm font-semibold text-white/50 uppercase tracking-wider mb-3">
-                Summary
-              </h3>
-              <p className="text-white/80 leading-relaxed">{video.insights.summary}</p>
-            </div>
-
-            {/* Action Items */}
-            <div>
-              <h3 className="text-sm font-semibold text-white/50 uppercase tracking-wider mb-3">
-                Action Items
-              </h3>
-              <ul className="space-y-2">
-                {video.insights.actions.map((action, i) => (
-                  <li
-                    key={i}
-                    className="flex items-start gap-3 p-3.5 rounded-xl bg-white/[0.03] border border-white/[0.05] hover:bg-white/[0.05] transition-colors"
-                  >
-                    <input
-                      type="checkbox"
-                      className="mt-0.5 h-4 w-4 rounded border-white/20 bg-white/5 text-primary-500 focus:ring-primary-500/50"
-                    />
-                    <span className="text-white/80">{action}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            {/* Topics */}
-            <div>
-              <h3 className="text-sm font-semibold text-white/50 uppercase tracking-wider mb-3">
-                Topics
-              </h3>
-              <div className="flex flex-wrap gap-2">
-                {video.insights.topics.map((topic) => (
-                  <span
-                    key={topic}
-                    className="px-4 py-2 rounded-full bg-primary-500/15 text-primary-400 border border-primary-500/25 text-sm font-medium"
-                  >
-                    {topic}
-                  </span>
-                ))}
-              </div>
-            </div>
-
-            {/* Actions */}
-            <div className="flex gap-3 pt-6 border-t border-white/[0.08]">
-              <button className="flex-1 btn btn-primary py-3">Deploy as App</button>
-              <button className="btn btn-secondary py-3 px-6">Export</button>
-              <button className="btn btn-secondary py-3 px-6">Share</button>
-            </div>
+        {/* Assistant Side Panel */}
+        {showAssistant && (
+          <div className="w-[400px] h-full">
+            <AnalysisPanel
+              videoId={video.id}
+              videoUrl={video.url}
+              onClose={() => setShowAssistant(false)}
+            />
           </div>
         )}
       </div>

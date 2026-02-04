@@ -1,0 +1,19 @@
+{
+  "summary": {
+    "total_processed": 0,
+    "duration_hours": 1,
+    "start_time": "2026-02-04T11:12:55.855028",
+    "end_time": "2026-02-04T11:12:55.855879",
+    "categories": {
+      "Educational_Content": 0,
+      "Business_Professional": 0,
+      "Creative_DIY": 0,
+      "Health_Fitness_Cooking": 0
+    }
+  },
+  "videos": [],
+  "performance": {
+    "average_rate": 0.0,
+    "success_rate": 0.0
+  }
+}

@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UVAI | Intelligence Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-deep: #0f1115;
+            --bg-card: rgba(22, 24, 30, 0.7);
+            --accent-primary: #6366f1;
+            --accent-secondary: #a855f7;
+            --text-main: #e2e8f0;
+            --text-dim: #94a3b8;
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --glow-shadow: 0 0 20px rgba(99, 102, 241, 0.2);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Inter', sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-deep);
+            color: var(--text-main);
+            overflow-x: hidden;
+            background-image:
+                radial-gradient(circle at 20% 20%, rgba(99, 102, 241, 0.05) 0%, transparent 40%),
+                radial-gradient(circle at 80% 80%, rgba(168, 85, 247, 0.05) 0%, transparent 40%);
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 3rem;
+        }
+
+        .logo {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .logo::before {
+            content: '';
+            width: 24px;
+            height: 24px;
+            background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+            border-radius: 6px;
+            display: inline-block;
+        }
+
+        .video-meta-card {
+            background: var(--bg-card);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            padding: 1.5rem;
+            display: flex;
+            gap: 2rem;
+            margin-bottom: 2rem;
+            box-shadow: var(--glow-shadow);
+        }
+
+        .thumbnail {
+            width: 320px;
+            height: 180px;
+            border-radius: 12px;
+            background-size: cover;
+            background-position: center;
+            border: 1px solid var(--glass-border);
+            position: relative;
+        }
+
+        .play-btn {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 48px;
+            height: 48px;
+            background: rgba(0,0,0,0.5);
+            backdrop-filter: blur(4px);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+
+        .video-info h1 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .video-stats {
+            display: flex;
+            gap: 1.5rem;
+            color: var(--text-dim);
+            font-size: 0.875rem;
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 2rem;
+        }
+
+        .card {
+            background: var(--bg-card);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            padding: 1.5rem;
+            height: fit-content;
+        }
+
+        .section-title {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 1.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .kanban-board {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1rem;
+        }
+
+        .kanban-col {
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 12px;
+            padding: 1rem;
+            min-height: 400px;
+        }
+
+        .col-header {
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-dim);
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .kanban-card {
+            background: rgba(30, 32, 40, 0.8);
+            border: 1px solid rgba(255,255,255,0.05);
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 0.75rem;
+            transition: transform 0.2s, box-shadow 0.2s;
+            cursor: move;
+        }
+
+        .kanban-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            border-color: var(--accent-primary);
+        }
+
+        .card-tag {
+            font-size: 0.65rem;
+            padding: 2px 6px;
+            border-radius: 4px;
+            background: rgba(99, 102, 241, 0.1);
+            color: var(--accent-primary);
+            margin-bottom: 0.5rem;
+            display: inline-block;
+        }
+
+        .card-title {
+            font-size: 0.9rem;
+            font-weight: 500;
+            line-height: 1.4;
+        }
+
+        .ai-badge {
+            background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+            padding: 0.35rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: white;
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+        }
+
+        .summary-content {
+            font-size: 0.95rem;
+            line-height: 1.6;
+            color: var(--text-main);
+        }
+
+        .persona-card {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-top: 1.5rem;
+            padding: 1rem;
+            background: rgba(255,255,255,0.03);
+            border-radius: 12px;
+        }
+
+        .persona-avatar {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #f59e0b, #ef4444);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.25rem;
+        }
+
+        .strategy-funnel {
+            margin-top: 2rem;
+        }
+
+        .funnel-step {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .step-number {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: var(--accent-primary);
+            font-size: 0.75rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .step-label {
+            font-size: 0.875rem;
+            color: var(--text-dim);
+        }
+
+        .step-value {
+            font-weight: 600;
+            margin-left: auto;
+        }
+
+        .indicator {
+            height: 4px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 2px;
+            margin-top: 0.5rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .indicator-fill {
+            position: absolute;
+            left: 0;
+            top: 0;
+            height: 100%;
+            background: var(--accent-primary);
+            width: 0;
+            transition: width 1s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .stagger-1 { animation: fadeIn 0.5s ease forwards; }
+        .stagger-2 { animation: fadeIn 0.5s ease 0.1s forwards; opacity: 0; }
+        .stagger-3 { animation: fadeIn 0.5s ease 0.2s forwards; opacity: 0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="logo">UVAI.io</div>
+            <div class="ai-badge">Gemini-Flash 2.0 Orchestration</div>
+        </header>
+
+        <section class="video-meta-card stagger-1">
+            <div class="thumbnail" style="background-image: url('https://i.ytimg.com/vi/jNQXAC9IVRw/maxresdefault.jpg');">
+                <div class="play-btn">▶</div>
+            </div>
+            <div class="video-info">
+                <h1>Me at the zoo</h1>
+                <div class="video-stats">
+                    <span>jawed</span>
+                    <span>•</span>
+                    <span>381,264,211 views</span>
+                    <span>•</span>
+                    <span>21 years ago</span>
+                </div>
+                <div class="summary-content" style="margin-top: 1rem; max-width: 600px;">
+                    <p style="color: var(--text-dim);">Historical artifact: The first video ever uploaded to YouTube. Features Jawed Karim at San Diego Zoo.</p>
+                </div>
+            </div>
+        </section>
+
+        <div class="dashboard-grid">
+            <section class="card stagger-2">
+                <div class="section-title">
+                    <span>Action Pipeline (Kanban)</span>
+                    <span style="font-size: 0.75rem; color: var(--accent-primary);">3 Agents Active</span>
+                </div>
+                <div class="kanban-board" id="kanban-board">
+                    <div class="kanban-col">
+                        <div class="col-header">Backlog</div>
+                        <div id="col-backlog"></div>
+                    </div>
+                    <div class="kanban-col">
+                        <div class="col-header">In Progress</div>
+                        <div id="col-progress"></div>
+                    </div>
+                    <div class="kanban-col">
+                        <div class="col-header">Done</div>
+                        <div id="col-done"></div>
+                    </div>
+                </div>
+            </section>
+
+            <aside>
+                <section class="card stagger-3" style="margin-bottom: 2rem;">
+                    <div class="section-title">AI Insight Summary</div>
+                    <div class="summary-content" id="ai-summary">
+                        Loading core intelligence...
+                    </div>
+
+                    <div class="persona-card">
+                        <div class="persona-avatar">🎨</div>
+                        <div>
+                            <div style="font-size: 0.75rem; color: var(--text-dim);">Creator Persona</div>
+                            <div style="font-weight: 600;" id="creator-persona">Pioneer</div>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="card stagger-3">
+                    <div class="section-title">Strategic Funnel</div>
+                    <div class="strategy-funnel" id="strategy-funnel">
+                        <!-- Funnel steps will be injected here -->
+                    </div>
+                </section>
+            </aside>
+        </div>
+    </div>
+
+    <script>
+        const data = {
+            summary: {
+                "executive_summary": "Observation of elephants with emphasis on their trunks. Foundational piece of internet history documenting a personal moment.",
+                "target_audience": "Global audience, internet historians, nostalgic users.",
+                "key_objectives": "Preserve internet history, analyze founding creator patterns.",
+                "risks": "Audience disengagement due to simplicity (addressed via historical context enrichment)."
+            },
+            board: {
+                "Backlog": [
+                    { "title": "Explore Elephant Trunk Anatomy", "role": "Researcher" },
+                    { "title": "Capture Elephant Sounds (Baa)", "role": "Sound Engineer" }
+                ],
+                "In Progress": [
+                    { "title": "Document 'Cool' Factor", "role": "Writer" }
+                ],
+                "Done": [
+                    { "title": "Acknowledge Elephant Exists", "role": "PM" }
+                ]
+            },
+            persona: "Pioneer (Iconic by historical accident)",
+            strategy: [
+                { label: "Awareness (Nostalgia)", value: 98 },
+                { label: "Engagement (Comments)", value: 75 },
+                { label: "Conversion (Retention)", value: 42 }
+            ]
+        };
+
+        // Populate Kanban
+        const renderBoard = () => {
+            const cols = {
+                'Backlog': document.getElementById('col-backlog'),
+                'In Progress': document.getElementById('col-progress'),
+                'Done': document.getElementById('col-done')
+            };
+
+            Object.entries(data.board).forEach(([colName, tasks]) => {
+                if (cols[colName]) {
+                    tasks.forEach(task => {
+                        const card = document.createElement('div');
+                        card.className = 'kanban-card';
+                        card.innerHTML = `
+                            <div class="card-tag">${task.role}</div>
+                            <div class="card-title">${task.title}</div>
+                        `;
+                        cols[colName].appendChild(card);
+                    });
+                }
+            });
+        };
+
+        // Populate Summary
+        const renderSummary = () => {
+            document.getElementById('ai-summary').innerHTML = `
+                <p>${data.summary.executive_summary}</p>
+                <p style="margin-top: 1rem; font-size: 0.875rem; color: var(--text-dim);">
+                    <strong>Target:</strong> ${data.summary.target_audience}
+                </p>
+                <div style="margin-top: 1rem; display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                    <span style="font-size: 0.7rem; border: 1px solid var(--accent-primary); padding: 2px 8px; border-radius: 4px;">Internet History</span>
+                    <span style="font-size: 0.7rem; border: 1px solid var(--accent-secondary); padding: 2px 8px; border-radius: 4px;">Pioneer Patterns</span>
+                </div>
+            `;
+            document.getElementById('creator-persona').innerText = data.persona;
+        };
+
+        // Populate Funnel
+        const renderFunnel = () => {
+            const funnel = document.getElementById('strategy-funnel');
+            data.strategy.forEach((step, i) => {
+                const div = document.createElement('div');
+                div.innerHTML = `
+                    <div class="funnel-step">
+                        <div class="step-number">${i+1}</div>
+                        <div class="step-label">${step.label}</div>
+                        <div class="step-value">${step.value}%</div>
+                    </div>
+                    <div class="indicator">
+                        <div class="indicator-fill" id="fill-${i}"></div>
+                    </div>
+                `;
+                funnel.appendChild(div);
+
+                setTimeout(() => {
+                    document.getElementById(`fill-${i}`).style.width = `${step.value}%`;
+                }, 500 + (i * 200));
+            });
+        };
+
+        window.onload = () => {
+            renderBoard();
+            renderSummary();
+            renderFunnel();
+        };
+    </script>
+</body>
+</html>
