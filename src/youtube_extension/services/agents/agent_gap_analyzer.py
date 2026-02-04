@@ -360,6 +360,7 @@ metadata:
 """
 
         # Generate agent content
+        expertise_list = '\n'.join(f'- **{area}**' for area in recommendation.expertise_areas)
         content = f"""
 # {recommendation.name.replace('-', ' ').title()} Agent for EventRelay
 
@@ -367,7 +368,7 @@ You are a senior {recommendation.domains[0]} engineer specializing in the EventR
 
 ## Your Expertise
 
-{'\n'.join(f'- **{area}**' for area in recommendation.expertise_areas)}
+{expertise_list}
 
 ## Project Context
 
@@ -403,7 +404,7 @@ You provide expert guidance for {recommendation.domains[0]}-related tasks within
 
 This agent was created to address the following recurring needs:
 
-{'\n'.join(f'{i+1}. {example}' for i, example in enumerate(recommendation.example_scenarios))}
+{chr(10).join(f'{i+1}. {example}' for i, example in enumerate(recommendation.example_scenarios))}
 
 ## Best Practices
 
@@ -522,7 +523,7 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 **Description**: {rec.description}
 
 **Example Scenarios**:
-{'\n'.join(f'- {example}' for example in rec.example_scenarios[:3])}
+{chr(10).join(f'- {example}' for example in rec.example_scenarios[:3])}
 
 **Action**: Review generated agent at `.eventrelay/agent_gaps/recommendations/{rec.name}.agent.md`
 

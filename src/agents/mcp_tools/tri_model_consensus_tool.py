@@ -432,7 +432,7 @@ class TriModelConsensusTool:
 
         # Length similarity (normalized)
         avg_length = sum(lengths) / len(lengths)
-        length_variance = sum((l - avg_length) ** 2 for l in lengths) / len(lengths)
+        length_variance = sum((length - avg_length) ** 2 for length in lengths) / len(lengths)
         length_score = 1.0 / (1.0 + length_variance / max(avg_length, 1))
 
         # Confidence agreement

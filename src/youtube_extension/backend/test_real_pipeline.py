@@ -67,7 +67,9 @@ class PipelineIntegrationTest:
                 if asyncio.iscoroutine(test):
                     await test
                 else:
-                    test
+                    # Execute non-coroutine test
+                    if callable(test):
+                        test()
             except Exception as e:
                 logger.error(f"Test failed: {e}")
 
