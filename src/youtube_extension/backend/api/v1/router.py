@@ -399,7 +399,7 @@ async def chat_v1(
 
         if video_id:
             logger.info(f"Adding video context for video_id: {video_id}")
-            print(f"DEBUG: Checking detail for video_id={video_id}")
+            logger.warning(f"DEBUG: Checking detail for video_id={video_id}")
             detail = data_service.get_video_detail(video_id)
 
             # If video not found, trigger real-time processing
@@ -407,27 +407,33 @@ async def chat_v1(
                 logger.info(
                     f"Video detail not found for {video_id}. Triggering real-time processing..."
                 )
-                print(f"DEBUG: Detail not found. URL={request.video_url}")
+                logger.warning(f"DEBUG: Detail not found. URL={request.video_url}")
                 try:
                     # process_video_for_markdown handles caching and uses EnhancedVideoProcessor
-                    print(f"DEBUG: Triggering process_video_for_markdown...")
+                    logger.warning(f"DEBUG: Triggering process_video_for_markdown...")
                     proc_result = (
                         await video_processing_service.process_video_for_markdown(
                             request.video_url
                         )
                     )
-                    print(f"DEBUG: proc_result status={proc_result.get('status')}")
+                    logger.warning(
+                        f"DEBUG: proc_result status={proc_result.get('status')}"
+                    )
                     if proc_result and proc_result.get("status") == "success":
                         # Re-fetch the detail now that it's processed
-                        print(f"DEBUG: Processing success. Re-fetching detail...")
+                        logger.warning(
+                            f"DEBUG: Processing success. Re-fetching detail..."
+                        )
                         detail = data_service.get_video_detail(video_id)
-                        print(f"DEBUG: Fetched detail after proc: {bool(detail)}")
+                        logger.warning(
+                            f"DEBUG: Fetched detail after proc: {bool(detail)}"
+                        )
                 except Exception as e:
                     logger.error(f"Real-time video processing failed: {e}")
-                    print(f"DEBUG: Processing failed: {e}")
+                    logger.warning(f"DEBUG: Processing failed: {e}")
 
             if detail:
-                print(f"DEBUG: Found detail. Adding to params.")
+                logger.warning(f"DEBUG: Found detail. Adding to params.")
                 params["video_id"] = video_id
                 params["video_url"] = request.video_url
                 # Prefer transcript from metadata if available
@@ -438,11 +444,11 @@ async def chat_v1(
                     or detail.get("markdown")
                 )
                 params["video_metadata"] = metadata
-                print(
+                logger.warning(
                     f"DEBUG: Transcript length: {len(params['transcript']) if params['transcript'] else 0}"
                 )
             else:
-                print(f"DEBUG: No detail found after all attempts.")
+                logger.warning(f"DEBUG: No detail found after all attempts.")
 
         # Execute chat assistance task via orchestrator
         result = await orchestrator.execute_task(
