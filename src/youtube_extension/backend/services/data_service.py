@@ -22,9 +22,11 @@ class DataService:
     Provides unified interface for video information, learning logs, and feedback management.
     """
 
-    def __init__(self,
-                 enhanced_analysis_dir: str = "youtube_processed_videos/enhanced_analysis",
-                 feedback_dir: str = "youtube_processed_videos/feedback"):
+    def __init__(
+        self,
+        enhanced_analysis_dir: str = "youtube_processed_videos/enhanced_analysis",
+        feedback_dir: str = "youtube_processed_videos/feedback",
+    ):
         """
         Initialize data service.
 
@@ -49,52 +51,66 @@ class DataService:
             items = []
 
             if not self.enhanced_analysis_dir.exists():
-                logger.warning(f"Enhanced analysis directory does not exist: {self.enhanced_analysis_dir}")
+                logger.warning(
+                    f"Enhanced analysis directory does not exist: {self.enhanced_analysis_dir}"
+                )
                 return items
 
-            for category_dir in self.enhanced_analysis_dir.iterdir():
-                if not category_dir.is_dir():
-                    continue
+            # Use recursive glob for all enhanced markdown files
+            for md_file in self.enhanced_analysis_dir.rglob("*_enhanced.md"):
+                try:
+                    # Extract video ID from filename
+                    video_id = md_file.name.split("_")[0]
+                    parent_dir = md_file.parent
 
-                for md_file in category_dir.glob("*_enhanced.md"):
-                    try:
-                        # Extract video ID from filename
-                        video_id = md_file.name.split("_")[0]
+                    # Find corresponding metadata file in the same directory
+                    metadata_file = next(
+                        parent_dir.glob(f"{video_id}_*_metadata.json"), None
+                    )
+                    metadata = {}
 
-                        # Find corresponding metadata file
-                        metadata_file = next(category_dir.glob(f"{video_id}_*_metadata.json"), None)
-                        metadata = {}
+                    if metadata_file and metadata_file.exists():
+                        try:
+                            with open(metadata_file, encoding="utf-8") as f:
+                                metadata = json.load(f)
+                        except json.JSONDecodeError as e:
+                            logger.warning(
+                                f"Failed to parse metadata file {metadata_file}: {e}"
+                            )
 
-                        if metadata_file and metadata_file.exists():
-                            try:
-                                with open(metadata_file, encoding="utf-8") as f:
-                                    metadata = json.load(f)
-                            except json.JSONDecodeError as e:
-                                logger.warning(f"Failed to parse metadata file {metadata_file}: {e}")
+                    # Get file statistics
+                    stat = md_file.stat()
 
-                        # Get file statistics
-                        stat = md_file.stat()
+                    # Extract title from metadata
+                    title = (
+                        metadata.get("title")
+                        or metadata.get("snippet", {}).get("title")
+                        or f"Video {video_id}"
+                    )
 
-                        # Extract title from metadata
-                        title = (metadata.get("title") or
-                                metadata.get("snippet", {}).get("title") or
-                                f"Video {video_id}")
-
-                        items.append({
+                    items.append(
+                        {
                             "video_id": video_id,
-                            "category": category_dir.name,
+                            "category": parent_dir.relative_to(
+                                self.enhanced_analysis_dir
+                            ).as_posix(),
                             "title": title,
                             "actions_generated": None,  # Could be extracted from content
                             "transcript_segments": None,  # Could be extracted from metadata
                             "processing_time": None,  # Could be stored in metadata
                             "quality_assessment": None,  # Could be computed from content
-                            "timestamp": datetime.fromtimestamp(stat.st_mtime).isoformat(),
-                            "feedback": None  # Could be linked to feedback data
-                        })
+                            "timestamp": datetime.fromtimestamp(
+                                stat.st_mtime
+                            ).isoformat(),
+                            "feedback": None,  # Could be linked to feedback data
+                        }
+                    )
 
-                    except Exception as e:
-                        logger.warning(f"Error processing learning log entry for {md_file}: {e}")
-                        continue
+                except Exception as e:
+                    logger.warning(
+                        f"Error processing learning log entry for {md_file}: {e}"
+                    )
+                    continue
 
             # Sort by timestamp (newest first)
             items.sort(key=lambda x: x["timestamp"], reverse=True)
@@ -117,66 +133,83 @@ class DataService:
             results = []
 
             if not self.enhanced_analysis_dir.exists():
-                logger.warning(f"Enhanced analysis directory does not exist: {self.enhanced_analysis_dir}")
+                logger.warning(
+                    f"Enhanced analysis directory does not exist: {self.enhanced_analysis_dir}"
+                )
                 return results
 
-            for category_dir in self.enhanced_analysis_dir.iterdir():
-                if not category_dir.is_dir():
-                    continue
+            # Use recursive glob for all enhanced markdown files
+            for md_file in self.enhanced_analysis_dir.rglob("*_enhanced.md"):
+                try:
+                    # Extract video ID from filename
+                    video_id = md_file.name.split("_")[0]
+                    parent_dir = md_file.parent
 
-                for md_file in category_dir.glob("*_enhanced.md"):
-                    try:
-                        # Extract video ID from filename
-                        video_id = md_file.name.split("_")[0]
+                    # Find corresponding metadata file in the same directory
+                    metadata_file = next(
+                        parent_dir.glob(f"{video_id}_*_metadata.json"), None
+                    )
+                    metadata = {}
 
-                        # Find corresponding metadata file
-                        metadata_file = next(category_dir.glob(f"{video_id}_*_metadata.json"), None)
-                        metadata = {}
+                    if metadata_file and metadata_file.exists():
+                        try:
+                            with open(metadata_file, encoding="utf-8") as f:
+                                metadata = json.load(f)
+                        except json.JSONDecodeError as e:
+                            logger.warning(
+                                f"Failed to parse metadata file {metadata_file}: {e}"
+                            )
 
-                        if metadata_file and metadata_file.exists():
-                            try:
-                                with open(metadata_file, encoding="utf-8") as f:
-                                    metadata = json.load(f)
-                            except json.JSONDecodeError as e:
-                                logger.warning(f"Failed to parse metadata file {metadata_file}: {e}")
+                    # Get file statistics
+                    stat = md_file.stat()
 
-                        # Get file statistics
-                        stat = md_file.stat()
+                    # Extract information from metadata
+                    title = (
+                        metadata.get("title")
+                        or metadata.get("snippet", {}).get("title")
+                        or f"Video {video_id}"
+                    )
 
-                        # Extract information from metadata
-                        title = (metadata.get("title") or
-                                metadata.get("snippet", {}).get("title") or
-                                f"Video {video_id}")
+                    published_at = metadata.get("published_at") or metadata.get(
+                        "snippet", {}
+                    ).get("publishedAt")
 
-                        published_at = (metadata.get("published_at") or
-                                      metadata.get("snippet", {}).get("publishedAt"))
+                    view_count = metadata.get("view_count") or metadata.get(
+                        "statistics", {}
+                    ).get("viewCount")
 
-                        view_count = (metadata.get("view_count") or
-                                    metadata.get("statistics", {}).get("viewCount"))
-
-                        results.append({
+                    results.append(
+                        {
                             "video_id": video_id,
-                            "category": category_dir.name,
                             "title": title,
+                            "category": parent_dir.relative_to(
+                                self.enhanced_analysis_dir
+                            ).as_posix(),
+                            "timestamp": datetime.fromtimestamp(
+                                stat.st_mtime
+                            ).isoformat(),
                             "published_at": published_at,
                             "view_count": view_count,
-                            "last_modified": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+                            "last_modified": datetime.fromtimestamp(
+                                stat.st_mtime
+                            ).isoformat(),
                             "markdown_path": str(md_file),
-                            "metadata_path": str(metadata_file) if metadata_file else None
-                        })
+                            "metadata_path": (
+                                str(metadata_file) if metadata_file else None
+                            ),
+                        }
+                    )
 
-                    except Exception as e:
-                        logger.warning(f"Error processing video summary for {md_file}: {e}")
-                        continue
+                except Exception as e:
+                    logger.error(f"Error processing summary for {md_file}: {e}")
+                    continue
 
-            # Sort by last modified (newest first)
-            results.sort(key=lambda x: x["last_modified"], reverse=True)
-
-            logger.info(f"Generated videos summary with {len(results)} entries")
+            # Sort by newest first
+            results.sort(key=lambda x: x["timestamp"], reverse=True)
             return results
 
         except Exception as e:
-            logger.error(f"Error listing videos: {e}")
+            logger.error(f"Error getting videos summary: {e}")
             return []
 
     def get_video_detail(self, video_id: str) -> Optional[dict[str, Any]]:
@@ -191,54 +224,70 @@ class DataService:
         """
         try:
             if not self.enhanced_analysis_dir.exists():
-                logger.warning(f"Enhanced analysis directory does not exist: {self.enhanced_analysis_dir}")
+                logger.warning(
+                    f"Enhanced analysis directory does not exist: {self.enhanced_analysis_dir}"
+                )
                 return None
 
-            for category_dir in self.enhanced_analysis_dir.iterdir():
-                if not category_dir.is_dir():
-                    continue
+            # Use recursive glob to find the markdown file regardless of nesting depth
+            # Filename pattern: {video_id}_*_enhanced.md
+            md_files = list(
+                self.enhanced_analysis_dir.rglob(f"{video_id}_*_enhanced.md")
+            )
 
-                # Find markdown file for this video
-                md_file = next(category_dir.glob(f"{video_id}_*_enhanced.md"), None)
-                if not md_file or not md_file.exists():
-                    continue
+            if not md_files:
+                logger.info(
+                    f"Video not found in {self.enhanced_analysis_dir}: {video_id}"
+                )
+                return None
 
-                # Find corresponding metadata file
-                metadata_file = next(category_dir.glob(f"{video_id}_*_metadata.json"), None)
-                metadata = {}
+            # Sort by modification time to get the latest one
+            md_files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
+            md_file = md_files[0]
 
-                if metadata_file and metadata_file.exists():
-                    try:
-                        with open(metadata_file, encoding="utf-8") as f:
-                            metadata = json.load(f)
-                    except json.JSONDecodeError as e:
-                        logger.warning(f"Failed to parse metadata file {metadata_file}: {e}")
+            # Find corresponding metadata file in the same directory
+            parent_dir = md_file.parent
+            metadata_file = next(parent_dir.glob(f"{video_id}_*_metadata.json"), None)
+            metadata = {}
 
-                # Read markdown content
+            if metadata_file and metadata_file.exists():
                 try:
-                    with open(md_file, encoding="utf-8") as f:
-                        markdown = f.read()
-                except Exception as e:
-                    logger.error(f"Failed to read markdown file {md_file}: {e}")
-                    markdown = ""
+                    with open(metadata_file, encoding="utf-8") as f:
+                        metadata = json.load(f)
+                except json.JSONDecodeError as e:
+                    logger.warning(
+                        f"Failed to parse metadata file {metadata_file}: {e}"
+                    )
 
-                # Extract title
-                title = (metadata.get("title") or
-                        metadata.get("snippet", {}).get("title") or
-                        f"Video {video_id}")
+            # Read markdown content
+            try:
+                with open(md_file, encoding="utf-8") as f:
+                    markdown = f.read()
+            except Exception as e:
+                logger.error(f"Failed to read markdown file {md_file}: {e}")
+                markdown = ""
 
-                return {
-                    "video_id": video_id,
-                    "category": category_dir.name,
-                    "title": title,
-                    "metadata": metadata,
-                    "markdown": markdown,
-                    "markdown_path": str(md_file),
-                    "metadata_path": str(metadata_file) if metadata_file else None
-                }
+            # Extract title
+            title = (
+                metadata.get("title")
+                or metadata.get("snippet", {}).get("title")
+                or f"Video {video_id}"
+            )
 
-            # Video not found
-            logger.info(f"Video not found: {video_id}")
+            return {
+                "video_id": video_id,
+                "category": parent_dir.relative_to(
+                    self.enhanced_analysis_dir
+                ).as_posix(),
+                "title": title,
+                "metadata": metadata,
+                "markdown": markdown,
+                "markdown_path": str(md_file),
+                "metadata_path": str(metadata_file) if metadata_file else None,
+            }
+
+        except Exception as e:
+            logger.error(f"Error reading video detail: {e}")
             return None
 
         except Exception as e:
@@ -260,10 +309,7 @@ class DataService:
             self.feedback_dir.mkdir(parents=True, exist_ok=True)
 
             # Prepare feedback entry
-            entry = {
-                "timestamp": datetime.now().isoformat(),
-                **feedback_data
-            }
+            entry = {"timestamp": datetime.now().isoformat(), **feedback_data}
 
             # Append to JSONL feedback file
             log_file = self.feedback_dir / "feedback.jsonl"
@@ -271,7 +317,9 @@ class DataService:
             with open(log_file, "a", encoding="utf-8") as f:
                 f.write(json.dumps(entry) + "\n")
 
-            logger.info(f"Feedback saved successfully for entry: {entry.get('id', 'unknown')}")
+            logger.info(
+                f"Feedback saved successfully for entry: {entry.get('id', 'unknown')}"
+            )
             return True
 
         except Exception as e:
@@ -329,7 +377,7 @@ class DataService:
                 "categories": {},
                 "feedback_entries": 0,
                 "total_storage_mb": 0,
-                "last_updated": None
+                "last_updated": None,
             }
 
             # Analyze enhanced analysis data
@@ -348,7 +396,7 @@ class DataService:
 
                     stats["categories"][category_name] = {
                         "count": category_count,
-                        "size_mb": round(category_size / 1024 / 1024, 2)
+                        "size_mb": round(category_size / 1024 / 1024, 2),
                     }
 
                     stats["enhanced_videos"] += category_count
@@ -363,7 +411,9 @@ class DataService:
                 stats["total_storage_mb"] = round(total_size / 1024 / 1024, 2)
 
                 if newest_time > 0:
-                    stats["last_updated"] = datetime.fromtimestamp(newest_time).isoformat()
+                    stats["last_updated"] = datetime.fromtimestamp(
+                        newest_time
+                    ).isoformat()
 
             # Count feedback entries
             feedback_file = self.feedback_dir / "feedback.jsonl"
@@ -383,7 +433,7 @@ class DataService:
                 "categories": {},
                 "feedback_entries": 0,
                 "total_storage_mb": 0,
-                "error": str(e)
+                "error": str(e),
             }
 
     def cleanup_old_data(self, days_old: int = 30) -> dict[str, Any]:
@@ -403,7 +453,7 @@ class DataService:
             cleanup_summary = {
                 "files_removed": 0,
                 "size_freed_mb": 0,
-                "categories_processed": 0
+                "categories_processed": 0,
             }
 
             if not self.enhanced_analysis_dir.exists():
@@ -426,7 +476,9 @@ class DataService:
                 if not any(category_dir.iterdir()):
                     category_dir.rmdir()
 
-            cleanup_summary["size_freed_mb"] = round(cleanup_summary["size_freed_mb"] / 1024 / 1024, 2)
+            cleanup_summary["size_freed_mb"] = round(
+                cleanup_summary["size_freed_mb"] / 1024 / 1024, 2
+            )
 
             logger.info(f"Cleanup completed: {cleanup_summary}")
             return cleanup_summary
@@ -437,5 +489,5 @@ class DataService:
                 "files_removed": 0,
                 "size_freed_mb": 0,
                 "categories_processed": 0,
-                "error": str(e)
+                "error": str(e),
             }

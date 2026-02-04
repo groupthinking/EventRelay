@@ -6,15 +6,23 @@ import sys
 
 
 async def verify_real_time_chat():
-    # Use a video URL that is likely NOT processed yet.
-    # "Together Forever" by Rick Astley
-    video_url = "https://www.youtube.com/watch?v=yPYZpwSpKmA"  # Together Forever
+    import argparse
 
-    # Alternatively, use a fresh one from a recent tech talk
-    # "Google I/O 2024 Keynote" - highly likely to work with Gemini
-    # video_url = "https://www.youtube.com/watch?v=N8-U8A-v1XU"
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--video-url", default="https://www.youtube.com/watch?v=yPYZpwSpKmA"
+    )
+    parser.add_argument("--query", default="What is this video about?")
+    parser.add_argument(
+        "--video-id", help="Video ID (optional, overrides video-url if provided)"
+    )
+    args = parser.parse_args()
 
-    query = "What is this video about?"
+    video_url = args.video_url
+    if args.video_id:
+        video_url = f"https://www.youtube.com/watch?v={args.video_id}"
+
+    query = args.query
 
     payload = {
         "query": query,
