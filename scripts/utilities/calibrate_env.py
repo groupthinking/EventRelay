@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 import os
 import sys
-import subprocess
 from pathlib import Path
 
 # Add src to sys.path
@@ -15,14 +14,16 @@ try:
     dotenv.load_dotenv(root_dir / ".env")
     print("✅ .env loaded successfully")
 except ImportError:
-    print("⚠️ python-dotenv not installed. Using existing environment variables.")
+    print(
+        "⚠️ python-dotenv not installed. "
+        "Using existing environment variables."
+    )
 
 
-def check_m1_native():
+def check_m1_native() -> None:
     import platform
 
     is_arm = platform.machine() == "arm64"
-    is_native = os.getenv("CPUTYPE") != "x86_64"  # Basic check
     print(f"🖥️  Architecture: {platform.machine()}")
     if is_arm:
         print("✅ Running natively on Apple Silicon")
@@ -30,7 +31,7 @@ def check_m1_native():
         print("⚠️ Running under Rosetta 2? (Detected x86_64)")
 
 
-def check_keys():
+def check_keys() -> None:
     print("\n🔑  API Key Validation:")
     keys_to_check = {
         "YOUTUBE_API_KEY": "YouTube Data API v3",
@@ -55,7 +56,7 @@ def check_keys():
             print(f"   ✅ {label}: CONFIGURED ({'*' * 8}{val[-4:]})")
 
 
-def check_imports():
+def check_imports() -> None:
     print("\n📦 Module Import Verification:")
     modules = [
         "youtube_extension.backend.services",

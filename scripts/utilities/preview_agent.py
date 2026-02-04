@@ -1,11 +1,9 @@
-import os
 import subprocess
-import sys
 import time
+from subprocess import Popen
 
 
-def start_dev_server():
-https://docs.cloud.google.com
+def start_dev_server() -> Popen:
     print("🚀 Starting local dev server (apps/web)...")
     # Start the dev server in a subprocess
     process = subprocess.Popen(
@@ -17,7 +15,7 @@ https://docs.cloud.google.com
     return process
 
 
-def main():
+def main() -> None:
     # In a real agentic environment, we would use the browser_subagent tool.
     # This script acts as a trigger/orchestrator for that.
 
@@ -29,7 +27,8 @@ def main():
 
         print("📸 Preview ready at http://localhost:3000")
         print(
-            "💡 Hint: Ask me to 'Capture a screenshot of localhost:3000' to see the current state."
+            "💡 Hint: Ask me to 'Capture a screenshot of "
+            "localhost:3000' to see the current state."
         )
 
         # Keep the script running to maintain the server

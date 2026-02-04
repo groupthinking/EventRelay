@@ -78,5 +78,8 @@
     "dart.previewFlutterUiGuides": true,
     "mediaPreview.video.autoPlay": true,
     "terminal.integrated.suggest.enabled": true,
-    "dart.enableCompletionCommitCharacters": true
+    "dart.enableCompletionCommitCharacters": true,
+    "geminicodeassist.codeGenerationPaneViewEnabled": true,
+    "geminicodeassist.inlineSuggestions.nextEditPredictions": true,
+    "geminicodeassist.inlineSuggestions.suggestionSpeed": "Fast"
 }
