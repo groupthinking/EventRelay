@@ -115,7 +115,7 @@ const SuggestedPrompts = forwardRef<HTMLDivElement, SuggestedPromptsProps>(
         ref={ref}
         className={clsx(
           'w-full max-w-2xl mx-auto',
-          'animate-fade-in-up motion-reduce:animate-none',
+          'animate-fade-in-up motion-reduce:animate-none motion-reduce:opacity-100',
           className
         )}
         style={{
