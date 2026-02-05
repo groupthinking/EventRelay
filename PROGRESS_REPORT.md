@@ -27,7 +27,7 @@ Successfully addressed code quality issues across the EventRelay repository that
   - Fixed ambiguous variable name `l` -> `length` (tri_model_consensus_tool.py)
   - Fixed unused loop variable `provider` -> `_provider` (gemini_video_master_agent.py)
   - Removed semicolons and split statements properly (orchestrator_minimal.py)
-  - Fixed useless expression in test runner (test_real_pipeline.py)
+  - Fixed test runner to store callable references instead of calling methods prematurely (test_real_pipeline.py)
 
 #### 3. Results
 - **Total Errors Reduced**: 205 → 154 (25% improvement)

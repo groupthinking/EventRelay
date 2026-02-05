@@ -1,10 +1,9 @@
 import json
 import logging
-import os
 from datetime import datetime
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 # Configure a separate logger for event processing
