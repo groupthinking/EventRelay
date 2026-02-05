@@ -124,7 +124,8 @@ class GeminiVideoMasterAgent:
 
     def __init__(self):
         self.gemini_api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
-        self.output_dir = Path("gemini_processed_videos")
+        # Use /tmp for Cloud Run compatibility (read-only root filesystem)
+        self.output_dir = Path("/tmp/gemini_processed_videos")
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
         # Initialize Google AI - using new google.genai Client

@@ -41,15 +41,12 @@ class ServiceContainer:
         """Load configuration from environment variables"""
         self._config = {
             # Cache configuration
-            "cache_dir": os.getenv(
-                "CACHE_DIR", "youtube_processed_videos/markdown_analysis"
-            ),
+            # Use /tmp for Cloud Run compatibility (read-only root filesystem)
+            "cache_dir": os.getenv("CACHE_DIR", "/tmp/uvai_cache/markdown_analysis"),
             "enhanced_analysis_dir": os.getenv(
-                "ENHANCED_ANALYSIS_DIR", "youtube_processed_videos/enhanced_analysis"
+                "ENHANCED_ANALYSIS_DIR", "/tmp/uvai_cache/enhanced_analysis"
             ),
-            "feedback_dir": os.getenv(
-                "FEEDBACK_DIR", "youtube_processed_videos/feedback"
-            ),
+            "feedback_dir": os.getenv("FEEDBACK_DIR", "/tmp/uvai_cache/feedback"),
             # Rate limiting
             "rate_limit_rps": int(os.getenv("RATE_LIMIT_RPS", "5")),
             "max_recent_requests": int(os.getenv("MAX_RECENT_REQUESTS", "1000")),
