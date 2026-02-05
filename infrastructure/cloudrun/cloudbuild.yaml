@@ -54,7 +54,7 @@ steps:
       - '--set-secrets'
       - 'GEMINI_API_KEY=GEMINI_API_KEY:latest,YOUTUBE_API_KEY=YOUTUBE_API_KEY:latest'
       - '--set-env-vars'
-      - 'LOG_LEVEL=INFO,ENHANCED_ANALYSIS_DIR=/app/data/enhanced_analysis'
+      - 'LOG_LEVEL=INFO,CACHE_DIR=/tmp/cache,ENHANCED_ANALYSIS_DIR=/tmp/enhanced_analysis,FEEDBACK_DIR=/tmp/feedback'
       - '--allow-unauthenticated'
       - '--cpu-boost'
       - '--no-cpu-throttling'
