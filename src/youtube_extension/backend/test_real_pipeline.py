@@ -54,20 +54,22 @@ class PipelineIntegrationTest:
         logger.info("🧪 Starting Real Pipeline Integration Tests")
 
         tests = [
-            self.test_imports(),
-            self.test_video_processor(),
-            self.test_code_generator(),
-            self.test_deployment_manager(),
-            self.test_ai_insights(),
-            self.test_end_to_end_pipeline()
+            self.test_imports,
+            self.test_video_processor,
+            self.test_code_generator,
+            self.test_deployment_manager,
+            self.test_ai_insights,
+            self.test_end_to_end_pipeline
         ]
 
         for test in tests:
             try:
-                if asyncio.iscoroutine(test):
-                    await test
-                else:
-                    test
+                result = test()
+                if asyncio.iscoroutine(result):
+                    await result
+                elif result is not None:
+                    # Handle non-None non-coroutine results if needed
+                    pass
             except Exception as e:
                 logger.error(f"Test failed: {e}")
 

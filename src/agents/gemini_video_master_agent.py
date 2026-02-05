@@ -650,7 +650,7 @@ class GeminiVideoMasterAgent:
             stats["total_cost"] += result.cost_estimate
 
         # Calculate averages
-        for provider, stats in provider_stats.items():
+        for _provider, stats in provider_stats.items():
             if stats["total_tasks"] > 0:
                 stats["avg_processing_time"] /= stats["total_tasks"]
                 stats["avg_quality_score"] /= stats["total_tasks"]
@@ -834,7 +834,7 @@ async def main():
             video_url = default_video
 
     # Check for banned video IDs
-    from urllib.parse import urlparse, parse_qs
+    from urllib.parse import parse_qs, urlparse
 
     parsed = urlparse(video_url)
     video_id = None

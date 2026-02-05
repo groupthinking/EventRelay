@@ -5,7 +5,8 @@ Revises: 001_initial_schema
 Create Date: 2026-01-07 00:57:13.364248
 
 """
-from typing import Sequence, Union
+from collections.abc import Sequence
+from typing import Union
 
 import sqlalchemy as sa
 from alembic import op

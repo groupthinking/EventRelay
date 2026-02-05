@@ -30,7 +30,8 @@ def process_video(video_url: str) -> dict[str, Any]:
     reg = load_registry()
     yt = next(t for t in reg["tools"] if t["name"]=="youtube_learning_service")
     cmd = yt["command"]
-    env = os.environ.copy(); env.update(yt.get("env", {}))
+    env = os.environ.copy()
+    env.update(yt.get("env", {}))
     payload = {"method":"tools/call","params":{"name":"process_video_markdown","arguments":{"video_url":video_url}}}
     proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
     out, err = proc.communicate((json.dumps(payload)+"\n").encode(), timeout=180)
@@ -49,7 +50,8 @@ def deploy(repo_info: dict[str, Any]) -> dict[str, Any]:
 def main():
     import sys
     if len(sys.argv)<2:
-        print("Usage: orchestrator_minimal.py <video_url>"); return 1
+        print("Usage: orchestrator_minimal.py <video_url>")
+        return 1
     video_url = sys.argv[1]
     res = process_video(video_url)
     print("PROCESS:", json.dumps(res)[:200])
