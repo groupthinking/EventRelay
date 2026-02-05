@@ -19,6 +19,14 @@ import asyncio
 import argparse
 import json
 import logging
+import os
+import sys
+import traceback
+from datetime import datetime, timezone, timedelta
+from pathlib import Path
+from typing import Dict, Any, List, Optional
+
+# Set up path to include src
 import sys
 import traceback
 from pathlib import Path
@@ -32,6 +40,7 @@ try:
     from youtube_extension.backend.services.metrics_service import MetricsService
     from youtube_extension.backend.services.logging_service import get_logging_service
     from youtube_extension.backend.services.database_cleanup_service import run_database_cleanup
+except ImportError as e:
     # Print warning but don't fail immediately, allows dry-run in incomplete envs
     # print(f"Warning: Could not import services: {e}")
     pass

@@ -14,7 +14,7 @@ import logging
 import sys
 import os
 from typing import Dict, List, Any, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
 # Ensure the lib directory is in sys.path FIRST before any relative imports
 _lib_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -76,7 +76,7 @@ class SecurityAnalyzerAgent(MCPEnabledA2AAgent):
 
     async def _perform_security_scan(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Perform comprehensive security scan using MCP tools"""
-        start_time = datetime.utcnow()
+        start_time = datetime.now(timezone.utc)
 
         try:
             code = data.get("code", "")
@@ -107,7 +107,7 @@ class SecurityAnalyzerAgent(MCPEnabledA2AAgent):
                 "scan_type": "comprehensive_security",
                 "status": "completed",
                 "start_time": start_time.isoformat(),
-                "completion_time": datetime.utcnow().isoformat(),
+                "completion_time": datetime.now(timezone.utc).isoformat(),
                 "mcp_analysis": analysis_result.get("result", {}),
                 "security_issues": security_issues,
                 "correction_suggestions": correction_result.get("result", {}),
@@ -124,7 +124,7 @@ class SecurityAnalyzerAgent(MCPEnabledA2AAgent):
                 "scan_type": "security_scan_failed",
                 "status": "error",
                 "error": str(e),
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
     def _detect_security_patterns(self, code: str) -> List[Dict[str, Any]]:
@@ -214,7 +214,7 @@ class SecurityAnalyzerAgent(MCPEnabledA2AAgent):
 
         assessment = {
             "vulnerability_type": vulnerability_type,
-            "assessment_time": datetime.utcnow().isoformat(),
+            "assessment_time": datetime.now(timezone.utc).isoformat(),
             "findings": [],
             "mitigation_steps": [],
         }
@@ -320,7 +320,7 @@ class PerformanceOptimizerAgent(MCPEnabledA2AAgent):
                 "efficiency_score": self._calculate_efficiency_score(
                     performance_metrics
                 ),
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
         except Exception as e:
@@ -329,7 +329,7 @@ class PerformanceOptimizerAgent(MCPEnabledA2AAgent):
                 "analysis_type": "performance_failed",
                 "status": "error",
                 "error": str(e),
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
     def _calculate_performance_metrics(self, code: str) -> Dict[str, Any]:
@@ -446,7 +446,7 @@ class PerformanceOptimizerAgent(MCPEnabledA2AAgent):
             "original_analysis": analysis.get("result", {}),
             "suggested_improvements": corrections.get("result", {}),
             "optimized_patterns": self._suggest_optimization_patterns(code),
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
     def _suggest_optimization_patterns(self, code: str) -> List[str]:
@@ -537,7 +537,7 @@ class StyleCheckerAgent(MCPEnabledA2AAgent):
                 "recommendations": self._generate_style_recommendations(
                     style_issues, naming_issues, documentation_issues
                 ),
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
         except Exception as e:
@@ -546,7 +546,7 @@ class StyleCheckerAgent(MCPEnabledA2AAgent):
                 "check_type": "style_check_failed",
                 "status": "error",
                 "error": str(e),
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
     async def _format_code(self, data: Dict[str, Any]) -> Dict[str, Any]:
@@ -571,7 +571,7 @@ class StyleCheckerAgent(MCPEnabledA2AAgent):
                 "original_code": code,
                 "formatted_code": format_result.get("formatted_code", code),
                 "changes_made": format_result.get("changes", []),
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
         except Exception as e:
@@ -580,7 +580,7 @@ class StyleCheckerAgent(MCPEnabledA2AAgent):
                 "action": "format_code",
                 "status": "error",
                 "error": str(e),
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
     async def _validate_naming(self, data: Dict[str, Any]) -> Dict[str, Any]:
@@ -607,7 +607,7 @@ class StyleCheckerAgent(MCPEnabledA2AAgent):
                 "recommendations": self._generate_naming_recommendations(
                     naming_violations
                 ),
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
         except Exception as e:
@@ -616,7 +616,7 @@ class StyleCheckerAgent(MCPEnabledA2AAgent):
                 "action": "validate_naming",
                 "status": "error",
                 "error": str(e),
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
     def _detect_style_issues(self, code: str, language: str) -> List[Dict[str, Any]]:

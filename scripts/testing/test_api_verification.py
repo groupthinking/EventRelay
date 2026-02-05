@@ -36,18 +36,34 @@ def test_youtube_api():
         return False, f"YouTube API failed: {str(e)}"
 
 def test_gemini_api():
-    """Test Gemini API with real credentials"""
+    """Verify Gemini API connection and model availability"""
+    print("\n🔹 Verifying Gemini API...")
+    
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        print("❌ GEMINI_API_KEY not found in environment variables")
+        return False, "GEMINI_API_KEY not found"
+        
     try:
-        import google.generativeai as genai
-        api_key = os.getenv('GEMINI_API_KEY')
-        if not api_key:
-            return False, "GEMINI_API_KEY not found"
-
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-2.5-pro')
-        response = model.generate_content("Hello, test message")
-        return True, f"Gemini API working - response: {response.text[:50]}..."
+        from google import genai
+        client = genai.Client(api_key=api_key)
+        
+        # Test generation with a simple prompt
+        print("  - Testing content generation...")
+        response = client.models.generate_content(
+            model="gemini-2.0-flash-exp",
+            contents="Hello, world!"
+        )
+        
+        if response and response.text:
+            print("  ✅ Gemini API connected and generating content")
+            return True, f"Gemini API working - response: {response.text[:50]}..."
+        else:
+            print("  ❌ Gemini API returned empty response")
+            return False, "Gemini API returned empty response"
+            
     except Exception as e:
+        print(f"  ❌ Gemini API verification failed: {str(e)}")
         return False, f"Gemini API failed: {str(e)}"
 
 def test_openai_api():
