@@ -204,33 +204,62 @@ async def detailed_health_check_v1(
     "/capabilities",
     response_model=dict[str, Any],
     summary="Model capabilities status",
-    description="Report availability info for FastVLM (local) and Gemini (cloud)",
+    description="Report availability info for video processing models",
 )
-async def get_capabilities_v1() -> dict[str, Any]:
-    """Return FastVLM and Gemini availability without performing inference."""
+async def get_capabilities_v1(
+    hybrid_processor: HybridProcessorService = Depends(get_hybrid_processor_service),
+) -> dict[str, Any]:
+    """Return available model capabilities without performing inference."""
     try:
-        # Lazy import to avoid impacting startup if modules are missing
-        from fastvlm_gemini_hybrid.config import HybridConfig
-        from fastvlm_gemini_hybrid.hybrid_processor import HybridVLMProcessor
+        # Check Gemini availability via the hybrid processor service
+        gemini_available = hybrid_processor is not None
+        gemini_model = "gemini-2.0-flash" if gemini_available else None
 
-        cfg = HybridConfig.from_env()
-        processor = HybridVLMProcessor(cfg)
+        # Check which video processors are available
+        available_processors = []
+        try:
+            from .enhanced_video_processor import EnhancedVideoProcessor
 
-        fast_info = processor.fastvlm.get_model_info()
-        gem_info = processor.gemini.get_model_info()
+            available_processors.append("enhanced")
+        except ImportError:
+            pass
+        try:
+            from .real_video_processor import RealVideoProcessor
+
+            available_processors.append("real")
+        except ImportError:
+            pass
+        try:
+            from .deepmcp.deepmcp_processor import DeepMCPAgentProcessor
+
+            available_processors.append("deepmcp")
+        except ImportError:
+            pass
 
         return {
-            "fastvlm": fast_info,
-            "gemini": gem_info,
-            "config": {
-                "fastvlm_model_path": cfg.fastvlm.model_path,
-                "fastvlm_device": cfg.fastvlm.device,
-                "gemini_model": cfg.gemini.model_name,
+            "status": "operational",
+            "gemini": {
+                "available": gemini_available,
+                "model": gemini_model,
+                "features": ["video_analysis", "transcript_action", "chat"],
             },
+            "fastvlm": {
+                "available": False,
+                "model": None,
+                "note": "FastVLM local inference not yet implemented",
+            },
+            "processors": available_processors,
+            "endpoints": [
+                "/api/v1/health",
+                "/api/v1/transcript-action",
+                "/api/v1/process-video",
+                "/api/v1/chat",
+                "/api/v1/video-to-software",
+            ],
         }
     except Exception as e:
         logger.error(f"Capabilities check failed: {e}")
-        return {"error": str(e)}
+        return {"status": "error", "error": str(e)}
 
 
 @router.post(
