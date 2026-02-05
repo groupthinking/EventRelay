@@ -61,7 +61,7 @@ class InfrastructurePackagingAgent:
 
         log_file = resolve_path('logs', 'infrastructure_packaging.log')
         log_file.parent.mkdir(parents=True, exist_ok=True)
-        handler = logging.FileHandler(log_file)
+        handler = logging.StreamHandler()  # Cloud Run compatible
         formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
         handler.setFormatter(formatter)
         logger.addHandler(handler)

@@ -21,7 +21,6 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - [SECURITY-AGENT] %(message)s',
     handlers=[
-        logging.FileHandler('security_agent.log'),
         logging.StreamHandler()
     ]
 )

@@ -26,7 +26,6 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - [WORKFLOW] %(message)s',
     handlers=[
-        logging.FileHandler('video_to_action_workflow.log'),
         logging.StreamHandler()
     ]
 )

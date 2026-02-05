@@ -23,7 +23,6 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - [QUALITY-AGENT] %(message)s',
     handlers=[
-        logging.FileHandler('quality_agent.log'),
         logging.StreamHandler()
     ]
 )

@@ -21,7 +21,6 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - [A2A-ORCHESTRATOR] %(message)s',
     handlers=[
-        logging.FileHandler('a2a_remediation.log'),
         logging.StreamHandler()
     ]
 )

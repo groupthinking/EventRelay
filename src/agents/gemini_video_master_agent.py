@@ -57,11 +57,11 @@ BANNED_VIDEO_IDS = frozenset(
     ]
 )
 
-# Configure logging
+# Configure logging (stdout only for Cloud Run compatibility)
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - [GEMINI_MASTER] %(message)s",
-    handlers=[logging.FileHandler("gemini_master_agent.log"), logging.StreamHandler()],
+    handlers=[logging.StreamHandler()],
 )
 logger = logging.getLogger("gemini_master_agent")
 
