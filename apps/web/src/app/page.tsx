@@ -484,9 +484,9 @@ export default function HomePage() {
       <nav className="relative z-50 flex items-center justify-between px-6 lg:px-12 py-5 border-b border-white/[0.06]">
         <div className="flex items-center gap-3">
           <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center font-black text-lg shadow-lg shadow-primary-500/30 transition-transform hover:scale-105">
-            V
+            U
           </div>
-          <span className="font-bold text-xl tracking-tight bg-gradient-to-r from-white to-white/80 bg-clip-text text-transparent">Video2Learn</span>
+          <span className="font-bold text-xl tracking-tight bg-gradient-to-r from-white to-white/80 bg-clip-text text-transparent">UVAI.io</span>
         </div>
 
         {/* Desktop Navigation */}
@@ -502,10 +502,10 @@ export default function HomePage() {
           </Link>
           <Link
             href="/dashboard"
-            className="btn btn-primary px-5 py-2.5 group"
+            className="btn btn-primary px-5 py-2.5 group inline-flex items-center gap-2"
           >
             Get Started
-            <span className="ml-1 transition-transform group-hover:translate-x-1">→</span>
+            <span className="transition-transform group-hover:translate-x-1">→</span>
           </Link>
         </div>
 
@@ -613,14 +613,22 @@ export default function HomePage() {
           <div className="mb-16">
             <SuggestedPrompts
               onSelectTopic={(query) => {
-                setVideoUrl(`https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`);
+                const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
+                if (typeof window !== 'undefined') {
+                  window.open(searchUrl, '_blank', 'noopener,noreferrer');
+                }
               }}
             />
           </div>
 
-          {/* Video Preview Card */}
+          {/* Video Preview Card - Visual Example Only */}
           <div className="max-w-lg mx-auto mb-16">
             <div className="relative group">
+              {/* Example label */}
+              <div className="absolute -top-8 left-0 right-0 flex justify-center">
+                <span className="text-xs font-semibold tracking-widest text-white/30 uppercase">Example Preview</span>
+              </div>
+              
               {/* Glow effect */}
               <div className="absolute -inset-4 bg-gradient-to-r from-primary-500/10 via-accent-500/10 to-primary-500/10 rounded-3xl blur-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
 
@@ -632,7 +640,7 @@ export default function HomePage() {
 
                   {/* Play button overlay */}
                   <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300">
-                    <div className="w-16 h-16 rounded-full bg-white/10 backdrop-blur-sm border border-white/20 flex items-center justify-center hover:scale-110 transition-transform cursor-pointer">
+                    <div className="w-16 h-16 rounded-full bg-white/10 backdrop-blur-sm border border-white/20 flex items-center justify-center hover:scale-110 transition-transform">
                       <span className="text-2xl ml-1">▶</span>
                     </div>
                   </div>
@@ -891,9 +899,9 @@ console.log(result.deployedUrl);
             <div className="col-span-2 md:col-span-1">
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center font-bold shadow-lg shadow-primary-500/25">
-                  V
+                  U
                 </div>
-                <span className="font-bold text-lg">Video2Learn</span>
+                <span className="font-bold text-lg">UVAI.io</span>
               </div>
               <p className="text-white/40 text-sm leading-relaxed mb-4">
                 Transform any video into interactive learning experiences with AI.
@@ -973,7 +981,7 @@ console.log(result.deployedUrl);
           {/* Footer Bottom */}
           <div className="pt-8 border-t border-white/[0.05] flex flex-col md:flex-row justify-between items-center gap-4">
             <p className="text-white/30 text-sm">
-              © 2026 Video2Learn. Built with AI by <span className="text-primary-400">Aaron Wade</span>
+              © 2026 UVAI.io. Built with AI by <span className="text-primary-400">Aaron Wade</span>
             </p>
             <div className="flex items-center gap-2 text-white/30 text-sm">
               <span className="relative flex h-2 w-2">
