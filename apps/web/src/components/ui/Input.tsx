@@ -44,18 +44,22 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
 
     const variants = {
       default: clsx(
-        'bg-white/[0.03] border border-white/[0.08]',
-        'focus:border-primary-500/50 focus:ring-2 focus:ring-primary-500/20',
+        'bg-surface-900/80 border border-white/[0.1]',
+        'hover:border-white/[0.15] hover:bg-surface-900/90',
+        'focus:border-primary-500/60 focus:ring-2 focus:ring-primary-500/25',
+        'focus:bg-surface-900',
         error && 'border-red-500/50 focus:border-red-500 focus:ring-red-500/20'
       ),
       ghost: clsx(
-        'bg-transparent border-b border-white/[0.08] rounded-none',
+        'bg-transparent border-b-2 border-white/[0.1] rounded-none',
+        'hover:border-white/[0.2]',
         'focus:border-primary-500',
         error && 'border-red-500/50 focus:border-red-500'
       ),
       filled: clsx(
-        'bg-white/[0.08] border border-transparent',
-        'focus:bg-white/[0.05] focus:border-primary-500/50',
+        'bg-white/[0.06] border border-transparent',
+        'hover:bg-white/[0.08]',
+        'focus:bg-white/[0.04] focus:border-primary-500/50 focus:ring-2 focus:ring-primary-500/20',
         error && 'bg-red-500/10 focus:border-red-500'
       ),
     };

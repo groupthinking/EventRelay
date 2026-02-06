@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useState, useEffect, useRef } from 'react';
 import { clsx } from 'clsx';
+import { SuggestedPrompts } from '@/components/ui';
 
 // ============================================
 // Animated Counter Component
@@ -273,6 +274,165 @@ function TestimonialCard({
 }
 
 // ============================================
+// Loading Spinner Component
+// ============================================
+function LoadingSpinner({ size = 20 }: { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      className="animate-spin"
+    >
+      <circle
+        cx="12"
+        cy="12"
+        r="10"
+        stroke="currentColor"
+        strokeWidth="3"
+        strokeOpacity="0.25"
+      />
+      <path
+        d="M12 2a10 10 0 0 1 10 10"
+        stroke="currentColor"
+        strokeWidth="3"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+// ============================================
+// Mobile Menu Component
+// ============================================
+function MobileMenu({
+  isOpen,
+  onClose
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [isOpen]);
+
+  return (
+    <>
+      {/* Backdrop */}
+      <div
+        className={clsx(
+          'fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] transition-opacity duration-300 md:hidden',
+          isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
+        )}
+        onClick={onClose}
+      />
+
+      {/* Menu Panel */}
+      <div
+        className={clsx(
+          'fixed top-0 right-0 h-full w-72 bg-surface-900/95 backdrop-blur-xl border-l border-white/[0.08] z-[101] transition-transform duration-300 ease-out md:hidden',
+          isOpen ? 'translate-x-0' : 'translate-x-full'
+        )}
+      >
+        {/* Close Button */}
+        <button
+          onClick={onClose}
+          className="absolute top-5 right-5 w-10 h-10 flex items-center justify-center rounded-lg bg-white/[0.05] hover:bg-white/[0.1] transition-colors"
+          aria-label="Close menu"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M18 6L6 18M6 6l12 12" />
+          </svg>
+        </button>
+
+        {/* Menu Links */}
+        <nav className="flex flex-col pt-20 px-6">
+          <Link
+            href="/dashboard"
+            className="py-4 text-lg font-medium text-white/70 hover:text-white border-b border-white/[0.05] transition-colors"
+            onClick={onClose}
+          >
+            Dashboard
+          </Link>
+          <Link
+            href="/playground"
+            className="py-4 text-lg font-medium text-white/70 hover:text-white border-b border-white/[0.05] transition-colors"
+            onClick={onClose}
+          >
+            API
+          </Link>
+          <Link
+            href="/docs"
+            className="py-4 text-lg font-medium text-white/70 hover:text-white border-b border-white/[0.05] transition-colors"
+            onClick={onClose}
+          >
+            Docs
+          </Link>
+
+          {/* CTA Button */}
+          <Link
+            href="/dashboard"
+            className="mt-8 btn btn-primary text-center"
+            onClick={onClose}
+          >
+            Get Started
+            <span className="ml-1">→</span>
+          </Link>
+        </nav>
+      </div>
+    </>
+  );
+}
+
+// ============================================
+// Scroll to Top Button
+// ============================================
+function ScrollToTopButton() {
+  const [isVisible, setIsVisible] = useState(false);
+
+  useEffect(() => {
+    const toggleVisibility = () => {
+      setIsVisible(window.scrollY > 500);
+    };
+
+    window.addEventListener('scroll', toggleVisibility);
+    return () => window.removeEventListener('scroll', toggleVisibility);
+  }, []);
+
+  const scrollToTop = () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  return (
+    <button
+      onClick={scrollToTop}
+      className={clsx(
+        'fixed bottom-8 right-8 z-50 w-12 h-12 rounded-full',
+        'bg-gradient-to-br from-primary-500 to-primary-600',
+        'shadow-lg shadow-primary-500/30',
+        'flex items-center justify-center',
+        'transition-all duration-300',
+        'hover:shadow-xl hover:shadow-primary-500/40 hover:-translate-y-1',
+        isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'
+      )}
+      aria-label="Scroll to top"
+    >
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+        <path d="M18 15l-6-6-6 6" />
+      </svg>
+    </button>
+  );
+}
+
+// ============================================
 // Floating Orbs Background
 // ============================================
 function FloatingOrbs() {
@@ -292,6 +452,8 @@ function FloatingOrbs() {
 export default function HomePage() {
   const [videoUrl, setVideoUrl] = useState('');
   const [isLoaded, setIsLoaded] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   useEffect(() => {
     setIsLoaded(true);
@@ -299,7 +461,10 @@ export default function HomePage() {
 
   const handleAnalyze = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (videoUrl.trim()) {
+    if (videoUrl.trim() && !isAnalyzing) {
+      setIsAnalyzing(true);
+      // Small delay to show loading state before navigation
+      await new Promise(resolve => setTimeout(resolve, 300));
       window.location.href = `/dashboard?video=${encodeURIComponent(videoUrl)}`;
     }
   };
@@ -309,32 +474,51 @@ export default function HomePage() {
       {/* Animated background */}
       <FloatingOrbs />
 
+      {/* Mobile Menu */}
+      <MobileMenu isOpen={isMobileMenuOpen} onClose={() => setIsMobileMenuOpen(false)} />
+
+      {/* Scroll to Top Button */}
+      <ScrollToTopButton />
+
       {/* Navigation */}
-      <nav className="relative z-50 flex items-center justify-between px-6 lg:px-12 py-4 border-b border-white/[0.05]">
+      <nav className="relative z-50 flex items-center justify-between px-6 lg:px-12 py-5 border-b border-white/[0.06]">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center font-black text-lg shadow-lg shadow-primary-500/25">
+          <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center font-black text-lg shadow-lg shadow-primary-500/30 transition-transform hover:scale-105">
             U
           </div>
-          <span className="font-bold text-xl tracking-tight">UVAI.io</span>
+          <span className="font-bold text-xl tracking-tight bg-gradient-to-r from-white to-white/80 bg-clip-text text-transparent">UVAI.io</span>
         </div>
+
+        {/* Desktop Navigation */}
         <div className="hidden md:flex items-center gap-8">
-          <Link href="/dashboard" className="text-white/60 hover:text-white transition-colors font-medium">
+          <Link href="/dashboard" className="text-white/50 hover:text-white transition-all duration-200 font-medium hover:-translate-y-0.5">
             Dashboard
           </Link>
-          <Link href="/playground" className="text-white/60 hover:text-white transition-colors font-medium">
+          <Link href="/playground" className="text-white/50 hover:text-white transition-all duration-200 font-medium hover:-translate-y-0.5">
             API
           </Link>
-          <Link href="/docs" className="text-white/60 hover:text-white transition-colors font-medium">
+          <Link href="/docs" className="text-white/50 hover:text-white transition-all duration-200 font-medium hover:-translate-y-0.5">
             Docs
           </Link>
           <Link
             href="/dashboard"
-            className="btn btn-primary"
+            className="btn btn-primary px-5 py-2.5 group inline-flex items-center gap-2"
           >
             Get Started
-            <span className="ml-1">→</span>
+            <span className="transition-transform group-hover:translate-x-1">→</span>
           </Link>
         </div>
+
+        {/* Mobile Hamburger Button */}
+        <button
+          onClick={() => setIsMobileMenuOpen(true)}
+          className="md:hidden w-10 h-10 flex items-center justify-center rounded-lg bg-white/[0.05] hover:bg-white/[0.1] transition-colors"
+          aria-label="Open menu"
+        >
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
       </nav>
 
       {/* Hero Section */}
@@ -356,48 +540,126 @@ export default function HomePage() {
           </div>
 
           {/* Main Headline */}
-          <h1 className="text-5xl md:text-7xl lg:text-8xl font-black leading-[0.95] mb-8 tracking-tight">
-            <span className="block text-white">
-              Transform Video into
+          <h1 className="text-5xl md:text-7xl lg:text-8xl font-black leading-[0.9] mb-6 tracking-tighter">
+            <span className="block text-white drop-shadow-lg">
+              VIDEO TO
             </span>
-            <span className="block bg-gradient-to-r from-primary-400 via-accent-400 to-primary-400 bg-clip-text text-transparent bg-[length:200%_auto] animate-gradient">
-              Actionable Intelligence
+            <span className="block text-white drop-shadow-lg">
+              LEARNING
+            </span>
+            <span className="block bg-gradient-to-r from-primary-400 via-accent-400 to-primary-400 bg-clip-text text-transparent bg-[length:200%_auto] animate-gradient drop-shadow-lg">
+              APP
             </span>
           </h1>
 
           {/* Subheadline */}
-          <p className="text-xl md:text-2xl text-white/50 max-w-2xl mx-auto mb-12 leading-relaxed font-light">
-            Stop watching. Start acting. UVAI extracts insights, generates action items,
-            and deploys live applications from any video in{' '}
-            <strong className="text-accent-400 font-semibold">2.3 seconds</strong>.
+          <p className="text-lg md:text-xl text-white/60 max-w-xl mx-auto mb-10 leading-relaxed">
+            Generate interactive learning apps from
+            <br />
+            <span className="text-white/80">YouTube content</span>
+          </p>
+
+          {/* Attribution */}
+          <p className="text-sm text-white/40 mb-10">
+            An experiment by <span className="text-primary-400 hover:text-primary-300 transition-colors cursor-pointer">Aaron Wade</span>
           </p>
 
           {/* Main CTA Input */}
-          <form onSubmit={handleAnalyze} className="max-w-2xl mx-auto mb-16">
-            <div className="flex gap-3 p-2 rounded-2xl bg-white/[0.03] border border-white/[0.08] backdrop-blur-xl shadow-2xl shadow-primary-500/5">
-              <input
-                type="text"
-                value={videoUrl}
-                onChange={(e) => setVideoUrl(e.target.value)}
-                placeholder="Paste any YouTube URL or video link..."
-                className="flex-1 px-5 py-4 bg-transparent text-white placeholder:text-white/30 focus:outline-none text-lg"
-              />
-              <button
-                type="submit"
-                className="px-8 py-4 rounded-xl bg-gradient-to-r from-primary-500 to-primary-600 font-bold text-lg hover:shadow-xl hover:shadow-primary-500/25 transition-all hover:-translate-y-0.5 flex items-center gap-2"
-              >
-                Analyze Now
-                <span className="text-xl">→</span>
-              </button>
+          <form onSubmit={handleAnalyze} className="max-w-2xl mx-auto mb-8">
+            <div className="relative group">
+              {/* Glow effect */}
+              <div className="absolute -inset-1 bg-gradient-to-r from-primary-500/20 via-accent-500/20 to-primary-500/20 rounded-3xl blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+
+              <div className="relative flex gap-3 p-2.5 rounded-2xl bg-surface-900/80 border border-white/[0.1] backdrop-blur-xl shadow-2xl shadow-primary-500/10 transition-all duration-300 group-hover:border-primary-500/30">
+                <input
+                  type="text"
+                  value={videoUrl}
+                  onChange={(e) => setVideoUrl(e.target.value)}
+                  placeholder="Paste a URL from YouTube..."
+                  className="flex-1 px-6 py-4 bg-transparent text-white text-lg placeholder:text-white/40 focus:outline-none"
+                />
+                <button
+                  type="submit"
+                  disabled={isAnalyzing}
+                  className={clsx(
+                    'px-8 py-4 rounded-xl font-bold text-lg',
+                    'bg-gradient-to-r from-primary-500 via-primary-600 to-primary-500 bg-[length:200%_100%]',
+                    'shadow-lg shadow-primary-500/30',
+                    'hover:shadow-xl hover:shadow-primary-500/40',
+                    'hover:-translate-y-0.5 active:translate-y-0',
+                    'transition-all duration-300',
+                    'flex items-center gap-2',
+                    'animate-gradient',
+                    'disabled:opacity-80 disabled:cursor-not-allowed disabled:hover:translate-y-0'
+                  )}
+                >
+                  {isAnalyzing ? (
+                    <>
+                      <LoadingSpinner size={20} />
+                      <span>Processing...</span>
+                    </>
+                  ) : (
+                    <>
+                      Generate app
+                      <span className="text-xl transition-transform group-hover:translate-x-1">→</span>
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </form>
 
+          {/* Suggested Topics */}
+          <div className="mb-16">
+            <SuggestedPrompts
+              onSelectTopic={(query) => {
+                const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
+                if (typeof window !== 'undefined') {
+                  window.open(searchUrl, '_blank', 'noopener,noreferrer');
+                }
+              }}
+            />
+          </div>
+
+          {/* Video Preview Card - Visual Example Only */}
+          <div className="max-w-lg mx-auto mb-16">
+            <div className="relative group">
+              {/* Example label */}
+              <div className="absolute -top-8 left-0 right-0 flex justify-center">
+                <span className="text-xs font-semibold tracking-widest text-white/30 uppercase">Example Preview</span>
+              </div>
+              
+              {/* Glow effect */}
+              <div className="absolute -inset-4 bg-gradient-to-r from-primary-500/10 via-accent-500/10 to-primary-500/10 rounded-3xl blur-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
+
+              <div className="relative overflow-hidden rounded-2xl border border-white/[0.1] bg-surface-900/80 backdrop-blur-xl shadow-2xl transition-all duration-500 group-hover:border-white/[0.15]">
+                {/* Video thumbnail placeholder */}
+                <div className="relative aspect-video bg-gradient-to-br from-surface-800 to-surface-900 flex items-center justify-center">
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+                  <div className="text-6xl opacity-50 group-hover:opacity-70 transition-opacity">🎬</div>
+
+                  {/* Play button overlay */}
+                  <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300">
+                    <div className="w-16 h-16 rounded-full bg-white/10 backdrop-blur-sm border border-white/20 flex items-center justify-center hover:scale-110 transition-transform">
+                      <span className="text-2xl ml-1">▶</span>
+                    </div>
+                  </div>
+
+                  {/* Video info overlay */}
+                  <div className="absolute bottom-4 left-4 right-4">
+                    <p className="text-sm text-white/70 font-medium">Sample: How to build a startup</p>
+                    <p className="text-xs text-white/40 mt-1">12:34 • Ready to transform</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* Stats */}
-          <div className="flex justify-center gap-16 md:gap-24">
+          <div className="flex justify-center gap-12 md:gap-20">
             <AnimatedCounter value="50K" suffix="+" label="Videos Processed" />
-            <AnimatedCounter value="2.3" suffix="s" label="Avg Processing Time" />
-            <AnimatedCounter value="7" label="AI Brains Connected" />
-            <AnimatedCounter value="99.9" suffix="%" label="Uptime SLA" />
+            <AnimatedCounter value="2.3" suffix="s" label="Avg Processing" />
+            <AnimatedCounter value="7" label="AI Models" />
           </div>
         </div>
       </section>
@@ -629,20 +891,105 @@ console.log(result.deployedUrl);
       </section>
 
       {/* Footer */}
-      <footer className="relative z-10 border-t border-white/[0.05] px-6 py-12">
-        <div className="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center font-bold shadow-lg shadow-primary-500/25">
-              U
+      <footer className="relative z-10 border-t border-white/[0.05] px-6 py-16">
+        <div className="max-w-6xl mx-auto">
+          {/* Footer Top */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-12">
+            {/* Brand Column */}
+            <div className="col-span-2 md:col-span-1">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center font-bold shadow-lg shadow-primary-500/25">
+                  U
+                </div>
+                <span className="font-bold text-lg">UVAI.io</span>
+              </div>
+              <p className="text-white/40 text-sm leading-relaxed mb-4">
+                Transform any video into interactive learning experiences with AI.
+              </p>
+              {/* Social Icons */}
+              <div className="flex gap-3">
+                <a
+                  href="https://github.com/groupthinking/EventRelay"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-9 h-9 rounded-lg bg-white/[0.05] hover:bg-white/[0.1] flex items-center justify-center transition-colors"
+                  aria-label="GitHub"
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="text-white/60 hover:text-white">
+                    <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
+                  </svg>
+                </a>
+                <a
+                  href="https://twitter.com/uvai_io"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-9 h-9 rounded-lg bg-white/[0.05] hover:bg-white/[0.1] flex items-center justify-center transition-colors"
+                  aria-label="Twitter"
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="text-white/60 hover:text-white">
+                    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+                  </svg>
+                </a>
+                <a
+                  href="https://discord.gg/uvai"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-9 h-9 rounded-lg bg-white/[0.05] hover:bg-white/[0.1] flex items-center justify-center transition-colors"
+                  aria-label="Discord"
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="text-white/60 hover:text-white">
+                    <path d="M20.317 4.37a19.791 19.791 0 00-4.885-1.515.074.074 0 00-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 00-5.487 0 12.64 12.64 0 00-.617-1.25.077.077 0 00-.079-.037A19.736 19.736 0 003.677 4.37a.07.07 0 00-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 00.031.057 19.9 19.9 0 005.993 3.03.078.078 0 00.084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 00-.041-.106 13.107 13.107 0 01-1.872-.892.077.077 0 01-.008-.128 10.2 10.2 0 00.372-.292.074.074 0 01.077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 01.078.01c.12.098.246.198.373.292a.077.077 0 01-.006.127 12.299 12.299 0 01-1.873.892.077.077 0 00-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 00.084.028 19.839 19.839 0 006.002-3.03.077.077 0 00.032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 00-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z" />
+                  </svg>
+                </a>
+              </div>
             </div>
-            <span className="font-bold">UVAI.io</span>
-            <span className="text-white/30 text-sm ml-2">© 2026</span>
+
+            {/* Product Column */}
+            <div>
+              <h4 className="font-semibold text-white mb-4">Product</h4>
+              <ul className="space-y-3 text-sm">
+                <li><Link href="/dashboard" className="text-white/40 hover:text-white transition-colors">Dashboard</Link></li>
+                <li><Link href="/playground" className="text-white/40 hover:text-white transition-colors">API Playground</Link></li>
+                <li><Link href="/docs" className="text-white/40 hover:text-white transition-colors">Documentation</Link></li>
+                <li><Link href="/pricing" className="text-white/40 hover:text-white transition-colors">Pricing</Link></li>
+              </ul>
+            </div>
+
+            {/* Resources Column */}
+            <div>
+              <h4 className="font-semibold text-white mb-4">Resources</h4>
+              <ul className="space-y-3 text-sm">
+                <li><Link href="/blog" className="text-white/40 hover:text-white transition-colors">Blog</Link></li>
+                <li><Link href="/changelog" className="text-white/40 hover:text-white transition-colors">Changelog</Link></li>
+                <li><Link href="/support" className="text-white/40 hover:text-white transition-colors">Support</Link></li>
+                <li><Link href="/status" className="text-white/40 hover:text-white transition-colors">Status</Link></li>
+              </ul>
+            </div>
+
+            {/* Company Column */}
+            <div>
+              <h4 className="font-semibold text-white mb-4">Company</h4>
+              <ul className="space-y-3 text-sm">
+                <li><Link href="/about" className="text-white/40 hover:text-white transition-colors">About</Link></li>
+                <li><Link href="/privacy" className="text-white/40 hover:text-white transition-colors">Privacy</Link></li>
+                <li><Link href="/terms" className="text-white/40 hover:text-white transition-colors">Terms</Link></li>
+                <li><a href="mailto:hello@uvai.io" className="text-white/40 hover:text-white transition-colors">Contact</a></li>
+              </ul>
+            </div>
           </div>
-          <div className="flex gap-8 text-white/40 text-sm">
-            <Link href="/privacy" className="hover:text-white transition-colors">Privacy</Link>
-            <Link href="/terms" className="hover:text-white transition-colors">Terms</Link>
-            <Link href="https://github.com/groupthinking/EventRelay" className="hover:text-white transition-colors">GitHub</Link>
-            <Link href="https://twitter.com/uvai_io" className="hover:text-white transition-colors">Twitter</Link>
+
+          {/* Footer Bottom */}
+          <div className="pt-8 border-t border-white/[0.05] flex flex-col md:flex-row justify-between items-center gap-4">
+            <p className="text-white/30 text-sm">
+              © 2026 UVAI.io. Built with AI by <span className="text-primary-400">Aaron Wade</span>
+            </p>
+            <div className="flex items-center gap-2 text-white/30 text-sm">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-green-400" />
+              </span>
+              All systems operational
+            </div>
           </div>
         </div>
       </footer>
