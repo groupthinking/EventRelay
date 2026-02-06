@@ -28,8 +28,8 @@ class TestCloudRunDeployment:
         assert "uvicorn" in content, "Dockerfile must use uvicorn"
         
         # Check for correct entry point
-        assert "youtube_extension.backend.main:app" in content or "uvai.api.main:app" in content, \
-            "Dockerfile must use a valid app entry point"
+        assert "youtube_extension.backend.main:app" in content, \
+            "Dockerfile must use youtube_extension.backend.main:app as entry point"
 
     def test_dockerfile_has_health_check(self):
         """Verify Dockerfile has health check"""
@@ -45,8 +45,7 @@ class TestCloudRunDeployment:
         content = dockerfile.read_text()
         
         assert "USER" in content, "Dockerfile must switch to non-root user"
-        assert "appuser" in content or "uvai" in content, \
-            "Dockerfile must create a non-root user"
+        assert "uvai" in content, "Dockerfile must create uvai user"
 
     def test_cloudbuild_yaml_exists(self):
         """Verify cloudbuild.yaml exists"""
