@@ -14,14 +14,33 @@ from typing import Any, Optional
 
 from dotenv import load_dotenv
 
-# Add the mcp_servers directory to the path
-# REMOVED: sys.path.insert with Path manipulation
+# Import the MCP YouTube proxy from the project-root `shared/libs/` directory.
+# NOTE: There is a namespace collision — `src/shared/` and project-root `shared/`
+# are both valid packages.  Since `src/` is on sys.path via setuptools, Python
+# always resolves `import shared` to `src/shared/` first.  We use importlib to
+# load directly from the correct path.
+import importlib.util
+
+_proxy_path = (
+    Path(__file__).resolve().parent.parent.parent
+    / "shared"
+    / "libs"
+    / "youtube_proxy.py"
+)
 
 try:
-    from shared.libs.youtube_proxy import YouTubeAPIProxy, create_youtube_proxy
-
-    MCP_PROXY_AVAILABLE = True
-except ImportError as e:
+    if _proxy_path.exists():
+        _spec = importlib.util.spec_from_file_location(
+            "shared.libs.youtube_proxy", str(_proxy_path)
+        )
+        _proxy_mod = importlib.util.module_from_spec(_spec)
+        _spec.loader.exec_module(_proxy_mod)
+        YouTubeAPIProxy = _proxy_mod.YouTubeAPIProxy
+        create_youtube_proxy = _proxy_mod.create_youtube_proxy
+        MCP_PROXY_AVAILABLE = True
+    else:
+        raise ImportError(f"Module not found at {_proxy_path}")
+except (ImportError, AttributeError, Exception) as e:
     MCP_PROXY_AVAILABLE = False
     logging.warning(f"MCP YouTube proxy not available: {e}")
 
