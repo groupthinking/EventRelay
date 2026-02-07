@@ -724,7 +724,7 @@ class GeminiService:
             contents = f"{prompt}\n\n{text_payload}"
 
         # New SDK uses client.models.generate_content
-        if hasattr(self, '_client') and self._client:
+        if hasattr(self, "_client") and self._client:
             config_dict = {
                 "temperature": generation_config.get("temperature", 1.0),
                 "top_p": generation_config.get("top_p", 0.95),
@@ -1156,15 +1156,44 @@ class GeminiService:
                 error="Gemini not available or not initialized",
             )
 
+        # Vertex AI supports YouTube URL processing with Gemini 2.0
         if self._use_vertex:
-            return GeminiResult(
-                success=False,
-                response=None,
-                latency=time.time() - start_time,
-                model_name=self.config.model_name,
-                backend="vertex",
-                error="YouTube URL processing not supported in Vertex AI",
-            )
+            try:
+                loop = asyncio.get_event_loop()
+                temp_kwargs = dict(kwargs)
+                generation_config, request_kwargs = self._prepare_generation_args(
+                    temp_kwargs
+                )
+
+                response = await loop.run_in_executor(
+                    None,
+                    self._process_youtube_vertex_sync,
+                    youtube_url,
+                    prompt,
+                    generation_config,
+                    request_kwargs,
+                )
+
+                latency = time.time() - start_time
+
+                return GeminiResult(
+                    success=True,
+                    response=response.text,
+                    latency=latency,
+                    model_name=self.config.model_name,
+                    backend="vertex",
+                )
+
+            except Exception as e:
+                self.logger.error(f"Error processing YouTube video with Vertex AI: {e}")
+                return GeminiResult(
+                    success=False,
+                    response=None,
+                    latency=time.time() - start_time,
+                    model_name=self.config.model_name,
+                    backend="vertex",
+                    error=str(e),
+                )
 
         if self._backend_kind != "gemini":
             error = f"{self._backend_kind} backend does not handle YouTube ingestion"
@@ -1254,6 +1283,23 @@ class GeminiService:
         }
         return self._model.generate_content(
             [prompt, youtube_part],
+            generation_config=generation_config,
+            **request_kwargs,
+        )
+
+    def _process_youtube_vertex_sync(
+        self,
+        youtube_url: str,
+        prompt: str,
+        generation_config: dict[str, Any],
+        request_kwargs: dict[str, Any],
+    ):
+        """Synchronous YouTube processing via Vertex AI using Part.from_uri()"""
+        # Vertex AI uses Part.from_uri() for YouTube URLs
+        # Gemini 2.0 on Vertex AI supports YouTube video understanding
+        youtube_part = Part.from_uri(youtube_url, mime_type="video/*")
+        return self._model.generate_content(
+            [youtube_part, prompt],
             generation_config=generation_config,
             **request_kwargs,
         )
