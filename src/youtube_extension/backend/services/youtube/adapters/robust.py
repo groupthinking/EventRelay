@@ -38,6 +38,7 @@ from .innertube import (
 # Try to import alternative libraries
 try:
     from pytube import YouTube as PyTubeYouTube
+
     HAS_PYTube = True
 except ImportError:
     HAS_PYTube = False
@@ -45,21 +46,25 @@ except ImportError:
 
 try:
     from youtubesearchpython import Transcript, VideosSearch
+
     HAS_YOUTUBE_SEARCH = True
 except ImportError:
     HAS_YOUTUBE_SEARCH = False
 
 try:
     from youtube_transcript_api import YouTubeTranscriptApi
+
     HAS_TRANSCRIPT_API = True
 except ImportError:
     HAS_TRANSCRIPT_API = False
 
 logger = logging.getLogger(__name__)
 
+
 @dataclass
 class RobustYouTubeMetadata:
     """Complete YouTube video metadata with fallbacks"""
+
     video_id: str
     title: str
     description: str
@@ -82,13 +87,14 @@ class RobustYouTubeMetadata:
     comments: Optional[list[dict[str, Any]]] = None
     channel_context: Optional[dict[str, Any]] = None
 
+
 class RobustYouTubeService:
     """
     Robust YouTube service with multiple fallback APIs
     """
 
     def __init__(self, api_key: Optional[str] = None):
-        self.youtube_api_key = api_key or os.getenv('YOUTUBE_API_KEY')
+        self.youtube_api_key = api_key or os.getenv("YOUTUBE_API_KEY")
         self.base_url = "https://www.googleapis.com/youtube/v3"
         self.session = None
 
@@ -136,15 +142,19 @@ class RobustYouTubeService:
 
         raise Exception("All YouTube metadata APIs failed")
 
-    async def _get_metadata_ytdlp(self, video_url: str, video_id: str) -> RobustYouTubeMetadata:
+    async def _get_metadata_ytdlp(
+        self, video_url: str, video_id: str
+    ) -> RobustYouTubeMetadata:
         """Fallback metadata using yt-dlp (most reliable, no API key needed)"""
         import subprocess
         import json
 
         def _get_ytdlp_metadata():
             result = subprocess.run(
-                ['yt-dlp', '--dump-json', '--skip-download', video_url],
-                capture_output=True, text=True, timeout=30
+                ["yt-dlp", "--dump-json", "--skip-download", video_url],
+                capture_output=True,
+                text=True,
+                timeout=30,
             )
             if result.returncode != 0:
                 raise Exception(f"yt-dlp failed: {result.stderr}")
@@ -153,30 +163,35 @@ class RobustYouTubeService:
         data = await asyncio.get_event_loop().run_in_executor(None, _get_ytdlp_metadata)
 
         # Check for transcript availability
-        transcript_available, transcript_segments = await self._check_transcript_availability(video_id)
+        transcript_available, transcript_segments = (
+            await self._check_transcript_availability(video_id)
+        )
 
         return RobustYouTubeMetadata(
             video_id=video_id,
-            title=data.get('title', 'Unknown Title'),
-            description=data.get('description', ''),
-            channel_id=data.get('channel_id', 'unknown'),
-            channel_title=data.get('uploader', data.get('channel', 'Unknown Channel')),
-            published_at=data.get('upload_date', datetime.now(timezone.utc).strftime('%Y%m%d')),
+            title=data.get("title", "Unknown Title"),
+            description=data.get("description", ""),
+            channel_id=data.get("channel_id", "unknown"),
+            channel_title=data.get("uploader", data.get("channel", "Unknown Channel")),
+            published_at=data.get(
+                "upload_date", datetime.now(timezone.utc).strftime("%Y%m%d")
+            ),
             duration=f"PT{data.get('duration', 0)}S",
-            view_count=data.get('view_count'),
-            like_count=data.get('like_count'),
-            comment_count=data.get('comment_count'),
-            thumbnail_urls={'default': data.get('thumbnail', '')},
-            tags=data.get('tags', []),
-            category_id=str(data.get('categories', ['0'])[0]) if data.get('categories') else '0',
-            default_language=data.get('language'),
-            default_audio_language=data.get('language'),
-            live_broadcast_content='none',
+            view_count=data.get("view_count"),
+            like_count=data.get("like_count"),
+            comment_count=data.get("comment_count"),
+            thumbnail_urls={"default": data.get("thumbnail", "")},
+            tags=data.get("tags", []),
+            category_id=(
+                str(data.get("categories", ["0"])[0]) if data.get("categories") else "0"
+            ),
+            default_language=data.get("language"),
+            default_audio_language=data.get("language"),
+            live_broadcast_content="none",
             transcript_available=transcript_available,
             transcript_segments=transcript_segments,
-            source_api='yt-dlp'
+            source_api="yt-dlp",
         )
-
 
     async def _get_metadata_youtube_api(self, video_id: str) -> RobustYouTubeMetadata:
         """Get metadata using YouTube Data API v3"""
@@ -185,10 +200,10 @@ class RobustYouTubeService:
 
         url = f"{self.base_url}/videos"
         params = {
-            'id': video_id,
-            'key': self.youtube_api_key,
-            'part': 'snippet,statistics,contentDetails,status',
-            'fields': 'items(id,snippet(title,description,channelId,channelTitle,publishedAt,tags,categoryId,defaultLanguage,defaultAudioLanguage,thumbnails),statistics(viewCount,likeCount,commentCount),contentDetails(duration),status(privacyStatus,uploadStatus))'
+            "id": video_id,
+            "key": self.youtube_api_key,
+            "part": "snippet,statistics,contentDetails,status",
+            "fields": "items(id,snippet(title,description,channelId,channelTitle,publishedAt,tags,categoryId,defaultLanguage,defaultAudioLanguage,thumbnails),statistics(viewCount,likeCount,commentCount),contentDetails(duration),status(privacyStatus,uploadStatus))",
         }
 
         if not self.session:
@@ -198,88 +213,112 @@ class RobustYouTubeService:
         response.raise_for_status()
 
         data = response.json()
-        if not data.get('items'):
+        if not data.get("items"):
             raise Exception(f"Video not found: {video_id}")
 
-        item = data['items'][0]
-        snippet = item['snippet']
-        statistics = item.get('statistics', {})
-        content_details = item.get('contentDetails', {})
+        item = data["items"][0]
+        snippet = item["snippet"]
+        statistics = item.get("statistics", {})
+        content_details = item.get("contentDetails", {})
 
         # Check for transcript availability
-        transcript_available, transcript_segments = await self._check_transcript_availability(video_id)
+        transcript_available, transcript_segments = (
+            await self._check_transcript_availability(video_id)
+        )
 
         # Get enhanced strategic metadata
         comments = await self._get_comments(video_id)
-        channel_context = await self._get_channel_context(snippet['channelId'])
+        channel_context = await self._get_channel_context(snippet["channelId"])
 
         return RobustYouTubeMetadata(
             video_id=video_id,
-            title=snippet['title'],
-            description=snippet['description'],
-            channel_id=snippet['channelId'],
-            channel_title=snippet['channelTitle'],
-            published_at=snippet['publishedAt'],
-            duration=content_details.get('duration', 'PT0S'),
-            view_count=int(statistics.get('viewCount', 0)) if statistics.get('viewCount') else None,
-            like_count=int(statistics.get('likeCount', 0)) if statistics.get('likeCount') else None,
-            comment_count=int(statistics.get('commentCount', 0)) if statistics.get('commentCount') else None,
+            title=snippet["title"],
+            description=snippet["description"],
+            channel_id=snippet["channelId"],
+            channel_title=snippet["channelTitle"],
+            published_at=snippet["publishedAt"],
+            duration=content_details.get("duration", "PT0S"),
+            view_count=(
+                int(statistics.get("viewCount", 0))
+                if statistics.get("viewCount")
+                else None
+            ),
+            like_count=(
+                int(statistics.get("likeCount", 0))
+                if statistics.get("likeCount")
+                else None
+            ),
+            comment_count=(
+                int(statistics.get("commentCount", 0))
+                if statistics.get("commentCount")
+                else None
+            ),
             thumbnail_urls={
-                quality: thumb['url']
-                for quality, thumb in snippet.get('thumbnails', {}).items()
-                if 'url' in thumb
+                quality: thumb["url"]
+                for quality, thumb in snippet.get("thumbnails", {}).items()
+                if "url" in thumb
             },
-            tags=snippet.get('tags', []),
-            category_id=snippet.get('categoryId', '0'),
-            default_language=snippet.get('defaultLanguage'),
-            default_audio_language=snippet.get('defaultAudioLanguage'),
-            live_broadcast_content='none',
+            tags=snippet.get("tags", []),
+            category_id=snippet.get("categoryId", "0"),
+            default_language=snippet.get("defaultLanguage"),
+            default_audio_language=snippet.get("defaultAudioLanguage"),
+            live_broadcast_content="none",
             transcript_available=transcript_available,
             transcript_segments=transcript_segments,
-            source_api='youtube_data_api_v3',
+            source_api="youtube_data_api_v3",
             comments=comments,
-            channel_context=channel_context
+            channel_context=channel_context,
         )
 
     async def _get_metadata_pytube(self, video_url: str) -> RobustYouTubeMetadata:
         """Fallback metadata using PyTube"""
+
         def _get_pytube_metadata():
             yt = PyTubeYouTube(video_url)
             return {
-                'title': yt.title,
-                'description': yt.description,
-                'channel_title': yt.author,
-                'publish_date': yt.publish_date.isoformat() if yt.publish_date else None,
-                'length': yt.length,
-                'views': yt.views,
-                'thumbnail_url': yt.thumbnail_url
+                "title": yt.title,
+                "description": yt.description,
+                "channel_title": yt.author,
+                "publish_date": (
+                    yt.publish_date.isoformat() if yt.publish_date else None
+                ),
+                "length": yt.length,
+                "views": yt.views,
+                "thumbnail_url": yt.thumbnail_url,
             }
 
-        metadata = await asyncio.get_event_loop().run_in_executor(None, _get_pytube_metadata)
+        metadata = await asyncio.get_event_loop().run_in_executor(
+            None, _get_pytube_metadata
+        )
 
         # Extract video ID
         video_id = self._extract_video_id(video_url)
 
         return RobustYouTubeMetadata(
             video_id=video_id,
-            title=metadata['title'] or 'Unknown Title',
-            description=metadata['description'] or '',
-            channel_id='unknown',
-            channel_title=metadata['channel_title'] or 'Unknown Channel',
-            published_at=metadata['publish_date'] or datetime.now(timezone.utc).isoformat(),
+            title=metadata["title"] or "Unknown Title",
+            description=metadata["description"] or "",
+            channel_id="unknown",
+            channel_title=metadata["channel_title"] or "Unknown Channel",
+            published_at=metadata["publish_date"]
+            or datetime.now(timezone.utc).isoformat(),
             duration=f"PT{metadata['length'] or 0}S",
-            view_count=metadata['views'],
+            view_count=metadata["views"],
             like_count=None,
             comment_count=None,
-            thumbnail_urls={'default': metadata['thumbnail_url']} if metadata['thumbnail_url'] else {},
+            thumbnail_urls=(
+                {"default": metadata["thumbnail_url"]}
+                if metadata["thumbnail_url"]
+                else {}
+            ),
             tags=[],
-            category_id='0',
+            category_id="0",
             default_language=None,
             default_audio_language=None,
-            live_broadcast_content='none',
+            live_broadcast_content="none",
             transcript_available=False,
             transcript_segments=0,
-            source_api='pytube'
+            source_api="pytube",
         )
 
     async def _get_metadata_search_api(self, video_id: str) -> RobustYouTubeMetadata:
@@ -287,47 +326,52 @@ class RobustYouTubeService:
         search = VideosSearch(video_id, limit=1)
 
         results = await asyncio.get_event_loop().run_in_executor(None, search.result)
-        if not results.get('result'):
+        if not results.get("result"):
             raise Exception("No search results found")
 
-        video = results['result'][0]
+        video = results["result"][0]
 
         return RobustYouTubeMetadata(
             video_id=video_id,
-            title=video.get('title', 'Unknown Title'),
-            description=video.get('descriptionSnippet', [{}])[0].get('text', ''),
-            channel_id='unknown',
-            channel_title=video.get('channel', {}).get('name', 'Unknown Channel'),
-            published_at=video.get('publishedTime') or datetime.now(timezone.utc).isoformat(),
-            duration=video.get('duration', 'PT0S'),
-            view_count=int(video.get('viewCount', {}).get('text', '0').replace(',', '')) if video.get('viewCount') else None,
+            title=video.get("title", "Unknown Title"),
+            description=video.get("descriptionSnippet", [{}])[0].get("text", ""),
+            channel_id="unknown",
+            channel_title=video.get("channel", {}).get("name", "Unknown Channel"),
+            published_at=video.get("publishedTime")
+            or datetime.now(timezone.utc).isoformat(),
+            duration=video.get("duration", "PT0S"),
+            view_count=(
+                int(video.get("viewCount", {}).get("text", "0").replace(",", ""))
+                if video.get("viewCount")
+                else None
+            ),
             like_count=None,
             comment_count=None,
-            thumbnail_urls={
-                'default': video.get('thumbnails', [{}])[0].get('url', '')
-            },
+            thumbnail_urls={"default": video.get("thumbnails", [{}])[0].get("url", "")},
             tags=[],
-            category_id='0',
+            category_id="0",
             default_language=None,
             default_audio_language=None,
-            live_broadcast_content='none',
+            live_broadcast_content="none",
             transcript_available=False,
             transcript_segments=0,
-            source_api='youtube_search_python'
+            source_api="youtube_search_python",
         )
 
-    async def _get_comments(self, video_id: str, max_results: int = 20) -> list[dict[str, Any]]:
+    async def _get_comments(
+        self, video_id: str, max_results: int = 20
+    ) -> list[dict[str, Any]]:
         """Extract recent comments using YouTube Data API v3"""
         if not self.youtube_api_key or not self.session:
             return []
 
         url = f"{self.base_url}/commentThreads"
         params = {
-            'part': 'snippet',
-            'videoId': video_id,
-            'maxResults': max_results,
-            'order': 'relevance',
-            'key': self.youtube_api_key
+            "part": "snippet",
+            "videoId": video_id,
+            "maxResults": max_results,
+            "order": "relevance",
+            "key": self.youtube_api_key,
         }
 
         try:
@@ -337,32 +381,36 @@ class RobustYouTubeService:
 
             data = response.json()
             comments = []
-            for item in data.get('items', []):
-                snippet = item['snippet']['topLevelComment']['snippet']
-                comments.append({
-                    'author': snippet['authorDisplayName'],
-                    'text': snippet['textDisplay'],
-                    'like_count': snippet['likeCount'],
-                    'published_at': snippet['publishedAt']
-                })
+            for item in data.get("items", []):
+                snippet = item["snippet"]["topLevelComment"]["snippet"]
+                comments.append(
+                    {
+                        "author": snippet["authorDisplayName"],
+                        "text": snippet["textDisplay"],
+                        "like_count": snippet["likeCount"],
+                        "published_at": snippet["publishedAt"],
+                    }
+                )
             return comments
         except Exception as e:
             logger.warning(f"Failed to extract comments: {e}")
             return []
 
-    async def _get_channel_context(self, channel_id: str, max_results: int = 5) -> dict[str, Any]:
+    async def _get_channel_context(
+        self, channel_id: str, max_results: int = 5
+    ) -> dict[str, Any]:
         """Extract context about the channel using YouTube Data API v3"""
         if not self.youtube_api_key or not self.session or not channel_id:
             return {}
 
         url = f"{self.base_url}/search"
         params = {
-            'part': 'snippet',
-            'channelId': channel_id,
-            'maxResults': max_results,
-            'order': 'date',
-            'type': 'video',
-            'key': self.youtube_api_key
+            "part": "snippet",
+            "channelId": channel_id,
+            "maxResults": max_results,
+            "order": "date",
+            "type": "video",
+            "key": self.youtube_api_key,
         }
 
         try:
@@ -372,16 +420,15 @@ class RobustYouTubeService:
 
             data = response.json()
             recent_videos = []
-            for item in data.get('items', []):
-                recent_videos.append({
-                    'title': item['snippet']['title'],
-                    'video_id': item['id'].get('videoId'),
-                    'published_at': item['snippet']['publishedAt']
-                })
-            return {
-                'channel_id': channel_id,
-                'recent_videos': recent_videos
-            }
+            for item in data.get("items", []):
+                recent_videos.append(
+                    {
+                        "title": item["snippet"]["title"],
+                        "video_id": item["id"].get("videoId"),
+                        "published_at": item["snippet"]["publishedAt"],
+                    }
+                )
+            return {"channel_id": channel_id, "recent_videos": recent_videos}
         except Exception as e:
             logger.warning(f"Failed to extract channel context: {e}")
             return {}
@@ -406,50 +453,108 @@ class RobustYouTubeService:
                 transcript_data = await asyncio.get_event_loop().run_in_executor(
                     None, lambda: Transcript.get(video_id)
                 )
-                segments = transcript_data.get('segments', [])
+                segments = transcript_data.get("segments", [])
                 return True, len(segments)
         except Exception as e:
             logger.debug(f"Transcript availability check failed: {e}")
 
         return False, 0
 
-    async def get_transcript(self, video_id: str, language: str = "en") -> dict[str, Any]:
+    async def get_transcript(
+        self, video_id: str, language: str = "en"
+    ) -> dict[str, Any]:
         """Get video transcript using multiple fallback approaches"""
+        transcript_errors: list[str] = []
+
         # Try YouTube Transcript API first
         if HAS_TRANSCRIPT_API:
             try:
                 segments_data = []
                 transcript_text_parts = []
+                transcript = None
+                api_error = None
 
+                # Try instance-based fetch first
                 try:
                     yt_api = YouTubeTranscriptApi()
-                    transcript = yt_api.fetch(video_id)
-                except Exception:
+                    transcript = yt_api.fetch(video_id, languages=[language, "en"])
+                    logger.info(
+                        f"YouTubeTranscriptApi.fetch() returned {len(transcript) if transcript else 0} segments"
+                    )
+                except Exception as fetch_err:
+                    api_error = f"YouTubeTranscriptApi.fetch failed: {type(fetch_err).__name__}: {fetch_err}"
+                    logger.warning(api_error)
+                    transcript_errors.append(api_error)
+                    # Try module-level list() as fallback
                     try:
-                        transcript = YouTubeTranscriptApi.list(video_id)
-                    except Exception:
+                        transcript_list = YouTubeTranscriptApi.list_transcripts(
+                            video_id
+                        )
+                        transcript = transcript_list.find_transcript(
+                            [language, "en"]
+                        ).fetch()
+                        logger.info(
+                            f"YouTubeTranscriptApi.list_transcripts() returned {len(transcript) if transcript else 0} segments"
+                        )
+                    except Exception as list_err:
+                        api_error = f"YouTubeTranscriptApi.list_transcripts failed: {type(list_err).__name__}: {list_err}"
+                        logger.warning(api_error)
+                        transcript_errors.append(api_error)
                         transcript = []
 
-                for segment in transcript:
-                    # API returns dicts with keys text,start,duration
-                    text = segment.get('text', '') if isinstance(segment, dict) else getattr(segment, 'text', '')
-                    start = segment.get('start', 0) if isinstance(segment, dict) else getattr(segment, 'start', 0)
-                    duration = segment.get('duration', 0) if isinstance(segment, dict) else getattr(segment, 'duration', 0)
+                if transcript:
+                    for segment in transcript:
+                        # API returns dicts with keys text,start,duration
+                        text = (
+                            segment.get("text", "")
+                            if isinstance(segment, dict)
+                            else getattr(segment, "text", "")
+                        )
+                        start = (
+                            segment.get("start", 0)
+                            if isinstance(segment, dict)
+                            else getattr(segment, "start", 0)
+                        )
+                        duration = (
+                            segment.get("duration", 0)
+                            if isinstance(segment, dict)
+                            else getattr(segment, "duration", 0)
+                        )
 
-                    segments_data.append({'text': text, 'start': start, 'duration': duration})
-                    transcript_text_parts.append(text)
+                        segments_data.append(
+                            {"text": text, "start": start, "duration": duration}
+                        )
+                        transcript_text_parts.append(text)
 
-                transcript_text = " ".join(transcript_text_parts)
+                    transcript_text = " ".join(transcript_text_parts)
 
-                return {
-                    'text': transcript_text,
-                    'source': 'youtube_transcript_api',
-                    'confidence': 0.9,
-                    'segments': segments_data,
-                    'processing_time': datetime.now().isoformat()
-                }
+                    if transcript_text.strip():
+                        logger.info(
+                            f"Successfully extracted transcript: {len(transcript_text)} chars, {len(segments_data)} segments"
+                        )
+                        return {
+                            "text": transcript_text,
+                            "source": "youtube_transcript_api",
+                            "confidence": 0.9,
+                            "segments": segments_data,
+                            "processing_time": datetime.now().isoformat(),
+                        }
+                    else:
+                        logger.warning(
+                            f"youtube_transcript_api returned empty text despite {len(transcript)} segments"
+                        )
+
             except Exception as e:
-                logger.warning(f"YouTube Transcript API failed: {e}")
+                error_msg = (
+                    f"YouTube Transcript API outer exception: {type(e).__name__}: {e}"
+                )
+                logger.warning(error_msg)
+                transcript_errors.append(error_msg)
+        else:
+            logger.warning(
+                "youtube_transcript_api not installed (HAS_TRANSCRIPT_API=False)"
+            )
+            transcript_errors.append("youtube_transcript_api not installed")
 
         # Try Innertube Android fallback
         try:
@@ -459,25 +564,42 @@ class RobustYouTubeService:
                 video_id, language=language, client=self.session
             )
             if innertube_segments:
-                transcript_text = " ".join(seg.text for seg in innertube_segments if seg.text)
+                transcript_text = " ".join(
+                    seg.text for seg in innertube_segments if seg.text
+                )
+                logger.info(
+                    f"Innertube Android returned {len(innertube_segments)} segments, "
+                    f"{len(transcript_text)} chars"
+                )
                 return {
-                    'text': transcript_text,
-                    'source': 'innertube_android',
-                    'confidence': 0.75,
-                    'segments': [
+                    "text": transcript_text,
+                    "source": "innertube_android",
+                    "confidence": 0.75,
+                    "segments": [
                         {
-                            'text': seg.text,
-                            'start': seg.start,
-                            'duration': seg.duration,
+                            "text": seg.text,
+                            "start": seg.start,
+                            "duration": seg.duration,
                         }
                         for seg in innertube_segments
                     ],
-                    'processing_time': datetime.now().isoformat(),
+                    "processing_time": datetime.now().isoformat(),
                 }
+            else:
+                logger.info(f"Innertube returned no segments for {video_id}")
+                transcript_errors.append("Innertube returned empty segments")
         except InnertubeTranscriptNotFound as e:
-            logger.info(f"Innertube captions not available for {video_id}: {e}")
+            error_msg = f"Innertube: captions not available - {e}"
+            logger.info(error_msg)
+            transcript_errors.append(error_msg)
         except InnertubeTranscriptError as e:
-            logger.debug(f"Innertube transcript fallback failed for {video_id}: {e}")
+            error_msg = f"Innertube: transcript error - {e}"
+            logger.warning(error_msg)
+            transcript_errors.append(error_msg)
+        except Exception as e:
+            error_msg = f"Innertube: unexpected error - {type(e).__name__}: {e}"
+            logger.warning(error_msg)
+            transcript_errors.append(error_msg)
 
         # Try YouTube Search Python
         if HAS_YOUTUBE_SEARCH:
@@ -486,36 +608,54 @@ class RobustYouTubeService:
                     None, lambda: Transcript.get(video_id)
                 )
 
-                if transcript_data.get('segments'):
-                    transcript_text = " ".join([
-                        segment.get('text', '')
-                        for segment in transcript_data['segments']
-                    ])
-
+                if transcript_data.get("segments"):
+                    transcript_text = " ".join(
+                        [
+                            segment.get("text", "")
+                            for segment in transcript_data["segments"]
+                        ]
+                    )
+                    logger.info(
+                        f"YouTube Search Python returned "
+                        f"{len(transcript_data['segments'])} segments"
+                    )
                     return {
-                        'text': transcript_text,
-                        'source': 'youtube_search_python',
-                        'confidence': 0.8,
-                        'segments': transcript_data['segments'],
-                        'processing_time': datetime.now().isoformat()
+                        "text": transcript_text,
+                        "source": "youtube_search_python",
+                        "confidence": 0.8,
+                        "segments": transcript_data["segments"],
+                        "processing_time": datetime.now().isoformat(),
                     }
+                else:
+                    transcript_errors.append(
+                        "YouTube Search Python returned no segments"
+                    )
             except Exception as e:
-                logger.warning(f"YouTube Search transcript failed: {e}")
+                error_msg = f"YouTube Search Python failed: {type(e).__name__}: {e}"
+                logger.warning(error_msg)
+                transcript_errors.append(error_msg)
+        else:
+            transcript_errors.append("youtube_search_python not installed")
+
+        # All fallbacks failed - log comprehensive error summary
+        error_summary = "; ".join(transcript_errors) if transcript_errors else "Unknown"
+        logger.error(f"All transcript sources failed for {video_id}: {error_summary}")
 
         return {
-            'text': '',
-            'source': 'unavailable',
-            'confidence': 0.0,
-            'error': 'No transcript APIs available or working',
-            'processing_time': datetime.now().isoformat()
+            "text": "",
+            "source": "unavailable",
+            "confidence": 0.0,
+            "error": error_summary,
+            "errors": transcript_errors,
+            "processing_time": datetime.now().isoformat(),
         }
 
     def _extract_video_id(self, url: str) -> Optional[str]:
         """Extract video ID from YouTube URL"""
         patterns = [
-            r'(?:v=|\/)([0-9A-Za-z_-]{11}).*',
-            r'(?:embed\/)([0-9A-Za-z_-]{11})',
-            r'(?:watch\?v=)([0-9A-Za-z_-]{11})'
+            r"(?:v=|\/)([0-9A-Za-z_-]{11}).*",
+            r"(?:embed\/)([0-9A-Za-z_-]{11})",
+            r"(?:watch\?v=)([0-9A-Za-z_-]{11})",
         ]
 
         for pattern in patterns:
@@ -528,11 +668,15 @@ class RobustYouTubeService:
 
         return None
 
+
 # Convenience functions
-async def get_video_metadata_robust(video_url: str, api_key: Optional[str] = None) -> RobustYouTubeMetadata:
+async def get_video_metadata_robust(
+    video_url: str, api_key: Optional[str] = None
+) -> RobustYouTubeMetadata:
     """Get video metadata with robust fallbacks"""
     async with RobustYouTubeService(api_key) as service:
         return await service.get_video_metadata(video_url)
+
 
 async def get_video_transcript_robust(
     video_id: str, api_key: Optional[str] = None, language: str = "en"
@@ -541,7 +685,9 @@ async def get_video_transcript_robust(
     async with RobustYouTubeService(api_key) as service:
         return await service.get_transcript(video_id, language=language)
 
+
 if __name__ == "__main__":
+
     async def test_robust_service():
         video_url = "https://www.youtube.com/watch?v=4v7tJ55rzs4"
 
@@ -560,13 +706,15 @@ if __name__ == "__main__":
             # Try to get transcript
             transcript = await get_video_transcript_robust(metadata.video_id)
             print(f"Transcript status: {transcript.get('source')}")
-            if transcript.get('text'):
+            if transcript.get("text"):
                 print(f"Transcript: {len(transcript['text'])} characters")
 
         except Exception as e:
             print(f"❌ Error: {e}")
             import traceback
+
             traceback.print_exc()
+
 
 if __name__ == "__main__":
     asyncio.run(test_robust_service())
