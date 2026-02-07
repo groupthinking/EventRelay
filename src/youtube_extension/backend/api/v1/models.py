@@ -17,14 +17,21 @@ from pydantic import BaseModel, Field, validator
 class ChatRequest(BaseModel):
     """Request model for chat endpoint"""
 
-    message: str = Field(..., min_length=1, max_length=2000, description="User message")
+    message: str = Field(
+        ..., alias="query", min_length=1, max_length=2000, description="User message"
+    )
+    video_id: Optional[str] = Field(None, description="Video identifier")
+    video_url: Optional[str] = Field(None, description="Video URL")
     context: Optional[str] = Field("tooltip-assistant", description="Chat context")
     session_id: Optional[str] = Field("default", description="Session identifier")
+    history: Optional[list[dict[str, str]]] = Field(None, description="Chat history")
 
     class Config:
+        populate_by_name = True
         schema_extra = {
             "example": {
-                "message": "How can I process a YouTube video?",
+                "query": "How can I process a YouTube video?",
+                "video_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
                 "context": "tooltip-assistant",
                 "session_id": "user123",
             }
@@ -57,7 +64,7 @@ class VideoProcessingRequest(BaseModel):
     options: Optional[dict[str, Any]] = Field({}, description="Processing options")
 
     @validator("video_url")
-    def validate_video_url(cls, value):
+    def validate_video_url(cls, value: str) -> str:
         """Validate YouTube URL format"""
         youtube_regex = re.compile(
             r"^(https?://)?(www\.)?(youtube\.com/watch\?v=|youtu\.be/|youtube\.com/embed/)[a-zA-Z0-9_-]{11}"
@@ -109,7 +116,7 @@ class MarkdownRequest(BaseModel):
     )
 
     @validator("video_url")
-    def validate_video_url(cls, value):
+    def validate_video_url(cls, value: str) -> str:
         """Validate YouTube URL format"""
         youtube_regex = re.compile(
             r"^(https?://)?(www\.)?(youtube\.com/watch\?v=|youtu\.be/|youtube\.com/embed/)[a-zA-Z0-9_-]{11}"
@@ -165,7 +172,7 @@ class VideoToSoftwareRequest(BaseModel):
     )
 
     @validator("video_url")
-    def validate_video_url(cls, value):
+    def validate_video_url(cls, value: str) -> str:
         """Validate YouTube URL format"""
         youtube_regex = re.compile(
             r"^(https?://)?(www\.)?(youtube\.com/watch\?v=|youtu\.be/|youtube\.com/embed/)[a-zA-Z0-9_-]{11}"
@@ -175,7 +182,7 @@ class VideoToSoftwareRequest(BaseModel):
         return value
 
     @validator("project_type")
-    def validate_project_type(cls, value):
+    def validate_project_type(cls, value: str) -> str:
         """Validate project type"""
         valid_types = ["web", "api", "ml", "mobile", "desktop"]
         if value not in valid_types:

@@ -9,18 +9,16 @@ import logging
 # Load environment variables
 try:
     from dotenv import load_dotenv
+
     load_dotenv()
 except ImportError:
     logging.warning("python-dotenv not available")
 
-# Configure logging
+# Configure logging (stdout only for Cloud Run)
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - [ENHANCED] %(message)s',
-    handlers=[
-        logging.FileHandler('enhanced_processing.log'),
-        logging.StreamHandler()
-    ]
+    format="%(asctime)s - %(levelname)s - [ENHANCED] %(message)s",
+    handlers=[logging.StreamHandler()],
 )
 logger = logging.getLogger("enhanced_video_processor")
 
@@ -31,8 +29,12 @@ try:
     )
 except ImportError as e:
     logger.error("Could not import backend.enhanced_video_processor: %s", e)
+
     def _not_implemented(*args, **kwargs):
-        raise ImportError("EnhancedVideoProcessor and get_enhanced_video_processor are unavailable because backend.enhanced_video_processor could not be imported.")
+        raise ImportError(
+            "EnhancedVideoProcessor and get_enhanced_video_processor are unavailable because backend.enhanced_video_processor could not be imported."
+        )
+
     EnhancedVideoProcessor = _not_implemented
     get_enhanced_video_processor = _not_implemented
 

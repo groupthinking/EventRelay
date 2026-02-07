@@ -58,7 +58,7 @@ export interface TopicChipProps extends HTMLAttributes<HTMLButtonElement> {
 }
 
 const TopicChip = forwardRef<HTMLButtonElement, TopicChipProps>(
-  ({ topic, onSelect, className, ...props }, ref) => {
+  ({ topic, onSelect, className, style, ...props }, ref) => {
     return (
       <button
         ref={ref}
@@ -77,8 +77,10 @@ const TopicChip = forwardRef<HTMLButtonElement, TopicChipProps>(
           'hover:border-white/20',
           'active:scale-100',
           'focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/50',
+          'motion-reduce:transition-none motion-reduce:transform-none',
           className
         )}
+        style={style}
         {...props}
       >
         <span className={clsx(
@@ -90,7 +92,7 @@ const TopicChip = forwardRef<HTMLButtonElement, TopicChipProps>(
         <span className={clsx(
           'text-sm font-medium',
           topic.textColor,
-          'group-hover:text-white transition-colors'
+          'group-hover:text-white transition-colors motion-reduce:transition-none'
         )}>
           {topic.label}
         </span>
@@ -107,20 +109,21 @@ export interface SuggestedPromptsProps extends HTMLAttributes<HTMLDivElement> {
 }
 
 const SuggestedPrompts = forwardRef<HTMLDivElement, SuggestedPromptsProps>(
-  ({ onSelectTopic, title = 'TRY A SUGGESTED TOPIC:', className, ...props }, ref) => {
+  ({ onSelectTopic, title = 'TRY A SUGGESTED TOPIC:', className, style, ...props }, ref) => {
     return (
       <div
         ref={ref}
         className={clsx(
           'w-full max-w-2xl mx-auto',
-          'animate-fade-in-up',
+          'animate-fade-in-up motion-reduce:animate-none motion-reduce:opacity-100',
           className
         )}
-        style={{ 
-          '--animation-delay': '200ms',
-          animationDelay: 'var(--animation-delay)',
-          opacity: 0 
-        } as React.CSSProperties}
+        style={{
+          ...style,
+          animationDelay: '200ms',
+          opacity: 0,
+          animationFillMode: 'forwards'
+        }}
         {...props}
       >
         <p className="text-xs font-semibold tracking-widest text-white/40 mb-4 text-center">

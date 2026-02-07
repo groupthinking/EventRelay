@@ -44,7 +44,6 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - [ENTERPRISE-MCP] %(name)s:%(lineno)d - %(message)s',
     handlers=[
-        logging.FileHandler('enterprise_mcp.log'),
         logging.StreamHandler()
     ]
 )

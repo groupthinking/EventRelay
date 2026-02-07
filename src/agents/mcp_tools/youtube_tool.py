@@ -14,8 +14,10 @@ project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 from youtube_extension.backend.video_processor_factory import get_video_processor
+from src.core.collections import SmartCollectionEngine
 
 logger = logging.getLogger(__name__)
+
 
 class YouTubeMCPTool:
     """
@@ -26,6 +28,7 @@ class YouTubeMCPTool:
     def __init__(self):
         # Get processor directly (factory pattern handles all deps)
         self.processor = None
+        self.collection_engine = SmartCollectionEngine()
         logger.info("✅ YouTube MCP Tool initialized")
 
     def _get_processor(self):
@@ -36,13 +39,16 @@ class YouTubeMCPTool:
 
     async def close(self):
         """Clean up processor resources"""
-        if self.processor and hasattr(self.processor, 'close'):
+        if self.processor and hasattr(self.processor, "close"):
             await self.processor.close()
             self.processor = None
 
-    async def process_video_markdown(self, video_url: str,
-                                     extract_transcript: bool = True,
-                                     analyze_content: bool = True) -> dict[str, Any]:
+    async def process_video_markdown(
+        self,
+        video_url: str,
+        extract_transcript: bool = True,
+        analyze_content: bool = True,
+    ) -> dict[str, Any]:
         """
         Process video and generate markdown analysis.
 
@@ -79,21 +85,21 @@ class YouTubeMCPTool:
                 "video_id": video_id,
                 "video_url": video_url,
                 "metadata": metadata,
+                "collections": self.collection_engine.categorize_video(
+                    result, metadata
+                ),
                 "markdown_content": markdown_content,
                 "transcript": transcript,
                 "cached": False,
-                "processing_time": result.get("processing_time", "0s")
+                "processing_time": result.get("processing_time", "0s"),
             }
 
         except Exception as e:
             logger.error(f"MCP Tool error: {e}")
             import traceback
+
             traceback.print_exc()
-            return {
-                "status": "error",
-                "error": str(e),
-                "video_url": video_url
-            }
+            return {"status": "error", "error": str(e), "video_url": video_url}
 
     def _generate_markdown(self, result: dict[str, Any]) -> str:
         """Generate markdown from processing result"""
@@ -109,6 +115,13 @@ class YouTubeMCPTool:
             lines.append("## Metadata")
             for key, value in metadata.items():
                 lines.append(f"- **{key}**: {value}")
+            lines.append("")
+
+        # Collections
+        collections = result.get("collections", [])
+        if collections:
+            lines.append("## Collections")
+            lines.append(f"**Folders**: {', '.join(collections)}")
             lines.append("")
 
         # AI Analysis
@@ -153,16 +166,12 @@ class YouTubeMCPTool:
                 "video_id": result.get("video_id"),
                 "video_url": video_url,
                 "transcript": transcript,
-                "language": result.get("metadata", {}).get("language", "en")
+                "language": result.get("metadata", {}).get("language", "en"),
             }
 
         except Exception as e:
             logger.error(f"MCP Tool error: {e}")
-            return {
-                "status": "error",
-                "error": str(e),
-                "video_url": video_url
-            }
+            return {"status": "error", "error": str(e), "video_url": video_url}
 
     async def analyze_video(self, video_url: str) -> dict[str, Any]:
         """
@@ -193,20 +202,18 @@ class YouTubeMCPTool:
                     "topics": ai_analysis.get("Related Topics", []),
                     "actions": ai_analysis.get("actions", []),
                     "summary": ai_analysis.get("summary", ""),
-                    "technologies": ai_analysis.get("technologies", [])
-                }
+                    "technologies": ai_analysis.get("technologies", []),
+                },
             }
 
         except Exception as e:
             logger.error(f"MCP Tool error: {e}")
-            return {
-                "status": "error",
-                "error": str(e),
-                "video_url": video_url
-            }
+            return {"status": "error", "error": str(e), "video_url": video_url}
+
 
 # Singleton instance
 _tool = None
+
 
 def get_youtube_tool() -> YouTubeMCPTool:
     """Get or create YouTube MCP Tool singleton"""
@@ -215,9 +222,10 @@ def get_youtube_tool() -> YouTubeMCPTool:
         _tool = YouTubeMCPTool()
     return _tool
 
+
 # MCP Tool registry for agent network
 MCP_TOOLS = {
     "process_video_markdown": get_youtube_tool().process_video_markdown,
     "get_transcript": get_youtube_tool().get_transcript,
-    "analyze_video": get_youtube_tool().analyze_video
+    "analyze_video": get_youtube_tool().analyze_video,
 }

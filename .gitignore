@@ -1,126 +1,130 @@
-# --- Git & System ---
-.git
-.gitignore
-.dockerignore
-.DS_Store
-.AppleDouble
-.LSOverride
-Thumbs.db
-ehthumbs.db
-Desktop.ini
-*~
-.directory
 
-# --- Dependencies ---
-node_modules/
-.venv/
-venv/
-.venv_prod_verify/
-.npm/
-.yarn/
-pnpm-lock.yaml
-yarn.lock
-
-# --- Build Artifacts ---
-dist/
-build/
-.build/
-.turbo/
-.runtime/
-coverage/
-htmlcov/
-target/
-build_extensions/
-chrome_build/
-safari_build/
-*.pyc
-*.pyo
-*.pyd
-__pycache__/
-
-# --- Editors & IDEs ---
-.vscode/
-.idea/
-.spyderproject
-.spyproject
-.ropeproject
-*.code-workspace
-*.swp
-*.swo
-.aiexclude
-
-# --- Logs & Temp ---
-*.log
-logs/
-tmp/
-*.tmp
-*.temp
-*.bak
-.cache/
-cost_report.json
-api_usage_data.json
-GAP_FIXING_WORKFLOW_REPORT.json
-.mypy_cache/
-.dmypy.json
-dmypy.json
-.pyre/
-.pytest_cache/
-.ruff_cache/
-
-# --- Frameworks ---
-instance/
-.webassets-cache
-.scrapy
-docs/_build/
-site/
-celerybeat-schedule
-celerybeat.pid
-
-# --- Project Specific ---
-terraform_export/
-google-cloud-sdk/
-ai-edge-torch/
-video_representations_extractor-*/
-generated_projects/
-research/labs/archive/
-.gemini/
-
-# --- Secrets (CRITICAL) ---
-.env*
 !.env.example
-**/secrets.json
-**/production-secrets.json
-*.pem
-*.key
-*.cert
-*.crt
-*_secret_*.json
-client_secret_*.json
-gha-creds-*.json
-*REAL_API*.md
-*api*key*.txt
-*credential*.txt
-
+# --- Archives ---
+# --- Build Artifacts ---
 # --- Data & Models ---
+# --- Dependencies ---
+# --- Editors & IDEs ---
+# --- Frameworks ---
+# --- Git & System ---
+# --- Ignore nested git repositories that aren't properly configured as submodules ---
+# --- Jupyter ---
+# --- Logs & Temp ---
+# --- Project Specific ---
+# --- Generated Reports & Data Dumps ---
+CREDENTIALS_REPORT.json
+IMPLEMENTATION_COMPLETE.md
+autonomous_processing_report_*.json
+comments_*.json
+transcript_action_result.json
+dashboard_test.html
+# --- Loose root scripts (must live under src/, scripts/, or tools/) ---
+/analyze_comments.py
+/fetch_comments.py
+/verify_enhancements.py
+# --- Secrets (CRITICAL) ---
+**/production-secrets.json
+**/secrets.json
+*.bak
+*.cert
+*.code-workspace
+*.coverage
+*.crt
+*.egg-info/
 *.db
+*.gguf
+*.ipynb
+*.key
+*.log
+*.pem
+*.pyc
+*.pyd
+*.pyo
+*.safetensors
 *.sqlite
 *.sqlite3
-*.gguf
-*.safetensors
-external/ml-fastvlm/
-
-# --- Jupyter ---
-.ipynb_checkpoints/
-*.ipynb
-
-# --- Archives ---
-_archive/
-.backup_*/
+*.swo
+*.swp
 *.tar.gz
+*.temp
 *.tgz
-
-# --- Ignore nested git repositories that aren't properly configured as submodules ---
+*.tmp
+*REAL_API*.md
+*_secret_*.json
+*api*key*.txt
+*credential*.txt
+*~
+.AppleDouble
+.DS_Store
+.LSOverride
+.aiexclude
+.backup_*/
+.build/
+.cache/
+.directory
+.dmypy.json
+.dockerignore
+.env*
+.gemini/
+.git
+.gitignore
+.idea/
+.ipynb_checkpoints/
+.mypy_cache/
+.npm/
+.pyre/
+.pytest_cache/
+.ropeproject
+.ruff_cache/
+.runtime/
+.scrapy
+.spyderproject
+.spyproject
+.turbo/
+.venv/
+.venv_prod_verify/
+.vscode/
+.webassets-cache
+.yarn/
+Desktop.ini
+GAP_FIXING_WORKFLOW_REPORT.json
+Thumbs.db
+__pycache__/
+_archive/
+ai-edge-torch/
+api_usage_data.json
+build/
+build_extensions/
 build_extensions/uvai-extensions/ai-integrations/MiniCPM-o/
 build_extensions/uvai-extensions/ai-integrations/youtube-mcp/
-youtube_processed_videos/
+celerybeat-schedule
+celerybeat.pid
+chrome_build/
+client_secret_*.json
+cost_report.json
+coverage/
+curl_output.txt
+dist/
+dmypy.json
+docs/_build/
+ehthumbs.db
+external/ml-fastvlm/
+generated_projects/
+gha-creds-*.json
+google-cloud-sdk/
+htmlcov/
+instance/
+logs/
+node_modules/
+pnpm-lock.yaml
 quantomcode_private.pem
+research/labs/archive/
+safari_build/
+site/
+target/
+terraform_export/
+tmp/
+venv/
+video_representations_extractor-*/
+yarn.lock
+youtube_processed_videos/

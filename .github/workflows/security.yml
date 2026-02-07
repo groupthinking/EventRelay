@@ -84,7 +84,7 @@ jobs:
             trivy-db-
         continue-on-error: true
       - name: Build image for scanning
-        run: docker build -t eventrelay:test -f Dockerfile.production .
+        run: docker build -t eventrelay:test -f Dockerfile .
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:

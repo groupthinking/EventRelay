@@ -11,12 +11,13 @@ from datetime import datetime
 from typing import Any, Generic, Optional, TypeVar, Union
 from uuid import UUID
 
-from models.base import BaseModel
+from ..models.base import BaseModel
 from sqlalchemy import asc, delete, desc, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-T = TypeVar('T', bound=BaseModel)
+T = TypeVar("T", bound=BaseModel)
+
 
 class BaseRepository(Generic[T], ABC):
     """
@@ -39,31 +40,37 @@ class BaseRepository(Generic[T], ABC):
             await self.session.rollback()
             raise ValueError(f"Entity creation failed: {str(e)}")
 
-    async def get_by_id(self, entity_id: Union[str, UUID], tenant_id: Optional[str] = None) -> Optional[T]:
+    async def get_by_id(
+        self, entity_id: Union[str, UUID], tenant_id: Optional[str] = None
+    ) -> Optional[T]:
         """Get entity by ID with optional tenant filtering"""
         query = select(self.model).where(self.model.id == entity_id)
 
-        if tenant_id and hasattr(self.model, 'tenant_id'):
+        if tenant_id and hasattr(self.model, "tenant_id"):
             query = query.where(self.model.tenant_id == tenant_id)
 
         # Exclude soft-deleted records
-        if hasattr(self.model, 'is_deleted'):
+        if hasattr(self.model, "is_deleted"):
             query = query.where(not self.model.is_deleted)
 
         result = await self.session.execute(query)
         return result.scalar_one_or_none()
 
-    async def get_by_field(self, field: str, value: Any, tenant_id: Optional[str] = None) -> Optional[T]:
+    async def get_by_field(
+        self, field: str, value: Any, tenant_id: Optional[str] = None
+    ) -> Optional[T]:
         """Get entity by specific field"""
         if not hasattr(self.model, field):
-            raise ValueError(f"Model {self.model.__name__} does not have field '{field}'")
+            raise ValueError(
+                f"Model {self.model.__name__} does not have field '{field}'"
+            )
 
         query = select(self.model).where(getattr(self.model, field) == value)
 
-        if tenant_id and hasattr(self.model, 'tenant_id'):
+        if tenant_id and hasattr(self.model, "tenant_id"):
             query = query.where(self.model.tenant_id == tenant_id)
 
-        if hasattr(self.model, 'is_deleted'):
+        if hasattr(self.model, "is_deleted"):
             query = query.where(not self.model.is_deleted)
 
         result = await self.session.execute(query)
@@ -75,18 +82,18 @@ class BaseRepository(Generic[T], ABC):
         limit: Optional[int] = None,
         offset: Optional[int] = None,
         order_by: Optional[str] = None,
-        filters: Optional[dict[str, Any]] = None
+        filters: Optional[dict[str, Any]] = None,
     ) -> list[T]:
         """List all entities with optional filtering, pagination, and sorting"""
 
         query = select(self.model)
 
         # Apply tenant filtering
-        if tenant_id and hasattr(self.model, 'tenant_id'):
+        if tenant_id and hasattr(self.model, "tenant_id"):
             query = query.where(self.model.tenant_id == tenant_id)
 
         # Exclude soft-deleted records
-        if hasattr(self.model, 'is_deleted'):
+        if hasattr(self.model, "is_deleted"):
             query = query.where(not self.model.is_deleted)
 
         # Apply additional filters
@@ -97,7 +104,7 @@ class BaseRepository(Generic[T], ABC):
 
         # Apply ordering
         if order_by:
-            if order_by.startswith('-'):
+            if order_by.startswith("-"):
                 field = order_by[1:]
                 if hasattr(self.model, field):
                     query = query.order_by(desc(getattr(self.model, field)))
@@ -106,7 +113,7 @@ class BaseRepository(Generic[T], ABC):
                     query = query.order_by(asc(getattr(self.model, order_by)))
         else:
             # Default ordering by created_at desc
-            if hasattr(self.model, 'created_at'):
+            if hasattr(self.model, "created_at"):
                 query = query.order_by(desc(self.model.created_at))
 
         # Apply pagination
@@ -121,12 +128,15 @@ class BaseRepository(Generic[T], ABC):
     async def update(self, entity_id: Union[str, UUID], **kwargs) -> Optional[T]:
         """Update entity by ID"""
         # Remove fields that shouldn't be updated
-        update_data = {k: v for k, v in kwargs.items()
-                      if k not in ['id', 'created_at', 'tenant_id']}
+        update_data = {
+            k: v
+            for k, v in kwargs.items()
+            if k not in ["id", "created_at", "tenant_id"]
+        }
 
         # Add updated_at timestamp
-        if hasattr(self.model, 'updated_at'):
-            update_data['updated_at'] = datetime.utcnow()
+        if hasattr(self.model, "updated_at"):
+            update_data["updated_at"] = datetime.utcnow()
 
         query = (
             update(self.model)
@@ -143,14 +153,14 @@ class BaseRepository(Generic[T], ABC):
 
         return updated_entity
 
-    async def delete(self, entity_id: Union[str, UUID], soft_delete: bool = True) -> bool:
+    async def delete(
+        self, entity_id: Union[str, UUID], soft_delete: bool = True
+    ) -> bool:
         """Delete entity (soft delete by default)"""
-        if soft_delete and hasattr(self.model, 'is_deleted'):
+        if soft_delete and hasattr(self.model, "is_deleted"):
             # Soft delete
             result = await self.update(
-                entity_id,
-                is_deleted=True,
-                deleted_at=datetime.utcnow()
+                entity_id, is_deleted=True, deleted_at=datetime.utcnow()
             )
             return result is not None
         else:
@@ -160,17 +170,15 @@ class BaseRepository(Generic[T], ABC):
             return result.rowcount > 0
 
     async def count(
-        self,
-        tenant_id: Optional[str] = None,
-        filters: Optional[dict[str, Any]] = None
+        self, tenant_id: Optional[str] = None, filters: Optional[dict[str, Any]] = None
     ) -> int:
         """Count entities with optional filtering"""
         query = select(func.count(self.model.id))
 
-        if tenant_id and hasattr(self.model, 'tenant_id'):
+        if tenant_id and hasattr(self.model, "tenant_id"):
             query = query.where(self.model.tenant_id == tenant_id)
 
-        if hasattr(self.model, 'is_deleted'):
+        if hasattr(self.model, "is_deleted"):
             query = query.where(not self.model.is_deleted)
 
         if filters:
@@ -182,17 +190,15 @@ class BaseRepository(Generic[T], ABC):
         return result.scalar() or 0
 
     async def exists(
-        self,
-        entity_id: Union[str, UUID],
-        tenant_id: Optional[str] = None
+        self, entity_id: Union[str, UUID], tenant_id: Optional[str] = None
     ) -> bool:
         """Check if entity exists"""
         query = select(func.count(self.model.id)).where(self.model.id == entity_id)
 
-        if tenant_id and hasattr(self.model, 'tenant_id'):
+        if tenant_id and hasattr(self.model, "tenant_id"):
             query = query.where(self.model.tenant_id == tenant_id)
 
-        if hasattr(self.model, 'is_deleted'):
+        if hasattr(self.model, "is_deleted"):
             query = query.where(not self.model.is_deleted)
 
         result = await self.session.execute(query)
@@ -218,7 +224,7 @@ class BaseRepository(Generic[T], ABC):
 
         # Group updates by entity ID
         for update_data in updates:
-            entity_id = update_data.pop('id', None)
+            entity_id = update_data.pop("id", None)
             if entity_id:
                 query = (
                     update(self.model)
@@ -234,7 +240,7 @@ class BaseRepository(Generic[T], ABC):
         search_term: str,
         search_fields: list[str],
         tenant_id: Optional[str] = None,
-        limit: Optional[int] = 50
+        limit: Optional[int] = 50,
     ) -> list[T]:
         """Full-text search across specified fields"""
         if not search_term.strip():
@@ -247,24 +253,22 @@ class BaseRepository(Generic[T], ABC):
         for field in search_fields:
             if hasattr(self.model, field):
                 field_attr = getattr(self.model, field)
-                search_conditions.append(
-                    field_attr.ilike(f"%{search_term}%")
-                )
+                search_conditions.append(field_attr.ilike(f"%{search_term}%"))
 
         if search_conditions:
             query = query.where(or_(*search_conditions))
 
-        if tenant_id and hasattr(self.model, 'tenant_id'):
+        if tenant_id and hasattr(self.model, "tenant_id"):
             query = query.where(self.model.tenant_id == tenant_id)
 
-        if hasattr(self.model, 'is_deleted'):
+        if hasattr(self.model, "is_deleted"):
             query = query.where(not self.model.is_deleted)
 
         if limit:
             query = query.limit(limit)
 
         # Order by relevance (simplified - could use PostgreSQL text search)
-        if hasattr(self.model, 'created_at'):
+        if hasattr(self.model, "created_at"):
             query = query.order_by(desc(self.model.created_at))
 
         result = await self.session.execute(query)
@@ -280,6 +284,7 @@ class BaseRepository(Generic[T], ABC):
         # This would be implemented by subclasses for specific loading strategies
         return self
 
+
 class TenantAwareRepository(BaseRepository[T]):
     """
     Repository with automatic tenant isolation
@@ -291,7 +296,7 @@ class TenantAwareRepository(BaseRepository[T]):
 
     async def create(self, **kwargs) -> T:
         """Create with automatic tenant assignment"""
-        kwargs['tenant_id'] = self.tenant_id
+        kwargs["tenant_id"] = self.tenant_id
         return await super().create(**kwargs)
 
     async def get_by_id(self, entity_id: Union[str, UUID]) -> Optional[T]:
@@ -307,7 +312,7 @@ class TenantAwareRepository(BaseRepository[T]):
         limit: Optional[int] = None,
         offset: Optional[int] = None,
         order_by: Optional[str] = None,
-        filters: Optional[dict[str, Any]] = None
+        filters: Optional[dict[str, Any]] = None,
     ) -> list[T]:
         """List with automatic tenant filtering"""
         return await super().list_all(
@@ -315,7 +320,7 @@ class TenantAwareRepository(BaseRepository[T]):
             limit=limit,
             offset=offset,
             order_by=order_by,
-            filters=filters
+            filters=filters,
         )
 
     async def count(self, filters: Optional[dict[str, Any]] = None) -> int:
@@ -327,15 +332,9 @@ class TenantAwareRepository(BaseRepository[T]):
         return await super().exists(entity_id, self.tenant_id)
 
     async def search(
-        self,
-        search_term: str,
-        search_fields: list[str],
-        limit: Optional[int] = 50
+        self, search_term: str, search_fields: list[str], limit: Optional[int] = 50
     ) -> list[T]:
         """Search with automatic tenant filtering"""
         return await super().search(
-            search_term,
-            search_fields,
-            tenant_id=self.tenant_id,
-            limit=limit
+            search_term, search_fields, tenant_id=self.tenant_id, limit=limit
         )

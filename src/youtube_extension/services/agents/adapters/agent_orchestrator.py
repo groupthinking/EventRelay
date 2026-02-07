@@ -19,6 +19,7 @@ from ..base_agent import AgentRequest, AgentResult, BaseAgent
 @dataclass
 class OrchestrationResult:
     """Result from agent orchestration"""
+
     success: bool
     results: dict[str, AgentResult] = field(default_factory=dict)
     errors: list[str] = field(default_factory=list)
@@ -42,11 +43,17 @@ class AgentOrchestrator:
         self._agents: dict[str, BaseAgent] = {}
         self._agent_types: dict[str, type[BaseAgent]] = {}
         self._task_mappings: dict[str, list[str]] = {
-            "video_analysis": ["video_master", "action_implementer", "personality_agent", "strategy_agent"],
+            "video_analysis": [
+                "video_master",
+                "action_implementer",
+                "personality_agent",
+                "strategy_agent",
+            ],
             "content_generation": ["video_master"],
             "action_planning": ["action_implementer"],
             "transcript_action": ["transcript_action"],
             "strategic_analysis": ["personality_agent", "strategy_agent"],
+            "chat_assistance": ["transcript_action"],
         }
 
     def register_agent_type(self, name: str, agent_class: type[BaseAgent]):
@@ -60,7 +67,9 @@ class AgentOrchestrator:
         self._agent_types[name] = agent_class
         self.logger.info(f"Registered agent type: {name}")
 
-    async def get_agent(self, name: str, config: Optional[dict[str, Any]] = None) -> Optional[BaseAgent]:
+    async def get_agent(
+        self, name: str, config: Optional[dict[str, Any]] = None
+    ) -> Optional[BaseAgent]:
         """
         Get agent instance, creating if needed.
 
@@ -99,7 +108,7 @@ class AgentOrchestrator:
         self,
         task_type: str,
         input_data: dict[str, Any],
-        agent_configs: Optional[dict[str, dict[str, Any]]] = None
+        agent_configs: Optional[dict[str, dict[str, Any]]] = None,
     ) -> OrchestrationResult:
         """
         Execute a task using appropriate agents.
@@ -121,7 +130,7 @@ class AgentOrchestrator:
             return OrchestrationResult(
                 success=False,
                 errors=[f"Unknown task type: {task_type}"],
-                total_processing_time=asyncio.get_event_loop().time() - start_time
+                total_processing_time=asyncio.get_event_loop().time() - start_time,
             )
 
         agent_names = self._task_mappings[task_type]
@@ -137,12 +146,15 @@ class AgentOrchestrator:
                 return OrchestrationResult(
                     success=False,
                     errors=[f"Failed to get agent: {agent_name}"],
-                    total_processing_time=asyncio.get_event_loop().time() - start_time
+                    total_processing_time=asyncio.get_event_loop().time() - start_time,
                 )
 
         # Execute agents in parallel
         try:
-            tasks = [agent.run(AgentRequest(task=task_type, params=input_data)) for agent in agents]
+            tasks = [
+                agent.run(AgentRequest(task=task_type, params=input_data))
+                for agent in agents
+            ]
             results = await asyncio.gather(*tasks, return_exceptions=True)
 
             orchestration_result = OrchestrationResult(success=True)
@@ -153,14 +165,18 @@ class AgentOrchestrator:
 
                 if isinstance(result, Exception):
                     orchestration_result.success = False
-                    orchestration_result.errors.append(f"Agent {agent_name} failed: {str(result)}")
+                    orchestration_result.errors.append(
+                        f"Agent {agent_name} failed: {str(result)}"
+                    )
                 else:
                     orchestration_result.results[agent_name] = result
                     if result.status != "ok":
                         orchestration_result.success = False
                         orchestration_result.errors.extend(result.logs)
 
-            orchestration_result.total_processing_time = asyncio.get_event_loop().time() - start_time
+            orchestration_result.total_processing_time = (
+                asyncio.get_event_loop().time() - start_time
+            )
 
             self.logger.info(
                 f"Task execution completed: {task_type} "
@@ -175,14 +191,14 @@ class AgentOrchestrator:
             return OrchestrationResult(
                 success=False,
                 errors=[f"Orchestration failed: {str(e)}"],
-                total_processing_time=asyncio.get_event_loop().time() - start_time
+                total_processing_time=asyncio.get_event_loop().time() - start_time,
             )
 
     async def execute_agents_sequentially(
         self,
         agent_names: list[str],
         input_data: dict[str, Any],
-        agent_configs: Optional[dict[str, dict[str, Any]]] = None
+        agent_configs: Optional[dict[str, dict[str, Any]]] = None,
     ) -> OrchestrationResult:
         """
         Execute agents sequentially, passing results between them.
@@ -222,7 +238,9 @@ class AgentOrchestrator:
             # Update current_data with result for next agent
             current_data.update(result.output)
 
-        orchestration_result.total_processing_time = asyncio.get_event_loop().time() - start_time
+        orchestration_result.total_processing_time = (
+            asyncio.get_event_loop().time() - start_time
+        )
         return orchestration_result
 
     def list_agents(self) -> list[str]:

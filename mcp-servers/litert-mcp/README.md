@@ -50,6 +50,8 @@ Runs inference using the configured LiteRT-LM model.
 }
 ```
 
+**Note**: The current CLI wrapper only supports text-only inference. For multimodal capabilities (image/audio), use the LiteRT-LM C++ or Python API directly.
+
 ## Setup for Development
 
 This server uses a manual JSON-RPC implementation to avoid external dependencies in the base environment. Just run:

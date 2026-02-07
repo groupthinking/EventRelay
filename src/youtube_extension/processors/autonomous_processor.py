@@ -27,7 +27,6 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - [AUTONOMOUS] %(message)s',
     handlers=[
-        logging.FileHandler('autonomous_processing.log'),
         logging.StreamHandler()
     ]
 )

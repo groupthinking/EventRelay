@@ -21,7 +21,6 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - [PERFORMANCE-AGENT] %(message)s',
     handlers=[
-        logging.FileHandler('performance_agent.log'),
         logging.StreamHandler()
     ]
 )

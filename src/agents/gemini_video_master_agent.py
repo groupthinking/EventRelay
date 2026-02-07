@@ -57,11 +57,11 @@ BANNED_VIDEO_IDS = frozenset(
     ]
 )
 
-# Configure logging
+# Configure logging (stdout only for Cloud Run compatibility)
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - [GEMINI_MASTER] %(message)s",
-    handlers=[logging.FileHandler("gemini_master_agent.log"), logging.StreamHandler()],
+    handlers=[logging.StreamHandler()],
 )
 logger = logging.getLogger("gemini_master_agent")
 
@@ -78,7 +78,7 @@ class TaskType(Enum):
     KEY_INSIGHTS = "key_insights"
     IMPLEMENTATION_PLAN = "implementation_plan"
     STRATEGIC_ANALYSIS = "strategic_analysis"
-    PERSONALITY_MAPPING = "personality_mapping"
+    PRECISION_EXTRACTION = "precision_extraction"
 
 
 class AIProvider(Enum):
@@ -124,7 +124,8 @@ class GeminiVideoMasterAgent:
 
     def __init__(self):
         self.gemini_api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
-        self.output_dir = Path("gemini_processed_videos")
+        # Use /tmp for Cloud Run compatibility (read-only root filesystem)
+        self.output_dir = Path("/tmp/gemini_processed_videos")
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
         # Initialize Google AI - using new google.genai Client
@@ -157,6 +158,7 @@ class GeminiVideoMasterAgent:
             TaskType.TIMESTAMP_ANALYSIS: AIProvider.GEMINI_2_5_FLASH,
             TaskType.KEY_INSIGHTS: AIProvider.GEMINI_2_5_FLASH,
             TaskType.IMPLEMENTATION_PLAN: AIProvider.GEMINI_2_5_FLASH,
+            TaskType.PRECISION_EXTRACTION: AIProvider.GEMINI_2_0_FLASH,
         }
 
         # Benchmarking results
@@ -269,6 +271,10 @@ class GeminiVideoMasterAgent:
             (
                 TaskType.IMPLEMENTATION_PLAN,
                 f"Create a detailed implementation plan with timelines, resources needed, and success metrics based on this video content. Video: {video_url}",
+            ),
+            (
+                TaskType.PRECISION_EXTRACTION,
+                f"Extract physical entities (ingredients, tools, parts, steps) with high precision, noticing what is visually present even if not verbally mentioned. Video: {video_url}",
             ),
         ]
 

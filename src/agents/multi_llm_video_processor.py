@@ -46,7 +46,7 @@ except ImportError:
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - [MULTI_LLM] %(message)s",
-    handlers=[logging.FileHandler("multi_llm_processor.log"), logging.StreamHandler()],
+    handlers=[logging.StreamHandler()],
 )
 logger = logging.getLogger("multi_llm_processor")
 

@@ -147,10 +147,26 @@ class MCPServer:
 
     async def _run_inference(self, args: Dict[str, Any]) -> Dict[str, Any]:
         prompt = args.get("prompt")
+        
+        # Validate prompt parameter
+        if not prompt or not isinstance(prompt, str) or not prompt.strip():
+            return {
+                "status": "error",
+                "message": "Invalid or empty prompt. Please provide a non-empty text prompt."
+            }
+        
         model_path = args.get("model_path") or self.default_model_path
         image_path = args.get("image_path")
         audio_path = args.get("audio_path")
         backend = args.get("backend", "cpu")
+        
+        # Validate backend parameter
+        valid_backends = ["cpu", "gpu", "npu"]
+        if backend not in valid_backends:
+            return {
+                "status": "error",
+                "message": f"Invalid backend '{backend}'. Must be one of {valid_backends}."
+            }
 
         # Validate Prompt
         if not prompt:
@@ -251,7 +267,7 @@ async def main():
             )
             writer = asyncio.StreamWriter(w_transport, w_protocol, None, asyncio.get_event_loop())
         except Exception as e:
-            LOGGER.warning(f"Could not connect write pipe to stdout: {e}. Falling back to print.")
+            LOGGER.warning(f"Could not connect write pipe to stdout: {e}. Falling back to sys.stdout.write().")
             writer = None
     else:
         # Windows fallback:
@@ -281,7 +297,8 @@ async def main():
                             writer = None
                             print(response_str, flush=True)
                     else:
-                        print(response_str, flush=True)
+                        sys.stdout.write(response_str)
+                        sys.stdout.flush()
 
             except json.JSONDecodeError:
                 LOGGER.error(f"Invalid JSON received: {line}")

@@ -23,7 +23,6 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - [ARCHITECTURE-AGENT] %(message)s',
     handlers=[
-        logging.FileHandler('architecture_agent.log'),
         logging.StreamHandler()
     ]
 )

@@ -27,18 +27,45 @@ class CacheService:
     Provides unified interface for cache operations across different storage formats.
     """
 
-    def __init__(self, cache_dir: str = "youtube_processed_videos/markdown_analysis"):
+    def __init__(self, cache_dir: str = None, enhanced_cache_dir: str = None):
         """
         Initialize cache service.
 
         Args:
             cache_dir: Base directory for cache storage
+            enhanced_cache_dir: Directory for enhanced analysis cache
         """
-        self.cache_dir = Path(cache_dir)
-        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        import os
 
-        # Enhanced analysis cache directory
-        self.enhanced_cache_dir = Path('youtube_processed_videos') / 'enhanced_analysis'
+        # Use environment variables for Cloud Run compatibility
+        default_cache_dir = os.getenv(
+            "CACHE_DIR", "youtube_processed_videos/markdown_analysis"
+        )
+        default_enhanced_dir = os.getenv(
+            "ENHANCED_ANALYSIS_DIR", "youtube_processed_videos/enhanced_analysis"
+        )
+
+        self.cache_dir = Path(cache_dir or default_cache_dir)
+        self.enhanced_cache_dir = Path(enhanced_cache_dir or default_enhanced_dir)
+
+        # Create directories, gracefully handle permission errors
+        try:
+            self.cache_dir.mkdir(parents=True, exist_ok=True)
+        except PermissionError:
+            logger.warning(
+                f"Cannot create cache directory {self.cache_dir} - using in-memory caching"
+            )
+            self.cache_dir = Path("/tmp/uvai_cache")
+            self.cache_dir.mkdir(parents=True, exist_ok=True)
+
+        try:
+            self.enhanced_cache_dir.mkdir(parents=True, exist_ok=True)
+        except PermissionError:
+            logger.warning(
+                f"Cannot create enhanced cache directory {self.enhanced_cache_dir}"
+            )
+            self.enhanced_cache_dir = Path("/tmp/uvai_enhanced_cache")
+            self.enhanced_cache_dir.mkdir(parents=True, exist_ok=True)
 
     def _get_cache_key(self, video_url: str) -> str:
         """Generate cache key from video URL"""
@@ -74,7 +101,9 @@ class CacheService:
             logger.error(f"Error checking cache: {e}")
             return None
 
-    def _get_legacy_cached_result(self, video_id: str, video_url: str) -> Optional[dict[str, Any]]:
+    def _get_legacy_cached_result(
+        self, video_id: str, video_url: str
+    ) -> Optional[dict[str, Any]]:
         """Check legacy markdown_analysis cache"""
         try:
             for category_dir in self.cache_dir.iterdir():
@@ -88,18 +117,18 @@ class CacheService:
                     # Check if cache is still valid (within 24 hours)
                     age = time.time() - markdown_file.stat().st_mtime
                     if age < 86400:  # 24 hours
-                        with open(markdown_file, encoding='utf-8') as f:
+                        with open(markdown_file, encoding="utf-8") as f:
                             content = f.read()
-                        with open(metadata_file, encoding='utf-8') as f:
+                        with open(metadata_file, encoding="utf-8") as f:
                             metadata = json.load(f)
 
                         return {
-                            'video_id': video_id,
-                            'video_url': video_url,
-                            'markdown_content': content,
-                            'metadata': metadata,
-                            'save_path': str(markdown_file),
-                            'cached': True
+                            "video_id": video_id,
+                            "video_url": video_url,
+                            "markdown_content": content,
+                            "metadata": metadata,
+                            "save_path": str(markdown_file),
+                            "cached": True,
                         }
 
             return None
@@ -108,7 +137,9 @@ class CacheService:
             logger.warning(f"Error checking legacy cache: {e}")
             return None
 
-    def _get_enhanced_cached_result(self, video_id: str, video_url: str) -> Optional[dict[str, Any]]:
+    def _get_enhanced_cached_result(
+        self, video_id: str, video_url: str
+    ) -> Optional[dict[str, Any]]:
         """Check enhanced_analysis cache"""
         try:
             if not self.enhanced_cache_dir.exists():
@@ -124,22 +155,24 @@ class CacheService:
                     md_path = candidates[-1]
 
                     # Find matching metadata file
-                    meta_candidates = sorted(category_dir.glob(f"{video_id}_*_metadata.json"))
+                    meta_candidates = sorted(
+                        category_dir.glob(f"{video_id}_*_metadata.json")
+                    )
                     metadata = {}
                     if meta_candidates:
-                        with open(meta_candidates[-1], encoding='utf-8') as f:
+                        with open(meta_candidates[-1], encoding="utf-8") as f:
                             metadata = json.load(f)
 
-                    with open(md_path, encoding='utf-8') as f:
+                    with open(md_path, encoding="utf-8") as f:
                         content = f.read()
 
                     return {
-                        'video_id': video_id,
-                        'video_url': video_url,
-                        'markdown_content': content,
-                        'metadata': metadata,
-                        'save_path': str(md_path),
-                        'cached': True
+                        "video_id": video_id,
+                        "video_url": video_url,
+                        "markdown_content": content,
+                        "metadata": metadata,
+                        "save_path": str(md_path),
+                        "cached": True,
                     }
 
             return None
@@ -224,7 +257,7 @@ class CacheService:
                 "total_size_mb": 0,
                 "oldest_cache": None,
                 "newest_cache": None,
-                "enhanced_cache_stats": {}
+                "enhanced_cache_stats": {},
             }
 
             # Analyze legacy cache
@@ -244,7 +277,7 @@ class CacheService:
                 "total_cached_videos": 0,
                 "categories": {},
                 "total_size_mb": 0,
-                "error": str(e)
+                "error": str(e),
             }
 
     def _analyze_legacy_cache_stats(self, stats: dict[str, Any]):
@@ -252,7 +285,7 @@ class CacheService:
         if not self.cache_dir.exists():
             return
 
-        oldest_time = float('inf')
+        oldest_time = float("inf")
         newest_time = 0
 
         for category_dir in self.cache_dir.iterdir():
@@ -267,7 +300,7 @@ class CacheService:
             stats["categories"][category_name] = {
                 "count": category_count,
                 "size_mb": round(category_size / 1024 / 1024, 2),
-                "type": "legacy"
+                "type": "legacy",
             }
 
             stats["total_cached_videos"] += category_count
@@ -282,7 +315,7 @@ class CacheService:
                     newest_time = mtime
 
         # Set timestamp info
-        if oldest_time != float('inf'):
+        if oldest_time != float("inf"):
             stats["oldest_cache"] = datetime.fromtimestamp(oldest_time).isoformat()
         if newest_time > 0:
             stats["newest_cache"] = datetime.fromtimestamp(newest_time).isoformat()
@@ -292,11 +325,7 @@ class CacheService:
         if not self.enhanced_cache_dir.exists():
             return
 
-        enhanced_stats = {
-            "total_videos": 0,
-            "categories": {},
-            "total_size_mb": 0
-        }
+        enhanced_stats = {"total_videos": 0, "categories": {}, "total_size_mb": 0}
 
         for category_dir in self.enhanced_cache_dir.iterdir():
             if not category_dir.is_dir():
@@ -310,14 +339,16 @@ class CacheService:
             enhanced_stats["categories"][category_name] = {
                 "count": category_count,
                 "size_mb": round(category_size / 1024 / 1024, 2),
-                "type": "enhanced"
+                "type": "enhanced",
             }
 
             enhanced_stats["total_videos"] += category_count
             enhanced_stats["total_size_mb"] += category_size
 
             # Also include in main stats
-            stats["categories"][category_name] = enhanced_stats["categories"][category_name]
+            stats["categories"][category_name] = enhanced_stats["categories"][
+                category_name
+            ]
             stats["total_cached_videos"] += category_count
             stats["total_size_mb"] += category_size
 
@@ -343,20 +374,20 @@ class CacheService:
                 metadata_path = category_dir / f"{video_id}_metadata.json"
 
                 if analysis_path.exists():
-                    with open(analysis_path, encoding='utf-8') as f:
+                    with open(analysis_path, encoding="utf-8") as f:
                         content = f.read()
 
                     metadata = {}
                     if metadata_path.exists():
-                        with open(metadata_path, encoding='utf-8') as f:
+                        with open(metadata_path, encoding="utf-8") as f:
                             metadata = json.load(f)
 
                     # Skip frontmatter if present
                     markdown_content = content
-                    if content.startswith('---'):
-                        end_idx = content.find('---', 3)
+                    if content.startswith("---"):
+                        end_idx = content.find("---", 3)
                         if end_idx != -1:
-                            markdown_content = content[end_idx + 3:].strip()
+                            markdown_content = content[end_idx + 3 :].strip()
 
                     # File statistics
                     file_stats = analysis_path.stat()
@@ -369,8 +400,10 @@ class CacheService:
                         "cached": True,
                         "cache_age_hours": round(age_hours, 2),
                         "file_size": file_stats.st_size,
-                        "last_modified": datetime.fromtimestamp(file_stats.st_mtime).isoformat(),
-                        "cache_type": "legacy"
+                        "last_modified": datetime.fromtimestamp(
+                            file_stats.st_mtime
+                        ).isoformat(),
+                        "cache_type": "legacy",
                     }
 
             return None

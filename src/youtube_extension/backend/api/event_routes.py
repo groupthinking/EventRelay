@@ -11,29 +11,33 @@ from pydantic import BaseModel, Field
 event_logger = logging.getLogger("event_relay")
 event_logger.setLevel(logging.INFO)
 
-# File handler for event logs
-# Ensure logs directory exists if we were to put it there, but per plan using strict file in CWD or relative.
-# Let's put it in logs/event_processing.log if possible, or just event_processing.log in root.
-# The plan said "separate log file". I'll use a relative path "event_processing.log" in the CWD for simplicity as per plan.
-log_handler = logging.FileHandler("event_processing.log")
+# Use StreamHandler for Cloud Run compatibility (stdout-based logging)
+log_handler = logging.StreamHandler()
 log_handler.setLevel(logging.INFO)
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 log_handler.setFormatter(formatter)
 event_logger.addHandler(log_handler)
 
 router = APIRouter(prefix="/api/v1/events", tags=["events"])
+
 
 class EventPayload(BaseModel):
     """
     Generic event payload model.
     Accepts arbitrary fields with 'type' being a key field for filtering.
     """
+
     type: str = Field(..., description="The type of the event, e.g., 'user_login'")
-    data: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Event data payload")
-    timestamp: Optional[datetime] = Field(default_factory=datetime.now, description="Event timestamp")
+    data: Optional[Dict[str, Any]] = Field(
+        default_factory=dict, description="Event data payload"
+    )
+    timestamp: Optional[datetime] = Field(
+        default_factory=datetime.now, description="Event timestamp"
+    )
 
     class Config:
-        extra = "allow" # Allow other fields
+        extra = "allow"  # Allow other fields
+
 
 @router.post("/", status_code=200)
 async def ingest_event(event: EventPayload):
@@ -64,12 +68,16 @@ async def ingest_event(event: EventPayload):
         # 4. Error Handling & Logging
         # "Log any exceptions ... to a separate log file."
         import traceback
+
         error_details = traceback.format_exc()
         event_logger.error(f"Error processing event: {str(e)}\n{error_details}")
 
         # We might want to return 500, but often event ingestion endpoints return 200 to acknowledge receipt
         # unless it's a client error. I'll return 500 to signal failure to the caller.
-        raise HTTPException(status_code=500, detail="Internal Server Error processing event")
+        raise HTTPException(
+            status_code=500, detail="Internal Server Error processing event"
+        )
+
 
 def process_event(event: EventPayload):
     """

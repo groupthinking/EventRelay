@@ -47,14 +47,15 @@ from .api.v1.router import router as v1_router
 # except ImportError:
 #     integrations_router = None
 
-# Configure structured logging
+# Configure structured logging (Cloud Run captures stdout/stderr automatically)
+import os
+import sys
+
+log_level = os.getenv("LOG_LEVEL", "INFO").upper()
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s',
-    handlers=[
-        logging.StreamHandler(),
-        logging.FileHandler('youtube_extension_api.log', mode='a')
-    ]
+    level=getattr(logging, log_level, logging.INFO),
+    format="%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s",
+    handlers=[logging.StreamHandler(sys.stdout)],
 )
 logger = logging.getLogger(__name__)
 
@@ -134,14 +135,11 @@ app.add_middleware(
         "http://localhost:5173",  # Vite dev server
         "http://localhost:8080",  # Alternative dev server
         "http://localhost:3001",  # Additional dev port
-
         # Production environments
         "https://youtube-extension-frontend.vercel.app",
         "https://youtube-extension-frontend-jxk2359s8-garvs-projects-5153e7c7.vercel.app",
-
         # Vercel preview deployments
         "https://*.vercel.app",
-
         # Additional production domains
         "https://uvai.platform",
         "https://api.uvai.platform",
@@ -151,7 +149,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH"],
     allow_headers=["*"],
-    expose_headers=["*"]
+    expose_headers=["*"],
 )
 
 # Security headers middleware
@@ -183,17 +181,20 @@ app.include_router(mcp_bridge.router)
 # if integrations_router:
 #     app.include_router(integrations_router)
 
+
 # Root redirect to documentation
 @app.get("/", include_in_schema=False)
 async def root():
     """Redirect root to API documentation"""
     return RedirectResponse(url="/docs")
 
+
 # Legacy API endpoints for backward compatibility
 @app.get("/health")
 async def legacy_health():
     """Legacy health endpoint - redirects to v1"""
     return RedirectResponse(url="/api/v1/health", status_code=308)
+
 
 @app.post("/api/chat")
 async def legacy_chat(request: dict):
@@ -205,7 +206,7 @@ async def legacy_chat(request: dict):
 
         # Convert legacy request to new format
         chat_request = ChatRequest(**request)
-        video_processing_service = get_service('video_processing_service')
+        video_processing_service = get_service("video_processing_service")
 
         processor = video_processing_service.get_video_processor()
 
@@ -218,12 +219,13 @@ async def legacy_chat(request: dict):
             "response": response_text,
             "status": "success",
             "session_id": chat_request.session_id,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
 
     except Exception as e:
         logger.error(f"Legacy chat endpoint error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.post("/api/process-video-markdown")
 async def legacy_process_video_markdown(request: dict):
@@ -234,8 +236,8 @@ async def legacy_process_video_markdown(request: dict):
 
         # Convert to new format
         markdown_request = MarkdownRequest(**request)
-        video_processing_service = get_service('video_processing_service')
-        health_service = get_service('health_monitoring_service')
+        video_processing_service = get_service("video_processing_service")
+        health_service = get_service("health_monitoring_service")
 
         # Rate limiting
         if not health_service.rate_limit_check():
@@ -245,8 +247,7 @@ async def legacy_process_video_markdown(request: dict):
 
         # Process video
         result = await video_processing_service.process_video_for_markdown(
-            markdown_request.video_url,
-            markdown_request.force_regenerate
+            markdown_request.video_url, markdown_request.force_regenerate
         )
 
         health_service.increment_metric("success_total")
@@ -258,6 +259,7 @@ async def legacy_process_video_markdown(request: dict):
     except Exception as e:
         logger.error(f"Legacy markdown processing error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.post("/api/process-video")
 async def legacy_process_video(request: dict):
@@ -274,34 +276,39 @@ async def legacy_process_video(request: dict):
         # Check for async processing flag
         if os.getenv("ASYNC_PROCESSING", "false").lower() == "true":
             try:
-                pubsub_service = get_service('pubsub_service')
-                message_id = await pubsub_service.publish_message({
-                    "video_url": video_request.video_url,
-                    "options": video_request.options
-                })
+                pubsub_service = get_service("pubsub_service")
+                message_id = await pubsub_service.publish_message(
+                    {
+                        "video_url": video_request.video_url,
+                        "options": video_request.options,
+                    }
+                )
 
                 if message_id:
-                    logger.info(f"Async processing queued for {video_request.video_url} (msg: {message_id})")
+                    logger.info(
+                        f"Async processing queued for {video_request.video_url} (msg: {message_id})"
+                    )
                     return {
                         "status": "queued",
                         "message": "Video processing queued asynchronously",
                         "job_id": message_id,
                         # Return basic metadata to satisfy minimal client expectations
                         "video_data": {"url": video_request.video_url},
-                        "processing_time": 0
+                        "processing_time": 0,
                     }
                 else:
-                    logger.warning("PubSub publish failed, falling back to sync processing")
+                    logger.warning(
+                        "PubSub publish failed, falling back to sync processing"
+                    )
             except Exception as e:
                 logger.error(f"Async dispatch failed: {e}, falling back to sync")
 
         # Sync fallback (original logic)
-        video_processing_service = get_service('video_processing_service')
+        video_processing_service = get_service("video_processing_service")
 
         # Process video
         result = await video_processing_service.process_video_basic(
-            video_request.video_url,
-            video_request.options
+            video_request.video_url, video_request.options
         )
 
         return result
@@ -310,33 +317,41 @@ async def legacy_process_video(request: dict):
         logger.error(f"Legacy video processing error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
 # Other legacy endpoints with redirects
 @app.get("/metrics")
 async def legacy_metrics():
     """Legacy metrics endpoint"""
     return RedirectResponse(url="/api/v1/metrics", status_code=308)
 
+
 @app.get("/connectors/health")
 async def legacy_connectors_health():
     """Legacy connector health endpoint"""
     return RedirectResponse(url="/api/v1/health/detailed", status_code=308)
+
 
 @app.delete("/api/cache/{video_id}")
 async def legacy_clear_video_cache(video_id: str):
     """Legacy cache clearing endpoint"""
     return RedirectResponse(url=f"/api/v1/cache/{video_id}", status_code=308)
 
+
 @app.get("/api/cache/stats")
 async def legacy_cache_stats():
     """Legacy cache stats endpoint"""
     return RedirectResponse(url="/api/v1/cache/stats", status_code=308)
 
+
 # WebSocket endpoint (no versioning needed for WebSocket)
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     """WebSocket endpoint for real-time communication"""
-    websocket_service: WebSocketService = service_container.get_service('websocket_service')
+    websocket_service: WebSocketService = service_container.get_service(
+        "websocket_service"
+    )
     await websocket_service.handle_websocket_connection(websocket)
+
 
 # System management endpoints
 @app.get("/system/info")
@@ -353,18 +368,18 @@ async def system_info():
                 "dependency_injection": True,
                 "websocket_support": True,
                 "comprehensive_monitoring": True,
-                "backward_compatibility": True
+                "backward_compatibility": True,
             },
             "services": {
                 "total_registered": len(service_container.get_all_services()),
-                "health_status": container_health["container"]
+                "health_status": container_health["container"],
             },
             "api_endpoints": {
                 "v1_endpoints": len(v1_router.routes),
                 "legacy_endpoints": "maintained for backward compatibility",
-                "websocket": "real-time communication enabled"
+                "websocket": "real-time communication enabled",
             },
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
 
         return system_info
@@ -372,6 +387,7 @@ async def system_info():
     except Exception as e:
         logger.error(f"System info error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 # Enhanced OpenAPI schema generation
 def custom_openapi():
@@ -387,59 +403,46 @@ def custom_openapi():
     )
 
     # Add custom extensions
-    openapi_schema["info"]["x-logo"] = {
-        "url": "https://uvai.io/logo.png"
-    }
+    openapi_schema["info"]["x-logo"] = {"url": "https://uvai.io/logo.png"}
 
     # Add server information
     openapi_schema["servers"] = [
-        {
-            "url": "http://localhost:8000",
-            "description": "Development server"
-        },
-        {
-            "url": "https://api.uvai.io",
-            "description": "Production server"
-        }
+        {"url": "http://localhost:8000", "description": "Development server"},
+        {"url": "https://api.uvai.io", "description": "Production server"},
     ]
 
     # Add security schemes
     openapi_schema["components"]["securitySchemes"] = {
-        "ApiKeyAuth": {
-            "type": "apiKey",
-            "in": "header",
-            "name": "X-API-Key"
-        }
+        "ApiKeyAuth": {"type": "apiKey", "in": "header", "name": "X-API-Key"}
     }
 
     # Add custom tags
     openapi_schema["tags"] = [
         {
             "name": "API v1",
-            "description": "Version 1 of the API - current stable release"
+            "description": "Version 1 of the API - current stable release",
         },
-        {
-            "name": "Health",
-            "description": "Health check and monitoring endpoints"
-        },
+        {"name": "Health", "description": "Health check and monitoring endpoints"},
         {
             "name": "Video Processing",
-            "description": "Core video processing and analysis endpoints"
+            "description": "Core video processing and analysis endpoints",
         },
         {
             "name": "Cache Management",
-            "description": "Cache control and statistics endpoints"
+            "description": "Cache control and statistics endpoints",
         },
         {
             "name": "Data & Analytics",
-            "description": "Data retrieval and analytics endpoints"
-        }
+            "description": "Data retrieval and analytics endpoints",
+        },
     ]
 
     app.openapi_schema = openapi_schema
     return app.openapi_schema
 
+
 app.openapi = custom_openapi
+
 
 # Global error handlers
 @app.exception_handler(ValueError)
@@ -452,9 +455,10 @@ async def value_error_handler(request, exc):
             "error": "Bad Request",
             "detail": str(exc),
             "timestamp": datetime.now().isoformat(),
-            "path": str(request.url) if hasattr(request, 'url') else "unknown"
-        }
+            "path": str(request.url) if hasattr(request, "url") else "unknown",
+        },
     )
+
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request, exc):
@@ -465,18 +469,16 @@ async def global_exception_handler(request, exc):
         "error": "Internal server error",
         "detail": str(exc),
         "timestamp": datetime.now().isoformat(),
-        "path": str(request.url) if hasattr(request, 'url') else "unknown",
+        "path": str(request.url) if hasattr(request, "url") else "unknown",
         "version": "2.0.0",
-        "architecture": "service-oriented"
+        "architecture": "service-oriented",
     }
 
-    if hasattr(exc, '__class__'):
+    if hasattr(exc, "__class__"):
         error_detail["error_type"] = exc.__class__.__name__
 
-    return JSONResponse(
-        status_code=500,
-        content=error_detail
-    )
+    return JSONResponse(status_code=500, content=error_detail)
+
 
 # Application lifecycle events
 @app.on_event("startup")
@@ -493,11 +495,11 @@ async def startup_event():
 
     try:
         # Verify critical services
-        service_container.get_service('video_processing_service')
-        cache_service = service_container.get_service('cache_service')
-        service_container.get_service('health_monitoring_service')
-        service_container.get_service('data_service')
-        service_container.get_service('websocket_service')
+        service_container.get_service("video_processing_service")
+        cache_service = service_container.get_service("cache_service")
+        service_container.get_service("health_monitoring_service")
+        service_container.get_service("data_service")
+        service_container.get_service("websocket_service")
 
         logger.info("✅ All critical services initialized and verified")
         # Initialize database optimization (connection pool and minimal schema for SQLite)
@@ -512,16 +514,19 @@ async def startup_event():
         # Log configuration summary
         config_summary = {
             # Pull from container configuration; HealthMonitoringService no longer exposes _rate_limit_rps
-            "rate_limiting": getattr(service_container, "_config", {}).get("rate_limit_rps"),
+            "rate_limiting": getattr(service_container, "_config", {}).get(
+                "rate_limit_rps"
+            ),
             "cache_directory": cache_service.cache_dir,
             "websocket_connections": 0,
-            "api_endpoints": len(app.routes)
+            "api_endpoints": len(app.routes),
         }
         logger.info(f"⚙️  Configuration: {config_summary}")
 
     except Exception as e:
         logger.error(f"❌ Critical service initialization failed: {e}")
         raise e
+
 
 @app.on_event("shutdown")
 async def shutdown_event():
@@ -544,6 +549,7 @@ async def shutdown_event():
     except Exception as e:
         logger.warning(f"⚠️  Shutdown warning: {e}")
 
+
 # Development server runner
 if __name__ == "__main__":
     import uvicorn
@@ -555,5 +561,5 @@ if __name__ == "__main__":
         port=8000,
         reload=True,
         log_level="info",
-        access_log=True
+        access_log=True,
     )
