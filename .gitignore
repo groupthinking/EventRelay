@@ -11,13 +11,26 @@
 # --- Jupyter ---
 # --- Logs & Temp ---
 # --- Project Specific ---
+# --- Generated Reports & Data Dumps ---
+CREDENTIALS_REPORT.json
+IMPLEMENTATION_COMPLETE.md
+autonomous_processing_report_*.json
+comments_*.json
+transcript_action_result.json
+dashboard_test.html
+# --- Loose root scripts (must live under src/, scripts/, or tools/) ---
+/analyze_comments.py
+/fetch_comments.py
+/verify_enhancements.py
 # --- Secrets (CRITICAL) ---
 **/production-secrets.json
 **/secrets.json
 *.bak
 *.cert
 *.code-workspace
+*.coverage
 *.crt
+*.egg-info/
 *.db
 *.gguf
 *.ipynb
