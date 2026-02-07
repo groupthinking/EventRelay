@@ -110,6 +110,8 @@ youtube = [
     "cachetools>=5.0.0",
     "google-cloud-storage>=2.13.0",
     "google-cloud-pubsub>=2.19.0",
+    "google-cloud-vision>=3.7.0",
+    "google-cloud-videointelligence>=2.13.0",
 ]
 # Optional Postgres driver
 postgres = [
