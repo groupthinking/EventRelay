@@ -1,6 +1,6 @@
 'use client';
 
-import { forwardRef, HTMLAttributes } from 'react';
+import { forwardRef, ButtonHTMLAttributes, HTMLAttributes } from 'react';
 import { clsx } from 'clsx';
 
 // Topic data with icons (using text-based icons for consistency)
@@ -52,7 +52,9 @@ const SUGGESTED_TOPICS = [
   },
 ];
 
-export interface TopicChipProps extends HTMLAttributes<HTMLButtonElement> {
+type TopicChipBaseProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'onSelect'>;
+
+export interface TopicChipProps extends TopicChipBaseProps {
   topic: typeof SUGGESTED_TOPICS[0];
   onSelect?: (query: string) => void;
 }
@@ -84,8 +86,7 @@ const TopicChip = forwardRef<HTMLButtonElement, TopicChipProps>(
         {...props}
       >
         <span className={clsx(
-          'text-lg font-medium',
-          topic.iconClassName
+          'text-lg font-medium'
         )}>
           {topic.icon}
         </span>
