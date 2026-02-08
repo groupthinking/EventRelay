@@ -67,6 +67,18 @@ autonomous_processing_report_*.json
 performance_monitoring.db
 *.db-journal
 *.db-wal
+
+# Webpack cache artifacts
+*.pack.old
+*.pack.gz.old
+
+# AI Studio exports
+ai-studio-*.xml
+*-remix.xml
+
+# Empty/orphaned tool directories
+.kombai/
+workflow_results/
 .LSOverride
 .aiexclude
 .backup_*/
