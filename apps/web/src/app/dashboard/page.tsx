@@ -111,8 +111,8 @@ function VideoCard({
         {video.status === 'processing' && (
           <div className="absolute inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center">
             <div className="text-center">
-              <div className="relative w-16 h-16 mx-auto mb-3">
-                <svg className="w-16 h-16 animate-spin" viewBox="0 0 24 24">
+              <div className="relative w-16 h-16 mx-auto mb-3 overflow-hidden">
+                <svg className="w-16 h-16 animate-spin" width="64" height="64" viewBox="0 0 24 24">
                   <circle
                     className="opacity-20"
                     cx="12" cy="12" r="10"
@@ -466,64 +466,9 @@ function DashboardContent() {
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const [loading, setLoading] = useState(true);
   const [videoUrl, setVideoUrl] = useState('');
-  const [videos, setVideos] = useState<Video[]>([
-    {
-      id: '1',
-      title: 'React Hooks Deep Dive Tutorial',
-      url: 'https://youtube.com/watch?v=abc123',
-      status: 'complete',
-      progress: 100,
-      duration: '45:32',
-      processedAt: '2 hours ago',
-      insights: {
-        summary:
-          'Comprehensive guide to React hooks including useState, useEffect, useCallback, and custom hooks.',
-        actions: [
-          'Implement useState for form handling',
-          'Add useEffect for API calls',
-          'Create custom useAuth hook',
-        ],
-        sentiment: 'Educational',
-        topics: ['React', 'Hooks', 'JavaScript', 'Frontend'],
-      },
-    },
-    {
-      id: '2',
-      title: 'Q4 Strategy Meeting Recording',
-      url: 'https://drive.google.com/file/xyz',
-      status: 'processing',
-      progress: 65,
-      duration: '1:23:45',
-    },
-    {
-      id: '3',
-      title: 'Product Demo for Enterprise Client',
-      url: 'https://youtube.com/watch?v=def456',
-      status: 'complete',
-      progress: 100,
-      duration: '12:08',
-      processedAt: '1 day ago',
-      insights: {
-        summary:
-          'Product demonstration showcasing key features for enterprise deployment.',
-        actions: [
-          'Follow up with client on pricing',
-          'Schedule technical deep-dive',
-          'Send case studies',
-        ],
-        sentiment: 'Positive',
-        topics: ['Sales', 'Demo', 'Enterprise', 'Features'],
-      },
-    },
-  ]);
+  const [videos, setVideos] = useState<Video[]>([]);
 
-  const [activities] = useState([
-    { time: 'Just now', event: 'Video analysis complete: React Hooks Tutorial', type: 'success' as const },
-    { time: '2 min ago', event: 'Processing started: Q4 Strategy Meeting', type: 'info' as const },
-    { time: '5 min ago', event: 'New video added to queue', type: 'info' as const },
-    { time: '15 min ago', event: 'Generated 3 action items from Demo video', type: 'success' as const },
-    { time: '1 hour ago', event: 'API rate limit reached - auto-retry scheduled', type: 'error' as const },
-  ]);
+  const [activities, setActivities] = useState<{ time: string; event: string; type: 'success' | 'info' | 'error' }[]>([]);
 
   const [selectedVideo, setSelectedVideo] = useState<Video | null>(null);
 
@@ -552,6 +497,12 @@ function DashboardContent() {
     return () => clearInterval(interval);
   }, []);
 
+  const addActivity = useCallback((event: string, type: 'success' | 'info' | 'error') => {
+    const now = new Date();
+    const time = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    setActivities(prev => [{ time, event, type }, ...prev].slice(0, 20));
+  }, []);
+
   const handleAddVideo = useCallback(
     async (url?: string) => {
       const targetUrl = url || videoUrl;
@@ -566,6 +517,7 @@ function DashboardContent() {
       };
       setVideos((prev) => [newVideo, ...prev]);
       setVideoUrl('');
+      addActivity(`Processing started: ${targetUrl.length > 40 ? targetUrl.substring(0, 37) + '...' : targetUrl}`, 'info');
 
       const progressInterval = setInterval(() => {
         setVideos((prev) =>
@@ -591,6 +543,7 @@ function DashboardContent() {
         }
 
         const result = await response.json();
+        const videoTitle = result.result?.insights?.summary?.substring(0, 50) || 'Video';
 
         setVideos((prev) =>
           prev.map((v) =>
@@ -599,22 +552,29 @@ function DashboardContent() {
                   ...v,
                   status: result.status === 'complete' ? 'complete' : 'failed',
                   progress: 100,
-                  title: result.result?.insights?.summary?.substring(0, 50) + '...' || 'Analyzed Video',
+                  title: videoTitle + (videoTitle.length >= 50 ? '...' : ''),
                   processedAt: 'Just now',
                   duration: `${result.result?.transcript_segments || 0} segments`,
                   insights: {
                     summary: result.result?.insights?.summary || 'Analysis complete',
                     actions: result.result?.insights?.actions || [],
                     sentiment: result.result?.insights?.sentiment || 'Neutral',
-                    topics: result.result?.insights?.topics || ['Analyzed'],
+                    topics: result.result?.insights?.topics || [],
                   },
                 }
               : v
           )
         );
+
+        const actionCount = result.result?.insights?.actions?.length || 0;
+        addActivity(`Analysis complete: ${videoTitle.substring(0, 30)}${videoTitle.length > 30 ? '...' : ''}`, 'success');
+        if (actionCount > 0) {
+          addActivity(`Generated ${actionCount} action item${actionCount > 1 ? 's' : ''}`, 'success');
+        }
       } catch (error) {
         clearInterval(progressInterval);
         console.error('Video analysis failed:', error);
+        addActivity(`Analysis failed: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
 
         setVideos((prev) =>
           prev.map((v) =>
@@ -623,7 +583,7 @@ function DashboardContent() {
         );
       }
     },
-    [videoUrl]
+    [videoUrl, addActivity]
   );
 
   return (
@@ -699,22 +659,16 @@ function DashboardContent() {
             value={metrics?.metrics.activeWorkflows ?? 0}
             label="Active Workflows"
             icon="⚡"
-            trend="+12%"
-            trendUp={true}
           />
           <MetricCard
             value={metrics?.metrics.totalProcessed ?? 0}
             label="Videos Processed"
             icon="🎬"
-            trend="+28%"
-            trendUp={true}
           />
           <MetricCard
-            value="2.3s"
-            label="Avg Processing Time"
-            icon="⏱️"
-            trend="-15%"
-            trendUp={true}
+            value={videos.length}
+            label="Videos in Library"
+            icon="📚"
           />
           <MetricCard
             value={`${metrics?.metrics.errorRate ?? 0}%`}
@@ -746,15 +700,26 @@ function DashboardContent() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              {videos.map((video) => (
-                <VideoCard
-                  key={video.id}
-                  video={video}
-                  onClick={() => setSelectedVideo(video)}
-                />
-              ))}
-            </div>
+            {videos.length === 0 ? (
+              <div className="col-span-full flex flex-col items-center justify-center py-20 rounded-2xl border border-dashed border-white/[0.1] bg-white/[0.02]">
+                <div className="text-6xl mb-4 opacity-50">🎬</div>
+                <h3 className="text-lg font-semibold text-white/70 mb-2">No videos yet</h3>
+                <p className="text-white/40 text-sm text-center max-w-sm">
+                  Paste a YouTube URL above and click Analyze to get started.
+                  Your processed videos will appear here.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                {videos.map((video) => (
+                  <VideoCard
+                    key={video.id}
+                    video={video}
+                    onClick={() => setSelectedVideo(video)}
+                  />
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Sidebar */}

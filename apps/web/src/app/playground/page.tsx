@@ -126,44 +126,44 @@ export default function APIPlaygroundPage() {
   const endpoints = [
     {
       method: 'POST',
-      endpoint: '/execute_video',
-      description: '🚀 E2E AUTONOMOUS EXECUTION - Builds the app from video (NEW!)',
-      realBody: '{"video_url": "https://www.youtube.com/watch?v=e2DA_btFSlM", "goal": "Build the app shown in this video", "auto_deploy": false}',
+      endpoint: '/api/v1/transcript-action',
+      description: 'Analyze a YouTube video — extract transcript, generate insights and actions',
+      realBody: '{"url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"}',
     },
     {
       method: 'POST',
-      endpoint: '/analyze_video_v2',
-      description: 'Analyze video with transcript extraction',
-      realBody: '{"video_url": "https://www.youtube.com/watch?v=e2DA_btFSlM", "task": "Summarize this video and extract key insights"}',
+      endpoint: '/api/v1/chat',
+      description: 'Chat with the AI about a previously analyzed video',
+      realBody: '{"message": "What are the key takeaways?", "video_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"}',
     },
     {
       method: 'POST',
-      endpoint: '/analyze_video',
-      description: 'Analyze a video URL (metadata only)',
-      realBody: '{"video_url": "https://youtube.com/watch?v=example", "task": "Summarize this video"}',
+      endpoint: '/api/v1/process-video',
+      description: 'Basic video processing — metadata and transcript extraction',
+      realBody: '{"url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ", "task": "Summarize this video"}',
     },
     {
       method: 'POST',
-      endpoint: '/dogfood',
-      description: 'Self-improvement: Extract suggestions from a tutorial video',
-      realBody: '{"video_url": "https://youtube.com/watch?v=example", "target_component": "frontend"}',
-    },
-    {
-      method: 'POST',
-      endpoint: '/evolve',
-      description: 'Execute a task with the Prescient Twin AI',
-      realBody: '{"task": "Analyze this code and suggest improvements"}',
+      endpoint: '/api/v1/process-video-markdown',
+      description: 'Process video and return a markdown-formatted learning guide',
+      realBody: '{"url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ", "task": "Create a study guide"}',
     },
     {
       method: 'GET',
-      endpoint: '/stats',
-      description: 'Get current system statistics and active agents',
+      endpoint: '/api/v1/health',
+      description: 'Health check — verify backend is running and responsive',
       realBody: null,
     },
     {
       method: 'GET',
-      endpoint: '/lessons',
-      description: 'Get recent lessons learned by the AI',
+      endpoint: '/api/v1/capabilities',
+      description: 'List available AI model capabilities',
+      realBody: null,
+    },
+    {
+      method: 'GET',
+      endpoint: '/api/v1/metrics',
+      description: 'System metrics in Prometheus format',
       realBody: null,
     },
   ];
@@ -234,7 +234,7 @@ export default function APIPlaygroundPage() {
         </div>
         <div className="flex items-center gap-4">
           <Link
-            href="https://api.uvai.io/docs"
+            href={`${BASE_URL}/docs`}
             target="_blank"
             className="px-4 py-2 rounded-lg bg-white/5 border border-white/10 text-sm hover:bg-white/10 transition"
           >

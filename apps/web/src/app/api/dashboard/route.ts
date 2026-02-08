@@ -1,33 +1,32 @@
 import { NextResponse } from 'next/server';
 
-const PRESCIENT_TWIN_URL = process.env.PRESCIENT_TWIN_URL || 'http://localhost:8000';
+const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000';
 
 export async function GET() {
   try {
-    // Get stats from Prescient Twin
-    const response = await fetch(`${PRESCIENT_TWIN_URL}/stats`);
+    // Use the real backend health endpoint
+    const response = await fetch(`${BACKEND_URL}/api/v1/health`, {
+      signal: AbortSignal.timeout(5000),
+    });
 
     if (!response.ok) {
-      throw new Error('Failed to fetch stats from Prescient Twin');
+      throw new Error(`Backend health check failed: ${response.status}`);
     }
 
-    const stats = await response.json();
+    const healthData = await response.json();
 
-    // Transform to dashboard format
     return NextResponse.json({
       status: 'operational',
       timestamp: new Date().toISOString(),
       metrics: {
-        activeWorkflows: stats.router?.agents_active?.length || 0,
-        totalProcessed: Object.values(stats.router?.routing_counts || {}).reduce((a: number, b: any) => a + (b as number), 0),
-        errorRate: 0.5,
-        availableBrains: stats.router?.available_brains || [],
-        lessonsLearned: stats.lessons || 0,
-      }
+        activeWorkflows: healthData.active_connections || 0,
+        totalProcessed: healthData.total_requests || 0,
+        errorRate: 0,
+      },
     });
   } catch (error) {
     console.error('Dashboard stats error:', error);
-    // Return fallback data if Prescient Twin is unavailable
+    // Return honest fallback — backend is not reachable
     return NextResponse.json({
       status: 'degraded',
       timestamp: new Date().toISOString(),
@@ -35,9 +34,7 @@ export async function GET() {
         activeWorkflows: 0,
         totalProcessed: 0,
         errorRate: 0,
-        availableBrains: [],
-        lessonsLearned: 0,
-      }
+      },
     });
   }
 }
