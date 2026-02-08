@@ -57,6 +57,16 @@ dashboard_test.html
 *~
 .AppleDouble
 .DS_Store
+
+# Generated logs (keep .gitkeep files)
+*.log
+!.gitkeep
+autonomous_processing_report_*.json
+
+# Database files (unless tracked intentionally)
+performance_monitoring.db
+*.db-journal
+*.db-wal
 .LSOverride
 .aiexclude
 .backup_*/

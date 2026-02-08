@@ -8,9 +8,9 @@
     "dev": "turbo run dev",
     "lint": "turbo run lint",
     "test": "turbo run test",
-    "build:frontend": "cd frontend && npm run build",
-    "start:frontend": "cd frontend && npm start",
-    "install:all": "npm install && cd frontend && npm install"
+    "build:web": "cd apps/web && npm run build",
+    "dev:web": "cd apps/web && npm run dev",
+    "install:all": "npm install"
   },
   "workspaces": [
     "apps/*",
