@@ -32,9 +32,9 @@
     "esbuild": "^0.27.2"
   },
   "dependencies": {
-    "@langchain/core": "^0.3.77",
+    "@langchain/core": "^1.1.19",
     "@langchain/langgraph": "^0.4.9",
-    "@langchain/openai": "^0.6.13",
+    "@langchain/openai": "^1.2.5",
     "chrome-devtools-mcp": "^0.10.2"
   }
 }
