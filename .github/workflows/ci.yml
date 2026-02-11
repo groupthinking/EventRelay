@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main]
   pull_request:
-    branches: [main, develop]
+    branches: [main]
 
 permissions:
   contents: read
@@ -20,15 +20,14 @@ jobs:
           node-version: "20"
           cache: "npm"
       - run: npm install --legacy-peer-deps
-      - name: Build packages
-        run: npx turbo run build || true
+      - name: Build web app
+        run: npm run build:web
       - uses: actions/upload-artifact@v4
         with:
           name: build-artifacts
           path: |
-            packages/*/dist
-            apps/*/dist
-            apps/*/.next
+            apps/web/.next
+          retention-days: 7
 
   lint:
     runs-on: ubuntu-latest
@@ -38,4 +37,5 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install ruff
-      - run: ruff check src --ignore E402,F811,F401,F821,B904,B020,E701,E722 || true
+      - name: Lint Python
+        run: ruff check src --ignore E402,F811,F401,F821,B904,B020,E701,E722

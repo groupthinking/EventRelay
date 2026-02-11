@@ -1,38 +1,32 @@
 # 🎯 EventRelay — Agentic Video Execution Platform
 
-AI-powered transcript capture, event extraction, and agent execution for YouTube content. EventRelay ships a FastAPI backend, a React dashboard, Gemini/Veo hybrid orchestration, and an agent workflow that mirrors what happens in the video—transcribing every scene into natural language, grounding it in RAG, and dispatching MCP/A2A agents to take real follow-up actions.
+[![CI](https://github.com/groupthinking/EventRelay/actions/workflows/ci.yml/badge.svg)](https://github.com/groupthinking/EventRelay/actions/workflows/ci.yml)
+[![Security](https://github.com/groupthinking/EventRelay/actions/workflows/security.yml/badge.svg)](https://github.com/groupthinking/EventRelay/actions/workflows/security.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
+AI-powered transcript capture, event extraction, and agent execution for YouTube content. EventRelay ships a FastAPI backend, a Next.js dashboard, Gemini/Veo hybrid orchestration, and an agent workflow that mirrors what happens in the video—transcribing every scene into natural language, grounding it in RAG, and dispatching MCP/A2A agents to take real follow-up actions.
 
 ## 📘 Overview
 
 - **What it solves:** Automates end-to-end execution from YouTube videos—capturing word-for-word transcripts, extracting concrete events, and wiring them into agent runtimes that can build code, create tickets, or trigger workflows.
 - **Why it matters:** Eliminates manual note-taking, keeps teams aligned on factual video-derived events, and exposes a programmable API for dispatching agents that act on what was actually said and shown.
-- **Status:** Production-ready backend + frontend with ongoing instrumentation and MCP ecosystem integration.
 - **Learning loop:** Every transcript is grounded into the RAG store and fed back into agents’ skill adapters so subsequent runs refine their prompts, tooling choices, and dispatch heuristics.
-- **Implementation Guide:** See [`docs/MASTER_IMPLEMENTATION_GUIDE.md`](docs/MASTER_IMPLEMENTATION_GUIDE.md) for the complete "Framework First" prompt-driven implementation plan.
-
-## 🔍 Mandatory Context Verification
-
-Before contributing or running automation, review **all lines** in the following governance artifacts:
-
-- `~/.claude/CLAUDE.md`
-- `~/CLAUDE.md`
-- `/Users/garvey/CLAUDE_CODE_GOVERNANCE.md`
+- **Implementation Guide:** See [`docs/MASTER_IMPLEMENTATION_GUIDE.md`](docs/MASTER_IMPLEMENTATION_GUIDE.md) for the complete prompt-driven implementation plan.
 
 ## 🧑‍💻 Contributor Guide
 
-Implementation details, coding standards, and testing workflows for EventRelay live in [AGENTS.md](AGENTS.md). Review that file before modifying backend, frontend, or MCP modules so new changes stay aligned with the shared agent guidelines.
+Implementation details, coding standards, and testing workflows live in [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md). Review those files before modifying backend, frontend, or MCP modules.
 
 ## 🖼️ Visual Context
 
 - Architecture diagram: [`docs/visuals/architecture.md`](docs/visuals/architecture.md)
-- Add product screenshots (`png/jpg/gif`) under `docs/visuals/` and link them from this section when ready.
 
 ## ⚙️ Prerequisites
 
-- Python >= 3.9 (see `pyproject.toml`)
-- Node.js >= 18 and npm >= 8 (`package.json` engines)
-- Google Cloud project configured for Speech-to-Text v2 (optional but required for long videos)
-- Valid API credentials (YouTube Data API, Gemini, OpenAI, optional Anthropic/Grok)
+- Python >= 3.11 (see `pyproject.toml`)
+- Node.js >= 20 and npm >= 8 (`package.json` engines)
+- Valid API credentials (at least one of: Gemini, OpenAI)
+- Optional: YouTube Data API key, Google Cloud Speech-to-Text v2 for long videos
 
 ## 🚀 Installation & Setup
 
@@ -208,39 +202,6 @@ Agent definitions are stored in `.github/agents/*.agent.md`. Each agent has:
 
 For details, see [.github/agents/README.md](.github/agents/README.md).
 
-## 💰 Revenue Pipeline Testing
-
-The Revenue Pipeline transforms YouTube videos into deployed web applications:
-
-**YouTube URL → Video Processing → AI Code Generation → Vercel Deployment**
-
-### Quick Test
-
-```bash
-# Check prerequisites
-python3 scripts/check_revenue_pipeline_prerequisites.py
-
-# Test pipeline (generation only, 30-60 seconds)
-python3 scripts/test_revenue_pipeline.py
-```
-
-### Requirements
-
-- **API Keys**: At least one of `GEMINI_API_KEY`, `GOOGLE_API_KEY`, or `OPENAI_API_KEY`
-- **Python**: 3.9+
-- **Disk Space**: 5GB+ free
-- **Optional**: Vercel CLI for deployment testing
-
-### Documentation
-
-- **[REVENUE_PIPELINE.md](REVENUE_PIPELINE.md)** - Architecture and design
-- **[REVENUE_PIPELINE_TESTING.md](REVENUE_PIPELINE_TESTING.md)** - Complete testing guide
-- **Scripts**:
-  - `scripts/check_revenue_pipeline_prerequisites.py` - Prerequisite validator
-  - `scripts/test_revenue_pipeline.py` - End-to-end pipeline test
-
-See [REVENUE_PIPELINE_TESTING.md](REVENUE_PIPELINE_TESTING.md) for detailed setup, troubleshooting, and examples.
-
 ## 🗂️ Project Structure
 
 ```
@@ -289,7 +250,7 @@ youtube_extension/
 - `POST /api/v1/cloud-ai/analyze/multi-provider` – parallel provider invocation
 - `GET /api/v1/cloud-ai/analysis-types` – supported analysis enumerations
 
-### Advanced Video Analysis APIs (NEW)
+### Advanced Video Analysis APIs
 - `POST /api/v1/video/temporal/segment` – analyze specific time segments with timestamps
 - `POST /api/v1/video/temporal/events` – extract timestamped events with CloudEvents publishing
 - `POST /api/v1/video/temporal/question` – temporal question answering with time context
@@ -368,14 +329,14 @@ See [Advanced Video Features Guide](docs/ADVANCED_VIDEO_FEATURES.md) for detaile
 
 - Never commit secrets—`.env.example` is provided as a template only.
 - Rotate API credentials stored in your shell profile or secret manager regularly.
-- Align with the guidance in `SECURITY.md` and `/Users/garvey/CLAUDE_CODE_GOVERNANCE.md` before enabling production agents.
+- Align with the guidance in `SECURITY.md` before enabling production agents.
 - Rate limiting and circuit breakers are enforced in `mcp_servers/youtube_api_proxy.py`; keep defaults unless you understand provider quotas.
 
 ## 📦 Dependencies
 
 - Python packages are declared in `pyproject.toml`; install optional extras with `pip install -e .[dev,youtube,ml]` as needed.
-- Frontend dependencies live in `frontend/package.json`; Node 18+ is required by the `engines` constraint.
-- Docker images reference `Dockerfile.production` and `Dockerfile.youtube-packager` for backend and packaging workloads respectively.
+- Frontend dependencies live in `apps/web/package.json`; Node 20+ is required.
+- The project uses npm workspaces with Turborepo for monorepo orchestration.
 
 ## 📈 Monitoring & Observability
 
@@ -393,11 +354,6 @@ Released under the MIT License. See `LICENSE` for full terms.
 - Operational status reports live in `docs/status/` and historical plans in `PLAN.md`.
 - Release history is tracked in [`docs/changelog/CHANGELOG.md`](docs/changelog/CHANGELOG.md); update the "Unreleased" section as features land and cut tagged releases for production drops.
 
-## 📊 Status Badges
-
-_Add CI/Test/Coverage badges here once your pipelines are active._
-
 ---
 
 Built for agentic video understanding, transcript automation, and actionable execution planning.
-Supports deployment to Google Cloud Run. See [CLOUD_RUN_DEPLOYMENT.md](CLOUD_RUN_DEPLOYMENT.md) for details.

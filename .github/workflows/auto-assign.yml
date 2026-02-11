@@ -8,13 +8,11 @@ on:
 jobs:
   auto-assign:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Randomly assign issue to Gemini or Copilot
+      - name: Assign issue to repository owner
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          ASSIGNEES=(Gemini Copilot)
-          RANDOM_ASSIGNEE=${ASSIGNEES[$RANDOM % ${#ASSIGNEES[@]}]}
-          echo "Assigning issue to $RANDOM_ASSIGNEE"
-          gh issue edit ${{ github.event.issue.number }} --add-assignee "$RANDOM_ASSIGNEE"
+          gh issue edit ${{ github.event.issue.number }} \
+            --repo ${{ github.repository }} \
+            --add-assignee "${{ github.repository_owner }}"
