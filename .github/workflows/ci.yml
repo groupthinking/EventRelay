@@ -39,3 +39,15 @@ jobs:
       - run: pip install ruff
       - name: Lint Python
         run: ruff check src --ignore E402,F811,F401,F821,B904,B020,E701,E722
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: pip install -e .[dev] 2>/dev/null || pip install pydantic pytest
+      - name: Run tests
+        run: PYTHONPATH=src python -m pytest tests/unit/ -v --override-ini="addopts="

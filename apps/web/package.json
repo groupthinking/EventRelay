@@ -9,12 +9,9 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "^2.0.53",
-    "@ai-sdk/openai": "^2.0.76",
     "@stripe/stripe-js": "^2.0.0",
     "@supabase/supabase-js": "^2.39.0",
     "@upstash/redis": "^1.28.0",
-    "ai": "^5.0.106",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.0",
     "lucide-react": "^0.300.0",

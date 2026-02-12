@@ -1,359 +1,183 @@
-# 🎯 EventRelay — Agentic Video Execution Platform
+# 🎯 EventRelay — AI Video Processing & Event Extraction Platform
 
 [![CI](https://github.com/groupthinking/EventRelay/actions/workflows/ci.yml/badge.svg)](https://github.com/groupthinking/EventRelay/actions/workflows/ci.yml)
-[![Security](https://github.com/groupthinking/EventRelay/actions/workflows/security.yml/badge.svg)](https://github.com/groupthinking/EventRelay/actions/workflows/security.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+![Node >= 20](https://img.shields.io/badge/Node-%3E%3D20-green)
+![Python >= 3.11](https://img.shields.io/badge/Python-%3E%3D3.11-blue)
 
-AI-powered transcript capture, event extraction, and agent execution for YouTube content. EventRelay ships a FastAPI backend, a Next.js dashboard, Gemini/Veo hybrid orchestration, and an agent workflow that mirrors what happens in the video—transcribing every scene into natural language, grounding it in RAG, and dispatching MCP/A2A agents to take real follow-up actions.
+AI-powered video transcript capture, structured event extraction, and agent execution for YouTube content. Paste a URL → get a word-for-word transcript, typed events, actionable tasks, and AI-driven insights.
 
-## 📘 Overview
-
-- **What it solves:** Automates end-to-end execution from YouTube videos—capturing word-for-word transcripts, extracting concrete events, and wiring them into agent runtimes that can build code, create tickets, or trigger workflows.
-- **Why it matters:** Eliminates manual note-taking, keeps teams aligned on factual video-derived events, and exposes a programmable API for dispatching agents that act on what was actually said and shown.
-- **Learning loop:** Every transcript is grounded into the RAG store and fed back into agents’ skill adapters so subsequent runs refine their prompts, tooling choices, and dispatch heuristics.
-- **Implementation Guide:** See [`docs/MASTER_IMPLEMENTATION_GUIDE.md`](docs/MASTER_IMPLEMENTATION_GUIDE.md) for the complete prompt-driven implementation plan.
-
-## 🧑‍💻 Contributor Guide
-
-Implementation details, coding standards, and testing workflows live in [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md). Review those files before modifying backend, frontend, or MCP modules.
-
-## 🖼️ Visual Context
-
-- Architecture diagram: [`docs/visuals/architecture.md`](docs/visuals/architecture.md)
-
-## ⚙️ Prerequisites
-
-- Python >= 3.11 (see `pyproject.toml`)
-- Node.js >= 20 and npm >= 8 (`package.json` engines)
-- Valid API credentials (at least one of: Gemini, OpenAI)
-- Optional: YouTube Data API key, Google Cloud Speech-to-Text v2 for long videos
-
-## 🚀 Installation & Setup
-
-1. **Clone & create virtual env**
-
-   ```bash
-   python -m venv .venv
-   source .venv/bin/activate
-   pip install -e .[dev,youtube,ml]
-   ```
-
-2. **Install frontend dependencies**
-
-   ```bash
-   npm install --prefix apps/web
-   ```
-
-3. **Setup API keys** (choose one method):
-
-   **Option A: Interactive Setup (Recommended)**
-
-   ```bash
-   python3 scripts/setup_env.py
-   ```
-
-   This guided CLI will:
-
-   - Create `.env` from template
-   - Prompt for each API key with help URLs
-   - Validate your configuration
-   - Show where to get each key
-
-   **Option B: Manual Setup**
-
-   ```bash
-   cp .env.example .env
-   # Edit .env and add your API keys (lines 5-25 have instructions)
-   ```
-
-   **Required Keys** (need at least ONE):
-
-   - `GEMINI_API_KEY` - Get from [Google AI Studio](https://aistudio.google.com/app/apikey) (recommended)
-   - `OPENAI_API_KEY` - Get from [OpenAI Platform](https://platform.openai.com/api-keys)
-
-   **Optional Keys** (recommended):
-
-   - `YOUTUBE_API_KEY` - Get from [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
-   - `ANTHROPIC_API_KEY` - Get from [Anthropic Console](https://console.anthropic.com/settings/keys)
-
-   **Validate Configuration**:
-
-   ```bash
-   python3 scripts/validate_env.py
-   ```
-
-   See [Environment Monitoring Guide](docs/ENV_MONITORING.md) for details on monitoring, validation, and MCP integration.
-
-4. **Boot the backend**
-
-   ```bash
-   uvicorn uvai.api.main:app --reload --port 8000
-   ```
-
-5. **Boot the frontend**
-
-   ```bash
-   npm start --prefix apps/web
-   ```
-
-## 🔧 Configuration
-
-- **Environment files:** `.env`, `.env.local`, `.env.production` (create as needed); keep secrets out of source control.
-- **Real Mode:** Set `REAL_MODE_ONLY=true` in production to disable all simulated behaviors (fake delays, mock responses) and enforce strict security checks.
-- **Setup tools:**
-  - `python3 scripts/setup_env.py` - Interactive environment setup
-  - `python3 scripts/validate_env.py` - Validate API key configuration
-  - `python3 scripts/monitor_env.py` - Monitor .env changes in real-time (development)
-- **MCP tooling:**
-  - Core MCP servers configured in `.github/mcp-servers.json` for video processing
-  - **Optional**: [GitHub MCP Server](https://github.com/github/github-mcp-server) for AI-assisted development (see `.github/mcp-config.md`)
-  - Align `~/.cursor/mcp.json` with configuration before enabling MCP-based agents
-- **Optional providers:** `ANTHROPIC_API_KEY`, `GROK_API_KEY`, `LIVEKIT_*`, `REDIS_URL`, and `OTEL_EXPORTER_OTLP_ENDPOINT` unlock additional integrations.
-- **Speech-to-Text batch:** Ensure your Google project has access to the configured GCS bucket for >30 minute videos.
-- **Full documentation:** See [Environment Monitoring Guide](docs/ENV_MONITORING.md) for complete API key setup, validation, and monitoring details.
-
-## 🛠️ Usage
-
-- **CLI helpers** (`youtube-extension`):
-  - `youtube-extension serve --host 0.0.0.0 --port 8000` – start FastAPI dev server
-  - `youtube-extension test -v --coverage` – run pytest with optional coverage (expects `tests/` directory)
-  - `youtube-extension lint` / `format` – run Ruff + mypy, or Black + isort
-- **REST APIs:** Once the backend is running, visit `http://localhost:8000/docs` for FastAPI Swagger UI.
-
-  - Transcript workflow example:
-
-    ```bash
-    curl -X POST http://127.0.0.1:8000/api/v1/transcript-action \
-         -H "Content-Type: application/json" \
-         -d '{"video_url":"https://www.youtube.com/watch?v=m0XAPRAOJ8A","language":"en"}'
-    ```
-
-  - Video-to-Software category discovery:
-
-    ```bash
-    curl -s -X POST http://127.0.0.1:8000/api/video-to-software/by-category \
-         -H "Content-Type: application/json" \
-         -d '{"category":"react frontend","project_type":"web_app","deployment_target":"vercel","published_within_days":14}'
-    ```
-
-  - Cloud AI analysis endpoints live under `/api/v1/cloud-ai/*` (see [API Reference](#-api-reference)).
-
-- **Frontend dashboard:** `npm start --prefix apps/web` launches the React UI with hot reload and proxying to the backend.
-- **Sample payloads:** `transcript_action_sample.json` illustrates the end-to-end response (event log, execution graph, task dispatch) for the transcript workflow.
-
-## 🤖 GitHub Copilot Custom Agents
-
-EventRelay includes specialized GitHub Copilot agents for different development tasks. These agents provide expert guidance and code generation for specific domains:
-
-### Available Agents
-
-Invoke agents using the `@agent-name` pattern in GitHub Copilot Chat:
-
-- **@python-backend** - FastAPI development, async services, database operations
-
-  ```
-  @python-backend How do I create a new API endpoint?
-  @python-backend Add authentication to this route
-  ```
-
-- **@frontend** - React components, hooks, TypeScript, API integration
-
-  ```
-  @frontend Create a hook to fetch video data
-  @frontend Build a video player component
-  ```
-
-- **@testing** - Unit tests, integration tests, mocking, coverage
-
-  ```
-  @testing Write tests for the video processor
-  @testing Add test fixtures for API endpoints
-  ```
-
-- **@mcp** - Model Context Protocol, agent orchestration, JSON-RPC
-
-  ```
-  @mcp Show me how to implement an MCP tool
-  @mcp Create an agent workflow for video processing
-  ```
-
-- **@documentation** - Technical writing, API docs, tutorials
-
-  ```
-  @documentation Document this API endpoint
-  @documentation Create a setup guide for new contributors
-  ```
-
-- **@video-processing** - Video analysis, transcription, event extraction
-
-  ```
-  @video-processing How do I extract events from a transcript?
-  @video-processing Optimize video processing performance
-  ```
-
-### Agent Configuration
-
-Agent definitions are stored in `.github/agents/*.agent.md`. Each agent has:
-
-- Specialized expertise and best practices
-- Project-specific context and patterns
-- Boundaries defining what they can/cannot modify
-- Tool access and capabilities
-
-For details, see [.github/agents/README.md](.github/agents/README.md).
-
-## 🗂️ Project Structure
+## Architecture
 
 ```
-youtube_extension/
-├── src/youtube_extension/
-│   ├── backend/                 # FastAPI routers, deployment helpers
-│   ├── services/                # Agents, workflows, deployment manager
-│   ├── integrations/            # Cloud AI, external providers
-│   ├── mcp/                     # MCP ecosystem coordinator and servers
-│   └── main.py                  # FastAPI entry point
-├── apps/web/                    # Next.js frontend + MCP-aware hooks
+┌──────────────────────────────────────────────────────────┐
+│  Next.js Frontend  (apps/web)         localhost:3000     │
+│  ┌─────────────┐  ┌──────────────┐  ┌────────────────┐  │
+│  │  Dashboard   │  │ /api/video   │  │ /api/extract-  │  │
+│  │  (React +    │──│ (proxy to    │──│  events        │  │
+│  │   Zustand)   │  │  backend)    │  │ (OpenAI        │  │
+│  └─────────────┘  └──────┬───────┘  │  Responses API) │  │
+│                          │          └────────────────┘  │
+│  ┌────────────────┐      │                              │
+│  │ /api/transcribe │      │   OpenAI STT fallback       │
+│  └────────────────┘      │                              │
+└──────────────────────────┼──────────────────────────────┘
+                           │
+┌──────────────────────────┼──────────────────────────────┐
+│  FastAPI Backend  (src/)           localhost:8000        │
+│                          │                              │
+│  ┌───────────────────────▼─────────────────────────┐    │
+│  │  /api/v1/transcript-action                      │    │
+│  │  YouTube transcript → 3 Gemini agents:          │    │
+│  │    • transcript_action (summary + tasks)        │    │
+│  │    • personality_agent (intent analysis)        │    │
+│  │    • strategy_agent   (strategic insights)      │    │
+│  └─────────────────────────────────────────────────┘    │
+│                                                         │
+│  /api/v1/health  /api/v1/capabilities  /api/v1/videos   │
+│  /api/v1/events  /api/v1/agents        /api/v1/chat     │
+└─────────────────────────────────────────────────────────┘
+```
+
+**Hybrid AI:** Gemini handles deep analysis (personality, strategy), OpenAI Responses API handles structured event/action extraction with JSON Schema strict mode, and OpenAI STT provides transcription fallback when YouTube captions are unavailable.
+
+## Quick Start
+
+### Prerequisites
+
+- Python >= 3.11
+- Node.js >= 20
+- API keys: `GEMINI_API_KEY` and `OPENAI_API_KEY`
+
+### Setup
+
+```bash
+# Clone
+git clone https://github.com/groupthinking/EventRelay.git
+cd EventRelay
+
+# Backend
+python3 -m venv .venv && source .venv/bin/activate
+pip install -e .[dev]
+
+# Frontend
+npm install
+
+# API keys (add to shell profile or .env)
+export GEMINI_API_KEY="your-key"
+export OPENAI_API_KEY="your-key"
+```
+
+### Run
+
+```bash
+# Terminal 1: Backend
+PYTHONPATH=src python3 -m uvicorn youtube_extension.main:app --port 8000
+
+# Terminal 2: Frontend
+cd apps/web && BACKEND_URL=http://localhost:8000 npx next dev --port 3000
+```
+
+Open http://localhost:3000/dashboard — paste a YouTube URL and watch it process.
+
+## How It Works
+
+1. **Paste URL** → Dashboard sends to `/api/video`
+2. **Transcribe** → Backend fetches YouTube transcript (falls back to OpenAI STT if unavailable)
+3. **Analyze** → 3 Gemini agents run: summary, personality mapping, strategy
+4. **Extract** → OpenAI Responses API returns structured events, actions, topics via strict JSON Schema
+5. **Display** → Dashboard shows everything in tabs: insights, transcript, events, agents
+
+## API Endpoints
+
+### Frontend Routes (Next.js)
+
+| Method | Route | Description |
+|--------|-------|-------------|
+| POST | `/api/video` | Process YouTube URL → transcript + AI analysis |
+| POST | `/api/extract-events` | Structured event/action extraction (OpenAI) |
+| POST | `/api/transcribe` | Transcription with YouTube/OpenAI STT fallback |
+| POST | `/api/chat` | Chat with AI about video content |
+| GET | `/api/dashboard` | Backend health check proxy |
+
+### Backend Routes (FastAPI)
+
+| Method | Route | Description |
+|--------|-------|-------------|
+| POST | `/api/v1/transcript-action` | Core pipeline: transcript → agents → results |
+| GET | `/api/v1/health` | Service health check |
+| GET | `/api/v1/capabilities` | Available features and providers |
+| POST | `/api/v1/videos/process` | Async video processing job |
+| GET | `/api/v1/videos/{job_id}/status` | Job status polling |
+| POST | `/api/v1/events/extract` | Backend event extraction |
+| POST | `/api/v1/agents/dispatch` | Dispatch agent execution |
+| POST | `/api/v1/chat` | Conversational AI about videos |
+
+Full API docs at http://localhost:8000/docs (Swagger UI).
+
+## Project Structure
+
+```
+EventRelay/
+├── apps/web/                        # Next.js frontend
 │   └── src/
-│       ├── components/          # UI components + tests
-│       ├── hooks/               # Data fetching & integration hooks
-│       └── services/            # API clients / stores
-│   └── (Note: `frontend/` references in legacy code point here)
-├── docs/                        # Living documentation & status reports
-├── deployment/                  # Production assembly tooling
-├── scripts/                     # Credential checks, monitoring, utilities
-├── Dockerfile* / docker-compose.*.yml
-├── pyproject.toml / package.json
-└── LICENSE
+│       ├── app/
+│       │   ├── dashboard/page.tsx   # Main dashboard UI
+│       │   └── api/                 # API routes (video, extract-events, transcribe, chat)
+│       ├── components/              # TranscriptViewer, EventList, AgentDashboard, ResultsViewer
+│       ├── store/                   # Zustand state management
+│       └── lib/                     # API client, services, types
+├── src/youtube_extension/           # FastAPI backend
+│   ├── main.py                      # App entry point
+│   └── backend/
+│       ├── api/v1/                  # Router + Pydantic models
+│       └── services/ai/             # Gemini service, health monitoring
+├── tests/unit/                      # Python unit tests
+├── docs/                            # Documentation
+├── .github/                         # CI workflows, Copilot agent configs
+├── Dockerfile                       # Production container
+└── package.json                     # Monorepo root (npm workspaces)
 ```
 
-## 🧠 Adaptive Learning & Memory
+## Testing
 
-- **Transcript memory:** Each transcription is persisted to `database/` tables and `youtube_processed_videos/`, then vectorized through the RAG workers in `src/rag/` for factual recall.
-- **Agent skill adapters:** The MCP orchestration in `mcp_youtube-0.2.0/` and `scripts/youtube_innovation_mcp_server.py` captures execution traces so subsequent runs reuse the highest scoring tools and prompts.
-- **Feedback signals:** Task outcomes and competitive insights are logged via `scripts/youtube_innovation_learning_database.py`, producing pattern tables (`learning_outcomes`, `pattern_database`) that agents query before acting.
-- **Custom model loops:** Fine-tuning recipes in `fastvlm_gemini_hybrid/` and `fine_tuned_execution/` let you continually improve planners and dispatch heuristics once enough labeled events accumulate.
+```bash
+# Python unit tests (15 tests)
+PYTHONPATH=src python3 -m pytest tests/unit/test_api_v1_models.py -v --override-ini="addopts="
 
-## 🧾 API Reference
+# Frontend build check
+npm run build:web
 
-### Core APIs
-- `GET /` – server metadata and feature list
-- `GET /health` – service heartbeat
-- `POST /api/v1/generate` – **Primary**: Transform YouTube video into deployed infrastructure (Revenue Pipeline)
-- `POST /api/video-to-software/by-category` – auto-discover a fresh video within a category and run the same pipeline
-- `POST /api/v1/transcript-action` – transcript → event extraction → agent dispatch
-- `POST /api/v1/process-video` – placeholder for legacy workflow
+# Lint
+cd apps/web && npx next lint
+```
 
-### Cloud AI APIs
-- `GET /api/v1/cloud-ai/providers/status` – provider availability snapshot
-- `POST /api/v1/cloud-ai/analyze/video` – single video multi-provider analysis
-- `POST /api/v1/cloud-ai/analyze/batch` – batch analysis with provider fallback
-- `POST /api/v1/cloud-ai/analyze/multi-provider` – parallel provider invocation
-- `GET /api/v1/cloud-ai/analysis-types` – supported analysis enumerations
+## Environment Variables
 
-### Advanced Video Analysis APIs
-- `POST /api/v1/video/temporal/segment` – analyze specific time segments with timestamps
-- `POST /api/v1/video/temporal/events` – extract timestamped events with CloudEvents publishing
-- `POST /api/v1/video/temporal/question` – temporal question answering with time context
-- `POST /api/v1/video/temporal/timeline` – create detailed video timeline
-- `POST /api/v1/video/temporal/compare-segments` – compare multiple video segments
-- `POST /api/v1/video/temporal/tutorial-steps` – extract tutorial steps with timestamps
-- `POST /api/v1/video/analyze/structured` – analyze with enforced JSON schema
-- `POST /api/v1/video/publish-event` – publish CloudEvents to EventMesh/OpenWhisk
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `GEMINI_API_KEY` | Yes | Google AI Studio key for Gemini agents |
+| `OPENAI_API_KEY` | Yes | OpenAI key for event extraction + STT |
+| `BACKEND_URL` | No | Backend URL (default: `http://localhost:8000`) |
+| `YOUTUBE_API_KEY` | No | YouTube Data API for enhanced metadata |
 
-Full REST schema is discoverable via FastAPI docs (`/docs`, `/redoc`).
-See [Advanced Video Features Guide](docs/ADVANCED_VIDEO_FEATURES.md) for detailed usage.
+## Deployment
 
-## 🧪 Testing
+```bash
+# Docker
+docker build -t eventrelay .
+docker run -p 8000:8000 -e GEMINI_API_KEY=... -e OPENAI_API_KEY=... eventrelay
 
-- **Backend:**
+# Vercel (frontend)
+vercel deploy --prod
+```
 
-  ```bash
-  pytest tests/unit/test_gemini_service_model_selection.py \
-         tests/unit/test_hybrid_processor_cloud.py \
-         tests/unit/test_transcript_action_workflow.py -q
-  ```
+## Contributing
 
-  _Heads-up: the repository currently references `tests/` in several scripts, but the folder may be missing in some branches—recreate or restore before running the suite._
+- Follow [Conventional Commits](https://www.conventionalcommits.org/): `feat:`, `fix:`, `chore:`, etc.
+- Run tests before opening PRs
+- See [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md) for detailed guidelines
 
-- **Frontend:**
+## License
 
-  ```bash
-  npm test -- --watch=false --prefix apps/web
-  ```
-
-  Unit specs live under `apps/web/src/components/__tests__/` and smoke tests under `apps/web/src/__tests__/`.
-
-- **Lint & type-check:**
-
-  ```bash
-  youtube-extension lint
-  youtube-extension format
-  ```
-
-## 🚢 Deployment
-
-- **Local production:**
-
-  ```bash
-  docker compose -f docker-compose.full.yml up --build
-  ```
-
-  Or run tailored stacks (e.g., `docker-compose.youtube-packager.yml`) for scoped deployments.
-
-- **Containers:** Dockerfiles exist for backend, orchestrator, MCP server, and frontend (`Dockerfile.production`, `Dockerfile.youtube-packager`, etc.).
-- **Environments:** Keep secrets in your orchestrator (Fly.io, Vercel, etc.) and mirror the environment variables from the setup section.
-
-## 🧰 Troubleshooting
-
-- **`ModuleNotFoundError` on startup:** Verify the virtual environment is active before running CLI commands.
-- **`GOOGLE_SPEECH_*` errors:** Re-export credentials or copy `.env.example` to `.env` and populate required keys.
-- **Port 8000/3000 already in use:** Stop existing services (`lsof -i :8000`) or override the port flags.
-- **Frontend `npm start` fails:** Remove `node_modules`, clear npm cache, and reinstall with `npm install --prefix apps/web`.
-- **Missing tests directory:** Some branches omit `tests/`; recreate from templates in `docs/status/` before running pytest.
-
-## 🤝 Contributing
-
-- Follow the Python style guide (4-space indent, type hints, Black/Isort/Ruff) and React conventions (PascalCase components, camelCase hooks).
-- Run `youtube-extension lint` and `youtube-extension test` before opening a PR.
-- Document new agents in `development/agents/` and wire feature flags through `src/youtube_extension/services/agents/`.
-- Review `AGENTS.md` and `development/agents/architecture/*` when extending the agent stack.
-- Use imperative commit messages and include motivation, implementation notes, and test evidence in PR descriptions.
-
-## 📢 Support & Contact
-
-- File issues or requests through the repository issue tracker.
-- For security concerns, reference `SECURITY.md` (currently a template—update with final contact details when available).
-- Internal teams can document playbooks and escalation paths under `docs/status/`.
-
-## 🔐 Security
-
-- Never commit secrets—`.env.example` is provided as a template only.
-- Rotate API credentials stored in your shell profile or secret manager regularly.
-- Align with the guidance in `SECURITY.md` before enabling production agents.
-- Rate limiting and circuit breakers are enforced in `mcp_servers/youtube_api_proxy.py`; keep defaults unless you understand provider quotas.
-
-## 📦 Dependencies
-
-- Python packages are declared in `pyproject.toml`; install optional extras with `pip install -e .[dev,youtube,ml]` as needed.
-- Frontend dependencies live in `apps/web/package.json`; Node 20+ is required.
-- The project uses npm workspaces with Turborepo for monorepo orchestration.
-
-## 📈 Monitoring & Observability
-
-- Health checks: `GET /health` and per-container Docker health probes (see `docker-compose.full.yml`).
-- Metrics service tracks transcript fallback success, provider latency, and quota usage—wire into dashboards via `metrics_service`.
-- `scripts/check_credentials.py` audits required keys across `.env` files.
-- Processed artifacts persist in `.runtime/`, `youtube_processed_videos/`, and configured cloud buckets.
-
-## 📄 License
-
-Released under the MIT License. See `LICENSE` for full terms.
-
-## 🔄 Changelog & Roadmap
-
-- Operational status reports live in `docs/status/` and historical plans in `PLAN.md`.
-- Release history is tracked in [`docs/changelog/CHANGELOG.md`](docs/changelog/CHANGELOG.md); update the "Unreleased" section as features land and cut tagged releases for production drops.
-
----
-
-Built for agentic video understanding, transcript automation, and actionable execution planning.
+MIT — see [LICENSE](LICENSE)
