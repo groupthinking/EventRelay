@@ -137,16 +137,18 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       const rawTitle = result.result?.insights?.summary;
       const videoTitle = (typeof rawTitle === 'string' ? rawTitle : 'Video').substring(0, 50);
 
+      const transcript =
+        result.result?.raw_response?.transcript?.text ||
+        result.result?.raw_response?.transcript ||
+        undefined;
+
       updateVideo(id, {
         status: result.status === 'complete' ? 'complete' : 'failed',
         progress: 100,
         title: videoTitle + (videoTitle.length >= 50 ? '…' : ''),
         processedAt: 'Just now',
         duration: `${result.result?.transcript_segments || 0} segments`,
-        transcript:
-          result.result?.raw_response?.transcript?.text ||
-          result.result?.raw_response?.transcript ||
-          undefined,
+        transcript,
         insights: {
           summary: typeof result.result?.insights?.summary === 'string'
             ? result.result.insights.summary
@@ -157,8 +159,50 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         },
       });
 
-      const actionCount = result.result?.insights?.actions?.length || 0;
       addActivity(`Analysis complete: ${videoTitle.substring(0, 30)}`, 'success');
+
+      // Auto-extract events + actions via AI SDK if we have a transcript
+      if (transcript && typeof transcript === 'string') {
+        addActivity('Extracting events & actions with AI…', 'info');
+        try {
+          const extractRes = await fetch('/api/extract-events', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              transcript,
+              videoTitle,
+              videoUrl: url,
+            }),
+          });
+          const extraction = await extractRes.json();
+          if (extraction.success && extraction.data) {
+            const { events: extractedEvents, actions, summary, topics } = extraction.data;
+            updateVideo(id, {
+              events: extractedEvents?.map((e: { type: string; title: string; description?: string; timestamp?: string; priority?: string }) => ({
+                id: `evt_${Math.random().toString(36).slice(2, 10)}`,
+                type: e.type,
+                title: e.title,
+                description: e.description,
+                timestamp: e.timestamp,
+                confidence: e.priority === 'high' ? 0.95 : e.priority === 'medium' ? 0.75 : 0.5,
+              })),
+              insights: {
+                summary: summary || videoTitle,
+                actions: actions?.map((a: { title: string }) => a.title) || [],
+                sentiment: get().videos.find(v => v.id === id)?.insights?.sentiment || 'Neutral',
+                topics: topics || [],
+              },
+            });
+            addActivity(`Extracted ${extractedEvents?.length || 0} events, ${actions?.length || 0} actions`, 'success');
+          } else if (extraction.error) {
+            addActivity(`Event extraction: ${extraction.error}`, 'info');
+          }
+        } catch (extractError) {
+          addActivity('Event extraction unavailable — set OPENAI_API_KEY', 'info');
+        }
+      }
+
+      const actionCount = get().videos.find(v => v.id === id)?.insights?.actions?.length || 0;
       if (actionCount > 0) {
         addActivity(`Generated ${actionCount} action item${actionCount > 1 ? 's' : ''}`, 'success');
       }
