@@ -187,7 +187,7 @@ class ChatRequest(BaseModel):
 
     class Config:
         populate_by_name = True
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "query": "How can I process a YouTube video?",
                 "video_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
@@ -206,7 +206,7 @@ class ChatResponse(BaseModel):
     timestamp: datetime = Field(..., description="Response timestamp")
 
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "response": "I can help you process YouTube videos for analysis...",
                 "status": "success",
@@ -233,7 +233,7 @@ class VideoProcessingRequest(BaseModel):
         return value
 
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "video_url": "https://www.youtube.com/watch?v=jNQXAC9IVRw",
                 "options": {"quality": "high", "include_transcript": True},
@@ -252,7 +252,7 @@ class VideoProcessingResponse(BaseModel):
     timestamp: datetime = Field(..., description="Processing timestamp")
 
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "result": {
                     "video_id": "jNQXAC9IVRw",
@@ -285,7 +285,7 @@ class MarkdownRequest(BaseModel):
         return value
 
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "video_url": "https://www.youtube.com/watch?v=jNQXAC9IVRw",
                 "force_regenerate": False,
@@ -306,7 +306,7 @@ class MarkdownResponse(BaseModel):
     status: str = Field(..., description="Processing status")
 
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "video_id": "jNQXAC9IVRw",
                 "video_url": "https://www.youtube.com/watch?v=jNQXAC9IVRw",
@@ -373,7 +373,7 @@ class VideoToSoftwareRequest(BaseModel):
         return value
 
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "video_url": "https://www.youtube.com/watch?v=bMknfKXIFA8",
                 "project_type": "web",
@@ -402,7 +402,7 @@ class VideoToSoftwareResponse(BaseModel):
     timestamp: datetime = Field(..., description="Completion timestamp")
 
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "video_url": "https://www.youtube.com/watch?v=bMknfKXIFA8",
                 "project_name": "sample-video-app",
@@ -433,7 +433,7 @@ class HealthResponse(BaseModel):
     )
 
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "status": "healthy",
                 "timestamp": "2024-01-01T12:00:00Z",
@@ -457,7 +457,7 @@ class CacheStats(BaseModel):
     )
 
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "total_cached_videos": 42,
                 "categories": {
@@ -635,7 +635,7 @@ class FeedbackRequest(BaseModel):
         return value
 
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "video_id": "jNQXAC9IVRw",
                 "feedback_type": "quality",
@@ -656,7 +656,7 @@ class FeedbackResponse(BaseModel):
     timestamp: datetime = Field(..., description="Submission timestamp")
 
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "status": "ok",
                 "message": "Thank you for your feedback!",
@@ -676,7 +676,7 @@ class ErrorResponse(BaseModel):
     path: Optional[str] = Field(None, description="Request path")
 
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "error": "Validation error",
                 "detail": "Invalid YouTube URL format",
