@@ -41,15 +41,6 @@ try:
 except ImportError as e:
     logger.warning(f"Cloud AI routes not available: {e}")
 
-# Include Generator routes (Revenue Pipeline)
-try:
-    from .backend.api.generator_routes import router as generator_router
-
-    app.include_router(generator_router)
-    logger.info("Generator routes loaded successfully")
-except ImportError as e:
-    logger.error(f"Failed to load generator routes: {e}")
-
 # Include Event Routes
 try:
     from .backend.api.event_routes import router as event_router

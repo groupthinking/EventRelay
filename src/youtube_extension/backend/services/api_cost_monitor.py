@@ -25,7 +25,7 @@ _DEFAULT_DB_PATH_ENV = os.getenv("API_COST_MONITOR_DB_PATH")
 DEFAULT_DB_PATH = (
     _DEFAULT_DB_PATH_ENV
     if _DEFAULT_DB_PATH_ENV
-    else str((Path(".runtime") / "api_cost_monitoring.db").resolve())
+    else str((Path(os.getenv("RUNTIME_DIR", "/tmp")) / "api_cost_monitoring.db").resolve())
 )
 
 # Import cleanup service for database maintenance
