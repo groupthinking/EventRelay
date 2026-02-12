@@ -18,6 +18,7 @@ Key Features:
 import asyncio
 import json
 import logging
+import os
 import sqlite3
 import statistics
 import threading
@@ -80,8 +81,8 @@ class PerformanceMonitor:
     - API costs and rate limiting
     """
 
-    def __init__(self, db_path: str = "performance_monitoring.db"):
-        self.db_path = db_path
+    def __init__(self, db_path: str = ""):
+        self.db_path = db_path or os.path.join(os.getenv("RUNTIME_DIR", "/tmp"), "performance_monitoring.db")
         self.monitoring_enabled = True
         self.alert_thresholds = {
             'video_processing_time': {'warning': 30000, 'critical': 60000},  # 30s, 60s
