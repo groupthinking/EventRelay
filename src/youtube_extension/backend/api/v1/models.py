@@ -137,6 +137,7 @@ class AgentDispatchRequest(BaseModel):
 
     job_id: Optional[str] = None
     events: list[dict[str, Any]] = Field(default_factory=list)
+    transcript: Optional[str] = Field(None, description="Transcript text — events will be auto-extracted if events list is empty")
     agent_types: Optional[list[str]] = Field(
         None, description="Specific agent types to dispatch"
     )

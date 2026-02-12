@@ -9,6 +9,8 @@ Provides versioned API endpoints with proper OpenAPI documentation.
 
 from datetime import datetime
 from typing import Any, Optional
+import asyncio
+import uuid as _uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
@@ -919,8 +921,6 @@ async def ingest_performance_report_v1(report: dict[str, Any]):
 # In-memory stores for async job tracking
 # (Replace with Redis/DB in production)
 # ============================================================
-import asyncio
-import uuid as _uuid
 
 _video_jobs: dict[str, VideoJobStatusResponse] = {}
 _agent_executions: dict[str, AgentExecution] = {}
@@ -949,9 +949,7 @@ async def start_video_processing(request: VideoProcessJobRequest):
     )
     _video_jobs[job_id] = job
 
-    asyncio.get_event_loop().create_task(
-        _run_video_job(job_id, request)
-    )
+    asyncio.create_task(_run_video_job(job_id, request))
 
     return ApiResponse.success(
         VideoProcessJobResponse(
@@ -971,7 +969,7 @@ async def _run_video_job(job_id: str, request: VideoProcessJobRequest):
         job.status = JobStatus.transcribing
         job.progress = 30.0
 
-        result = await workflow.execute(
+        result = await workflow.run(
             video_url=request.video_url,
             language=request.language or "en",
         )
@@ -1057,16 +1055,26 @@ async def extract_events(request: EventExtractRequest):
                     )
                 )
     except Exception as exc:
-        logger.warning(f"AI event extraction failed, using simple extraction: {exc}")
-        paragraphs = [p.strip() for p in transcript_text.split("\n\n") if len(p.strip()) > 20]
-        for para in paragraphs[:20]:
+        logger.warning(f"AI event extraction failed, using heuristic extraction: {exc}")
+        import re
+
+        sentences = re.split(r"(?<=[.!?])\s+", transcript_text.replace("\n", " "))
+        action_words = {"build", "create", "implement", "add", "deploy", "configure", "install", "setup", "run", "write", "make", "use"}
+        for sent in sentences:
+            sent = sent.strip()
+            if len(sent) < 10:
+                continue
+            words = {w.lower() for w in sent.split()[:5]}
+            etype = "action" if words & action_words else "topic"
             events.append(
                 ExtractedEvent(
-                    type="topic",
-                    title=para[:120],
-                    description=para if len(para) > 120 else None,
+                    type=etype,
+                    title=sent[:120],
+                    description=sent if len(sent) > 120 else None,
                 )
             )
+            if len(events) >= 30:
+                break
 
     resp = EventExtractResponse(
         job_id=request.job_id,
@@ -1089,6 +1097,23 @@ async def extract_events(request: EventExtractRequest):
 )
 async def dispatch_agents(request: AgentDispatchRequest):
     """Dispatch specialist agents to act on extracted events."""
+    events = request.events
+
+    # Auto-extract events from transcript if none provided
+    if not events and request.transcript:
+        import re as _re
+
+        sentences = _re.split(r"(?<=[.!?])\s+", request.transcript.replace("\n", " "))
+        for sent in sentences:
+            sent = sent.strip()
+            if len(sent) >= 10:
+                events.append({"id": f"evt_{_uuid.uuid4().hex[:8]}", "type": "topic", "title": sent[:120]})
+                if len(events) >= 20:
+                    break
+
+    if not events:
+        raise HTTPException(status_code=400, detail="Provide events list or transcript text")
+
     dispatch = AgentDispatchResponse()
     agent_types = request.agent_types or ["analyzer", "content_creator"]
 
@@ -1105,9 +1130,7 @@ async def dispatch_agents(request: AgentDispatchRequest):
     _dispatches[dispatch.dispatch_id] = dispatch
 
     for execution in dispatch.executions:
-        asyncio.get_event_loop().create_task(
-            _run_agent(execution, request.events)
-        )
+        asyncio.create_task(_run_agent(execution, request.events))
 
     return ApiResponse.success(dispatch.model_dump())
 

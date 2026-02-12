@@ -77,7 +77,8 @@ export interface EventExtractResponse {
 
 export interface AgentDispatchRequest {
   job_id?: string;
-  events: Record<string, unknown>[];
+  events?: Record<string, unknown>[];
+  transcript?: string;
   agent_types?: string[];
 }
 

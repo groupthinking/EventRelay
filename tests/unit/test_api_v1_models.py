@@ -114,6 +114,18 @@ class TestAgentDispatchResponse:
         assert resp.executions == []
 
 
+class TestAgentDispatchRequest:
+    def test_with_events(self):
+        req = AgentDispatchRequest(events=[{"id": "e1"}], agent_types=["research"])
+        assert len(req.events) == 1
+        assert req.transcript is None
+
+    def test_with_transcript(self):
+        req = AgentDispatchRequest(transcript="Hello world")
+        assert req.transcript == "Hello world"
+        assert req.events == []
+
+
 class TestJobStatusEnum:
     def test_values(self):
         assert JobStatus.pending == "pending"

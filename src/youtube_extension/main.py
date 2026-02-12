@@ -7,7 +7,7 @@ Provides the core API endpoints and integrates all services including cloud AI
 import logging
 
 import uvicorn
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 # Configure logging
@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="EventRelay API",
     description="EventRelay - AI Infrastructure Automation Platform Generator",
-    version="1.0.0",
+    version="1.1.0",
     docs_url="/docs",
     redoc_url="/redoc",
 )
@@ -65,8 +65,8 @@ try:
 
     app.include_router(api_v1_router)
     logger.info("API v1 router loaded successfully")
-except ImportError as e:
-    logger.error(f"Failed to load API v1 router: {e}")
+except Exception as e:
+    logger.error(f"Failed to load API v1 router: {type(e).__name__}: {e}")
 
 
 # Health check endpoint
@@ -91,22 +91,6 @@ async def root():
             "Batch processing support",
         ],
     }
-
-
-# Video processing endpoint (placeholder)
-@app.post("/api/v1/process-video")
-async def process_video(video_url: str):
-    """Process a YouTube video (placeholder implementation)"""
-    try:
-        # TODO: Implement actual video processing logic
-        return {
-            "status": "success",
-            "video_url": video_url,
-            "message": "Video processing initiated",
-        }
-    except Exception as e:
-        logger.error(f"Error processing video: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == "__main__":
