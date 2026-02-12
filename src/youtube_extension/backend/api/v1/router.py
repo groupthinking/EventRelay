@@ -728,7 +728,7 @@ async def clear_all_cache_v1(cache_service: CacheService = Depends(get_cache_ser
 # Data Endpoints
 @router.get(
     "/videos",
-    response_model=list[dict[str, Any]],
+    response_model=dict[str, Any],
     summary="List Processed Videos",
     description="Get summary list of all processed videos",
 )

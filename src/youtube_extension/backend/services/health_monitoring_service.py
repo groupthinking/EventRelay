@@ -671,8 +671,11 @@ class HealthMonitoringService:
         # Initialize health checkers
         self._initialize_checkers()
 
-        # Start monitoring
-        asyncio.create_task(self.start_monitoring())
+        # Start monitoring (deferred — requires running event loop)
+        try:
+            asyncio.create_task(self.start_monitoring())
+        except RuntimeError:
+            pass  # No event loop yet; monitoring will be started on first request
 
     # -----------------------------
     # Public utility methods used by API v1

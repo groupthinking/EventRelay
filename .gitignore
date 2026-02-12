@@ -152,3 +152,4 @@ video_representations_extractor-*/
 yarn.lock
 youtube_processed_videos/
 UVAI_Digital_Refinery_Blueprint.pdf
+*.db
