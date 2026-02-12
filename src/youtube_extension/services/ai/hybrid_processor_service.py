@@ -243,13 +243,7 @@ class HybridProcessorService:
             )
 
             if self.config.enable_mock or not self.gemini.is_available():
-                self.logger.warning(
-                    "Using mock response — enable_mock=%s, gemini_available=%s, api_key=%s, initialized=%s",
-                    self.config.enable_mock,
-                    self.gemini.is_available(),
-                    bool(self.gemini.config.api_key),
-                    self.gemini.is_initialized(),
-                )
+                self.logger.info("Using mock response for Gemini processing")
                 mock_text = self._generate_mock_response(prompt, task_type)
                 cloud_result = GeminiResult(
                     success=True,
