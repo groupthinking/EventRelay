@@ -55,19 +55,18 @@ RUN mkdir -p /app/data/enhanced_analysis /app/data/cache /app/logs && \
 # Switch to non-root user
 USER uvai
 
-# Environment variables for Cloud Run
+# Environment variables
 ENV PORT=8080
 ENV HOST=0.0.0.0
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONPATH=/app/src
 
-# Expose the Cloud Run default port
-EXPOSE 8080
+EXPOSE ${PORT}
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8080/api/v1/health')" || exit 1
+# Health check (uses PORT env var)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD python -c "import os,urllib.request; urllib.request.urlopen(f'http://localhost:{os.environ.get(\"PORT\",8080)}/api/v1/health')" || exit 1
 
-# Run the application
-CMD ["python", "-m", "uvicorn", "youtube_extension.main:app", "--host", "0.0.0.0", "--port", "8080"]
+# Run — use shell form so $PORT is expanded at runtime
+CMD python -m uvicorn youtube_extension.main:app --host 0.0.0.0 --port $PORT
