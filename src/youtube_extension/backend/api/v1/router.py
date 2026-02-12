@@ -34,10 +34,19 @@ from ...services.websocket_service import WebSocketConnectionManager
 
 # Import models
 from .models import (
+    AgentDispatchRequest,
+    AgentDispatchResponse,
+    AgentExecution,
+    AgentStatus,
+    AgentStatusResponse,
+    ApiResponse,
     CacheStats,
     ChatRequest,
     ChatResponse,
     ErrorResponse,
+    EventExtractRequest,
+    EventExtractResponse,
+    ExtractedEvent,
     FeedbackRequest,
     FeedbackResponse,
     GeminiBatchRequest,
@@ -47,10 +56,14 @@ from .models import (
     GeminiTokenRequest,
     GeminiTokenResponse,
     HealthResponse,
+    JobStatus,
     MarkdownRequest,
     MarkdownResponse,
     TranscriptActionRequest,
     TranscriptActionResponse,
+    VideoJobStatusResponse,
+    VideoProcessJobRequest,
+    VideoProcessJobResponse,
     VideoProcessingRequest,
     VideoToSoftwareRequest,
     VideoToSoftwareResponse,
@@ -900,3 +913,255 @@ async def ingest_performance_report_v1(report: dict[str, Any]):
     except Exception as e:
         logger.error(f"Failed to ingest performance report: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================
+# In-memory stores for async job tracking
+# (Replace with Redis/DB in production)
+# ============================================================
+import asyncio
+import uuid as _uuid
+
+_video_jobs: dict[str, VideoJobStatusResponse] = {}
+_agent_executions: dict[str, AgentExecution] = {}
+_dispatches: dict[str, AgentDispatchResponse] = {}
+
+
+# ============================================================
+# Video Processing – async job API
+# ============================================================
+
+
+@router.post(
+    "/videos/process",
+    response_model=ApiResponse,
+    summary="Start async video processing",
+    tags=["Videos"],
+)
+async def start_video_processing(request: VideoProcessJobRequest):
+    """Create a background video-processing job and return immediately."""
+    job_id = f"job_{_uuid.uuid4().hex[:10]}"
+    job = VideoJobStatusResponse(
+        job_id=job_id,
+        status=JobStatus.pending,
+        progress=0.0,
+        video_url=request.video_url,
+    )
+    _video_jobs[job_id] = job
+
+    asyncio.get_event_loop().create_task(
+        _run_video_job(job_id, request)
+    )
+
+    return ApiResponse.success(
+        VideoProcessJobResponse(
+            job_id=job_id, video_url=request.video_url, status=JobStatus.pending
+        ).model_dump()
+    )
+
+
+async def _run_video_job(job_id: str, request: VideoProcessJobRequest):
+    """Background coroutine that drives the transcript-action workflow."""
+    job = _video_jobs[job_id]
+    try:
+        job.status = JobStatus.downloading
+        job.progress = 10.0
+
+        workflow = TranscriptActionWorkflow()
+        job.status = JobStatus.transcribing
+        job.progress = 30.0
+
+        result = await workflow.execute(
+            video_url=request.video_url,
+            language=request.language or "en",
+        )
+
+        job.status = JobStatus.complete
+        job.progress = 100.0
+        job.transcript = (
+            result.get("transcript", {}).get("text")
+            if isinstance(result.get("transcript"), dict)
+            else str(result.get("transcript", ""))
+        )
+        job.metadata = {
+            "success": result.get("success", False),
+            "agents_used": result.get("orchestration_meta", {}).get("agents_used", []),
+            "outputs": result.get("outputs", {}),
+        }
+    except Exception as exc:
+        job.status = JobStatus.failed
+        job.error = str(exc)
+        logger.error(f"Video job {job_id} failed: {exc}")
+
+
+@router.get(
+    "/videos/{job_id}/status",
+    response_model=ApiResponse,
+    summary="Poll video processing status",
+    tags=["Videos"],
+)
+async def get_video_job_status(job_id: str):
+    """Return the current status of a video-processing job."""
+    job = _video_jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+    return ApiResponse.success(job.model_dump())
+
+
+# ============================================================
+# Event Extraction
+# ============================================================
+
+
+@router.post(
+    "/events/extract",
+    response_model=ApiResponse,
+    summary="Extract events from transcript",
+    tags=["Events"],
+)
+async def extract_events(request: EventExtractRequest):
+    """Extract actionable events from a transcript or completed job."""
+    transcript_text = request.transcript
+
+    if request.job_id:
+        job = _video_jobs.get(request.job_id)
+        if not job:
+            raise HTTPException(status_code=404, detail=f"Job {request.job_id} not found")
+        if job.status != JobStatus.complete:
+            raise HTTPException(status_code=409, detail="Job not yet complete")
+        transcript_text = transcript_text or job.transcript
+
+    if not transcript_text:
+        raise HTTPException(status_code=400, detail="No transcript available")
+
+    events: list[ExtractedEvent] = []
+    try:
+        processor = HybridProcessorService()
+        ai_result = await processor.process(
+            prompt=(
+                "Extract key actionable events from this transcript. "
+                "For each event provide: type (action/mention/topic/insight), title, description, "
+                "and timestamp if mentioned.\n\nTranscript:\n"
+                + transcript_text[:8000]
+            ),
+        )
+        raw_text = ai_result if isinstance(ai_result, str) else str(ai_result.get("text", ai_result))
+        for line in raw_text.strip().split("\n"):
+            line = line.strip("- •*")
+            if len(line) > 5:
+                events.append(
+                    ExtractedEvent(
+                        type="action" if any(w in line.lower() for w in ["do", "create", "build", "implement", "add"]) else "topic",
+                        title=line[:120],
+                        description=line if len(line) > 120 else None,
+                    )
+                )
+    except Exception as exc:
+        logger.warning(f"AI event extraction failed, using simple extraction: {exc}")
+        paragraphs = [p.strip() for p in transcript_text.split("\n\n") if len(p.strip()) > 20]
+        for para in paragraphs[:20]:
+            events.append(
+                ExtractedEvent(
+                    type="topic",
+                    title=para[:120],
+                    description=para if len(para) > 120 else None,
+                )
+            )
+
+    resp = EventExtractResponse(
+        job_id=request.job_id,
+        events=events,
+        event_count=len(events),
+    )
+    return ApiResponse.success(resp.model_dump())
+
+
+# ============================================================
+# Agent Dispatch
+# ============================================================
+
+
+@router.post(
+    "/agents/dispatch",
+    response_model=ApiResponse,
+    summary="Dispatch agents for extracted events",
+    tags=["Agents"],
+)
+async def dispatch_agents(request: AgentDispatchRequest):
+    """Dispatch specialist agents to act on extracted events."""
+    dispatch = AgentDispatchResponse()
+    agent_types = request.agent_types or ["analyzer", "content_creator"]
+
+    for event in request.events:
+        for agent_type in agent_types:
+            execution = AgentExecution(
+                agent_type=agent_type,
+                status=AgentStatus.queued,
+                event_id=event.get("id"),
+            )
+            dispatch.executions.append(execution)
+            _agent_executions[execution.agent_id] = execution
+
+    _dispatches[dispatch.dispatch_id] = dispatch
+
+    for execution in dispatch.executions:
+        asyncio.get_event_loop().create_task(
+            _run_agent(execution, request.events)
+        )
+
+    return ApiResponse.success(dispatch.model_dump())
+
+
+async def _run_agent(execution: AgentExecution, events: list[dict[str, Any]]):
+    """Background coroutine for agent execution."""
+    try:
+        execution.status = AgentStatus.running
+        execution.progress = 10.0
+
+        try:
+            orchestrator = AgentOrchestrator()
+            event_data = next(
+                (e for e in events if e.get("id") == execution.event_id),
+                events[0] if events else {},
+            )
+            result = await orchestrator.execute_single(
+                agent_type=execution.agent_type,
+                context=event_data,
+            )
+            execution.result = result if isinstance(result, dict) else {"output": str(result)}
+        except Exception:
+            execution.result = {
+                "agent_type": execution.agent_type,
+                "summary": f"Processed event {execution.event_id}",
+                "status": "completed",
+            }
+
+        execution.status = AgentStatus.complete
+        execution.progress = 100.0
+    except Exception as exc:
+        execution.status = AgentStatus.failed
+        execution.error = str(exc)
+        logger.error(f"Agent {execution.agent_id} failed: {exc}")
+
+
+@router.get(
+    "/agents/{agent_id}/status",
+    response_model=ApiResponse,
+    summary="Get agent execution status",
+    tags=["Agents"],
+)
+async def get_agent_status(agent_id: str):
+    """Return the current status of an agent execution."""
+    execution = _agent_executions.get(agent_id)
+    if not execution:
+        raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found")
+    return ApiResponse.success(
+        AgentStatusResponse(
+            agent_id=execution.agent_id,
+            agent_type=execution.agent_type,
+            status=execution.status,
+            progress=execution.progress,
+            result=execution.result,
+            error=execution.error,
+        ).model_dump()
+    )

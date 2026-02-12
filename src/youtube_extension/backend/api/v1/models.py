@@ -8,10 +8,168 @@ Provides data validation and serialization for all API endpoints.
 """
 
 import re
+import uuid
 from datetime import datetime
-from typing import Any, Optional, Union
+from enum import Enum
+from typing import Any, Generic, Optional, TypeVar, Union
 
 from pydantic import BaseModel, Field, validator
+
+T = TypeVar("T")
+
+
+# ============ Standardized API Response Wrapper ============
+
+
+class ApiResponse(BaseModel, Generic[T]):
+    """Standardized API response wrapper used by all endpoints."""
+
+    status: str = Field(..., description="'success' or 'error'")
+    data: Optional[T] = Field(None, description="Response payload")
+    error: Optional[str] = Field(None, description="Error message (when status='error')")
+    detail: Optional[str] = Field(None, description="Additional error detail")
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    request_id: str = Field(default_factory=lambda: f"req_{uuid.uuid4().hex[:12]}")
+
+    @classmethod
+    def success(cls, data: Any) -> "ApiResponse":
+        return cls(status="success", data=data)
+
+    @classmethod
+    def fail(cls, error: str, detail: Optional[str] = None) -> "ApiResponse":
+        return cls(status="error", error=error, detail=detail)
+
+
+# ============ Job / Workflow Enums ============
+
+
+class JobStatus(str, Enum):
+    pending = "pending"
+    downloading = "downloading"
+    transcribing = "transcribing"
+    extracting = "extracting"
+    complete = "complete"
+    failed = "failed"
+
+
+class AgentStatus(str, Enum):
+    queued = "queued"
+    running = "running"
+    complete = "complete"
+    failed = "failed"
+
+
+# ============ Video Processing (job-based) ============
+
+
+class VideoProcessJobRequest(BaseModel):
+    """Request to start async video processing."""
+
+    video_url: str = Field(..., description="YouTube video URL")
+    language: Optional[str] = Field("en", description="Transcript language")
+    options: Optional[dict[str, Any]] = Field(default_factory=dict)
+
+    @validator("video_url")
+    def validate_video_url(cls, value: str) -> str:
+        youtube_regex = re.compile(
+            r"^(https?://)?(www\.)?(youtube\.com/watch\?v=|youtu\.be/|youtube\.com/embed/)[a-zA-Z0-9_-]{11}"
+        )
+        if not youtube_regex.match(value):
+            raise ValueError("Invalid YouTube URL format")
+        return value
+
+
+class VideoProcessJobResponse(BaseModel):
+    """Returned when a video processing job is created."""
+
+    job_id: str
+    video_url: str
+    status: JobStatus = JobStatus.pending
+
+
+class VideoJobStatusResponse(BaseModel):
+    """Returned when polling a video job's status."""
+
+    job_id: str
+    status: JobStatus
+    progress: float = Field(0.0, ge=0.0, le=100.0)
+    video_url: Optional[str] = None
+    transcript: Optional[str] = None
+    metadata: Optional[dict[str, Any]] = None
+    error: Optional[str] = None
+
+
+# ============ Event Extraction ============
+
+
+class EventExtractRequest(BaseModel):
+    """Request to extract events from a transcript."""
+
+    job_id: Optional[str] = Field(None, description="Job ID from video processing")
+    transcript: Optional[str] = Field(None, description="Raw transcript text")
+    video_url: Optional[str] = None
+
+
+class ExtractedEvent(BaseModel):
+    """A single extracted event."""
+
+    id: str = Field(default_factory=lambda: f"evt_{uuid.uuid4().hex[:8]}")
+    type: str = Field(..., description="Event type: action | mention | topic | insight")
+    title: str
+    description: Optional[str] = None
+    timestamp: Optional[str] = Field(None, description="Time in video, e.g. '02:15'")
+    confidence: float = Field(1.0, ge=0.0, le=1.0)
+
+
+class EventExtractResponse(BaseModel):
+    """Response containing extracted events."""
+
+    job_id: Optional[str] = None
+    events: list[ExtractedEvent] = Field(default_factory=list)
+    event_count: int = 0
+
+
+# ============ Agent Dispatch ============
+
+
+class AgentDispatchRequest(BaseModel):
+    """Request to dispatch agents for a set of events."""
+
+    job_id: Optional[str] = None
+    events: list[dict[str, Any]] = Field(default_factory=list)
+    agent_types: Optional[list[str]] = Field(
+        None, description="Specific agent types to dispatch"
+    )
+
+
+class AgentExecution(BaseModel):
+    """Status of a single dispatched agent."""
+
+    agent_id: str = Field(default_factory=lambda: f"agent_{uuid.uuid4().hex[:8]}")
+    agent_type: str
+    status: AgentStatus = AgentStatus.queued
+    progress: float = Field(0.0, ge=0.0, le=100.0)
+    event_id: Optional[str] = None
+    result: Optional[dict[str, Any]] = None
+    error: Optional[str] = None
+
+
+class AgentDispatchResponse(BaseModel):
+    """Response after dispatching agents."""
+
+    dispatch_id: str = Field(default_factory=lambda: f"dsp_{uuid.uuid4().hex[:8]}")
+    executions: list[AgentExecution] = Field(default_factory=list)
+
+
+class AgentStatusResponse(BaseModel):
+    """Status of a single agent execution."""
+
+    agent_id: str
+    agent_type: str
+    status: AgentStatus
+    progress: float = 0.0
+    result: Optional[dict[str, Any]] = None
+    error: Optional[str] = None
 
 
 class ChatRequest(BaseModel):
