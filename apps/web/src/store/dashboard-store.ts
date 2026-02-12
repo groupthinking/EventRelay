@@ -137,10 +137,34 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       const rawTitle = result.result?.insights?.summary;
       const videoTitle = (typeof rawTitle === 'string' ? rawTitle : 'Video').substring(0, 50);
 
-      const transcript =
+      let transcript =
         result.result?.raw_response?.transcript?.text ||
         result.result?.raw_response?.transcript ||
         undefined;
+
+      // Flatten transcript array to string if needed
+      if (Array.isArray(transcript)) {
+        transcript = transcript.map((s: { text?: string }) => s.text || '').join(' ').trim();
+      }
+
+      // STT fallback: if YouTube API returned no/empty transcript, try OpenAI
+      if (!transcript || (typeof transcript === 'string' && transcript.length < 50)) {
+        addActivity('YouTube transcript unavailable — trying OpenAI fallback…', 'info');
+        try {
+          const sttRes = await fetch('/api/transcribe', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url }),
+          });
+          const sttResult = await sttRes.json();
+          if (sttResult.success && sttResult.transcript) {
+            transcript = sttResult.transcript;
+            addActivity(`Transcript retrieved via ${sttResult.source} (${sttResult.wordCount} words)`, 'success');
+          }
+        } catch {
+          addActivity('STT fallback unavailable', 'info');
+        }
+      }
 
       updateVideo(id, {
         status: result.status === 'complete' ? 'complete' : 'failed',

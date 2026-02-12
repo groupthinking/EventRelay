@@ -1,59 +1,51 @@
-import { openai } from '@ai-sdk/openai';
-import { generateObject } from 'ai';
-import { jsonSchema } from 'ai';
+import OpenAI from 'openai';
 import { NextResponse } from 'next/server';
 
-const ExtractionSchema = jsonSchema<{
-  events: Array<{
-    type: 'action' | 'topic' | 'insight' | 'tool' | 'resource';
-    title: string;
-    description: string;
-    timestamp?: string;
-    priority: 'high' | 'medium' | 'low';
-  }>;
-  actions: Array<{
-    title: string;
-    description: string;
-    category: 'setup' | 'build' | 'deploy' | 'learn' | 'research' | 'configure';
-    estimatedMinutes?: number;
-  }>;
-  summary: string;
-  topics: string[];
-}>({
-  type: 'object',
+let _client: OpenAI | null = null;
+function getClient() {
+  if (!_client) _client = new OpenAI();
+  return _client;
+}
+
+// JSON Schema for structured extraction via Responses API
+const extractionSchema = {
+  type: 'object' as const,
   properties: {
     events: {
-      type: 'array',
+      type: 'array' as const,
       items: {
-        type: 'object',
+        type: 'object' as const,
         properties: {
-          type: { type: 'string', enum: ['action', 'topic', 'insight', 'tool', 'resource'] },
-          title: { type: 'string', description: 'Short descriptive title' },
-          description: { type: 'string', description: 'One-sentence explanation' },
-          timestamp: { type: 'string', description: 'Time in video if mentioned, e.g. "02:15"' },
-          priority: { type: 'string', enum: ['high', 'medium', 'low'] },
+          type: { type: 'string' as const, enum: ['action', 'topic', 'insight', 'tool', 'resource'] },
+          title: { type: 'string' as const, description: 'Short descriptive title' },
+          description: { type: 'string' as const, description: 'One-sentence explanation' },
+          timestamp: { type: ['string', 'null'] as const, description: 'Time in video if mentioned, e.g. "02:15", or null' },
+          priority: { type: 'string' as const, enum: ['high', 'medium', 'low'] },
         },
-        required: ['type', 'title', 'description', 'priority'],
+        required: ['type', 'title', 'description', 'timestamp', 'priority'],
+        additionalProperties: false,
       },
     },
     actions: {
-      type: 'array',
+      type: 'array' as const,
       items: {
-        type: 'object',
+        type: 'object' as const,
         properties: {
-          title: { type: 'string' },
-          description: { type: 'string' },
-          category: { type: 'string', enum: ['setup', 'build', 'deploy', 'learn', 'research', 'configure'] },
-          estimatedMinutes: { type: 'number' },
+          title: { type: 'string' as const },
+          description: { type: 'string' as const },
+          category: { type: 'string' as const, enum: ['setup', 'build', 'deploy', 'learn', 'research', 'configure'] },
+          estimatedMinutes: { type: ['number', 'null'] as const },
         },
-        required: ['title', 'description', 'category'],
+        required: ['title', 'description', 'category', 'estimatedMinutes'],
+        additionalProperties: false,
       },
     },
-    summary: { type: 'string', description: '2-3 sentence summary of the content' },
-    topics: { type: 'array', items: { type: 'string' }, description: 'Key topics covered' },
+    summary: { type: 'string' as const, description: '2-3 sentence summary of the content' },
+    topics: { type: 'array' as const, items: { type: 'string' as const }, description: 'Key topics covered' },
   },
   required: ['events', 'actions', 'summary', 'topics'],
-});
+  additionalProperties: false,
+};
 
 export async function POST(request: Request) {
   try {
@@ -68,25 +60,31 @@ export async function POST(request: Request) {
 
     const trimmed = transcript.slice(0, 8000);
 
-    const { object } = await generateObject({
-      model: openai('gpt-4o-mini'),
-      schema: ExtractionSchema,
-      prompt: `Analyze this video transcript and extract structured data.
+    // Use OpenAI Responses API — better caching (40-80%), built-in tool loop
+    const response = await getClient().responses.create({
+      model: 'gpt-4o-mini',
+      instructions: `You are an expert content analyst. Extract structured data from video transcripts.
+Be specific and practical — no vague or generic items.
+For events: classify type (action/topic/insight/tool/resource) and priority (high/medium/low).
+For actions: generate concrete tasks a developer/learner should DO after watching.`,
+      input: `Analyze this video transcript and extract structured data.
 
 Video: ${videoTitle || videoUrl || 'Unknown'}
 
 TRANSCRIPT:
-${trimmed}
-
-Instructions:
-- Extract every actionable event, key topic, insight, tool mention, and resource reference.
-- For each event, classify its type and priority.
-- Generate concrete action items — things a developer/learner should DO after watching.
-- Provide a concise summary and list of topics covered.
-- Be specific and practical — no vague or generic items.`,
+${trimmed}`,
+      text: {
+        format: {
+          type: 'json_schema',
+          name: 'event_extraction',
+          schema: extractionSchema,
+          strict: true,
+        },
+      },
     });
 
-    return NextResponse.json({ success: true, data: object });
+    const parsed = JSON.parse(response.output_text);
+    return NextResponse.json({ success: true, data: parsed });
   } catch (error) {
     console.error('Event extraction error:', error);
     const message = error instanceof Error ? error.message : String(error);
