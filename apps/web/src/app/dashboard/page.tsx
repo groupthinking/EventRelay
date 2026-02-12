@@ -10,6 +10,7 @@ import EventList from '@/components/EventList';
 import AgentDashboard from '@/components/AgentDashboard';
 import ResultsViewer from '@/components/ResultsViewer';
 import type { ExtractedEvent, AgentExecution } from '@/lib/types';
+import { useDashboardStore } from '@/store/dashboard-store';
 
 // ============================================
 // Types
@@ -543,21 +544,28 @@ function VideoDetailModal({
 function DashboardContent() {
   const searchParams = useSearchParams();
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
-  const [loading, setLoading] = useState(true);
   const [videoUrl, setVideoUrl] = useState('');
-  const [videos, setVideos] = useState<Video[]>([]);
 
-  const [activities, setActivities] = useState<{ time: string; event: string; type: 'success' | 'info' | 'error' }[]>([]);
+  // Zustand store
+  const videos = useDashboardStore((s) => s.videos);
+  const activities = useDashboardStore((s) => s.activities);
+  const selectedVideoId = useDashboardStore((s) => s.selectedVideoId);
+  const loading = useDashboardStore((s) => s.loading);
+  const selectVideo = useDashboardStore((s) => s.selectVideo);
+  const processVideo = useDashboardStore((s) => s.processVideo);
+  const extractEvents = useDashboardStore((s) => s.extractEvents);
+  const dispatchAgents = useDashboardStore((s) => s.dispatchAgents);
+  const setLoading = useDashboardStore((s) => s.setLoading);
 
-  const [selectedVideo, setSelectedVideo] = useState<Video | null>(null);
+  const selectedVideo = videos.find((v) => v.id === selectedVideoId) || null;
 
   useEffect(() => {
     const video = searchParams.get('video');
     if (video) {
       setVideoUrl(video);
-      handleAddVideo(video);
+      processVideo(video);
     }
-  }, [searchParams]);
+  }, [searchParams, processVideo]);
 
   useEffect(() => {
     async function fetchMetrics() {
@@ -574,211 +582,16 @@ function DashboardContent() {
     fetchMetrics();
     const interval = setInterval(fetchMetrics, 10000);
     return () => clearInterval(interval);
-  }, []);
-
-  const addActivity = useCallback((event: string, type: 'success' | 'info' | 'error') => {
-    const now = new Date();
-    const time = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    setActivities(prev => [{ time, event, type }, ...prev].slice(0, 20));
-  }, []);
+  }, [setLoading]);
 
   const handleAddVideo = useCallback(
-    async (url?: string) => {
+    (url?: string) => {
       const targetUrl = url || videoUrl;
       if (!targetUrl.trim()) return;
-
-      const newVideo: Video = {
-        id: Date.now().toString(),
-        title: `Analyzing: ${targetUrl.length > 50 ? targetUrl.substring(0, 47) + '...' : targetUrl}`,
-        url: targetUrl,
-        status: 'processing',
-        progress: 10,
-      };
-      setVideos((prev) => [newVideo, ...prev]);
       setVideoUrl('');
-      addActivity(`Processing started: ${targetUrl.length > 40 ? targetUrl.substring(0, 37) + '...' : targetUrl}`, 'info');
-
-      const progressInterval = setInterval(() => {
-        setVideos((prev) =>
-          prev.map((v) =>
-            v.id === newVideo.id && v.status === 'processing'
-              ? { ...v, progress: Math.min(v.progress + 5, 95) }
-              : v
-          )
-        );
-      }, 1000);
-
-      try {
-        const response = await fetch('/api/video', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: targetUrl }),
-        });
-
-        clearInterval(progressInterval);
-
-        if (!response.ok) {
-          throw new Error(`API error: ${response.status}`);
-        }
-
-        const result = await response.json();
-        const videoTitle = result.result?.insights?.summary?.substring(0, 50) || 'Video';
-
-        setVideos((prev) =>
-          prev.map((v) =>
-            v.id === newVideo.id
-              ? {
-                  ...v,
-                  status: result.status === 'complete' ? 'complete' : 'failed',
-                  progress: 100,
-                  title: videoTitle + (videoTitle.length >= 50 ? '...' : ''),
-                  processedAt: 'Just now',
-                  duration: `${result.result?.transcript_segments || 0} segments`,
-                  transcript: result.result?.raw_response?.transcript?.text
-                    || result.result?.raw_response?.transcript
-                    || undefined,
-                  insights: {
-                    summary: result.result?.insights?.summary || 'Analysis complete',
-                    actions: result.result?.insights?.actions || [],
-                    sentiment: result.result?.insights?.sentiment || 'Neutral',
-                    topics: result.result?.insights?.topics || [],
-                  },
-                }
-              : v
-          )
-        );
-
-        const actionCount = result.result?.insights?.actions?.length || 0;
-        addActivity(`Analysis complete: ${videoTitle.substring(0, 30)}${videoTitle.length > 30 ? '...' : ''}`, 'success');
-        if (actionCount > 0) {
-          addActivity(`Generated ${actionCount} action item${actionCount > 1 ? 's' : ''}`, 'success');
-        }
-      } catch (error) {
-        clearInterval(progressInterval);
-        console.error('Video analysis failed:', error);
-        addActivity(`Analysis failed: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
-
-        setVideos((prev) =>
-          prev.map((v) =>
-            v.id === newVideo.id ? { ...v, status: 'failed', progress: 0 } : v
-          )
-        );
-      }
+      processVideo(targetUrl);
     },
-    [videoUrl, addActivity]
-  );
-
-  const handleExtractEvents = useCallback(
-    async (videoId: string) => {
-      const video = videos.find((v) => v.id === videoId);
-      if (!video?.transcript) return;
-
-      addActivity('Extracting events…', 'info');
-      try {
-        const res = await fetch('/api/video', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'extract_events', transcript: video.transcript }),
-        });
-
-        // Fallback: parse actions from insights into events
-        const events: ExtractedEvent[] = (video.insights?.actions || []).map(
-          (action: string, i: number) => ({
-            id: `evt_${videoId}_${i}`,
-            type: 'action' as const,
-            title: action,
-            confidence: 0.85,
-          }),
-        );
-
-        // Add topics as topic events
-        (video.insights?.topics || []).forEach((topic: string, i: number) => {
-          events.push({
-            id: `evt_${videoId}_t${i}`,
-            type: 'topic' as const,
-            title: topic,
-            confidence: 0.9,
-          });
-        });
-
-        setVideos((prev) =>
-          prev.map((v) => (v.id === videoId ? { ...v, events } : v)),
-        );
-        // Update selected video too
-        setSelectedVideo((prev) => (prev?.id === videoId ? { ...prev, events } : prev));
-        addActivity(`Extracted ${events.length} events`, 'success');
-      } catch (error) {
-        addActivity(`Event extraction failed: ${error instanceof Error ? error.message : 'Unknown'}`, 'error');
-      }
-    },
-    [videos, addActivity],
-  );
-
-  const handleDispatchAgents = useCallback(
-    async (videoId: string) => {
-      const video = videos.find((v) => v.id === videoId);
-      if (!video?.events?.length) return;
-
-      addActivity('Dispatching agents…', 'info');
-
-      // Create simulated agent executions based on events
-      const agentTypes = ['analyzer', 'content_creator'];
-      const executions: AgentExecution[] = video.events.slice(0, 5).flatMap((event) =>
-        agentTypes.map((agentType) => ({
-          agent_id: `agent_${videoId}_${event.id}_${agentType}`,
-          agent_type: agentType,
-          status: 'running' as const,
-          progress: 0,
-          event_id: event.id,
-        })),
-      );
-
-      setVideos((prev) =>
-        prev.map((v) => (v.id === videoId ? { ...v, agents: executions } : v)),
-      );
-      setSelectedVideo((prev) => (prev?.id === videoId ? { ...prev, agents: executions } : prev));
-
-      // Simulate agent completion
-      for (const exec of executions) {
-        setTimeout(() => {
-          const completed: AgentExecution = {
-            ...exec,
-            status: 'complete',
-            progress: 100,
-            result: {
-              summary: `Processed by ${exec.agent_type}`,
-              output: `Analysis complete for event ${exec.event_id}`,
-              status: 'completed',
-            },
-          };
-          setVideos((prev) =>
-            prev.map((v) =>
-              v.id === videoId
-                ? {
-                    ...v,
-                    agents: (v.agents || []).map((a) =>
-                      a.agent_id === exec.agent_id ? completed : a,
-                    ),
-                  }
-                : v,
-            ),
-          );
-          setSelectedVideo((prev) =>
-            prev?.id === videoId
-              ? {
-                  ...prev,
-                  agents: (prev.agents || []).map((a) =>
-                    a.agent_id === exec.agent_id ? completed : a,
-                  ),
-                }
-              : prev,
-          );
-        }, 1500 + Math.random() * 3000);
-      }
-
-      addActivity(`Dispatched ${executions.length} agents`, 'success');
-    },
-    [videos, addActivity],
+    [videoUrl, processVideo],
   );
 
   return (
@@ -910,7 +723,7 @@ function DashboardContent() {
                   <VideoCard
                     key={video.id}
                     video={video}
-                    onClick={() => setSelectedVideo(video)}
+                    onClick={() => selectVideo(video.id)}
                   />
                 ))}
               </div>
@@ -929,9 +742,9 @@ function DashboardContent() {
       {selectedVideo && (
         <VideoDetailModal
           video={selectedVideo}
-          onClose={() => setSelectedVideo(null)}
-          onExtractEvents={handleExtractEvents}
-          onDispatchAgents={handleDispatchAgents}
+          onClose={() => selectVideo(null)}
+          onExtractEvents={extractEvents}
+          onDispatchAgents={dispatchAgents}
         />
       )}
     </div>
