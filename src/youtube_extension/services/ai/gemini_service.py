@@ -14,7 +14,7 @@ import logging
 import mimetypes
 import os
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Optional, Union
@@ -262,22 +262,41 @@ class VeoVideoClient:
 class GeminiConfig:
     """Configuration for Gemini service"""
 
-    api_key: Optional[str] = os.getenv("GEMINI_API_KEY")
-    model_name: str = "gemini-2.0-flash"
-    project_id: Optional[str] = os.getenv("GOOGLE_CLOUD_PROJECT")
-    location: str = "us-central1"
-    max_output_tokens: int = 8192
-    temperature: float = 1.0  # Gemini 3 requires temp=1.0
-    top_p: float = 0.95
-    top_k: int = 40
-    safety_settings: Optional[dict] = None
-    video_frame_rate: int = 1
-    max_video_duration: int = 600
-    response_schema: Optional[Any] = None
-    response_mime_type: Optional[str] = None
-    tools: Optional[list[Any]] = None
-    tool_choice: Optional[str] = None
-    thinking: bool = False
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        model_name: str = "gemini-2.0-flash",
+        project_id: Optional[str] = None,
+        location: str = "us-central1",
+        max_output_tokens: int = 8192,
+        temperature: float = 1.0,
+        top_p: float = 0.95,
+        top_k: int = 40,
+        safety_settings: Optional[dict] = None,
+        video_frame_rate: int = 1,
+        max_video_duration: int = 600,
+        response_schema: Optional[Any] = None,
+        response_mime_type: Optional[str] = None,
+        tools: Optional[list[Any]] = None,
+        tool_choice: Optional[str] = None,
+        thinking: bool = False,
+    ):
+        self.api_key = api_key if api_key is not None else os.getenv("GEMINI_API_KEY")
+        self.model_name = model_name
+        self.project_id = project_id if project_id is not None else os.getenv("GOOGLE_CLOUD_PROJECT")
+        self.location = location
+        self.max_output_tokens = max_output_tokens
+        self.temperature = temperature
+        self.top_p = top_p
+        self.top_k = top_k
+        self.safety_settings = safety_settings
+        self.video_frame_rate = video_frame_rate
+        self.max_video_duration = max_video_duration
+        self.response_schema = response_schema
+        self.response_mime_type = response_mime_type
+        self.tools = tools
+        self.tool_choice = tool_choice
+        self.thinking = thinking
 
 
 @dataclass
