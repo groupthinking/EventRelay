@@ -5,6 +5,11 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { clsx } from 'clsx';
 import AnalysisPanel from '@/components/AnalysisPanel';
+import TranscriptViewer from '@/components/TranscriptViewer';
+import EventList from '@/components/EventList';
+import AgentDashboard from '@/components/AgentDashboard';
+import ResultsViewer from '@/components/ResultsViewer';
+import type { ExtractedEvent, AgentExecution } from '@/lib/types';
 
 // ============================================
 // Types
@@ -18,6 +23,9 @@ interface Video {
   thumbnail?: string;
   duration?: string;
   processedAt?: string;
+  transcript?: string;
+  events?: ExtractedEvent[];
+  agents?: AgentExecution[];
   insights?: {
     summary: string;
     actions: string[];
@@ -329,11 +337,16 @@ function QuickActions() {
 function VideoDetailModal({
   video,
   onClose,
+  onExtractEvents,
+  onDispatchAgents,
 }: {
   video: Video;
   onClose: () => void;
+  onExtractEvents?: (videoId: string) => void;
+  onDispatchAgents?: (videoId: string) => void;
 }) {
   const [showAssistant, setShowAssistant] = useState(false);
+  const [activeTab, setActiveTab] = useState<'insights' | 'transcript' | 'events' | 'agents'>('insights');
 
   return (
     <div
@@ -371,9 +384,32 @@ function VideoDetailModal({
             </div>
           </div>
 
+          {/* Tab Navigation */}
+          <div className="px-6 border-b border-white/[0.08] flex gap-1">
+            {(['insights', 'transcript', 'events', 'agents'] as const).map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={clsx(
+                  'px-4 py-3 text-sm font-medium capitalize transition-colors border-b-2 -mb-px',
+                  activeTab === tab
+                    ? 'border-primary-500 text-primary-400'
+                    : 'border-transparent text-white/40 hover:text-white/60'
+                )}
+              >
+                {tab}
+                {tab === 'events' && video.events && video.events.length > 0 && (
+                  <span className="ml-1.5 text-xs bg-primary-500/20 text-primary-400 px-1.5 py-0.5 rounded-full">
+                    {video.events.length}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+
           {/* Scrollable Content */}
           <div className="flex-1 overflow-y-auto p-6 space-y-6">
-            {video.insights && (
+            {activeTab === 'insights' && video.insights && (
               <>
                 {/* Summary */}
                 <div>
@@ -420,6 +456,49 @@ function VideoDetailModal({
                     ))}
                   </div>
                 </div>
+              </>
+            )}
+
+            {activeTab === 'insights' && !video.insights && (
+              <p className="text-sm text-white/30 text-center py-8">
+                Insights will appear once processing completes.
+              </p>
+            )}
+
+            {activeTab === 'transcript' && (
+              video.transcript ? (
+                <TranscriptViewer transcript={video.transcript} />
+              ) : (
+                <p className="text-sm text-white/30 text-center py-8">
+                  No transcript available yet.
+                </p>
+              )
+            )}
+
+            {activeTab === 'events' && (
+              <EventList
+                events={video.events || []}
+                onExtract={onExtractEvents ? () => onExtractEvents(video.id) : undefined}
+              />
+            )}
+
+            {activeTab === 'agents' && (
+              <>
+                <AgentDashboard executions={video.agents || []} />
+                <ResultsViewer
+                  executions={video.agents || []}
+                  events={video.events || []}
+                />
+                {(!video.agents || video.agents.length === 0) && video.events && video.events.length > 0 && onDispatchAgents && (
+                  <div className="flex justify-center py-6">
+                    <button
+                      onClick={() => onDispatchAgents(video.id)}
+                      className="btn btn-primary py-2.5 px-6"
+                    >
+                      🚀 Dispatch Agents
+                    </button>
+                  </div>
+                )}
               </>
             )}
           </div>
@@ -555,6 +634,9 @@ function DashboardContent() {
                   title: videoTitle + (videoTitle.length >= 50 ? '...' : ''),
                   processedAt: 'Just now',
                   duration: `${result.result?.transcript_segments || 0} segments`,
+                  transcript: result.result?.raw_response?.transcript?.text
+                    || result.result?.raw_response?.transcript
+                    || undefined,
                   insights: {
                     summary: result.result?.insights?.summary || 'Analysis complete',
                     actions: result.result?.insights?.actions || [],
@@ -584,6 +666,119 @@ function DashboardContent() {
       }
     },
     [videoUrl, addActivity]
+  );
+
+  const handleExtractEvents = useCallback(
+    async (videoId: string) => {
+      const video = videos.find((v) => v.id === videoId);
+      if (!video?.transcript) return;
+
+      addActivity('Extracting events…', 'info');
+      try {
+        const res = await fetch('/api/video', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'extract_events', transcript: video.transcript }),
+        });
+
+        // Fallback: parse actions from insights into events
+        const events: ExtractedEvent[] = (video.insights?.actions || []).map(
+          (action: string, i: number) => ({
+            id: `evt_${videoId}_${i}`,
+            type: 'action' as const,
+            title: action,
+            confidence: 0.85,
+          }),
+        );
+
+        // Add topics as topic events
+        (video.insights?.topics || []).forEach((topic: string, i: number) => {
+          events.push({
+            id: `evt_${videoId}_t${i}`,
+            type: 'topic' as const,
+            title: topic,
+            confidence: 0.9,
+          });
+        });
+
+        setVideos((prev) =>
+          prev.map((v) => (v.id === videoId ? { ...v, events } : v)),
+        );
+        // Update selected video too
+        setSelectedVideo((prev) => (prev?.id === videoId ? { ...prev, events } : prev));
+        addActivity(`Extracted ${events.length} events`, 'success');
+      } catch (error) {
+        addActivity(`Event extraction failed: ${error instanceof Error ? error.message : 'Unknown'}`, 'error');
+      }
+    },
+    [videos, addActivity],
+  );
+
+  const handleDispatchAgents = useCallback(
+    async (videoId: string) => {
+      const video = videos.find((v) => v.id === videoId);
+      if (!video?.events?.length) return;
+
+      addActivity('Dispatching agents…', 'info');
+
+      // Create simulated agent executions based on events
+      const agentTypes = ['analyzer', 'content_creator'];
+      const executions: AgentExecution[] = video.events.slice(0, 5).flatMap((event) =>
+        agentTypes.map((agentType) => ({
+          agent_id: `agent_${videoId}_${event.id}_${agentType}`,
+          agent_type: agentType,
+          status: 'running' as const,
+          progress: 0,
+          event_id: event.id,
+        })),
+      );
+
+      setVideos((prev) =>
+        prev.map((v) => (v.id === videoId ? { ...v, agents: executions } : v)),
+      );
+      setSelectedVideo((prev) => (prev?.id === videoId ? { ...prev, agents: executions } : prev));
+
+      // Simulate agent completion
+      for (const exec of executions) {
+        setTimeout(() => {
+          const completed: AgentExecution = {
+            ...exec,
+            status: 'complete',
+            progress: 100,
+            result: {
+              summary: `Processed by ${exec.agent_type}`,
+              output: `Analysis complete for event ${exec.event_id}`,
+              status: 'completed',
+            },
+          };
+          setVideos((prev) =>
+            prev.map((v) =>
+              v.id === videoId
+                ? {
+                    ...v,
+                    agents: (v.agents || []).map((a) =>
+                      a.agent_id === exec.agent_id ? completed : a,
+                    ),
+                  }
+                : v,
+            ),
+          );
+          setSelectedVideo((prev) =>
+            prev?.id === videoId
+              ? {
+                  ...prev,
+                  agents: (prev.agents || []).map((a) =>
+                    a.agent_id === exec.agent_id ? completed : a,
+                  ),
+                }
+              : prev,
+          );
+        }, 1500 + Math.random() * 3000);
+      }
+
+      addActivity(`Dispatched ${executions.length} agents`, 'success');
+    },
+    [videos, addActivity],
   );
 
   return (
@@ -735,6 +930,8 @@ function DashboardContent() {
         <VideoDetailModal
           video={selectedVideo}
           onClose={() => setSelectedVideo(null)}
+          onExtractEvents={handleExtractEvents}
+          onDispatchAgents={handleDispatchAgents}
         />
       )}
     </div>
