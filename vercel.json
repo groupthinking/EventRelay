@@ -4,6 +4,6 @@
   "buildCommand": "npm run build:web",
   "outputDirectory": "apps/web/.next",
   "env": {
-    "BACKEND_URL": "@backend-url"
+    "BACKEND_URL": "${BACKEND_URL}"
   }
 }
