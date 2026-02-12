@@ -38,9 +38,31 @@ export async function POST(request: Request) {
     const personalityAgent = result.outputs?.personality_agent?.data || {};
     const strategyAgent = result.outputs?.strategy_agent?.data || {};
 
+    // Extract summary string from various possible shapes
+    let summaryText = 'Video analyzed successfully';
+    const rawSummary = transcriptAction.summary;
+    if (typeof rawSummary === 'string') {
+      summaryText = rawSummary;
+    } else if (rawSummary && typeof rawSummary === 'object') {
+      // summary may be { content, raw, executive_summary, ... }
+      summaryText =
+        rawSummary.content ||
+        rawSummary.executive_summary ||
+        (typeof rawSummary.raw === 'string'
+          ? (() => {
+              try {
+                const parsed = JSON.parse(rawSummary.raw.replace(/```json\n?|```/g, ''));
+                return parsed.executive_summary || parsed.summary || rawSummary.raw.slice(0, 200);
+              } catch {
+                return rawSummary.raw.slice(0, 200);
+              }
+            })()
+          : JSON.stringify(rawSummary).slice(0, 200));
+    }
+
     // Build structured response
     const insights = {
-      summary: transcriptAction.summary?.content || transcriptAction.summary || 'Video analyzed successfully',
+      summary: summaryText,
       actions: transcriptAction.task_board?.tasks?.map((t: { title?: string }) => t.title) || [],
       topics: transcriptAction.metadata?.topics || [],
       sentiment: personalityAgent.personality_map?.video_intent?.primary || 'Neutral',

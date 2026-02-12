@@ -292,6 +292,24 @@ class GeminiResult:
     error: Optional[str] = None
 
 
+class _GenaiClientModelProxy:
+    """Thin wrapper around google.genai.Client that exposes generate_content()
+    so existing call sites (which expect the old GenerativeModel interface)
+    work with the new Client-based SDK."""
+
+    def __init__(self, client: Any, model_name: str):
+        self._client = client
+        self._model_name = model_name
+
+    def generate_content(self, contents: Any, *, generation_config: Any = None, **kwargs: Any) -> Any:
+        return self._client.models.generate_content(
+            model=self._model_name,
+            contents=contents,
+            config=generation_config,
+            **kwargs,
+        )
+
+
 class GeminiService:
     """
     Service for cloud-based vision-language processing using Google Gemini.
@@ -337,10 +355,9 @@ class GeminiService:
                 self.logger.info(
                     f"Initializing Gemini via API key: {self.config.api_key[:8]}..."
                 )
-                # New SDK uses Client - stores client for model access
                 self._client = genai.Client(api_key=self.config.api_key)
-                # Store model name, actual calls will use client.models
-                self._model = self._client  # Use client as model proxy
+                # Wrap client.models so call sites can use .generate_content() directly
+                self._model = _GenaiClientModelProxy(self._client, self.config.model_name)
                 self._use_vertex = False
                 self.logger.info(
                     f"Gemini Client initialized for model {self.config.model_name}"

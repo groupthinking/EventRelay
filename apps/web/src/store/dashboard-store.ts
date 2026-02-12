@@ -134,7 +134,8 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       if (!res.ok) throw new Error(`API error: ${res.status}`);
 
       const result = await res.json();
-      const videoTitle = result.result?.insights?.summary?.substring(0, 50) || 'Video';
+      const rawTitle = result.result?.insights?.summary;
+      const videoTitle = (typeof rawTitle === 'string' ? rawTitle : 'Video').substring(0, 50);
 
       updateVideo(id, {
         status: result.status === 'complete' ? 'complete' : 'failed',
@@ -147,7 +148,9 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
           result.result?.raw_response?.transcript ||
           undefined,
         insights: {
-          summary: result.result?.insights?.summary || 'Analysis complete',
+          summary: typeof result.result?.insights?.summary === 'string'
+            ? result.result.insights.summary
+            : 'Analysis complete',
           actions: result.result?.insights?.actions || [],
           sentiment: result.result?.insights?.sentiment || 'Neutral',
           topics: result.result?.insights?.topics || [],
