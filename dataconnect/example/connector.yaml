@@ -1,0 +1,78 @@
+connectorId: example
+generate:
+  javascriptSdk:
+    - outputDir: ../../src/dataconnect-generated
+      package: "@dataconnect/generated"
+      packageJsonDir: ../..
+      react: false
+      angular: false
+    - outputDir: ../../packages/vector-store/src/dataconnect-generated
+      package: "@dataconnect/generated"
+      packageJsonDir: ../../packages/vector-store
+      react: false
+      angular: false
+    - outputDir: ../../packages/tsconfig/src/dataconnect-generated
+      package: "@dataconnect/generated"
+      packageJsonDir: ../../packages/tsconfig
+      react: false
+      angular: false
+    - outputDir: ../../packages/ui/src/dataconnect-generated
+      package: "@dataconnect/generated"
+      packageJsonDir: ../../packages/ui
+      react: false
+      angular: false
+    - outputDir: ../../packages/state-manager/src/dataconnect-generated
+      package: "@dataconnect/generated"
+      packageJsonDir: ../../packages/state-manager
+      react: false
+      angular: false
+    - outputDir: ../../packages/observability/src/dataconnect-generated
+      package: "@dataconnect/generated"
+      packageJsonDir: ../../packages/observability
+      react: false
+      angular: false
+    - outputDir: ../../packages/mcp-connectors/src/dataconnect-generated
+      package: "@dataconnect/generated"
+      packageJsonDir: ../../packages/mcp-connectors
+      react: false
+      angular: false
+    - outputDir: ../../packages/logger/src/dataconnect-generated
+      package: "@dataconnect/generated"
+      packageJsonDir: ../../packages/logger
+      react: false
+      angular: false
+    - outputDir: ../../packages/error-handling/src/dataconnect-generated
+      package: "@dataconnect/generated"
+      packageJsonDir: ../../packages/error-handling
+      react: true
+      angular: false
+    - outputDir: ../../packages/eslint-config/src/dataconnect-generated
+      package: "@dataconnect/generated"
+      packageJsonDir: ../../packages/eslint-config
+      react: true
+      angular: false
+    - outputDir: ../../packages/embeddings/src/dataconnect-generated
+      package: "@dataconnect/generated"
+      packageJsonDir: ../../packages/embeddings
+      react: false
+      angular: false
+    - outputDir: ../../packages/config/src/dataconnect-generated
+      package: "@dataconnect/generated"
+      packageJsonDir: ../../packages/config
+      react: false
+      angular: false
+    - outputDir: ../../packages/database/src/dataconnect-generated
+      package: "@dataconnect/generated"
+      packageJsonDir: ../../packages/database
+      react: false
+      angular: false
+    - outputDir: ../../packages/ai-gateway/src/dataconnect-generated
+      package: "@dataconnect/generated"
+      packageJsonDir: ../../packages/ai-gateway
+      react: false
+      angular: false
+    - outputDir: ../../apps/web/src/dataconnect-generated
+      package: "@dataconnect/generated"
+      packageJsonDir: ../../apps/web
+      react: true
+      angular: false
