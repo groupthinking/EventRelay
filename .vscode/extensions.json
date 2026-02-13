@@ -1,7 +1,6 @@
 {
     "recommendations": [
         "antigravity.antigravity-rpc",
-        "salesforce.agent-script-language-client",
         "googlecloudtools.firebase-dataconnect-vscode"
     ]
 }

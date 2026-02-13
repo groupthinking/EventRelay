@@ -7,9 +7,7 @@ import { clsx } from 'clsx';
 import AnalysisPanel from '@/components/AnalysisPanel';
 import TranscriptViewer from '@/components/TranscriptViewer';
 import EventList from '@/components/EventList';
-import AgentDashboard from '@/components/AgentDashboard';
-import ResultsViewer from '@/components/ResultsViewer';
-import type { ExtractedEvent, AgentExecution } from '@/lib/types';
+import type { ExtractedEvent } from '@/lib/types';
 import { useDashboardStore } from '@/store/dashboard-store';
 
 // ============================================
@@ -26,22 +24,11 @@ interface Video {
   processedAt?: string;
   transcript?: string;
   events?: ExtractedEvent[];
-  agents?: AgentExecution[];
   insights?: {
     summary: string;
     actions: string[];
     sentiment: string;
     topics: string[];
-  };
-}
-
-interface DashboardMetrics {
-  status: string;
-  timestamp: string;
-  metrics: {
-    activeWorkflows: number;
-    totalProcessed: number;
-    errorRate: number;
   };
 }
 
@@ -88,7 +75,7 @@ function VideoCard({
   video: Video;
   onClick: () => void;
 }) {
-  const stages = ['Ingest', 'Transcribe', 'Analyze', 'Generate'];
+  const stages = ['Ingest', 'Transcribe', 'Analyze', 'Extract'];
   const currentStage = Math.floor((video.progress / 100) * stages.length);
 
   return (
@@ -149,13 +136,6 @@ function VideoCard({
           </div>
         )}
 
-        {/* Duration badge */}
-        {video.duration && (
-          <div className="absolute bottom-2 right-2 px-2 py-1 bg-black/80 backdrop-blur-sm rounded-lg text-xs text-white/80 font-medium">
-            {video.duration}
-          </div>
-        )}
-
         {/* Status badge */}
         <div
           className={clsx(
@@ -190,7 +170,7 @@ function VideoCard({
           </div>
         )}
 
-        {/* Quick insights */}
+        {/* Quick insights for completed */}
         {video.status === 'complete' && video.insights && (
           <div className="mt-4 pt-4 border-t border-white/[0.05]">
             <div className="flex flex-wrap gap-2">
@@ -202,52 +182,19 @@ function VideoCard({
                   {topic}
                 </span>
               ))}
+              {video.events && video.events.length > 0 && (
+                <span className="px-2.5 py-1 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-lg text-xs font-medium">
+                  {video.events.length} events
+                </span>
+              )}
             </div>
           </div>
         )}
-      </div>
-    </div>
-  );
-}
 
-// ============================================
-// Metric Card Component
-// ============================================
-function MetricCard({
-  value,
-  label,
-  icon,
-  trend,
-  trendUp = true,
-}: {
-  value: string | number;
-  label: string;
-  icon: string;
-  trend?: string;
-  trendUp?: boolean;
-}) {
-  return (
-    <div className={clsx(
-      'bg-surface-900/50 backdrop-blur-xl rounded-2xl p-6',
-      'border border-white/[0.08]',
-      'transition-all duration-300 hover:border-primary-500/20',
-      'hover:shadow-lg hover:shadow-primary-500/5'
-    )}>
-      <div className="flex items-start justify-between">
-        <div>
-          <p className="text-white/40 text-sm font-medium">{label}</p>
-          <p className="text-4xl font-bold text-white mt-2 tracking-tight">{value}</p>
-          {trend && (
-            <p className={clsx(
-              'text-sm mt-3 font-medium flex items-center gap-1',
-              trendUp ? 'text-green-400' : 'text-red-400'
-            )}>
-              <span>{trendUp ? '↑' : '↓'}</span>
-              {trend} vs last week
-            </p>
-          )}
-        </div>
-        <div className="text-4xl opacity-80">{icon}</div>
+        {/* Failed state */}
+        {video.status === 'failed' && (
+          <p className="mt-3 text-xs text-red-400/70">Processing failed. Click to retry.</p>
+        )}
       </div>
     </div>
   );
@@ -261,13 +208,27 @@ function ActivityFeed({
 }: {
   activities: { time: string; event: string; type: 'success' | 'info' | 'error' }[];
 }) {
+  if (activities.length === 0) {
+    return (
+      <div className={clsx(
+        'bg-surface-900/50 backdrop-blur-xl rounded-2xl p-6',
+        'border border-white/[0.08]'
+      )}>
+        <h3 className="font-semibold text-white mb-4">Activity Feed</h3>
+        <p className="text-sm text-white/30 text-center py-6">
+          Process a video to see activity here.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className={clsx(
       'bg-surface-900/50 backdrop-blur-xl rounded-2xl p-6',
       'border border-white/[0.08]'
     )}>
       <h3 className="font-semibold text-white mb-5">Activity Feed</h3>
-      <div className="space-y-4 max-h-72 overflow-y-auto pr-2">
+      <div className="space-y-4 max-h-96 overflow-y-auto pr-2">
         {activities.map((activity, i) => (
           <div
             key={i}
@@ -296,58 +257,23 @@ function ActivityFeed({
 }
 
 // ============================================
-// Quick Actions
-// ============================================
-function QuickActions() {
-  const actions = [
-    { icon: '📊', label: 'Generate Weekly Report', primary: true },
-    { icon: '🔗', label: 'Connect Integration', primary: false },
-    { icon: '📤', label: 'Export All Insights', primary: false },
-  ];
-
-  return (
-    <div className={clsx(
-      'bg-surface-900/50 backdrop-blur-xl rounded-2xl p-6',
-      'border border-white/[0.08]'
-    )}>
-      <h3 className="font-semibold text-white mb-5">Quick Actions</h3>
-      <div className="space-y-3">
-        {actions.map((action, i) => (
-          <button
-            key={i}
-            className={clsx(
-              'w-full px-4 py-3.5 rounded-xl text-sm font-medium text-left transition-all duration-200',
-              'flex items-center gap-3',
-              action.primary
-                ? 'bg-primary-500/10 border border-primary-500/20 text-primary-400 hover:bg-primary-500/20'
-                : 'bg-white/[0.03] border border-white/[0.08] text-white/80 hover:bg-white/[0.06]'
-            )}
-          >
-            <span className="text-lg">{action.icon}</span>
-            {action.label}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ============================================
 // Video Detail Modal
 // ============================================
 function VideoDetailModal({
   video,
   onClose,
   onExtractEvents,
-  onDispatchAgents,
 }: {
   video: Video;
   onClose: () => void;
   onExtractEvents?: (videoId: string) => void;
-  onDispatchAgents?: (videoId: string) => void;
 }) {
   const [showAssistant, setShowAssistant] = useState(false);
-  const [activeTab, setActiveTab] = useState<'insights' | 'transcript' | 'events' | 'agents'>('insights');
+  const [activeTab, setActiveTab] = useState<'insights' | 'transcript' | 'events'>('insights');
+
+  const hasInsights = video.insights && (video.insights.summary !== 'Analysis complete' || video.insights.actions.length > 0);
+  const hasTranscript = !!video.transcript;
+  const hasEvents = video.events && video.events.length > 0;
 
   return (
     <div
@@ -372,8 +298,13 @@ function VideoDetailModal({
             <div className="flex items-start justify-between">
               <div className="flex-1 min-w-0 pr-4">
                 <h2 className="text-xl font-bold text-white truncate">{video.title}</h2>
-                <div className="flex items-center gap-2 mt-1.5">
+                <div className="flex items-center gap-3 mt-1.5">
                   <p className="text-white/40 text-sm truncate">{video.url}</p>
+                  {video.status === 'complete' && (
+                    <span className="flex-shrink-0 px-2 py-0.5 rounded-full bg-green-500/15 text-green-400 text-xs font-medium">
+                      ✓ Complete
+                    </span>
+                  )}
                 </div>
               </div>
               <button
@@ -387,7 +318,7 @@ function VideoDetailModal({
 
           {/* Tab Navigation */}
           <div className="px-6 border-b border-white/[0.08] flex gap-1">
-            {(['insights', 'transcript', 'events', 'agents'] as const).map((tab) => (
+            {(['insights', 'transcript', 'events'] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -399,9 +330,14 @@ function VideoDetailModal({
                 )}
               >
                 {tab}
-                {tab === 'events' && video.events && video.events.length > 0 && (
+                {tab === 'events' && hasEvents && (
                   <span className="ml-1.5 text-xs bg-primary-500/20 text-primary-400 px-1.5 py-0.5 rounded-full">
-                    {video.events.length}
+                    {video.events!.length}
+                  </span>
+                )}
+                {tab === 'insights' && video.insights?.actions && video.insights.actions.length > 0 && (
+                  <span className="ml-1.5 text-xs bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded-full">
+                    {video.insights.actions.length}
                   </span>
                 )}
               </button>
@@ -410,69 +346,95 @@ function VideoDetailModal({
 
           {/* Scrollable Content */}
           <div className="flex-1 overflow-y-auto p-6 space-y-6">
-            {activeTab === 'insights' && video.insights && (
+            {activeTab === 'insights' && hasInsights && (
               <>
                 {/* Summary */}
                 <div>
                   <h3 className="text-sm font-semibold text-white/50 uppercase tracking-wider mb-3">
                     Summary
                   </h3>
-                  <p className="text-white/80 leading-relaxed">{video.insights.summary}</p>
+                  <p className="text-white/80 leading-relaxed">{video.insights!.summary}</p>
                 </div>
 
                 {/* Action Items */}
-                <div>
-                  <h3 className="text-sm font-semibold text-white/50 uppercase tracking-wider mb-3">
-                    Action Items
-                  </h3>
-                  <ul className="space-y-2">
-                    {video.insights.actions.map((action, i) => (
-                      <li
-                        key={i}
-                        className="flex items-start gap-3 p-3.5 rounded-xl bg-white/[0.03] border border-white/[0.05] hover:bg-white/[0.05] transition-colors"
-                      >
-                        <input
-                          type="checkbox"
-                          className="mt-0.5 h-4 w-4 rounded border-white/20 bg-white/5 text-primary-500 focus:ring-primary-500/50"
-                        />
-                        <span className="text-white/80">{action}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+                {video.insights!.actions.length > 0 && (
+                  <div>
+                    <h3 className="text-sm font-semibold text-white/50 uppercase tracking-wider mb-3">
+                      Action Items
+                    </h3>
+                    <ul className="space-y-2">
+                      {video.insights!.actions.map((action, i) => (
+                        <li
+                          key={i}
+                          className="flex items-start gap-3 p-3.5 rounded-xl bg-white/[0.03] border border-white/[0.05] hover:bg-white/[0.05] transition-colors"
+                        >
+                          <input
+                            type="checkbox"
+                            className="mt-0.5 h-4 w-4 rounded border-white/20 bg-white/5 text-primary-500 focus:ring-primary-500/50"
+                          />
+                          <span className="text-white/80">{action}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Sentiment */}
+                {video.insights!.sentiment && video.insights!.sentiment !== 'Neutral' && (
+                  <div>
+                    <h3 className="text-sm font-semibold text-white/50 uppercase tracking-wider mb-3">
+                      Sentiment
+                    </h3>
+                    <span className="px-3 py-1.5 rounded-lg bg-white/[0.05] text-white/70 text-sm">
+                      {video.insights!.sentiment}
+                    </span>
+                  </div>
+                )}
 
                 {/* Topics */}
-                <div>
-                  <h3 className="text-sm font-semibold text-white/50 uppercase tracking-wider mb-3">
-                    Topics
-                  </h3>
-                  <div className="flex flex-wrap gap-2">
-                    {video.insights.topics.map((topic) => (
-                      <span
-                        key={topic}
-                        className="px-4 py-2 rounded-full bg-primary-500/15 text-primary-400 border border-primary-500/25 text-sm font-medium"
-                      >
-                        {topic}
-                      </span>
-                    ))}
+                {video.insights!.topics.length > 0 && (
+                  <div>
+                    <h3 className="text-sm font-semibold text-white/50 uppercase tracking-wider mb-3">
+                      Topics
+                    </h3>
+                    <div className="flex flex-wrap gap-2">
+                      {video.insights!.topics.map((topic) => (
+                        <span
+                          key={topic}
+                          className="px-4 py-2 rounded-full bg-primary-500/15 text-primary-400 border border-primary-500/25 text-sm font-medium"
+                        >
+                          {topic}
+                        </span>
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
               </>
             )}
 
-            {activeTab === 'insights' && !video.insights && (
-              <p className="text-sm text-white/30 text-center py-8">
-                Insights will appear once processing completes.
-              </p>
+            {activeTab === 'insights' && !hasInsights && (
+              <div className="text-center py-12">
+                <div className="text-4xl mb-3 opacity-40">🧠</div>
+                <p className="text-sm text-white/30">
+                  {video.status === 'processing'
+                    ? 'Insights will appear once processing completes.'
+                    : 'No insights available for this video.'}
+                </p>
+              </div>
             )}
 
             {activeTab === 'transcript' && (
-              video.transcript ? (
-                <TranscriptViewer transcript={video.transcript} />
+              hasTranscript ? (
+                <TranscriptViewer transcript={video.transcript!} />
               ) : (
-                <p className="text-sm text-white/30 text-center py-8">
-                  No transcript available yet.
-                </p>
+                <div className="text-center py-12">
+                  <div className="text-4xl mb-3 opacity-40">📝</div>
+                  <p className="text-sm text-white/30">
+                    {video.status === 'processing'
+                      ? 'Transcript is being generated...'
+                      : 'No transcript available.'}
+                  </p>
+                </div>
               )
             )}
 
@@ -481,26 +443,6 @@ function VideoDetailModal({
                 events={video.events || []}
                 onExtract={onExtractEvents ? () => onExtractEvents(video.id) : undefined}
               />
-            )}
-
-            {activeTab === 'agents' && (
-              <>
-                <AgentDashboard executions={video.agents || []} />
-                <ResultsViewer
-                  executions={video.agents || []}
-                  events={video.events || []}
-                />
-                {(!video.agents || video.agents.length === 0) && video.events && video.events.length > 0 && onDispatchAgents && (
-                  <div className="flex justify-center py-6">
-                    <button
-                      onClick={() => onDispatchAgents(video.id)}
-                      className="btn btn-primary py-2.5 px-6"
-                    >
-                      🚀 Dispatch Agents
-                    </button>
-                  </div>
-                )}
-              </>
             )}
           </div>
 
@@ -511,14 +453,27 @@ function VideoDetailModal({
                 onClick={() => setShowAssistant(!showAssistant)}
                 className={clsx(
                   "flex-1 btn py-3 transition-all flex items-center justify-center gap-2",
-                  showAssistant ? "btn-secondary" : "btn-primary animate-pulse-glow"
+                  showAssistant ? "btn-secondary" : "btn-primary"
                 )}
               >
                 <span className="text-xl">🤖</span>
-                {showAssistant ? "Hide Assistant" : "Ask Assistant"}
+                {showAssistant ? "Hide Assistant" : "Ask About This Video"}
               </button>
-              <button className="btn btn-secondary py-3 px-6">Deploy</button>
-              <button className="btn btn-secondary py-3 px-6">Export</button>
+              {video.transcript && (
+                <button
+                  onClick={() => {
+                    const blob = new Blob([video.transcript!], { type: 'text/plain' });
+                    const a = document.createElement('a');
+                    a.href = URL.createObjectURL(blob);
+                    a.download = `transcript-${video.id}.txt`;
+                    a.click();
+                    URL.revokeObjectURL(a.href);
+                  }}
+                  className="btn btn-secondary py-3 px-6"
+                >
+                  Export Transcript
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -543,21 +498,26 @@ function VideoDetailModal({
 // ============================================
 function DashboardContent() {
   const searchParams = useSearchParams();
-  const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const [videoUrl, setVideoUrl] = useState('');
+  const [filter, setFilter] = useState<'all' | 'processing' | 'complete' | 'failed'>('all');
 
   // Zustand store
   const videos = useDashboardStore((s) => s.videos);
   const activities = useDashboardStore((s) => s.activities);
   const selectedVideoId = useDashboardStore((s) => s.selectedVideoId);
-  const loading = useDashboardStore((s) => s.loading);
   const selectVideo = useDashboardStore((s) => s.selectVideo);
   const processVideo = useDashboardStore((s) => s.processVideo);
   const extractEvents = useDashboardStore((s) => s.extractEvents);
-  const dispatchAgents = useDashboardStore((s) => s.dispatchAgents);
-  const setLoading = useDashboardStore((s) => s.setLoading);
 
   const selectedVideo = videos.find((v) => v.id === selectedVideoId) || null;
+
+  const filteredVideos = filter === 'all'
+    ? videos
+    : videos.filter((v) => v.status === filter);
+
+  const completedCount = videos.filter((v) => v.status === 'complete').length;
+  const processingCount = videos.filter((v) => v.status === 'processing').length;
+  const totalEvents = videos.reduce((sum, v) => sum + (v.events?.length || 0), 0);
 
   useEffect(() => {
     const video = searchParams.get('video');
@@ -566,23 +526,6 @@ function DashboardContent() {
       processVideo(video);
     }
   }, [searchParams, processVideo]);
-
-  useEffect(() => {
-    async function fetchMetrics() {
-      try {
-        const res = await fetch('/api/dashboard');
-        const data = await res.json();
-        setMetrics(data);
-      } catch (error) {
-        console.error('Failed to fetch metrics:', error);
-      } finally {
-        setLoading(false);
-      }
-    }
-    fetchMetrics();
-    const interval = setInterval(fetchMetrics, 10000);
-    return () => clearInterval(interval);
-  }, [setLoading]);
 
   const handleAddVideo = useCallback(
     (url?: string) => {
@@ -601,41 +544,47 @@ function DashboardContent() {
         <div className="flex items-center gap-6">
           <Link href="/" className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center font-black text-lg shadow-lg shadow-primary-500/25">
-              U
+              E
             </div>
-            <span className="font-bold text-xl tracking-tight">UVAI.io</span>
+            <span className="font-bold text-xl tracking-tight">EventRelay</span>
           </Link>
           <div className="h-6 w-px bg-white/[0.08]" />
           <span className="text-white/50 font-medium">Dashboard</span>
         </div>
         <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2.5 px-4 py-2 rounded-xl bg-green-500/10 border border-green-500/20">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-green-400" />
-            </span>
-            <span className="text-sm text-green-400 font-medium">System Online</span>
-          </div>
-          <Link
-            href="/playground"
-            className="btn btn-secondary py-2"
-          >
+          {processingCount > 0 && (
+            <div className="flex items-center gap-2.5 px-4 py-2 rounded-xl bg-primary-500/10 border border-primary-500/20">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-primary-400" />
+              </span>
+              <span className="text-sm text-primary-400 font-medium">{processingCount} Processing</span>
+            </div>
+          )}
+          {processingCount === 0 && (
+            <div className="flex items-center gap-2.5 px-4 py-2 rounded-xl bg-green-500/10 border border-green-500/20">
+              <span className="relative flex h-2 w-2">
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-green-400" />
+              </span>
+              <span className="text-sm text-green-400 font-medium">Ready</span>
+            </div>
+          )}
+          <Link href="/playground" className="btn btn-secondary py-2 text-sm">
             API Docs
           </Link>
         </div>
       </nav>
 
       <div className="relative z-10 max-w-7xl mx-auto p-6 lg:p-8">
-        {/* Header */}
-        <div className="mb-10">
+        {/* Header + Input */}
+        <div className="mb-8">
           <h1 className="text-3xl md:text-4xl font-bold mb-3 tracking-tight">
-            Video Intelligence Dashboard
+            Video Intelligence
           </h1>
-          <p className="text-white/50 text-lg mb-8">
+          <p className="text-white/50 text-lg mb-6">
             Process, analyze, and extract insights from any video
           </p>
 
-          {/* Video Input */}
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -643,17 +592,18 @@ function DashboardContent() {
             }}
             className="flex gap-3 max-w-2xl"
           >
-            <div className="flex-1 flex gap-3 p-2 rounded-2xl bg-white/[0.03] border border-white/[0.08] backdrop-blur-xl">
+            <div className="flex-1 flex gap-3 p-2 rounded-2xl bg-white/[0.03] border border-white/[0.08] backdrop-blur-xl focus-within:border-primary-500/30 transition-all">
               <input
                 type="text"
                 value={videoUrl}
                 onChange={(e) => setVideoUrl(e.target.value)}
-                placeholder="Paste YouTube URL, Google Drive link, or upload..."
+                placeholder="Paste YouTube URL..."
                 className="flex-1 px-5 py-3 bg-transparent text-white placeholder:text-white/30 focus:outline-none"
               />
               <button
                 type="submit"
-                className="btn btn-primary py-3 px-8"
+                disabled={!videoUrl.trim()}
+                className="btn btn-primary py-3 px-8 disabled:opacity-30 disabled:cursor-not-allowed"
               >
                 Analyze
               </button>
@@ -661,29 +611,25 @@ function DashboardContent() {
           </form>
         </div>
 
-        {/* Metrics Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-10">
-          <MetricCard
-            value={metrics?.metrics.activeWorkflows ?? 0}
-            label="Active Workflows"
-            icon="⚡"
-          />
-          <MetricCard
-            value={metrics?.metrics.totalProcessed ?? 0}
-            label="Videos Processed"
-            icon="🎬"
-          />
-          <MetricCard
-            value={videos.length}
-            label="Videos in Library"
-            icon="📚"
-          />
-          <MetricCard
-            value={`${metrics?.metrics.errorRate ?? 0}%`}
-            label="Error Rate"
-            icon="✓"
-          />
-        </div>
+        {/* Session Stats (real data from store) */}
+        {videos.length > 0 && (
+          <div className="flex items-center gap-6 mb-8 text-sm">
+            <div className="flex items-center gap-2 text-white/50">
+              <span className="text-lg">📚</span>
+              <span><strong className="text-white">{videos.length}</strong> videos</span>
+            </div>
+            <div className="flex items-center gap-2 text-white/50">
+              <span className="text-lg">✅</span>
+              <span><strong className="text-white">{completedCount}</strong> complete</span>
+            </div>
+            {totalEvents > 0 && (
+              <div className="flex items-center gap-2 text-white/50">
+                <span className="text-lg">⚡</span>
+                <span><strong className="text-white">{totalEvents}</strong> events extracted</span>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Main Content */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -692,34 +638,42 @@ function DashboardContent() {
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-bold">Video Library</h2>
               <div className="flex gap-2">
-                {['All', 'Processing', 'Complete'].map((filter, i) => (
-                  <button
-                    key={filter}
-                    className={clsx(
-                      'px-4 py-2 rounded-xl text-sm font-medium transition-all',
-                      i === 0
-                        ? 'bg-primary-500/15 text-primary-400 border border-primary-500/20'
-                        : 'bg-white/[0.03] text-white/50 border border-white/[0.05] hover:bg-white/[0.06]'
-                    )}
-                  >
-                    {filter}
-                  </button>
-                ))}
+                {(['all', 'processing', 'complete', 'failed'] as const).map((f) => {
+                  const count = f === 'all' ? videos.length : videos.filter(v => v.status === f).length;
+                  if (f !== 'all' && count === 0) return null;
+                  return (
+                    <button
+                      key={f}
+                      onClick={() => setFilter(f)}
+                      className={clsx(
+                        'px-4 py-2 rounded-xl text-sm font-medium transition-all capitalize',
+                        filter === f
+                          ? 'bg-primary-500/15 text-primary-400 border border-primary-500/20'
+                          : 'bg-white/[0.03] text-white/50 border border-white/[0.05] hover:bg-white/[0.06]'
+                      )}
+                    >
+                      {f} {count > 0 && `(${count})`}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
-            {videos.length === 0 ? (
+            {filteredVideos.length === 0 && videos.length === 0 ? (
               <div className="col-span-full flex flex-col items-center justify-center py-20 rounded-2xl border border-dashed border-white/[0.1] bg-white/[0.02]">
                 <div className="text-6xl mb-4 opacity-50">🎬</div>
                 <h3 className="text-lg font-semibold text-white/70 mb-2">No videos yet</h3>
                 <p className="text-white/40 text-sm text-center max-w-sm">
                   Paste a YouTube URL above and click Analyze to get started.
-                  Your processed videos will appear here.
                 </p>
+              </div>
+            ) : filteredVideos.length === 0 ? (
+              <div className="text-center py-12 text-white/30 text-sm">
+                No {filter} videos.
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                {videos.map((video) => (
+                {filteredVideos.map((video) => (
                   <VideoCard
                     key={video.id}
                     video={video}
@@ -733,7 +687,6 @@ function DashboardContent() {
           {/* Sidebar */}
           <div className="space-y-6">
             <ActivityFeed activities={activities} />
-            <QuickActions />
           </div>
         </div>
       </div>
@@ -744,7 +697,6 @@ function DashboardContent() {
           video={selectedVideo}
           onClose={() => selectVideo(null)}
           onExtractEvents={extractEvents}
-          onDispatchAgents={dispatchAgents}
         />
       )}
     </div>
