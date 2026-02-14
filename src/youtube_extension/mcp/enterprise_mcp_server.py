@@ -20,7 +20,7 @@ import psutil
 
 # Import existing processors
 # from video_extractor_enhanced import EnhancedVideoExtractor, VideoContent
-# from notebooklm_processor import NotebookLMProcessor, VideoNotebook
+from notebooklm_processor import NotebookLMProcessor, VideoNotebook
 # from videoprism_analyzer import VideoPrismAnalyzer, VideoPrismAnalysis
 
 # MCP imports
@@ -366,7 +366,7 @@ class EnterpriseMCPServer:
 
         # Initialize processors
         # self.video_extractor = EnhancedVideoExtractor(config)
-        # self.notebook_processor = NotebookLMProcessor(config)
+        self.notebook_processor = NotebookLMProcessor(config)
         # self.videoprism_analyzer = VideoPrismAnalyzer(config)
 
         # Initialize MCP server if available
@@ -539,6 +539,60 @@ class EnterpriseMCPServer:
                     content=[TextContent(type="text", text=json.dumps({
                         "error": str(e),
                         "processing_time": round(time.time() - operation_start, 2)
+                    }))]
+                )
+
+        @self.server.call_tool()
+        async def analyze_video_with_notebooklm(arguments: dict) -> CallToolResult:
+            """
+            Analyze video transcript using NotebookLM (MCP Orchestration).
+            Creates a notebook, adds the transcript, and generates a summary.
+            """
+            video_id = arguments.get("video_id")
+            transcript = arguments.get("transcript")
+            title = arguments.get("title", "Unknown Video")
+
+            if not video_id or not transcript:
+                return CallToolResult(
+                    content=[TextContent(type="text", text=json.dumps({
+                        "error": "Missing video_id or transcript parameters"
+                    }))]
+                )
+
+            operation_start = time.time()
+            self.metrics.record_counter("notebooklm_analysis.requests")
+
+            try:
+                # Use circuit breaker for AI processing
+                async def analysis_operation():
+                    async with self.circuit_breakers["ai_processing"]:
+                        return await self.notebook_processor.process_video(video_id, transcript, title)
+
+                result = await self.retry_manager.execute_with_retry(
+                    analysis_operation,
+                    "notebooklm_analysis"
+                )
+
+                response = {
+                    "video_id": result.video_id,
+                    "notebook_id": result.notebook_id,
+                    "summary": result.summary,
+                    "processing_time": round(time.time() - operation_start, 2)
+                }
+                
+                self.metrics.record_timing("notebooklm_analysis.duration", time.time() - operation_start)
+                self.metrics.record_counter("notebooklm_analysis.success")
+
+                return CallToolResult(
+                    content=[TextContent(type="text", text=json.dumps(response, indent=2))]
+                )
+
+            except Exception as e:
+                self.metrics.record_counter("notebooklm_analysis.error")
+                logger.error(f"NotebookLM analysis failed: {e}", exc_info=True)
+                return CallToolResult(
+                    content=[TextContent(type="text", text=json.dumps({
+                        "error": str(e)
                     }))]
                 )
 
