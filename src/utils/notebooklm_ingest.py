@@ -20,25 +20,41 @@ def upload_to_notebooklm(file_path):
     print(f"Starting NotebookLM ingestion for: {file_path}")
     
     with sync_playwright() as p:
+        context = None
+        browser = None
         try:
-            # Launch persistent context
-            # We use headless=False so the user can see/interact if needed (especially for first login)
-            print(f"Launching browser with profile: {USER_DATA_DIR}")
-            context = p.chromium.launch_persistent_context(
-                user_data_dir=USER_DATA_DIR,
-                headless=False, # Must be false to allow login interaction
-                accept_downloads=True,
-                viewport={"width": 1280, "height": 720},
-                user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
-                args=[
-                    "--disable-blink-features=AutomationControlled",
-                    "--no-sandbox",
-                    "--disable-infobars",
-                ],
-                ignore_default_args=["--enable-automation"],
-            )
+            # Try connecting to existing browser first (CDP)
+            try:
+                print("Attempting to connect to existing Chrome instance on port 9222...")
+                browser = p.chromium.connect_over_cdp("http://localhost:9222")
+                context = browser.contexts[0]
+                print("Successfully connected to existing browser!")
+            except Exception as e:
+                print(f"Could not connect to existing browser: {e}")
+                print("Falling back to launching new persistent context...")
+
+            if not context:
+                # Launch persistent context
+                # We use headless=False so the user can see/interact if needed (especially for first login)
+                print(f"Launching browser with profile: {USER_DATA_DIR}")
+                context = p.chromium.launch_persistent_context(
+                    user_data_dir=USER_DATA_DIR,
+                    headless=False, # Must be false to allow login interaction
+                    accept_downloads=True,
+                    viewport={"width": 1280, "height": 720},
+                    user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+                    args=[
+                        "--disable-blink-features=AutomationControlled",
+                        "--no-sandbox",
+                        "--disable-infobars",
+                    ],
+                    ignore_default_args=["--enable-automation"],
+                )
             
-            page = context.pages[0]
+            if len(context.pages) > 0:
+                page = context.pages[0]
+            else:
+                page = context.new_page()
             
             print("Navigating to NotebookLM...")
             page.goto(NOTEBOOKLM_URL)
