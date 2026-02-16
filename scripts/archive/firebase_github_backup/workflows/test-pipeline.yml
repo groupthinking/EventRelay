@@ -1,0 +1,434 @@
+name: Automated Testing Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'package.json'
+      - '.github/workflows/test-pipeline.yml'
+  pull_request:
+    branches: [main, develop]
+    types: [opened, synchronize, reopened]
+  schedule:
+    # Run comprehensive tests daily at 6 AM UTC
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+    inputs:
+      test_type:
+        description: 'Type of tests to run'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - unit
+          - integration
+          - e2e
+          - security
+          - performance
+
+jobs:
+  setup:
+    name: Setup and Cache
+    runs-on: ubuntu-latest
+    outputs:
+      test-changed: ${{ steps.check-changes.outputs.test-changed }}
+      src-changed: ${{ steps.check-changes.outputs.src-changed }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check for changes
+        id: check-changes
+        run: |
+          if git diff --name-only HEAD~1 | grep -E '\.(js|ts|spec|test)' || git diff --name-only HEAD~1 | grep 'tests/'; then
+            echo "test-changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "test-changed=false" >> $GITHUB_OUTPUT
+          fi
+
+          if git diff --name-only HEAD~1 | grep '^src/'; then
+            echo "src-changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "src-changed=false" >> $GITHUB_OUTPUT
+          fi
+
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    needs: setup
+    if: needs.setup.outputs.src-changed == 'true' || github.event.inputs.test_type == 'unit' || github.event.inputs.test_type == 'all'
+
+    strategy:
+      matrix:
+        node-version: [16.x, 18.x, 20.x]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run unit tests
+        run: npm run test:unit -- --coverage --watchAll=false
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage/lcov.info
+          flags: unit,${{ matrix.node-version }}
+          name: unit-tests-${{ matrix.node-version }}
+
+      - name: Check coverage threshold
+        run: |
+          COVERAGE=$(jq '.total.lines.pct' coverage/coverage-summary.json)
+          if (( $(echo "$COVERAGE < 80" | bc -l) )); then
+            echo "❌ Coverage $COVERAGE% is below 80% threshold"
+            exit 1
+          else
+            echo "✅ Coverage $COVERAGE% meets threshold"
+          fi
+
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: [setup, unit-tests]
+    if: (needs.setup.outputs.src-changed == 'true' || github.event.inputs.test_type == 'integration' || github.event.inputs.test_type == 'all') && !failure()
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Setup test database
+        run: |
+          npm run db:migrate:test
+          npm run db:seed:test
+
+      - name: Run integration tests
+        run: npm run test:integration
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+          REDIS_URL: redis://localhost:6379
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: integration-test-results
+          path: test-results/integration/
+
+  e2e-tests:
+    name: End-to-End Tests
+    runs-on: ubuntu-latest
+    needs: [setup, integration-tests]
+    if: (needs.setup.outputs.src-changed == 'true' || github.event.inputs.test_type == 'e2e' || github.event.inputs.test_type == 'all') && !failure()
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Setup test environment
+        run: |
+          npm run env:setup:test
+          npm run db:migrate:test
+          npm run db:seed:test
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps
+
+      - name: Run E2E tests
+        run: npm run test:e2e
+        env:
+          BASE_URL: http://localhost:3000
+
+      - name: Upload test artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-test-artifacts
+          path: |
+            test-results/e2e/
+            playwright-report/
+
+  security-tests:
+    name: Security Tests
+    runs-on: ubuntu-latest
+    needs: setup
+    if: needs.setup.outputs.src-changed == 'true' || github.event.inputs.test_type == 'security' || github.event.inputs.test_type == 'all'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run npm audit
+        run: npm audit --audit-level high
+
+      - name: Run OWASP Dependency Check
+        uses: dependency-check/Dependency-Check_Action@main
+        with:
+          project: 'Firebase Project'
+          path: '.'
+          format: 'ALL'
+          args: >
+            --enableRetired
+            --enableExperimental
+            --nvdValidForHours 24
+
+      - name: Run security linting
+        run: npm run security:lint
+
+      - name: Run SAST (Static Application Security Testing)
+        run: |
+          # Install and run security scanning tools
+          npm install -g eslint-plugin-security
+          npx eslint src/ --ext .js,.ts --plugin security
+
+      - name: Upload security scan results
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-scan-results
+          path: |
+            reports/dependency-check-report.html
+            reports/security-lint-results.json
+
+  performance-tests:
+    name: Performance Tests
+    runs-on: ubuntu-latest
+    needs: [setup, e2e-tests]
+    if: (needs.setup.outputs.src-changed == 'true' || github.event.inputs.test_type == 'performance' || github.event.inputs.test_type == 'all') && !failure()
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Setup performance test environment
+        run: |
+          npm run env:setup:perf
+          npm run db:migrate:test
+          npm run db:seed:perf
+
+      - name: Run Lighthouse performance audit
+        uses: treosh/lighthouse-ci-action@v10
+        with:
+          urls: http://localhost:3000
+          configPath: .lighthouserc.json
+          uploadArtifacts: true
+          temporaryPublicStorage: true
+
+      - name: Run Artillery load testing
+        run: |
+          npm install -g artillery
+          artillery run tests/performance/load-test.yml --output test-results/performance/artillery-report.json
+
+      - name: Generate performance report
+        run: |
+          npm run perf:analyze
+          npm run perf:compare-baseline
+
+      - name: Upload performance results
+        uses: actions/upload-artifact@v4
+        with:
+          name: performance-test-results
+          path: |
+            test-results/performance/
+            lighthouseci/
+            .lighthouseci/
+
+  quality-gate:
+    name: Quality Gate
+    runs-on: ubuntu-latest
+    needs: [unit-tests, integration-tests, e2e-tests, security-tests, performance-tests]
+    if: always()
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download test results
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+
+      - name: Quality gate check
+        run: |
+          # Check if all required tests passed
+          if [ -f ./artifacts/unit-test-results/coverage-final.json ]; then
+            COVERAGE=$(jq '.total.lines.pct' ./artifacts/unit-test-results/coverage-final.json)
+            if (( $(echo "$COVERAGE < 80" | bc -l) )); then
+              echo "❌ Coverage $COVERAGE% below 80% threshold"
+              exit 1
+            fi
+          fi
+
+          # Check for security vulnerabilities
+          if [ -f ./artifacts/security-scan-results/dependency-check-report.html ]; then
+            CRITICAL_VULNS=$(grep -c "CRITICAL" ./artifacts/security-scan-results/dependency-check-report.html || echo "0")
+            if [ "$CRITICAL_VULNS" -gt 0 ]; then
+              echo "❌ Found $CRITICAL_VULNS critical security vulnerabilities"
+              exit 1
+            fi
+          fi
+
+          # Check performance thresholds
+          if [ -f ./artifacts/performance-test-results/lighthouse-results.json ]; then
+            PERF_SCORE=$(jq '.categories.performance.score * 100' ./artifacts/performance-test-results/lighthouse-results.json)
+            if (( $(echo "$PERF_SCORE < 90" | bc -l) )); then
+              echo "❌ Performance score $PERF_SCORE below 90 threshold"
+              exit 1
+            fi
+          fi
+
+          echo "✅ All quality gates passed!"
+
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: quality-gate
+    if: github.ref == 'refs/heads/develop' && needs.quality-gate.result == 'success'
+    environment: staging
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to staging
+        run: |
+          echo "🚀 Deploying to staging environment..."
+          # Add your staging deployment commands here
+          echo "✅ Staging deployment completed"
+
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [quality-gate, deploy-staging]
+    if: github.ref == 'refs/heads/main' && needs.quality-gate.result == 'success'
+    environment: production
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to production
+        run: |
+          echo "🚀 Deploying to production environment..."
+          # Add your production deployment commands here
+          echo "✅ Production deployment completed"
+
+  notifications:
+    name: Send Notifications
+    runs-on: ubuntu-latest
+    needs: [quality-gate, deploy-staging, deploy-production]
+    if: always()
+
+    steps:
+      - name: Send Slack notification
+        uses: 8398a7/action-slack@v3
+        if: env.SLACK_WEBHOOK_URL != null
+        with:
+          status: ${{ job.status }}
+          webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          fields: repo,message,commit,author,action,eventName,ref,workflow
+          title: 'Testing Pipeline ${{ job.status }}'
+          text: 'Automated testing pipeline has completed'
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+      - name: Send email notification
+        if: failure()
+        uses: actions/send-email@v1
+        with:
+          server_address: smtp.gmail.com
+          server_port: 587
+          username: ${{ secrets.EMAIL_USERNAME }}
+          password: ${{ secrets.EMAIL_PASSWORD }}
+          subject: 'Testing Pipeline Failed - ${{ github.repository }}'
+          body: |
+            The automated testing pipeline has failed for ${{ github.repository }}.
+
+            Branch: ${{ github.ref }}
+            Commit: ${{ github.sha }}
+            Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+            Please review the test results and fix any issues.
+          to: dev-team@yourcompany.com

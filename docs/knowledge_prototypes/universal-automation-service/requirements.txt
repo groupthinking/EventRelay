@@ -1,0 +1,8 @@
+python-dotenv
+requests
+google-generativeai
+youtube-transcript-api
+torch
+transformers
+numpy
+psutil

@@ -124,19 +124,72 @@ def upload_to_notebooklm(file_path):
                 return None
 
             print("Waiting for notebook to be created...")
-            page.wait_for_url("**/notebook/*", timeout=30000)
+            # Wait for URL to change from "creating" to actual ID
+            page.wait_for_url(lambda u: "/notebook/" in u and "/creating" not in u, timeout=30000)
             notebook_url = page.url
             print(f"Created Notebook: {notebook_url}")
             
             print("Uploading source...")
             # Handling the upload
             try:
-                # Wait for the file input to be present in the DOM
-                # It might be hidden, so we don't wait for visibility
-                page.wait_for_selector('input[type="file"]', state="attached", timeout=10000)
-                page.set_input_files('input[type="file"]', file_path)
+                # Check if we need to click "Add source" or a specific source type
+                # Sometimes the panel is already open, sometimes not.
+                
+                # Wait for the page to settle
+                page.wait_for_load_state("networkidle", timeout=5000)
+
+                # If "Add source" button is visible (meaning panel might be closed), click it
+                if page.locator("text=Add source").is_visible():
+                    print("Clicking 'Add source' button...")
+                    page.click("text=Add source")
+                    time.sleep(1)
+
+                # Try to trigger file chooser by clicking likely buttons
+                print("Attempting to trigger file chooser...")
+                
+                upload_triggers = [
+                    "text=Upload a source",
+                    "text=PDF",
+                    "text=Text file",
+                    "button:has-text('Upload')",
+                    "div[role='button']:has-text('Upload')",
+                    "text=Upload"
+                ]
+                
+                file_chooser = None
+                for trigger in upload_triggers:
+                    try:
+                        loc = page.locator(trigger).first
+                        if loc.is_visible():
+                            print(f"Trying upload trigger: {trigger}")
+                            with page.expect_file_chooser(timeout=3000) as fc_info:
+                                loc.click()
+                            file_chooser = fc_info.value
+                            print("File chooser triggered!")
+                            break
+                    except Exception:
+                        # expected if click doesn't trigger chooser
+                        pass
+                
+                if file_chooser:
+                    print(f"Uploading file: {file_path}")
+                    file_chooser.set_files(file_path)
+                else:
+                    # Fallback to looking for input directly if no chooser triggered
+                    print("No file chooser triggered. Looking for input[type='file']...")
+                    page.wait_for_selector('input[type="file"]', state="attached", timeout=5000)
+                    page.set_input_files('input[type="file"]', file_path)
             except Exception as e:
                 print(f"Error uploading file: {e}")
+                # Try to capture what might be wrong
+                try:
+                    print(f"Current URL: {page.url}")
+                    # Save HTML to file for inspection
+                    with open("debug_notebooklm_page.html", "w", encoding="utf-8") as f:
+                        f.write(page.content())
+                    print("Saved page content to debug_notebooklm_page.html")
+                except:
+                    pass
                 context.close()
                 return None
 

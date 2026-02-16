@@ -1,0 +1,175 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.software-on-demand.dev/step_graph.schema.json",
+  "title": "Software-On-Demand Step Graph",
+  "description": "Execution graph describing agent orchestration for tutorial reproduction runs.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "graph_id",
+    "run_context",
+    "steps"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^v[0-9]+\\.[0-9]+$"
+    },
+    "graph_id": {
+      "type": "string",
+      "description": "Unique identifier for this step graph instance."
+    },
+    "run_context": {
+      "type": "object",
+      "required": ["video_url", "run_id", "initiated_at"],
+      "properties": {
+        "video_url": { "type": "string", "format": "uri" },
+        "run_id": { "type": "string" },
+        "initiated_at": { "type": "string", "format": "date-time" },
+        "initiator": { "type": "string" },
+        "stack": {
+          "type": "object",
+          "properties": {
+            "language": { "type": "string" },
+            "framework": { "type": "string" },
+            "runtime_version": { "type": "string" }
+          },
+          "additionalProperties": false
+        },
+        "notes": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/step" }
+    },
+    "edges": {
+      "type": "array",
+      "description": "Optional explicit edges when graph is not purely sequential.",
+      "items": { "$ref": "#/$defs/edge" }
+    }
+  },
+  "$defs": {
+    "edge": {
+      "type": "object",
+      "required": ["from", "to"],
+      "properties": {
+        "from": { "type": "string" },
+        "to": { "type": "string" },
+        "condition": {
+          "type": "object",
+          "description": "Optional condition for traversal (e.g., status == retry).",
+          "properties": {
+            "type": { "type": "string" },
+            "value": {}
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "step": {
+      "type": "object",
+      "required": ["id", "kind", "status", "started_at"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Stable step identifier (e.g., agent-fetch-transcript)."
+        },
+        "display_name": { "type": "string" },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "ingest_metadata",
+            "transcribe",
+            "segment",
+            "extract_actions",
+            "rag_ground",
+            "execute",
+            "verify",
+            "publish",
+            "human_review",
+            "system"
+          ]
+        },
+        "status": {
+          "type": "string",
+          "enum": ["waiting", "running", "succeeded", "failed", "skipped", "cancelled"]
+        },
+        "started_at": { "type": "string", "format": "date-time" },
+        "completed_at": { "type": ["string", "null"], "format": "date-time" },
+        "retries": { "type": "integer", "minimum": 0 },
+        "inputs": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/io" },
+          "default": []
+        },
+        "outputs": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/io" },
+          "default": []
+        },
+        "tool_invocation": {
+          "type": "object",
+          "description": "Details about LLM/tool calls executed within the step.",
+          "properties": {
+            "model": { "type": "string" },
+            "tool": { "type": "string" },
+            "prompt_tokens": { "type": "integer", "minimum": 0 },
+            "completion_tokens": { "type": "integer", "minimum": 0 },
+            "cost_usd": { "type": "number", "minimum": 0 }
+          },
+          "additionalProperties": false
+        },
+        "artifacts": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/artifact" },
+          "default": []
+        },
+        "children": {
+          "type": "array",
+          "description": "Nested steps for hierarchical graphs.",
+          "items": { "$ref": "#/$defs/step" }
+        },
+        "notes": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "io": {
+      "type": "object",
+      "required": ["name", "type"],
+      "properties": {
+        "name": { "type": "string" },
+        "type": {
+          "type": "string",
+          "enum": ["text", "file", "url", "command", "json", "secret", "metric"]
+        },
+        "value": {},
+        "sensitive": { "type": "boolean", "default": false },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "artifact": {
+      "type": "object",
+      "required": ["uri", "type"],
+      "properties": {
+        "uri": { "type": "string", "format": "uri" },
+        "type": {
+          "type": "string",
+          "enum": ["log", "file", "dataset", "deployment", "report"]
+        },
+        "checksum": { "type": "string" },
+        "size_bytes": { "type": "integer", "minimum": 0 },
+        "description": { "type": "string" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

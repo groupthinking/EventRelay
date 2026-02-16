@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Universal Automation Service - YouTube to Skills Pipeline</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        header {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #667eea;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        .tagline {
+            color: #666;
+            font-size: 1.2em;
+        }
+        .input-section {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+        }
+        .input-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        input[type="text"] {
+            flex: 1;
+            padding: 15px;
+            font-size: 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            transition: border-color 0.3s;
+        }
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        button {
+            padding: 15px 30px;
+            font-size: 16px;
+            font-weight: 600;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+        button:active {
+            transform: translateY(0);
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+        }
+        .card h2 {
+            color: #667eea;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 10px;
+        }
+        .pipeline-viz {
+            grid-column: 1 / -1;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: 600;
+            margin-right: 8px;
+        }
+        .status-idle { background: #e0e0e0; color: #666; }
+        .status-processing { background: #fff3cd; color: #856404; }
+        .status-completed { background: #d4edda; color: #155724; }
+        .status-error { background: #f8d7da; color: #721c24; }
+        .event-feed {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .event-item {
+            padding: 12px;
+            margin-bottom: 10px;
+            border-left: 4px solid #667eea;
+            background: #f8f9fa;
+            border-radius: 4px;
+        }
+        .event-item .timestamp {
+            font-size: 0.85em;
+            color: #999;
+            margin-bottom: 4px;
+        }
+        .event-item .type {
+            font-weight: 600;
+            color: #667eea;
+            margin-bottom: 4px;
+        }
+        .metrics {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+        .metric {
+            text-align: center;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 8px;
+        }
+        .metric .value {
+            font-size: 2.5em;
+            font-weight: 700;
+            margin-bottom: 5px;
+        }
+        .metric .label {
+            font-size: 0.9em;
+            opacity: 0.9;
+        }
+        .pipeline-stage {
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 8px;
+            border-left: 5px solid #667eea;
+        }
+        .pipeline-stage.active {
+            background: #fff3cd;
+            border-left-color: #ffc107;
+        }
+        .pipeline-stage.completed {
+            background: #d4edda;
+            border-left-color: #28a745;
+        }
+        .pipeline-stage h3 {
+            color: #333;
+            margin-bottom: 8px;
+        }
+        .pipeline-stage .details {
+            font-size: 0.9em;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🚀 Universal Automation Service</h1>
+            <p class="tagline">YouTube URL → EventRelay → UVAI → Executor → Skills</p>
+        </header>
+
+        <div class="input-section">
+            <h2 style="color: #667eea; margin-bottom: 15px;">📺 Process YouTube Video</h2>
+            <div class="input-group">
+                <input type="text" id="youtubeUrl" placeholder="Enter YouTube URL (e.g., https://youtube.com/watch?v=...)" />
+                <button onclick="processVideo()">Process Video</button>
+            </div>
+            <div id="processingStatus"></div>
+        </div>
+
+        <div class="card pipeline-viz">
+            <h2>🔄 Pipeline Architecture</h2>
+            <div class="mermaid">
+graph LR
+    A[YouTube URL] --> B[EventRelay Processing]
+    B --> C[UVAI Intelligence]
+    C --> D[Self-Correcting Executor]
+    D --> E[Claude Code Skills]
+
+    B --> B1[YouTube API Proxy]
+    B --> B2[Transcription Server]
+    B --> B3[Video Analysis]
+    B --> B4[Learning Analytics]
+
+    C --> C1[Context7 MCP]
+    C --> C2[Infrastructure Packaging]
+
+    D --> D1[Skill Creation]
+    D --> D2[Workflow Execution]
+    D --> D3[Self-Correction]
+
+    style A fill:#667eea,color:#fff
+    style E fill:#28a745,color:#fff
+    style B fill:#ffc107,color:#333
+    style C fill:#17a2b8,color:#fff
+    style D fill:#6f42c1,color:#fff
+            </div>
+        </div>
+
+        <div class="grid">
+            <div class="card">
+                <h2>📊 Live Event Feed</h2>
+                <div class="event-feed" id="eventFeed">
+                    <div class="event-item">
+                        <div class="timestamp">Waiting for events...</div>
+                        <div class="type">System Status: Ready</div>
+                        <div>Universal Automation Service monitoring active</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>📈 Metrics</h2>
+                <div class="metrics">
+                    <div class="metric">
+                        <div class="value" id="totalEvents">0</div>
+                        <div class="label">Total Events</div>
+                    </div>
+                    <div class="metric">
+                        <div class="value" id="videosProcessed">0</div>
+                        <div class="label">Videos Processed</div>
+                    </div>
+                    <div class="metric">
+                        <div class="value" id="skillsCreated">0</div>
+                        <div class="label">Skills Created</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>🎯 Current Pipeline Status</h2>
+            <div id="pipelineStatus">
+                <div class="pipeline-stage">
+                    <h3>🟢 System Ready</h3>
+                    <div class="details">Waiting for YouTube URL input</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        mermaid.initialize({ startOnLoad: true, theme: 'default' });
+
+        let ws;
+        let eventCount = 0;
+        let videosProcessed = 0;
+        let skillsCreated = 0;
+
+        function connectWebSocket() {
+            ws = new WebSocket('ws://localhost:3000');
+
+            ws.onopen = () => {
+                console.log('Connected to Universal Automation Service monitor');
+                addEvent('system.connected', 'Connected to monitoring server');
+            };
+
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                handleEvent(data);
+            };
+
+            ws.onclose = () => {
+                console.log('Disconnected from monitor, reconnecting...');
+                setTimeout(connectWebSocket, 3000);
+            };
+        }
+
+        function handleEvent(data) {
+            if (data.type === 'event') {
+                const evt = data.data;
+                addEvent(evt.eventType, evt.payload);
+                eventCount++;
+                document.getElementById('totalEvents').textContent = eventCount;
+
+                // Update pipeline-specific metrics
+                if (evt.eventType === 'pipeline.completed') {
+                    videosProcessed++;
+                    document.getElementById('videosProcessed').textContent = videosProcessed;
+                }
+                if (evt.eventType === 'executor.skill.created') {
+                    skillsCreated++;
+                    document.getElementById('skillsCreated').textContent = skillsCreated;
+                }
+
+                // Update pipeline status visualization
+                updatePipelineStatus(evt);
+            }
+        }
+
+        function addEvent(type, payload) {
+            const feed = document.getElementById('eventFeed');
+            const eventItem = document.createElement('div');
+            eventItem.className = 'event-item';
+            eventItem.innerHTML = `
+                <div class="timestamp">${new Date().toLocaleTimeString()}</div>
+                <div class="type">${type}</div>
+                <div>${JSON.stringify(payload).substring(0, 200)}</div>
+            `;
+            feed.insertBefore(eventItem, feed.firstChild);
+
+            // Keep only last 20 events
+            while (feed.children.length > 20) {
+                feed.removeChild(feed.lastChild);
+            }
+        }
+
+        function updatePipelineStatus(evt) {
+            const statusDiv = document.getElementById('pipelineStatus');
+            const stages = {
+                'pipeline.started': '<div class="pipeline-stage active"><h3>🔄 Pipeline Started</h3><div class="details">Processing YouTube URL</div></div>',
+                'eventrelay.processing': '<div class="pipeline-stage active"><h3>📺 EventRelay Processing</h3><div class="details">Fetching video, transcript, analysis</div></div>',
+                'eventrelay.completed': '<div class="pipeline-stage completed"><h3>✅ EventRelay Complete</h3><div class="details">Video data extracted</div></div>',
+                'uvai.processing': '<div class="pipeline-stage active"><h3>🧠 UVAI Intelligence Processing</h3><div class="details">Analyzing content and generating insights</div></div>',
+                'uvai.completed': '<div class="pipeline-stage completed"><h3>✅ UVAI Complete</h3><div class="details">Intelligence extracted</div></div>',
+                'executor.processing': '<div class="pipeline-stage active"><h3>⚙️ Executor Processing</h3><div class="details">Creating skills and executing workflows</div></div>',
+                'executor.skill.created': '<div class="pipeline-stage active"><h3>🎯 Skill Created</h3><div class="details">New Claude Code skill generated</div></div>',
+                'pipeline.completed': '<div class="pipeline-stage completed"><h3>🎉 Pipeline Complete</h3><div class="details">YouTube video processed successfully</div></div>'
+            };
+
+            if (stages[evt.eventType]) {
+                statusDiv.innerHTML += stages[evt.eventType];
+            }
+        }
+
+        function processVideo() {
+            const url = document.getElementById('youtubeUrl').value.trim();
+            if (!url) {
+                alert('Please enter a YouTube URL');
+                return;
+            }
+
+            const statusDiv = document.getElementById('processingStatus');
+            statusDiv.innerHTML = '<span class="status-badge status-processing">Processing...</span> Sending to pipeline';
+
+            // Send to backend (placeholder - would call coordinator.py)
+            fetch('/api/process-video', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ youtube_url: url })
+            }).then(res => res.json())
+              .then(data => {
+                  statusDiv.innerHTML = '<span class="status-badge status-completed">Success!</span> Pipeline started';
+              })
+              .catch(err => {
+                  statusDiv.innerHTML = '<span class="status-badge status-error">Error</span> ' + err.message;
+              });
+
+            // Simulate pipeline events for demo
+            setTimeout(() => ws.send(JSON.stringify({type: 'pipeline.event', payload: {eventType: 'pipeline.started', url}})), 500);
+            setTimeout(() => ws.send(JSON.stringify({type: 'pipeline.event', payload: {eventType: 'eventrelay.processing'}})), 2000);
+        }
+
+        // Initialize
+        connectWebSocket();
+
+        // Fetch initial metrics
+        fetch('/api/metrics')
+            .then(res => res.json())
+            .then(data => {
+                eventCount = data.totalEvents || 0;
+                document.getElementById('totalEvents').textContent = eventCount;
+            });
+    </script>
+</body>
+</html>

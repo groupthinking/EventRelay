@@ -1,0 +1,44 @@
+{
+  "name": "mcp-supabase-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "node -r dotenv/config server.js",
+    "build": "next build",
+    "start": "ts-node src/server.ts",
+    "orchestrate": "ts-node src/orchestrate-cli.ts",
+    "visualize": "node mcp-visualize-cli.js --connect",
+    "test-visualizer": "node test_mcp_visualizer.js",
+    "lint": "next lint",
+    "test": "node test_mcp_supabase_mock.js",
+    "test-real": "node test_real_supabase.js",
+    "test-sql": "node test_real_sql_mcp.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.40.1",
+    "@octokit/rest": "^21.1.1",
+    "@supabase/supabase-js": "^2.38.0",
+    "@types/express": "^5.0.1",
+    "better-sqlite3": "^11.9.1",
+    "dotenv": "^16.5.0",
+    "express": "^5.1.0",
+    "next": "15.4.10",
+    "node-fetch": "^3.3.2",
+    "pg": "^8.11.3",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "sqlite3": "^5.1.7",
+    "ts-node": "^10.9.2",
+    "uuid": "^9.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "esm": "^3.2.25",
+    "typescript": "^5"
+  },
+  "bin": {
+    "mcp-visualize": "./mcp-visualize-cli.js"
+  }
+}

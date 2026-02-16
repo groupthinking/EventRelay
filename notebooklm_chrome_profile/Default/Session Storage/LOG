@@ -1,2 +1,3 @@
-2026/02/15-13:30:37.702 3ee713 Creating DB /Users/garvey/Dev/EventRelay/notebooklm_chrome_profile/Default/Session Storage since it was missing.
-2026/02/15-13:30:37.709 3ee713 Reusing MANIFEST /Users/garvey/Dev/EventRelay/notebooklm_chrome_profile/Default/Session Storage/MANIFEST-000001
+2026/02/15-23:10:37.474 3ee70f Reusing MANIFEST /Users/garvey/Dev/EventRelay/notebooklm_chrome_profile/Default/Session Storage/MANIFEST-000001
+2026/02/15-23:10:37.480 3ee70f Recovering log #3
+2026/02/15-23:10:37.481 3ee70f Reusing old log /Users/garvey/Dev/EventRelay/notebooklm_chrome_profile/Default/Session Storage/000003.log 

@@ -1,0 +1,226 @@
+name: Documentation Maintenance
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'Docs/**'
+      - 'scripts/**'
+      - '.github/workflows/docs-maintenance.yml'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'Docs/**'
+  schedule:
+    # Run weekly maintenance on Mondays at 2 AM UTC
+    - cron: '0 2 * * 1'
+  workflow_dispatch:
+    inputs:
+      maintenance_type:
+        description: 'Type of maintenance to run'
+        required: true
+        default: 'full'
+        type: choice
+        options:
+          - full
+          - validate-only
+          - update-only
+
+jobs:
+  validate-docs:
+    name: Validate Documentation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate documentation completeness
+        run: npm run docs:validate
+
+      - name: Check for broken links
+        run: npm run docs:check-links
+
+      - name: Upload validation results
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: docs-validation-results
+          path: Docs/maintenance-report.*
+
+  update-docs:
+    name: Update Documentation
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event.inputs.maintenance_type == 'update-only'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Update documentation timestamps
+        run: npm run docs:update
+
+      - name: Check for changes
+        id: verify-changed-files
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "changes=true" >> $GITHUB_OUTPUT
+          else
+            echo "changes=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Commit documentation updates
+        if: steps.verify-changed-files.outputs.changes == 'true'
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add Docs/
+          git commit -m "docs: update timestamps and maintenance [automated]" || echo "No changes to commit"
+
+      - name: Push changes
+        if: steps.verify-changed-files.outputs.changes == 'true'
+        uses: ad-m/github-push-action@master
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          branch: ${{ github.ref }}
+
+  weekly-maintenance:
+    name: Weekly Maintenance
+    runs-on: ubuntu-latest
+    if: github.event.schedule == '0 2 * * 1' || github.event.inputs.maintenance_type == 'full'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run weekly documentation review
+        run: npm run docs:weekly-review
+
+      - name: Upload maintenance report
+        uses: actions/upload-artifact@v4
+        with:
+          name: weekly-maintenance-report
+          path: Docs/maintenance-report.*
+
+      - name: Create maintenance issue (if issues found)
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const report = JSON.parse(fs.readFileSync('Docs/maintenance-report.json', 'utf8'));
+
+            if (report.summary.issuesFound > 0) {
+              github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: `Documentation Maintenance Required - ${report.summary.issuesFound} issues found`,
+                body: `## Weekly Documentation Maintenance Report
+
+**Issues Found:** ${report.summary.issuesFound}
+- Critical: ${report.summary.criticalIssues}
+- Warnings: ${report.summary.warningIssues}
+- Info: ${report.summary.infoIssues}
+
+### Top Issues:
+${report.issues.slice(0, 5).map(issue => `- **${issue.type}**: ${issue.message}`).join('\n')}
+
+### Recommendations:
+${report.recommendations.map(rec => `- ${rec}`).join('\n')}
+
+[View full report](https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})`,
+                labels: ['documentation', 'maintenance', 'automated']
+              });
+            }
+
+  monthly-audit:
+    name: Monthly Documentation Audit
+    runs-on: ubuntu-latest
+    if: github.event.schedule == '0 2 1 * *' || (github.event_name == 'workflow_dispatch' && github.event.inputs.maintenance_type == 'full')
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run monthly documentation audit
+        run: npm run docs:monthly-audit
+
+      - name: Upload audit report
+        uses: actions/upload-artifact@v4
+        with:
+          name: monthly-audit-report
+          path: Docs/maintenance-report.*
+
+      - name: Generate maintenance summary
+        run: |
+          echo "## Monthly Documentation Audit Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ -f "Docs/maintenance-report.json" ]; then
+            REPORT=$(cat Docs/maintenance-report.json)
+            ISSUES=$(echo $REPORT | jq '.summary.issuesFound')
+            CRITICAL=$(echo $REPORT | jq '.summary.criticalIssues')
+            echo "- Total Issues: $ISSUES" >> $GITHUB_STEP_SUMMARY
+            echo "- Critical Issues: $CRITICAL" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### Recommendations:" >> $GITHUB_STEP_SUMMARY
+            echo $REPORT | jq -r '.recommendations[]' | sed 's/^/- /' >> $GITHUB_STEP_SUMMARY
+          else
+            echo "No maintenance report found" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  notify-maintenance:
+    name: Notify Maintenance Results
+    runs-on: ubuntu-latest
+    if: always() && (github.event.schedule == '0 2 * * 1' || github.event.schedule == '0 2 1 * *')
+    needs: [validate-docs, weekly-maintenance, monthly-audit]
+
+    steps:
+      - name: Send maintenance notification
+        uses: 8398a7/action-slack@v3
+        if: env.SLACK_WEBHOOK_URL != null
+        with:
+          status: ${{ job.status }}
+          webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          fields: repo,message,commit,author,action,eventName,ref,workflow
+          title: 'Documentation Maintenance ${{ job.status }}'
+          text: 'Weekly/Monthly documentation maintenance has completed'
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
