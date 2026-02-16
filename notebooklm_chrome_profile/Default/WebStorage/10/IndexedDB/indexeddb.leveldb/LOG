@@ -1,0 +1,6 @@
+2026/02/16-01:26:37.590 3ee65d Creating DB /Users/garvey/Dev/EventRelay/notebooklm_chrome_profile/Default/WebStorage/10/IndexedDB/indexeddb.leveldb since it was missing.
+2026/02/16-01:26:37.592 3ee65d Reusing MANIFEST /Users/garvey/Dev/EventRelay/notebooklm_chrome_profile/Default/WebStorage/10/IndexedDB/indexeddb.leveldb/MANIFEST-000001
+2026/02/16-01:34:12.210 3ee65f Level-0 table #5: started
+2026/02/16-01:34:12.215 3ee65f Level-0 table #5: 408725 bytes OK
+2026/02/16-01:34:12.217 3ee65f Delete type=0 #3
+2026/02/16-01:34:12.219 3ee65f Manual compaction at level-0 from (begin) .. (end); will stop at (end)

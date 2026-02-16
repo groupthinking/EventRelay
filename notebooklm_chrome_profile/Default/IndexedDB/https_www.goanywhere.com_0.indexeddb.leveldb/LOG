@@ -1,0 +1,6 @@
+2026/02/16-02:41:21.282 3ee65f Creating DB /Users/garvey/Dev/EventRelay/notebooklm_chrome_profile/Default/IndexedDB/https_www.goanywhere.com_0.indexeddb.leveldb since it was missing.
+2026/02/16-02:41:21.285 3ee65f Reusing MANIFEST /Users/garvey/Dev/EventRelay/notebooklm_chrome_profile/Default/IndexedDB/https_www.goanywhere.com_0.indexeddb.leveldb/MANIFEST-000001
+2026/02/16-02:44:20.099 3ee65f Level-0 table #5: started
+2026/02/16-02:44:20.100 3ee65f Level-0 table #5: 1308 bytes OK
+2026/02/16-02:44:20.102 3ee65f Delete type=0 #3
+2026/02/16-02:44:20.102 3ee65f Manual compaction at level-0 from (begin) .. (end); will stop at (end)
