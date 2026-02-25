@@ -1,15 +1,3 @@
-2026/02/15-23:10:37.255 3ee70f Reusing MANIFEST /Users/garvey/Dev/EventRelay/notebooklm_chrome_profile/Default/Local Storage/leveldb/MANIFEST-000001
-2026/02/15-23:10:37.262 3ee70f Recovering log #3
-2026/02/15-23:10:37.262 3ee70f Reusing old log /Users/garvey/Dev/EventRelay/notebooklm_chrome_profile/Default/Local Storage/leveldb/000003.log 
-2026/02/15-23:45:05.608 3ee713 Level-0 table #5: started
-2026/02/15-23:45:05.612 3ee713 Level-0 table #5: 27876 bytes OK
-2026/02/15-23:45:05.613 3ee713 Delete type=0 #3
-2026/02/16-00:44:02.576 3ee713 Level-0 table #7: started
-2026/02/16-00:44:02.580 3ee713 Level-0 table #7: 24592 bytes OK
-2026/02/16-00:44:02.582 3ee713 Delete type=0 #4
-2026/02/16-01:45:12.502 3ee713 Level-0 table #9: started
-2026/02/16-01:45:12.504 3ee713 Level-0 table #9: 20614 bytes OK
-2026/02/16-01:45:12.505 3ee713 Delete type=0 #6
-2026/02/16-02:50:30.888 3ee713 Level-0 table #11: started
-2026/02/16-02:50:30.893 3ee713 Level-0 table #11: 28531 bytes OK
-2026/02/16-02:50:30.897 3ee713 Delete type=0 #8
+2026/02/17-14:03:55.079 3ee70f Reusing MANIFEST /Users/garvey/Dev/EventRelay/notebooklm_chrome_profile/Default/Local Storage/leveldb/MANIFEST-000001
+2026/02/17-14:03:55.085 3ee70f Recovering log #10
+2026/02/17-14:03:55.087 3ee70f Reusing old log /Users/garvey/Dev/EventRelay/notebooklm_chrome_profile/Default/Local Storage/leveldb/000010.log 

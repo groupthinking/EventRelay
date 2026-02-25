@@ -1,2 +1,3 @@
-2026/02/15-23:10:37.583 3ee65d Creating DB /Users/garvey/Dev/EventRelay/notebooklm_chrome_profile/Default/Platform Notifications since it was missing.
-2026/02/15-23:10:37.590 3ee65d Reusing MANIFEST /Users/garvey/Dev/EventRelay/notebooklm_chrome_profile/Default/Platform Notifications/MANIFEST-000001
+2026/02/17-14:03:55.070 3ee66d Reusing MANIFEST /Users/garvey/Dev/EventRelay/notebooklm_chrome_profile/Default/Platform Notifications/MANIFEST-000001
+2026/02/17-14:03:55.074 3ee66d Recovering log #3
+2026/02/17-14:03:55.074 3ee66d Reusing old log /Users/garvey/Dev/EventRelay/notebooklm_chrome_profile/Default/Platform Notifications/000003.log 
