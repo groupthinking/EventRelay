@@ -12,8 +12,8 @@ const STEPS = [
 ];
 
 const EXAMPLES = [
-  'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
-  'https://youtu.be/jNQXAC9IVRw',
+  'https://www.youtube.com/watch?v=aircAruvnKk',
+  'https://www.youtube.com/watch?v=zjkBMFhNj_g',
 ];
 
 export default function Home() {
