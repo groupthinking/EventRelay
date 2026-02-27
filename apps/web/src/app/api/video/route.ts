@@ -33,12 +33,17 @@ export async function POST(request: Request) {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 15_000);
 
-      const response = await fetch(`${BACKEND_URL}/api/v1/transcript-action`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ video_url: url, language: 'en' }),
-        signal: controller.signal,
-      }).finally(() => clearTimeout(timeout));
+      let response: Response;
+      try {
+        response = await fetch(`${BACKEND_URL}/api/v1/transcript-action`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ video_url: url, language: 'en' }),
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timeout);
+      }
 
       if (response.ok) {
         const result = await response.json();
