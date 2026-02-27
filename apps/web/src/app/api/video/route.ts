@@ -92,7 +92,6 @@ export async function POST(request: Request) {
     // /api/transcribe and /api/extract-events routes directly.
 
     let transcript = '';
-    let transcript = '';
     let transcriptSource = 'none';
     try {
       const transcribeRes = await fetch('/api/transcribe', {
