@@ -37,7 +37,7 @@ try:
     # Vertex AI SDK probes the GCE metadata server on import which can hang
     # for 5+ seconds outside GCP. Only import when explicitly requested via
     # environment variables to keep startup fast in local / CI environments.
-    if os.getenv("GOOGLE_CLOUD_PROJECT") or os.getenv("ENABLE_VERTEX_AI", "").lower() in {"1", "true", "yes"}:
+    if os.getenv("GOOGLE_CLOUD_PROJECT") or os.getenv("ENABLE_VERTEX_AI", "0").lower() in {"1", "true", "yes"}:
         import vertexai
         from vertexai.generative_models import GenerativeModel, Part
 

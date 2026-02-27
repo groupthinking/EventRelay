@@ -74,7 +74,7 @@ export async function POST(request: Request) {
           result: {
             success: result.success,
             insights,
-            transcript_segments: result.transcript?.segments?.length || 0,
+            transcript_segments: (Array.isArray(result.transcript) ? result.transcript.length : result.transcript?.segments?.length) || 0,
             agents_used: result.orchestration_meta?.agents_used || [],
             errors: result.errors || [],
             raw_response: result,
@@ -97,7 +97,7 @@ export async function POST(request: Request) {
     let transcript = '';
     let transcriptSource = 'none';
     try {
-      const transcribeRes = await fetch(`${origin}/api/transcribe`, {
+      const transcribeRes = await fetch('/api/transcribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url }),
@@ -115,7 +115,7 @@ export async function POST(request: Request) {
     let extraction: { events?: Array<{ type: string; title: string; description?: string; timestamp?: string; priority?: string }>; actions?: Array<{ title: string }>; summary?: string; topics?: string[] } = {};
     if (transcript) {
       try {
-        const extractRes = await fetch(`${origin}/api/extract-events`, {
+        const extractRes = await fetch('/api/extract-events', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ transcript, videoUrl: url }),
