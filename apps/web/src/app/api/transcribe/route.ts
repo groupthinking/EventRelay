@@ -42,17 +42,12 @@ export async function POST(request: Request) {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 8_000);
 
-        let ytResponse: Response;
-        try {
-          ytResponse = await fetch(`${BACKEND_URL}/api/v1/transcript-action`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ video_url: url, language }),
-            signal: controller.signal,
-          });
-        } finally {
-          clearTimeout(timeout);
-        }
+        const ytResponse = await fetch(`${BACKEND_URL}/api/v1/transcript-action`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ video_url: url, language }),
+          signal: controller.signal,
+        }).finally(() => clearTimeout(timeout));
 
         if (ytResponse.ok) {
           const result = await ytResponse.json();
