@@ -75,7 +75,7 @@ export async function POST(request: Request) {
           result: {
             success: result.success,
             insights,
-            transcript_segments: result.transcript?.length || 0,
+            transcript_segments: (Array.isArray(result.transcript) ? result.transcript.length : result.transcript?.segments?.length) || 0,
             agents_used: result.orchestration_meta?.agents_used || [],
             errors: result.errors || [],
             raw_response: result,
