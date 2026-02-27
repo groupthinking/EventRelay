@@ -91,11 +91,11 @@ export async function POST(request: Request) {
     // Works on Vercel without the Python backend by chaining the serverless
     // /api/transcribe and /api/extract-events routes directly.
 
-    const origin = request.headers.get('x-forwarded-proto')
-      ? `${request.headers.get('x-forwarded-proto')}://${request.headers.get('host')}`
-      : new URL(request.url).origin;
+    // Use trusted backend origin instead of deriving from potentially user-controlled request data
+    const origin = BACKEND_URL;
 
     // Step 1: Get transcript
+    let transcript = '';
     let transcript = '';
     let transcriptSource = 'none';
     try {
