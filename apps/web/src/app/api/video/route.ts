@@ -3,6 +3,15 @@ import { NextResponse } from 'next/server';
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000';
 
 /**
+ * Get the absolute base URL for the current request.
+ * Uses the request's origin or falls back to environment variables.
+ */
+function getBaseUrl(request: Request): string {
+  const url = new URL(request.url);
+  return `${url.protocol}//${url.host}`;
+}
+
+/**
  * POST /api/video
  *
  * Tries the full backend pipeline first (FastAPI transcript-action workflow).
@@ -94,7 +103,8 @@ export async function POST(request: Request) {
     let transcript = '';
     let transcriptSource = 'none';
     try {
-      const transcribeRes = await fetch('/api/transcribe', {
+      const baseUrl = getBaseUrl(request);
+      const transcribeRes = await fetch(`${baseUrl}/api/transcribe`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url }),
@@ -112,7 +122,8 @@ export async function POST(request: Request) {
     let extraction: { events?: Array<{ type: string; title: string; description?: string; timestamp?: string; priority?: string }>; actions?: Array<{ title: string }>; summary?: string; topics?: string[] } = {};
     if (transcript) {
       try {
-        const extractRes = await fetch('/api/extract-events', {
+        const baseUrl = getBaseUrl(request);
+        const extractRes = await fetch(`${baseUrl}/api/extract-events`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ transcript, videoUrl: url }),
