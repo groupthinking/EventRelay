@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 
-const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000';
+// Backend URL with validation - skip if not a valid URL
+const rawBackendUrl = process.env.BACKEND_URL || '';
+const BACKEND_URL = rawBackendUrl.startsWith('http') ? rawBackendUrl : 'http://localhost:8000';
+const BACKEND_AVAILABLE = rawBackendUrl.startsWith('http');
 
 /**
  * Get the absolute base URL for the current request.
@@ -28,10 +31,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Video URL is required' }, { status: 400 });
     }
 
-    // ── Strategy 1: Full backend pipeline ──
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 15_000);
+    // ── Strategy 1: Full backend pipeline (skip if no backend configured) ──
+    if (BACKEND_AVAILABLE) {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 15_000);
 
       let response: Response;
       try {
@@ -95,9 +99,10 @@ export async function POST(request: Request) {
           },
         });
       }
-      console.warn(`Backend returned ${response.status}, falling back to frontend-only pipeline`);
-    } catch {
-      console.log('Backend unavailable — using frontend-only pipeline');
+        console.warn(`Backend returned ${response.status}, falling back to frontend-only pipeline`);
+      } catch {
+        console.log('Backend unavailable — using frontend-only pipeline');
+      }
     }
 
     // ── Strategy 2: Frontend-only pipeline ──
@@ -179,29 +184,35 @@ export async function POST(request: Request) {
 }
 
 export async function GET() {
-  try {
-    const response = await fetch(`${BACKEND_URL}/api/v1/health`);
-    const health = await response.json();
+  // If backend URL is configured and valid, check its health
+  if (BACKEND_AVAILABLE) {
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/v1/health`);
+      const health = await response.json();
 
-    return NextResponse.json({
-      name: 'UVAI Video Analysis API',
-      version: '2.0.0',
-      backend_status: health.status,
-      backend_components: health.components,
-      endpoints: {
-        analyze: 'POST /api/video - Analyze a video URL',
-        health: 'GET /api/video - Check API status',
-      },
-    });
-  } catch {
-    return NextResponse.json({
-      name: 'UVAI Video Analysis API',
-      version: '2.0.0',
-      backend_status: 'unavailable',
-      frontend_pipeline: 'active',
-      endpoints: {
-        analyze: 'POST /api/video - Analyze a video URL',
-      },
-    });
+      return NextResponse.json({
+        name: 'UVAI Video Analysis API',
+        version: '2.0.0',
+        backend_status: health.status,
+        backend_components: health.components,
+        endpoints: {
+          analyze: 'POST /api/video - Analyze a video URL',
+          health: 'GET /api/video - Check API status',
+        },
+      });
+    } catch {
+      // Backend configured but unreachable
+    }
   }
+
+  // Frontend-only mode
+  return NextResponse.json({
+    name: 'UVAI Video Analysis API',
+    version: '2.0.0',
+    backend_status: 'not-configured',
+    frontend_pipeline: 'active',
+    endpoints: {
+      analyze: 'POST /api/video - Analyze a video URL',
+    },
+  });
 }

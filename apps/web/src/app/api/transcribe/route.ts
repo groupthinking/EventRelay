@@ -14,7 +14,10 @@ function getGemini() {
   return _gemini;
 }
 
-const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000';
+// Backend URL with validation - skip if not a valid URL
+const rawBackendUrl = process.env.BACKEND_URL || '';
+const BACKEND_URL = rawBackendUrl.startsWith('http') ? rawBackendUrl : 'http://localhost:8000';
+const BACKEND_AVAILABLE = rawBackendUrl.startsWith('http');
 
 /**
  * POST /api/transcribe
@@ -37,7 +40,7 @@ export async function POST(request: Request) {
     }
 
     // Strategy 1: Try YouTube transcript API via backend (fast + free)
-    if (url && !audioUrl) {
+    if (url && !audioUrl && BACKEND_AVAILABLE) {
       try {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 8_000);
