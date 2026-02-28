@@ -9,11 +9,29 @@ parallel processing, and intelligent routing.
 
 import asyncio
 import logging
+import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Optional
 
 from ..base_agent import AgentRequest, AgentResult, BaseAgent
+
+
+@dataclass
+class A2AContextMessage:
+    """Lightweight A2A context-share message within the orchestrator."""
+
+    sender: str
+    recipient: str
+    content: dict[str, Any]
+    conversation_id: str = ""
+    timestamp: str = ""
+
+    def __post_init__(self):
+        if not self.conversation_id:
+            self.conversation_id = str(uuid.uuid4())
+        if not self.timestamp:
+            self.timestamp = datetime.utcnow().isoformat()
 
 
 @dataclass
@@ -42,6 +60,7 @@ class AgentOrchestrator:
         self.logger = logging.getLogger("agent_orchestrator")
         self._agents: dict[str, BaseAgent] = {}
         self._agent_types: dict[str, type[BaseAgent]] = {}
+        self._a2a_log: list[A2AContextMessage] = []
         self._task_mappings: dict[str, list[str]] = {
             "video_analysis": [
                 "video_master",
@@ -178,6 +197,25 @@ class AgentOrchestrator:
                 asyncio.get_event_loop().time() - start_time
             )
 
+            # A2A context sharing: broadcast each agent's output to all others
+            if orchestration_result.success and len(orchestration_result.results) > 1:
+                conv_id = str(uuid.uuid4())
+                for sender_name, sender_result in orchestration_result.results.items():
+                    for recipient_name in orchestration_result.results:
+                        if recipient_name != sender_name:
+                            msg = A2AContextMessage(
+                                sender=sender_name,
+                                recipient=recipient_name,
+                                content={"type": "context_share", "output": sender_result.output},
+                                conversation_id=conv_id,
+                            )
+                            self._a2a_log.append(msg)
+                self.logger.debug(
+                    "A2A context shared across %d agents (conv=%s)",
+                    len(orchestration_result.results),
+                    conv_id,
+                )
+
             self.logger.info(
                 f"Task execution completed: {task_type} "
                 f"(success={orchestration_result.success}, "
@@ -261,6 +299,54 @@ class AgentOrchestrator:
         """
         self._task_mappings[task_type] = agent_names
         self.logger.info(f"Added task mapping: {task_type} -> {agent_names}")
+
+    # --- A2A messaging ---
+
+    async def send_a2a_message(
+        self,
+        sender: str,
+        recipient: str,
+        content: dict[str, Any],
+        conversation_id: str | None = None,
+    ) -> A2AContextMessage:
+        """Send an A2A context-share message between agents."""
+        msg = A2AContextMessage(
+            sender=sender,
+            recipient=recipient,
+            content=content,
+            conversation_id=conversation_id or str(uuid.uuid4()),
+        )
+        self._a2a_log.append(msg)
+
+        # Deliver to recipient agent if it exists
+        agent = self._agents.get(recipient)
+        if agent and hasattr(agent, "receive_context"):
+            try:
+                await agent.receive_context(content)
+            except Exception as e:
+                self.logger.warning("Agent %s failed to receive context: %s", recipient, e)
+
+        return msg
+
+    def get_a2a_log(
+        self,
+        conversation_id: str | None = None,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        """Return recent A2A messages, optionally filtered by conversation."""
+        msgs = self._a2a_log
+        if conversation_id:
+            msgs = [m for m in msgs if m.conversation_id == conversation_id]
+        return [
+            {
+                "sender": m.sender,
+                "recipient": m.recipient,
+                "content": m.content,
+                "conversation_id": m.conversation_id,
+                "timestamp": m.timestamp,
+            }
+            for m in msgs[-limit:]
+        ]
 
 
 # Global orchestrator instance

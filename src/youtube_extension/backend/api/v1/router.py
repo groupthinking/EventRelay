@@ -1214,3 +1214,55 @@ async def get_agent_status(agent_id: str):
             error=execution.error,
         ).model_dump()
     )
+
+
+# ============================================================
+# A2A Inter-Agent Messaging
+# ============================================================
+
+
+@router.post(
+    "/agents/a2a/send",
+    response_model=ApiResponse,
+    summary="Send an A2A message between agents",
+    tags=["Agents"],
+)
+async def send_a2a_message(
+    body: dict[str, Any] = {},
+):
+    """Send a context-share or tool-request message between agents."""
+    sender = body.get("sender", "frontend")
+    recipient = body.get("recipient")
+    content = body.get("content", {})
+    conversation_id = body.get("conversation_id")
+
+    if not recipient:
+        raise HTTPException(status_code=400, detail="recipient is required")
+
+    orch = AgentOrchestrator()
+    msg = await orch.send_a2a_message(
+        sender=sender,
+        recipient=recipient,
+        content=content,
+        conversation_id=conversation_id,
+    )
+    return ApiResponse.success({
+        "conversation_id": msg.conversation_id,
+        "timestamp": msg.timestamp,
+    })
+
+
+@router.get(
+    "/agents/a2a/log",
+    response_model=ApiResponse,
+    summary="Get A2A message log",
+    tags=["Agents"],
+)
+async def get_a2a_log(
+    conversation_id: Optional[str] = None,
+    limit: int = 50,
+):
+    """Return recent A2A inter-agent messages."""
+    orch = AgentOrchestrator()
+    log = orch.get_a2a_log(conversation_id=conversation_id, limit=limit)
+    return ApiResponse.success({"messages": log, "count": len(log)})
