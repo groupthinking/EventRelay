@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { publishEvent, EventTypes } from '@/lib/cloudevents';
+import { analyzeVideoWithGemini } from '@/lib/gemini-video-analyzer';
 
 // Backend URL with validation - skip if not a valid URL
 const rawBackendUrl = process.env.BACKEND_URL || '';
@@ -112,18 +113,59 @@ export async function POST(request: Request) {
       }
     }
 
-    // ── Strategy 2: Frontend-only pipeline ──
-    // Works on Vercel without the Python backend by chaining the serverless
-    // /api/transcribe and /api/extract-events routes directly.
+    // ── Strategy 2: Gemini Agentic Analysis (primary frontend strategy) ──
+    // Uses Google Search grounding to retrieve transcripts, descriptions,
+    // and chapter data directly — no separate transcribe/extract steps needed.
+    if (process.env.GEMINI_API_KEY) {
+      try {
+        await publishEvent(EventTypes.TRANSCRIPT_STARTED, { url, strategy: 'gemini-agentic' }, url);
+        const startTime = Date.now();
+        const analysis = await analyzeVideoWithGemini(url, process.env.GEMINI_API_KEY);
+        const elapsed = Date.now() - startTime;
 
-    // Use trusted backend origin instead of deriving from potentially user-controlled request data
-    const origin = BACKEND_URL;
+        await publishEvent(EventTypes.PIPELINE_COMPLETED, {
+          strategy: 'gemini-agentic',
+          success: true,
+          transcriptSegments: analysis.transcript?.length || 0,
+          events: analysis.events?.length || 0,
+        }, url);
 
-    // Step 1: Get transcript
+        return NextResponse.json({
+          id: `vid_${Date.now().toString(36)}`,
+          status: 'complete',
+          processing_time_ms: elapsed,
+          result: {
+            success: true,
+            insights: {
+              summary: analysis.summary,
+              actions: analysis.actions?.map((a) => a.title) || [],
+              topics: analysis.topics || [],
+              sentiment: 'Neutral',
+            },
+            transcript_segments: analysis.transcript?.length || 0,
+            transcript_source: 'gemini-agentic',
+            agents_used: ['gemini-agentic-engine'],
+            errors: [],
+            raw_response: {
+              title: analysis.title,
+              transcript: analysis.transcript,
+              events: analysis.events,
+              actions: analysis.actions,
+              architectureCode: analysis.architectureCode,
+              ingestScript: analysis.ingestScript,
+            },
+          },
+        });
+      } catch (e) {
+        console.warn('Gemini agentic analysis failed, falling back to transcribe chain:', e);
+      }
+    }
+
+    // ── Strategy 3: Frontend-only transcribe → extract chain (fallback) ──
     let transcript = '';
     let transcriptSource = 'none';
     try {
-      await publishEvent(EventTypes.TRANSCRIPT_STARTED, { url, strategy: 'frontend' }, url);
+      await publishEvent(EventTypes.TRANSCRIPT_STARTED, { url, strategy: 'frontend-chain' }, url);
       const baseUrl = getBaseUrl(request);
       const transcribeRes = await fetch(`${baseUrl}/api/transcribe`, {
         method: 'POST',
@@ -140,7 +182,6 @@ export async function POST(request: Request) {
       console.error('Transcript extraction failed:', e);
     }
 
-    // Step 2: Extract events + insights from transcript
     let extraction: { events?: Array<{ type: string; title: string; description?: string; timestamp?: string; priority?: string }>; actions?: Array<{ title: string }>; summary?: string; topics?: string[] } = {};
     if (transcript) {
       try {
@@ -165,7 +206,7 @@ export async function POST(request: Request) {
 
     await publishEvent(
       hasResults ? EventTypes.PIPELINE_COMPLETED : EventTypes.PIPELINE_FAILED,
-      { strategy: 'frontend', success: hasResults, transcriptSource },
+      { strategy: 'frontend-chain', success: hasResults, transcriptSource },
       url,
     );
 
@@ -176,7 +217,7 @@ export async function POST(request: Request) {
       result: {
         success: hasResults,
         insights: {
-          summary: extraction.summary || (hasResults ? 'Transcript extracted successfully' : 'Could not extract transcript — configure OPENAI_API_KEY or GEMINI_API_KEY'),
+          summary: extraction.summary || (hasResults ? 'Transcript extracted successfully' : 'Could not extract transcript — configure GEMINI_API_KEY'),
           actions: extraction.actions?.map((a) => a.title) || [],
           topics: extraction.topics || [],
           sentiment: 'Neutral',
@@ -184,7 +225,7 @@ export async function POST(request: Request) {
         transcript_segments: 0,
         transcript_source: transcriptSource,
         agents_used: ['frontend-pipeline'],
-        errors: hasResults ? [] : ['Backend unavailable and transcript extraction failed'],
+        errors: hasResults ? [] : ['All strategies failed — ensure GEMINI_API_KEY is set'],
         raw_response: {
           transcript: { text: transcript },
           extraction,

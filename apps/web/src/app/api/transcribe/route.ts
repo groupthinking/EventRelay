@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import { GoogleGenAI } from '@google/genai';
 import { NextResponse } from 'next/server';
+import { fetchYouTubeMetadata, formatMetadataAsContext } from '@/lib/youtube-metadata';
 
 let _openai: OpenAI | null = null;
 function getOpenAI() {
@@ -93,59 +94,42 @@ export async function POST(request: Request) {
       }
     }
 
-    // Strategy 2: OpenAI Responses API with web_search
-    if (url && !audioUrl && process.env.OPENAI_API_KEY) {
+    // Fetch YouTube metadata (description, chapters, title) — used by strategies below
+    let metadata: Awaited<ReturnType<typeof fetchYouTubeMetadata>> = null;
+    if (url) {
       try {
-        const response = await getOpenAI().responses.create({
-          model: 'gpt-4o-mini',
-          instructions: `You are a video content transcription assistant.
-Given a YouTube URL, use web search to find the video's transcript or detailed content.
-Return the full transcript text if available, or a detailed content summary.
-Be thorough — capture all key points, quotes, and technical details.`,
-          tools: [{ type: 'web_search' as const }],
-          input: `Find and return the full transcript or detailed content of this video: ${url}`,
-        });
-
-        const text = response.output_text || '';
-
-        if (text.length > 100) {
-          return NextResponse.json({
-            success: true,
-            transcript: text,
-            source: 'openai-web-search',
-            wordCount: text.split(/\s+/).length,
-          });
-        }
-      } catch (e) {
-        console.warn('OpenAI web_search transcript failed:', e);
+        metadata = await fetchYouTubeMetadata(url);
+      } catch {
+        console.log('YouTube metadata fetch failed, continuing without');
       }
     }
 
-    // Strategy 3: Gemini with direct YouTube URL processing + Google Search grounding
+    // Strategy 2: Gemini with Google Search grounding (PRIMARY for YouTube)
+    // Uses Google Search to find actual transcript content, descriptions, and chapters
     if (url && !audioUrl && process.env.GEMINI_API_KEY) {
       try {
         const ai = getGemini();
+        const metadataContext = metadata ? formatMetadataAsContext(metadata) : '';
+
         const result = await ai.models.generateContent({
-          model: 'gemini-2.0-flash',
-          contents: [
-            {
-              role: 'user',
-              parts: [
-                {
-                  fileData: {
-                    mimeType: 'video/*',
-                    fileUri: url,
-                  },
-                },
-                {
-                  text: 'Provide a complete, detailed transcript of this video. ' +
-                    'Include all spoken content verbatim. ' +
-                    'Include timestamps where possible in [MM:SS] format. ' +
-                    'Be thorough and comprehensive — capture every key point, quote, and technical detail.',
-                },
-              ],
-            },
-          ],
+          model: 'gemini-2.5-flash',
+          contents: `You are a video transcription assistant with access to Google Search.
+
+For the following YouTube video, use your googleSearch tool to find the ACTUAL transcript,
+description, and chapter content. The video creator often provides detailed descriptions
+with chapter breakdowns — USE that metadata as high-quality structured content.
+
+${metadataContext ? `KNOWN VIDEO METADATA:\n${metadataContext}\n` : ''}
+Video URL: ${url}
+
+INSTRUCTIONS:
+1. Search for the video's transcript using Google Search.
+2. If a spoken transcript is available, return it verbatim.
+3. If not, reconstruct detailed content from the description, chapters, comments,
+   and related articles found via search.
+4. Be thorough — capture ALL key points, technical details, quotes, and actionable insights.
+5. Include timestamps in [MM:SS] format where possible.
+6. Do NOT return generic advice like "click Show Transcript" — return actual content.`,
           config: {
             temperature: 0.2,
             tools: [{ googleSearch: {} }],
@@ -157,40 +141,56 @@ Be thorough — capture all key points, quotes, and technical details.`,
           return NextResponse.json({
             success: true,
             transcript: text,
-            source: 'gemini-video',
+            source: 'gemini-search',
+            wordCount: text.split(/\s+/).length,
+            metadata: metadata ? {
+              title: metadata.title,
+              channel: metadata.channel,
+              chapters: metadata.chapters,
+            } : undefined,
+          });
+        }
+      } catch (e) {
+        console.warn('Gemini Google Search transcript failed:', e);
+      }
+    }
+
+    // Strategy 3: OpenAI Responses API with web_search (fallback)
+    if (url && !audioUrl && process.env.OPENAI_API_KEY) {
+      try {
+        const metadataContext = metadata ? formatMetadataAsContext(metadata) : '';
+
+        const response = await getOpenAI().responses.create({
+          model: 'gpt-4o-mini',
+          instructions: `You are a video content transcription assistant.
+Given a YouTube URL, use web search to find the video's ACTUAL transcript or detailed content.
+Return the full transcript text if available. If not, provide a comprehensive content summary
+based on the video's description, chapters, and any available reviews or summaries.
+Do NOT return instructions on how to find a transcript — return the actual content.
+Be thorough — capture all key points, quotes, technical details, and chapter breakdowns.`,
+          tools: [{ type: 'web_search' as const }],
+          input: `Find and return the full transcript or detailed content of this video: ${url}
+${metadataContext ? `\nKNOWN METADATA:\n${metadataContext}` : ''}`,
+        });
+
+        const text = response.output_text || '';
+
+        // Reject results that are just instructions rather than actual content
+        const isGarbage = text.toLowerCase().includes('click show transcript') ||
+          text.toLowerCase().includes('click on the three dots') ||
+          text.toLowerCase().includes('steps to find') ||
+          (text.length < 300 && text.includes('transcript'));
+
+        if (text.length > 100 && !isGarbage) {
+          return NextResponse.json({
+            success: true,
+            transcript: text,
+            source: 'openai-web-search',
             wordCount: text.split(/\s+/).length,
           });
         }
       } catch (e) {
-        console.warn('Gemini video URL processing failed, trying text fallback:', e);
-
-        // Fallback: text-based Gemini with Google Search grounding
-        try {
-          const ai = getGemini();
-          const result = await ai.models.generateContent({
-            model: 'gemini-2.0-flash',
-            contents: `You are a video content transcription assistant. ` +
-              `For the following YouTube video URL, provide a detailed transcript or content summary. ` +
-              `Include all key points, technical details, quotes, and actionable insights. ` +
-              `Be thorough and comprehensive.\n\nVideo URL: ${url}`,
-            config: {
-              temperature: 0.2,
-              tools: [{ googleSearch: {} }],
-            },
-          });
-          const text = result.text ?? '';
-
-          if (text.length > 100) {
-            return NextResponse.json({
-              success: true,
-              transcript: text,
-              source: 'gemini',
-              wordCount: text.split(/\s+/).length,
-            });
-          }
-        } catch (e2) {
-          console.warn('Gemini text fallback also failed:', e2);
-        }
+        console.warn('OpenAI web_search transcript failed:', e);
       }
     }
 

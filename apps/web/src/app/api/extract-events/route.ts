@@ -150,38 +150,79 @@ export async function POST(request: Request) {
   try {
     const { transcript, videoTitle, videoUrl } = await request.json();
 
-    if (!transcript || typeof transcript !== 'string') {
+    // Accept either transcript text OR videoUrl for direct Gemini analysis
+    if ((!transcript || typeof transcript !== 'string') && !videoUrl) {
       return NextResponse.json(
-        { error: 'transcript (string) is required' },
+        { error: 'transcript (string) or videoUrl is required' },
         { status: 400 }
       );
     }
 
-    const trimmed = transcript.slice(0, 8000);
     let parsed;
     let provider = 'openai';
 
-    // Try OpenAI first, fall back to Gemini on quota/auth errors
-    if (process.env.OPENAI_API_KEY) {
-      try {
-        parsed = await extractWithOpenAI(trimmed, videoTitle, videoUrl);
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : '';
-        if ((msg.includes('429') || msg.includes('quota') || msg.includes('rate')) && process.env.GEMINI_API_KEY) {
-          console.warn('OpenAI quota hit, falling back to Gemini');
-          parsed = await extractWithGemini(trimmed, videoTitle, videoUrl);
-          provider = 'gemini';
-        } else {
-          throw err;
+    // If we have transcript text, use the existing extraction logic
+    if (transcript && typeof transcript === 'string' && transcript.length > 50) {
+      const trimmed = transcript.slice(0, 8000);
+
+      if (process.env.OPENAI_API_KEY) {
+        try {
+          parsed = await extractWithOpenAI(trimmed, videoTitle, videoUrl);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : '';
+          if ((msg.includes('429') || msg.includes('quota') || msg.includes('rate')) && process.env.GEMINI_API_KEY) {
+            console.warn('OpenAI quota hit, falling back to Gemini');
+            parsed = await extractWithGemini(trimmed, videoTitle, videoUrl);
+            provider = 'gemini';
+          } else {
+            throw err;
+          }
         }
+      } else if (process.env.GEMINI_API_KEY) {
+        parsed = await extractWithGemini(trimmed, videoTitle, videoUrl);
+        provider = 'gemini';
       }
-    } else if (process.env.GEMINI_API_KEY) {
-      parsed = await extractWithGemini(trimmed, videoTitle, videoUrl);
-      provider = 'gemini';
-    } else {
+    }
+
+    // If no transcript but have videoUrl + Gemini, do direct video analysis via Google Search
+    if (!parsed && videoUrl && process.env.GEMINI_API_KEY) {
+      try {
+        const ai = getGemini();
+        const response = await ai.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: `${SYSTEM_PROMPT}\n\nAnalyze this YouTube video and extract structured data.
+Use your Google Search tool to find the video's transcript, description, and chapter content.
+
+Video URL: ${videoUrl}
+${videoTitle ? `Video Title: ${videoTitle}` : ''}
+
+Extract events, actions, summary, and topics from the actual video content found via search.
+Respond with ONLY valid JSON matching this structure:
+{
+  "events": [{"type": "action|topic|insight|tool|resource", "title": "...", "description": "...", "timestamp": "02:15" or null, "priority": "high|medium|low"}],
+  "actions": [{"title": "...", "description": "...", "category": "setup|build|deploy|learn|research|configure", "estimatedMinutes": number or null}],
+  "summary": "2-3 sentence summary",
+  "topics": ["topic1", "topic2"]
+}`,
+          config: {
+            temperature: 0.3,
+            responseMimeType: 'application/json',
+            responseSchema: geminiResponseSchema,
+            tools: [{ googleSearch: {} }],
+          },
+        });
+        const text = response.text ?? '';
+        parsed = JSON.parse(text);
+        provider = 'gemini-search';
+      } catch (e) {
+        console.warn('Gemini direct video extraction failed:', e);
+      }
+    }
+
+    if (!parsed) {
       return NextResponse.json({
         success: false,
-        error: 'No AI API key configured. Set OPENAI_API_KEY or GEMINI_API_KEY.',
+        error: 'No AI API key configured or all extraction attempts failed. Set GEMINI_API_KEY.',
         data: { events: [], actions: [], summary: '', topics: [] },
       });
     }
