@@ -1,5 +1,5 @@
 import OpenAI from 'openai';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenAI, Type } from '@google/genai';
 import { NextResponse } from 'next/server';
 
 let _openai: OpenAI | null = null;
@@ -8,13 +8,13 @@ function getOpenAI() {
   return _openai;
 }
 
-let _gemini: GoogleGenerativeAI | null = null;
+let _gemini: GoogleGenAI | null = null;
 function getGemini() {
-  if (!_gemini) _gemini = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
+  if (!_gemini) _gemini = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
   return _gemini;
 }
 
-// JSON Schema for structured extraction via Responses API
+// JSON Schema for structured extraction via OpenAI Responses API
 const extractionSchema = {
   type: 'object' as const,
   properties: {
@@ -52,6 +52,43 @@ const extractionSchema = {
   },
   required: ['events', 'actions', 'summary', 'topics'],
   additionalProperties: false,
+};
+
+// Gemini responseSchema using @google/genai Type system
+const geminiResponseSchema = {
+  type: Type.OBJECT,
+  properties: {
+    events: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          type: { type: Type.STRING, enum: ['action', 'topic', 'insight', 'tool', 'resource'] },
+          title: { type: Type.STRING },
+          description: { type: Type.STRING },
+          timestamp: { type: Type.STRING, nullable: true },
+          priority: { type: Type.STRING, enum: ['high', 'medium', 'low'] },
+        },
+        required: ['type', 'title', 'description', 'priority'],
+      },
+    },
+    actions: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          title: { type: Type.STRING },
+          description: { type: Type.STRING },
+          category: { type: Type.STRING, enum: ['setup', 'build', 'deploy', 'learn', 'research', 'configure'] },
+          estimatedMinutes: { type: Type.NUMBER, nullable: true },
+        },
+        required: ['title', 'description', 'category'],
+      },
+    },
+    summary: { type: Type.STRING },
+    topics: { type: Type.ARRAY, items: { type: Type.STRING } },
+  },
+  required: ['events', 'actions', 'summary', 'topics'],
 };
 
 const SYSTEM_PROMPT = `You are an expert content analyst. Extract structured data from video transcripts.
@@ -94,15 +131,18 @@ async function extractWithOpenAI(trimmed: string, videoTitle?: string, videoUrl?
 }
 
 async function extractWithGemini(trimmed: string, videoTitle?: string, videoUrl?: string) {
-  const model = getGemini().getGenerativeModel({
+  const ai = getGemini();
+  const response = await ai.models.generateContent({
     model: 'gemini-2.0-flash',
-    generationConfig: {
-      responseMimeType: 'application/json',
+    contents: `${SYSTEM_PROMPT}\n\n${buildUserPrompt(trimmed, videoTitle, videoUrl)}`,
+    config: {
       temperature: 0.3,
+      responseMimeType: 'application/json',
+      responseSchema: geminiResponseSchema,
+      tools: [{ googleSearch: {} }],
     },
   });
-  const result = await model.generateContent(`${SYSTEM_PROMPT}\n\n${buildUserPrompt(trimmed, videoTitle, videoUrl)}`);
-  const text = result.response.text();
+  const text = response.text ?? '';
   return JSON.parse(text);
 }
 

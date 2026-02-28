@@ -45,6 +45,31 @@ class CodeSnippet(BaseModel):
     content: str
 
 
+class Chapter(BaseModel):
+    title: str
+    start_s: float = Field(ge=0)
+    end_s: float | None = None
+    summary: str | None = None
+
+
+class CodeCue(BaseModel):
+    t_s: float = Field(ge=0, description="Timestamp in video where code is shown/discussed")
+    language: str | None = None
+    snippet: str | None = None
+    description: str | None = None
+    framework: str | None = None
+
+
+class Task(BaseModel):
+    id: str = Field(default_factory=lambda: str(_uuid.uuid4()))
+    title: str
+    description: str | None = None
+    category: str | None = Field(default="learn")  # setup|build|deploy|learn|research|configure
+    estimated_minutes: int | None = None
+    priority: str | None = Field(default="normal")  # low|normal|high
+    dependencies: list[str] = Field(default_factory=list)
+
+
 class ArtifactRef(BaseModel):
     kind: str  # e.g., "repo", "file", "url"
     path: str | None = None  # repo/file path
@@ -75,10 +100,13 @@ class VideoPackV0(BaseModel):
     source_url: HttpUrl | None = None
 
     transcript: Transcript
+    chapters: list[Chapter] = Field(default_factory=list)
     keyframes: list[Keyframe] = Field(default_factory=list)
     concepts: list[str] = Field(default_factory=list)
     requirements: list[Requirement] = Field(default_factory=list)
     code_snippets: list[CodeSnippet] = Field(default_factory=list)
+    code_cues: list[CodeCue] = Field(default_factory=list)
+    tasks: list[Task] = Field(default_factory=list)
     artifacts: list[ArtifactRef] = Field(default_factory=list)
 
     metrics: Metrics = Field(default_factory=Metrics)
