@@ -17,7 +17,8 @@ import {
   listEmbeddings,
   getJobEmbeddings,
   deleteJobEmbeddings,
-} from "../dataconnect-generated";
+  type VideoEmbedding,
+} from "./dataconnect-generated";
 
 // =============================================================================
 // Types
@@ -108,7 +109,9 @@ export async function generateEmbedding(text: string): Promise<number[]> {
     throw new Error(`Embedding API error: ${response.status} ${await response.text()}`);
   }
 
-  const data = await response.json();
+  const data = (await response.json()) as {
+    predictions: Array<{ embeddings: { values: number[] } }>;
+  };
   return data.predictions[0].embeddings.values;
 }
 
@@ -134,8 +137,10 @@ export async function generateEmbeddings(texts: string[]): Promise<number[][]> {
     throw new Error(`Embedding API error: ${response.status} ${await response.text()}`);
   }
 
-  const data = await response.json();
-  return data.predictions.map((p: { embeddings: { values: number[] } }) => p.embeddings.values);
+  const data = (await response.json()) as {
+    predictions: Array<{ embeddings: { values: number[] } }>;
+  };
+  return data.predictions.map((p) => p.embeddings.values);
 }
 
 /**
@@ -148,7 +153,7 @@ async function getAccessToken(): Promise<string> {
       "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token",
       { headers: { "Metadata-Flavor": "Google" } }
     );
-    const data = await response.json();
+    const data = (await response.json()) as { access_token: string };
     return data.access_token;
   }
 
@@ -356,7 +361,7 @@ export async function embedJobAnalysis(
  */
 export async function getEmbeddingsForJob(jobId: string): Promise<EmbeddingRecord[]> {
   const result = await getJobEmbeddings({ jobId: jobId as `${string}-${string}-${string}-${string}-${string}` });
-  return result.data.videoEmbeddings.map((e) => ({
+  return result.data.videoEmbeddings.map((e: VideoEmbedding) => ({
     id: e.id,
     segmentType: e.segmentType,
     segmentIndex: e.segmentIndex,
@@ -377,7 +382,7 @@ export async function clearJobEmbeddings(jobId: string): Promise<void> {
  */
 export async function listRecentEmbeddings(limit: number = 100): Promise<EmbeddingRecord[]> {
   const result = await listEmbeddings({ limit });
-  return result.data.videoEmbeddings.map((e) => ({
+  return result.data.videoEmbeddings.map((e: VideoEmbedding) => ({
     id: e.id,
     segmentType: e.segmentType,
     segmentIndex: e.segmentIndex,
