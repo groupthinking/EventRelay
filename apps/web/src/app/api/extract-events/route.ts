@@ -1,5 +1,5 @@
 import OpenAI from 'openai';
-
+import { Type } from '@google/genai';
 import { NextResponse } from 'next/server';
 import { getGeminiClient, hasGeminiKey } from '@/lib/gemini-client';
 
@@ -49,6 +49,43 @@ const extractionSchema = {
   additionalProperties: false,
 };
 
+// Gemini responseSchema using @google/genai Type system
+const geminiResponseSchema = {
+  type: Type.OBJECT,
+  properties: {
+    events: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          type: { type: Type.STRING, enum: ['action', 'topic', 'insight', 'tool', 'resource'] },
+          title: { type: Type.STRING },
+          description: { type: Type.STRING },
+          timestamp: { type: Type.STRING, nullable: true },
+          priority: { type: Type.STRING, enum: ['high', 'medium', 'low'] },
+        },
+        required: ['type', 'title', 'description', 'priority'],
+      },
+    },
+    actions: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          title: { type: Type.STRING },
+          description: { type: Type.STRING },
+          category: { type: Type.STRING, enum: ['setup', 'build', 'deploy', 'learn', 'research', 'configure'] },
+          estimatedMinutes: { type: Type.NUMBER, nullable: true },
+        },
+        required: ['title', 'description', 'category'],
+      },
+    },
+    summary: { type: Type.STRING },
+    topics: { type: Type.ARRAY, items: { type: Type.STRING } },
+  },
+  required: ['events', 'actions', 'summary', 'topics'],
+};
+
 const SYSTEM_PROMPT = `You are an expert content analyst. Extract structured data from video transcripts.
 Be specific and practical — no vague or generic items.
 For events: classify type (action/topic/insight/tool/resource) and priority (high/medium/low).
@@ -91,16 +128,17 @@ async function extractWithOpenAI(trimmed: string, videoTitle?: string, videoUrl?
 async function extractWithGemini(trimmed: string, videoTitle?: string, videoUrl?: string) {
   const ai = getGeminiClient();
   const response = await ai.models.generateContent({
-    model: 'gemini-2.0-flash',
+    model: 'gemini-3-pro-preview',
     contents: `${SYSTEM_PROMPT}\n\n${buildUserPrompt(trimmed, videoTitle, videoUrl)}`,
     config: {
       temperature: 0.3,
+      responseMimeType: 'application/json',
+      responseSchema: geminiResponseSchema,
       tools: [{ googleSearch: {} }],
     },
   });
-  const text = (response.text ?? '').trim();
-  const cleaned = text.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '');
-  return JSON.parse(cleaned);
+  const text = response.text ?? '';
+  return JSON.parse(text);
 }
 
 export async function POST(request: Request) {
@@ -146,29 +184,23 @@ export async function POST(request: Request) {
       try {
         const ai = getGeminiClient();
         const response = await ai.models.generateContent({
-          model: 'gemini-2.5-flash',
+          model: 'gemini-3-pro-preview',
           contents: `${SYSTEM_PROMPT}\n\nAnalyze this YouTube video and extract structured data.
 Use your Google Search tool to find the video's transcript, description, and chapter content.
 
 Video URL: ${videoUrl}
 ${videoTitle ? `Video Title: ${videoTitle}` : ''}
 
-Extract events, actions, summary, and topics from the actual video content found via search.
-Respond with ONLY valid JSON matching this structure:
-{
-  "events": [{"type": "action|topic|insight|tool|resource", "title": "...", "description": "...", "timestamp": "02:15" or null, "priority": "high|medium|low"}],
-  "actions": [{"title": "...", "description": "...", "category": "setup|build|deploy|learn|research|configure", "estimatedMinutes": number or null}],
-  "summary": "2-3 sentence summary",
-  "topics": ["topic1", "topic2"]
-}`,
+Extract events, actions, summary, and topics from the actual video content found via search.`,
           config: {
             temperature: 0.3,
+            responseMimeType: 'application/json',
+            responseSchema: geminiResponseSchema,
             tools: [{ googleSearch: {} }],
           },
         });
-        const text = (response.text ?? '').trim();
-        const cleaned = text.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '');
-        parsed = JSON.parse(cleaned);
+        const text = response.text ?? '';
+        parsed = JSON.parse(text);
         provider = 'gemini-search';
       } catch (e) {
         console.warn('Gemini direct video extraction failed:', e);
