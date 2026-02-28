@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { publishEvent, EventTypes } from '@/lib/cloudevents';
 
 // Backend URL with validation - skip if not a valid URL
 const rawBackendUrl = process.env.BACKEND_URL || '';
@@ -23,13 +24,17 @@ function getBaseUrl(request: Request): string {
  * and /api/extract-events serverless functions directly.
  */
 export async function POST(request: Request) {
+  let videoUrl: string | undefined;
   try {
     const body = await request.json();
     const { url } = body;
+    videoUrl = url;
 
     if (!url) {
       return NextResponse.json({ error: 'Video URL is required' }, { status: 400 });
     }
+
+    await publishEvent(EventTypes.VIDEO_RECEIVED, { url }, url);
 
     // ── Strategy 1: Full backend pipeline (skip if no backend configured) ──
     if (BACKEND_AVAILABLE) {
@@ -85,6 +90,8 @@ export async function POST(request: Request) {
           project_scaffold: transcriptAction.project_scaffold || null,
         };
 
+        await publishEvent(EventTypes.PIPELINE_COMPLETED, { strategy: 'backend', success: result.success, agents: result.orchestration_meta?.agents_used || [] }, url);
+
         return NextResponse.json({
           id: `vid_${Date.now().toString(36)}`,
           status: result.success ? 'complete' : 'failed',
@@ -116,6 +123,7 @@ export async function POST(request: Request) {
     let transcript = '';
     let transcriptSource = 'none';
     try {
+      await publishEvent(EventTypes.TRANSCRIPT_STARTED, { url, strategy: 'frontend' }, url);
       const baseUrl = getBaseUrl(request);
       const transcribeRes = await fetch(`${baseUrl}/api/transcribe`, {
         method: 'POST',
@@ -126,6 +134,7 @@ export async function POST(request: Request) {
       if (transcribeResult.success && transcribeResult.transcript) {
         transcript = transcribeResult.transcript;
         transcriptSource = transcribeResult.source || 'frontend';
+        await publishEvent(EventTypes.TRANSCRIPT_COMPLETED, { source: transcriptSource, wordCount: transcript.split(/\s+/).length }, url);
       }
     } catch (e) {
       console.error('Transcript extraction failed:', e);
@@ -135,6 +144,7 @@ export async function POST(request: Request) {
     let extraction: { events?: Array<{ type: string; title: string; description?: string; timestamp?: string; priority?: string }>; actions?: Array<{ title: string }>; summary?: string; topics?: string[] } = {};
     if (transcript) {
       try {
+        await publishEvent(EventTypes.EXTRACTION_STARTED, { transcriptLength: transcript.length }, url);
         const baseUrl = getBaseUrl(request);
         const extractRes = await fetch(`${baseUrl}/api/extract-events`, {
           method: 'POST',
@@ -144,6 +154,7 @@ export async function POST(request: Request) {
         const extractResult = await extractRes.json();
         if (extractResult.success && extractResult.data) {
           extraction = extractResult.data;
+          await publishEvent(EventTypes.EXTRACTION_COMPLETED, { events: extraction.events?.length || 0, actions: extraction.actions?.length || 0 }, url);
         }
       } catch (e) {
         console.error('Event extraction failed:', e);
@@ -151,6 +162,12 @@ export async function POST(request: Request) {
     }
 
     const hasResults = transcript.length > 0;
+
+    await publishEvent(
+      hasResults ? EventTypes.PIPELINE_COMPLETED : EventTypes.PIPELINE_FAILED,
+      { strategy: 'frontend', success: hasResults, transcriptSource },
+      url,
+    );
 
     return NextResponse.json({
       id: `vid_${Date.now().toString(36)}`,
@@ -176,6 +193,7 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error('Video analysis error:', error);
+    await publishEvent(EventTypes.PIPELINE_FAILED, { error: String(error) }, videoUrl).catch(() => {});
     return NextResponse.json(
       { error: 'Failed to analyze video', details: String(error) },
       { status: 500 },
