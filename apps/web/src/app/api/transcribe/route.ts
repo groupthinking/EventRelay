@@ -50,8 +50,7 @@ export async function POST(request: Request) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ video_url: url, language }),
           signal: controller.signal,
-        });
-        clearTimeout(timeout);
+        }).finally(() => clearTimeout(timeout));
 
         if (ytResponse.ok) {
           const result = await ytResponse.json();

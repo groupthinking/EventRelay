@@ -6,6 +6,15 @@ const BACKEND_URL = rawBackendUrl.startsWith('http') ? rawBackendUrl : 'http://l
 const BACKEND_AVAILABLE = rawBackendUrl.startsWith('http');
 
 /**
+ * Get the absolute base URL for the current request.
+ * Uses the request's origin or falls back to environment variables.
+ */
+function getBaseUrl(request: Request): string {
+  const url = new URL(request.url);
+  return `${url.protocol}//${url.host}`;
+}
+
+/**
  * POST /api/video
  *
  * Tries the full backend pipeline first (FastAPI transcript-action workflow).
@@ -28,13 +37,17 @@ export async function POST(request: Request) {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 15_000);
 
-        const response = await fetch(`${BACKEND_URL}/api/v1/transcript-action`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ video_url: url, language: 'en' }),
-        signal: controller.signal,
-      });
-      clearTimeout(timeout);
+      let response: Response;
+      try {
+        response = await fetch(`${BACKEND_URL}/api/v1/transcript-action`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ video_url: url, language: 'en' }),
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timeout);
+      }
 
       if (response.ok) {
         const result = await response.json();
@@ -79,7 +92,7 @@ export async function POST(request: Request) {
           result: {
             success: result.success,
             insights,
-            transcript_segments: result.transcript?.length || 0,
+            transcript_segments: (Array.isArray(result.transcript) ? result.transcript.length : result.transcript?.segments?.length) || 0,
             agents_used: result.orchestration_meta?.agents_used || [],
             errors: result.errors || [],
             raw_response: result,
@@ -96,15 +109,15 @@ export async function POST(request: Request) {
     // Works on Vercel without the Python backend by chaining the serverless
     // /api/transcribe and /api/extract-events routes directly.
 
-    const origin = request.headers.get('x-forwarded-proto')
-      ? `${request.headers.get('x-forwarded-proto')}://${request.headers.get('host')}`
-      : new URL(request.url).origin;
+    // Use trusted backend origin instead of deriving from potentially user-controlled request data
+    const origin = BACKEND_URL;
 
     // Step 1: Get transcript
     let transcript = '';
     let transcriptSource = 'none';
     try {
-      const transcribeRes = await fetch(`${origin}/api/transcribe`, {
+      const baseUrl = getBaseUrl(request);
+      const transcribeRes = await fetch(`${baseUrl}/api/transcribe`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url }),
@@ -122,7 +135,8 @@ export async function POST(request: Request) {
     let extraction: { events?: Array<{ type: string; title: string; description?: string; timestamp?: string; priority?: string }>; actions?: Array<{ title: string }>; summary?: string; topics?: string[] } = {};
     if (transcript) {
       try {
-        const extractRes = await fetch(`${origin}/api/extract-events`, {
+        const baseUrl = getBaseUrl(request);
+        const extractRes = await fetch(`${baseUrl}/api/extract-events`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ transcript, videoUrl: url }),
