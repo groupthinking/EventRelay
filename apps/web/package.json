@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@google/genai": "^1.43.0",
     "@google/generative-ai": "^0.24.1",
     "@stripe/stripe-js": "^2.0.0",
     "@supabase/supabase-js": "^2.39.0",

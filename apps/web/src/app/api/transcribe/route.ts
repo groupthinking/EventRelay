@@ -1,5 +1,5 @@
 import OpenAI from 'openai';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenAI } from '@google/genai';
 import { NextResponse } from 'next/server';
 
 let _openai: OpenAI | null = null;
@@ -8,9 +8,9 @@ function getOpenAI() {
   return _openai;
 }
 
-let _gemini: GoogleGenerativeAI | null = null;
+let _gemini: GoogleGenAI | null = null;
 function getGemini() {
-  if (!_gemini) _gemini = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
+  if (!_gemini) _gemini = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
   return _gemini;
 }
 
@@ -121,32 +121,76 @@ Be thorough — capture all key points, quotes, and technical details.`,
       }
     }
 
-    // Strategy 3: Gemini fallback (when OpenAI unavailable)
+    // Strategy 3: Gemini with direct YouTube URL processing + Google Search grounding
     if (url && !audioUrl && process.env.GEMINI_API_KEY) {
       try {
-        const model = getGemini().getGenerativeModel({
+        const ai = getGemini();
+        const result = await ai.models.generateContent({
           model: 'gemini-2.0-flash',
-          generationConfig: { temperature: 0.2 },
+          contents: [
+            {
+              role: 'user',
+              parts: [
+                {
+                  fileData: {
+                    mimeType: 'video/*',
+                    fileUri: url,
+                  },
+                },
+                {
+                  text: 'Provide a complete, detailed transcript of this video. ' +
+                    'Include all spoken content verbatim. ' +
+                    'Include timestamps where possible in [MM:SS] format. ' +
+                    'Be thorough and comprehensive — capture every key point, quote, and technical detail.',
+                },
+              ],
+            },
+          ],
+          config: {
+            temperature: 0.2,
+            tools: [{ googleSearch: {} }],
+          },
         });
-
-        const result = await model.generateContent(
-          `You are a video content transcription assistant. ` +
-          `For the following YouTube video URL, provide a detailed transcript or content summary. ` +
-          `Include all key points, technical details, quotes, and actionable insights. ` +
-          `Be thorough and comprehensive.\n\nVideo URL: ${url}`
-        );
-        const text = result.response.text();
+        const text = result.text ?? '';
 
         if (text.length > 100) {
           return NextResponse.json({
             success: true,
             transcript: text,
-            source: 'gemini',
+            source: 'gemini-video',
             wordCount: text.split(/\s+/).length,
           });
         }
       } catch (e) {
-        console.warn('Gemini transcript fallback failed:', e);
+        console.warn('Gemini video URL processing failed, trying text fallback:', e);
+
+        // Fallback: text-based Gemini with Google Search grounding
+        try {
+          const ai = getGemini();
+          const result = await ai.models.generateContent({
+            model: 'gemini-2.0-flash',
+            contents: `You are a video content transcription assistant. ` +
+              `For the following YouTube video URL, provide a detailed transcript or content summary. ` +
+              `Include all key points, technical details, quotes, and actionable insights. ` +
+              `Be thorough and comprehensive.\n\nVideo URL: ${url}`,
+            config: {
+              temperature: 0.2,
+              tools: [{ googleSearch: {} }],
+            },
+          });
+          const text = result.text ?? '';
+
+          if (text.length > 100) {
+            return NextResponse.json({
+              success: true,
+              transcript: text,
+              source: 'gemini',
+              wordCount: text.split(/\s+/).length,
+            });
+          }
+        } catch (e2) {
+          console.warn('Gemini text fallback also failed:', e2);
+        }
       }
     }
 
