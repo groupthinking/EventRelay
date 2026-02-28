@@ -1,18 +1,12 @@
 import OpenAI from 'openai';
-import { GoogleGenAI } from '@google/genai';
 import { NextResponse } from 'next/server';
 import { fetchYouTubeMetadata, formatMetadataAsContext } from '@/lib/youtube-metadata';
+import { getGeminiClient, hasGeminiKey } from '@/lib/gemini-client';
 
 let _openai: OpenAI | null = null;
 function getOpenAI() {
   if (!_openai) _openai = new OpenAI();
   return _openai;
-}
-
-let _gemini: GoogleGenAI | null = null;
-function getGemini() {
-  if (!_gemini) _gemini = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
-  return _gemini;
 }
 
 // Backend URL with validation - skip if not a valid URL
@@ -106,9 +100,9 @@ export async function POST(request: Request) {
 
     // Strategy 2: Gemini with Google Search grounding (PRIMARY for YouTube)
     // Uses Google Search to find actual transcript content, descriptions, and chapters
-    if (url && !audioUrl && process.env.GEMINI_API_KEY) {
+    if (url && !audioUrl && hasGeminiKey()) {
       try {
-        const ai = getGemini();
+        const ai = getGeminiClient();
         const metadataContext = metadata ? formatMetadataAsContext(metadata) : '';
 
         const result = await ai.models.generateContent({
@@ -222,7 +216,7 @@ ${metadataContext ? `\nKNOWN METADATA:\n${metadataContext}` : ''}`,
     }
 
     // No strategy succeeded
-    const hasKeys = !!(process.env.OPENAI_API_KEY || process.env.GEMINI_API_KEY);
+    const hasKeys = !!(process.env.OPENAI_API_KEY || hasGeminiKey());
     return NextResponse.json({
       success: false,
       error: hasKeys

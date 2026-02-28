@@ -6,7 +6,8 @@
  * Based on the UVAI PK=998 implementation pattern.
  */
 
-import { GoogleGenAI, Type } from '@google/genai';
+import { Type } from '@google/genai';
+import { getGeminiClient } from './gemini-client';
 
 export interface VideoAnalysisResult {
   title: string;
@@ -150,9 +151,8 @@ IMPORTANT RULES:
  */
 export async function analyzeVideoWithGemini(
   videoUrl: string,
-  apiKey: string,
 ): Promise<VideoAnalysisResult> {
-  const ai = new GoogleGenAI({ apiKey });
+  const ai = getGeminiClient();
 
   const systemInstruction = buildSystemInstruction(videoUrl);
 

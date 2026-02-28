@@ -1,17 +1,12 @@
 import OpenAI from 'openai';
-import { GoogleGenAI, Type } from '@google/genai';
+import { Type } from '@google/genai';
 import { NextResponse } from 'next/server';
+import { getGeminiClient, hasGeminiKey } from '@/lib/gemini-client';
 
 let _openai: OpenAI | null = null;
 function getOpenAI() {
   if (!_openai) _openai = new OpenAI();
   return _openai;
-}
-
-let _gemini: GoogleGenAI | null = null;
-function getGemini() {
-  if (!_gemini) _gemini = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
-  return _gemini;
 }
 
 // JSON Schema for structured extraction via OpenAI Responses API
@@ -131,7 +126,7 @@ async function extractWithOpenAI(trimmed: string, videoTitle?: string, videoUrl?
 }
 
 async function extractWithGemini(trimmed: string, videoTitle?: string, videoUrl?: string) {
-  const ai = getGemini();
+  const ai = getGeminiClient();
   const response = await ai.models.generateContent({
     model: 'gemini-2.0-flash',
     contents: `${SYSTEM_PROMPT}\n\n${buildUserPrompt(trimmed, videoTitle, videoUrl)}`,
@@ -170,7 +165,7 @@ export async function POST(request: Request) {
           parsed = await extractWithOpenAI(trimmed, videoTitle, videoUrl);
         } catch (err) {
           const msg = err instanceof Error ? err.message : '';
-          if ((msg.includes('429') || msg.includes('quota') || msg.includes('rate')) && process.env.GEMINI_API_KEY) {
+          if ((msg.includes('429') || msg.includes('quota') || msg.includes('rate')) && hasGeminiKey()) {
             console.warn('OpenAI quota hit, falling back to Gemini');
             parsed = await extractWithGemini(trimmed, videoTitle, videoUrl);
             provider = 'gemini';
@@ -178,16 +173,16 @@ export async function POST(request: Request) {
             throw err;
           }
         }
-      } else if (process.env.GEMINI_API_KEY) {
+      } else if (hasGeminiKey()) {
         parsed = await extractWithGemini(trimmed, videoTitle, videoUrl);
         provider = 'gemini';
       }
     }
 
     // If no transcript but have videoUrl + Gemini, do direct video analysis via Google Search
-    if (!parsed && videoUrl && process.env.GEMINI_API_KEY) {
+    if (!parsed && videoUrl && hasGeminiKey()) {
       try {
-        const ai = getGemini();
+        const ai = getGeminiClient();
         const response = await ai.models.generateContent({
           model: 'gemini-2.5-flash',
           contents: `${SYSTEM_PROMPT}\n\nAnalyze this YouTube video and extract structured data.

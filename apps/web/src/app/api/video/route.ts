@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { publishEvent, EventTypes } from '@/lib/cloudevents';
 import { analyzeVideoWithGemini } from '@/lib/gemini-video-analyzer';
+import { hasGeminiKey } from '@/lib/gemini-client';
 
 // Backend URL with validation - skip if not a valid URL
 const rawBackendUrl = process.env.BACKEND_URL || '';
@@ -116,11 +117,11 @@ export async function POST(request: Request) {
     // ── Strategy 2: Gemini Agentic Analysis (primary frontend strategy) ──
     // Uses Google Search grounding to retrieve transcripts, descriptions,
     // and chapter data directly — no separate transcribe/extract steps needed.
-    if (process.env.GEMINI_API_KEY) {
+    if (hasGeminiKey()) {
       try {
         await publishEvent(EventTypes.TRANSCRIPT_STARTED, { url, strategy: 'gemini-agentic' }, url);
         const startTime = Date.now();
-        const analysis = await analyzeVideoWithGemini(url, process.env.GEMINI_API_KEY);
+        const analysis = await analyzeVideoWithGemini(url);
         const elapsed = Date.now() - startTime;
 
         await publishEvent(EventTypes.PIPELINE_COMPLETED, {
