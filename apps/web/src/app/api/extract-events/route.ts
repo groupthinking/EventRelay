@@ -1,5 +1,5 @@
 import OpenAI from 'openai';
-import { Type } from '@google/genai';
+
 import { NextResponse } from 'next/server';
 import { getGeminiClient, hasGeminiKey } from '@/lib/gemini-client';
 
@@ -49,43 +49,6 @@ const extractionSchema = {
   additionalProperties: false,
 };
 
-// Gemini responseSchema using @google/genai Type system
-const geminiResponseSchema = {
-  type: Type.OBJECT,
-  properties: {
-    events: {
-      type: Type.ARRAY,
-      items: {
-        type: Type.OBJECT,
-        properties: {
-          type: { type: Type.STRING, enum: ['action', 'topic', 'insight', 'tool', 'resource'] },
-          title: { type: Type.STRING },
-          description: { type: Type.STRING },
-          timestamp: { type: Type.STRING, nullable: true },
-          priority: { type: Type.STRING, enum: ['high', 'medium', 'low'] },
-        },
-        required: ['type', 'title', 'description', 'priority'],
-      },
-    },
-    actions: {
-      type: Type.ARRAY,
-      items: {
-        type: Type.OBJECT,
-        properties: {
-          title: { type: Type.STRING },
-          description: { type: Type.STRING },
-          category: { type: Type.STRING, enum: ['setup', 'build', 'deploy', 'learn', 'research', 'configure'] },
-          estimatedMinutes: { type: Type.NUMBER, nullable: true },
-        },
-        required: ['title', 'description', 'category'],
-      },
-    },
-    summary: { type: Type.STRING },
-    topics: { type: Type.ARRAY, items: { type: Type.STRING } },
-  },
-  required: ['events', 'actions', 'summary', 'topics'],
-};
-
 const SYSTEM_PROMPT = `You are an expert content analyst. Extract structured data from video transcripts.
 Be specific and practical — no vague or generic items.
 For events: classify type (action/topic/insight/tool/resource) and priority (high/medium/low).
@@ -132,13 +95,12 @@ async function extractWithGemini(trimmed: string, videoTitle?: string, videoUrl?
     contents: `${SYSTEM_PROMPT}\n\n${buildUserPrompt(trimmed, videoTitle, videoUrl)}`,
     config: {
       temperature: 0.3,
-      responseMimeType: 'application/json',
-      responseSchema: geminiResponseSchema,
       tools: [{ googleSearch: {} }],
     },
   });
-  const text = response.text ?? '';
-  return JSON.parse(text);
+  const text = (response.text ?? '').trim();
+  const cleaned = text.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '');
+  return JSON.parse(cleaned);
 }
 
 export async function POST(request: Request) {
@@ -201,13 +163,12 @@ Respond with ONLY valid JSON matching this structure:
 }`,
           config: {
             temperature: 0.3,
-            responseMimeType: 'application/json',
-            responseSchema: geminiResponseSchema,
             tools: [{ googleSearch: {} }],
           },
         });
-        const text = response.text ?? '';
-        parsed = JSON.parse(text);
+        const text = (response.text ?? '').trim();
+        const cleaned = text.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '');
+        parsed = JSON.parse(cleaned);
         provider = 'gemini-search';
       } catch (e) {
         console.warn('Gemini direct video extraction failed:', e);

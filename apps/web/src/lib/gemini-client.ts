@@ -3,26 +3,22 @@
  *
  * Supports two authentication modes:
  *   1. Gemini API: uses GEMINI_API_KEY or GOOGLE_API_KEY
- *   2. Vertex AI: uses Vertex_AI_API_KEY with project/location
- *      (Express Mode — API key instead of service account)
+ *   2. Vertex AI Express Mode: uses Vertex_AI_API_KEY
+ *      (apiKey + vertexai: true — no project/location needed)
  *
- * Env vars for Vertex AI:
- *   - Vertex_AI_API_KEY: the Vertex AI API key
- *   - GOOGLE_CLOUD_PROJECT: GCP project ID (default: uvai-730bb)
- *   - GOOGLE_CLOUD_LOCATION: GCP location (default: us-central1)
+ * See: https://docs.cloud.google.com/vertex-ai/generative-ai/docs/start/express-mode/vertex-ai-express-mode-api-reference
  */
 
 import { GoogleGenAI } from '@google/genai';
 
 /**
  * Resolve the best available Google/Gemini API key.
- * Returns the first non-empty key found, or empty string.
  */
 export function resolveGeminiApiKey(): string {
   return (
+    process.env.Vertex_AI_API_KEY ||
     process.env.GEMINI_API_KEY ||
     process.env.GOOGLE_API_KEY ||
-    process.env.Vertex_AI_API_KEY ||
     ''
   );
 }
@@ -35,14 +31,10 @@ export function hasGeminiKey(): boolean {
 }
 
 /**
- * Determine if we should use Vertex AI mode.
- * True when the only available key is Vertex_AI_API_KEY,
- * or when GOOGLE_CLOUD_PROJECT is explicitly set.
+ * Determine if we should use Vertex AI Express Mode.
  */
 function shouldUseVertexAI(): boolean {
-  // If standard Gemini keys are set, use Gemini API
-  if (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY) return false;
-  // If Vertex AI key is available, use Vertex AI Express Mode
+  if (process.env.GOOGLE_GENAI_USE_VERTEXAI === 'true') return true;
   if (process.env.Vertex_AI_API_KEY) return true;
   return false;
 }
@@ -52,7 +44,7 @@ let _lastKey = '';
 let _lastMode = '';
 
 /**
- * Get a shared GoogleGenAI instance, creating one if needed.
+ * Get a shared GoogleGenAI instance.
  * Automatically selects Gemini API or Vertex AI Express Mode.
  */
 export function getGeminiClient(): GoogleGenAI {
@@ -61,11 +53,10 @@ export function getGeminiClient(): GoogleGenAI {
 
   if (!_gemini || _lastKey !== key || _lastMode !== mode) {
     if (mode === 'vertex') {
+      // Vertex AI Express Mode: apiKey + vertexai only
       _gemini = new GoogleGenAI({
         vertexai: true,
         apiKey: key,
-        project: process.env.GOOGLE_CLOUD_PROJECT || 'uvai-730bb',
-        location: process.env.GOOGLE_CLOUD_LOCATION || 'us-central1',
       });
     } else {
       _gemini = new GoogleGenAI({ apiKey: key });

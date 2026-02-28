@@ -4,9 +4,11 @@
  * Uses the googleSearch tool as the PRIMARY mechanism to retrieve real-time
  * transcripts, descriptions, chapters, and metadata from YouTube videos.
  * Based on the UVAI PK=998 implementation pattern.
+ *
+ * NOTE: Vertex AI does NOT support responseSchema (controlled generation)
+ * combined with googleSearch tool. JSON structure is enforced via prompt.
  */
 
-import { Type } from '@google/genai';
 import { getGeminiClient } from './gemini-client';
 
 export interface VideoAnalysisResult {
@@ -32,82 +34,11 @@ export interface VideoAnalysisResult {
 }
 
 /**
- * Gemini response schema using the @google/genai Type system.
- * Matches the UVAI structured output requirements.
- */
-const responseSchema = {
-  type: Type.OBJECT,
-  properties: {
-    title: { type: Type.STRING },
-    summary: { type: Type.STRING },
-    transcript: {
-      type: Type.ARRAY,
-      items: {
-        type: Type.OBJECT,
-        properties: {
-          start: { type: Type.NUMBER, description: 'Seconds from video start' },
-          duration: { type: Type.NUMBER },
-          text: { type: Type.STRING },
-        },
-        required: ['start', 'duration', 'text'] as const,
-      },
-    },
-    events: {
-      type: Type.ARRAY,
-      items: {
-        type: Type.OBJECT,
-        properties: {
-          timestamp: { type: Type.NUMBER },
-          label: { type: Type.STRING },
-          description: { type: Type.STRING },
-          codeMapping: {
-            type: Type.STRING,
-            description: 'One-line code implementation of the action',
-          },
-          cloudService: { type: Type.STRING },
-        },
-        required: ['timestamp', 'label', 'description', 'codeMapping', 'cloudService'] as const,
-      },
-    },
-    actions: {
-      type: Type.ARRAY,
-      items: {
-        type: Type.OBJECT,
-        properties: {
-          title: { type: Type.STRING },
-          description: { type: Type.STRING },
-          category: {
-            type: Type.STRING,
-            enum: ['setup', 'build', 'deploy', 'learn', 'research', 'configure'],
-          },
-          estimatedMinutes: { type: Type.NUMBER, nullable: true },
-        },
-        required: ['title', 'description', 'category'] as const,
-      },
-    },
-    topics: { type: Type.ARRAY, items: { type: Type.STRING } },
-    architectureCode: { type: Type.STRING },
-    ingestScript: { type: Type.STRING },
-  },
-  required: [
-    'title',
-    'summary',
-    'transcript',
-    'events',
-    'actions',
-    'topics',
-    'architectureCode',
-    'ingestScript',
-  ] as const,
-};
-
-/**
  * Build the agentic system instruction for the Gemini model.
  * Implements the Think → Act → Observe → Map loop from PK=998.
  */
 function buildSystemInstruction(videoUrl: string): string {
-  return `
-You are the Agentic Video Intelligence Engine.
+  return `You are the Agentic Video Intelligence Engine.
 
 MISSION:
 1. WATCH the video at ${videoUrl} by searching for its transcript, technical documentation,
@@ -119,20 +50,6 @@ MISSION:
 4. OBSERVE & MAP: Extract specific "Action Events" from the video and provide a direct
    code mapping for each.
 
-DATA STRUCTURE REQUIREMENTS:
-- title: Accurate video title from search results.
-- summary: A high-level technical executive summary (2-3 sentences).
-- transcript: An array of {start, duration, text} reconstructed from grounding.
-  Use chapter timestamps and description content if a full transcript is unavailable.
-  Each entry should cover a meaningful segment (30-120 seconds).
-- events: 3-8 key technical milestones with timestamp, label, description, and codeMapping.
-- actions: 3-8 concrete tasks a developer/learner should DO after watching.
-- topics: Key topics and technologies covered.
-- architectureCode: A markdown-formatted architecture overview if technical content is discussed,
-  or empty string if not applicable.
-- ingestScript: A Python script that processes or replicates the video's key workflow,
-  or empty string if not applicable.
-
 IMPORTANT RULES:
 - Use your googleSearch tool to find the ACTUAL content. Search for the video URL,
   the video title, and related terms.
@@ -142,7 +59,24 @@ IMPORTANT RULES:
   chapters, comments, and related articles found via search.
 - NO MOCK DATA. Only use what is found via search grounding.
 - Be thorough — capture every key point, technical detail, and actionable insight.
-`;
+
+You MUST respond with ONLY valid JSON (no markdown fences, no extra text) matching this exact structure:
+{
+  "title": "Accurate video title",
+  "summary": "2-3 sentence technical executive summary",
+  "transcript": [
+    {"start": 0, "duration": 60, "text": "segment text covering 30-120 seconds each"}
+  ],
+  "events": [
+    {"timestamp": 0, "label": "Event Name", "description": "What happened", "codeMapping": "one-line code", "cloudService": "relevant service"}
+  ],
+  "actions": [
+    {"title": "Task title", "description": "What to do", "category": "setup|build|deploy|learn|research|configure", "estimatedMinutes": 15}
+  ],
+  "topics": ["topic1", "topic2"],
+  "architectureCode": "markdown architecture overview or empty string",
+  "ingestScript": "Python script or empty string"
+}`;
 }
 
 /**
@@ -161,13 +95,13 @@ export async function analyzeVideoWithGemini(
     contents: `Perform Agentic Grounding for Video: ${videoUrl}`,
     config: {
       systemInstruction,
-      responseMimeType: 'application/json',
-      responseSchema,
       tools: [{ googleSearch: {} }],
       temperature: 0.3,
     },
   });
 
-  const resultText = response.text || '{}';
-  return JSON.parse(resultText) as VideoAnalysisResult;
+  const resultText = (response.text || '').trim();
+  // Strip markdown code fences if present
+  const cleaned = resultText.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '');
+  return JSON.parse(cleaned) as VideoAnalysisResult;
 }
