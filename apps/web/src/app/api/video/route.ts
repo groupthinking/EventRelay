@@ -39,6 +39,8 @@ export async function POST(request: Request) {
     await publishEvent(EventTypes.VIDEO_RECEIVED, { url }, url);
 
     // ── Strategy 1: Full backend pipeline (skip if no backend configured) ──
+    // Calls /api/v1/transcript-action for analysis. For full end-to-end
+    // pipeline (analysis → code gen → deploy), use POST /api/pipeline instead.
     if (BACKEND_AVAILABLE) {
       try {
         const controller = new AbortController();
@@ -273,6 +275,7 @@ export async function GET() {
     frontend_pipeline: 'active',
     endpoints: {
       analyze: 'POST /api/video - Analyze a video URL',
+      pipeline: 'POST /api/pipeline - Full end-to-end pipeline (YouTube URL → deployed software)',
     },
   });
 }

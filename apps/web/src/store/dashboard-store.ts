@@ -14,6 +14,22 @@ import type {
 
 // ── Types ──
 
+export interface PipelineResult {
+  live_url: string | null;
+  github_repo: string | null;
+  build_status: string;
+  code_generation: {
+    framework: string;
+    files_created: string[];
+    entry_point: string;
+  } | null;
+  deployment: {
+    status: string;
+    platforms: string[];
+    urls: Record<string, string>;
+  } | null;
+}
+
 export interface Video {
   id: string;
   title: string;
@@ -26,6 +42,7 @@ export interface Video {
   transcript?: string;
   events?: ExtractedEvent[];
   agents?: AgentExecution[];
+  pipelineResult?: PipelineResult;
   insights?: {
     summary: string;
     actions: string[];
@@ -60,6 +77,7 @@ interface DashboardState {
 
   // Workflow actions
   processVideo: (url: string) => Promise<void>;
+  deployPipeline: (url: string) => Promise<void>;
   extractEvents: (videoId: string) => void;
   dispatchAgents: (videoId: string) => void;
 }
@@ -235,6 +253,86 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       updateVideo(id, { status: 'failed', progress: 0 });
       addActivity(
         `Analysis failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        'error',
+      );
+    }
+  },
+
+  // ── Full end-to-end pipeline: YouTube URL → deployed software ──
+  deployPipeline: async (url) => {
+    const { addVideo, updateVideo, addActivity } = get();
+    const id = Date.now().toString();
+
+    const video: Video = {
+      id,
+      title: `🚀 Deploying: ${url.length > 40 ? url.substring(0, 37) + '…' : url}`,
+      url,
+      status: 'processing',
+      progress: 5,
+    };
+    addVideo(video);
+    addActivity(`Pipeline started: ${url.length > 40 ? url.substring(0, 37) + '…' : url}`, 'info');
+
+    const stages = ['Analyzing video', 'Generating code', 'Creating repo', 'Deploying'];
+    let stageIdx = 0;
+    const interval = setInterval(() => {
+      const current = get().videos.find((v) => v.id === id);
+      if (current && current.status === 'processing') {
+        const newProgress = Math.min(current.progress + 3, 95);
+        const newStage = Math.min(Math.floor(newProgress / 25), stages.length - 1);
+        if (newStage > stageIdx) {
+          stageIdx = newStage;
+          addActivity(stages[stageIdx] + '…', 'info');
+        }
+        updateVideo(id, { progress: newProgress });
+      }
+    }, 2000);
+
+    try {
+      const res = await fetch('/api/pipeline', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url, project_type: 'web', deployment_target: 'vercel' }),
+      });
+      clearInterval(interval);
+
+      if (!res.ok) throw new Error(`Pipeline error: ${res.status}`);
+
+      const result = await res.json();
+      const pipelineResult: PipelineResult = {
+        live_url: result.result?.live_url || null,
+        github_repo: result.result?.github_repo || null,
+        build_status: result.result?.build_status || 'unknown',
+        code_generation: result.result?.code_generation || null,
+        deployment: result.result?.deployment || null,
+      };
+
+      updateVideo(id, {
+        status: result.status === 'success' || result.status === 'complete' ? 'complete' : 'failed',
+        progress: 100,
+        title: `Deployed: ${url.length > 40 ? url.substring(0, 37) + '…' : url}`,
+        processedAt: 'Just now',
+        pipelineResult,
+        insights: {
+          summary: result.result?.video_analysis?.extracted_info?.title || 'Pipeline complete',
+          actions: result.result?.features_implemented || [],
+          sentiment: 'Positive',
+          topics: result.result?.code_generation?.files_created || [],
+        },
+      });
+
+      if (pipelineResult.live_url) {
+        addActivity(`🎉 Live at: ${pipelineResult.live_url}`, 'success');
+      }
+      if (pipelineResult.github_repo) {
+        addActivity(`📦 Repo: ${pipelineResult.github_repo}`, 'success');
+      }
+      addActivity(`Pipeline complete (${result.processing_time || 'done'})`, 'success');
+    } catch (error) {
+      clearInterval(interval);
+      updateVideo(id, { status: 'failed', progress: 0 });
+      addActivity(
+        `Pipeline failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
         'error',
       );
     }
