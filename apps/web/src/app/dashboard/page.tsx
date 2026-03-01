@@ -9,28 +9,7 @@ import TranscriptViewer from '@/components/TranscriptViewer';
 import EventList from '@/components/EventList';
 import type { ExtractedEvent } from '@/lib/types';
 import { useDashboardStore } from '@/store/dashboard-store';
-
-// ============================================
-// Types
-// ============================================
-interface Video {
-  id: string;
-  title: string;
-  url: string;
-  status: 'processing' | 'complete' | 'failed';
-  progress: number;
-  thumbnail?: string;
-  duration?: string;
-  processedAt?: string;
-  transcript?: string;
-  events?: ExtractedEvent[];
-  insights?: {
-    summary: string;
-    actions: string[];
-    sentiment: string;
-    topics: string[];
-  };
-}
+import type { PipelineResult, Video } from '@/store/dashboard-store';
 
 // ============================================
 // Processing Stage Indicator
@@ -75,7 +54,9 @@ function VideoCard({
   video: Video;
   onClick: () => void;
 }) {
-  const stages = ['Ingest', 'Transcribe', 'Analyze', 'Extract'];
+  const stages = video.pipelineResult !== undefined
+    ? ['Ingest', 'Generate', 'Deploy', 'Live']
+    : ['Ingest', 'Transcribe', 'Analyze', 'Extract'];
   const currentStage = Math.floor((video.progress / 100) * stages.length);
 
   return (
@@ -173,6 +154,38 @@ function VideoCard({
         {/* Quick insights for completed */}
         {video.status === 'complete' && video.insights && (
           <div className="mt-4 pt-4 border-t border-white/[0.05]">
+            {/* Pipeline deployment result */}
+            {video.pipelineResult && (
+              <div className="mb-3 space-y-2">
+                {video.pipelineResult.live_url && (
+                  <a
+                    href={video.pipelineResult.live_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 px-3 py-2 bg-green-500/10 border border-green-500/20 rounded-lg text-sm text-green-400 hover:bg-green-500/20 transition-colors"
+                  >
+                    🌐 <span className="font-medium">Live:</span> <span className="truncate">{video.pipelineResult.live_url}</span>
+                  </a>
+                )}
+                {video.pipelineResult.github_repo && (
+                  <a
+                    href={video.pipelineResult.github_repo}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 px-3 py-2 bg-purple-500/10 border border-purple-500/20 rounded-lg text-sm text-purple-400 hover:bg-purple-500/20 transition-colors"
+                  >
+                    📦 <span className="font-medium">Repo:</span> <span className="truncate">{video.pipelineResult.github_repo}</span>
+                  </a>
+                )}
+                {video.pipelineResult.code_generation && (
+                  <div className="flex items-center gap-2 text-xs text-white/40">
+                    <span>Framework: {video.pipelineResult.code_generation.framework}</span>
+                    <span>•</span>
+                    <span>{video.pipelineResult.code_generation.files_created.length} files</span>
+                  </div>
+                )}
+              </div>
+            )}
             <div className="flex flex-wrap gap-2">
               {video.insights.topics.slice(0, 3).map((topic) => (
                 <span
@@ -507,6 +520,7 @@ function DashboardContent() {
   const selectedVideoId = useDashboardStore((s) => s.selectedVideoId);
   const selectVideo = useDashboardStore((s) => s.selectVideo);
   const processVideo = useDashboardStore((s) => s.processVideo);
+  const deployPipeline = useDashboardStore((s) => s.deployPipeline);
   const extractEvents = useDashboardStore((s) => s.extractEvents);
 
   const selectedVideo = videos.find((v) => v.id === selectedVideoId) || null;
@@ -535,6 +549,16 @@ function DashboardContent() {
       processVideo(targetUrl);
     },
     [videoUrl, processVideo],
+  );
+
+  const handleDeployPipeline = useCallback(
+    () => {
+      const targetUrl = videoUrl;
+      if (!targetUrl.trim()) return;
+      setVideoUrl('');
+      deployPipeline(targetUrl);
+    },
+    [videoUrl, deployPipeline],
   );
 
   return (
@@ -606,6 +630,14 @@ function DashboardContent() {
                 className="btn btn-primary py-3 px-8 disabled:opacity-30 disabled:cursor-not-allowed"
               >
                 Analyze
+              </button>
+              <button
+                type="button"
+                disabled={!videoUrl.trim()}
+                onClick={handleDeployPipeline}
+                className="btn py-3 px-6 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-400 hover:to-emerald-500 text-white font-semibold rounded-xl shadow-lg shadow-green-500/25 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+              >
+                🚀 Deploy
               </button>
             </div>
           </form>
