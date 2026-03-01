@@ -49,8 +49,8 @@ COPY --chown=uvai:uvai src/ ./src/
 COPY --chown=uvai:uvai pyproject.toml ./
 
 # Create data directories
-RUN mkdir -p /app/data/enhanced_analysis /app/data/cache /app/logs && \
-    chown -R uvai:uvai /app/data /app/logs
+RUN mkdir -p /app/data/enhanced_analysis /app/data/cache /app/logs /app/generated_projects /app/youtube_processed_videos /tmp/uvai_data && \
+    chown -R uvai:uvai /app/data /app/logs /app/generated_projects /app/youtube_processed_videos /tmp/uvai_data
 
 # Switch to non-root user
 USER uvai
