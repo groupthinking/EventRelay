@@ -13,7 +13,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Generic, Optional, TypeVar, Union
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, ConfigDict, Field, validator
 
 T = TypeVar("T")
 
@@ -323,14 +323,16 @@ class MarkdownResponse(BaseModel):
 class VideoToSoftwareRequest(BaseModel):
     """Request model for video-to-software conversion"""
 
-    video_url: str = Field(..., description="YouTube video URL")
+    model_config = ConfigDict(populate_by_name=True)
+
+    video_url: str = Field(..., alias="url", description="YouTube video URL")
     project_type: str = Field("web", description="Project type (web, api, ml, mobile)")
     deployment_target: str = Field("vercel", description="Deployment platform")
     features: Optional[list[str]] = Field(
         [], description="Additional features to implement"
     )
 
-    @validator("video_url")
+    @validator("video_url", pre=True)
     def validate_video_url(cls, value: str) -> str:
         """Validate YouTube URL format"""
         youtube_regex = re.compile(

@@ -26,7 +26,16 @@ app = FastAPI(
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure appropriately for production
+    allow_origins=[
+        "http://localhost:3000",
+        "http://localhost:5173",
+        "http://localhost:8080",
+        "http://localhost:3001",
+        "https://event-relay-web.vercel.app",
+        "https://eventrelay-production.up.railway.app",
+        "https://uvai.io",
+        "https://www.uvai.io",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

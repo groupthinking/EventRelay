@@ -51,35 +51,35 @@ class VercelAdapter(BaseDeploymentAdapter):
             self.logger.warning(f"GitHub repository {repo_url} not accessible, attempting direct file deployment")
             return await self._deploy_files_directly(project_path, project_config, env, token, headers)
 
-        # Prepare deployment payload for GitHub integration
+        # Parse org/repo from GitHub URL
+        repo_path = repo_url.replace("https://github.com/", "")
+        parts = repo_path.strip("/").split("/")
+        if len(parts) >= 2:
+            org, repo_name = parts[0], parts[1]
+        else:
+            org, repo_name = "groupthinking", repo_path
+
+        project_name = env.get("VERCEL_PROJECT_NAME", f"uvai-{project_config.get('title', 'project').lower().replace(' ', '-')}")
+
+        # Prepare deployment payload using Vercel REST API gitSource format
         payload = {
-            "name": env.get("VERCEL_PROJECT_NAME", f"uvai-{project_config.get('title', 'project').lower().replace(' ', '-')}"),
-            "gitRepository": {
+            "name": project_name,
+            "gitSource": {
                 "type": "github",
-                "repo": repo_url.replace("https://github.com/", "")
+                "org": org,
+                "repo": repo_name,
+                "ref": project_config.get("branch", "main")
             },
-            "target": "production"
+            "projectSettings": {
+                "framework": self._detect_framework(project_config),
+                "installCommand": project_config.get("install_command", "npm install || true"),
+                "buildCommand": project_config.get("build_command", "echo 'static'"),
+                "outputDirectory": project_config.get("output_directory", ".")
+            }
         }
 
-        # Add optional build configuration
-        framework = self._detect_framework(project_config)
-        if framework:
-            payload["framework"] = framework
-
-        build_command = project_config.get("build_command")
-        if build_command:
-            payload["buildCommand"] = build_command
-
-        install_command = project_config.get("install_command")
-        if install_command:
-            payload["installCommand"] = install_command
-
-        output_directory = project_config.get("output_directory", "dist")
-        if output_directory and output_directory != "dist":
-            payload["outputDirectory"] = output_directory
-
         # Create deployment
-        self.logger.info(f"Creating Vercel deployment for {payload['name']}")
+        self.logger.info(f"Creating Vercel deployment for {project_name}")
         deployment_data = await self._make_request_with_retry(
             'POST',
             f"{VERCEL_API}/v13/deployments",
