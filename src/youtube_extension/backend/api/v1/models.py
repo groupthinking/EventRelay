@@ -323,7 +323,17 @@ class MarkdownResponse(BaseModel):
 class VideoToSoftwareRequest(BaseModel):
     """Request model for video-to-software conversion"""
 
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(
+        populate_by_name=True,
+        json_schema_extra={
+            "example": {
+                "video_url": "https://www.youtube.com/watch?v=bMknfKXIFA8",
+                "project_type": "web",
+                "deployment_target": "vercel",
+                "features": ["responsive_design", "dark_mode"],
+            }
+        },
+    )
 
     video_url: str = Field(..., alias="url", description="YouTube video URL")
     project_type: str = Field("web", description="Project type (web, api, ml, mobile)")
@@ -373,16 +383,6 @@ class VideoToSoftwareRequest(BaseModel):
                 f'Deployment target must be one of: {", ".join(valid_targets)}'
             )
         return value
-
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "video_url": "https://www.youtube.com/watch?v=bMknfKXIFA8",
-                "project_type": "web",
-                "deployment_target": "vercel",
-                "features": ["responsive_design", "dark_mode"],
-            }
-        }
 
 
 class VideoToSoftwareResponse(BaseModel):
