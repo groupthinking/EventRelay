@@ -9,6 +9,10 @@ import logging
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
+from starlette.middleware.base import BaseHTTPMiddleware
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -35,11 +39,39 @@ app.add_middleware(
         "https://eventrelay-production.up.railway.app",
         "https://uvai.io",
         "https://www.uvai.io",
+        "https://uvaiio.vercel.app",
     ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Rate limiting
+limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+
+# Security headers middleware
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        return response
+
+
+app.add_middleware(SecurityHeadersMiddleware)
+
+# API key auth middleware
+try:
+    from .backend.middleware.api_key_auth import APIKeyMiddleware
+
+    app.add_middleware(APIKeyMiddleware)
+    logger.info("API key auth middleware loaded")
+except ImportError as e:
+    logger.warning(f"API key auth middleware not available: {e}")
 
 # Include Cloud AI routes
 try:
