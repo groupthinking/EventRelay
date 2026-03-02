@@ -674,8 +674,9 @@ class DeploymentManager:
         urls = {}
 
         for platform, result in deployments.items():
-            if result.get("status") in ["success", "simulated"] and result.get("url"):
-                urls[platform] = result["url"]
+            url = result.get("url")
+            if url:
+                urls[platform] = url
 
         return urls
 
