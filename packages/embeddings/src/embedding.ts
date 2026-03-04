@@ -17,7 +17,7 @@ import {
   listEmbeddings,
   getJobEmbeddings,
   deleteJobEmbeddings,
-} from "../dataconnect-generated";
+} from "./dataconnect-generated/index.js";
 
 // =============================================================================
 // Types
@@ -108,7 +108,7 @@ export async function generateEmbedding(text: string): Promise<number[]> {
     throw new Error(`Embedding API error: ${response.status} ${await response.text()}`);
   }
 
-  const data = await response.json();
+  const data = (await response.json()) as { predictions: { embeddings: { values: number[] } }[] };
   return data.predictions[0].embeddings.values;
 }
 
@@ -134,8 +134,8 @@ export async function generateEmbeddings(texts: string[]): Promise<number[][]> {
     throw new Error(`Embedding API error: ${response.status} ${await response.text()}`);
   }
 
-  const data = await response.json();
-  return data.predictions.map((p: { embeddings: { values: number[] } }) => p.embeddings.values);
+  const data = (await response.json()) as { predictions: { embeddings: { values: number[] } }[] };
+  return data.predictions.map((p) => p.embeddings.values);
 }
 
 /**
@@ -148,7 +148,7 @@ async function getAccessToken(): Promise<string> {
       "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token",
       { headers: { "Metadata-Flavor": "Google" } }
     );
-    const data = await response.json();
+    const data = (await response.json()) as { access_token: string };
     return data.access_token;
   }
 

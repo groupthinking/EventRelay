@@ -1,18 +1,10 @@
 import type { Metadata, Viewport } from 'next';
-import { Inter, JetBrains_Mono } from 'next/font/google';
 import './globals.css';
 
-const inter = Inter({
-  subsets: ['latin'],
-  display: 'swap',
-  variable: '--font-inter',
-});
-
-const jetbrainsMono = JetBrains_Mono({
-  subsets: ['latin'],
-  display: 'swap',
-  variable: '--font-mono',
-});
+// Font CSS variables are defined via <link> to Google Fonts in <head> and
+// resolved in globals.css / tailwind.config. This avoids next/font/google
+// which hard-fails during build if the Google Fonts API is unreachable
+// (common in sandboxed CI and offline environments).
 
 export const metadata: Metadata = {
   title: {
@@ -85,10 +77,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable}`}>
+    <html lang="en">
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&family=JetBrains+Mono:wght@100..800&display=swap"
+          rel="stylesheet"
+        />
       </head>
       <body className="min-h-screen bg-surface-950 font-sans antialiased">
         {/* Global background effects */}

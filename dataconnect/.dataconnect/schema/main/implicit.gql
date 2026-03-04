@@ -1,0 +1,26 @@
+extend type JobEvent {
+  """
+  ✨ Implicit primary key field. It's a UUID column default to a generated new value. See `@table` for how to customize it.
+  """
+  id: UUID! @default(expr: "uuidV4()") @fdc_generated(from: "JobEvent", purpose: IMPLICIT_KEY_FIELD)
+  """
+  ✨ Implicit foreign key field based on `JobEvent`.`job`. It must match the value of `VideoJob`.`id`. See `@ref` for how to customize it.
+  """
+  jobId: UUID! @fdc_generated(from: "JobEvent.job", purpose: IMPLICIT_REF_FIELD)
+}
+extend type VideoEmbedding {
+  """
+  ✨ Implicit primary key field. It's a UUID column default to a generated new value. See `@table` for how to customize it.
+  """
+  id: UUID! @default(expr: "uuidV4()") @fdc_generated(from: "VideoEmbedding", purpose: IMPLICIT_KEY_FIELD)
+  """
+  ✨ Implicit foreign key field based on `VideoEmbedding`.`job`. It must match the value of `VideoJob`.`id`. See `@ref` for how to customize it.
+  """
+  jobId: UUID! @fdc_generated(from: "VideoEmbedding.job", purpose: IMPLICIT_REF_FIELD)
+}
+extend type VideoJob {
+  """
+  ✨ Implicit primary key field. It's a UUID column default to a generated new value. See `@table` for how to customize it.
+  """
+  id: UUID! @default(expr: "uuidV4()") @fdc_generated(from: "VideoJob", purpose: IMPLICIT_KEY_FIELD)
+}

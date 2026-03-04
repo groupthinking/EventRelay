@@ -1,0 +1,7 @@
+[console_scripts]
+uvai.api = uvai.api.server:main
+uvai.core = uvai.core.server:main
+youtube-extension = youtube_extension.cli:main
+youtube-migrate = youtube_extension.cli:migrate
+youtube-test = youtube_extension.cli:test
+youtube-worker = youtube_extension.backend.worker:main

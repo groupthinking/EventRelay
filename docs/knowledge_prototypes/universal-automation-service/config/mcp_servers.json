@@ -1,0 +1,85 @@
+{
+  "mcpServers": {
+    "youtube-api-proxy": {
+      "command": "python3",
+      "args": [
+        "/Users/garvey/Dev/OpenAI_Hub/projects/EventRelay/external/mcp_servers/youtube_api_proxy.py"
+      ],
+      "env": {
+        "YOUTUBE_API_KEY": "${YOUTUBE_API_KEY}"
+      },
+      "description": "YouTube API proxy with rate limiting and retry logic"
+    },
+    "transcription-server": {
+      "command": "python3",
+      "args": [
+        "/Users/garvey/Dev/OpenAI_Hub/projects/EventRelay/external/mcp_servers/transcription_mcp_server.py"
+      ],
+      "env": {
+        "YOUTUBE_EXTENSION_BASE": "http://localhost:8000"
+      },
+      "description": "Video transcription and text processing"
+    },
+    "video-analysis": {
+      "command": "python3",
+      "args": [
+        "/Users/garvey/Dev/OpenAI_Hub/projects/EventRelay/external/mcp_servers/video_analysis_mcp_server.py"
+      ],
+      "env": {
+        "YOUTUBE_EXTENSION_BASE": "http://localhost:8000"
+      },
+      "description": "Video content analysis and intelligence"
+    },
+    "unified-analytics": {
+      "command": "node",
+      "args": [
+        "/Users/garvey/Dev/OpenAI_Hub/mcp-servers/unified-analytics/build/index.js"
+      ],
+      "description": "Unified analytics for cross-system intelligence and reporting"
+    },
+    "puppeteer": {
+      "command": "node",
+      "args": [
+        "/Users/garvey/Dev/OpenAI_Hub/mcp-servers/puppeteer-server/index.js"
+      ],
+      "description": "Browser automation and web scraping"
+    },
+    "github": {
+      "command": "node",
+      "args": [
+        "/Users/garvey/Dev/OpenAI_Hub/mcp-servers/github/custom-github-server.js"
+      ],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_PERSONAL_ACCESS_TOKEN}"
+      },
+      "description": "GitHub integration for repository management"
+    },
+    "grok": {
+      "command": "node",
+      "args": [
+        "/Users/garvey/Dev/OpenAI_Hub/mcp-servers/grok-server/build/index.js"
+      ],
+      "description": "Grok AI integration"
+    },
+    "perplexity": {
+      "command": "node",
+      "args": [
+        "/Users/garvey/Dev/OpenAI_Hub/mcp-servers/perplexity-mcp/build/index.js"
+      ],
+      "description": "Perplexity AI search and research"
+    },
+    "self-correcting-executor": {
+      "command": "python3",
+      "args": [
+        "/Users/garvey/self-correcting-executor-PRODUCTION/mcp_server/main.py"
+      ],
+      "description": "Self-correcting execution with automatic error recovery"
+    }
+  },
+  "settings": {
+    "max_concurrent_servers": 12,
+    "restart_failed_servers": true,
+    "server_timeout": 30000,
+    "log_level": "INFO"
+  }
+}

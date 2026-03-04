@@ -330,7 +330,7 @@ class VideoProcessingService:
             # Import required components
             try:
                 from youtube_extension.backend.code_generator import get_code_generator
-                from youtube_extension.backend.services.deployment_manager import (
+                from youtube_extension.backend.deployment_manager import (
                     get_deployment_manager,
                 )
                 pipeline_available = True

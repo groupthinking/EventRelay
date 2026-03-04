@@ -21,6 +21,14 @@ from youtube_extension.services.workflows.transcript_action_workflow import (
     TranscriptActionWorkflow,
 )
 
+# CloudEvents integration (optional — falls back to file sink)
+try:
+    from youtube_extension.integration.cloudevents_publisher import create_publisher as _create_publisher
+
+    _ce_publisher = _create_publisher(backend="file")
+except Exception:
+    _ce_publisher = None
+
 # Import services
 from ...containers.service_container import get_service
 from ...services.cache_service import CacheService
@@ -76,6 +84,21 @@ performance_monitor = PerformanceMonitor()
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+async def _emit_event(event_type: str, data: dict, subject: str | None = None) -> None:
+    """Emit a CloudEvent if the publisher is available."""
+    if _ce_publisher is not None:
+        try:
+            await _ce_publisher.publish(
+                source="/eventrelay/backend/v1",
+                type=event_type,
+                data=data,
+                subject=subject,
+            )
+        except Exception as exc:
+            logger.debug("CloudEvent publish failed: %s", exc)
+
 
 # Create API v1 router
 router = APIRouter(
@@ -524,10 +547,12 @@ async def process_video_v1(
     """Basic video processing endpoint"""
     try:
         logger.info(f"Video processing request: {request.video_url}")
+        await _emit_event("com.eventrelay.video.received", {"url": request.video_url}, request.video_url)
 
         result = await video_processing_service.process_video_basic(
             request.video_url, request.options
         )
+        await _emit_event("com.eventrelay.pipeline.completed", {"url": request.video_url, "strategy": "backend"}, request.video_url)
         # Persist summary for analytics/storage if repository is available
         try:
             from youtube_extension.backend.repositories.video_repository import (
@@ -550,6 +575,7 @@ async def process_video_v1(
 
     except Exception as e:
         logger.error(f"Error in video processing: {e}")
+        await _emit_event("com.eventrelay.pipeline.failed", {"url": request.video_url, "error": str(e)}, request.video_url)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -1188,3 +1214,55 @@ async def get_agent_status(agent_id: str):
             error=execution.error,
         ).model_dump()
     )
+
+
+# ============================================================
+# A2A Inter-Agent Messaging
+# ============================================================
+
+
+@router.post(
+    "/agents/a2a/send",
+    response_model=ApiResponse,
+    summary="Send an A2A message between agents",
+    tags=["Agents"],
+)
+async def send_a2a_message(
+    body: dict[str, Any] = {},
+):
+    """Send a context-share or tool-request message between agents."""
+    sender = body.get("sender", "frontend")
+    recipient = body.get("recipient")
+    content = body.get("content", {})
+    conversation_id = body.get("conversation_id")
+
+    if not recipient:
+        raise HTTPException(status_code=400, detail="recipient is required")
+
+    orch = AgentOrchestrator()
+    msg = await orch.send_a2a_message(
+        sender=sender,
+        recipient=recipient,
+        content=content,
+        conversation_id=conversation_id,
+    )
+    return ApiResponse.success({
+        "conversation_id": msg.conversation_id,
+        "timestamp": msg.timestamp,
+    })
+
+
+@router.get(
+    "/agents/a2a/log",
+    response_model=ApiResponse,
+    summary="Get A2A message log",
+    tags=["Agents"],
+)
+async def get_a2a_log(
+    conversation_id: Optional[str] = None,
+    limit: int = 50,
+):
+    """Return recent A2A inter-agent messages."""
+    orch = AgentOrchestrator()
+    log = orch.get_a2a_log(conversation_id=conversation_id, limit=limit)
+    return ApiResponse.success({"messages": log, "count": len(log)})

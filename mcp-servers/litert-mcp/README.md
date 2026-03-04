@@ -6,6 +6,27 @@ It allows you to run inference on local models (like Gemma, Phi, Qwen) directly 
 
 **Note:** This server currently wraps the `lit` CLI. Multimodal inputs (image/audio) are enabled in the interface but require the C++ API or Python bindings. The CLI wrapper currently supports **Text-only inference** until CLI flags for multimodal are verified.
 
+## Quick Setup
+
+Run the setup script to download the `lit` binary and a default model:
+
+```bash
+cd mcp-servers/litert-mcp
+./setup.sh
+```
+
+This downloads:
+- `lit` CLI binary from [google-ai-edge/LiteRT-LM](https://github.com/google-ai-edge/LiteRT-LM/releases) into `bin/`
+- A Gemma 3n model from [HuggingFace litert-community](https://huggingface.co/litert-community) into `models/`
+- Writes a `.env` file with `LIT_BINARY_PATH` and `LIT_MODEL_PATH`
+
+Then start the server:
+
+```bash
+export $(cat .env | xargs)
+python3 server.py
+```
+
 ## Prerequisites
 
 1.  **LiteRT-LM**: You must have LiteRT-LM installed or built.

@@ -1,0 +1,94 @@
+{
+  "llama_agent": {
+    "model": {
+      "name": "llama-3.1-8b-instruct",
+      "path": "models/llama-3.1-8b-instruct/model.gguf",
+      "download_url": "TheBloke/Llama-3.1-8B-Instruct-GGUF",
+      "filename": "llama-3.1-8b-instruct.Q4_K_M.gguf",
+      "context_window": 4096,
+      "max_tokens": 1024,
+      "temperature": 0.3,
+      "cpu_threads": "auto",
+      "gpu_layers": 0
+    },
+    "embedding_model": {
+      "name": "all-MiniLM-L6-v2",
+      "max_length": 512
+    },
+    "processing": {
+      "batch_size": 10,
+      "sleep_interval": 60,
+      "max_retries": 3,
+      "retry_delay": 5,
+      "timeout": 300
+    },
+    "quality_assessment": {
+      "enabled": true,
+      "min_confidence": 0.7,
+      "score_weights": {
+        "clarity": 0.3,
+        "actionability": 0.4,
+        "technical_accuracy": 0.2,
+        "implementation_difficulty": 0.1
+      }
+    },
+    "learning": {
+      "enabled": true,
+      "insight_extraction": true,
+      "pattern_recognition": true,
+      "continuous_improvement": true
+    },
+    "mcp_integration": {
+      "enabled": true,
+      "server_name": "llama_agent_mcp_server",
+      "version": "1.0.0",
+      "tools": [
+        "analyze_video_content",
+        "assess_video_quality",
+        "generate_implementation_plan",
+        "extract_learning_insights",
+        "get_agent_stats"
+      ]
+    },
+    "performance": {
+      "monitoring": true,
+      "metrics_collection": true,
+      "optimization": true,
+      "resource_limits": {
+        "max_memory_gb": 8,
+        "max_cpu_percent": 80,
+        "max_processing_time": 300
+      }
+    },
+    "fallback": {
+      "enabled": true,
+      "use_basic_processor": true,
+      "graceful_degradation": true
+    }
+  },
+  "environment": {
+    "USE_LLAMA": "true",
+    "BATCH_SIZE": "10",
+    "SLEEP_INTERVAL": "60",
+    "LLAMA_MODEL_PATH": "",
+    "YOUTUBE_API_KEY": "",
+    "OPENAI_API_KEY": "",
+    "GEMINI_API_KEY": "",
+    "ANTHROPIC_API_KEY": ""
+  },
+  "directories": {
+    "models": "models/llama-3.1-8b-instruct",
+    "workflow_results": "workflow_results",
+    "videos": "workflow_results/videos",
+    "failures": "workflow_results/failures",
+    "learning_logs": "workflow_results/learning_logs",
+    "implementation_plans": "workflow_results/implementation_plans"
+  },
+  "logging": {
+    "level": "INFO",
+    "format": "%(asctime)s - %(levelname)s - [LLAMA-AGENT] %(message)s",
+    "file": "logs/llama_agent.log",
+    "max_size_mb": 100,
+    "backup_count": 5
+  }
+}

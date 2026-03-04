@@ -81,5 +81,6 @@
     "dart.enableCompletionCommitCharacters": true,
     "geminicodeassist.codeGenerationPaneViewEnabled": true,
     "geminicodeassist.inlineSuggestions.nextEditPredictions": true,
-    "geminicodeassist.inlineSuggestions.suggestionSpeed": "Fast"
+    "geminicodeassist.inlineSuggestions.suggestionSpeed": "Fast",
+    "geminicodeassist.outlines.automaticOutlineGeneration": true
 }
