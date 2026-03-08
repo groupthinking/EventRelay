@@ -77,7 +77,6 @@ def get_available_providers() -> list[str]:
     # Check Google Cloud
     try:
         import google.cloud.videointelligence
-        import google.cloud.vision
         available.append("google_cloud")
     except ImportError:
         pass
