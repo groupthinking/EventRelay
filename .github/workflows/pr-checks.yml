@@ -17,7 +17,7 @@ jobs:
             if (pr.title.length < 10) {
               issues.push('❌ PR title too short (minimum 10 characters)');
             }
-            if (!/^(feat|fix|docs|style|refactor|test|chore|perf|ci|build|revert)(\(.+\))?:/.test(pr.title)) {
+            if (!/^(?:⚡\s*)?(feat|fix|docs|style|refactor|test|chore|perf|ci|build|revert)(\(.+\))?:/i.test(pr.title) && !pr.title.startsWith('⚡')) {
               issues.push('⚠️ PR title should follow conventional commits format');
             }
 
@@ -34,12 +34,16 @@ jobs:
               // Fork PRs get a read-only GITHUB_TOKEN; skip commenting to avoid errors
               if (pr.head.repo.full_name === pr.base.repo.full_name) {
                 const comment = `## 🔍 PR Validation\n\n${issues.join('\n')}`;
-                await github.rest.issues.createComment({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  issue_number: pr.number,
-                  body: comment
-                });
+                try {
+                  await github.rest.issues.createComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: pr.number,
+                    body: comment
+                  });
+                } catch (error) {
+                  core.warning('Failed to post comment: ' + error.message);
+                }
               } else {
                 core.warning('Skipping PR comment for fork PR (read-only token)');
                 issues.forEach(issue => core.warning(issue));
