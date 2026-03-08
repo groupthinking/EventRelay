@@ -67,6 +67,7 @@ dependencies = [
     "ffmpeg-python>=0.2.0",
     "qrcode[pil]>=7.0",
     "opencv-python>=4.8.0",
+    "orjson>=3.9.0",
 ]
 
 [project.optional-dependencies]
