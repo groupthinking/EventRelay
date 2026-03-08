@@ -20,6 +20,7 @@ requests>=2.31.0
 
 # File Handling
 aiofiles>=23.2.1
+orjson>=3.9.0
 
 # Database
 sqlalchemy>=2.0.0
