@@ -110,7 +110,8 @@ async def test_cicd_pipeline():
 
         # Stage 4: Health Check Simulation
         print("\n🏥 Stage 4: Health Check Simulation")
-        import requests
+        import aiohttp
+        import time
 
         # Test basic connectivity to common services
         health_checks = []
@@ -120,17 +121,19 @@ async def test_cicd_pipeline():
             ("Vercel Status", "https://vercel.com/api/web/now/health"),
         ]
 
-        for name, url in test_urls:
+        async def fetch_health(name, url, session):
+            start_time = time.time()
             try:
-                response = requests.get(url, timeout=10)
-                health_checks.append({
-                    "service": name,
-                    "url": url,
-                    "status": "healthy" if response.status_code < 400 else "unhealthy",
-                    "status_code": response.status_code,
-                    "response_time": response.elapsed.total_seconds()
-                })
-                print(f"✅ {name}: {response.status_code} ({response.elapsed.total_seconds():.2f}s)")
+                async with session.get(url, timeout=10) as response:
+                    elapsed = time.time() - start_time
+                    health_checks.append({
+                        "service": name,
+                        "url": url,
+                        "status": "healthy" if response.status < 400 else "unhealthy",
+                        "status_code": response.status,
+                        "response_time": elapsed
+                    })
+                    print(f"✅ {name}: {response.status} ({elapsed:.2f}s)")
             except Exception as e:
                 health_checks.append({
                     "service": name,
@@ -139,6 +142,10 @@ async def test_cicd_pipeline():
                     "error": str(e)
                 })
                 print(f"⚠️  {name}: Error - {e}")
+
+        async with aiohttp.ClientSession() as session:
+            tasks = [fetch_health(name, url, session) for name, url in test_urls]
+            await asyncio.gather(*tasks)
 
         results["stages"]["health_check"] = {
             "status": "completed",
