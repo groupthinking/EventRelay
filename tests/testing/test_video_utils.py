@@ -105,6 +105,38 @@ class TestIsValidVideoId:
         """Test with non-string value"""
         assert is_valid_video_id(12345678901) is False
 
+    def test_exact_length_with_whitespace(self):
+        """Test 11-character string with whitespace"""
+        assert is_valid_video_id("auJzb1D fag") is False
+        assert is_valid_video_id("auJzb\tD-fag") is False
+        assert is_valid_video_id("auJzb\nD-fag") is False
+
+    def test_exact_length_with_special_chars(self):
+        """Test 11-character string with invalid special characters"""
+        assert is_valid_video_id("auJzb1D*fag") is False
+        assert is_valid_video_id("auJzb1D@fag") is False
+        assert is_valid_video_id("auJzb1D.fag") is False
+        assert is_valid_video_id("auJzb1D/fag") is False
+
+    def test_boundary_lengths(self):
+        """Test lengths exactly at the boundaries"""
+        assert is_valid_video_id("1234567890") is False  # 10 chars
+        assert is_valid_video_id("123456789012") is False  # 12 chars
+        assert is_valid_video_id("12345678901") is True  # 11 chars (all numbers)
+        assert is_valid_video_id("-----------") is True  # 11 chars (all hyphens)
+        assert is_valid_video_id("___________") is True  # 11 chars (all underscores)
+
+    def test_leading_trailing_whitespace(self):
+        """Test valid IDs with leading or trailing whitespace"""
+        assert is_valid_video_id(" auJzb1D-fag") is False
+        assert is_valid_video_id("auJzb1D-fag ") is False
+        assert is_valid_video_id("\tauJzb1D-fag\n") is False
+
+    def test_url_instead_of_id(self):
+        """Test full URLs (should fail as it expects only the ID)"""
+        assert is_valid_video_id("https://www.youtube.com/watch?v=auJzb1D-fag") is False
+        assert is_valid_video_id("youtube.com/watch?v=auJzb1D") is False
+
 
 class TestNormalizeVideoUrl:
     """Tests for normalize_video_url function"""
