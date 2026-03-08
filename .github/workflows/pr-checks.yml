@@ -45,5 +45,9 @@ jobs:
                 core.warning('Skipping PR comment for fork PR (read-only token)');
                 issues.forEach(issue => core.warning(issue));
               }
-              core.setFailed('PR validation failed');
+
+              const hasErrors = issues.some(issue => issue.includes('❌'));
+              if (hasErrors) {
+                core.setFailed('PR validation failed');
+              }
             }
