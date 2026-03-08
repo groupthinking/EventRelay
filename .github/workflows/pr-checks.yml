@@ -18,7 +18,7 @@ jobs:
             if (pr.title.length < 10) {
               issues.push('❌ PR title too short (minimum 10 characters)');
             }
-            if (!/^(feat|fix|docs|style|refactor|test|chore|perf|ci|build|revert)(\(.+\))?:/.test(pr.title)) {
+            if (!/^(?:[\p{Emoji}\u200d\s\W]+)?(feat|fix|docs|style|refactor|test|chore|perf|ci|build|revert)(\(.+\))?[:\]\s]/iu.test(pr.title)) {
               issues.push('⚠️ PR title should follow conventional commits format');
             }
 
