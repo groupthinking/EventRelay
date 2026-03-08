@@ -4,6 +4,7 @@ on:
     types: [opened, reopened, synchronize, edited]
 permissions:
   pull-requests: write
+  issues: write
 jobs:
   validate:
     runs-on: ubuntu-latest
