@@ -1,0 +1,10 @@
+--- .github/workflows/pr-checks.yml
++++ .github/workflows/pr-checks.yml
+@@ -5,6 +5,7 @@
+     types: [opened, reopened, synchronize, edited]
+ permissions:
+   issues: write
++  pull-requests: write
+ jobs:
+   validate:
+     runs-on: ubuntu-latest

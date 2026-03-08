@@ -1,4 +1,6 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import * as observabilityModule from './observability';
+import { Observability } from './observability';
 
 // Mock the open telemetry modules
 vi.mock('@opentelemetry/sdk-node', () => {
