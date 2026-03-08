@@ -2,6 +2,9 @@ name: Auto Label
 on:
   pull_request:
     types: [opened, reopened, synchronized]
+permissions:
+  issues: write
+  pull-requests: read
 jobs:
   label:
     runs-on: ubuntu-latest
