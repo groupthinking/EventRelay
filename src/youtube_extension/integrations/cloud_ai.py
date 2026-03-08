@@ -45,7 +45,6 @@ from .cloud_ai.exceptions import (
     CloudAIError,
     ConfigurationError,
     QuotaExceededError,
-    RateLimitError,
     ServiceUnavailableError,
 )
 from .cloud_ai.integrator import CloudAIIntegrator
@@ -62,7 +61,6 @@ __all__ = [
 
     # Exceptions
     "CloudAIError",
-    "RateLimitError",
     "ConfigurationError",
     "ServiceUnavailableError",
     "AuthenticationError",
