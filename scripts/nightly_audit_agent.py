@@ -26,12 +26,6 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 
-try:
-    import orjson
-    HAS_ORJSON = True
-except ImportError:
-    HAS_ORJSON = False
-
 # Set up path to include src
 import sys
 import traceback
@@ -169,14 +163,11 @@ class AuditAgent:
 
         for log_file in files_to_scan:
             try:
-                with open(log_file, 'rb') as f:
+                with open(log_file, 'r') as f:
                     for line in f:
                         try:
                             if not line.strip(): continue
-                            if HAS_ORJSON:
-                                entry = orjson.loads(line)
-                            else:
-                                entry = json.loads(line.decode('utf-8'))
+                            entry = json.loads(line)
 
                             # Check timestamp
                             ts_str = entry.get("timestamp")
@@ -205,8 +196,7 @@ class AuditAgent:
                                 found_issues.append(entry)
                                 continue
 
-                        except Exception:
-                            # Catch any JSON decode error (both json and orjson)
+                        except json.JSONDecodeError:
                             continue
             except Exception as e:
                 logger.error(f"Error scanning {log_file}: {e}")
@@ -234,12 +224,8 @@ class AuditAgent:
             return
 
         try:
-            with open(metrics_file, 'rb') as f:
-                content = f.read()
-                if HAS_ORJSON:
-                    data = orjson.loads(content)
-                else:
-                    data = json.loads(content.decode('utf-8'))
+            with open(metrics_file, 'r') as f:
+                data = json.load(f)
 
             metrics = data.get("metrics", {})
             for name, metric_data in metrics.items():
