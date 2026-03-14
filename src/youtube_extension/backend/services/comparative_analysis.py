@@ -433,7 +433,23 @@ class ComparativeAnalysisService:
             )
             resp.raise_for_status()
             data = resp.json()
-        text = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+        
+        # Validate response structure to avoid silent failures
+        if "choices" not in data or not data["choices"]:
+            raise ValueError(
+                f"Invalid Grok API response: missing or empty 'choices' field in {data}"
+            )
+        choice = data["choices"][0]
+        if "message" not in choice or "content" not in choice.get("message", {}):
+            raise ValueError(
+                f"Invalid Grok API response: missing 'message.content' in {choice}"
+            )
+        text = choice["message"]["content"]
+        if not isinstance(text, str):
+            raise ValueError(
+                f"Invalid Grok API response: 'content' is not a string: {type(text)}"
+            )
+        
         latency = int((time.monotonic() - start) * 1000)
         return ProviderResult(
             provider="grok",
@@ -462,7 +478,23 @@ class ComparativeAnalysisService:
             )
             resp.raise_for_status()
             data = resp.json()
-        text = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+        
+        # Validate response structure to avoid silent failures
+        if "choices" not in data or not data["choices"]:
+            raise ValueError(
+                f"Invalid OpenAI API response: missing or empty 'choices' field in {data}"
+            )
+        choice = data["choices"][0]
+        if "message" not in choice or "content" not in choice.get("message", {}):
+            raise ValueError(
+                f"Invalid OpenAI API response: missing 'message.content' in {choice}"
+            )
+        text = choice["message"]["content"]
+        if not isinstance(text, str):
+            raise ValueError(
+                f"Invalid OpenAI API response: 'content' is not a string: {type(text)}"
+            )
+        
         latency = int((time.monotonic() - start) * 1000)
         return ProviderResult(
             provider="openai",
