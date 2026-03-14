@@ -80,12 +80,17 @@ function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: (id: string)
 
 // ── Provider ──
 
+const MAX_TOASTS = 5;
+
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
 
   const addToast = useCallback((message: string, type: ToastType = 'info') => {
-    const id = `toast-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    setToasts((prev) => [...prev.slice(-4), { id, message, type }]);
+    const id = typeof crypto !== 'undefined' && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `toast-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    // Keep at most MAX_TOASTS - 1 existing + 1 new = MAX_TOASTS total
+    setToasts((prev) => [...prev.slice(-(MAX_TOASTS - 1)), { id, message, type }]);
   }, []);
 
   const dismiss = useCallback((id: string) => {

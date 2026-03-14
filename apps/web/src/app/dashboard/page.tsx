@@ -563,18 +563,16 @@ function DashboardContent() {
       const targetUrl = url || videoUrl;
       if (!targetUrl.trim()) return;
       setVideoUrl('');
-      processVideo(targetUrl).then(() => {
-        addToast('Video processing started', 'info');
-      });
+      addToast('Video analysis started', 'info');
+      processVideo(targetUrl);
     },
     [videoUrl, processVideo, addToast],
   );
 
   const handleRetryVideo = useCallback(
     (url: string) => {
-      processVideo(url).then(() => {
-        addToast('Retrying video processing…', 'info');
-      });
+      addToast('Retrying video analysis…', 'info');
+      processVideo(url);
     },
     [processVideo, addToast],
   );

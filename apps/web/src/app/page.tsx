@@ -28,7 +28,11 @@ function validateVideoUrl(url: string): string | null {
       hostname === 'youtu.be' ||
       hostname === 'drive.google.com'
     ) {
-      if (hostname === 'youtube.com' && !parsed.searchParams.get('v') && !url.includes('/shorts/')) {
+      if (
+        hostname === 'youtube.com' &&
+        !parsed.searchParams.get('v') &&
+        !parsed.pathname.match(/^\/shorts\/[\w-]+/)
+      ) {
         return 'YouTube URLs must contain a video ID (e.g. ?v=…).';
       }
       return null; // valid

@@ -213,7 +213,7 @@ export default function EventList({ events, loading, onExtract, className }: Eve
         })}
         {filteredEvents.length === 0 && (
           <p className="text-sm text-white/30 text-center py-4">
-            No {activeFilter !== 'all' ? activeFilter : ''} events found.
+            {activeFilter !== 'all' ? `No ${activeFilter} events found.` : 'No events found.'}
           </p>
         )}
       </div>

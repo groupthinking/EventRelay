@@ -179,7 +179,7 @@ export default function AnalysisPanel({
           <input
             type="text"
             value={input}
-            onChange={(e) => setInput(e.target.value.slice(0, MAX_CHARS))}
+            onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Ask a question about the video..."
             maxLength={MAX_CHARS}
@@ -204,7 +204,8 @@ export default function AnalysisPanel({
         {/* Character counter + keyboard hint */}
         <div className="flex items-center justify-between mt-2 px-1">
           <p className="text-[10px] text-white/20">
-            Powered by Gemini 2.0 • <kbd className="px-1 py-0.5 rounded bg-white/[0.06] font-mono text-[9px]">⌘↵</kbd> to send
+            Powered by Gemini 2.0 •{' '}
+            <kbd className="px-1 py-0.5 rounded bg-white/[0.06] font-mono text-[9px]">Ctrl/⌘↵</kbd> to send
           </p>
           {input.length > 0 && (
             <span className={clsx(
