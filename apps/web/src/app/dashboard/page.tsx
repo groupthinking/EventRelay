@@ -10,6 +10,7 @@ import EventList from '@/components/EventList';
 import type { ExtractedEvent } from '@/lib/types';
 import { useDashboardStore } from '@/store/dashboard-store';
 import type { PipelineResult, Video } from '@/store/dashboard-store';
+import { useToast } from '@/components/ui/Toast';
 
 // ============================================
 // Processing Stage Indicator
@@ -49,10 +50,12 @@ function ProcessingStage({
 // ============================================
 function VideoCard({
   video,
-  onClick
+  onClick,
+  onRetry,
 }: {
   video: Video;
   onClick: () => void;
+  onRetry?: (url: string) => void;
 }) {
   const stages = video.pipelineResult !== undefined
     ? ['Ingest', 'Generate', 'Deploy', 'Live']
@@ -206,7 +209,17 @@ function VideoCard({
 
         {/* Failed state */}
         {video.status === 'failed' && (
-          <p className="mt-3 text-xs text-red-400/70">Processing failed. Click to retry.</p>
+          <div className="mt-3 flex items-center gap-2">
+            <p className="text-xs text-red-400/70 flex-1">Processing failed.</p>
+            {onRetry && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onRetry(video.url); }}
+                className="text-xs px-3 py-1.5 rounded-lg bg-primary-500/10 text-primary-400 border border-primary-500/20 hover:bg-primary-500/20 transition-colors shrink-0"
+              >
+                ↺ Retry
+              </button>
+            )}
+          </div>
         )}
       </div>
     </div>
@@ -228,9 +241,12 @@ function ActivityFeed({
         'border border-white/[0.08]'
       )}>
         <h3 className="font-semibold text-white mb-4">Activity Feed</h3>
-        <p className="text-sm text-white/30 text-center py-6">
-          Process a video to see activity here.
-        </p>
+        <div className="flex flex-col items-center justify-center py-8 gap-3 text-center">
+          <div className="text-4xl opacity-20">📋</div>
+          <p className="text-sm text-white/30 leading-relaxed">
+            Activity will appear here as you process videos, extract events, and dispatch agents.
+          </p>
+        </div>
       </div>
     );
   }
@@ -513,6 +529,7 @@ function DashboardContent() {
   const searchParams = useSearchParams();
   const [videoUrl, setVideoUrl] = useState('');
   const [filter, setFilter] = useState<'all' | 'processing' | 'complete' | 'failed'>('all');
+  const { addToast } = useToast();
 
   // Zustand store
   const videos = useDashboardStore((s) => s.videos);
@@ -546,9 +563,20 @@ function DashboardContent() {
       const targetUrl = url || videoUrl;
       if (!targetUrl.trim()) return;
       setVideoUrl('');
-      processVideo(targetUrl);
+      processVideo(targetUrl).then(() => {
+        addToast('Video processing started', 'info');
+      });
     },
-    [videoUrl, processVideo],
+    [videoUrl, processVideo, addToast],
+  );
+
+  const handleRetryVideo = useCallback(
+    (url: string) => {
+      processVideo(url).then(() => {
+        addToast('Retrying video processing…', 'info');
+      });
+    },
+    [processVideo, addToast],
   );
 
   const handleDeployPipeline = useCallback(
@@ -710,6 +738,7 @@ function DashboardContent() {
                     key={video.id}
                     video={video}
                     onClick={() => selectVideo(video.id)}
+                    onRetry={handleRetryVideo}
                   />
                 ))}
               </div>

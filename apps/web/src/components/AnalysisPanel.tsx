@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { clsx } from 'clsx';
 
 interface Message {
@@ -15,6 +15,8 @@ interface AnalysisPanelProps {
   initialContext?: string;
   onClose?: () => void;
 }
+
+const MAX_CHARS = 1000;
 
 export default function AnalysisPanel({
   videoId,
@@ -41,13 +43,12 @@ export default function AnalysisPanel({
     scrollToBottom();
   }, [messages]);
 
-  const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!input.trim() || isLoading) return;
+  const sendMessage = useCallback(async (text: string) => {
+    if (!text.trim() || isLoading) return;
 
     const userMessage: Message = {
       role: 'user',
-      content: input,
+      content: text,
       timestamp: new Date()
     };
 
@@ -56,15 +57,13 @@ export default function AnalysisPanel({
     setIsLoading(true);
 
     try {
-      // Logic to call backend chat/ask endpoint
-      // For now, simulating a response. In production, this would call /api/v1/chat or similar.
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           video_id: videoId,
           video_url: videoUrl,
-          query: input,
+          query: text,
           history: messages.map(m => ({ role: m.role, content: m.content }))
         })
       });
@@ -90,7 +89,23 @@ export default function AnalysisPanel({
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [isLoading, messages, videoId, videoUrl]);
+
+  const handleSendMessage = useCallback(async (e: React.FormEvent) => {
+    e.preventDefault();
+    await sendMessage(input);
+  }, [input, sendMessage]);
+
+  // Ctrl+Enter / Cmd+Enter to send
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      e.preventDefault();
+      sendMessage(input);
+    }
+  }, [input, sendMessage]);
+
+  const charsLeft = MAX_CHARS - input.length;
+  const isOverLimit = charsLeft < 0;
 
   return (
     <div className="flex flex-col h-full bg-surface-900/50 backdrop-blur-xl border-l border-white/[0.08] animate-slide-in-right">
@@ -112,6 +127,7 @@ export default function AnalysisPanel({
           <button
             onClick={onClose}
             className="p-2 hover:bg-white/5 rounded-lg text-white/40 hover:text-white transition-colors"
+            aria-label="Close assistant"
           >
             ✕
           </button>
@@ -163,23 +179,43 @@ export default function AnalysisPanel({
           <input
             type="text"
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={(e) => setInput(e.target.value.slice(0, MAX_CHARS))}
+            onKeyDown={handleKeyDown}
             placeholder="Ask a question about the video..."
-            className="w-full bg-white/[0.03] border border-white/[0.08] rounded-xl px-4 py-3 pr-12 text-sm focus:outline-none focus:border-primary-500/50 transition-all placeholder:text-white/20"
+            maxLength={MAX_CHARS}
+            className={clsx(
+              "w-full bg-white/[0.03] border rounded-xl px-4 py-3 pr-12 text-sm focus:outline-none transition-all placeholder:text-white/20",
+              isOverLimit
+                ? "border-red-500/50 focus:border-red-500/70"
+                : "border-white/[0.08] focus:border-primary-500/50"
+            )}
           />
           <button
             type="submit"
-            disabled={!input.trim() || isLoading}
+            disabled={!input.trim() || isLoading || isOverLimit}
             className="absolute right-2 top-1.5 p-1.5 rounded-lg bg-primary-500 text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+            aria-label="Send message"
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
             </svg>
           </button>
         </form>
-        <p className="text-[10px] text-white/20 text-center mt-3">
-          Powered by Gemini 2.0 • Multimodal Video Intelligence
-        </p>
+        {/* Character counter + keyboard hint */}
+        <div className="flex items-center justify-between mt-2 px-1">
+          <p className="text-[10px] text-white/20">
+            Powered by Gemini 2.0 • <kbd className="px-1 py-0.5 rounded bg-white/[0.06] font-mono text-[9px]">⌘↵</kbd> to send
+          </p>
+          {input.length > 0 && (
+            <span className={clsx(
+              'text-[10px] tabular-nums',
+              charsLeft < 50 ? 'text-amber-400' : 'text-white/25',
+              isOverLimit && 'text-red-400'
+            )}>
+              {charsLeft}
+            </span>
+          )}
+        </div>
       </div>
     </div>
   );

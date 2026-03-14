@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useState, useCallback } from 'react';
 import { clsx } from 'clsx';
 import { useRouter } from 'next/navigation';
+import { useToast } from '@/components/ui/Toast';
 
 const STEPS = [
   { icon: '🔗', title: 'Paste a URL', desc: 'YouTube, Google Drive, or any video link' },
@@ -16,14 +17,67 @@ const EXAMPLES = [
   'https://www.youtube.com/watch?v=zjkBMFhNj_g',
 ];
 
+// Validate that a URL looks like a YouTube or supported video link
+function validateVideoUrl(url: string): string | null {
+  if (!url.trim()) return 'Please enter a video URL.';
+  try {
+    const parsed = new URL(url);
+    const hostname = parsed.hostname.replace(/^www\./, '');
+    if (
+      hostname === 'youtube.com' ||
+      hostname === 'youtu.be' ||
+      hostname === 'drive.google.com'
+    ) {
+      if (hostname === 'youtube.com' && !parsed.searchParams.get('v') && !url.includes('/shorts/')) {
+        return 'YouTube URLs must contain a video ID (e.g. ?v=…).';
+      }
+      return null; // valid
+    }
+    return 'Please enter a YouTube or Google Drive video URL.';
+  } catch {
+    return 'Please enter a valid URL (e.g. https://youtube.com/watch?v=…).';
+  }
+}
+
 export default function Home() {
   const [videoUrl, setVideoUrl] = useState('');
+  const [urlError, setUrlError] = useState<string | null>(null);
+  const [pasting, setPasting] = useState(false);
   const router = useRouter();
+  const { addToast } = useToast();
 
   const handleProcess = useCallback(() => {
-    if (!videoUrl.trim()) return;
+    const error = validateVideoUrl(videoUrl);
+    if (error) {
+      setUrlError(error);
+      return;
+    }
+    setUrlError(null);
     router.push(`/dashboard?video=${encodeURIComponent(videoUrl)}`);
   }, [videoUrl, router]);
+
+  const handleUrlChange = useCallback((value: string) => {
+    setVideoUrl(value);
+    if (urlError) setUrlError(null); // clear error on change
+  }, [urlError]);
+
+  const handlePasteFromClipboard = useCallback(async () => {
+    try {
+      setPasting(true);
+      const text = await navigator.clipboard.readText();
+      if (text.trim()) {
+        setVideoUrl(text.trim());
+        setUrlError(null);
+        addToast('Pasted from clipboard', 'success');
+      } else {
+        addToast('Clipboard is empty', 'warning');
+      }
+    } catch {
+      addToast('Could not access clipboard — paste manually', 'error');
+    } finally {
+      setPasting(false);
+    }
+  }, [addToast]);
 
   return (
     <div className="min-h-screen text-white">
@@ -63,15 +117,40 @@ export default function Home() {
         <form
           onSubmit={(e) => { e.preventDefault(); handleProcess(); }}
           className="max-w-2xl mx-auto"
+          noValidate
         >
-          <div className="flex gap-3 p-2 rounded-2xl bg-white/[0.04] border border-white/[0.08] focus-within:border-primary-500/40 focus-within:shadow-lg focus-within:shadow-primary-500/5 transition-all">
+          <div className={clsx(
+            'flex gap-3 p-2 rounded-2xl bg-white/[0.04] border transition-all',
+            urlError
+              ? 'border-red-500/40 shadow-lg shadow-red-500/5'
+              : 'border-white/[0.08] focus-within:border-primary-500/40 focus-within:shadow-lg focus-within:shadow-primary-500/5'
+          )}>
             <input
-              type="text"
+              type="url"
               value={videoUrl}
-              onChange={(e) => setVideoUrl(e.target.value)}
+              onChange={(e) => handleUrlChange(e.target.value)}
               placeholder="Paste a YouTube URL..."
+              aria-label="Video URL"
+              aria-describedby={urlError ? 'url-error' : undefined}
+              aria-invalid={urlError ? 'true' : 'false'}
               className="flex-1 px-4 py-3 bg-transparent text-white placeholder:text-white/30 focus:outline-none text-sm"
             />
+            {/* Paste from clipboard */}
+            <button
+              type="button"
+              onClick={handlePasteFromClipboard}
+              disabled={pasting}
+              title="Paste from clipboard"
+              className="btn btn-ghost py-3 px-3 text-white/40 hover:text-white/70 disabled:opacity-40"
+            >
+              {pasting ? (
+                <span className="inline-block animate-spin text-xs">⏳</span>
+              ) : (
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                </svg>
+              )}
+            </button>
             <button
               type="submit"
               disabled={!videoUrl.trim()}
@@ -80,6 +159,16 @@ export default function Home() {
               Analyze
             </button>
           </div>
+          {/* Inline validation error */}
+          {urlError && (
+            <p
+              id="url-error"
+              role="alert"
+              className="mt-2 text-xs text-red-400 text-left px-2 animate-fade-in-up"
+            >
+              {urlError}
+            </p>
+          )}
         </form>
 
         {/* Example URLs */}
@@ -88,7 +177,7 @@ export default function Home() {
           {EXAMPLES.map((url) => (
             <button
               key={url}
-              onClick={() => { setVideoUrl(url); }}
+              onClick={() => { setVideoUrl(url); setUrlError(null); }}
               className="text-xs text-primary-400/70 hover:text-primary-400 transition truncate max-w-[200px]"
             >
               {url.replace('https://www.youtube.com/watch?v=', 'youtu.be/')}
