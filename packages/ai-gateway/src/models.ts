@@ -49,7 +49,7 @@ export class ModelRegistry {
         // that the Vercel AI SDK can drive it through the same interface.
         model = openai(config.model || 'lfm2-vl', {
           baseURL: 'https://liquidai-lfm2-mcp.static.hf.space/v1',
-          apiKey: config.apiKey || 'no-key-required',
+          apiKey: config.apiKey,
         });
         break;
 
