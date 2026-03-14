@@ -39,6 +39,7 @@ if ModelProvider is None:  # pragma: no cover - fallback for local testing
     ModelProvider.GROK = ModelProvider("grok")  # type: ignore[attr-defined]
     ModelProvider.OPENAI = ModelProvider("openai")  # type: ignore[attr-defined]
     ModelProvider.GEMINI = ModelProvider("gemini")  # type: ignore[attr-defined]
+    ModelProvider.LIQUIDAI = ModelProvider("liquidai")  # type: ignore[attr-defined]
 
 
 logger = logging.getLogger(__name__)
@@ -304,5 +305,6 @@ class ModelRouter:
                 getattr(ModelProvider, "GROK", None),
                 getattr(ModelProvider, "OPENAI", None),
                 getattr(ModelProvider, "GEMINI", None),
+                getattr(ModelProvider, "LIQUIDAI", None),
             ]
         return [provider for provider in providers if provider]
