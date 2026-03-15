@@ -156,3 +156,4 @@ UVAI_Digital_Refinery_Blueprint.pdf
 .vercel
 .env*.local
 .next/
+.env
