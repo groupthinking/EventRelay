@@ -214,6 +214,95 @@ function VideoCard({
 }
 
 // ============================================
+// Quick Start Guide (shown when no videos)
+// ============================================
+const STARTER_VIDEOS = [
+  { label: 'Y Combinator lecture', url: 'https://www.youtube.com/watch?v=aircAruvnKk' },
+  { label: 'Tech conference talk', url: 'https://www.youtube.com/watch?v=zjkBMFhNj_g' },
+];
+
+function QuickStartGuide({ onLoad }: { onLoad: (url: string) => void }) {
+  return (
+    <div className={clsx(
+      'bg-surface-900/50 backdrop-blur-xl rounded-2xl p-6',
+      'border border-white/[0.08]'
+    )}>
+      <h3 className="font-semibold text-white mb-2">Quick Start</h3>
+      <p className="text-xs text-white/40 mb-5 leading-relaxed">
+        Paste any YouTube URL or try one of these examples to see EventRelay in action.
+      </p>
+      <div className="space-y-2">
+        {STARTER_VIDEOS.map((v) => (
+          <button
+            key={v.url}
+            onClick={() => onLoad(v.url)}
+            className="w-full flex items-center gap-3 p-3 rounded-xl bg-white/[0.03] border border-white/[0.06] hover:border-primary-500/30 hover:bg-primary-500/5 transition-all text-left group"
+          >
+            <span className="text-xl">▶️</span>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm text-white/80 group-hover:text-white transition truncate">
+                {v.label}
+              </p>
+              <p className="text-xs text-white/30 truncate">{v.url.replace('https://www.youtube.com/watch?v=', 'youtu.be/')}</p>
+            </div>
+            <span className="text-primary-400 opacity-0 group-hover:opacity-100 transition text-xs font-semibold">
+              Try →
+            </span>
+          </button>
+        ))}
+      </div>
+
+      <div className="mt-5 pt-5 border-t border-white/[0.06]">
+        <div className="text-xs font-semibold text-white/30 uppercase tracking-wider mb-3">What you&apos;ll get</div>
+        <ul className="space-y-2">
+          {['Full transcript', 'Extracted events & actions', 'AI-powered insights', 'Searchable video chat'].map((item) => (
+            <li key={item} className="flex items-center gap-2 text-xs text-white/50">
+              <span className="text-green-400">✓</span>
+              {item}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
+// ============================================
+// Stats Summary Card (shown when has videos)
+// ============================================
+function StatsSummary({
+  videoCount,
+  completedCount,
+  totalEvents,
+}: {
+  videoCount: number;
+  completedCount: number;
+  totalEvents: number;
+}) {
+  return (
+    <div className={clsx(
+      'bg-surface-900/50 backdrop-blur-xl rounded-2xl p-6',
+      'border border-white/[0.08]'
+    )}>
+      <h3 className="font-semibold text-white mb-4">Session Stats</h3>
+      <div className="grid grid-cols-3 gap-3">
+        {[
+          { value: videoCount, label: 'Videos', icon: '🎬' },
+          { value: completedCount, label: 'Done', icon: '✅' },
+          { value: totalEvents, label: 'Events', icon: '⚡' },
+        ].map((s) => (
+          <div key={s.label} className="text-center p-3 rounded-xl bg-white/[0.03] border border-white/[0.05]">
+            <div className="text-lg mb-1">{s.icon}</div>
+            <div className="text-xl font-black text-white">{s.value}</div>
+            <div className="text-[10px] text-white/35 mt-0.5">{s.label}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ============================================
 // Activity Feed
 // ============================================
 function ActivityFeed({
@@ -227,7 +316,7 @@ function ActivityFeed({
         'bg-surface-900/50 backdrop-blur-xl rounded-2xl p-6',
         'border border-white/[0.08]'
       )}>
-        <h3 className="font-semibold text-white mb-4">Activity Feed</h3>
+        <h3 className="font-semibold text-white mb-4">Activity</h3>
         <p className="text-sm text-white/30 text-center py-6">
           Process a video to see activity here.
         </p>
@@ -240,15 +329,15 @@ function ActivityFeed({
       'bg-surface-900/50 backdrop-blur-xl rounded-2xl p-6',
       'border border-white/[0.08]'
     )}>
-      <h3 className="font-semibold text-white mb-5">Activity Feed</h3>
-      <div className="space-y-4 max-h-96 overflow-y-auto pr-2">
+      <h3 className="font-semibold text-white mb-5">Activity</h3>
+      <div className="space-y-4 max-h-72 overflow-y-auto pr-2">
         {activities.map((activity, i) => (
           <div
             key={i}
             className="flex items-start gap-3 text-sm animate-fade-in-up opacity-0"
             style={{ animationDelay: `${i * 50}ms`, animationFillMode: 'forwards' }}
           >
-            <div className="relative mt-1.5">
+            <div className="relative mt-1.5 flex-shrink-0">
               <div
                 className={clsx(
                   'w-2.5 h-2.5 rounded-full',
@@ -259,12 +348,80 @@ function ActivityFeed({
               />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-white/80 leading-snug">{activity.event}</p>
-              <p className="text-white/30 text-xs mt-1">{activity.time}</p>
+              <p className="text-white/80 leading-snug text-xs">{activity.event}</p>
+              <p className="text-white/30 text-[10px] mt-0.5">{activity.time}</p>
             </div>
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+// ============================================
+// Export Button (for completed videos)
+// ============================================
+function ExportMenu({ videos }: { videos: Video[] }) {
+  const [open, setOpen] = useState(false);
+  const completed = videos.filter((v) => v.status === 'complete');
+  if (completed.length === 0) return null;
+
+  const exportJSON = () => {
+    const data = completed.map((v) => ({
+      title: v.title,
+      transcript: v.transcript,
+      events: v.events,
+      insights: v.insights,
+    }));
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `eventrelay-export-${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    setOpen(false);
+  };
+
+  const exportCSV = () => {
+    const rows = ['Video Title,Event Type,Event Title,Timestamp,Confidence'];
+    completed.forEach((v) => {
+      (v.events || []).forEach((e) => {
+        rows.push(`"${v.title}","${e.type}","${e.title}","${e.timestamp || ''}","${Math.round(e.confidence * 100)}%"`);
+      });
+    });
+    const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `eventrelay-events-${Date.now()}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    setOpen(false);
+  };
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="btn btn-secondary py-2 px-4 text-sm flex items-center gap-2"
+      >
+        <span>↓</span> Export
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full mt-2 w-48 bg-surface-900 border border-white/[0.12] rounded-xl shadow-2xl z-30 overflow-hidden">
+          <button
+            onClick={exportJSON}
+            className="w-full text-left px-4 py-3 text-sm text-white/80 hover:bg-white/[0.06] transition flex items-center gap-2"
+          >
+            <span>&#123;&#125;</span> Export JSON
+          </button>
+          <button
+            onClick={exportCSV}
+            className="w-full text-left px-4 py-3 text-sm text-white/80 hover:bg-white/[0.06] transition flex items-center gap-2 border-t border-white/[0.06]"
+          >
+            <span>📊</span> Export CSV
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -643,33 +800,16 @@ function DashboardContent() {
           </form>
         </div>
 
-        {/* Session Stats (real data from store) */}
-        {videos.length > 0 && (
-          <div className="flex items-center gap-6 mb-8 text-sm">
-            <div className="flex items-center gap-2 text-white/50">
-              <span className="text-lg">📚</span>
-              <span><strong className="text-white">{videos.length}</strong> videos</span>
-            </div>
-            <div className="flex items-center gap-2 text-white/50">
-              <span className="text-lg">✅</span>
-              <span><strong className="text-white">{completedCount}</strong> complete</span>
-            </div>
-            {totalEvents > 0 && (
-              <div className="flex items-center gap-2 text-white/50">
-                <span className="text-lg">⚡</span>
-                <span><strong className="text-white">{totalEvents}</strong> events extracted</span>
-              </div>
-            )}
-          </div>
-        )}
-
         {/* Main Content */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Video Library */}
           <div className="lg:col-span-2">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-bold">Video Library</h2>
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
+                {videos.length > 0 && (
+                  <ExportMenu videos={videos} />
+                )}
                 {(['all', 'processing', 'complete', 'failed'] as const).map((f) => {
                   const count = f === 'all' ? videos.length : videos.filter(v => v.status === f).length;
                   if (f !== 'all' && count === 0) return null;
@@ -693,11 +833,22 @@ function DashboardContent() {
 
             {filteredVideos.length === 0 && videos.length === 0 ? (
               <div className="col-span-full flex flex-col items-center justify-center py-20 rounded-2xl border border-dashed border-white/[0.1] bg-white/[0.02]">
-                <div className="text-6xl mb-4 opacity-50">🎬</div>
-                <h3 className="text-lg font-semibold text-white/70 mb-2">No videos yet</h3>
-                <p className="text-white/40 text-sm text-center max-w-sm">
-                  Paste a YouTube URL above and click Analyze to get started.
+                <div className="text-6xl mb-4">🎬</div>
+                <h3 className="text-xl font-bold text-white mb-2">Start with any video</h3>
+                <p className="text-white/40 text-sm text-center max-w-sm mb-6">
+                  Paste a YouTube URL in the field above, or pick an example from the Quick Start guide on the right.
                 </p>
+                <div className="flex flex-wrap gap-3 justify-center">
+                  {STARTER_VIDEOS.map((v) => (
+                    <button
+                      key={v.url}
+                      onClick={() => handleAddVideo(v.url)}
+                      className="px-4 py-2 rounded-xl bg-primary-500/10 text-primary-400 border border-primary-500/20 hover:bg-primary-500/20 transition text-sm font-medium"
+                    >
+                      Try: {v.label}
+                    </button>
+                  ))}
+                </div>
               </div>
             ) : filteredVideos.length === 0 ? (
               <div className="text-center py-12 text-white/30 text-sm">
@@ -717,8 +868,33 @@ function DashboardContent() {
           </div>
 
           {/* Sidebar */}
-          <div className="space-y-6">
-            <ActivityFeed activities={activities} />
+          <div className="space-y-5">
+            {videos.length > 0 && (
+              <StatsSummary
+                videoCount={videos.length}
+                completedCount={completedCount}
+                totalEvents={totalEvents}
+              />
+            )}
+            {videos.length === 0 ? (
+              <QuickStartGuide onLoad={handleAddVideo} />
+            ) : (
+              <ActivityFeed activities={activities} />
+            )}
+            {videos.length > 0 && activities.length > 0 && (
+              <div className={clsx(
+                'bg-surface-900/50 backdrop-blur-xl rounded-2xl p-5',
+                'border border-white/[0.08]'
+              )}>
+                <div className="text-xs font-semibold text-white/30 uppercase tracking-wider mb-3">Tips</div>
+                <ul className="space-y-2 text-xs text-white/45 leading-relaxed">
+                  <li>• Click any video card to see full insights</li>
+                  <li>• Use "Ask About This Video" to chat with AI</li>
+                  <li>• Export events to CSV or JSON</li>
+                  <li>• Deploy button generates and deploys code</li>
+                </ul>
+              </div>
+            )}
           </div>
         </div>
       </div>
