@@ -33,6 +33,7 @@ psutil>=5.9.0
 ffmpeg-python>=0.2.0
 qrcode[pil]>=7.0
 opencv-python>=4.8.0
+orjson>=3.9.0
 
 [deploy]
 docker>=6.1.0
