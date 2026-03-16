@@ -14,12 +14,13 @@
     "test": "jest"
   },
   "dependencies": {
-    "react": "^18",
-    "@repo/logger": "*"
+    "@dataconnect/generated": "file:src/dataconnect-generated",
+    "@repo/logger": "*",
+    "react": "^18"
   },
   "devDependencies": {
     "@types/react": "^18",
-    "typescript": "^5",
-    "eslint": "^8"
+    "eslint": "^8",
+    "typescript": "^5"
   }
 }

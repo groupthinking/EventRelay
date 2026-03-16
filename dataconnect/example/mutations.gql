@@ -1,33 +1,35 @@
-# Example mutations for a simple movie app
+# Example mutations for EventRelay Video Analysis Pipeline
+# These demonstrate the available mutations for the VideoJob/JobEvent schema.
+# Production operations are in jobs/jobs.gql
 
-# Create a movie based on user input
-mutation CreateMovie($title: String!, $genre: String!, $imageUrl: String!)
-@auth(level: USER_EMAIL_VERIFIED, insecureReason: "Any email verified users can create a new movie.") {
-  movie_insert(data: { title: $title, genre: $genre, imageUrl: $imageUrl })
-}
-
-# Upsert (update or insert) a user's username based on their auth.uid
-mutation UpsertUser($username: String!) @auth(level: USER) {
-  # The "auth.uid" server value ensures that users can only register their own user.
-  user_upsert(data: { id_expr: "auth.uid", username: $username })
-}
-
-# Add a review for a movie
-mutation AddReview($movieId: UUID!, $rating: Int!, $reviewText: String!)
-@auth(level: USER) {
-  review_upsert(
+# Create a new video analysis job
+mutation CreateExampleJob($videoUrl: String!, $source: String!, $taskType: String!)
+@auth(level: PUBLIC) {
+  videoJob_insert(
     data: {
-      userId_expr: "auth.uid"
-      movieId: $movieId
-      rating: $rating
-      reviewText: $reviewText
-      # reviewDate defaults to today in the schema. No need to set it manually.
+      videoUrl: $videoUrl
+      source: $source
+      taskType: $taskType
+      status: "QUEUED"
+      executedAgents: []
     }
   )
 }
 
-# Logged in user can delete their review for a movie
-mutation DeleteReview($movieId: UUID!) @auth(level: USER) {
-  # The "auth.uid" server value ensures that users can only delete their own reviews.
-  review_delete(key: { userId_expr: "auth.uid", movieId: $movieId })
+# Record a job event (e.g., agent start/complete, status change)
+mutation RecordExampleEvent($jobId: UUID!, $eventType: String!, $agent: String, $details: String)
+@auth(level: PUBLIC) {
+  jobEvent_insert(
+    data: {
+      job: { id: $jobId }
+      eventType: $eventType
+      agent: $agent
+      details: $details
+    }
+  )
+}
+
+# Delete a specific job event
+mutation DeleteExampleEvent($id: UUID!) @auth(level: PUBLIC) {
+  jobEvent_delete(id: $id)
 }
