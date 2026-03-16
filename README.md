@@ -77,7 +77,7 @@ cp .env.example .env
 
 ```bash
 # Terminal 1: Backend
-PYTHONPATH=src uvicorn youtube_extension.main:app --reload --port 8000
+PYTHONPATH=src python -m uvicorn youtube_extension.main:app --reload --port 8000
 
 # Terminal 2: Frontend
 npm run dev:web
