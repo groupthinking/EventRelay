@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@dataconnect/generated": "file:src/dataconnect-generated",
     "@google/genai": "^1.43.0",
     "@google/generative-ai": "^0.24.1",
     "@stripe/stripe-js": "^2.0.0",

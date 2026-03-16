@@ -6,7 +6,8 @@ node_modules/
 venv/
 .gemini/
 .vscode/
-__pycache__/
+scripts/
+.idea/__pycache__/
 *.pyc
 *.pyo
 *.pyd
@@ -37,3 +38,8 @@ google-cloud-sdk/
 ai-edge-torch/
 .venv_prod_verify/
 htmlcov/
+
+# Chrome / NotebookLM browser profiles (~1GB)
+notebooklm_chrome_profile/
+src/utils/notebooklm_profile/
+src/utils/notebooklm_profile_v2/

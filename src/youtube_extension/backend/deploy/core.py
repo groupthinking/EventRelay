@@ -242,7 +242,8 @@ class BaseDeploymentAdapter(ABC):
     async def _poll_deployment_status(self,
                                     status_url: str,
                                     success_statuses: list[str],
-                                    timeout_minutes: int = 10) -> dict[str, Any]:
+                                    timeout_minutes: int = 10,
+                                    headers: Optional[dict[str, str]] = None) -> dict[str, Any]:
         """Poll deployment status until completion or timeout"""
 
         start_time = time.time()
@@ -250,12 +251,12 @@ class BaseDeploymentAdapter(ABC):
 
         while time.time() - start_time < timeout_seconds:
             try:
-                status_data = await self._make_request_with_retry('GET', status_url)
+                status_data = await self._make_request_with_retry('GET', status_url, headers=headers)
 
                 status = status_data.get('status', '').lower()
-                if status in success_statuses:
+                if status in [s.lower() for s in success_statuses]:
                     return status_data
-                elif status in ['failed', 'error', 'cancelled']:
+                elif status in ['failed', 'error', 'cancelled', 'canceled']:
                     raise DeploymentError(
                         platform=self.platform,
                         operation='status_check',

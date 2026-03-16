@@ -130,19 +130,12 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        # Development environments
-        "http://localhost:3000",  # React dev server
-        "http://localhost:5173",  # Vite dev server
-        "http://localhost:8080",  # Alternative dev server
-        "http://localhost:3001",  # Additional dev port
-        # Production environments
-        "https://youtube-extension-frontend.vercel.app",
-        "https://youtube-extension-frontend-jxk2359s8-garvs-projects-5153e7c7.vercel.app",
-        # Vercel preview deployments
-        "https://*.vercel.app",
-        # Additional production domains
-        "https://uvai.platform",
-        "https://api.uvai.platform",
+        "http://localhost:3000",
+        "http://localhost:5173",
+        "http://localhost:8080",
+        "http://localhost:3001",
+        "https://event-relay-web.vercel.app",
+        "https://eventrelay-production.up.railway.app",
         "https://uvai.io",
         "https://www.uvai.io",
     ],
@@ -160,14 +153,16 @@ app.add_middleware(
 #     hsts_max_age=31536000,  # 1 year
 # )
 
-# Rate limiting middleware
-# from .middleware.rate_limiting import RateLimitMiddleware
-# app.add_middleware(
-#    RateLimitMiddleware,
-#    requests_per_minute=100,  # Configurable via environment
-#    burst_size=20,
-#    exempt_paths=["/health", "/docs", "/redoc", "/openapi.json", "/api/v1/health"],
-# )
+from .middleware.rate_limiting import RateLimitMiddleware
+app.add_middleware(
+    RateLimitMiddleware,
+    requests_per_minute=60,
+    burst_size=15,
+    exempt_paths=["/health", "/docs", "/redoc", "/openapi.json", "/api/v1/health", "/api/v1/health/detailed"],
+)
+
+from .middleware.api_key_auth import APIKeyAuthMiddleware
+app.add_middleware(APIKeyAuthMiddleware)
 
 # Include API version routers
 app.include_router(v1_router)

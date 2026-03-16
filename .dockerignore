@@ -1,0 +1,63 @@
+# Node & Frontend (not needed for Python backend container)
+node_modules/
+apps/
+.next/
+
+# Chrome / NotebookLM browser profiles (~1GB)
+notebooklm_chrome_profile/
+src/utils/notebooklm_profile/
+src/utils/notebooklm_profile_v2/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+
+# IDE & System
+.git/
+.idea/
+.vscode/
+.DS_Store
+*.swp
+
+# Logs & Data
+*.log
+logs/
+*.db
+*.sqlite3
+
+# Config & Secrets
+.env*
+*.pem
+*.key
+*.cert
+*secret*.json
+gha-creds-*.json
+
+# Research & Archives
+research/
+docs/
+_archive/
+.gemini/
+ai-edge-torch/
+external/
+google-cloud-sdk/
+chrome_build/
+safari_build/
+generated_projects/
+youtube_processed_videos/
+terraform_export/
+video_representations_extractor-*/
+build_extensions/
+
+# Test & Coverage
+tests/
+coverage/
+htmlcov/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/

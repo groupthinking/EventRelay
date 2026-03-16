@@ -1,78 +1,81 @@
-# Example queries for a simple movie app.
+# Example queries for EventRelay Video Analysis Pipeline
+# These demonstrate the available queries for the VideoJob/JobEvent/VideoEmbedding schema.
+# Production operations are in jobs/jobs.gql
 
-# @auth() directives control who can call each operation.
-# Anyone should be able to list all movies, so the auth level is set to PUBLIC
-query ListMovies @auth(level: PUBLIC, insecureReason: "Anyone can list all movies.") {
-  movies {
+# List all video jobs, most recent first
+query ListVideoJobs @auth(level: PUBLIC) {
+  videoJobs(orderBy: [{ createdAt: DESC }], limit: 20) {
     id
+    videoUrl
+    source
+    taskType
+    status
     title
-    imageUrl
-    genre
+    createdAt
+    updatedAt
   }
 }
 
-# List all users, only admins should be able to list all users, so we use NO_ACCESS
-query ListUsers @auth(level: NO_ACCESS) {
-  users {
+# Get a specific video job by ID with full details
+query GetVideoJob($id: UUID!) @auth(level: PUBLIC) {
+  videoJob(id: $id) {
     id
-    username
-  }
-}
-
-# Logged in users can list all their reviews and movie titles associated with the review
-# Since the query uses the uid of the current authenticated user, we set auth level to USER
-query ListUserReviews @auth(level: USER) {
-  user(key: { id_expr: "auth.uid" }) {
-    id
-    username
-    # <field>_on_<foreign_key_field> makes it easy to grab info from another table
-    # Here, we use it to grab all the reviews written by the user.
-    reviews: reviews_on_user {
-      rating
-      reviewDate
-      reviewText
-      movie {
-        id
-        title
-      }
-    }
-  }
-}
-
-# Get movie by id
-query GetMovieById($id: UUID!) @auth(level: PUBLIC, insecureReason: "Anyone can get a movie by id.") {
-  movie(id: $id) {
-    id
+    videoUrl
+    source
+    taskType
+    status
+    executedAgents
+    resultJson
+    error
     title
-    imageUrl
-    genre
-    metadata: movieMetadata_on_movie {
-      rating
-      releaseYear
-      description
-    }
-    reviews: reviews_on_movie {
-      reviewText
-      reviewDate
-      rating
-      user {
-        id
-        username
-      }
-    }
+    duration
+    fileSize
+    createdAt
+    updatedAt
   }
 }
 
-# Search for movies, actors, and reviews
-query SearchMovie($titleInput: String, $genre: String) @auth(level: PUBLIC, insecureReason: "Anyone can search for movies.") {
-  movies(
-    where: {
-      _and: [{ genre: { eq: $genre } }, { title: { contains: $titleInput } }]
-    }
+# List job events for a specific job, ordered chronologically
+query ListJobEvents($jobId: UUID!) @auth(level: PUBLIC) {
+  jobEvents(
+    where: { job: { id: { eq: $jobId } } }
+    orderBy: [{ timestamp: ASC }]
   ) {
     id
-    title
-    genre
-    imageUrl
+    eventType
+    agent
+    details
+    timestamp
+  }
+}
+
+# List recent video embeddings
+query ListVideoEmbeddings($limit: Int = 50) @auth(level: PUBLIC) {
+  videoEmbeddings(orderBy: [{ createdAt: DESC }], limit: $limit) {
+    id
+    segmentType
+    segmentIndex
+    content
+    job {
+      id
+      title
+      videoUrl
+    }
+    createdAt
+  }
+}
+
+# List only failed jobs for debugging
+query ListFailedJobs @auth(level: PUBLIC) {
+  videoJobs(
+    where: { status: { eq: "FAILED" } }
+    orderBy: [{ updatedAt: DESC }]
+    limit: 20
+  ) {
+    id
+    videoUrl
+    error
+    executedAgents
+    updatedAt
   }
 }

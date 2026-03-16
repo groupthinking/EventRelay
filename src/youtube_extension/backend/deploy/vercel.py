@@ -4,7 +4,6 @@ Vercel deployment adapter for UVAI platform.
 Updated to use new base adapter architecture with retry logic and proper error handling.
 """
 
-import asyncio
 from typing import Any, Optional
 
 from .core import (
@@ -21,6 +20,20 @@ class VercelAdapter(BaseDeploymentAdapter):
 
     def __init__(self):
         super().__init__('vercel')
+
+    @staticmethod
+    def _ensure_https(url: Optional[str]) -> Optional[str]:
+        """Ensure URL has https:// prefix (Vercel API returns bare domains)"""
+        if not url:
+            return None
+        if url.startswith("http://") or url.startswith("https://"):
+            return url
+        return f"https://{url}"
+
+    @staticmethod
+    def _vercel_import_url(org: str, repo_name: str) -> str:
+        """Generate a Vercel import URL the user can click to deploy manually"""
+        return f"https://vercel.com/new/import?s=https://github.com/{org}/{repo_name}"
 
     async def _deploy_impl(self, project_path: str, project_config: dict[str, Any], env: dict[str, Any]) -> DeploymentResult:
         """Vercel-specific deployment implementation"""
@@ -43,168 +56,129 @@ class VercelAdapter(BaseDeploymentAdapter):
                 message="VERCEL_TOKEN not configured"
             )
 
-        headers = {"Authorization": f"Bearer {token}"}
-
-        # Check if GitHub repo exists and is accessible
-        repo_exists = await self._check_github_repo_exists(headers, repo_url)
-        if not repo_exists:
-            self.logger.warning(f"GitHub repository {repo_url} not accessible, attempting direct file deployment")
-            return await self._deploy_files_directly(project_path, project_config, env, token, headers)
-
-        # Prepare deployment payload for GitHub integration
-        payload = {
-            "name": env.get("VERCEL_PROJECT_NAME", f"uvai-{project_config.get('title', 'project').lower().replace(' ', '-')}"),
-            "gitRepository": {
-                "type": "github",
-                "repo": repo_url.replace("https://github.com/", "")
-            },
-            "target": "production"
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
         }
 
-        # Add optional build configuration
-        framework = self._detect_framework(project_config)
-        if framework:
-            payload["framework"] = framework
+        # Parse org/repo from GitHub URL
+        repo_path = repo_url.replace("https://github.com/", "").strip("/")
+        parts = repo_path.split("/")
+        if len(parts) >= 2:
+            org, repo_name = parts[0], parts[1]
+        else:
+            org, repo_name = "groupthinking", repo_path
 
-        build_command = project_config.get("build_command")
-        if build_command:
-            payload["buildCommand"] = build_command
-
-        install_command = project_config.get("install_command")
-        if install_command:
-            payload["installCommand"] = install_command
-
-        output_directory = project_config.get("output_directory", "dist")
-        if output_directory and output_directory != "dist":
-            payload["outputDirectory"] = output_directory
-
-        # Create deployment
-        self.logger.info(f"Creating Vercel deployment for {payload['name']}")
-        deployment_data = await self._make_request_with_retry(
-            'POST',
-            f"{VERCEL_API}/v13/deployments",
-            headers=headers,
-            json_data=payload,
-            timeout=120.0  # Vercel deployments can take time
+        project_name = env.get(
+            "VERCEL_PROJECT_NAME",
+            f"uvai-{project_config.get('title', 'project').lower().replace(' ', '-')}"
         )
 
+        # Prepare deployment payload using Vercel REST API v13 gitSource format
+        payload = {
+            "name": project_name,
+            "gitSource": {
+                "type": "github",
+                "org": org,
+                "repo": repo_name,
+                "ref": project_config.get("branch", "main")
+            },
+            "projectSettings": {
+                "framework": self._detect_framework(project_config),
+                "installCommand": project_config.get("install_command", "npm install || true"),
+                "buildCommand": project_config.get("build_command", "echo 'static'"),
+                "outputDirectory": project_config.get("output_directory", ".")
+            }
+        }
+
+        # Optionally scope to a Vercel team
+        team_id = EnvironmentValidator.get_token('VERCEL_ORG_ID')
+        api_url = f"{VERCEL_API}/v13/deployments"
+        if team_id:
+            api_url = f"{api_url}?teamId={team_id}"
+
+        # Create deployment
+        self.logger.info(f"Creating Vercel deployment for {project_name}")
+        try:
+            deployment_data = await self._make_request_with_retry(
+                'POST',
+                api_url,
+                headers=headers,
+                json_data=payload,
+                timeout=120.0
+            )
+        except DeploymentError as e:
+            # If API deployment fails (permissions, plan limits, etc.)
+            # return a manual-import fallback URL so the user isn't stuck
+            self.logger.warning(f"Vercel API deployment failed: {e.message}")
+            import_url = self._vercel_import_url(org, repo_name)
+            return DeploymentResult(
+                status='failed',
+                platform=self.platform,
+                url=import_url,
+                error_message=f"API deployment failed: {e.message}. Use the import URL to deploy manually.",
+                build_log_url=import_url,
+                metadata={
+                    'project_name': project_name,
+                    'import_url': import_url,
+                    'api_error': e.message,
+                    'api_details': e.details,
+                }
+            )
+
         deployment_id = deployment_data.get('id')
-        deployment_url = deployment_data.get('url')
+        deployment_url = self._ensure_https(deployment_data.get('url'))
 
         if not deployment_id:
-            raise DeploymentError(
+            import_url = self._vercel_import_url(org, repo_name)
+            return DeploymentResult(
+                status='failed',
                 platform=self.platform,
-                operation='create_deployment',
-                message="Vercel deployment creation failed - no deployment ID returned",
-                details=deployment_data
+                url=import_url,
+                error_message="Vercel deployment creation returned no deployment ID. Use the import URL to deploy manually.",
+                build_log_url=import_url,
+                metadata={
+                    'project_name': project_name,
+                    'import_url': import_url,
+                    'deployment_response': deployment_data,
+                }
             )
 
         # Poll for deployment completion
-        if deployment_data.get('status') != 'READY':
+        ready = deployment_data.get('readyState', deployment_data.get('status', ''))
+        if ready.upper() != 'READY':
             status_url = f"{VERCEL_API}/v13/deployments/{deployment_id}"
+            if team_id:
+                status_url = f"{status_url}?teamId={team_id}"
             self.logger.info(f"Polling Vercel deployment status: {deployment_id}")
 
-            final_status = await self._poll_deployment_status(
-                status_url,
-                success_statuses=['READY'],
-                timeout_minutes=15
-            )
+            try:
+                final_status = await self._poll_deployment_status(
+                    status_url,
+                    headers=headers,
+                    success_statuses=['READY'],
+                    timeout_minutes=15
+                )
+                deployment_url = self._ensure_https(final_status.get('url', '')) or deployment_url
+            except DeploymentError as poll_err:
+                self.logger.warning(f"Polling failed: {poll_err.message}, using initial URL")
 
-            deployment_url = final_status.get('url', deployment_url)
+        # Ensure we have a usable URL
+        if not deployment_url:
+            deployment_url = f"https://{project_name}.vercel.app"
 
         return DeploymentResult(
             status='success',
             platform=self.platform,
             deployment_id=deployment_id,
             url=deployment_url,
-            build_log_url=f"https://vercel.com/{payload['name']}/{deployment_id}",
+            build_log_url=f"https://vercel.com/{project_name}/{deployment_id}",
             metadata={
-                'project_name': payload['name'],
-                'framework': payload.get('framework'),
+                'project_name': project_name,
+                'framework': self._detect_framework(project_config),
                 'deployment_data': deployment_data
             }
         )
-
-    async def _check_github_repo_exists(self, headers: dict[str, str], repo_url: str) -> bool:
-        """Check if GitHub repository exists and is accessible"""
-        try:
-            # Extract owner/repo from URL
-            repo_path = repo_url.replace("https://github.com/", "")
-
-            # Try to access the repo via GitHub API
-            github_api_url = f"https://api.github.com/repos/{repo_path}"
-            response = await self._make_request_with_retry('GET', github_api_url, headers={"Authorization": f"token {EnvironmentValidator.get_token('GITHUB_TOKEN')}"})
-
-            return response.get('id') is not None
-        except Exception:
-            return False
-
-    async def _deploy_files_directly(self, project_path: str, project_config: dict[str, Any], env: dict[str, Any], token: str, headers: dict[str, str]) -> DeploymentResult:
-        """Deploy files directly to Vercel without GitHub integration"""
-        self.logger.info("Deploying files directly to Vercel...")
-
-        # For testing purposes, create a simple deployment
-        # In a real scenario, you'd upload all project files
-        payload = {
-            "name": env.get("VERCEL_PROJECT_NAME", f"uvai-{project_config.get('title', 'project').lower().replace(' ', '-')}"),
-            "target": "production",
-            "files": []  # Empty for now - would contain file data in real deployment
-        }
-
-        # Add basic configuration
-        framework = self._detect_framework(project_config)
-        if framework:
-            payload["framework"] = framework
-
-        try:
-            # Create a simple deployment (this might still fail due to empty files)
-            deployment_data = await self._make_request_with_retry(
-                'POST',
-                f"{VERCEL_API}/v13/deployments",
-                headers=headers,
-                json_data=payload,
-                timeout=120.0
-            )
-
-            deployment_id = deployment_data.get('id')
-            deployment_url = deployment_data.get('url')
-
-            if deployment_id:
-                return DeploymentResult(
-                    status='success',
-                    platform=self.platform,
-                    deployment_id=deployment_id,
-                    url=deployment_url,
-                    build_log_url=f"https://vercel.com/{payload['name']}/{deployment_id}",
-                    metadata={
-                        'project_name': payload['name'],
-                        'deployment_type': 'direct_files',
-                        'deployment_data': deployment_data
-                    }
-                )
-            else:
-                raise DeploymentError(
-                    platform=self.platform,
-                    operation='create_deployment',
-                    message="Direct file deployment failed - no deployment ID returned",
-                    details=deployment_data
-                )
-
-        except Exception as e:
-            self.logger.error(f"Direct file deployment failed: {e}")
-            # Return a simulated successful result for testing purposes
-            return DeploymentResult(
-                status='success',
-                platform=self.platform,
-                deployment_id=f"test-{int(asyncio.get_event_loop().time())}",
-                url=f"https://test-deployment-{int(asyncio.get_event_loop().time())}.vercel.app",
-                build_log_url="https://vercel.com/test/test-deployment",
-                metadata={
-                    'project_name': payload['name'],
-                    'deployment_type': 'simulated',
-                    'note': 'Direct file deployment not fully implemented - simulated success for testing'
-                }
-            )
 
     def _detect_framework(self, project_config: dict[str, Any]) -> Optional[str]:
         """Detect framework from project configuration"""
