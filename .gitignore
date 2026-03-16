@@ -86,7 +86,6 @@ workflow_results/
 .cache/
 .directory
 .dmypy.json
-.dockerignore
 .env*
 .gemini/
 .git
