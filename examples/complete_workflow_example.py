@@ -16,6 +16,10 @@ import json
 import os
 import sys
 from pathlib import Path
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -24,7 +28,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 async def main():
     """Run complete video analysis workflow."""
     
-    video_url = "https://youtube.com/watch?v=dQw4w9WgXcQ"
+    video_url = "https://www.youtube.com/watch?v=i3FOFgimXn0" # How to video
     
     print("=" * 60)
     print("EventRelay Advanced Video Analysis Workflow")
@@ -36,13 +40,26 @@ async def main():
     
     analyzer = TemporalVideoAnalyzer()
     
+    # Extract tutorial steps
+    print("Extracting tutorial steps...")
+    steps = await analyzer.extract_tutorial_steps(
+        video_url=video_url
+    )
+    
+    print(f"✅ Extracted {len(steps)} steps")
+    for step in steps:
+        print(f" - [{step.get('timestamp', '00:00')}] Step {step.get('step_number', '?')}: {step.get('title', '')}")
+        print(f"   Instruction: {step.get('instructions', '')}")
+    
     # Extract events
+    print("\nExtracting general events...")
     events = await analyzer.extract_temporal_events(
-        video_url=video_url,
-        event_types=["code_change", "api_call"]
+        video_url=video_url
     )
     
     print(f"✅ Extracted {len(events)} events")
+    for evt in events:
+        print(f" - [{evt.timestamp}] {evt.event_type}: {evt.description}")
     
     # Publish to EventMesh
     publisher = create_publisher(backend="file")
