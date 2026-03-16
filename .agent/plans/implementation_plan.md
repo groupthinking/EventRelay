@@ -4,6 +4,7 @@
 - [x] Submit a real non-music video
 - [x] Verify agent workflow output is produced
 - [x] Document the complete flow with evidence
+  - **Evidence**: Executed `examples/complete_workflow_example.py` with URL `https://www.youtube.com/watch?v=i3FOFgimXn0`. Successfully parsed JSON using fixed `extract_tutorial_steps` function, yielding 7 actionable tutorial steps (e.g., "Install OpenAI Library") and 15 temporal events.
 
 ### 🔲 NOT STARTED: Phase 4 — Design Rebuild with Stitch
 - [ ] Create design brief based on research

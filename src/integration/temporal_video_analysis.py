@@ -404,11 +404,22 @@ class TemporalVideoAnalyzer:
         )
         
         try:
-            if isinstance(result.summary, str) and result.summary.strip().startswith("{"):
-                data = json.loads(result.summary)
-                return data.get("steps", [])
-        except json.JSONDecodeError:
-            logger.warning("Could not parse tutorial steps")
+            summary_text = result.summary
+            if isinstance(summary_text, str):
+                # Clean up markdown formatting if present
+                if summary_text.strip().startswith("```json"):
+                    summary_text = summary_text.strip()[7:]
+                elif summary_text.strip().startswith("```"):
+                    summary_text = summary_text.strip()[3:]
+                if summary_text.strip().endswith("```"):
+                    summary_text = summary_text.strip()[:-3]
+                
+                if summary_text.strip().startswith("{"):
+                    data = json.loads(summary_text.strip())
+                    return data.get("steps", [])
+        except json.JSONDecodeError as e:
+            logger.warning(f"Could not parse tutorial steps: {e}")
+            logger.debug(f"Failed JSON content: {summary_text}")
         
         return []
     
