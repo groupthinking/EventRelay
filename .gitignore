@@ -157,3 +157,8 @@ UVAI_Digital_Refinery_Blueprint.pdf
 .env*.local
 .next/
 .env
+
+# Chrome / NotebookLM browser profiles (massive, never belong in repo)
+notebooklm_chrome_profile/
+src/utils/notebooklm_profile/
+src/utils/notebooklm_profile_v2/
