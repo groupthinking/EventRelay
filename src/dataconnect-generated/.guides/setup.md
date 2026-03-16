@@ -13,7 +13,7 @@ initializeApp({
 
 Then, you can run the SDK as needed.
 ```ts
-import { ... } from '@dataconnect/generated';
+import { ... } from '@video-analyzer/dataconnect';
 ```
 
 

@@ -1,5 +1,5 @@
 # Generated TypeScript README
-This README will guide you through the process of using the generated JavaScript SDK package for the connector `example`. It will also provide examples on how to use your generated SDK to call your Data Connect queries and mutations.
+This README will guide you through the process of using the generated JavaScript SDK package for the connector `jobs`. It will also provide examples on how to use your generated SDK to call your Data Connect queries and mutations.
 
 ***NOTE:** This README is generated alongside the generated SDK. If you make changes to this file, they will be overwritten when the SDK is regenerated.*
 
@@ -8,26 +8,29 @@ This README will guide you through the process of using the generated JavaScript
 - [**Accessing the connector**](#accessing-the-connector)
   - [*Connecting to the local Emulator*](#connecting-to-the-local-emulator)
 - [**Queries**](#queries)
-  - [*ListVideoJobs*](#listvideojobs)
-  - [*GetVideoJob*](#getvideojob)
-  - [*ListJobEvents*](#listjobevents)
-  - [*ListVideoEmbeddings*](#listvideoembeddings)
-  - [*ListFailedJobs*](#listfailedjobs)
+  - [*getJob*](#getjob)
+  - [*listJobs*](#listjobs)
+  - [*getJobEvents*](#getjobevents)
+  - [*listEmbeddings*](#listembeddings)
+  - [*getJobEmbeddings*](#getjobembeddings)
 - [**Mutations**](#mutations)
-  - [*CreateExampleJob*](#createexamplejob)
-  - [*RecordExampleEvent*](#recordexampleevent)
-  - [*DeleteExampleEvent*](#deleteexampleevent)
+  - [*createVideoJob*](#createvideojob)
+  - [*updateJobStatus*](#updatejobstatus)
+  - [*completeJob*](#completejob)
+  - [*failJob*](#failjob)
+  - [*recordJobEvent*](#recordjobevent)
+  - [*deleteJobEmbeddings*](#deletejobembeddings)
 
 # Accessing the connector
-A connector is a collection of Queries and Mutations. One SDK is generated for each connector - this SDK is generated for the connector `example`. You can find more information about connectors in the [Data Connect documentation](https://firebase.google.com/docs/data-connect#how-does).
+A connector is a collection of Queries and Mutations. One SDK is generated for each connector - this SDK is generated for the connector `jobs`. You can find more information about connectors in the [Data Connect documentation](https://firebase.google.com/docs/data-connect#how-does).
 
-You can use this generated SDK by importing from the package `@dataconnect/generated` as shown below. Both CommonJS and ESM imports are supported.
+You can use this generated SDK by importing from the package `@video-analyzer/dataconnect` as shown below. Both CommonJS and ESM imports are supported.
 
 You can also follow the instructions from the [Data Connect documentation](https://firebase.google.com/docs/data-connect/web-sdk#set-client).
 
 ```typescript
 import { getDataConnect } from 'firebase/data-connect';
-import { connectorConfig } from '@dataconnect/generated';
+import { connectorConfig } from '@video-analyzer/dataconnect';
 
 const dataConnect = getDataConnect(connectorConfig);
 ```
@@ -40,7 +43,7 @@ You can also follow the emulator instructions from the [Data Connect documentati
 
 ```typescript
 import { connectDataConnectEmulator, getDataConnect } from 'firebase/data-connect';
-import { connectorConfig } from '@dataconnect/generated';
+import { connectorConfig } from '@video-analyzer/dataconnect';
 
 const dataConnect = getDataConnect(connectorConfig);
 connectDataConnectEmulator(dataConnect, 'localhost', 9399);
@@ -61,151 +64,51 @@ The following is true for both the action shortcut function and the `QueryRef` f
 - If the Query accepts arguments, both the action shortcut function and the `QueryRef` function accept a single argument: an object that contains all the required variables (and the optional variables) for the Query
 - Both functions can be called with or without passing in a `DataConnect` instance as an argument. If no `DataConnect` argument is passed in, then the generated SDK will call `getDataConnect(connectorConfig)` behind the scenes for you.
 
-Below are examples of how to use the `example` connector's generated functions to execute each query. You can also follow the examples from the [Data Connect documentation](https://firebase.google.com/docs/data-connect/web-sdk#using-queries).
+Below are examples of how to use the `jobs` connector's generated functions to execute each query. You can also follow the examples from the [Data Connect documentation](https://firebase.google.com/docs/data-connect/web-sdk#using-queries).
 
-## ListVideoJobs
-You can execute the `ListVideoJobs` query using the following action shortcut function, or by calling `executeQuery()` after calling the following `QueryRef` function, both of which are defined in [dataconnect-generated/index.d.ts](./index.d.ts):
+## getJob
+You can execute the `getJob` query using the following action shortcut function, or by calling `executeQuery()` after calling the following `QueryRef` function, both of which are defined in [dataconnect-generated/index.d.ts](./index.d.ts):
 ```typescript
-listVideoJobs(): QueryPromise<ListVideoJobsData, undefined>;
+getJob(vars: GetJobVariables): QueryPromise<GetJobData, GetJobVariables>;
 
-interface ListVideoJobsRef {
+interface GetJobRef {
   ...
   /* Allow users to create refs without passing in DataConnect */
-  (): QueryRef<ListVideoJobsData, undefined>;
+  (vars: GetJobVariables): QueryRef<GetJobData, GetJobVariables>;
 }
-export const listVideoJobsRef: ListVideoJobsRef;
+export const getJobRef: GetJobRef;
 ```
 You can also pass in a `DataConnect` instance to the action shortcut function or `QueryRef` function.
 ```typescript
-listVideoJobs(dc: DataConnect): QueryPromise<ListVideoJobsData, undefined>;
+getJob(dc: DataConnect, vars: GetJobVariables): QueryPromise<GetJobData, GetJobVariables>;
 
-interface ListVideoJobsRef {
+interface GetJobRef {
   ...
-  (dc: DataConnect): QueryRef<ListVideoJobsData, undefined>;
+  (dc: DataConnect, vars: GetJobVariables): QueryRef<GetJobData, GetJobVariables>;
 }
-export const listVideoJobsRef: ListVideoJobsRef;
+export const getJobRef: GetJobRef;
 ```
 
-If you need the name of the operation without creating a ref, you can retrieve the operation name by calling the `operationName` property on the listVideoJobsRef:
+If you need the name of the operation without creating a ref, you can retrieve the operation name by calling the `operationName` property on the getJobRef:
 ```typescript
-const name = listVideoJobsRef.operationName;
+const name = getJobRef.operationName;
 console.log(name);
 ```
 
 ### Variables
-The `ListVideoJobs` query has no variables.
-### Return Type
-Recall that executing the `ListVideoJobs` query returns a `QueryPromise` that resolves to an object with a `data` property.
-
-The `data` property is an object of type `ListVideoJobsData`, which is defined in [dataconnect-generated/index.d.ts](./index.d.ts). It has the following fields:
-```typescript
-export interface ListVideoJobsData {
-  videoJobs: ({
-    id: UUIDString;
-    videoUrl: string;
-    source: string;
-    taskType: string;
-    status: string;
-    title?: string | null;
-    createdAt: TimestampString;
-    updatedAt: TimestampString;
-  } & VideoJob_Key)[];
-}
-```
-### Using `ListVideoJobs`'s action shortcut function
+The `getJob` query requires an argument of type `GetJobVariables`, which is defined in [dataconnect-generated/index.d.ts](./index.d.ts). It has the following fields:
 
 ```typescript
-import { getDataConnect } from 'firebase/data-connect';
-import { connectorConfig, listVideoJobs } from '@dataconnect/generated';
-
-
-// Call the `listVideoJobs()` function to execute the query.
-// You can use the `await` keyword to wait for the promise to resolve.
-const { data } = await listVideoJobs();
-
-// You can also pass in a `DataConnect` instance to the action shortcut function.
-const dataConnect = getDataConnect(connectorConfig);
-const { data } = await listVideoJobs(dataConnect);
-
-console.log(data.videoJobs);
-
-// Or, you can use the `Promise` API.
-listVideoJobs().then((response) => {
-  const data = response.data;
-  console.log(data.videoJobs);
-});
-```
-
-### Using `ListVideoJobs`'s `QueryRef` function
-
-```typescript
-import { getDataConnect, executeQuery } from 'firebase/data-connect';
-import { connectorConfig, listVideoJobsRef } from '@dataconnect/generated';
-
-
-// Call the `listVideoJobsRef()` function to get a reference to the query.
-const ref = listVideoJobsRef();
-
-// You can also pass in a `DataConnect` instance to the `QueryRef` function.
-const dataConnect = getDataConnect(connectorConfig);
-const ref = listVideoJobsRef(dataConnect);
-
-// Call `executeQuery()` on the reference to execute the query.
-// You can use the `await` keyword to wait for the promise to resolve.
-const { data } = await executeQuery(ref);
-
-console.log(data.videoJobs);
-
-// Or, you can use the `Promise` API.
-executeQuery(ref).then((response) => {
-  const data = response.data;
-  console.log(data.videoJobs);
-});
-```
-
-## GetVideoJob
-You can execute the `GetVideoJob` query using the following action shortcut function, or by calling `executeQuery()` after calling the following `QueryRef` function, both of which are defined in [dataconnect-generated/index.d.ts](./index.d.ts):
-```typescript
-getVideoJob(vars: GetVideoJobVariables): QueryPromise<GetVideoJobData, GetVideoJobVariables>;
-
-interface GetVideoJobRef {
-  ...
-  /* Allow users to create refs without passing in DataConnect */
-  (vars: GetVideoJobVariables): QueryRef<GetVideoJobData, GetVideoJobVariables>;
-}
-export const getVideoJobRef: GetVideoJobRef;
-```
-You can also pass in a `DataConnect` instance to the action shortcut function or `QueryRef` function.
-```typescript
-getVideoJob(dc: DataConnect, vars: GetVideoJobVariables): QueryPromise<GetVideoJobData, GetVideoJobVariables>;
-
-interface GetVideoJobRef {
-  ...
-  (dc: DataConnect, vars: GetVideoJobVariables): QueryRef<GetVideoJobData, GetVideoJobVariables>;
-}
-export const getVideoJobRef: GetVideoJobRef;
-```
-
-If you need the name of the operation without creating a ref, you can retrieve the operation name by calling the `operationName` property on the getVideoJobRef:
-```typescript
-const name = getVideoJobRef.operationName;
-console.log(name);
-```
-
-### Variables
-The `GetVideoJob` query requires an argument of type `GetVideoJobVariables`, which is defined in [dataconnect-generated/index.d.ts](./index.d.ts). It has the following fields:
-
-```typescript
-export interface GetVideoJobVariables {
+export interface GetJobVariables {
   id: UUIDString;
 }
 ```
 ### Return Type
-Recall that executing the `GetVideoJob` query returns a `QueryPromise` that resolves to an object with a `data` property.
+Recall that executing the `getJob` query returns a `QueryPromise` that resolves to an object with a `data` property.
 
-The `data` property is an object of type `GetVideoJobData`, which is defined in [dataconnect-generated/index.d.ts](./index.d.ts). It has the following fields:
+The `data` property is an object of type `GetJobData`, which is defined in [dataconnect-generated/index.d.ts](./index.d.ts). It has the following fields:
 ```typescript
-export interface GetVideoJobData {
+export interface GetJobData {
   videoJob?: {
     id: UUIDString;
     videoUrl: string;
@@ -216,62 +119,60 @@ export interface GetVideoJobData {
     resultJson?: string | null;
     error?: string | null;
     title?: string | null;
-    duration?: number | null;
-    fileSize?: number | null;
     createdAt: TimestampString;
     updatedAt: TimestampString;
   } & VideoJob_Key;
 }
 ```
-### Using `GetVideoJob`'s action shortcut function
+### Using `getJob`'s action shortcut function
 
 ```typescript
 import { getDataConnect } from 'firebase/data-connect';
-import { connectorConfig, getVideoJob, GetVideoJobVariables } from '@dataconnect/generated';
+import { connectorConfig, getJob, GetJobVariables } from '@video-analyzer/dataconnect';
 
-// The `GetVideoJob` query requires an argument of type `GetVideoJobVariables`:
-const getVideoJobVars: GetVideoJobVariables = {
+// The `getJob` query requires an argument of type `GetJobVariables`:
+const getJobVars: GetJobVariables = {
   id: ..., 
 };
 
-// Call the `getVideoJob()` function to execute the query.
+// Call the `getJob()` function to execute the query.
 // You can use the `await` keyword to wait for the promise to resolve.
-const { data } = await getVideoJob(getVideoJobVars);
+const { data } = await getJob(getJobVars);
 // Variables can be defined inline as well.
-const { data } = await getVideoJob({ id: ..., });
+const { data } = await getJob({ id: ..., });
 
 // You can also pass in a `DataConnect` instance to the action shortcut function.
 const dataConnect = getDataConnect(connectorConfig);
-const { data } = await getVideoJob(dataConnect, getVideoJobVars);
+const { data } = await getJob(dataConnect, getJobVars);
 
 console.log(data.videoJob);
 
 // Or, you can use the `Promise` API.
-getVideoJob(getVideoJobVars).then((response) => {
+getJob(getJobVars).then((response) => {
   const data = response.data;
   console.log(data.videoJob);
 });
 ```
 
-### Using `GetVideoJob`'s `QueryRef` function
+### Using `getJob`'s `QueryRef` function
 
 ```typescript
 import { getDataConnect, executeQuery } from 'firebase/data-connect';
-import { connectorConfig, getVideoJobRef, GetVideoJobVariables } from '@dataconnect/generated';
+import { connectorConfig, getJobRef, GetJobVariables } from '@video-analyzer/dataconnect';
 
-// The `GetVideoJob` query requires an argument of type `GetVideoJobVariables`:
-const getVideoJobVars: GetVideoJobVariables = {
+// The `getJob` query requires an argument of type `GetJobVariables`:
+const getJobVars: GetJobVariables = {
   id: ..., 
 };
 
-// Call the `getVideoJobRef()` function to get a reference to the query.
-const ref = getVideoJobRef(getVideoJobVars);
+// Call the `getJobRef()` function to get a reference to the query.
+const ref = getJobRef(getJobVars);
 // Variables can be defined inline as well.
-const ref = getVideoJobRef({ id: ..., });
+const ref = getJobRef({ id: ..., });
 
 // You can also pass in a `DataConnect` instance to the `QueryRef` function.
 const dataConnect = getDataConnect(connectorConfig);
-const ref = getVideoJobRef(dataConnect, getVideoJobVars);
+const ref = getJobRef(dataConnect, getJobVars);
 
 // Call `executeQuery()` on the reference to execute the query.
 // You can use the `await` keyword to wait for the promise to resolve.
@@ -286,49 +187,171 @@ executeQuery(ref).then((response) => {
 });
 ```
 
-## ListJobEvents
-You can execute the `ListJobEvents` query using the following action shortcut function, or by calling `executeQuery()` after calling the following `QueryRef` function, both of which are defined in [dataconnect-generated/index.d.ts](./index.d.ts):
+## listJobs
+You can execute the `listJobs` query using the following action shortcut function, or by calling `executeQuery()` after calling the following `QueryRef` function, both of which are defined in [dataconnect-generated/index.d.ts](./index.d.ts):
 ```typescript
-listJobEvents(vars: ListJobEventsVariables): QueryPromise<ListJobEventsData, ListJobEventsVariables>;
+listJobs(vars?: ListJobsVariables): QueryPromise<ListJobsData, ListJobsVariables>;
 
-interface ListJobEventsRef {
+interface ListJobsRef {
   ...
   /* Allow users to create refs without passing in DataConnect */
-  (vars: ListJobEventsVariables): QueryRef<ListJobEventsData, ListJobEventsVariables>;
+  (vars?: ListJobsVariables): QueryRef<ListJobsData, ListJobsVariables>;
 }
-export const listJobEventsRef: ListJobEventsRef;
+export const listJobsRef: ListJobsRef;
 ```
 You can also pass in a `DataConnect` instance to the action shortcut function or `QueryRef` function.
 ```typescript
-listJobEvents(dc: DataConnect, vars: ListJobEventsVariables): QueryPromise<ListJobEventsData, ListJobEventsVariables>;
+listJobs(dc: DataConnect, vars?: ListJobsVariables): QueryPromise<ListJobsData, ListJobsVariables>;
 
-interface ListJobEventsRef {
+interface ListJobsRef {
   ...
-  (dc: DataConnect, vars: ListJobEventsVariables): QueryRef<ListJobEventsData, ListJobEventsVariables>;
+  (dc: DataConnect, vars?: ListJobsVariables): QueryRef<ListJobsData, ListJobsVariables>;
 }
-export const listJobEventsRef: ListJobEventsRef;
+export const listJobsRef: ListJobsRef;
 ```
 
-If you need the name of the operation without creating a ref, you can retrieve the operation name by calling the `operationName` property on the listJobEventsRef:
+If you need the name of the operation without creating a ref, you can retrieve the operation name by calling the `operationName` property on the listJobsRef:
 ```typescript
-const name = listJobEventsRef.operationName;
+const name = listJobsRef.operationName;
 console.log(name);
 ```
 
 ### Variables
-The `ListJobEvents` query requires an argument of type `ListJobEventsVariables`, which is defined in [dataconnect-generated/index.d.ts](./index.d.ts). It has the following fields:
+The `listJobs` query has an optional argument of type `ListJobsVariables`, which is defined in [dataconnect-generated/index.d.ts](./index.d.ts). It has the following fields:
 
 ```typescript
-export interface ListJobEventsVariables {
+export interface ListJobsVariables {
+  limit?: number | null;
+}
+```
+### Return Type
+Recall that executing the `listJobs` query returns a `QueryPromise` that resolves to an object with a `data` property.
+
+The `data` property is an object of type `ListJobsData`, which is defined in [dataconnect-generated/index.d.ts](./index.d.ts). It has the following fields:
+```typescript
+export interface ListJobsData {
+  videoJobs: ({
+    id: UUIDString;
+    videoUrl: string;
+    source: string;
+    taskType: string;
+    status: string;
+    title?: string | null;
+    createdAt: TimestampString;
+    updatedAt: TimestampString;
+  } & VideoJob_Key)[];
+}
+```
+### Using `listJobs`'s action shortcut function
+
+```typescript
+import { getDataConnect } from 'firebase/data-connect';
+import { connectorConfig, listJobs, ListJobsVariables } from '@video-analyzer/dataconnect';
+
+// The `listJobs` query has an optional argument of type `ListJobsVariables`:
+const listJobsVars: ListJobsVariables = {
+  limit: ..., // optional
+};
+
+// Call the `listJobs()` function to execute the query.
+// You can use the `await` keyword to wait for the promise to resolve.
+const { data } = await listJobs(listJobsVars);
+// Variables can be defined inline as well.
+const { data } = await listJobs({ limit: ..., });
+// Since all variables are optional for this query, you can omit the `ListJobsVariables` argument.
+const { data } = await listJobs();
+
+// You can also pass in a `DataConnect` instance to the action shortcut function.
+const dataConnect = getDataConnect(connectorConfig);
+const { data } = await listJobs(dataConnect, listJobsVars);
+
+console.log(data.videoJobs);
+
+// Or, you can use the `Promise` API.
+listJobs(listJobsVars).then((response) => {
+  const data = response.data;
+  console.log(data.videoJobs);
+});
+```
+
+### Using `listJobs`'s `QueryRef` function
+
+```typescript
+import { getDataConnect, executeQuery } from 'firebase/data-connect';
+import { connectorConfig, listJobsRef, ListJobsVariables } from '@video-analyzer/dataconnect';
+
+// The `listJobs` query has an optional argument of type `ListJobsVariables`:
+const listJobsVars: ListJobsVariables = {
+  limit: ..., // optional
+};
+
+// Call the `listJobsRef()` function to get a reference to the query.
+const ref = listJobsRef(listJobsVars);
+// Variables can be defined inline as well.
+const ref = listJobsRef({ limit: ..., });
+// Since all variables are optional for this query, you can omit the `ListJobsVariables` argument.
+const ref = listJobsRef();
+
+// You can also pass in a `DataConnect` instance to the `QueryRef` function.
+const dataConnect = getDataConnect(connectorConfig);
+const ref = listJobsRef(dataConnect, listJobsVars);
+
+// Call `executeQuery()` on the reference to execute the query.
+// You can use the `await` keyword to wait for the promise to resolve.
+const { data } = await executeQuery(ref);
+
+console.log(data.videoJobs);
+
+// Or, you can use the `Promise` API.
+executeQuery(ref).then((response) => {
+  const data = response.data;
+  console.log(data.videoJobs);
+});
+```
+
+## getJobEvents
+You can execute the `getJobEvents` query using the following action shortcut function, or by calling `executeQuery()` after calling the following `QueryRef` function, both of which are defined in [dataconnect-generated/index.d.ts](./index.d.ts):
+```typescript
+getJobEvents(vars: GetJobEventsVariables): QueryPromise<GetJobEventsData, GetJobEventsVariables>;
+
+interface GetJobEventsRef {
+  ...
+  /* Allow users to create refs without passing in DataConnect */
+  (vars: GetJobEventsVariables): QueryRef<GetJobEventsData, GetJobEventsVariables>;
+}
+export const getJobEventsRef: GetJobEventsRef;
+```
+You can also pass in a `DataConnect` instance to the action shortcut function or `QueryRef` function.
+```typescript
+getJobEvents(dc: DataConnect, vars: GetJobEventsVariables): QueryPromise<GetJobEventsData, GetJobEventsVariables>;
+
+interface GetJobEventsRef {
+  ...
+  (dc: DataConnect, vars: GetJobEventsVariables): QueryRef<GetJobEventsData, GetJobEventsVariables>;
+}
+export const getJobEventsRef: GetJobEventsRef;
+```
+
+If you need the name of the operation without creating a ref, you can retrieve the operation name by calling the `operationName` property on the getJobEventsRef:
+```typescript
+const name = getJobEventsRef.operationName;
+console.log(name);
+```
+
+### Variables
+The `getJobEvents` query requires an argument of type `GetJobEventsVariables`, which is defined in [dataconnect-generated/index.d.ts](./index.d.ts). It has the following fields:
+
+```typescript
+export interface GetJobEventsVariables {
   jobId: UUIDString;
 }
 ```
 ### Return Type
-Recall that executing the `ListJobEvents` query returns a `QueryPromise` that resolves to an object with a `data` property.
+Recall that executing the `getJobEvents` query returns a `QueryPromise` that resolves to an object with a `data` property.
 
-The `data` property is an object of type `ListJobEventsData`, which is defined in [dataconnect-generated/index.d.ts](./index.d.ts). It has the following fields:
+The `data` property is an object of type `GetJobEventsData`, which is defined in [dataconnect-generated/index.d.ts](./index.d.ts). It has the following fields:
 ```typescript
-export interface ListJobEventsData {
+export interface GetJobEventsData {
   jobEvents: ({
     id: UUIDString;
     eventType: string;
@@ -338,55 +361,55 @@ export interface ListJobEventsData {
   } & JobEvent_Key)[];
 }
 ```
-### Using `ListJobEvents`'s action shortcut function
+### Using `getJobEvents`'s action shortcut function
 
 ```typescript
 import { getDataConnect } from 'firebase/data-connect';
-import { connectorConfig, listJobEvents, ListJobEventsVariables } from '@dataconnect/generated';
+import { connectorConfig, getJobEvents, GetJobEventsVariables } from '@video-analyzer/dataconnect';
 
-// The `ListJobEvents` query requires an argument of type `ListJobEventsVariables`:
-const listJobEventsVars: ListJobEventsVariables = {
+// The `getJobEvents` query requires an argument of type `GetJobEventsVariables`:
+const getJobEventsVars: GetJobEventsVariables = {
   jobId: ..., 
 };
 
-// Call the `listJobEvents()` function to execute the query.
+// Call the `getJobEvents()` function to execute the query.
 // You can use the `await` keyword to wait for the promise to resolve.
-const { data } = await listJobEvents(listJobEventsVars);
+const { data } = await getJobEvents(getJobEventsVars);
 // Variables can be defined inline as well.
-const { data } = await listJobEvents({ jobId: ..., });
+const { data } = await getJobEvents({ jobId: ..., });
 
 // You can also pass in a `DataConnect` instance to the action shortcut function.
 const dataConnect = getDataConnect(connectorConfig);
-const { data } = await listJobEvents(dataConnect, listJobEventsVars);
+const { data } = await getJobEvents(dataConnect, getJobEventsVars);
 
 console.log(data.jobEvents);
 
 // Or, you can use the `Promise` API.
-listJobEvents(listJobEventsVars).then((response) => {
+getJobEvents(getJobEventsVars).then((response) => {
   const data = response.data;
   console.log(data.jobEvents);
 });
 ```
 
-### Using `ListJobEvents`'s `QueryRef` function
+### Using `getJobEvents`'s `QueryRef` function
 
 ```typescript
 import { getDataConnect, executeQuery } from 'firebase/data-connect';
-import { connectorConfig, listJobEventsRef, ListJobEventsVariables } from '@dataconnect/generated';
+import { connectorConfig, getJobEventsRef, GetJobEventsVariables } from '@video-analyzer/dataconnect';
 
-// The `ListJobEvents` query requires an argument of type `ListJobEventsVariables`:
-const listJobEventsVars: ListJobEventsVariables = {
+// The `getJobEvents` query requires an argument of type `GetJobEventsVariables`:
+const getJobEventsVars: GetJobEventsVariables = {
   jobId: ..., 
 };
 
-// Call the `listJobEventsRef()` function to get a reference to the query.
-const ref = listJobEventsRef(listJobEventsVars);
+// Call the `getJobEventsRef()` function to get a reference to the query.
+const ref = getJobEventsRef(getJobEventsVars);
 // Variables can be defined inline as well.
-const ref = listJobEventsRef({ jobId: ..., });
+const ref = getJobEventsRef({ jobId: ..., });
 
 // You can also pass in a `DataConnect` instance to the `QueryRef` function.
 const dataConnect = getDataConnect(connectorConfig);
-const ref = listJobEventsRef(dataConnect, listJobEventsVars);
+const ref = getJobEventsRef(dataConnect, getJobEventsVars);
 
 // Call `executeQuery()` on the reference to execute the query.
 // You can use the `await` keyword to wait for the promise to resolve.
@@ -401,49 +424,49 @@ executeQuery(ref).then((response) => {
 });
 ```
 
-## ListVideoEmbeddings
-You can execute the `ListVideoEmbeddings` query using the following action shortcut function, or by calling `executeQuery()` after calling the following `QueryRef` function, both of which are defined in [dataconnect-generated/index.d.ts](./index.d.ts):
+## listEmbeddings
+You can execute the `listEmbeddings` query using the following action shortcut function, or by calling `executeQuery()` after calling the following `QueryRef` function, both of which are defined in [dataconnect-generated/index.d.ts](./index.d.ts):
 ```typescript
-listVideoEmbeddings(vars?: ListVideoEmbeddingsVariables): QueryPromise<ListVideoEmbeddingsData, ListVideoEmbeddingsVariables>;
+listEmbeddings(vars?: ListEmbeddingsVariables): QueryPromise<ListEmbeddingsData, ListEmbeddingsVariables>;
 
-interface ListVideoEmbeddingsRef {
+interface ListEmbeddingsRef {
   ...
   /* Allow users to create refs without passing in DataConnect */
-  (vars?: ListVideoEmbeddingsVariables): QueryRef<ListVideoEmbeddingsData, ListVideoEmbeddingsVariables>;
+  (vars?: ListEmbeddingsVariables): QueryRef<ListEmbeddingsData, ListEmbeddingsVariables>;
 }
-export const listVideoEmbeddingsRef: ListVideoEmbeddingsRef;
+export const listEmbeddingsRef: ListEmbeddingsRef;
 ```
 You can also pass in a `DataConnect` instance to the action shortcut function or `QueryRef` function.
 ```typescript
-listVideoEmbeddings(dc: DataConnect, vars?: ListVideoEmbeddingsVariables): QueryPromise<ListVideoEmbeddingsData, ListVideoEmbeddingsVariables>;
+listEmbeddings(dc: DataConnect, vars?: ListEmbeddingsVariables): QueryPromise<ListEmbeddingsData, ListEmbeddingsVariables>;
 
-interface ListVideoEmbeddingsRef {
+interface ListEmbeddingsRef {
   ...
-  (dc: DataConnect, vars?: ListVideoEmbeddingsVariables): QueryRef<ListVideoEmbeddingsData, ListVideoEmbeddingsVariables>;
+  (dc: DataConnect, vars?: ListEmbeddingsVariables): QueryRef<ListEmbeddingsData, ListEmbeddingsVariables>;
 }
-export const listVideoEmbeddingsRef: ListVideoEmbeddingsRef;
+export const listEmbeddingsRef: ListEmbeddingsRef;
 ```
 
-If you need the name of the operation without creating a ref, you can retrieve the operation name by calling the `operationName` property on the listVideoEmbeddingsRef:
+If you need the name of the operation without creating a ref, you can retrieve the operation name by calling the `operationName` property on the listEmbeddingsRef:
 ```typescript
-const name = listVideoEmbeddingsRef.operationName;
+const name = listEmbeddingsRef.operationName;
 console.log(name);
 ```
 
 ### Variables
-The `ListVideoEmbeddings` query has an optional argument of type `ListVideoEmbeddingsVariables`, which is defined in [dataconnect-generated/index.d.ts](./index.d.ts). It has the following fields:
+The `listEmbeddings` query has an optional argument of type `ListEmbeddingsVariables`, which is defined in [dataconnect-generated/index.d.ts](./index.d.ts). It has the following fields:
 
 ```typescript
-export interface ListVideoEmbeddingsVariables {
+export interface ListEmbeddingsVariables {
   limit?: number | null;
 }
 ```
 ### Return Type
-Recall that executing the `ListVideoEmbeddings` query returns a `QueryPromise` that resolves to an object with a `data` property.
+Recall that executing the `listEmbeddings` query returns a `QueryPromise` that resolves to an object with a `data` property.
 
-The `data` property is an object of type `ListVideoEmbeddingsData`, which is defined in [dataconnect-generated/index.d.ts](./index.d.ts). It has the following fields:
+The `data` property is an object of type `ListEmbeddingsData`, which is defined in [dataconnect-generated/index.d.ts](./index.d.ts). It has the following fields:
 ```typescript
-export interface ListVideoEmbeddingsData {
+export interface ListEmbeddingsData {
   videoEmbeddings: ({
     id: UUIDString;
     segmentType: string;
@@ -454,63 +477,62 @@ export interface ListVideoEmbeddingsData {
       title?: string | null;
       videoUrl: string;
     } & VideoJob_Key;
-      createdAt: TimestampString;
   } & VideoEmbedding_Key)[];
 }
 ```
-### Using `ListVideoEmbeddings`'s action shortcut function
+### Using `listEmbeddings`'s action shortcut function
 
 ```typescript
 import { getDataConnect } from 'firebase/data-connect';
-import { connectorConfig, listVideoEmbeddings, ListVideoEmbeddingsVariables } from '@dataconnect/generated';
+import { connectorConfig, listEmbeddings, ListEmbeddingsVariables } from '@video-analyzer/dataconnect';
 
-// The `ListVideoEmbeddings` query has an optional argument of type `ListVideoEmbeddingsVariables`:
-const listVideoEmbeddingsVars: ListVideoEmbeddingsVariables = {
+// The `listEmbeddings` query has an optional argument of type `ListEmbeddingsVariables`:
+const listEmbeddingsVars: ListEmbeddingsVariables = {
   limit: ..., // optional
 };
 
-// Call the `listVideoEmbeddings()` function to execute the query.
+// Call the `listEmbeddings()` function to execute the query.
 // You can use the `await` keyword to wait for the promise to resolve.
-const { data } = await listVideoEmbeddings(listVideoEmbeddingsVars);
+const { data } = await listEmbeddings(listEmbeddingsVars);
 // Variables can be defined inline as well.
-const { data } = await listVideoEmbeddings({ limit: ..., });
-// Since all variables are optional for this query, you can omit the `ListVideoEmbeddingsVariables` argument.
-const { data } = await listVideoEmbeddings();
+const { data } = await listEmbeddings({ limit: ..., });
+// Since all variables are optional for this query, you can omit the `ListEmbeddingsVariables` argument.
+const { data } = await listEmbeddings();
 
 // You can also pass in a `DataConnect` instance to the action shortcut function.
 const dataConnect = getDataConnect(connectorConfig);
-const { data } = await listVideoEmbeddings(dataConnect, listVideoEmbeddingsVars);
+const { data } = await listEmbeddings(dataConnect, listEmbeddingsVars);
 
 console.log(data.videoEmbeddings);
 
 // Or, you can use the `Promise` API.
-listVideoEmbeddings(listVideoEmbeddingsVars).then((response) => {
+listEmbeddings(listEmbeddingsVars).then((response) => {
   const data = response.data;
   console.log(data.videoEmbeddings);
 });
 ```
 
-### Using `ListVideoEmbeddings`'s `QueryRef` function
+### Using `listEmbeddings`'s `QueryRef` function
 
 ```typescript
 import { getDataConnect, executeQuery } from 'firebase/data-connect';
-import { connectorConfig, listVideoEmbeddingsRef, ListVideoEmbeddingsVariables } from '@dataconnect/generated';
+import { connectorConfig, listEmbeddingsRef, ListEmbeddingsVariables } from '@video-analyzer/dataconnect';
 
-// The `ListVideoEmbeddings` query has an optional argument of type `ListVideoEmbeddingsVariables`:
-const listVideoEmbeddingsVars: ListVideoEmbeddingsVariables = {
+// The `listEmbeddings` query has an optional argument of type `ListEmbeddingsVariables`:
+const listEmbeddingsVars: ListEmbeddingsVariables = {
   limit: ..., // optional
 };
 
-// Call the `listVideoEmbeddingsRef()` function to get a reference to the query.
-const ref = listVideoEmbeddingsRef(listVideoEmbeddingsVars);
+// Call the `listEmbeddingsRef()` function to get a reference to the query.
+const ref = listEmbeddingsRef(listEmbeddingsVars);
 // Variables can be defined inline as well.
-const ref = listVideoEmbeddingsRef({ limit: ..., });
-// Since all variables are optional for this query, you can omit the `ListVideoEmbeddingsVariables` argument.
-const ref = listVideoEmbeddingsRef();
+const ref = listEmbeddingsRef({ limit: ..., });
+// Since all variables are optional for this query, you can omit the `ListEmbeddingsVariables` argument.
+const ref = listEmbeddingsRef();
 
 // You can also pass in a `DataConnect` instance to the `QueryRef` function.
 const dataConnect = getDataConnect(connectorConfig);
-const ref = listVideoEmbeddingsRef(dataConnect, listVideoEmbeddingsVars);
+const ref = listEmbeddingsRef(dataConnect, listEmbeddingsVars);
 
 // Call `executeQuery()` on the reference to execute the query.
 // You can use the `await` keyword to wait for the promise to resolve.
@@ -525,100 +547,118 @@ executeQuery(ref).then((response) => {
 });
 ```
 
-## ListFailedJobs
-You can execute the `ListFailedJobs` query using the following action shortcut function, or by calling `executeQuery()` after calling the following `QueryRef` function, both of which are defined in [dataconnect-generated/index.d.ts](./index.d.ts):
+## getJobEmbeddings
+You can execute the `getJobEmbeddings` query using the following action shortcut function, or by calling `executeQuery()` after calling the following `QueryRef` function, both of which are defined in [dataconnect-generated/index.d.ts](./index.d.ts):
 ```typescript
-listFailedJobs(): QueryPromise<ListFailedJobsData, undefined>;
+getJobEmbeddings(vars: GetJobEmbeddingsVariables): QueryPromise<GetJobEmbeddingsData, GetJobEmbeddingsVariables>;
 
-interface ListFailedJobsRef {
+interface GetJobEmbeddingsRef {
   ...
   /* Allow users to create refs without passing in DataConnect */
-  (): QueryRef<ListFailedJobsData, undefined>;
+  (vars: GetJobEmbeddingsVariables): QueryRef<GetJobEmbeddingsData, GetJobEmbeddingsVariables>;
 }
-export const listFailedJobsRef: ListFailedJobsRef;
+export const getJobEmbeddingsRef: GetJobEmbeddingsRef;
 ```
 You can also pass in a `DataConnect` instance to the action shortcut function or `QueryRef` function.
 ```typescript
-listFailedJobs(dc: DataConnect): QueryPromise<ListFailedJobsData, undefined>;
+getJobEmbeddings(dc: DataConnect, vars: GetJobEmbeddingsVariables): QueryPromise<GetJobEmbeddingsData, GetJobEmbeddingsVariables>;
 
-interface ListFailedJobsRef {
+interface GetJobEmbeddingsRef {
   ...
-  (dc: DataConnect): QueryRef<ListFailedJobsData, undefined>;
+  (dc: DataConnect, vars: GetJobEmbeddingsVariables): QueryRef<GetJobEmbeddingsData, GetJobEmbeddingsVariables>;
 }
-export const listFailedJobsRef: ListFailedJobsRef;
+export const getJobEmbeddingsRef: GetJobEmbeddingsRef;
 ```
 
-If you need the name of the operation without creating a ref, you can retrieve the operation name by calling the `operationName` property on the listFailedJobsRef:
+If you need the name of the operation without creating a ref, you can retrieve the operation name by calling the `operationName` property on the getJobEmbeddingsRef:
 ```typescript
-const name = listFailedJobsRef.operationName;
+const name = getJobEmbeddingsRef.operationName;
 console.log(name);
 ```
 
 ### Variables
-The `ListFailedJobs` query has no variables.
-### Return Type
-Recall that executing the `ListFailedJobs` query returns a `QueryPromise` that resolves to an object with a `data` property.
+The `getJobEmbeddings` query requires an argument of type `GetJobEmbeddingsVariables`, which is defined in [dataconnect-generated/index.d.ts](./index.d.ts). It has the following fields:
 
-The `data` property is an object of type `ListFailedJobsData`, which is defined in [dataconnect-generated/index.d.ts](./index.d.ts). It has the following fields:
 ```typescript
-export interface ListFailedJobsData {
-  videoJobs: ({
-    id: UUIDString;
-    videoUrl: string;
-    error?: string | null;
-    executedAgents: string[];
-    updatedAt: TimestampString;
-  } & VideoJob_Key)[];
+export interface GetJobEmbeddingsVariables {
+  jobId: UUIDString;
 }
 ```
-### Using `ListFailedJobs`'s action shortcut function
+### Return Type
+Recall that executing the `getJobEmbeddings` query returns a `QueryPromise` that resolves to an object with a `data` property.
+
+The `data` property is an object of type `GetJobEmbeddingsData`, which is defined in [dataconnect-generated/index.d.ts](./index.d.ts). It has the following fields:
+```typescript
+export interface GetJobEmbeddingsData {
+  videoEmbeddings: ({
+    id: UUIDString;
+    segmentType: string;
+    segmentIndex: number;
+    content: string;
+    createdAt: TimestampString;
+  } & VideoEmbedding_Key)[];
+}
+```
+### Using `getJobEmbeddings`'s action shortcut function
 
 ```typescript
 import { getDataConnect } from 'firebase/data-connect';
-import { connectorConfig, listFailedJobs } from '@dataconnect/generated';
+import { connectorConfig, getJobEmbeddings, GetJobEmbeddingsVariables } from '@video-analyzer/dataconnect';
 
+// The `getJobEmbeddings` query requires an argument of type `GetJobEmbeddingsVariables`:
+const getJobEmbeddingsVars: GetJobEmbeddingsVariables = {
+  jobId: ..., 
+};
 
-// Call the `listFailedJobs()` function to execute the query.
+// Call the `getJobEmbeddings()` function to execute the query.
 // You can use the `await` keyword to wait for the promise to resolve.
-const { data } = await listFailedJobs();
+const { data } = await getJobEmbeddings(getJobEmbeddingsVars);
+// Variables can be defined inline as well.
+const { data } = await getJobEmbeddings({ jobId: ..., });
 
 // You can also pass in a `DataConnect` instance to the action shortcut function.
 const dataConnect = getDataConnect(connectorConfig);
-const { data } = await listFailedJobs(dataConnect);
+const { data } = await getJobEmbeddings(dataConnect, getJobEmbeddingsVars);
 
-console.log(data.videoJobs);
+console.log(data.videoEmbeddings);
 
 // Or, you can use the `Promise` API.
-listFailedJobs().then((response) => {
+getJobEmbeddings(getJobEmbeddingsVars).then((response) => {
   const data = response.data;
-  console.log(data.videoJobs);
+  console.log(data.videoEmbeddings);
 });
 ```
 
-### Using `ListFailedJobs`'s `QueryRef` function
+### Using `getJobEmbeddings`'s `QueryRef` function
 
 ```typescript
 import { getDataConnect, executeQuery } from 'firebase/data-connect';
-import { connectorConfig, listFailedJobsRef } from '@dataconnect/generated';
+import { connectorConfig, getJobEmbeddingsRef, GetJobEmbeddingsVariables } from '@video-analyzer/dataconnect';
 
+// The `getJobEmbeddings` query requires an argument of type `GetJobEmbeddingsVariables`:
+const getJobEmbeddingsVars: GetJobEmbeddingsVariables = {
+  jobId: ..., 
+};
 
-// Call the `listFailedJobsRef()` function to get a reference to the query.
-const ref = listFailedJobsRef();
+// Call the `getJobEmbeddingsRef()` function to get a reference to the query.
+const ref = getJobEmbeddingsRef(getJobEmbeddingsVars);
+// Variables can be defined inline as well.
+const ref = getJobEmbeddingsRef({ jobId: ..., });
 
 // You can also pass in a `DataConnect` instance to the `QueryRef` function.
 const dataConnect = getDataConnect(connectorConfig);
-const ref = listFailedJobsRef(dataConnect);
+const ref = getJobEmbeddingsRef(dataConnect, getJobEmbeddingsVars);
 
 // Call `executeQuery()` on the reference to execute the query.
 // You can use the `await` keyword to wait for the promise to resolve.
 const { data } = await executeQuery(ref);
 
-console.log(data.videoJobs);
+console.log(data.videoEmbeddings);
 
 // Or, you can use the `Promise` API.
 executeQuery(ref).then((response) => {
   const data = response.data;
-  console.log(data.videoJobs);
+  console.log(data.videoEmbeddings);
 });
 ```
 
@@ -635,109 +675,109 @@ The following is true for both the action shortcut function and the `MutationRef
 - If the Mutation accepts arguments, both the action shortcut function and the `MutationRef` function accept a single argument: an object that contains all the required variables (and the optional variables) for the Mutation
 - Both functions can be called with or without passing in a `DataConnect` instance as an argument. If no `DataConnect` argument is passed in, then the generated SDK will call `getDataConnect(connectorConfig)` behind the scenes for you.
 
-Below are examples of how to use the `example` connector's generated functions to execute each mutation. You can also follow the examples from the [Data Connect documentation](https://firebase.google.com/docs/data-connect/web-sdk#using-mutations).
+Below are examples of how to use the `jobs` connector's generated functions to execute each mutation. You can also follow the examples from the [Data Connect documentation](https://firebase.google.com/docs/data-connect/web-sdk#using-mutations).
 
-## CreateExampleJob
-You can execute the `CreateExampleJob` mutation using the following action shortcut function, or by calling `executeMutation()` after calling the following `MutationRef` function, both of which are defined in [dataconnect-generated/index.d.ts](./index.d.ts):
+## createVideoJob
+You can execute the `createVideoJob` mutation using the following action shortcut function, or by calling `executeMutation()` after calling the following `MutationRef` function, both of which are defined in [dataconnect-generated/index.d.ts](./index.d.ts):
 ```typescript
-createExampleJob(vars: CreateExampleJobVariables): MutationPromise<CreateExampleJobData, CreateExampleJobVariables>;
+createVideoJob(vars: CreateVideoJobVariables): MutationPromise<CreateVideoJobData, CreateVideoJobVariables>;
 
-interface CreateExampleJobRef {
+interface CreateVideoJobRef {
   ...
   /* Allow users to create refs without passing in DataConnect */
-  (vars: CreateExampleJobVariables): MutationRef<CreateExampleJobData, CreateExampleJobVariables>;
+  (vars: CreateVideoJobVariables): MutationRef<CreateVideoJobData, CreateVideoJobVariables>;
 }
-export const createExampleJobRef: CreateExampleJobRef;
+export const createVideoJobRef: CreateVideoJobRef;
 ```
 You can also pass in a `DataConnect` instance to the action shortcut function or `MutationRef` function.
 ```typescript
-createExampleJob(dc: DataConnect, vars: CreateExampleJobVariables): MutationPromise<CreateExampleJobData, CreateExampleJobVariables>;
+createVideoJob(dc: DataConnect, vars: CreateVideoJobVariables): MutationPromise<CreateVideoJobData, CreateVideoJobVariables>;
 
-interface CreateExampleJobRef {
+interface CreateVideoJobRef {
   ...
-  (dc: DataConnect, vars: CreateExampleJobVariables): MutationRef<CreateExampleJobData, CreateExampleJobVariables>;
+  (dc: DataConnect, vars: CreateVideoJobVariables): MutationRef<CreateVideoJobData, CreateVideoJobVariables>;
 }
-export const createExampleJobRef: CreateExampleJobRef;
+export const createVideoJobRef: CreateVideoJobRef;
 ```
 
-If you need the name of the operation without creating a ref, you can retrieve the operation name by calling the `operationName` property on the createExampleJobRef:
+If you need the name of the operation without creating a ref, you can retrieve the operation name by calling the `operationName` property on the createVideoJobRef:
 ```typescript
-const name = createExampleJobRef.operationName;
+const name = createVideoJobRef.operationName;
 console.log(name);
 ```
 
 ### Variables
-The `CreateExampleJob` mutation requires an argument of type `CreateExampleJobVariables`, which is defined in [dataconnect-generated/index.d.ts](./index.d.ts). It has the following fields:
+The `createVideoJob` mutation requires an argument of type `CreateVideoJobVariables`, which is defined in [dataconnect-generated/index.d.ts](./index.d.ts). It has the following fields:
 
 ```typescript
-export interface CreateExampleJobVariables {
+export interface CreateVideoJobVariables {
   videoUrl: string;
   source: string;
   taskType: string;
 }
 ```
 ### Return Type
-Recall that executing the `CreateExampleJob` mutation returns a `MutationPromise` that resolves to an object with a `data` property.
+Recall that executing the `createVideoJob` mutation returns a `MutationPromise` that resolves to an object with a `data` property.
 
-The `data` property is an object of type `CreateExampleJobData`, which is defined in [dataconnect-generated/index.d.ts](./index.d.ts). It has the following fields:
+The `data` property is an object of type `CreateVideoJobData`, which is defined in [dataconnect-generated/index.d.ts](./index.d.ts). It has the following fields:
 ```typescript
-export interface CreateExampleJobData {
+export interface CreateVideoJobData {
   videoJob_insert: VideoJob_Key;
 }
 ```
-### Using `CreateExampleJob`'s action shortcut function
+### Using `createVideoJob`'s action shortcut function
 
 ```typescript
 import { getDataConnect } from 'firebase/data-connect';
-import { connectorConfig, createExampleJob, CreateExampleJobVariables } from '@dataconnect/generated';
+import { connectorConfig, createVideoJob, CreateVideoJobVariables } from '@video-analyzer/dataconnect';
 
-// The `CreateExampleJob` mutation requires an argument of type `CreateExampleJobVariables`:
-const createExampleJobVars: CreateExampleJobVariables = {
+// The `createVideoJob` mutation requires an argument of type `CreateVideoJobVariables`:
+const createVideoJobVars: CreateVideoJobVariables = {
   videoUrl: ..., 
   source: ..., 
   taskType: ..., 
 };
 
-// Call the `createExampleJob()` function to execute the mutation.
+// Call the `createVideoJob()` function to execute the mutation.
 // You can use the `await` keyword to wait for the promise to resolve.
-const { data } = await createExampleJob(createExampleJobVars);
+const { data } = await createVideoJob(createVideoJobVars);
 // Variables can be defined inline as well.
-const { data } = await createExampleJob({ videoUrl: ..., source: ..., taskType: ..., });
+const { data } = await createVideoJob({ videoUrl: ..., source: ..., taskType: ..., });
 
 // You can also pass in a `DataConnect` instance to the action shortcut function.
 const dataConnect = getDataConnect(connectorConfig);
-const { data } = await createExampleJob(dataConnect, createExampleJobVars);
+const { data } = await createVideoJob(dataConnect, createVideoJobVars);
 
 console.log(data.videoJob_insert);
 
 // Or, you can use the `Promise` API.
-createExampleJob(createExampleJobVars).then((response) => {
+createVideoJob(createVideoJobVars).then((response) => {
   const data = response.data;
   console.log(data.videoJob_insert);
 });
 ```
 
-### Using `CreateExampleJob`'s `MutationRef` function
+### Using `createVideoJob`'s `MutationRef` function
 
 ```typescript
 import { getDataConnect, executeMutation } from 'firebase/data-connect';
-import { connectorConfig, createExampleJobRef, CreateExampleJobVariables } from '@dataconnect/generated';
+import { connectorConfig, createVideoJobRef, CreateVideoJobVariables } from '@video-analyzer/dataconnect';
 
-// The `CreateExampleJob` mutation requires an argument of type `CreateExampleJobVariables`:
-const createExampleJobVars: CreateExampleJobVariables = {
+// The `createVideoJob` mutation requires an argument of type `CreateVideoJobVariables`:
+const createVideoJobVars: CreateVideoJobVariables = {
   videoUrl: ..., 
   source: ..., 
   taskType: ..., 
 };
 
-// Call the `createExampleJobRef()` function to get a reference to the mutation.
-const ref = createExampleJobRef(createExampleJobVars);
+// Call the `createVideoJobRef()` function to get a reference to the mutation.
+const ref = createVideoJobRef(createVideoJobVars);
 // Variables can be defined inline as well.
-const ref = createExampleJobRef({ videoUrl: ..., source: ..., taskType: ..., });
+const ref = createVideoJobRef({ videoUrl: ..., source: ..., taskType: ..., });
 
 // You can also pass in a `DataConnect` instance to the `MutationRef` function.
 const dataConnect = getDataConnect(connectorConfig);
-const ref = createExampleJobRef(dataConnect, createExampleJobVars);
+const ref = createVideoJobRef(dataConnect, createVideoJobVars);
 
 // Call `executeMutation()` on the reference to execute the mutation.
 // You can use the `await` keyword to wait for the promise to resolve.
@@ -752,40 +792,382 @@ executeMutation(ref).then((response) => {
 });
 ```
 
-## RecordExampleEvent
-You can execute the `RecordExampleEvent` mutation using the following action shortcut function, or by calling `executeMutation()` after calling the following `MutationRef` function, both of which are defined in [dataconnect-generated/index.d.ts](./index.d.ts):
+## updateJobStatus
+You can execute the `updateJobStatus` mutation using the following action shortcut function, or by calling `executeMutation()` after calling the following `MutationRef` function, both of which are defined in [dataconnect-generated/index.d.ts](./index.d.ts):
 ```typescript
-recordExampleEvent(vars: RecordExampleEventVariables): MutationPromise<RecordExampleEventData, RecordExampleEventVariables>;
+updateJobStatus(vars: UpdateJobStatusVariables): MutationPromise<UpdateJobStatusData, UpdateJobStatusVariables>;
 
-interface RecordExampleEventRef {
+interface UpdateJobStatusRef {
   ...
   /* Allow users to create refs without passing in DataConnect */
-  (vars: RecordExampleEventVariables): MutationRef<RecordExampleEventData, RecordExampleEventVariables>;
+  (vars: UpdateJobStatusVariables): MutationRef<UpdateJobStatusData, UpdateJobStatusVariables>;
 }
-export const recordExampleEventRef: RecordExampleEventRef;
+export const updateJobStatusRef: UpdateJobStatusRef;
 ```
 You can also pass in a `DataConnect` instance to the action shortcut function or `MutationRef` function.
 ```typescript
-recordExampleEvent(dc: DataConnect, vars: RecordExampleEventVariables): MutationPromise<RecordExampleEventData, RecordExampleEventVariables>;
+updateJobStatus(dc: DataConnect, vars: UpdateJobStatusVariables): MutationPromise<UpdateJobStatusData, UpdateJobStatusVariables>;
 
-interface RecordExampleEventRef {
+interface UpdateJobStatusRef {
   ...
-  (dc: DataConnect, vars: RecordExampleEventVariables): MutationRef<RecordExampleEventData, RecordExampleEventVariables>;
+  (dc: DataConnect, vars: UpdateJobStatusVariables): MutationRef<UpdateJobStatusData, UpdateJobStatusVariables>;
 }
-export const recordExampleEventRef: RecordExampleEventRef;
+export const updateJobStatusRef: UpdateJobStatusRef;
 ```
 
-If you need the name of the operation without creating a ref, you can retrieve the operation name by calling the `operationName` property on the recordExampleEventRef:
+If you need the name of the operation without creating a ref, you can retrieve the operation name by calling the `operationName` property on the updateJobStatusRef:
 ```typescript
-const name = recordExampleEventRef.operationName;
+const name = updateJobStatusRef.operationName;
 console.log(name);
 ```
 
 ### Variables
-The `RecordExampleEvent` mutation requires an argument of type `RecordExampleEventVariables`, which is defined in [dataconnect-generated/index.d.ts](./index.d.ts). It has the following fields:
+The `updateJobStatus` mutation requires an argument of type `UpdateJobStatusVariables`, which is defined in [dataconnect-generated/index.d.ts](./index.d.ts). It has the following fields:
 
 ```typescript
-export interface RecordExampleEventVariables {
+export interface UpdateJobStatusVariables {
+  id: UUIDString;
+  status: string;
+  executedAgents?: string[] | null;
+}
+```
+### Return Type
+Recall that executing the `updateJobStatus` mutation returns a `MutationPromise` that resolves to an object with a `data` property.
+
+The `data` property is an object of type `UpdateJobStatusData`, which is defined in [dataconnect-generated/index.d.ts](./index.d.ts). It has the following fields:
+```typescript
+export interface UpdateJobStatusData {
+  videoJob_update?: VideoJob_Key | null;
+}
+```
+### Using `updateJobStatus`'s action shortcut function
+
+```typescript
+import { getDataConnect } from 'firebase/data-connect';
+import { connectorConfig, updateJobStatus, UpdateJobStatusVariables } from '@video-analyzer/dataconnect';
+
+// The `updateJobStatus` mutation requires an argument of type `UpdateJobStatusVariables`:
+const updateJobStatusVars: UpdateJobStatusVariables = {
+  id: ..., 
+  status: ..., 
+  executedAgents: ..., // optional
+};
+
+// Call the `updateJobStatus()` function to execute the mutation.
+// You can use the `await` keyword to wait for the promise to resolve.
+const { data } = await updateJobStatus(updateJobStatusVars);
+// Variables can be defined inline as well.
+const { data } = await updateJobStatus({ id: ..., status: ..., executedAgents: ..., });
+
+// You can also pass in a `DataConnect` instance to the action shortcut function.
+const dataConnect = getDataConnect(connectorConfig);
+const { data } = await updateJobStatus(dataConnect, updateJobStatusVars);
+
+console.log(data.videoJob_update);
+
+// Or, you can use the `Promise` API.
+updateJobStatus(updateJobStatusVars).then((response) => {
+  const data = response.data;
+  console.log(data.videoJob_update);
+});
+```
+
+### Using `updateJobStatus`'s `MutationRef` function
+
+```typescript
+import { getDataConnect, executeMutation } from 'firebase/data-connect';
+import { connectorConfig, updateJobStatusRef, UpdateJobStatusVariables } from '@video-analyzer/dataconnect';
+
+// The `updateJobStatus` mutation requires an argument of type `UpdateJobStatusVariables`:
+const updateJobStatusVars: UpdateJobStatusVariables = {
+  id: ..., 
+  status: ..., 
+  executedAgents: ..., // optional
+};
+
+// Call the `updateJobStatusRef()` function to get a reference to the mutation.
+const ref = updateJobStatusRef(updateJobStatusVars);
+// Variables can be defined inline as well.
+const ref = updateJobStatusRef({ id: ..., status: ..., executedAgents: ..., });
+
+// You can also pass in a `DataConnect` instance to the `MutationRef` function.
+const dataConnect = getDataConnect(connectorConfig);
+const ref = updateJobStatusRef(dataConnect, updateJobStatusVars);
+
+// Call `executeMutation()` on the reference to execute the mutation.
+// You can use the `await` keyword to wait for the promise to resolve.
+const { data } = await executeMutation(ref);
+
+console.log(data.videoJob_update);
+
+// Or, you can use the `Promise` API.
+executeMutation(ref).then((response) => {
+  const data = response.data;
+  console.log(data.videoJob_update);
+});
+```
+
+## completeJob
+You can execute the `completeJob` mutation using the following action shortcut function, or by calling `executeMutation()` after calling the following `MutationRef` function, both of which are defined in [dataconnect-generated/index.d.ts](./index.d.ts):
+```typescript
+completeJob(vars: CompleteJobVariables): MutationPromise<CompleteJobData, CompleteJobVariables>;
+
+interface CompleteJobRef {
+  ...
+  /* Allow users to create refs without passing in DataConnect */
+  (vars: CompleteJobVariables): MutationRef<CompleteJobData, CompleteJobVariables>;
+}
+export const completeJobRef: CompleteJobRef;
+```
+You can also pass in a `DataConnect` instance to the action shortcut function or `MutationRef` function.
+```typescript
+completeJob(dc: DataConnect, vars: CompleteJobVariables): MutationPromise<CompleteJobData, CompleteJobVariables>;
+
+interface CompleteJobRef {
+  ...
+  (dc: DataConnect, vars: CompleteJobVariables): MutationRef<CompleteJobData, CompleteJobVariables>;
+}
+export const completeJobRef: CompleteJobRef;
+```
+
+If you need the name of the operation without creating a ref, you can retrieve the operation name by calling the `operationName` property on the completeJobRef:
+```typescript
+const name = completeJobRef.operationName;
+console.log(name);
+```
+
+### Variables
+The `completeJob` mutation requires an argument of type `CompleteJobVariables`, which is defined in [dataconnect-generated/index.d.ts](./index.d.ts). It has the following fields:
+
+```typescript
+export interface CompleteJobVariables {
+  id: UUIDString;
+  resultJson: string;
+  title?: string | null;
+}
+```
+### Return Type
+Recall that executing the `completeJob` mutation returns a `MutationPromise` that resolves to an object with a `data` property.
+
+The `data` property is an object of type `CompleteJobData`, which is defined in [dataconnect-generated/index.d.ts](./index.d.ts). It has the following fields:
+```typescript
+export interface CompleteJobData {
+  videoJob_update?: VideoJob_Key | null;
+}
+```
+### Using `completeJob`'s action shortcut function
+
+```typescript
+import { getDataConnect } from 'firebase/data-connect';
+import { connectorConfig, completeJob, CompleteJobVariables } from '@video-analyzer/dataconnect';
+
+// The `completeJob` mutation requires an argument of type `CompleteJobVariables`:
+const completeJobVars: CompleteJobVariables = {
+  id: ..., 
+  resultJson: ..., 
+  title: ..., // optional
+};
+
+// Call the `completeJob()` function to execute the mutation.
+// You can use the `await` keyword to wait for the promise to resolve.
+const { data } = await completeJob(completeJobVars);
+// Variables can be defined inline as well.
+const { data } = await completeJob({ id: ..., resultJson: ..., title: ..., });
+
+// You can also pass in a `DataConnect` instance to the action shortcut function.
+const dataConnect = getDataConnect(connectorConfig);
+const { data } = await completeJob(dataConnect, completeJobVars);
+
+console.log(data.videoJob_update);
+
+// Or, you can use the `Promise` API.
+completeJob(completeJobVars).then((response) => {
+  const data = response.data;
+  console.log(data.videoJob_update);
+});
+```
+
+### Using `completeJob`'s `MutationRef` function
+
+```typescript
+import { getDataConnect, executeMutation } from 'firebase/data-connect';
+import { connectorConfig, completeJobRef, CompleteJobVariables } from '@video-analyzer/dataconnect';
+
+// The `completeJob` mutation requires an argument of type `CompleteJobVariables`:
+const completeJobVars: CompleteJobVariables = {
+  id: ..., 
+  resultJson: ..., 
+  title: ..., // optional
+};
+
+// Call the `completeJobRef()` function to get a reference to the mutation.
+const ref = completeJobRef(completeJobVars);
+// Variables can be defined inline as well.
+const ref = completeJobRef({ id: ..., resultJson: ..., title: ..., });
+
+// You can also pass in a `DataConnect` instance to the `MutationRef` function.
+const dataConnect = getDataConnect(connectorConfig);
+const ref = completeJobRef(dataConnect, completeJobVars);
+
+// Call `executeMutation()` on the reference to execute the mutation.
+// You can use the `await` keyword to wait for the promise to resolve.
+const { data } = await executeMutation(ref);
+
+console.log(data.videoJob_update);
+
+// Or, you can use the `Promise` API.
+executeMutation(ref).then((response) => {
+  const data = response.data;
+  console.log(data.videoJob_update);
+});
+```
+
+## failJob
+You can execute the `failJob` mutation using the following action shortcut function, or by calling `executeMutation()` after calling the following `MutationRef` function, both of which are defined in [dataconnect-generated/index.d.ts](./index.d.ts):
+```typescript
+failJob(vars: FailJobVariables): MutationPromise<FailJobData, FailJobVariables>;
+
+interface FailJobRef {
+  ...
+  /* Allow users to create refs without passing in DataConnect */
+  (vars: FailJobVariables): MutationRef<FailJobData, FailJobVariables>;
+}
+export const failJobRef: FailJobRef;
+```
+You can also pass in a `DataConnect` instance to the action shortcut function or `MutationRef` function.
+```typescript
+failJob(dc: DataConnect, vars: FailJobVariables): MutationPromise<FailJobData, FailJobVariables>;
+
+interface FailJobRef {
+  ...
+  (dc: DataConnect, vars: FailJobVariables): MutationRef<FailJobData, FailJobVariables>;
+}
+export const failJobRef: FailJobRef;
+```
+
+If you need the name of the operation without creating a ref, you can retrieve the operation name by calling the `operationName` property on the failJobRef:
+```typescript
+const name = failJobRef.operationName;
+console.log(name);
+```
+
+### Variables
+The `failJob` mutation requires an argument of type `FailJobVariables`, which is defined in [dataconnect-generated/index.d.ts](./index.d.ts). It has the following fields:
+
+```typescript
+export interface FailJobVariables {
+  id: UUIDString;
+  error: string;
+}
+```
+### Return Type
+Recall that executing the `failJob` mutation returns a `MutationPromise` that resolves to an object with a `data` property.
+
+The `data` property is an object of type `FailJobData`, which is defined in [dataconnect-generated/index.d.ts](./index.d.ts). It has the following fields:
+```typescript
+export interface FailJobData {
+  videoJob_update?: VideoJob_Key | null;
+}
+```
+### Using `failJob`'s action shortcut function
+
+```typescript
+import { getDataConnect } from 'firebase/data-connect';
+import { connectorConfig, failJob, FailJobVariables } from '@video-analyzer/dataconnect';
+
+// The `failJob` mutation requires an argument of type `FailJobVariables`:
+const failJobVars: FailJobVariables = {
+  id: ..., 
+  error: ..., 
+};
+
+// Call the `failJob()` function to execute the mutation.
+// You can use the `await` keyword to wait for the promise to resolve.
+const { data } = await failJob(failJobVars);
+// Variables can be defined inline as well.
+const { data } = await failJob({ id: ..., error: ..., });
+
+// You can also pass in a `DataConnect` instance to the action shortcut function.
+const dataConnect = getDataConnect(connectorConfig);
+const { data } = await failJob(dataConnect, failJobVars);
+
+console.log(data.videoJob_update);
+
+// Or, you can use the `Promise` API.
+failJob(failJobVars).then((response) => {
+  const data = response.data;
+  console.log(data.videoJob_update);
+});
+```
+
+### Using `failJob`'s `MutationRef` function
+
+```typescript
+import { getDataConnect, executeMutation } from 'firebase/data-connect';
+import { connectorConfig, failJobRef, FailJobVariables } from '@video-analyzer/dataconnect';
+
+// The `failJob` mutation requires an argument of type `FailJobVariables`:
+const failJobVars: FailJobVariables = {
+  id: ..., 
+  error: ..., 
+};
+
+// Call the `failJobRef()` function to get a reference to the mutation.
+const ref = failJobRef(failJobVars);
+// Variables can be defined inline as well.
+const ref = failJobRef({ id: ..., error: ..., });
+
+// You can also pass in a `DataConnect` instance to the `MutationRef` function.
+const dataConnect = getDataConnect(connectorConfig);
+const ref = failJobRef(dataConnect, failJobVars);
+
+// Call `executeMutation()` on the reference to execute the mutation.
+// You can use the `await` keyword to wait for the promise to resolve.
+const { data } = await executeMutation(ref);
+
+console.log(data.videoJob_update);
+
+// Or, you can use the `Promise` API.
+executeMutation(ref).then((response) => {
+  const data = response.data;
+  console.log(data.videoJob_update);
+});
+```
+
+## recordJobEvent
+You can execute the `recordJobEvent` mutation using the following action shortcut function, or by calling `executeMutation()` after calling the following `MutationRef` function, both of which are defined in [dataconnect-generated/index.d.ts](./index.d.ts):
+```typescript
+recordJobEvent(vars: RecordJobEventVariables): MutationPromise<RecordJobEventData, RecordJobEventVariables>;
+
+interface RecordJobEventRef {
+  ...
+  /* Allow users to create refs without passing in DataConnect */
+  (vars: RecordJobEventVariables): MutationRef<RecordJobEventData, RecordJobEventVariables>;
+}
+export const recordJobEventRef: RecordJobEventRef;
+```
+You can also pass in a `DataConnect` instance to the action shortcut function or `MutationRef` function.
+```typescript
+recordJobEvent(dc: DataConnect, vars: RecordJobEventVariables): MutationPromise<RecordJobEventData, RecordJobEventVariables>;
+
+interface RecordJobEventRef {
+  ...
+  (dc: DataConnect, vars: RecordJobEventVariables): MutationRef<RecordJobEventData, RecordJobEventVariables>;
+}
+export const recordJobEventRef: RecordJobEventRef;
+```
+
+If you need the name of the operation without creating a ref, you can retrieve the operation name by calling the `operationName` property on the recordJobEventRef:
+```typescript
+const name = recordJobEventRef.operationName;
+console.log(name);
+```
+
+### Variables
+The `recordJobEvent` mutation requires an argument of type `RecordJobEventVariables`, which is defined in [dataconnect-generated/index.d.ts](./index.d.ts). It has the following fields:
+
+```typescript
+export interface RecordJobEventVariables {
   jobId: UUIDString;
   eventType: string;
   agent?: string | null;
@@ -793,69 +1175,69 @@ export interface RecordExampleEventVariables {
 }
 ```
 ### Return Type
-Recall that executing the `RecordExampleEvent` mutation returns a `MutationPromise` that resolves to an object with a `data` property.
+Recall that executing the `recordJobEvent` mutation returns a `MutationPromise` that resolves to an object with a `data` property.
 
-The `data` property is an object of type `RecordExampleEventData`, which is defined in [dataconnect-generated/index.d.ts](./index.d.ts). It has the following fields:
+The `data` property is an object of type `RecordJobEventData`, which is defined in [dataconnect-generated/index.d.ts](./index.d.ts). It has the following fields:
 ```typescript
-export interface RecordExampleEventData {
+export interface RecordJobEventData {
   jobEvent_insert: JobEvent_Key;
 }
 ```
-### Using `RecordExampleEvent`'s action shortcut function
+### Using `recordJobEvent`'s action shortcut function
 
 ```typescript
 import { getDataConnect } from 'firebase/data-connect';
-import { connectorConfig, recordExampleEvent, RecordExampleEventVariables } from '@dataconnect/generated';
+import { connectorConfig, recordJobEvent, RecordJobEventVariables } from '@video-analyzer/dataconnect';
 
-// The `RecordExampleEvent` mutation requires an argument of type `RecordExampleEventVariables`:
-const recordExampleEventVars: RecordExampleEventVariables = {
+// The `recordJobEvent` mutation requires an argument of type `RecordJobEventVariables`:
+const recordJobEventVars: RecordJobEventVariables = {
   jobId: ..., 
   eventType: ..., 
   agent: ..., // optional
   details: ..., // optional
 };
 
-// Call the `recordExampleEvent()` function to execute the mutation.
+// Call the `recordJobEvent()` function to execute the mutation.
 // You can use the `await` keyword to wait for the promise to resolve.
-const { data } = await recordExampleEvent(recordExampleEventVars);
+const { data } = await recordJobEvent(recordJobEventVars);
 // Variables can be defined inline as well.
-const { data } = await recordExampleEvent({ jobId: ..., eventType: ..., agent: ..., details: ..., });
+const { data } = await recordJobEvent({ jobId: ..., eventType: ..., agent: ..., details: ..., });
 
 // You can also pass in a `DataConnect` instance to the action shortcut function.
 const dataConnect = getDataConnect(connectorConfig);
-const { data } = await recordExampleEvent(dataConnect, recordExampleEventVars);
+const { data } = await recordJobEvent(dataConnect, recordJobEventVars);
 
 console.log(data.jobEvent_insert);
 
 // Or, you can use the `Promise` API.
-recordExampleEvent(recordExampleEventVars).then((response) => {
+recordJobEvent(recordJobEventVars).then((response) => {
   const data = response.data;
   console.log(data.jobEvent_insert);
 });
 ```
 
-### Using `RecordExampleEvent`'s `MutationRef` function
+### Using `recordJobEvent`'s `MutationRef` function
 
 ```typescript
 import { getDataConnect, executeMutation } from 'firebase/data-connect';
-import { connectorConfig, recordExampleEventRef, RecordExampleEventVariables } from '@dataconnect/generated';
+import { connectorConfig, recordJobEventRef, RecordJobEventVariables } from '@video-analyzer/dataconnect';
 
-// The `RecordExampleEvent` mutation requires an argument of type `RecordExampleEventVariables`:
-const recordExampleEventVars: RecordExampleEventVariables = {
+// The `recordJobEvent` mutation requires an argument of type `RecordJobEventVariables`:
+const recordJobEventVars: RecordJobEventVariables = {
   jobId: ..., 
   eventType: ..., 
   agent: ..., // optional
   details: ..., // optional
 };
 
-// Call the `recordExampleEventRef()` function to get a reference to the mutation.
-const ref = recordExampleEventRef(recordExampleEventVars);
+// Call the `recordJobEventRef()` function to get a reference to the mutation.
+const ref = recordJobEventRef(recordJobEventVars);
 // Variables can be defined inline as well.
-const ref = recordExampleEventRef({ jobId: ..., eventType: ..., agent: ..., details: ..., });
+const ref = recordJobEventRef({ jobId: ..., eventType: ..., agent: ..., details: ..., });
 
 // You can also pass in a `DataConnect` instance to the `MutationRef` function.
 const dataConnect = getDataConnect(connectorConfig);
-const ref = recordExampleEventRef(dataConnect, recordExampleEventVars);
+const ref = recordJobEventRef(dataConnect, recordJobEventVars);
 
 // Call `executeMutation()` on the reference to execute the mutation.
 // You can use the `await` keyword to wait for the promise to resolve.
@@ -870,112 +1252,112 @@ executeMutation(ref).then((response) => {
 });
 ```
 
-## DeleteExampleEvent
-You can execute the `DeleteExampleEvent` mutation using the following action shortcut function, or by calling `executeMutation()` after calling the following `MutationRef` function, both of which are defined in [dataconnect-generated/index.d.ts](./index.d.ts):
+## deleteJobEmbeddings
+You can execute the `deleteJobEmbeddings` mutation using the following action shortcut function, or by calling `executeMutation()` after calling the following `MutationRef` function, both of which are defined in [dataconnect-generated/index.d.ts](./index.d.ts):
 ```typescript
-deleteExampleEvent(vars: DeleteExampleEventVariables): MutationPromise<DeleteExampleEventData, DeleteExampleEventVariables>;
+deleteJobEmbeddings(vars: DeleteJobEmbeddingsVariables): MutationPromise<DeleteJobEmbeddingsData, DeleteJobEmbeddingsVariables>;
 
-interface DeleteExampleEventRef {
+interface DeleteJobEmbeddingsRef {
   ...
   /* Allow users to create refs without passing in DataConnect */
-  (vars: DeleteExampleEventVariables): MutationRef<DeleteExampleEventData, DeleteExampleEventVariables>;
+  (vars: DeleteJobEmbeddingsVariables): MutationRef<DeleteJobEmbeddingsData, DeleteJobEmbeddingsVariables>;
 }
-export const deleteExampleEventRef: DeleteExampleEventRef;
+export const deleteJobEmbeddingsRef: DeleteJobEmbeddingsRef;
 ```
 You can also pass in a `DataConnect` instance to the action shortcut function or `MutationRef` function.
 ```typescript
-deleteExampleEvent(dc: DataConnect, vars: DeleteExampleEventVariables): MutationPromise<DeleteExampleEventData, DeleteExampleEventVariables>;
+deleteJobEmbeddings(dc: DataConnect, vars: DeleteJobEmbeddingsVariables): MutationPromise<DeleteJobEmbeddingsData, DeleteJobEmbeddingsVariables>;
 
-interface DeleteExampleEventRef {
+interface DeleteJobEmbeddingsRef {
   ...
-  (dc: DataConnect, vars: DeleteExampleEventVariables): MutationRef<DeleteExampleEventData, DeleteExampleEventVariables>;
+  (dc: DataConnect, vars: DeleteJobEmbeddingsVariables): MutationRef<DeleteJobEmbeddingsData, DeleteJobEmbeddingsVariables>;
 }
-export const deleteExampleEventRef: DeleteExampleEventRef;
+export const deleteJobEmbeddingsRef: DeleteJobEmbeddingsRef;
 ```
 
-If you need the name of the operation without creating a ref, you can retrieve the operation name by calling the `operationName` property on the deleteExampleEventRef:
+If you need the name of the operation without creating a ref, you can retrieve the operation name by calling the `operationName` property on the deleteJobEmbeddingsRef:
 ```typescript
-const name = deleteExampleEventRef.operationName;
+const name = deleteJobEmbeddingsRef.operationName;
 console.log(name);
 ```
 
 ### Variables
-The `DeleteExampleEvent` mutation requires an argument of type `DeleteExampleEventVariables`, which is defined in [dataconnect-generated/index.d.ts](./index.d.ts). It has the following fields:
+The `deleteJobEmbeddings` mutation requires an argument of type `DeleteJobEmbeddingsVariables`, which is defined in [dataconnect-generated/index.d.ts](./index.d.ts). It has the following fields:
 
 ```typescript
-export interface DeleteExampleEventVariables {
-  id: UUIDString;
+export interface DeleteJobEmbeddingsVariables {
+  jobId: UUIDString;
 }
 ```
 ### Return Type
-Recall that executing the `DeleteExampleEvent` mutation returns a `MutationPromise` that resolves to an object with a `data` property.
+Recall that executing the `deleteJobEmbeddings` mutation returns a `MutationPromise` that resolves to an object with a `data` property.
 
-The `data` property is an object of type `DeleteExampleEventData`, which is defined in [dataconnect-generated/index.d.ts](./index.d.ts). It has the following fields:
+The `data` property is an object of type `DeleteJobEmbeddingsData`, which is defined in [dataconnect-generated/index.d.ts](./index.d.ts). It has the following fields:
 ```typescript
-export interface DeleteExampleEventData {
-  jobEvent_delete?: JobEvent_Key | null;
+export interface DeleteJobEmbeddingsData {
+  videoEmbedding_deleteMany: number;
 }
 ```
-### Using `DeleteExampleEvent`'s action shortcut function
+### Using `deleteJobEmbeddings`'s action shortcut function
 
 ```typescript
 import { getDataConnect } from 'firebase/data-connect';
-import { connectorConfig, deleteExampleEvent, DeleteExampleEventVariables } from '@dataconnect/generated';
+import { connectorConfig, deleteJobEmbeddings, DeleteJobEmbeddingsVariables } from '@video-analyzer/dataconnect';
 
-// The `DeleteExampleEvent` mutation requires an argument of type `DeleteExampleEventVariables`:
-const deleteExampleEventVars: DeleteExampleEventVariables = {
-  id: ..., 
+// The `deleteJobEmbeddings` mutation requires an argument of type `DeleteJobEmbeddingsVariables`:
+const deleteJobEmbeddingsVars: DeleteJobEmbeddingsVariables = {
+  jobId: ..., 
 };
 
-// Call the `deleteExampleEvent()` function to execute the mutation.
+// Call the `deleteJobEmbeddings()` function to execute the mutation.
 // You can use the `await` keyword to wait for the promise to resolve.
-const { data } = await deleteExampleEvent(deleteExampleEventVars);
+const { data } = await deleteJobEmbeddings(deleteJobEmbeddingsVars);
 // Variables can be defined inline as well.
-const { data } = await deleteExampleEvent({ id: ..., });
+const { data } = await deleteJobEmbeddings({ jobId: ..., });
 
 // You can also pass in a `DataConnect` instance to the action shortcut function.
 const dataConnect = getDataConnect(connectorConfig);
-const { data } = await deleteExampleEvent(dataConnect, deleteExampleEventVars);
+const { data } = await deleteJobEmbeddings(dataConnect, deleteJobEmbeddingsVars);
 
-console.log(data.jobEvent_delete);
+console.log(data.videoEmbedding_deleteMany);
 
 // Or, you can use the `Promise` API.
-deleteExampleEvent(deleteExampleEventVars).then((response) => {
+deleteJobEmbeddings(deleteJobEmbeddingsVars).then((response) => {
   const data = response.data;
-  console.log(data.jobEvent_delete);
+  console.log(data.videoEmbedding_deleteMany);
 });
 ```
 
-### Using `DeleteExampleEvent`'s `MutationRef` function
+### Using `deleteJobEmbeddings`'s `MutationRef` function
 
 ```typescript
 import { getDataConnect, executeMutation } from 'firebase/data-connect';
-import { connectorConfig, deleteExampleEventRef, DeleteExampleEventVariables } from '@dataconnect/generated';
+import { connectorConfig, deleteJobEmbeddingsRef, DeleteJobEmbeddingsVariables } from '@video-analyzer/dataconnect';
 
-// The `DeleteExampleEvent` mutation requires an argument of type `DeleteExampleEventVariables`:
-const deleteExampleEventVars: DeleteExampleEventVariables = {
-  id: ..., 
+// The `deleteJobEmbeddings` mutation requires an argument of type `DeleteJobEmbeddingsVariables`:
+const deleteJobEmbeddingsVars: DeleteJobEmbeddingsVariables = {
+  jobId: ..., 
 };
 
-// Call the `deleteExampleEventRef()` function to get a reference to the mutation.
-const ref = deleteExampleEventRef(deleteExampleEventVars);
+// Call the `deleteJobEmbeddingsRef()` function to get a reference to the mutation.
+const ref = deleteJobEmbeddingsRef(deleteJobEmbeddingsVars);
 // Variables can be defined inline as well.
-const ref = deleteExampleEventRef({ id: ..., });
+const ref = deleteJobEmbeddingsRef({ jobId: ..., });
 
 // You can also pass in a `DataConnect` instance to the `MutationRef` function.
 const dataConnect = getDataConnect(connectorConfig);
-const ref = deleteExampleEventRef(dataConnect, deleteExampleEventVars);
+const ref = deleteJobEmbeddingsRef(dataConnect, deleteJobEmbeddingsVars);
 
 // Call `executeMutation()` on the reference to execute the mutation.
 // You can use the `await` keyword to wait for the promise to resolve.
 const { data } = await executeMutation(ref);
 
-console.log(data.jobEvent_delete);
+console.log(data.videoEmbedding_deleteMany);
 
 // Or, you can use the `Promise` API.
 executeMutation(ref).then((response) => {
   const data = response.data;
-  console.log(data.jobEvent_delete);
+  console.log(data.videoEmbedding_deleteMany);
 });
 ```
 

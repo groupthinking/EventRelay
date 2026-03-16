@@ -1,104 +1,140 @@
 const { queryRef, executeQuery, mutationRef, executeMutation, validateArgs } = require('firebase/data-connect');
 
 const connectorConfig = {
-  connector: 'example',
+  connector: 'jobs',
   service: 'eventrelay',
   location: 'us-east4'
 };
 exports.connectorConfig = connectorConfig;
 
-const listVideoJobsRef = (dc) => {
-  const { dc: dcInstance} = validateArgs(connectorConfig, dc, undefined);
-  dcInstance._useGeneratedSdk();
-  return queryRef(dcInstance, 'ListVideoJobs');
-}
-listVideoJobsRef.operationName = 'ListVideoJobs';
-exports.listVideoJobsRef = listVideoJobsRef;
-
-exports.listVideoJobs = function listVideoJobs(dc) {
-  return executeQuery(listVideoJobsRef(dc));
-};
-
-const getVideoJobRef = (dcOrVars, vars) => {
+const createVideoJobRef = (dcOrVars, vars) => {
   const { dc: dcInstance, vars: inputVars} = validateArgs(connectorConfig, dcOrVars, vars, true);
   dcInstance._useGeneratedSdk();
-  return queryRef(dcInstance, 'GetVideoJob', inputVars);
+  return mutationRef(dcInstance, 'createVideoJob', inputVars);
 }
-getVideoJobRef.operationName = 'GetVideoJob';
-exports.getVideoJobRef = getVideoJobRef;
+createVideoJobRef.operationName = 'createVideoJob';
+exports.createVideoJobRef = createVideoJobRef;
 
-exports.getVideoJob = function getVideoJob(dcOrVars, vars) {
-  return executeQuery(getVideoJobRef(dcOrVars, vars));
+exports.createVideoJob = function createVideoJob(dcOrVars, vars) {
+  return executeMutation(createVideoJobRef(dcOrVars, vars));
 };
 
-const listJobEventsRef = (dcOrVars, vars) => {
+const updateJobStatusRef = (dcOrVars, vars) => {
   const { dc: dcInstance, vars: inputVars} = validateArgs(connectorConfig, dcOrVars, vars, true);
   dcInstance._useGeneratedSdk();
-  return queryRef(dcInstance, 'ListJobEvents', inputVars);
+  return mutationRef(dcInstance, 'updateJobStatus', inputVars);
 }
-listJobEventsRef.operationName = 'ListJobEvents';
-exports.listJobEventsRef = listJobEventsRef;
+updateJobStatusRef.operationName = 'updateJobStatus';
+exports.updateJobStatusRef = updateJobStatusRef;
 
-exports.listJobEvents = function listJobEvents(dcOrVars, vars) {
-  return executeQuery(listJobEventsRef(dcOrVars, vars));
+exports.updateJobStatus = function updateJobStatus(dcOrVars, vars) {
+  return executeMutation(updateJobStatusRef(dcOrVars, vars));
 };
 
-const listVideoEmbeddingsRef = (dcOrVars, vars) => {
+const completeJobRef = (dcOrVars, vars) => {
+  const { dc: dcInstance, vars: inputVars} = validateArgs(connectorConfig, dcOrVars, vars, true);
+  dcInstance._useGeneratedSdk();
+  return mutationRef(dcInstance, 'completeJob', inputVars);
+}
+completeJobRef.operationName = 'completeJob';
+exports.completeJobRef = completeJobRef;
+
+exports.completeJob = function completeJob(dcOrVars, vars) {
+  return executeMutation(completeJobRef(dcOrVars, vars));
+};
+
+const failJobRef = (dcOrVars, vars) => {
+  const { dc: dcInstance, vars: inputVars} = validateArgs(connectorConfig, dcOrVars, vars, true);
+  dcInstance._useGeneratedSdk();
+  return mutationRef(dcInstance, 'failJob', inputVars);
+}
+failJobRef.operationName = 'failJob';
+exports.failJobRef = failJobRef;
+
+exports.failJob = function failJob(dcOrVars, vars) {
+  return executeMutation(failJobRef(dcOrVars, vars));
+};
+
+const recordJobEventRef = (dcOrVars, vars) => {
+  const { dc: dcInstance, vars: inputVars} = validateArgs(connectorConfig, dcOrVars, vars, true);
+  dcInstance._useGeneratedSdk();
+  return mutationRef(dcInstance, 'recordJobEvent', inputVars);
+}
+recordJobEventRef.operationName = 'recordJobEvent';
+exports.recordJobEventRef = recordJobEventRef;
+
+exports.recordJobEvent = function recordJobEvent(dcOrVars, vars) {
+  return executeMutation(recordJobEventRef(dcOrVars, vars));
+};
+
+const getJobRef = (dcOrVars, vars) => {
+  const { dc: dcInstance, vars: inputVars} = validateArgs(connectorConfig, dcOrVars, vars, true);
+  dcInstance._useGeneratedSdk();
+  return queryRef(dcInstance, 'getJob', inputVars);
+}
+getJobRef.operationName = 'getJob';
+exports.getJobRef = getJobRef;
+
+exports.getJob = function getJob(dcOrVars, vars) {
+  return executeQuery(getJobRef(dcOrVars, vars));
+};
+
+const listJobsRef = (dcOrVars, vars) => {
   const { dc: dcInstance, vars: inputVars} = validateArgs(connectorConfig, dcOrVars, vars);
   dcInstance._useGeneratedSdk();
-  return queryRef(dcInstance, 'ListVideoEmbeddings', inputVars);
+  return queryRef(dcInstance, 'listJobs', inputVars);
 }
-listVideoEmbeddingsRef.operationName = 'ListVideoEmbeddings';
-exports.listVideoEmbeddingsRef = listVideoEmbeddingsRef;
+listJobsRef.operationName = 'listJobs';
+exports.listJobsRef = listJobsRef;
 
-exports.listVideoEmbeddings = function listVideoEmbeddings(dcOrVars, vars) {
-  return executeQuery(listVideoEmbeddingsRef(dcOrVars, vars));
+exports.listJobs = function listJobs(dcOrVars, vars) {
+  return executeQuery(listJobsRef(dcOrVars, vars));
 };
 
-const listFailedJobsRef = (dc) => {
-  const { dc: dcInstance} = validateArgs(connectorConfig, dc, undefined);
-  dcInstance._useGeneratedSdk();
-  return queryRef(dcInstance, 'ListFailedJobs');
-}
-listFailedJobsRef.operationName = 'ListFailedJobs';
-exports.listFailedJobsRef = listFailedJobsRef;
-
-exports.listFailedJobs = function listFailedJobs(dc) {
-  return executeQuery(listFailedJobsRef(dc));
-};
-
-const createExampleJobRef = (dcOrVars, vars) => {
+const getJobEventsRef = (dcOrVars, vars) => {
   const { dc: dcInstance, vars: inputVars} = validateArgs(connectorConfig, dcOrVars, vars, true);
   dcInstance._useGeneratedSdk();
-  return mutationRef(dcInstance, 'CreateExampleJob', inputVars);
+  return queryRef(dcInstance, 'getJobEvents', inputVars);
 }
-createExampleJobRef.operationName = 'CreateExampleJob';
-exports.createExampleJobRef = createExampleJobRef;
+getJobEventsRef.operationName = 'getJobEvents';
+exports.getJobEventsRef = getJobEventsRef;
 
-exports.createExampleJob = function createExampleJob(dcOrVars, vars) {
-  return executeMutation(createExampleJobRef(dcOrVars, vars));
+exports.getJobEvents = function getJobEvents(dcOrVars, vars) {
+  return executeQuery(getJobEventsRef(dcOrVars, vars));
 };
 
-const recordExampleEventRef = (dcOrVars, vars) => {
-  const { dc: dcInstance, vars: inputVars} = validateArgs(connectorConfig, dcOrVars, vars, true);
+const listEmbeddingsRef = (dcOrVars, vars) => {
+  const { dc: dcInstance, vars: inputVars} = validateArgs(connectorConfig, dcOrVars, vars);
   dcInstance._useGeneratedSdk();
-  return mutationRef(dcInstance, 'RecordExampleEvent', inputVars);
+  return queryRef(dcInstance, 'listEmbeddings', inputVars);
 }
-recordExampleEventRef.operationName = 'RecordExampleEvent';
-exports.recordExampleEventRef = recordExampleEventRef;
+listEmbeddingsRef.operationName = 'listEmbeddings';
+exports.listEmbeddingsRef = listEmbeddingsRef;
 
-exports.recordExampleEvent = function recordExampleEvent(dcOrVars, vars) {
-  return executeMutation(recordExampleEventRef(dcOrVars, vars));
+exports.listEmbeddings = function listEmbeddings(dcOrVars, vars) {
+  return executeQuery(listEmbeddingsRef(dcOrVars, vars));
 };
 
-const deleteExampleEventRef = (dcOrVars, vars) => {
+const getJobEmbeddingsRef = (dcOrVars, vars) => {
   const { dc: dcInstance, vars: inputVars} = validateArgs(connectorConfig, dcOrVars, vars, true);
   dcInstance._useGeneratedSdk();
-  return mutationRef(dcInstance, 'DeleteExampleEvent', inputVars);
+  return queryRef(dcInstance, 'getJobEmbeddings', inputVars);
 }
-deleteExampleEventRef.operationName = 'DeleteExampleEvent';
-exports.deleteExampleEventRef = deleteExampleEventRef;
+getJobEmbeddingsRef.operationName = 'getJobEmbeddings';
+exports.getJobEmbeddingsRef = getJobEmbeddingsRef;
 
-exports.deleteExampleEvent = function deleteExampleEvent(dcOrVars, vars) {
-  return executeMutation(deleteExampleEventRef(dcOrVars, vars));
+exports.getJobEmbeddings = function getJobEmbeddings(dcOrVars, vars) {
+  return executeQuery(getJobEmbeddingsRef(dcOrVars, vars));
+};
+
+const deleteJobEmbeddingsRef = (dcOrVars, vars) => {
+  const { dc: dcInstance, vars: inputVars} = validateArgs(connectorConfig, dcOrVars, vars, true);
+  dcInstance._useGeneratedSdk();
+  return mutationRef(dcInstance, 'deleteJobEmbeddings', inputVars);
+}
+deleteJobEmbeddingsRef.operationName = 'deleteJobEmbeddings';
+exports.deleteJobEmbeddingsRef = deleteJobEmbeddingsRef;
+
+exports.deleteJobEmbeddings = function deleteJobEmbeddings(dcOrVars, vars) {
+  return executeMutation(deleteJobEmbeddingsRef(dcOrVars, vars));
 };

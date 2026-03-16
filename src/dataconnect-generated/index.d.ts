@@ -10,25 +10,44 @@ export type DateString = string;
 
 
 
-export interface CreateExampleJobData {
+export interface CompleteJobData {
+  videoJob_update?: VideoJob_Key | null;
+}
+
+export interface CompleteJobVariables {
+  id: UUIDString;
+  resultJson: string;
+  title?: string | null;
+}
+
+export interface CreateVideoJobData {
   videoJob_insert: VideoJob_Key;
 }
 
-export interface CreateExampleJobVariables {
+export interface CreateVideoJobVariables {
   videoUrl: string;
   source: string;
   taskType: string;
 }
 
-export interface DeleteExampleEventData {
-  jobEvent_delete?: JobEvent_Key | null;
+export interface DeleteJobEmbeddingsData {
+  videoEmbedding_deleteMany: number;
 }
 
-export interface DeleteExampleEventVariables {
+export interface DeleteJobEmbeddingsVariables {
+  jobId: UUIDString;
+}
+
+export interface FailJobData {
+  videoJob_update?: VideoJob_Key | null;
+}
+
+export interface FailJobVariables {
   id: UUIDString;
+  error: string;
 }
 
-export interface GetVideoJobData {
+export interface GetJobData {
   videoJob?: {
     id: UUIDString;
     videoUrl: string;
@@ -39,33 +58,26 @@ export interface GetVideoJobData {
     resultJson?: string | null;
     error?: string | null;
     title?: string | null;
-    duration?: number | null;
-    fileSize?: number | null;
     createdAt: TimestampString;
     updatedAt: TimestampString;
   } & VideoJob_Key;
 }
 
-export interface GetVideoJobVariables {
-  id: UUIDString;
-}
-
-export interface JobEvent_Key {
-  id: UUIDString;
-  __typename?: 'JobEvent_Key';
-}
-
-export interface ListFailedJobsData {
-  videoJobs: ({
+export interface GetJobEmbeddingsData {
+  videoEmbeddings: ({
     id: UUIDString;
-    videoUrl: string;
-    error?: string | null;
-    executedAgents: string[];
-    updatedAt: TimestampString;
-  } & VideoJob_Key)[];
+    segmentType: string;
+    segmentIndex: number;
+    content: string;
+    createdAt: TimestampString;
+  } & VideoEmbedding_Key)[];
 }
 
-export interface ListJobEventsData {
+export interface GetJobEmbeddingsVariables {
+  jobId: UUIDString;
+}
+
+export interface GetJobEventsData {
   jobEvents: ({
     id: UUIDString;
     eventType: string;
@@ -75,11 +87,20 @@ export interface ListJobEventsData {
   } & JobEvent_Key)[];
 }
 
-export interface ListJobEventsVariables {
+export interface GetJobEventsVariables {
   jobId: UUIDString;
 }
 
-export interface ListVideoEmbeddingsData {
+export interface GetJobVariables {
+  id: UUIDString;
+}
+
+export interface JobEvent_Key {
+  id: UUIDString;
+  __typename?: 'JobEvent_Key';
+}
+
+export interface ListEmbeddingsData {
   videoEmbeddings: ({
     id: UUIDString;
     segmentType: string;
@@ -90,15 +111,14 @@ export interface ListVideoEmbeddingsData {
       title?: string | null;
       videoUrl: string;
     } & VideoJob_Key;
-      createdAt: TimestampString;
   } & VideoEmbedding_Key)[];
 }
 
-export interface ListVideoEmbeddingsVariables {
+export interface ListEmbeddingsVariables {
   limit?: number | null;
 }
 
-export interface ListVideoJobsData {
+export interface ListJobsData {
   videoJobs: ({
     id: UUIDString;
     videoUrl: string;
@@ -111,15 +131,29 @@ export interface ListVideoJobsData {
   } & VideoJob_Key)[];
 }
 
-export interface RecordExampleEventData {
+export interface ListJobsVariables {
+  limit?: number | null;
+}
+
+export interface RecordJobEventData {
   jobEvent_insert: JobEvent_Key;
 }
 
-export interface RecordExampleEventVariables {
+export interface RecordJobEventVariables {
   jobId: UUIDString;
   eventType: string;
   agent?: string | null;
   details?: string | null;
+}
+
+export interface UpdateJobStatusData {
+  videoJob_update?: VideoJob_Key | null;
+}
+
+export interface UpdateJobStatusVariables {
+  id: UUIDString;
+  status: string;
+  executedAgents?: string[] | null;
 }
 
 export interface VideoEmbedding_Key {
@@ -132,99 +166,135 @@ export interface VideoJob_Key {
   __typename?: 'VideoJob_Key';
 }
 
-interface ListVideoJobsRef {
+interface CreateVideoJobRef {
   /* Allow users to create refs without passing in DataConnect */
-  (): QueryRef<ListVideoJobsData, undefined>;
+  (vars: CreateVideoJobVariables): MutationRef<CreateVideoJobData, CreateVideoJobVariables>;
   /* Allow users to pass in custom DataConnect instances */
-  (dc: DataConnect): QueryRef<ListVideoJobsData, undefined>;
+  (dc: DataConnect, vars: CreateVideoJobVariables): MutationRef<CreateVideoJobData, CreateVideoJobVariables>;
   operationName: string;
 }
-export const listVideoJobsRef: ListVideoJobsRef;
+export const createVideoJobRef: CreateVideoJobRef;
 
-export function listVideoJobs(): QueryPromise<ListVideoJobsData, undefined>;
-export function listVideoJobs(dc: DataConnect): QueryPromise<ListVideoJobsData, undefined>;
+export function createVideoJob(vars: CreateVideoJobVariables): MutationPromise<CreateVideoJobData, CreateVideoJobVariables>;
+export function createVideoJob(dc: DataConnect, vars: CreateVideoJobVariables): MutationPromise<CreateVideoJobData, CreateVideoJobVariables>;
 
-interface GetVideoJobRef {
+interface UpdateJobStatusRef {
   /* Allow users to create refs without passing in DataConnect */
-  (vars: GetVideoJobVariables): QueryRef<GetVideoJobData, GetVideoJobVariables>;
+  (vars: UpdateJobStatusVariables): MutationRef<UpdateJobStatusData, UpdateJobStatusVariables>;
   /* Allow users to pass in custom DataConnect instances */
-  (dc: DataConnect, vars: GetVideoJobVariables): QueryRef<GetVideoJobData, GetVideoJobVariables>;
+  (dc: DataConnect, vars: UpdateJobStatusVariables): MutationRef<UpdateJobStatusData, UpdateJobStatusVariables>;
   operationName: string;
 }
-export const getVideoJobRef: GetVideoJobRef;
+export const updateJobStatusRef: UpdateJobStatusRef;
 
-export function getVideoJob(vars: GetVideoJobVariables): QueryPromise<GetVideoJobData, GetVideoJobVariables>;
-export function getVideoJob(dc: DataConnect, vars: GetVideoJobVariables): QueryPromise<GetVideoJobData, GetVideoJobVariables>;
+export function updateJobStatus(vars: UpdateJobStatusVariables): MutationPromise<UpdateJobStatusData, UpdateJobStatusVariables>;
+export function updateJobStatus(dc: DataConnect, vars: UpdateJobStatusVariables): MutationPromise<UpdateJobStatusData, UpdateJobStatusVariables>;
 
-interface ListJobEventsRef {
+interface CompleteJobRef {
   /* Allow users to create refs without passing in DataConnect */
-  (vars: ListJobEventsVariables): QueryRef<ListJobEventsData, ListJobEventsVariables>;
+  (vars: CompleteJobVariables): MutationRef<CompleteJobData, CompleteJobVariables>;
   /* Allow users to pass in custom DataConnect instances */
-  (dc: DataConnect, vars: ListJobEventsVariables): QueryRef<ListJobEventsData, ListJobEventsVariables>;
+  (dc: DataConnect, vars: CompleteJobVariables): MutationRef<CompleteJobData, CompleteJobVariables>;
   operationName: string;
 }
-export const listJobEventsRef: ListJobEventsRef;
+export const completeJobRef: CompleteJobRef;
 
-export function listJobEvents(vars: ListJobEventsVariables): QueryPromise<ListJobEventsData, ListJobEventsVariables>;
-export function listJobEvents(dc: DataConnect, vars: ListJobEventsVariables): QueryPromise<ListJobEventsData, ListJobEventsVariables>;
+export function completeJob(vars: CompleteJobVariables): MutationPromise<CompleteJobData, CompleteJobVariables>;
+export function completeJob(dc: DataConnect, vars: CompleteJobVariables): MutationPromise<CompleteJobData, CompleteJobVariables>;
 
-interface ListVideoEmbeddingsRef {
+interface FailJobRef {
   /* Allow users to create refs without passing in DataConnect */
-  (vars?: ListVideoEmbeddingsVariables): QueryRef<ListVideoEmbeddingsData, ListVideoEmbeddingsVariables>;
+  (vars: FailJobVariables): MutationRef<FailJobData, FailJobVariables>;
   /* Allow users to pass in custom DataConnect instances */
-  (dc: DataConnect, vars?: ListVideoEmbeddingsVariables): QueryRef<ListVideoEmbeddingsData, ListVideoEmbeddingsVariables>;
+  (dc: DataConnect, vars: FailJobVariables): MutationRef<FailJobData, FailJobVariables>;
   operationName: string;
 }
-export const listVideoEmbeddingsRef: ListVideoEmbeddingsRef;
+export const failJobRef: FailJobRef;
 
-export function listVideoEmbeddings(vars?: ListVideoEmbeddingsVariables): QueryPromise<ListVideoEmbeddingsData, ListVideoEmbeddingsVariables>;
-export function listVideoEmbeddings(dc: DataConnect, vars?: ListVideoEmbeddingsVariables): QueryPromise<ListVideoEmbeddingsData, ListVideoEmbeddingsVariables>;
+export function failJob(vars: FailJobVariables): MutationPromise<FailJobData, FailJobVariables>;
+export function failJob(dc: DataConnect, vars: FailJobVariables): MutationPromise<FailJobData, FailJobVariables>;
 
-interface ListFailedJobsRef {
+interface RecordJobEventRef {
   /* Allow users to create refs without passing in DataConnect */
-  (): QueryRef<ListFailedJobsData, undefined>;
+  (vars: RecordJobEventVariables): MutationRef<RecordJobEventData, RecordJobEventVariables>;
   /* Allow users to pass in custom DataConnect instances */
-  (dc: DataConnect): QueryRef<ListFailedJobsData, undefined>;
+  (dc: DataConnect, vars: RecordJobEventVariables): MutationRef<RecordJobEventData, RecordJobEventVariables>;
   operationName: string;
 }
-export const listFailedJobsRef: ListFailedJobsRef;
+export const recordJobEventRef: RecordJobEventRef;
 
-export function listFailedJobs(): QueryPromise<ListFailedJobsData, undefined>;
-export function listFailedJobs(dc: DataConnect): QueryPromise<ListFailedJobsData, undefined>;
+export function recordJobEvent(vars: RecordJobEventVariables): MutationPromise<RecordJobEventData, RecordJobEventVariables>;
+export function recordJobEvent(dc: DataConnect, vars: RecordJobEventVariables): MutationPromise<RecordJobEventData, RecordJobEventVariables>;
 
-interface CreateExampleJobRef {
+interface GetJobRef {
   /* Allow users to create refs without passing in DataConnect */
-  (vars: CreateExampleJobVariables): MutationRef<CreateExampleJobData, CreateExampleJobVariables>;
+  (vars: GetJobVariables): QueryRef<GetJobData, GetJobVariables>;
   /* Allow users to pass in custom DataConnect instances */
-  (dc: DataConnect, vars: CreateExampleJobVariables): MutationRef<CreateExampleJobData, CreateExampleJobVariables>;
+  (dc: DataConnect, vars: GetJobVariables): QueryRef<GetJobData, GetJobVariables>;
   operationName: string;
 }
-export const createExampleJobRef: CreateExampleJobRef;
+export const getJobRef: GetJobRef;
 
-export function createExampleJob(vars: CreateExampleJobVariables): MutationPromise<CreateExampleJobData, CreateExampleJobVariables>;
-export function createExampleJob(dc: DataConnect, vars: CreateExampleJobVariables): MutationPromise<CreateExampleJobData, CreateExampleJobVariables>;
+export function getJob(vars: GetJobVariables): QueryPromise<GetJobData, GetJobVariables>;
+export function getJob(dc: DataConnect, vars: GetJobVariables): QueryPromise<GetJobData, GetJobVariables>;
 
-interface RecordExampleEventRef {
+interface ListJobsRef {
   /* Allow users to create refs without passing in DataConnect */
-  (vars: RecordExampleEventVariables): MutationRef<RecordExampleEventData, RecordExampleEventVariables>;
+  (vars?: ListJobsVariables): QueryRef<ListJobsData, ListJobsVariables>;
   /* Allow users to pass in custom DataConnect instances */
-  (dc: DataConnect, vars: RecordExampleEventVariables): MutationRef<RecordExampleEventData, RecordExampleEventVariables>;
+  (dc: DataConnect, vars?: ListJobsVariables): QueryRef<ListJobsData, ListJobsVariables>;
   operationName: string;
 }
-export const recordExampleEventRef: RecordExampleEventRef;
+export const listJobsRef: ListJobsRef;
 
-export function recordExampleEvent(vars: RecordExampleEventVariables): MutationPromise<RecordExampleEventData, RecordExampleEventVariables>;
-export function recordExampleEvent(dc: DataConnect, vars: RecordExampleEventVariables): MutationPromise<RecordExampleEventData, RecordExampleEventVariables>;
+export function listJobs(vars?: ListJobsVariables): QueryPromise<ListJobsData, ListJobsVariables>;
+export function listJobs(dc: DataConnect, vars?: ListJobsVariables): QueryPromise<ListJobsData, ListJobsVariables>;
 
-interface DeleteExampleEventRef {
+interface GetJobEventsRef {
   /* Allow users to create refs without passing in DataConnect */
-  (vars: DeleteExampleEventVariables): MutationRef<DeleteExampleEventData, DeleteExampleEventVariables>;
+  (vars: GetJobEventsVariables): QueryRef<GetJobEventsData, GetJobEventsVariables>;
   /* Allow users to pass in custom DataConnect instances */
-  (dc: DataConnect, vars: DeleteExampleEventVariables): MutationRef<DeleteExampleEventData, DeleteExampleEventVariables>;
+  (dc: DataConnect, vars: GetJobEventsVariables): QueryRef<GetJobEventsData, GetJobEventsVariables>;
   operationName: string;
 }
-export const deleteExampleEventRef: DeleteExampleEventRef;
+export const getJobEventsRef: GetJobEventsRef;
 
-export function deleteExampleEvent(vars: DeleteExampleEventVariables): MutationPromise<DeleteExampleEventData, DeleteExampleEventVariables>;
-export function deleteExampleEvent(dc: DataConnect, vars: DeleteExampleEventVariables): MutationPromise<DeleteExampleEventData, DeleteExampleEventVariables>;
+export function getJobEvents(vars: GetJobEventsVariables): QueryPromise<GetJobEventsData, GetJobEventsVariables>;
+export function getJobEvents(dc: DataConnect, vars: GetJobEventsVariables): QueryPromise<GetJobEventsData, GetJobEventsVariables>;
+
+interface ListEmbeddingsRef {
+  /* Allow users to create refs without passing in DataConnect */
+  (vars?: ListEmbeddingsVariables): QueryRef<ListEmbeddingsData, ListEmbeddingsVariables>;
+  /* Allow users to pass in custom DataConnect instances */
+  (dc: DataConnect, vars?: ListEmbeddingsVariables): QueryRef<ListEmbeddingsData, ListEmbeddingsVariables>;
+  operationName: string;
+}
+export const listEmbeddingsRef: ListEmbeddingsRef;
+
+export function listEmbeddings(vars?: ListEmbeddingsVariables): QueryPromise<ListEmbeddingsData, ListEmbeddingsVariables>;
+export function listEmbeddings(dc: DataConnect, vars?: ListEmbeddingsVariables): QueryPromise<ListEmbeddingsData, ListEmbeddingsVariables>;
+
+interface GetJobEmbeddingsRef {
+  /* Allow users to create refs without passing in DataConnect */
+  (vars: GetJobEmbeddingsVariables): QueryRef<GetJobEmbeddingsData, GetJobEmbeddingsVariables>;
+  /* Allow users to pass in custom DataConnect instances */
+  (dc: DataConnect, vars: GetJobEmbeddingsVariables): QueryRef<GetJobEmbeddingsData, GetJobEmbeddingsVariables>;
+  operationName: string;
+}
+export const getJobEmbeddingsRef: GetJobEmbeddingsRef;
+
+export function getJobEmbeddings(vars: GetJobEmbeddingsVariables): QueryPromise<GetJobEmbeddingsData, GetJobEmbeddingsVariables>;
+export function getJobEmbeddings(dc: DataConnect, vars: GetJobEmbeddingsVariables): QueryPromise<GetJobEmbeddingsData, GetJobEmbeddingsVariables>;
+
+interface DeleteJobEmbeddingsRef {
+  /* Allow users to create refs without passing in DataConnect */
+  (vars: DeleteJobEmbeddingsVariables): MutationRef<DeleteJobEmbeddingsData, DeleteJobEmbeddingsVariables>;
+  /* Allow users to pass in custom DataConnect instances */
+  (dc: DataConnect, vars: DeleteJobEmbeddingsVariables): MutationRef<DeleteJobEmbeddingsData, DeleteJobEmbeddingsVariables>;
+  operationName: string;
+}
+export const deleteJobEmbeddingsRef: DeleteJobEmbeddingsRef;
+
+export function deleteJobEmbeddings(vars: DeleteJobEmbeddingsVariables): MutationPromise<DeleteJobEmbeddingsData, DeleteJobEmbeddingsVariables>;
+export function deleteJobEmbeddings(dc: DataConnect, vars: DeleteJobEmbeddingsVariables): MutationPromise<DeleteJobEmbeddingsData, DeleteJobEmbeddingsVariables>;
 

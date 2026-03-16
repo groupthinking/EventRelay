@@ -14,32 +14,38 @@ If a user is not using a supported framework, they can use the generated SDK dir
 Here's an example of how to use it with the first 5 operations:
 
 ```js
-import { listVideoJobs, getVideoJob, listJobEvents, listVideoEmbeddings, listFailedJobs, createExampleJob, recordExampleEvent, deleteExampleEvent } from '@dataconnect/generated';
+import { createVideoJob, updateJobStatus, completeJob, failJob, recordJobEvent, getJob, listJobs, getJobEvents, listEmbeddings, getJobEmbeddings } from '@video-analyzer/dataconnect';
 
 
-// Operation ListVideoJobs: 
-const { data } = await ListVideoJobs(dataConnect);
+// Operation createVideoJob:  For variables, look at type CreateVideoJobVars in ../index.d.ts
+const { data } = await CreateVideoJob(dataConnect, createVideoJobVars);
 
-// Operation GetVideoJob:  For variables, look at type GetVideoJobVars in ../index.d.ts
-const { data } = await GetVideoJob(dataConnect, getVideoJobVars);
+// Operation updateJobStatus:  For variables, look at type UpdateJobStatusVars in ../index.d.ts
+const { data } = await UpdateJobStatus(dataConnect, updateJobStatusVars);
 
-// Operation ListJobEvents:  For variables, look at type ListJobEventsVars in ../index.d.ts
-const { data } = await ListJobEvents(dataConnect, listJobEventsVars);
+// Operation completeJob:  For variables, look at type CompleteJobVars in ../index.d.ts
+const { data } = await CompleteJob(dataConnect, completeJobVars);
 
-// Operation ListVideoEmbeddings:  For variables, look at type ListVideoEmbeddingsVars in ../index.d.ts
-const { data } = await ListVideoEmbeddings(dataConnect, listVideoEmbeddingsVars);
+// Operation failJob:  For variables, look at type FailJobVars in ../index.d.ts
+const { data } = await FailJob(dataConnect, failJobVars);
 
-// Operation ListFailedJobs: 
-const { data } = await ListFailedJobs(dataConnect);
+// Operation recordJobEvent:  For variables, look at type RecordJobEventVars in ../index.d.ts
+const { data } = await RecordJobEvent(dataConnect, recordJobEventVars);
 
-// Operation CreateExampleJob:  For variables, look at type CreateExampleJobVars in ../index.d.ts
-const { data } = await CreateExampleJob(dataConnect, createExampleJobVars);
+// Operation getJob:  For variables, look at type GetJobVars in ../index.d.ts
+const { data } = await GetJob(dataConnect, getJobVars);
 
-// Operation RecordExampleEvent:  For variables, look at type RecordExampleEventVars in ../index.d.ts
-const { data } = await RecordExampleEvent(dataConnect, recordExampleEventVars);
+// Operation listJobs:  For variables, look at type ListJobsVars in ../index.d.ts
+const { data } = await ListJobs(dataConnect, listJobsVars);
 
-// Operation DeleteExampleEvent:  For variables, look at type DeleteExampleEventVars in ../index.d.ts
-const { data } = await DeleteExampleEvent(dataConnect, deleteExampleEventVars);
+// Operation getJobEvents:  For variables, look at type GetJobEventsVars in ../index.d.ts
+const { data } = await GetJobEvents(dataConnect, getJobEventsVars);
+
+// Operation listEmbeddings:  For variables, look at type ListEmbeddingsVars in ../index.d.ts
+const { data } = await ListEmbeddings(dataConnect, listEmbeddingsVars);
+
+// Operation getJobEmbeddings:  For variables, look at type GetJobEmbeddingsVars in ../index.d.ts
+const { data } = await GetJobEmbeddings(dataConnect, getJobEmbeddingsVars);
 
 
 ```
