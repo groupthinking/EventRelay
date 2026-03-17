@@ -1,0 +1,43 @@
+# Ray Serve configuration for UVAI ML models
+# Deploy with: serve deploy ray-serve-config.yaml
+#
+# Endpoints:
+#   GET  /health                → service health
+#   GET  /models                → model metadata
+#   POST /score-transcript      → predict transcript quality
+#   POST /score-transcript/outcome → record actual results
+#   POST /rank-actions          → rank actions by priority
+#   POST /rank-actions/feedback → record user feedback
+
+proxy_location: EveryNode
+
+http_options:
+  host: 0.0.0.0
+  port: 8000
+
+applications:
+  - name: uvai-ml
+    route_prefix: /
+    import_path: uvai.ml.serve:app
+    runtime_env:
+      env_vars:
+        PYTHONPATH: "/home/ray"
+    deployments:
+      - name: transcript-quality-scorer
+        ray_actor_options:
+          num_cpus: 0.5
+        autoscaling_config:
+          min_replicas: 1
+          max_replicas: 3
+          target_num_ongoing_requests_per_replica: 5
+      - name: action-priority-ranker
+        ray_actor_options:
+          num_cpus: 0.5
+        autoscaling_config:
+          min_replicas: 1
+          max_replicas: 3
+          target_num_ongoing_requests_per_replica: 5
+      - name: uvai-ml-router
+        num_replicas: 1
+        ray_actor_options:
+          num_cpus: 0.25
