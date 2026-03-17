@@ -146,8 +146,8 @@ class RobustYouTubeService:
         self, video_url: str, video_id: str
     ) -> RobustYouTubeMetadata:
         """Fallback metadata using yt-dlp (most reliable, no API key needed)"""
-        import subprocess
         import json
+        import subprocess
 
         def _get_ytdlp_metadata():
             result = subprocess.run(

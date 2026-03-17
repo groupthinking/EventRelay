@@ -1,7 +1,8 @@
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.asymmetric import ec
-from cryptography.hazmat.primitives import serialization
 import os
+
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import ec
+
 
 def generate_key_pair():
     # 1. Generate the Private Key (using NIST P-256 curve)

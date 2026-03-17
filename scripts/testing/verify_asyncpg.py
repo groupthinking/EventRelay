@@ -4,7 +4,9 @@ Verify asyncpg installation and basic functionality
 """
 
 import asyncio
+
 import asyncpg
+
 
 async def verify_asyncpg():
     """Verify asyncpg is working"""

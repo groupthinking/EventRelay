@@ -13,10 +13,11 @@ Notes:
   - Accepts a local file path or a URL. Local files are encoded as base64 data URLs.
   - Optional detail: low|high|auto (default auto)
 """
-import os
-import sys
 import base64
 import json
+import os
+import sys
+
 import requests
 
 

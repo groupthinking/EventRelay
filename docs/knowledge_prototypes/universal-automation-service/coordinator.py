@@ -5,10 +5,11 @@ YouTube URL → EventRelay → UVAI → Self-Correcting Executor Pipeline
 Supports multiple processing modes: eventrelay, gemini, hybrid, auto
 """
 import json
-import re
 import os
-from typing import Dict, Any, Optional
+import re
 from datetime import datetime
+from typing import Any, Dict, Optional
+
 
 class UniversalAutomationCoordinator:
     """Orchestrates YouTube URL processing through integrated MCP services"""
@@ -214,7 +215,6 @@ class UniversalAutomationCoordinator:
         return self.pipeline_state
 
 if __name__ == "__main__":
-    import sys
     import argparse
 
     parser = argparse.ArgumentParser(description='Universal Automation Service - YouTube to Skills Pipeline')

@@ -21,7 +21,7 @@ class TemporalSegment:
     start_time: str  # Format: "MM:SS" or "HH:MM:SS"
     end_time: str
     description: Optional[str] = None
-    
+
     def to_seconds(self, timestamp: str) -> int:
         """Convert timestamp to seconds."""
         parts = timestamp.split(":")
@@ -30,7 +30,7 @@ class TemporalSegment:
         elif len(parts) == 3:  # HH:MM:SS
             return int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
         return 0
-    
+
     @property
     def duration_seconds(self) -> int:
         """Get segment duration in seconds."""
@@ -67,10 +67,10 @@ class TemporalVideoAnalyzer:
     - Temporal reasoning across segments
     - Time-bounded question answering
     """
-    
+
     def __init__(self, api_key: Optional[str] = None):
         self.gemini_service = GeminiVideoService(api_key=api_key)
-    
+
     async def analyze_segment(
         self,
         video_url: str,
@@ -91,7 +91,7 @@ class TemporalVideoAnalyzer:
             Analysis result for the segment
         """
         segment = TemporalSegment(start_time, end_time)
-        
+
         prompt = f"""Analyze this video focusing ONLY on the time segment from {start_time} to {end_time}.
         
         Duration: {segment.duration_seconds} seconds
@@ -110,16 +110,16 @@ class TemporalVideoAnalyzer:
         
         Be precise about timestamps within the {start_time}-{end_time} range.
         """
-        
+
         result = await self.gemini_service.analyze_video(
             video_url,
             prompt,
             media_resolution="high",
             thinking_level="high"
         )
-        
+
         return result
-    
+
     async def extract_temporal_events(
         self,
         video_url: str,
@@ -139,7 +139,7 @@ class TemporalVideoAnalyzer:
         event_filter = ""
         if event_types:
             event_filter = f"Focus on these event types: {', '.join(event_types)}"
-        
+
         prompt = f"""Watch this entire video and extract ALL significant events with PRECISE timestamps.
         
         {event_filter}
@@ -165,14 +165,14 @@ class TemporalVideoAnalyzer:
         - Categorize events by type
         - Capture both visual and audio events
         """
-        
+
         result = await self.gemini_service.analyze_video(
             video_url,
             prompt,
             media_resolution="high",
             thinking_level="high"
         )
-        
+
         # Parse events from result
         events = []
         try:
@@ -185,7 +185,7 @@ class TemporalVideoAnalyzer:
                     summary_text = summary_text.strip()[3:]
                 if summary_text.strip().endswith("```"):
                     summary_text = summary_text.strip()[:-3]
-                
+
                 if summary_text.strip().startswith("{"):
                     data = json.loads(summary_text.strip())
                     for evt in data.get("events", []):
@@ -206,9 +206,9 @@ class TemporalVideoAnalyzer:
                     event_type="extracted",
                     description=evt.get("event", ""),
                 ))
-        
+
         return events
-    
+
     async def temporal_question(
         self,
         video_url: str,
@@ -227,7 +227,7 @@ class TemporalVideoAnalyzer:
             Answer with timestamps
         """
         time_instruction = f"Focus your answer on the time period: {time_context}" if time_context else ""
-        
+
         prompt = f"""Watch this video and answer the following question.
         
         Question: {question}
@@ -243,10 +243,10 @@ class TemporalVideoAnalyzer:
         Evidence at [MM:SS]: [What you see/hear]
         Evidence at [MM:SS]: [What you see/hear]
         """
-        
+
         result = await self.gemini_service.answer_video_question(video_url, prompt)
         return result
-    
+
     async def create_timeline(
         self,
         video_url: str,
@@ -267,7 +267,7 @@ class TemporalVideoAnalyzer:
             "medium": "every 30-60 seconds",
             "coarse": "at major section boundaries"
         }
-        
+
         prompt = f"""Create a detailed timeline of this video with markers {interval_descriptions[granularity]}.
         
         Return as JSON:
@@ -287,14 +287,14 @@ class TemporalVideoAnalyzer:
         
         Create a comprehensive timeline that captures all major moments.
         """
-        
+
         result = await self.gemini_service.analyze_video(
             video_url,
             prompt,
             media_resolution="high",
             thinking_level="high"
         )
-        
+
         # Parse timeline
         try:
             if isinstance(result.summary, str) and result.summary.strip().startswith("{"):
@@ -302,9 +302,9 @@ class TemporalVideoAnalyzer:
                 return data.get("timeline", [])
         except json.JSONDecodeError:
             logger.warning("Could not parse timeline JSON")
-        
+
         return []
-    
+
     async def compare_segments(
         self,
         video_url: str,
@@ -324,7 +324,7 @@ class TemporalVideoAnalyzer:
         """
         segment_strs = [f"{s[0]}-{s[1]}" for s in segments]
         focus_str = f"Compare them in terms of: {comparison_focus}" if comparison_focus else ""
-        
+
         prompt = f"""Watch this video and compare these time segments:
         {chr(10).join(f"{i+1}. {seg}" for i, seg in enumerate(segment_strs))}
         
@@ -344,22 +344,22 @@ class TemporalVideoAnalyzer:
             "overall_assessment": "Summary of comparison"
         }}
         """
-        
+
         result = await self.gemini_service.analyze_video(
             video_url,
             prompt,
             media_resolution="high",
             thinking_level="high"
         )
-        
+
         try:
             if isinstance(result.summary, str) and result.summary.strip().startswith("{"):
                 return json.loads(result.summary)
         except json.JSONDecodeError:
             pass
-        
+
         return {"comparison": result.summary}
-    
+
     async def extract_tutorial_steps(
         self,
         video_url: str
@@ -395,14 +395,14 @@ class TemporalVideoAnalyzer:
         
         Be thorough and capture every actionable step.
         """
-        
+
         result = await self.gemini_service.analyze_video(
             video_url,
             prompt,
             media_resolution="high",
             thinking_level="high"
         )
-        
+
         try:
             summary_text = result.summary
             if isinstance(summary_text, str):
@@ -413,16 +413,16 @@ class TemporalVideoAnalyzer:
                     summary_text = summary_text.strip()[3:]
                 if summary_text.strip().endswith("```"):
                     summary_text = summary_text.strip()[:-3]
-                
+
                 if summary_text.strip().startswith("{"):
                     data = json.loads(summary_text.strip())
                     return data.get("steps", [])
         except json.JSONDecodeError as e:
             logger.warning(f"Could not parse tutorial steps: {e}")
             logger.debug(f"Failed JSON content: {summary_text}")
-        
+
         return []
-    
+
     async def close(self):
         """Clean up resources."""
         await self.gemini_service.close()

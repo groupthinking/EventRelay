@@ -10,12 +10,11 @@ Analyzes the codebase for:
 - Proper environment variable usage
 """
 
-import os
-import re
 import json
-from pathlib import Path
-from typing import Dict, List, Set, Optional, Any
+import re
 from collections import defaultdict
+from pathlib import Path
+
 
 class CredentialsChecker:
     def __init__(self, base_path: str = ".") -> None:
@@ -188,7 +187,7 @@ class CredentialsChecker:
                             "match": match.group()[:50] + "..." if len(match.group()) > 50 else match.group()
                         })
 
-            except Exception as e:
+            except Exception:
                 pass
 
     def check_missing_keys(self) -> None:

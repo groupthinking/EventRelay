@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Verify test consistency for REAL FILE OPERATIONS"""
 
-from typing import List
 import re
 from pathlib import Path
+from typing import List
+
 
 def check_test_consistency() -> List[str]:
     """Check for test data consistency issues"""

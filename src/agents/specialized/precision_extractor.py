@@ -7,10 +7,11 @@ from video content by cross-referencing visual data with transcripts.
 Addresses the "incorrect ingredients" bug found in YouTube comment analysis.
 """
 
+import json
 import logging
 import os
-import json
-from typing import Any, Optional, Dict, List
+from typing import Any, Dict, Optional
+
 from google import genai
 from google.genai import types
 
@@ -98,7 +99,6 @@ class PrecisionExtractorAgent:
 
 if __name__ == "__main__":
     # Quick test
-    import asyncio
 
     async def test():
         agent = PrecisionExtractorAgent()

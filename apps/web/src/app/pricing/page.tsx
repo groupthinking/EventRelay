@@ -56,7 +56,7 @@ const FAQS = [
   },
   {
     q: 'How does annual billing work?',
-    a: 'Annual billing charges you once per year at a 20% discount compared to monthly billing. For Pro, that\'s $15/mo (billed as $180/yr) instead of $19/mo.',
+    a: 'Annual billing charges you once per year at a 20% discount compared to monthly billing. For Pro, that&apos;s $15/mo (billed as $180/yr) instead of $19/mo.',
   },
   {
     q: 'What payment methods do you accept?',
@@ -326,7 +326,7 @@ export default function PricingPage() {
           <div>
             <h3 className="font-bold text-white mb-1 text-lg">30-day money-back guarantee</h3>
             <p className="text-sm text-white/50 leading-relaxed">
-              Not happy? We'll refund 100% of your payment within the first 30 days — no questions asked, no hoops to jump through.
+              Not happy? We&apos;ll refund 100% of your payment within the first 30 days — no questions asked, no hoops to jump through.
               We stand behind EventRelay because we use it ourselves.
             </p>
           </div>
@@ -405,7 +405,7 @@ export default function PricingPage() {
           <div className="text-4xl mb-4">💬</div>
           <h3 className="text-2xl font-black mb-3">Still have questions?</h3>
           <p className="text-white/50 text-sm leading-relaxed mb-6 max-w-md mx-auto">
-            We're a small team and we read every email. Reach out and we'll get back to you within a few hours.
+            We&apos;re a small team and we read every email. Reach out and we&apos;ll get back to you within a few hours.
           </p>
           <a
             href="mailto:hello@eventrelay.ai"

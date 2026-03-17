@@ -1,7 +1,7 @@
-import os
-import json
 import glob
-from typing import Dict, Any
+import json
+import os
+from typing import Any, Dict
 
 ROOT_DIR = os.getcwd()
 CATALOG_FILE = os.path.join(ROOT_DIR, "shared/PROJECT_CATALOG.md")

@@ -17,17 +17,14 @@ Env:
   OPENAI_TTS_VOICE (default: alloy)
   OPENAI_TTS_FORMAT (default: wav)
 """
-import os
-import sys
-import json
-import base64
 import argparse
-import tempfile
+import json
+import os
 import subprocess
-from typing import Optional
+import sys
+import tempfile
 
 import requests
-
 
 API_BASE = "https://api.openai.com/v1"
 

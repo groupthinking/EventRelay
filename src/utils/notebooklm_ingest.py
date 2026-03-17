@@ -1,6 +1,7 @@
 import os
 import sys
 import time
+
 from playwright.sync_api import sync_playwright
 
 # Configuration
@@ -18,7 +19,7 @@ def upload_to_notebooklm(file_path):
         return None
 
     print(f"Starting NotebookLM ingestion for: {file_path}")
-    
+
     with sync_playwright() as p:
         context = None
         browser = None
@@ -50,15 +51,15 @@ def upload_to_notebooklm(file_path):
                     ],
                     ignore_default_args=["--enable-automation"],
                 )
-            
+
             if len(context.pages) > 0:
                 page = context.pages[0]
             else:
                 page = context.new_page()
-            
+
             print("Navigating to NotebookLM...")
             page.goto(NOTEBOOKLM_URL)
-            
+
             # Check for login
             try:
                 page.wait_for_load_state("networkidle", timeout=5000)
@@ -71,10 +72,10 @@ def upload_to_notebooklm(file_path):
                 print("We are using a secure browser session to avoid security checks.")
                 print("Once you are logged in and see your notebook dashboard, the script will continue.")
                 print("="*60 + "\n")
-                
+
                 # Wait for user to log in. We check periodically if we are on the dashboard.
                 logged_in = False
-                
+
                 print("Waiting for login (looking for 'New Notebook' or 'Create' button)...")
                 for i in range(120): # Wait up to 10 minutes (120 * 5s)
                     try:
@@ -93,7 +94,7 @@ def upload_to_notebooklm(file_path):
                                 break
                     except:
                         pass
-                    
+
                     if i % 5 == 0:
                         try:
                             sys.stdout.write(f". ({page.url})")
@@ -101,13 +102,13 @@ def upload_to_notebooklm(file_path):
                             sys.stdout.write(".")
                         sys.stdout.flush()
                     time.sleep(5)
-                
+
                 print("") # Newline
                 if not logged_in:
                     print("Error: Login timeout or not completed.")
                     context.close()
                     return None
-            
+
             # Click "New Notebook"
             try:
                 print("Clicking creation button...")
@@ -128,13 +129,13 @@ def upload_to_notebooklm(file_path):
             page.wait_for_url(lambda u: "/notebook/" in u and "/creating" not in u, timeout=30000)
             notebook_url = page.url
             print(f"Created Notebook: {notebook_url}")
-            
+
             print("Uploading source...")
             # Handling the upload
             try:
                 # Check if we need to click "Add source" or a specific source type
                 # Sometimes the panel is already open, sometimes not.
-                
+
                 # Wait for the page to settle
                 page.wait_for_load_state("networkidle", timeout=5000)
 
@@ -146,7 +147,7 @@ def upload_to_notebooklm(file_path):
 
                 # Try to trigger file chooser by clicking likely buttons
                 print("Attempting to trigger file chooser...")
-                
+
                 upload_triggers = [
                     "text=Upload a source",
                     "text=PDF",
@@ -155,7 +156,7 @@ def upload_to_notebooklm(file_path):
                     "div[role='button']:has-text('Upload')",
                     "text=Upload"
                 ]
-                
+
                 file_chooser = None
                 for trigger in upload_triggers:
                     try:
@@ -170,7 +171,7 @@ def upload_to_notebooklm(file_path):
                     except Exception:
                         # expected if click doesn't trigger chooser
                         pass
-                
+
                 if file_chooser:
                     print(f"Uploading file: {file_path}")
                     file_chooser.set_files(file_path)
@@ -196,7 +197,7 @@ def upload_to_notebooklm(file_path):
             print("Waiting for source processing...")
             file_name = os.path.basename(file_path)
             display_name = os.path.splitext(file_name)[0]
-            
+
             # Wait for the source to appear in the list
             try:
                 page.wait_for_selector(f"text={display_name}", timeout=60000)
@@ -206,7 +207,7 @@ def upload_to_notebooklm(file_path):
 
             # Give it a moment to sync/save
             time.sleep(3)
-            
+
             context.close()
             return notebook_url
 
@@ -220,7 +221,7 @@ if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("Usage: python notebooklm_ingest.py <file_path>")
         sys.exit(1)
-        
+
     fpath = sys.argv[1]
     url = upload_to_notebooklm(fpath)
     if url:

@@ -4,8 +4,8 @@ Test script to verify async imports don't cause coroutines at import time
 """
 
 import sys
-import os
 import traceback
+
 
 def test_import(module_path):
     """Test importing a module without triggering async execution"""

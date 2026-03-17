@@ -9,8 +9,6 @@
  * @see https://developer.chrome.com/docs/ai/built-in
  */
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
-
 // Type declarations for Chrome Built-in AI APIs (not yet in lib.dom.d.ts)
 declare global {
   interface Window {

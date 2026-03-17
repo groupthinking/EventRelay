@@ -8,10 +8,11 @@ Writes JSON to stdout: {"text": str, "code_blocks": [ {"language": str, "code": 
 
 This is a lightweight, dependency-free extractor intended as a fallback.
 """
-import sys
 import json
 import re
-from typing import Dict, Any, List
+import sys
+from typing import Any, Dict, List
+
 
 def fetch_url(url: str) -> str:
     import requests  # use requests if available in env

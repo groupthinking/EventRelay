@@ -1,4 +1,4 @@
-specVersion: "v1"
+specVersion: "v1alpha1"
 serviceId: "eventrelay"
 location: "us-east4"
 schema:

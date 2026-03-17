@@ -11,10 +11,11 @@ from datetime import datetime
 from typing import Any, Generic, Optional, TypeVar, Union
 from uuid import UUID
 
-from ..models.base import BaseModel
 from sqlalchemy import asc, delete, desc, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from ..models.base import BaseModel
 
 T = TypeVar("T", bound=BaseModel)
 

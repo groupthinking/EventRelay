@@ -7,7 +7,7 @@ Anti-bloat: <100 lines, JSON storage, no ML overhead
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Any, Optional
+from typing import Any, Dict, List
 
 KNOWLEDGE_DB = Path(__file__).parent / "knowledge_database.json"
 

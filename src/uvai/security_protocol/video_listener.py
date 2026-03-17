@@ -7,15 +7,14 @@ except ImportError:
     print("Run: pip install opencv-python")
     sys.exit(1)
 
-import json
 import base64
+import json
 import os
 
 try:
-    from cryptography.hazmat.primitives import hashes
-    from cryptography.hazmat.primitives.asymmetric import ec
-    from cryptography.hazmat.primitives import serialization
     from cryptography.exceptions import InvalidSignature
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
 except ImportError:
     print("❌ Error: 'cryptography' is not installed.")
     print("Run: pip install cryptography")

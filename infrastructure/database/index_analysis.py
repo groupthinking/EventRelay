@@ -19,16 +19,20 @@ import asyncio
 import json
 import logging
 import time
-from datetime import datetime, timedelta, timezone
-from typing import Dict, Any, List, Optional, Tuple
-from dataclasses import dataclass, asdict
+from contextlib import asynccontextmanager
+from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
+from typing import Any, Dict, List
+
 import asyncpg
 import psutil
-from contextlib import asynccontextmanager
 
 # Import performance monitoring
 try:
-    from ..backend.services.performance_monitor import performance_monitor, track_database_query_time
+    from ..backend.services.performance_monitor import (
+        performance_monitor,
+        track_database_query_time,
+    )
 except ImportError:
     performance_monitor = None
     async def track_database_query_time(query_time_ms, query_type="general"):
@@ -85,21 +89,21 @@ class DatabaseOptimizer:
     - Automatic maintenance scheduling
     - Real-time performance tracking
     """
-    
+
     def __init__(self, database_url: str):
         self.database_url = database_url
         self.connection_pool = None
         self.monitoring_enabled = True
         self.slow_query_threshold = 100.0  # 100ms
         self.target_hit_ratio = 95.0  # 95% cache hit ratio
-        
+
         # Performance tracking
         self.query_history = []
         self.optimization_history = []
         self.current_recommendations = []
-        
+
         logger.info("🔧 Database Optimizer initialized")
-    
+
     async def initialize(self):
         """Initialize database connection pool"""
         try:
@@ -111,27 +115,27 @@ class DatabaseOptimizer:
                 max_inactive_connection_lifetime=300,
                 command_timeout=30
             )
-            
+
             logger.info("✅ Database connection pool initialized")
-            
+
             # Enable query statistics if not already enabled
             await self._enable_query_stats()
-            
+
         except Exception as e:
             logger.error(f"Failed to initialize database optimizer: {e}")
             raise
-    
+
     async def close(self):
         """Close database connections"""
         if self.connection_pool:
             await self.connection_pool.close()
             logger.info("Database connection pool closed")
-    
+
     @asynccontextmanager
     async def get_connection(self):
         """Get database connection with performance tracking"""
         start_time = time.time()
-        
+
         async with self.connection_pool.acquire() as connection:
             try:
                 yield connection
@@ -140,7 +144,7 @@ class DatabaseOptimizer:
                 acquisition_time = (time.time() - start_time) * 1000
                 if acquisition_time > 10:  # More than 10ms to get connection
                     logger.warning(f"Slow connection acquisition: {acquisition_time:.2f}ms")
-    
+
     async def _enable_query_stats(self):
         """Enable query statistics collection"""
         try:
@@ -150,7 +154,7 @@ class DatabaseOptimizer:
                 logger.info("✅ Query statistics enabled")
         except Exception as e:
             logger.warning(f"Could not enable query statistics: {e}")
-    
+
     async def analyze_query_performance(self) -> List[QueryPerformanceMetric]:
         """Analyze query performance from pg_stat_statements"""
         try:
@@ -171,13 +175,13 @@ class DatabaseOptimizer:
                     ORDER BY mean_exec_time DESC
                     LIMIT 100
                 """
-                
+
                 start_time = time.time()
                 rows = await conn.fetch(query)
                 query_time = (time.time() - start_time) * 1000
-                
+
                 await track_database_query_time(query_time, "performance_analysis")
-                
+
                 metrics = []
                 for row in rows:
                     metrics.append(QueryPerformanceMetric(
@@ -191,25 +195,25 @@ class DatabaseOptimizer:
                         rows=row['rows'],
                         hit_percent=row['hit_percent'] or 0
                     ))
-                
+
                 logger.info(f"Analyzed {len(metrics)} query performance metrics")
                 return metrics
-                
+
         except Exception as e:
             logger.error(f"Error analyzing query performance: {e}")
             return []
-    
+
     async def get_slow_queries(self, threshold_ms: float = None) -> List[QueryPerformanceMetric]:
         """Get queries slower than threshold"""
         if threshold_ms is None:
             threshold_ms = self.slow_query_threshold
-        
+
         all_metrics = await self.analyze_query_performance()
         slow_queries = [m for m in all_metrics if m.mean_time > threshold_ms]
-        
+
         logger.info(f"Found {len(slow_queries)} slow queries (>{threshold_ms}ms)")
         return slow_queries
-    
+
     async def analyze_index_usage(self) -> Dict[str, Any]:
         """Analyze index usage statistics"""
         try:
@@ -231,7 +235,7 @@ class DatabaseOptimizer:
                     WHERE schemaname = 'public'
                     ORDER BY idx_tup_read DESC
                 """
-                
+
                 # Unused indexes
                 unused_indexes_query = """
                     SELECT 
@@ -245,7 +249,7 @@ class DatabaseOptimizer:
                       AND indexname NOT LIKE '%_pkey'  -- Exclude primary keys
                     ORDER BY pg_relation_size(indexrelid) DESC
                 """
-                
+
                 # Missing indexes (table scans)
                 table_scans_query = """
                     SELECT 
@@ -260,16 +264,16 @@ class DatabaseOptimizer:
                       AND seq_scan > idx_scan  -- More sequential scans than index scans
                     ORDER BY seq_tup_read DESC
                 """
-                
+
                 start_time = time.time()
-                
+
                 index_usage = await conn.fetch(index_usage_query)
                 unused_indexes = await conn.fetch(unused_indexes_query)
                 table_scans = await conn.fetch(table_scans_query)
-                
+
                 query_time = (time.time() - start_time) * 1000
                 await track_database_query_time(query_time, "index_analysis")
-                
+
                 return {
                     'index_usage': [dict(row) for row in index_usage],
                     'unused_indexes': [dict(row) for row in unused_indexes],
@@ -278,24 +282,24 @@ class DatabaseOptimizer:
                     'unused_count': len(unused_indexes),
                     'scan_heavy_tables': len(table_scans)
                 }
-                
+
         except Exception as e:
             logger.error(f"Error analyzing index usage: {e}")
             return {}
-    
+
     async def generate_index_recommendations(self) -> List[IndexRecommendation]:
         """Generate intelligent index recommendations"""
         recommendations = []
-        
+
         try:
             # Get slow queries and analyze them
             slow_queries = await self.get_slow_queries()
             index_analysis = await self.analyze_index_usage()
-            
+
             # Analyze query patterns for missing indexes
             for query_metric in slow_queries:
                 query = query_metric.query.lower()
-                
+
                 # Simple pattern matching for common optimization opportunities
                 if 'where' in query and 'order by' not in query:
                     # Potential filtering index needed
@@ -309,7 +313,7 @@ class DatabaseOptimizer:
                             query_examples=[query_metric.query[:100]],
                             priority="high"
                         ))
-                
+
                 elif 'order by' in query:
                     # Potential sorting index needed
                     if query_metric.mean_time > 200:
@@ -322,7 +326,7 @@ class DatabaseOptimizer:
                             query_examples=[query_metric.query[:100]],
                             priority="medium"
                         ))
-            
+
             # Analyze tables with high sequential scan activity
             for table_info in index_analysis.get('tables_with_scans', []):
                 if table_info['seq_tup_read'] > 10000:  # High scan activity
@@ -335,24 +339,24 @@ class DatabaseOptimizer:
                         query_examples=["SELECT queries on this table"],
                         priority="high"
                     ))
-            
+
             # Specific recommendations for known patterns
             specific_recommendations = await self._get_specific_recommendations()
             recommendations.extend(specific_recommendations)
-            
+
             self.current_recommendations = recommendations
             logger.info(f"Generated {len(recommendations)} index recommendations")
-            
+
             return recommendations
-            
+
         except Exception as e:
             logger.error(f"Error generating index recommendations: {e}")
             return []
-    
+
     async def _get_specific_recommendations(self) -> List[IndexRecommendation]:
         """Get specific recommendations for known table patterns"""
         recommendations = []
-        
+
         try:
             async with self.get_connection() as conn:
                 # Check if video_processing_results table needs optimization
@@ -365,7 +369,7 @@ class DatabaseOptimizer:
                     FROM pg_stat_user_tables 
                     WHERE tablename = 'video_processing_results'
                 """)
-                
+
                 if video_table_stats and video_table_stats['seq_scan'] > video_table_stats['idx_scan']:
                     recommendations.append(IndexRecommendation(
                         table_name="video_processing_results",
@@ -379,7 +383,7 @@ class DatabaseOptimizer:
                         ],
                         priority="high"
                     ))
-                
+
                 # Check performance_metrics table
                 perf_metrics_stats = await conn.fetchrow("""
                     SELECT 
@@ -389,7 +393,7 @@ class DatabaseOptimizer:
                     FROM pg_stat_user_tables 
                     WHERE tablename = 'performance_metrics_optimized'
                 """)
-                
+
                 if perf_metrics_stats and perf_metrics_stats['seq_tup_read'] > 50000:
                     recommendations.append(IndexRecommendation(
                         table_name="performance_metrics_optimized",
@@ -403,13 +407,13 @@ class DatabaseOptimizer:
                         ],
                         priority="high"
                     ))
-                
+
                 return recommendations
-                
+
         except Exception as e:
             logger.error(f"Error getting specific recommendations: {e}")
             return []
-    
+
     async def get_database_health_metrics(self) -> DatabaseHealthMetrics:
         """Get comprehensive database health metrics"""
         try:
@@ -423,14 +427,14 @@ class DatabaseOptimizer:
                     FROM pg_stat_statements
                     WHERE calls > 1
                 """)
-                
+
                 # Connection stats
                 connection_stats = await conn.fetchrow("""
                     SELECT COUNT(*) as connection_count
                     FROM pg_stat_activity 
                     WHERE state = 'active'
                 """)
-                
+
                 # Cache hit ratio
                 cache_stats = await conn.fetchrow("""
                     SELECT 
@@ -438,7 +442,7 @@ class DatabaseOptimizer:
                         sum(blks_hit + blks_read) as total_reads
                     FROM pg_stat_database
                 """)
-                
+
                 # Table bloat check
                 bloat_stats = await conn.fetchrow("""
                     SELECT 
@@ -452,7 +456,7 @@ class DatabaseOptimizer:
                     FROM pg_stat_user_tables
                     WHERE n_live_tup > 0
                 """)
-                
+
                 # Index usage
                 index_stats = await conn.fetchrow("""
                     SELECT 
@@ -461,20 +465,20 @@ class DatabaseOptimizer:
                     FROM pg_stat_user_indexes
                     WHERE schemaname = 'public'
                 """)
-                
+
                 # Calculate metrics
                 total_queries = query_stats['total_queries'] or 0
                 slow_queries = query_stats['slow_query_count'] or 0
                 slow_query_percent = (slow_queries / total_queries * 100) if total_queries > 0 else 0
-                
+
                 cache_hits = cache_stats['cache_hits'] or 0
                 total_reads = cache_stats['total_reads'] or 0
                 cache_hit_ratio = (cache_hits / total_reads * 100) if total_reads > 0 else 0
-                
+
                 total_indexes = index_stats['total_indexes'] or 0
                 used_indexes = index_stats['used_indexes'] or 0
                 index_usage_percent = (used_indexes / total_indexes * 100) if total_indexes > 0 else 0
-                
+
                 return DatabaseHealthMetrics(
                     total_queries=total_queries,
                     avg_query_time=query_stats['avg_query_time'] or 0,
@@ -485,35 +489,35 @@ class DatabaseOptimizer:
                     table_bloat_percent=bloat_stats['avg_bloat_percent'] or 0,
                     index_usage_percent=index_usage_percent
                 )
-                
+
         except Exception as e:
             logger.error(f"Error getting database health metrics: {e}")
             return DatabaseHealthMetrics(0, 0, 0, 0, 0, 0, 0, 0)
-    
+
     async def run_performance_benchmark(self) -> Dict[str, Any]:
         """Run database performance benchmark"""
         logger.info("🏃 Running database performance benchmark...")
-        
+
         benchmark_results = {
             'timestamp': datetime.now(timezone.utc).isoformat(),
             'tests': [],
             'summary': {}
         }
-        
+
         try:
             async with self.get_connection() as conn:
                 # Test 1: Simple SELECT performance
                 start_time = time.time()
                 await conn.fetchrow("SELECT 1")
                 simple_query_time = (time.time() - start_time) * 1000
-                
+
                 benchmark_results['tests'].append({
                     'name': 'Simple SELECT',
                     'time_ms': simple_query_time,
                     'meets_target': simple_query_time < 10,
                     'target_ms': 10
                 })
-                
+
                 # Test 2: Video result lookup (if table exists)
                 try:
                     start_time = time.time()
@@ -525,7 +529,7 @@ class DatabaseOptimizer:
                         LIMIT 1
                     """)
                     video_lookup_time = (time.time() - start_time) * 1000
-                    
+
                     benchmark_results['tests'].append({
                         'name': 'Video Result Lookup',
                         'time_ms': video_lookup_time,
@@ -534,7 +538,7 @@ class DatabaseOptimizer:
                     })
                 except Exception:
                     pass  # Table might not exist
-                
+
                 # Test 3: Aggregate query performance
                 start_time = time.time()
                 await conn.fetchrow("""
@@ -545,19 +549,19 @@ class DatabaseOptimizer:
                     WHERE relkind = 'r'
                 """)
                 aggregate_time = (time.time() - start_time) * 1000
-                
+
                 benchmark_results['tests'].append({
                     'name': 'Aggregate Query',
                     'time_ms': aggregate_time,
                     'meets_target': aggregate_time < 100,
                     'target_ms': 100
                 })
-                
+
                 # Calculate summary
                 total_tests = len(benchmark_results['tests'])
                 tests_meeting_target = len([t for t in benchmark_results['tests'] if t['meets_target']])
                 avg_query_time = sum(t['time_ms'] for t in benchmark_results['tests']) / total_tests
-                
+
                 benchmark_results['summary'] = {
                     'total_tests': total_tests,
                     'tests_meeting_target': tests_meeting_target,
@@ -565,15 +569,15 @@ class DatabaseOptimizer:
                     'avg_query_time_ms': avg_query_time,
                     'performance_grade': 'A' if tests_meeting_target == total_tests else 'B' if tests_meeting_target >= total_tests * 0.8 else 'C'
                 }
-                
+
                 logger.info(f"✅ Benchmark completed: {tests_meeting_target}/{total_tests} tests meeting targets")
-                
+
         except Exception as e:
             logger.error(f"Error running performance benchmark: {e}")
             benchmark_results['error'] = str(e)
-        
+
         return benchmark_results
-    
+
     async def optimize_connection_pool(self) -> Dict[str, Any]:
         """Optimize connection pool settings based on current usage"""
         try:
@@ -583,16 +587,16 @@ class DatabaseOptimizer:
                 'min_size': self.connection_pool.get_min_size(),
                 'idle_size': self.connection_pool.get_idle_size()
             }
-            
+
             # Get system resource usage
             cpu_percent = psutil.cpu_percent(interval=1)
             memory_info = psutil.virtual_memory()
-            
+
             optimization_suggestions = []
-            
+
             # Pool size optimization
             utilization = (pool_stats['current_size'] - pool_stats['idle_size']) / pool_stats['current_size']
-            
+
             if utilization > 0.8:
                 optimization_suggestions.append({
                     'type': 'increase_pool_size',
@@ -607,7 +611,7 @@ class DatabaseOptimizer:
                     'suggested_max': max(pool_stats['max_size'] - 5, 20),
                     'reason': f'Low pool utilization: {utilization:.1%}'
                 })
-            
+
             # Memory-based optimization
             if memory_info.percent > 85:
                 optimization_suggestions.append({
@@ -615,7 +619,7 @@ class DatabaseOptimizer:
                     'reason': f'High memory usage: {memory_info.percent:.1f}%',
                     'suggested_action': 'Consider reducing max_size or optimizing queries'
                 })
-            
+
             return {
                 'timestamp': datetime.now(timezone.utc).isoformat(),
                 'current_stats': pool_stats,
@@ -627,11 +631,11 @@ class DatabaseOptimizer:
                 'utilization': utilization,
                 'optimization_suggestions': optimization_suggestions
             }
-            
+
         except Exception as e:
             logger.error(f"Error optimizing connection pool: {e}")
             return {}
-    
+
     async def get_optimization_dashboard(self) -> Dict[str, Any]:
         """Get comprehensive optimization dashboard"""
         try:
@@ -640,7 +644,7 @@ class DatabaseOptimizer:
             index_analysis = await self.analyze_index_usage()
             recommendations = self.current_recommendations or await self.generate_index_recommendations()
             pool_optimization = await self.optimize_connection_pool()
-            
+
             # Calculate performance targets achievement
             target_achievements = {
                 'sub_100ms_queries': {
@@ -659,7 +663,7 @@ class DatabaseOptimizer:
                     'achieved': health_metrics.index_usage_percent >= 80.0
                 }
             }
-            
+
             dashboard = {
                 'timestamp': datetime.now(timezone.utc).isoformat(),
                 'health_metrics': asdict(health_metrics),
@@ -679,41 +683,41 @@ class DatabaseOptimizer:
                 'connection_pool': pool_optimization,
                 'overall_grade': self._calculate_performance_grade(health_metrics, target_achievements)
             }
-            
+
             return dashboard
-            
+
         except Exception as e:
             logger.error(f"Error generating optimization dashboard: {e}")
             return {}
-    
+
     def _calculate_performance_grade(self, health_metrics: DatabaseHealthMetrics, targets: Dict[str, Any]) -> str:
         """Calculate overall performance grade"""
         score = 0
-        
+
         # Sub-100ms queries target (40 points)
         if targets['sub_100ms_queries']['achieved']:
             score += 40
         else:
             score += 40 * (targets['sub_100ms_queries']['current_percent'] / 100)
-        
+
         # Cache hit ratio (30 points)
         if targets['cache_hit_ratio']['achieved']:
             score += 30
         else:
             score += 30 * (targets['cache_hit_ratio']['current_percent'] / 100)
-        
+
         # Index utilization (20 points)
         if targets['index_utilization']['achieved']:
             score += 20
         else:
             score += 20 * (targets['index_utilization']['current_percent'] / 100)
-        
+
         # Connection efficiency (10 points)
         if health_metrics.connection_count < 50:  # Reasonable connection count
             score += 10
         elif health_metrics.connection_count < 100:
             score += 5
-        
+
         # Convert to letter grade
         if score >= 90:
             return 'A'
@@ -751,30 +755,30 @@ if __name__ == "__main__":
     async def test_database_optimizer():
         # Example database URL (adjust for your setup)
         db_url = "postgresql://user:password@localhost:5432/uvai_db"
-        
+
         optimizer = DatabaseOptimizer(db_url)
-        
+
         try:
             await optimizer.initialize()
-            
+
             # Run performance analysis
             slow_queries = await optimizer.get_slow_queries()
             print(f"Found {len(slow_queries)} slow queries")
-            
+
             # Generate recommendations
             recommendations = await optimizer.generate_index_recommendations()
             print(f"Generated {len(recommendations)} optimization recommendations")
-            
+
             # Get dashboard
             dashboard = await optimizer.get_optimization_dashboard()
             print(f"Performance grade: {dashboard.get('overall_grade', 'N/A')}")
-            
+
             # Run benchmark
             benchmark = await optimizer.run_performance_benchmark()
             print(f"Benchmark results: {json.dumps(benchmark, indent=2, default=str)}")
-            
+
         finally:
             await optimizer.close()
-    
+
 if __name__ == "__main__":
     asyncio.run(test_database_optimizer())

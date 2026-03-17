@@ -2,10 +2,12 @@
 """MCP-YouTube - A MCP server wrapper for yt-dlp"""
 
 import asyncio
-from pathlib import Path
 import json
-from typing import List, Dict, Any, Optional, Union, cast
-from mcp.server.fastmcp import FastMCP, Context
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Union, cast
+
+from mcp.server.fastmcp import Context, FastMCP
+
 
 class UserError(Exception):
     """Error caused by user input"""
@@ -41,37 +43,37 @@ def get_output_template(media_type: str) -> str:
 async def _run_dl(args: List[str], ctx: Optional[Context[Any, Any]] = None) -> Union[str, Dict[str, Any]]:
     """Execute yt-dlp command and return output"""
     ensure_output_dirs()
-    
+
     base_args = ["yt-dlp", "--no-warnings"]
     cmd = base_args + args
-    
+
     try:
         process = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE
         )
-        
+
         stdout, stderr = await process.communicate()
-        
+
         if process.returncode != 0:
             error_msg = stderr.decode() if stderr else "Unknown error"
             if ctx:
                 await ctx.error(f"yt-dlp error: {error_msg}")
             raise UserError(f"yt-dlp failed: {error_msg}")
-            
+
         output = stdout.decode().strip()
         if ctx:
             await ctx.info(f"yt-dlp completed successfully: {output}")
-            
+
         if "--dump-json" in args:
             try:
                 return cast(Dict[str, Any], json.loads(output))
             except json.JSONDecodeError:
                 pass
-            
+
         return output
-        
+
     except Exception as e:
         if ctx:
             await ctx.error(f"Failed to run yt-dlp: {str(e)}")
@@ -90,19 +92,19 @@ async def download_playlist(
     """Download videos from a playlist"""
     if "playlist" not in url:
         raise UserError("Please provide a playlist URL.")
-        
+
     args = [
         "--format", "bv*+ba/b",
         "--merge-output-format", "mp4",
         "--playlist-start", str(start),
         "--output", get_output_template("video")
     ]
-    
+
     if end > 0:
         args.extend(["--playlist-end", str(end)])
-        
+
     args.append(url)
-    
+
     output = await _run_dl(args, ctx)
     if isinstance(output, dict):
         raise UserError("Unexpected JSON output from yt-dlp")
@@ -126,7 +128,7 @@ async def download_audio(
         "--output", get_output_template("audio"),
         url
     ]
-    
+
     output = await _run_dl(args, ctx)
     if isinstance(output, dict):
         raise UserError("Unexpected JSON output from yt-dlp")
@@ -146,7 +148,7 @@ async def get_metadata(
         "--no-download",
         url
     ]
-    
+
     result = await _run_dl(args, ctx)
     if isinstance(result, str):
         try:
@@ -173,14 +175,14 @@ async def download_subtitles(
         "--sub-format", "vtt",
         "--output", get_output_template("subtitle"),
     ]
-    
+
     if embed:
         args.append("--embed-subs")
     else:
         args.append("--skip-download")
-        
+
     args.append(url)
-    
+
     output = await _run_dl(args, ctx)
     if isinstance(output, dict):
         raise UserError("Unexpected JSON output from yt-dlp")
@@ -201,14 +203,14 @@ async def download_video(
     format_spec = f"bestvideo[height<={resolution[:-1]}]+bestaudio/best"
     if quality == "worst":
         format_spec = "worstvideo+worstaudio/worst"
-    
+
     args = [
         "--format", format_spec,
         "--merge-output-format", format,
         "--output", get_output_template("video"),
         url
     ]
-    
+
     output = await _run_dl(args, ctx)
     if isinstance(output, dict):
         raise UserError("Unexpected JSON output from yt-dlp")
@@ -230,7 +232,7 @@ async def download_thumbnail(
         "--output", get_output_template("thumbnail"),
         url
     ]
-    
+
     output = await _run_dl(args, ctx)
     if isinstance(output, dict):
         raise UserError("Unexpected JSON output from yt-dlp")

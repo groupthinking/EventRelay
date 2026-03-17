@@ -1,6 +1,6 @@
-import requests
 import json
-import time
+
+import requests
 
 BASE_URL = "http://localhost:8001"
 
@@ -15,9 +15,9 @@ def test_api():
 
     # 1. Test Transcript-Action Workflow
     video_url = "https://www.youtube.com/watch?v=i3FOFgimXn0"
-    print(f"\n--- Testing /api/v1/transcript-action ---")
+    print("\n--- Testing /api/v1/transcript-action ---")
     print(f"URL: {video_url}")
-    
+
     headers = {"Content-Type": "application/json"}
     payload = {
         "video_url": video_url,
@@ -26,13 +26,13 @@ def test_api():
 
     try:
         response = requests.post(
-            f"{BASE_URL}/api/v1/transcript-action", 
-            json=payload, 
+            f"{BASE_URL}/api/v1/transcript-action",
+            json=payload,
             headers=headers,
             timeout=120
         )
         print(f"Status Code: {response.status_code}")
-        
+
         if response.status_code == 200:
             data = response.json()
             print("Success! Action Plan Generated.")
@@ -41,7 +41,7 @@ def test_api():
         else:
             print("Error response:")
             print(response.text)
-            
+
     except Exception as e:
         print(f"Request failed: {e}")
 

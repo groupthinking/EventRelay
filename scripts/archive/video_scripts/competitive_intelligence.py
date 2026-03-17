@@ -17,17 +17,13 @@ EXECUTION STRATEGY:
 4. Market domination through speed and execution
 """
 
-import os
-import json
 import asyncio
 import logging
-from typing import Dict, List, Any, Optional, Tuple
 from datetime import datetime, timedelta
-from pathlib import Path
+from typing import Any, Dict, List
 
 # Third-party imports
 from pydantic import BaseModel, Field
-import aiofiles
 
 # Configure aggressive logging for CEO-level insights
 logging.basicConfig(level=logging.INFO)

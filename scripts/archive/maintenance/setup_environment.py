@@ -6,8 +6,8 @@ Installs dependencies and configures environment for YouTube video processing te
 
 import subprocess
 import sys
-import os
 from pathlib import Path
+
 
 def run_command(command, description):
     """Run a command and handle errors"""
@@ -49,7 +49,7 @@ def install_dependencies():
 def create_env_file():
     """Create .env file template"""
     print("\n🔑 Creating environment file...")
-    
+
     env_content = """# YouTube Extension Development Platform Environment Variables
 # Copy this file to .env and fill in your API keys
 
@@ -74,12 +74,12 @@ MIN_PROCESSING_TIME=0.5
 # Rate limiting (seconds between requests)
 RATE_LIMIT_DELAY=1.0
 """
-    
+
     env_file = Path('.env')
     if env_file.exists():
         print("   ⚠️ .env file already exists")
         return True
-    
+
     try:
         with open(env_file, 'w') as f:
             f.write(env_content)
@@ -93,13 +93,13 @@ RATE_LIMIT_DELAY=1.0
 def create_directories():
     """Create necessary directories"""
     print("\n📁 Creating directories...")
-    
+
     directories = [
         'batch_test_results',
         'gdrive_results',
         'logs'
     ]
-    
+
     for directory in directories:
         dir_path = Path(directory)
         if not dir_path.exists():
@@ -111,7 +111,7 @@ def create_directories():
 def test_imports():
     """Test if key modules can be imported"""
     print("\n🧪 Testing imports...")
-    
+
     modules = [
         'asyncio',
         'json',
@@ -120,7 +120,7 @@ def test_imports():
         'typing',
         'datetime'
     ]
-    
+
     failed_imports = []
     for module in modules:
         try:
@@ -129,39 +129,39 @@ def test_imports():
         except ImportError:
             print(f"   ❌ {module}")
             failed_imports.append(module)
-    
+
     if failed_imports:
         print(f"   ❌ Failed imports: {failed_imports}")
         return False
-    
+
     return True
 
 def main():
     """Main setup function"""
     print("🚀 ENVIRONMENT SETUP")
     print("=" * 50)
-    
+
     # Check Python version
     if not check_python_version():
         print("\n❌ Python version incompatible. Please upgrade to Python 3.8+")
         return False
-    
+
     # Create directories
     create_directories()
-    
+
     # Install dependencies
     if not install_dependencies():
         print("\n❌ Failed to install dependencies")
         return False
-    
+
     # Test imports
     if not test_imports():
         print("\n❌ Import test failed")
         return False
-    
+
     # Create environment file
     create_env_file()
-    
+
     print("\n" + "=" * 50)
     print("✅ ENVIRONMENT SETUP COMPLETED")
     print("=" * 50)
@@ -177,7 +177,7 @@ def main():
     print("   • README.md - Project overview")
     print("   • process_video_with_mcp.py - Main processing logic")
     print("   • test_100_technical_videos.py - Batch testing")
-    
+
     return True
 
 if __name__ == "__main__":
