@@ -11,7 +11,7 @@ export type DateString = string;
 
 
 export interface CompleteJobData {
-  videoJob_update?: VideoJob_Key | null;
+  videoJob_updateMany: number;
 }
 
 export interface CompleteJobVariables {
@@ -39,7 +39,7 @@ export interface DeleteJobEmbeddingsVariables {
 }
 
 export interface FailJobData {
-  videoJob_update?: VideoJob_Key | null;
+  videoJob_updateMany: number;
 }
 
 export interface FailJobVariables {
@@ -48,7 +48,7 @@ export interface FailJobVariables {
 }
 
 export interface GetJobData {
-  videoJob?: {
+  videoJobs: ({
     id: UUIDString;
     videoUrl: string;
     source: string;
@@ -60,7 +60,7 @@ export interface GetJobData {
     title?: string | null;
     createdAt: TimestampString;
     updatedAt: TimestampString;
-  } & VideoJob_Key;
+  } & VideoJob_Key)[];
 }
 
 export interface GetJobEmbeddingsData {
@@ -147,7 +147,7 @@ export interface RecordJobEventVariables {
 }
 
 export interface UpdateJobStatusData {
-  videoJob_update?: VideoJob_Key | null;
+  videoJob_updateMany: number;
 }
 
 export interface UpdateJobStatusVariables {

@@ -109,7 +109,7 @@ Recall that executing the `getJob` query returns a `QueryPromise` that resolves 
 The `data` property is an object of type `GetJobData`, which is defined in [dataconnect-generated/index.d.ts](./index.d.ts). It has the following fields:
 ```typescript
 export interface GetJobData {
-  videoJob?: {
+  videoJobs: ({
     id: UUIDString;
     videoUrl: string;
     source: string;
@@ -121,7 +121,7 @@ export interface GetJobData {
     title?: string | null;
     createdAt: TimestampString;
     updatedAt: TimestampString;
-  } & VideoJob_Key;
+  } & VideoJob_Key)[];
 }
 ```
 ### Using `getJob`'s action shortcut function
@@ -145,12 +145,12 @@ const { data } = await getJob({ id: ..., });
 const dataConnect = getDataConnect(connectorConfig);
 const { data } = await getJob(dataConnect, getJobVars);
 
-console.log(data.videoJob);
+console.log(data.videoJobs);
 
 // Or, you can use the `Promise` API.
 getJob(getJobVars).then((response) => {
   const data = response.data;
-  console.log(data.videoJob);
+  console.log(data.videoJobs);
 });
 ```
 
@@ -178,12 +178,12 @@ const ref = getJobRef(dataConnect, getJobVars);
 // You can use the `await` keyword to wait for the promise to resolve.
 const { data } = await executeQuery(ref);
 
-console.log(data.videoJob);
+console.log(data.videoJobs);
 
 // Or, you can use the `Promise` API.
 executeQuery(ref).then((response) => {
   const data = response.data;
-  console.log(data.videoJob);
+  console.log(data.videoJobs);
 });
 ```
 
@@ -837,7 +837,7 @@ Recall that executing the `updateJobStatus` mutation returns a `MutationPromise`
 The `data` property is an object of type `UpdateJobStatusData`, which is defined in [dataconnect-generated/index.d.ts](./index.d.ts). It has the following fields:
 ```typescript
 export interface UpdateJobStatusData {
-  videoJob_update?: VideoJob_Key | null;
+  videoJob_updateMany: number;
 }
 ```
 ### Using `updateJobStatus`'s action shortcut function
@@ -863,12 +863,12 @@ const { data } = await updateJobStatus({ id: ..., status: ..., executedAgents: .
 const dataConnect = getDataConnect(connectorConfig);
 const { data } = await updateJobStatus(dataConnect, updateJobStatusVars);
 
-console.log(data.videoJob_update);
+console.log(data.videoJob_updateMany);
 
 // Or, you can use the `Promise` API.
 updateJobStatus(updateJobStatusVars).then((response) => {
   const data = response.data;
-  console.log(data.videoJob_update);
+  console.log(data.videoJob_updateMany);
 });
 ```
 
@@ -898,12 +898,12 @@ const ref = updateJobStatusRef(dataConnect, updateJobStatusVars);
 // You can use the `await` keyword to wait for the promise to resolve.
 const { data } = await executeMutation(ref);
 
-console.log(data.videoJob_update);
+console.log(data.videoJob_updateMany);
 
 // Or, you can use the `Promise` API.
 executeMutation(ref).then((response) => {
   const data = response.data;
-  console.log(data.videoJob_update);
+  console.log(data.videoJob_updateMany);
 });
 ```
 
@@ -952,7 +952,7 @@ Recall that executing the `completeJob` mutation returns a `MutationPromise` tha
 The `data` property is an object of type `CompleteJobData`, which is defined in [dataconnect-generated/index.d.ts](./index.d.ts). It has the following fields:
 ```typescript
 export interface CompleteJobData {
-  videoJob_update?: VideoJob_Key | null;
+  videoJob_updateMany: number;
 }
 ```
 ### Using `completeJob`'s action shortcut function
@@ -978,12 +978,12 @@ const { data } = await completeJob({ id: ..., resultJson: ..., title: ..., });
 const dataConnect = getDataConnect(connectorConfig);
 const { data } = await completeJob(dataConnect, completeJobVars);
 
-console.log(data.videoJob_update);
+console.log(data.videoJob_updateMany);
 
 // Or, you can use the `Promise` API.
 completeJob(completeJobVars).then((response) => {
   const data = response.data;
-  console.log(data.videoJob_update);
+  console.log(data.videoJob_updateMany);
 });
 ```
 
@@ -1013,12 +1013,12 @@ const ref = completeJobRef(dataConnect, completeJobVars);
 // You can use the `await` keyword to wait for the promise to resolve.
 const { data } = await executeMutation(ref);
 
-console.log(data.videoJob_update);
+console.log(data.videoJob_updateMany);
 
 // Or, you can use the `Promise` API.
 executeMutation(ref).then((response) => {
   const data = response.data;
-  console.log(data.videoJob_update);
+  console.log(data.videoJob_updateMany);
 });
 ```
 
@@ -1066,7 +1066,7 @@ Recall that executing the `failJob` mutation returns a `MutationPromise` that re
 The `data` property is an object of type `FailJobData`, which is defined in [dataconnect-generated/index.d.ts](./index.d.ts). It has the following fields:
 ```typescript
 export interface FailJobData {
-  videoJob_update?: VideoJob_Key | null;
+  videoJob_updateMany: number;
 }
 ```
 ### Using `failJob`'s action shortcut function
@@ -1091,12 +1091,12 @@ const { data } = await failJob({ id: ..., error: ..., });
 const dataConnect = getDataConnect(connectorConfig);
 const { data } = await failJob(dataConnect, failJobVars);
 
-console.log(data.videoJob_update);
+console.log(data.videoJob_updateMany);
 
 // Or, you can use the `Promise` API.
 failJob(failJobVars).then((response) => {
   const data = response.data;
-  console.log(data.videoJob_update);
+  console.log(data.videoJob_updateMany);
 });
 ```
 
@@ -1125,12 +1125,12 @@ const ref = failJobRef(dataConnect, failJobVars);
 // You can use the `await` keyword to wait for the promise to resolve.
 const { data } = await executeMutation(ref);
 
-console.log(data.videoJob_update);
+console.log(data.videoJob_updateMany);
 
 // Or, you can use the `Promise` API.
 executeMutation(ref).then((response) => {
   const data = response.data;
-  console.log(data.videoJob_update);
+  console.log(data.videoJob_updateMany);
 });
 ```
 
