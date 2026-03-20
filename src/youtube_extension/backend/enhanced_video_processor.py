@@ -21,6 +21,7 @@ from typing import Any, Optional
 import aiohttp
 from dotenv import load_dotenv
 
+from src.integration.gemini_video import GeminiVideoService
 from youtube_extension.utils import extract_video_id, format_duration
 
 # Load environment variables
@@ -141,6 +142,14 @@ class EnhancedVideoProcessor:
                     video_url, transcript, metadata
                 )
 
+            # Derive structured build plan for downstream deterministic generation
+            build_plan = await self._generate_build_plan(
+                video_url, metadata, transcript, ai_analysis
+            )
+            extracted_info = self._build_extracted_info(
+                metadata, ai_analysis, build_plan, transcript
+            )
+
             # Step 5: Generate comprehensive markdown
             markdown_content = await self._generate_enhanced_markdown(
                 video_id, metadata, transcript, ai_analysis
@@ -157,6 +166,8 @@ class EnhancedVideoProcessor:
                 "metadata": metadata,
                 "transcript": transcript,
                 "ai_analysis": ai_analysis,
+                "build_plan": build_plan,
+                "extracted_info": extracted_info,
                 "markdown_analysis": markdown_content,
                 "save_path": save_path,
                 "processing_time": datetime.now().isoformat(),
@@ -539,6 +550,134 @@ class EnhancedVideoProcessor:
             "source": "gemini_api",
             "format": "text_coerced",
         }
+
+    async def _generate_build_plan(
+        self,
+        video_url: str,
+        metadata: dict[str, Any],
+        transcript: dict[str, Any],
+        ai_analysis: dict[str, Any],
+    ) -> dict[str, Any]:
+        """
+        Invoke Gemini in JSON mode to produce a structured build plan.
+        """
+        try:
+            transcript_excerpt = transcript.get("text", "")
+            gemini = GeminiVideoService(api_key=self.gemini_api_key)
+            plan = await gemini.generate_build_plan(
+                video_url,
+                transcript_excerpt=transcript_excerpt,
+                metadata=metadata,
+            )
+            await gemini.close()
+            if plan.get("steps"):
+                return plan
+        except Exception as e:
+            logger.warning(f"Build plan generation failed, using fallback: {e}")
+
+        return self._fallback_build_plan(metadata, ai_analysis)
+
+    def _fallback_build_plan(
+        self, metadata: dict[str, Any], ai_analysis: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Best-effort build plan when structured extraction fails."""
+        summary = (
+            ai_analysis.get("Content Summary")
+            or ai_analysis.get("summary")
+            or "High-level plan derived from analysis."
+        )
+        return {
+            "title": metadata.get("title", "Generated Build Plan"),
+            "summary": summary,
+            "prerequisites": self._coerce_list(ai_analysis.get("Prerequisites")),
+            "steps": [
+                {
+                    "step_number": 1,
+                    "action": "review_requirements",
+                    "description": "Review the tutorial summary and transcript to confirm scope.",
+                    "target_file": "README.md",
+                    "code": "",
+                    "dependencies": [],
+                    "prerequisites": [],
+                }
+            ],
+        }
+
+    def _build_extracted_info(
+        self,
+        metadata: dict[str, Any],
+        ai_analysis: dict[str, Any],
+        build_plan: dict[str, Any],
+        transcript: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Normalize extracted_info for downstream generators."""
+        technologies = self._coerce_list(
+            ai_analysis.get("Related Topics")
+            or ai_analysis.get("Key Concepts")
+            or metadata.get("tags")
+        )
+        if not technologies:
+            technologies = ["javascript", "html", "css"]
+
+        key_concepts = self._coerce_list(ai_analysis.get("Key Concepts"))
+        feature_candidates = key_concepts or technologies
+
+        tutorial_steps = self._tutorial_steps_from_plan(build_plan)
+        if not tutorial_steps:
+            learning_path = ai_analysis.get("Learning Path", "")
+            tutorial_steps = [
+                line.strip(" -*")
+                for line in str(learning_path).splitlines()
+                if line.strip()
+            ]
+        if not tutorial_steps and transcript.get("text"):
+            tutorial_steps = [
+                s.strip()
+                for s in transcript["text"].split(".")
+                if s.strip()
+            ][:5]
+
+        return {
+            "title": metadata.get("title", "UVAI Generated Project"),
+            "technologies": technologies,
+            "features": [
+                feat.replace(" ", "_") for feat in feature_candidates[:5] if feat
+            ],
+            "project_type": "web",
+            "tutorial_steps": tutorial_steps[:8],
+            "build_plan": build_plan,
+        }
+
+    def _tutorial_steps_from_plan(self, build_plan: dict[str, Any]) -> list[str]:
+        """Convert build plan steps into human-readable tutorial steps."""
+        steps: list[str] = []
+        for step in build_plan.get("steps", [])[:10]:
+            number = step.get("step_number")
+            action = step.get("action") or "action"
+            description = step.get("description") or ""
+            target = step.get("target_file") or ""
+            prefix = f"Step {number}: {action}"
+            if target:
+                prefix += f" -> {target}"
+            if description:
+                prefix += f" — {description}"
+            steps.append(prefix.strip())
+        return steps
+
+    def _coerce_list(self, value: Any) -> list[str]:
+        """Convert common iterable or delimited strings into a clean list."""
+        if not value:
+            return []
+        if isinstance(value, list):
+            return [str(item) for item in value if str(item).strip()]
+        if isinstance(value, str):
+            parts = [
+                part.strip()
+                for part in value.replace("|", ",").split(",")
+                if part.strip()
+            ]
+            return parts or [value.strip()]
+        return []
 
     async def _save_enhanced_result(
         self, video_id: str, metadata: dict, markdown: str
