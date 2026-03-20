@@ -90,6 +90,11 @@ src/uvai/api/__init__.py
 src/uvai/api/main.py
 src/uvai/api/server.py
 src/uvai/api/v1/services/issue_tracker.py
+src/uvai/ml/__init__.py
+src/uvai/ml/serve.py
+src/uvai/ml/models/__init__.py
+src/uvai/ml/models/action_priority_ranker.py
+src/uvai/ml/models/transcript_quality_scorer.py
 src/uvai/security_protocol/__init__.py
 src/uvai/security_protocol/encode_video.py
 src/uvai/security_protocol/generate_keys.py
@@ -144,6 +149,7 @@ src/youtube_extension/backend/models/__init__.py
 src/youtube_extension/backend/models/analytics.py
 src/youtube_extension/backend/models/audit.py
 src/youtube_extension/backend/models/base.py
+src/youtube_extension/backend/models/build_plan.py
 src/youtube_extension/backend/models/cache.py
 src/youtube_extension/backend/models/learning.py
 src/youtube_extension/backend/models/tenant.py
@@ -247,3 +253,5 @@ src/youtube_extension/videopack/provenance.py
 src/youtube_extension/videopack/schema.py
 src/youtube_extension/videopack/validate.py
 src/youtube_extension/videopack/versioning.py
+tests/test_code_generator.py
+tests/test_ml_models.py
