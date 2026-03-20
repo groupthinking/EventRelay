@@ -226,17 +226,38 @@ function SplitView({
                     <h3 className="text-sm font-bold text-white/50 uppercase tracking-wider mb-4 flex items-center gap-2">
                       <span className="text-green-500">❖</span> Extracted Tasks
                     </h3>
-                    <ul className="space-y-3">
+                    <ul className="space-y-4">
                       {video.insights!.actions.map((action, i) => (
                         <li
                           key={i}
-                          className="flex items-start gap-3 p-4 rounded-xl bg-white/[0.02] border border-white/[0.05]"
+                          className="flex items-start gap-3 p-4 rounded-xl bg-white/[0.02] border border-white/[0.05] hover:bg-white/[0.05] transition-colors"
                         >
                           <input
                             type="checkbox"
-                            className="mt-1 h-4 w-4 rounded border-white/20 bg-white/5 text-primary-500"
+                            className="mt-1.5 h-4 w-4 rounded border-white/20 bg-white/5 text-primary-500 cursor-pointer"
                           />
-                          <span className="text-white/80 text-sm leading-relaxed">{action}</span>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              {action.category && (
+                                <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-primary-500/10 text-primary-400 border border-primary-500/20">
+                                  {action.category}
+                                </span>
+                              )}
+                              {action.estimatedMinutes && (
+                                <span className="text-xs text-white/40">
+                                  ⏱ {action.estimatedMinutes}m
+                                </span>
+                              )}
+                            </div>
+                            <h4 className="text-white/90 text-sm font-semibold leading-relaxed">
+                              {action.title}
+                            </h4>
+                            {action.description && (
+                              <p className="text-white/60 text-xs mt-1 leading-relaxed">
+                                {action.description}
+                              </p>
+                            )}
+                          </div>
                         </li>
                       ))}
                     </ul>

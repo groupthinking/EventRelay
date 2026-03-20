@@ -30,6 +30,13 @@ export interface PipelineResult {
   } | null;
 }
 
+export interface Action {
+  title: string;
+  description: string;
+  category: string;
+  estimatedMinutes?: number | null;
+}
+
 export interface Video {
   id: string;
   title: string;
@@ -45,7 +52,7 @@ export interface Video {
   pipelineResult?: PipelineResult;
   insights?: {
     summary: string;
-    actions: string[];
+    actions: Action[];
     sentiment: string;
     topics: string[];
   };
@@ -230,7 +237,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
               })),
               insights: {
                 summary: summary || videoTitle,
-                actions: actions?.map((a: { title: string }) => a.title) || [],
+                actions: actions || [],
                 sentiment: get().videos.find(v => v.id === id)?.insights?.sentiment || 'Neutral',
                 topics: topics || [],
               },
@@ -353,7 +360,8 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       events.push({
         id: `evt_${videoId}_${i}`,
         type: 'action',
-        title: action,
+        title: action.title,
+        description: action.description,
         confidence: 0.85,
       });
     });
