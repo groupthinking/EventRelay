@@ -14,6 +14,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from youtube_extension.backend.build_plan import BuildPlan, parse_build_plan
+
 logger = logging.getLogger(__name__)
 
 class ProjectCodeGenerator:
@@ -45,6 +47,7 @@ class ProjectCodeGenerator:
             project_type = extracted_info.get("project_type", "web")
             technologies = extracted_info.get("technologies", ["javascript", "html", "css"])
             features = extracted_info.get("features", [])
+            build_plan = context.get("build_plan")
 
             # Carry enriched context forward for downstream generators
             video_analysis = dict(video_analysis)
@@ -71,6 +74,10 @@ class ProjectCodeGenerator:
             result["project_type"] = project_type
             result["technologies"] = technologies
             result["features"] = features
+            # Include the structured BuildPlan artifact in the result so that
+            # callers (e.g. API endpoints and tests) can inspect it.
+            if build_plan is not None:
+                result["build_plan"] = build_plan.to_dict()
 
             logger.info(f"✅ Project generated successfully at {project_path}")
             return result
@@ -932,7 +939,13 @@ This is a starting point generated from video analysis. You can:
         return name[:50] if name else 'uvai-project'
 
     def _build_generation_context(self, video_analysis: dict[str, Any], project_config: dict[str, Any]) -> dict[str, Any]:
-        """Combine video analysis, AI insights, and user config for generation."""
+        """Combine video analysis, AI insights, and user config for generation.
+
+        This method now also runs Stage 2 Semantic Logic Parsing: it calls
+        :func:`~youtube_extension.backend.build_plan.parse_build_plan` to
+        produce a :class:`~youtube_extension.backend.build_plan.BuildPlan`
+        that downstream generators can consume deterministically.
+        """
         extracted_info = dict(video_analysis.get("extracted_info") or {})
         metadata = video_analysis.get("metadata") or video_analysis.get("video_data") or {}
         ai_analysis = video_analysis.get("ai_analysis") or {}
@@ -959,11 +972,28 @@ This is a starting point generated from video analysis. You can:
         if not features and technologies:
             features = [tech.replace(" ", "_") for tech in technologies[:3]]
 
-        tutorial_steps = self._coerce_to_list(extracted_info.get("tutorial_steps"))
+        # --- Stage 2: Semantic Logic Parsing -----------------------------------
+        # Parse video analysis into a structured BuildPlan so the code
+        # generator can follow ordered, actionable steps instead of raw text.
+        build_plan: BuildPlan = parse_build_plan(
+            {
+                **video_analysis,
+                "extracted_info": {
+                    **extracted_info,
+                    "title": title,
+                    "technologies": technologies,
+                    "project_type": project_config.get("type", extracted_info.get("project_type", "web")),
+                },
+            }
+        )
+
+        # Derive tutorial_steps from the BuildPlan so existing generators
+        # keep working — each step's description becomes one tutorial step.
+        tutorial_steps = [step.description for step in build_plan.steps] if build_plan.steps else []
         if not tutorial_steps:
             tutorial_steps = self._derive_tutorial_steps(ai_analysis, video_analysis)
 
-        summary = self._extract_summary(ai_analysis, video_analysis)
+        summary = build_plan.summary or self._extract_summary(ai_analysis, video_analysis)
         key_concepts = self._coerce_to_list(ai_analysis.get("Key Concepts")) or technologies
 
         extracted_info.update({
@@ -971,13 +1001,16 @@ This is a starting point generated from video analysis. You can:
             "technologies": technologies,
             "features": features,
             "tutorial_steps": tutorial_steps,
-            "project_type": project_config.get("type", extracted_info.get("project_type", "web"))
+            "project_type": build_plan.project_type,
+            # Expose the full BuildPlan dict for consumers that want rich data
+            "build_plan": build_plan.to_dict(),
         })
 
         return {
             "extracted_info": extracted_info,
             "summary": summary,
-            "key_concepts": key_concepts
+            "key_concepts": key_concepts,
+            "build_plan": build_plan,
         }
 
     def _coerce_to_list(self, value: Any) -> list[str]:

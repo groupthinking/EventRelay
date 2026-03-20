@@ -286,7 +286,10 @@ class EnhancedVideoProcessor:
 
             url = f"{self.gemini_base_url}/models/gemini-2.0-flash:generateContent"
 
-            # Create comprehensive analysis prompt with strict JSON schema
+            # Create comprehensive analysis prompt with strict JSON schema.
+            # The schema now includes a "build_plan" field so Stage 2
+            # (Semantic Logic Parsing) returns structured, actionable steps
+            # that Stage 3 (code generation) can consume deterministically.
             prompt = f"""
             You are analyzing a YouTube video based on its transcript and metadata.
             Return ONLY valid JSON (no prose, no markdown) that matches this schema exactly:
@@ -298,7 +301,23 @@ class EnhancedVideoProcessor:
               "Code Generation Potential": string,
               "Difficulty Level": "Beginner" | "Intermediate" | "Advanced",
               "Prerequisites": string,
-              "Related Topics": string[] | string
+              "Related Topics": string[] | string,
+              "build_plan": {{
+                "title": string,
+                "project_type": "web" | "api" | "mobile" | "other",
+                "technologies": string[],
+                "summary": string,
+                "steps": [
+                  {{
+                    "order": number,
+                    "action": "create" | "install" | "configure" | "implement" | "test" | "deploy",
+                    "target_file": string,
+                    "description": string,
+                    "code_content": string,
+                    "dependencies": string[]
+                  }}
+                ]
+              }}
             }}
 
             Video URL: {video_url}
@@ -311,6 +330,8 @@ class EnhancedVideoProcessor:
             Rules:
             - Respond with JSON only. Do not include markdown fences.
             - If a field cannot be determined, provide a best-effort concise summary.
+            - build_plan.steps must be in chronological order (3–12 steps).
+            - Keep code_content to the most essential snippet (≤ 20 lines).
             """
 
             payload = {
