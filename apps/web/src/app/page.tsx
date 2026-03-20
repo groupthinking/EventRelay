@@ -4,6 +4,38 @@ import Link from 'next/link';
 import { useState, useCallback } from 'react';
 import { clsx } from 'clsx';
 import { useRouter } from 'next/navigation';
+import { useToast } from '@/components/ui/Toast';
+
+// ─── URL Validation ────────────────────────────────────────────────────────────
+function validateVideoUrl(url: string): string | null {
+  if (!url.trim()) {
+    return 'Please enter a video URL';
+  }
+
+  try {
+    // Try to parse as URL
+    new URL(url);
+  } catch {
+    return 'Please enter a valid URL';
+  }
+
+  // Check if it's a recognized video platform
+  const videoPatterns = [
+    /youtube\.com/i,
+    /youtu\.be/i,
+    /drive\.google\.com/i,
+    /vimeo\.com/i,
+    /loom\.com/i,
+    /\.mp4$/i,
+    /\.webm$/i,
+  ];
+
+  if (!videoPatterns.some(pattern => pattern.test(url))) {
+    return 'URL must be from a supported platform (YouTube, Google Drive, Vimeo, etc.) or a direct video link';
+  }
+
+  return null;
+}
 
 const STEPS = [
   { icon: '🔗', title: 'Paste a Video URL', desc: 'Drop any YouTube link — tutorials, talks, walkthroughs' },
@@ -18,12 +50,45 @@ const EXAMPLES = [
 
 export default function Home() {
   const [videoUrl, setVideoUrl] = useState('');
+  const [isFocused, setIsFocused] = useState(false);
+  const [urlError, setUrlError] = useState<string | null>(null);
+  const [pasting, setPasting] = useState(false);
   const router = useRouter();
+  const typedWord = useTypewriter(USE_CASES);
+  const { addToast } = useToast();
 
   const handleProcess = useCallback(() => {
-    if (!videoUrl.trim()) return;
+    const error = validateVideoUrl(videoUrl);
+    if (error) {
+      setUrlError(error);
+      return;
+    }
+    setUrlError(null);
     router.push(`/dashboard?video=${encodeURIComponent(videoUrl)}`);
   }, [videoUrl, router]);
+
+  const handleUrlChange = useCallback((value: string) => {
+    setVideoUrl(value);
+    if (urlError) setUrlError(null); // clear error on change
+  }, []);
+
+  const handlePasteFromClipboard = useCallback(async () => {
+    try {
+      setPasting(true);
+      const text = await navigator.clipboard.readText();
+      if (text.trim()) {
+        setVideoUrl(text.trim());
+        setUrlError(null);
+        addToast('Pasted from clipboard', 'success');
+      } else {
+        addToast('Clipboard is empty', 'warning');
+      }
+    } catch {
+      addToast('Could not access clipboard — paste manually', 'error');
+    } finally {
+      setPasting(false);
+    }
+  }, [addToast]);
 
   return (
     <div className="min-h-screen text-white">
@@ -66,12 +131,28 @@ export default function Home() {
         >
           <div className="flex gap-3 p-2 rounded-2xl bg-white/[0.04] border border-white/[0.08] focus-within:border-primary-500/40 focus-within:shadow-lg focus-within:shadow-primary-500/5 transition-all">
             <input
-              type="text"
+              type="url"
               value={videoUrl}
               onChange={(e) => setVideoUrl(e.target.value)}
               placeholder="https://youtube.com/watch?v=..."
               className="flex-1 px-4 py-3 bg-transparent text-white placeholder:text-white/30 focus:outline-none text-sm"
             />
+            {/* Paste from clipboard */}
+            <button
+              type="button"
+              onClick={handlePasteFromClipboard}
+              disabled={pasting}
+              title="Paste from clipboard"
+              className="btn btn-ghost py-3 px-3 text-white/40 hover:text-white/70 disabled:opacity-40"
+            >
+              {pasting ? (
+                <span className="inline-block animate-spin text-xs">⏳</span>
+              ) : (
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                </svg>
+              )}
+            </button>
             <button
               type="submit"
               disabled={!videoUrl.trim()}
