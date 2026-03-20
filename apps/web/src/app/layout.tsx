@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next';
+import { Analytics } from '@vercel/analytics/next';
 import './globals.css';
 
 // Font CSS variables are defined via <link> to Google Fonts in <head> and
@@ -95,6 +96,7 @@ export default function RootLayout({
         <div className="relative z-10">
           {children}
         </div>
+        <Analytics />
       </body>
     </html>
   );
