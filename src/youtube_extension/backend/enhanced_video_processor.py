@@ -293,7 +293,23 @@ class EnhancedVideoProcessor:
               "Code Generation Potential": string,
               "Difficulty Level": "Beginner" | "Intermediate" | "Advanced",
               "Prerequisites": string,
-              "Related Topics": string[] | string
+              "Related Topics": string[] | string,
+              "build_plan": {{
+                "title": string,
+                "project_type": "web" | "api" | "mobile" | "other",
+                "technologies": string[],
+                "summary": string,
+                "steps": [
+                  {{
+                    "order": number,
+                    "action": "create" | "install" | "configure" | "implement" | "test" | "deploy",
+                    "target_file": string,
+                    "description": string,
+                    "code_content": string,
+                    "dependencies": string[]
+                  }}
+                ]
+              }}
             }}
             
             Video URL: {video_url}
@@ -306,6 +322,8 @@ class EnhancedVideoProcessor:
             Rules:
             - Respond with JSON only. Do not include markdown fences.
             - If a field cannot be determined, provide a best-effort concise summary.
+            - build_plan.steps must be in chronological order (3–12 steps).
+            - Keep code_content to the most essential snippet (≤ 20 lines).
             """
             
             payload = {

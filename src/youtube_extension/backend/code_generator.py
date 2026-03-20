@@ -21,6 +21,8 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 from urllib.parse import urlparse, parse_qs
 
+from youtube_extension.backend.build_plan import BuildPlan, parse_build_plan
+
 logger = logging.getLogger(__name__)
 
 
@@ -167,6 +169,10 @@ class ProjectCodeGenerator:
             result["project_type"] = project_type
             result["technologies"] = technologies
             result["features"] = features
+            # Include the structured BuildPlan artifact in the result so that
+            # callers (e.g. API endpoints and tests) can inspect it.
+            if build_plan is not None:
+                result["build_plan"] = build_plan.to_dict()
 
             logger.info(f"✅ Project generated successfully at {project_path}")
             return result
@@ -1192,7 +1198,13 @@ This is a starting point generated from video analysis. You can:
         return result
 
     def _build_generation_context(self, video_analysis: dict[str, Any], project_config: dict[str, Any]) -> dict[str, Any]:
-        """Combine video analysis, AI insights, and user config for generation."""
+        """Combine video analysis, AI insights, and user config for generation.
+
+        This method now also runs Stage 2 Semantic Logic Parsing: it calls
+        :func:`~youtube_extension.backend.build_plan.parse_build_plan` to
+        produce a :class:`~youtube_extension.backend.build_plan.BuildPlan`
+        that downstream generators can consume deterministically.
+        """
         extracted_info = dict(video_analysis.get("extracted_info") or {})
         metadata = video_analysis.get("metadata") or video_analysis.get("video_data") or {}
         ai_analysis = video_analysis.get("ai_analysis") or {}

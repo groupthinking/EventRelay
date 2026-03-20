@@ -111,6 +111,7 @@ src/youtube_extension.egg-info/top_level.txt
 src/youtube_extension/backend/__init__.py
 src/youtube_extension/backend/ai_code_generator.py
 src/youtube_extension/backend/ai_insights_processor.py
+src/youtube_extension/backend/build_plan.py
 src/youtube_extension/backend/cloud_ai_routes.py
 src/youtube_extension/backend/code_generator.py
 src/youtube_extension/backend/deployment_manager.py
