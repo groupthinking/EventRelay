@@ -137,7 +137,7 @@ Full interactive docs at http://localhost:8000/docs (Swagger UI).
 ```
 EventRelay/
 ├── apps/
-│   └── web/                         # Next.js 15 frontend (TypeScript)
+│   └── web/                         # Next.js 16 frontend (TypeScript)
 │       └── src/
 │           ├── app/
 │           │   ├── dashboard/        # Main dashboard UI
