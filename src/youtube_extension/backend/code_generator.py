@@ -239,7 +239,7 @@ class ProjectCodeGenerator:
             f.write("\n".join(requirements))
 
         # Generate main.py
-        main_py = self._generate_fastapi_main(title, features)
+        main_py = self._generate_fastapi_main(title, features, extracted_info)
         with open(project_path / "main.py", "w") as f:
             f.write(main_py)
 
@@ -533,29 +533,135 @@ root.render(
 </html>'''
 
     def _generate_vanilla_main_js(self, tutorial_steps: list[str], features: list[str]) -> str:
-        """Generate main.js for vanilla projects"""
-        return '''// UVAI Generated JavaScript
-document.addEventListener('DOMContentLoaded', function() {
+        """Generate main.js for vanilla projects, tailored to tutorial steps and features"""
+        # Build per-step functions from extracted tutorial steps
+        step_functions = ""
+        step_calls = ""
+        for i, step in enumerate(tutorial_steps[:8], 1):
+            safe_desc = step[:100].replace("\\", "\\\\").replace("'", "\\'").replace("`", "\\`")
+            func_name = f"executeStep{i}"
+            step_functions += f"""
+function {func_name}() {{
+    // Step {i}: {safe_desc}
+    console.log('Step {i}: {safe_desc}');
+    updateStatus('Completed step {i}');
+}}
+"""
+            step_calls += f"    {func_name}();\n"
+
+        if not step_calls:
+            step_calls = "    // No tutorial steps extracted – add your own steps here\n"
+
+        # Build feature-specific initialisation code
+        feature_init = ""
+        if any(f in features for f in ("form", "input", "form_handling")):
+            feature_init += "\n    setupFormHandlers();"
+        if any(f in features for f in ("api_integration", "fetch", "http")):
+            feature_init += "\n    fetchInitialData();"
+        if "dark_mode" in features:
+            feature_init += "\n    setupDarkModeToggle();"
+        if any(f in features for f in ("search", "filtering")):
+            feature_init += "\n    initSearch();"
+
+        # Build feature-specific helper functions
+        feature_helpers = ""
+        if any(f in features for f in ("form", "input", "form_handling")):
+            feature_helpers += """
+function setupFormHandlers() {
+    const forms = document.querySelectorAll('form');
+    forms.forEach(form => {
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            console.log('Form submitted:', new FormData(form));
+        });
+    });
+}
+"""
+        if any(f in features for f in ("api_integration", "fetch", "http")):
+            feature_helpers += """
+async function fetchInitialData() {
+    try {
+        const response = await fetch('/api/data');
+        const data = await response.json();
+        console.log('Data loaded:', data);
+    } catch (err) {
+        console.error('Failed to load data:', err);
+    }
+}
+"""
+        if "dark_mode" in features:
+            feature_helpers += """
+function setupDarkModeToggle() {
+    const toggle = document.getElementById('dark-mode-toggle');
+    if (toggle) {
+        toggle.addEventListener('click', () => {
+            document.body.classList.toggle('dark-mode');
+        });
+    }
+}
+"""
+        if any(f in features for f in ("search", "filtering")):
+            feature_helpers += """
+function initSearch() {
+    const searchInput = document.getElementById('search');
+    if (searchInput) {
+        searchInput.addEventListener('input', function() {
+            const query = this.value.toLowerCase();
+            document.querySelectorAll('[data-searchable]').forEach(el => {
+                el.style.display = el.textContent.toLowerCase().includes(query) ? '' : 'none';
+            });
+        });
+    }
+}
+"""
+
+        steps_comment = (
+            f"// Tutorial steps ({len(tutorial_steps)}): "
+            + " | ".join(s[:60] for s in tutorial_steps[:3])
+            if tutorial_steps
+            else "// No tutorial steps extracted from video"
+        )
+        features_comment = (
+            f"// Features: {', '.join(features)}" if features else "// No specific features detected"
+        )
+
+        return f"""// UVAI Generated JavaScript
+{steps_comment}
+{features_comment}
+
+function updateStatus(message) {{
+    const statusEl = document.getElementById('status');
+    if (statusEl) statusEl.textContent = message;
+    console.log('[Status]', message);
+}}
+
+document.addEventListener('DOMContentLoaded', function() {{
     console.log('App loaded successfully');
 
-    // Add interactive features based on video analysis
-    addInteractiveFeatures();
-});
+    // Run tutorial-specific workflow
+    runTutorialSteps();
+{feature_init}
 
-function addInteractiveFeatures() {
-    // Add animations
+    // Animate sections into view
+    addInteractiveFeatures();
+}});
+
+function runTutorialSteps() {{
+{step_calls}}}
+{step_functions}{feature_helpers}
+function addInteractiveFeatures() {{
     const sections = document.querySelectorAll('section');
-    sections.forEach((section, index) => {
+    sections.forEach((section, index) => {{
         section.style.opacity = '0';
         section.style.transform = 'translateY(20px)';
 
-        setTimeout(() => {
+        setTimeout(() => {{
             section.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
             section.style.opacity = '1';
             section.style.transform = 'translateY(0)';
-        }, index * 200);
-    });
-}'''
+        }}, index * 200);
+    }});
+}}"""
 
     def _generate_vanilla_styles_css(self, features: list[str]) -> str:
         """Generate styles.css for vanilla projects"""
@@ -667,8 +773,13 @@ body {{
 }}
 {responsive_css}'''
 
-    def _generate_fastapi_main(self, title: str, features: list[str]) -> str:
-        """Generate main.py for FastAPI projects"""
+    def _generate_fastapi_main(self, title: str, features: list[str], extracted_info: dict | None = None) -> str:
+        """Generate main.py for FastAPI projects, using tutorial context for unique endpoints"""
+        extracted_info = extracted_info or {}
+        tutorial_steps = extracted_info.get("tutorial_steps", [])
+        keywords = extracted_info.get("keywords", [])
+        description = extracted_info.get("description", f"Generated by UVAI from YouTube tutorial: {title}")
+
         auth_imports = ""
         auth_code = ""
 
@@ -698,14 +809,70 @@ async def get_data():
     """Placeholder data endpoint"""
     return {"data": "Connect to your database here"}'''
 
+        # Build tutorial-specific endpoints from extracted steps
+        tutorial_endpoints = ""
+        if tutorial_steps:
+            steps_repr = "\n".join(
+                f'        {{"step": {i + 1}, "description": "{s[:120].replace(chr(34), chr(39))}"}}'
+                for i, s in enumerate(tutorial_steps[:10])
+            )
+            tutorial_endpoints += f'''
+
+@app.get("/api/tutorial/steps")
+async def get_tutorial_steps():
+    """Return the tutorial steps extracted from the source video"""
+    return {{
+        "title": "{title}",
+        "steps": [
+{steps_repr}
+        ]
+    }}'''
+
+        # Build keyword-based domain endpoints
+        domain_endpoints = ""
+        for kw in keywords[:3]:
+            safe_kw = kw.lower().replace(" ", "_").replace("-", "_")
+            safe_kw = "".join(c for c in safe_kw if c.isalnum() or c == "_")
+            if safe_kw:
+                domain_endpoints += f'''
+
+@app.get("/api/{safe_kw}")
+async def get_{safe_kw}():
+    """Get {kw} data (extracted from tutorial keywords)"""
+    return {{"resource": "{kw}", "status": "ready", "data": []}}'''
+
+        # Fallback generic endpoints when no domain context exists
+        if not tutorial_endpoints and not domain_endpoints:
+            domain_endpoints = f'''
+
+@app.get("/api/resources")
+async def get_resources():
+    """List resources for {title}"""
+    return [{{"id": 1, "name": "Sample resource for {title}", "status": "active"}}]
+
+@app.post("/api/resources")
+async def create_resource(payload: dict):
+    """Create a resource for {title}"""
+    return {{"created": True, "data": payload}}'''
+
+        steps_comment = (
+            "\n".join(f"# Step {i+1}: {s[:100]}" for i, s in enumerate(tutorial_steps[:5]))
+            if tutorial_steps
+            else "# No tutorial steps extracted from source video"
+        )
+
         return f'''from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional{auth_imports}
 
+# Tutorial context
+# Title: {title}
+{steps_comment}
+
 app = FastAPI(
     title="{title}",
-    description="Generated by UVAI from YouTube tutorial",
+    description="{description}",
     version="1.0.0"
 )
 
@@ -719,40 +886,31 @@ app.add_middleware(
 )
 
 # Pydantic models
-class Message(BaseModel):
-    text: str
-    timestamp: Optional[str] = None
+class ResourceItem(BaseModel):
+    name: str
+    description: Optional[str] = None
 
-class MessageResponse(BaseModel):
-    message: str
+class ResourceResponse(BaseModel):
+    id: int
+    name: str
     status: str
 
 @app.get("/")
 async def root():
     """Root endpoint"""
     return {{
-        "message": "Welcome to {title}",
-        "description": "This API was generated by UVAI from a YouTube tutorial",
-        "endpoints": ["/docs", "/api/messages", "/api/health"]
+        "title": "{title}",
+        "description": "{description}",
+        "endpoints": ["/docs", "/api/tutorial/steps", "/api/health"]
     }}
 
 @app.get("/api/health")
 async def health_check():
     """Health check endpoint"""
-    return {{"status": "healthy", "timestamp": "2024-01-01T00:00:00Z"}}
-
-@app.get("/api/messages", response_model=List[MessageResponse])
-async def get_messages():
-    """Get all messages"""
-    return [
-        {{"message": "Hello from your UVAI generated API!", "status": "active"}},
-        {{"message": "This API was created from a YouTube tutorial", "status": "active"}}
-    ]
-
-@app.post("/api/messages", response_model=MessageResponse)
-async def create_message(message: Message):
-    """Create a new message"""
-    return {{"message": f"Received: {{message.text}}", "status": "created"}}
+    from datetime import datetime
+    return {{"status": "healthy", "service": "{title}", "timestamp": datetime.utcnow().isoformat()}}
+{tutorial_endpoints}
+{domain_endpoints}
 {auth_code}
 {database_code}
 

@@ -93,6 +93,12 @@ class CodeGeneratorAgent:
         intent = inputs.get("intent", "")
         context = inputs.get("context", {})
 
+        # Enrich context with top-level video/tutorial metadata when available
+        if "video_title" not in context and "title" in inputs:
+            context = {**context, "video_title": inputs["title"]}
+        if "tutorial_steps" not in context and "tutorial_steps" in inputs:
+            context = {**context, "tutorial_steps": inputs["tutorial_steps"]}
+
         # Parse the intent to understand what to generate
         generation_type = self._parse_intent(intent)
 
@@ -104,7 +110,7 @@ class CodeGeneratorAgent:
         elif generation_type == "data_model":
             code = self._generate_data_model(context)
         else:
-            code = self._generate_generic_api(context)
+            code = self._generate_generic_api(context, intent)
 
         return {
             "success": True,
@@ -129,10 +135,23 @@ class CodeGeneratorAgent:
             return "generic"
 
     def _generate_api_endpoint(self, context: dict) -> str:
-        """Generate a single API endpoint"""
+        """Generate a single API endpoint tailored to the video/tutorial context"""
         endpoint_name = context.get("endpoint_name", "process")
         function_name = context.get("function_name", endpoint_name.replace("-", "_"))
         description = context.get("description", f"Process {endpoint_name} request")
+
+        # Use tutorial / video metadata when available
+        video_title = context.get("video_title", "")
+        tutorial_steps = context.get("tutorial_steps", [])
+
+        # Prepend a docstring comment that makes output unique per video
+        preamble = ""
+        if video_title:
+            preamble += f"# Endpoint generated for: {video_title}\n"
+        if tutorial_steps:
+            preamble += "# Tutorial steps referenced:\n"
+            for i, step in enumerate(tutorial_steps[:5], 1):
+                preamble += f"#   {i}. {step[:100]}\n"
 
         # Generate parameter list
         params = context.get("parameters", {})
@@ -155,14 +174,25 @@ class CodeGeneratorAgent:
         else:
             validation_logic += "pass"
 
-        # Generate processing logic
-        processing_logic = """# Main processing logic
+        # Build processing logic, incorporating tutorial steps when present
+        if tutorial_steps:
+            steps_code = "\n        ".join(
+                f"# Step {i}: {s[:80]}" for i, s in enumerate(tutorial_steps[:5], 1)
+            )
+            processing_logic = f"""# Tutorial-derived processing logic
+        {steps_code}
+        result = {{
+            'processed': True,
+            'data': request
+        }}"""
+        else:
+            processing_logic = """# Main processing logic
         result = {
             'processed': True,
             'data': request
         }"""
 
-        return self.templates["fastapi_endpoint"].format(
+        return preamble + self.templates["fastapi_endpoint"].format(
             endpoint_name=endpoint_name,
             function_name=function_name,
             parameters=parameters,
@@ -217,13 +247,27 @@ class {model_name}(BaseModel):
 
         return model_code
 
-    def _generate_generic_api(self, context: dict) -> str:
-        """Generate a generic API structure"""
-        return self.templates["rest_api"].format(
-            title="Generated API",
+    def _generate_generic_api(self, context: dict, intent: str = "") -> str:
+        """Generate a generic API structure incorporating video/tutorial context"""
+        video_title = context.get("video_title", "")
+        tutorial_steps = context.get("tutorial_steps", [])
+
+        header = ""
+        if video_title:
+            header += f"# API generated for tutorial: {video_title}\n"
+        if intent:
+            header += f"# Intent: {intent}\n"
+        if tutorial_steps:
+            header += "# Tutorial steps:\n"
+            for i, step in enumerate(tutorial_steps[:5], 1):
+                header += f"#   {i}. {step[:100]}\n"
+
+        base_code = self.templates["rest_api"].format(
+            title=video_title or "Generated API",
             models=self._generate_data_model(context),
             endpoints=self._generate_api_endpoint(context),
         )
+        return header + base_code if header else base_code
 
     def _get_file_list(self, code: str) -> list:
         """Determine which files would be created"""
