@@ -663,19 +663,27 @@ class DeploymentManager:
             }
 
     def _generate_repo_name(self, project_config: dict[str, Any]) -> str:
-        """Generate a repository name from project config"""
+        """Generate a repository name from project config.
+
+        Uses UUID4 suffix instead of timestamp to guarantee uniqueness
+        (previously used ``time() % 10000`` which only had 10 000 possible
+        values and collided in rapid succession — root cause of the 11
+        identical ``uvai-generated-project-*`` repos).
+        """
+        import re
+        import uuid
+
         title = project_config.get("title", "uvai-project")
 
         # Sanitize title for repository name
-        import re
         name = re.sub(r'[^a-zA-Z0-9\s-]', '', title.lower())
         name = re.sub(r'\s+', '-', name.strip())
 
-        # Ensure it's not too long and add timestamp
+        # Ensure it's not too long and add a globally unique suffix
         name = name[:30]
-        timestamp = int(asyncio.get_event_loop().time()) % 10000
+        unique_suffix = uuid.uuid4().hex[:8]
 
-        return f"{name}-{timestamp}" if name else f"uvai-project-{timestamp}"
+        return f"{name}-{unique_suffix}" if name else f"uvai-project-{unique_suffix}"
 
     def _generate_random_id(self) -> str:
         """Generate a random ID for URLs"""
