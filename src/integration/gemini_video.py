@@ -379,6 +379,114 @@ class GeminiVideoService:
             thinking_level="high",
         )
 
+    async def extract_build_plan(
+        self, video_url: str, response_schema: Optional[dict] = None
+    ) -> dict:
+        """
+        Extract a structured BuildPlan from video content.
+
+        This method implements Stage 2: Semantic Logic Parsing by transforming
+        raw video transcripts and visual cues into structured, actionable
+        instructions that Stage 3 (Code Generation) can consume deterministically.
+
+        Args:
+            video_url: YouTube URL or file URI
+            response_schema: Optional custom JSON schema. If None, uses BuildPlan schema.
+
+        Returns:
+            Structured BuildPlan as a dict conforming to the schema
+        """
+        # Import schema function here to avoid circular dependencies
+        from youtube_extension.backend.models.build_plan import (
+            build_plan_to_gemini_schema,
+        )
+
+        schema = response_schema or build_plan_to_gemini_schema()
+
+        prompt = """
+        Analyze this video tutorial carefully and extract a structured build plan.
+
+        Your task is to identify:
+        1. The project being built (title, description, type)
+        2. Technologies and frameworks used
+        3. Step-by-step build instructions with dependencies
+        4. Code snippets visible in the video
+        5. Commands executed (npm install, etc.)
+        6. Learning objectives and prerequisites
+
+        For each build step:
+        - Provide the exact action type (create_file, install_dependency, etc.)
+        - Include the target file path if applicable
+        - Extract any visible code snippets
+        - Note dependencies between steps (e.g., "install tailwind" depends on "create react app")
+        - Add relevant metadata (timestamps, component types, etc.)
+
+        Be specific and actionable. The output will be used to automatically
+        generate a working project, so accuracy and completeness are critical.
+
+        Extract up to 20 steps if the video shows a complex build process.
+        Order steps sequentially and mark dependencies clearly.
+        """
+
+        # Determine if YouTube URL
+        is_youtube = "youtube.com" in video_url or "youtu.be" in video_url
+
+        if is_youtube:
+            payload = {
+                "contents": [
+                    {
+                        "parts": [
+                            {"text": video_url},
+                            {"text": prompt},
+                        ]
+                    }
+                ],
+                "generationConfig": {
+                    "temperature": 0.3,  # Lower temp for more consistent output
+                    "topK": 32,
+                    "topP": 1,
+                    "maxOutputTokens": 8192,
+                    "responseMimeType": "application/json",
+                    "responseSchema": schema,
+                },
+            }
+        else:
+            payload = {
+                "contents": [
+                    {
+                        "parts": [
+                            {
+                                "file_data": {
+                                    "file_uri": video_url,
+                                    "mime_type": "video/mp4",
+                                }
+                            },
+                            {"text": prompt},
+                        ]
+                    }
+                ],
+                "generationConfig": {
+                    "temperature": 0.3,
+                    "topK": 32,
+                    "topP": 1,
+                    "maxOutputTokens": 8192,
+                    "responseMimeType": "application/json",
+                    "responseSchema": schema,
+                },
+            }
+
+        response = await self._make_request(self.DEFAULT_MODEL, payload)
+        text = response["candidates"][0]["content"]["parts"][0]["text"]
+
+        # Parse JSON response
+        try:
+            import json
+
+            build_plan = json.loads(text)
+            return build_plan
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Failed to parse BuildPlan JSON: {e}") from e
+
     async def generate_code_from_video(
         self, video_url: str, target_framework: str = "nextjs"
     ) -> str:
