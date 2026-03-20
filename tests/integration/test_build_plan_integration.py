@@ -98,7 +98,10 @@ def video_analysis_without_build_plan():
     return {
         "video_id": "test_video_456",
         "video_url": "https://youtube.com/watch?v=test_video_456",
-        "metadata": {"title": "Generic Tutorial", "description": "Tutorial description"},
+        "metadata": {
+            "title": "Generic Tutorial",
+            "description": "Tutorial description",
+        },
         "transcript": {"text": "Tutorial transcript..."},
         "extracted_info": {
             "title": "Generic Project",
@@ -117,9 +120,7 @@ class TestBuildPlanIntegration:
     """Integration tests for BuildPlan extraction and usage."""
 
     @pytest.mark.asyncio
-    async def test_code_generator_with_build_plan(
-        self, video_analysis_with_build_plan
-    ):
+    async def test_code_generator_with_build_plan(self, video_analysis_with_build_plan):
         """Test that ProjectCodeGenerator uses BuildPlan when available."""
         generator = ProjectCodeGenerator()
         project_config = {"type": "react"}
@@ -187,7 +188,9 @@ class TestBuildPlanIntegration:
         plan = BuildPlan(**sample_build_plan)
 
         # Find the component creation step
-        component_step = [s for s in plan.steps if s.action == ActionType.CREATE_COMPONENT][0]
+        component_step = [
+            s for s in plan.steps if s.action == ActionType.CREATE_COMPONENT
+        ][0]
 
         assert component_step.code_snippet is not None
         assert "useState" in component_step.code_snippet
@@ -277,7 +280,9 @@ class TestBuildPlanValidation:
 
     def test_build_plan_requires_minimum_steps(self):
         """Test that BuildPlan requires at least one step."""
-        with pytest.raises(Exception):
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
             BuildPlan(
                 title="Test",
                 description="Test",
@@ -288,7 +293,9 @@ class TestBuildPlanValidation:
 
     def test_build_plan_requires_technologies(self):
         """Test that BuildPlan requires at least one technology."""
-        with pytest.raises(Exception):
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
             BuildPlan(
                 title="Test",
                 description="Test",
