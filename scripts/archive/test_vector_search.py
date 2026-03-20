@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Test vector similarity search."""
 import os
+
 import psycopg2
-from google import genai
 from dotenv import load_dotenv
+from google import genai
 
 load_dotenv(override=True)
 client = genai.Client(api_key=os.environ['GOOGLE_API_KEY'])

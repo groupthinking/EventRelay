@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
-import sys, json
+import sys
+
 from src.youtube_extension.videopack import read_pack, validate_pack
+
 
 def main() -> None:
     if len(sys.argv) != 2:

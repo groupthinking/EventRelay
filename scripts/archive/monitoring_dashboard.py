@@ -7,21 +7,17 @@ Provides comprehensive observability and alerting
 import asyncio
 import json
 import logging
-from datetime import datetime, timedelta
-from typing import Dict, Any, List
-from pathlib import Path
 import time
+from collections import defaultdict, deque
 from dataclasses import dataclass
-
-# Web dashboard imports
-from fastapi import FastAPI, WebSocket, HTMLResponse, Request
-from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
-import uvicorn
+from typing import Any, Dict, List
 
 # Monitoring imports
 import psutil
-from collections import deque, defaultdict
+import uvicorn
+
+# Web dashboard imports
+from fastapi import FastAPI, HTMLResponse, Request, WebSocket
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -205,7 +201,7 @@ class MCPMonitoringDashboard:
             try:
                 while True:
                     await websocket.receive_text()  # Keep connection alive
-            except Exception as e:
+            except Exception:
                 logger.info("👋 Client disconnected from monitoring")
             finally:
                 self.connected_clients.discard(websocket)

@@ -1,0 +1,30 @@
+# Cloud Build config for UVAI Ray Serve image
+#
+# Usage:
+#   gcloud builds submit /tmp/ray-build \
+#     --config infrastructure/k8s/ray/cloudbuild.yaml \
+#     --project uvai-730bb
+#
+# Or simply:
+#   gcloud builds submit /tmp/ray-build \
+#     --tag us-central1-docker.pkg.dev/uvai-730bb/uvai-registry/ray-serve-uvai:latest \
+#     --project uvai-730bb
+
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-f'
+      - 'infrastructure/k8s/ray/Dockerfile.ray'
+      - '-t'
+      - 'us-central1-docker.pkg.dev/uvai-730bb/uvai-registry/ray-serve-uvai:latest'
+      - '.'
+
+images:
+  - 'us-central1-docker.pkg.dev/uvai-730bb/uvai-registry/ray-serve-uvai:latest'
+
+timeout: '600s'
+
+options:
+  machineType: 'E2_HIGHCPU_8'
+  logging: CLOUD_LOGGING_ONLY

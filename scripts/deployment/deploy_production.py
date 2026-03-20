@@ -5,17 +5,18 @@ This script handles the complete deployment pipeline to Vercel
 """
 
 import asyncio
+import json
 import os
 import sys
-import json
-import httpx
-from pathlib import Path
 from datetime import datetime
-from typing import Optional, Dict, List, Any, Union
+from typing import Any, Dict, Optional
+
+import httpx
 
 # Use absolute imports from installed package
 from youtube_extension.backend.deploy import deploy_project
 from youtube_extension.backend.deploy.core import EnvironmentValidator
+
 
 class ProductionDeployer:
     def __init__(self) -> None:

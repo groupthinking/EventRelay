@@ -20,7 +20,8 @@ import psutil
 
 # Import existing processors
 # from video_extractor_enhanced import EnhancedVideoExtractor, VideoContent
-from notebooklm_processor import NotebookLMProcessor, VideoNotebook
+from notebooklm_processor import NotebookLMProcessor
+
 # from videoprism_analyzer import VideoPrismAnalyzer, VideoPrismAnalysis
 
 # MCP imports
@@ -579,7 +580,7 @@ class EnterpriseMCPServer:
                     "summary": result.summary,
                     "processing_time": round(time.time() - operation_start, 2)
                 }
-                
+
                 self.metrics.record_timing("notebooklm_analysis.duration", time.time() - operation_start)
                 self.metrics.record_counter("notebooklm_analysis.success")
 

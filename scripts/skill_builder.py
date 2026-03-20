@@ -7,8 +7,8 @@ Anti-bloat: <100 lines, uses existing tools
 import json
 from datetime import datetime
 from pathlib import Path
+from typing import Any, Dict, List, Optional
 
-from typing import Dict, Any, List, Optional
 SKILLS_DB = Path(__file__).parent / "skills_database.json"
 
 class SkillBuilder:

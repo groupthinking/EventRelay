@@ -1,6 +1,5 @@
 {
     "recommendations": [
-        "antigravity.antigravity-rpc",
         "googlecloudtools.firebase-dataconnect-vscode"
     ]
 }

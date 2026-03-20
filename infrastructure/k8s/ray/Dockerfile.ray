@@ -1,0 +1,42 @@
+# UVAI Ray Serve — Custom Image
+# Extends the official Ray 2.9.0 image with UVAI model code
+# baked in — eliminates kubectl cp for deployments.
+#
+# Build locally:
+#   docker build -f infrastructure/k8s/ray/Dockerfile.ray \
+#     -t us-central1-docker.pkg.dev/uvai-730bb/uvai-registry/ray-serve-uvai:latest .
+#   docker push us-central1-docker.pkg.dev/uvai-730bb/uvai-registry/ray-serve-uvai:latest
+#
+# Build via Cloud Build (no local Docker needed):
+#   gcloud builds submit /tmp/ray-build \
+#     --tag us-central1-docker.pkg.dev/uvai-730bb/uvai-registry/ray-serve-uvai:latest \
+#     --project uvai-730bb
+
+FROM rayproject/ray:2.9.0-py39
+
+RUN pip install --no-cache-dir \
+    numpy>=1.24.0
+
+RUN mkdir -p /home/ray/uvai/ml/models
+
+# Create the top-level package marker (uvai/__init__.py)
+RUN echo '"""UVAI platform package."""' > /home/ray/uvai/__init__.py
+
+# Copy ML package files explicitly
+COPY src/uvai/ml/__init__.py      /home/ray/uvai/ml/__init__.py
+COPY src/uvai/ml/serve.py         /home/ray/uvai/ml/serve.py
+COPY src/uvai/ml/models/__init__.py                    /home/ray/uvai/ml/models/__init__.py
+COPY src/uvai/ml/models/transcript_quality_scorer.py   /home/ray/uvai/ml/models/transcript_quality_scorer.py
+COPY src/uvai/ml/models/action_priority_ranker.py      /home/ray/uvai/ml/models/action_priority_ranker.py
+
+# Bake in the Ray Serve config
+COPY infrastructure/k8s/ray/ray-serve-config.yaml /home/ray/ray-serve-config.yaml
+
+# Ensure PYTHONPATH includes /home/ray so `import uvai.ml...` works
+ENV PYTHONPATH="/home/ray:${PYTHONPATH}"
+
+# Verify imports at build time — fails the build if code is broken
+RUN python -c "import sys; sys.path.insert(0, '/home/ray'); from uvai.ml.models.transcript_quality_scorer import TranscriptQualityScorer; from uvai.ml.models.action_priority_ranker import ActionPriorityRanker; s = TranscriptQualityScorer(); r = ActionPriorityRanker(); print(f'Build verification OK: {s.model_info[\"name\"]} + {r.model_info[\"name\"]}')"
+
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
+    CMD python -c "from uvai.ml.models.transcript_quality_scorer import TranscriptQualityScorer; print('OK')"

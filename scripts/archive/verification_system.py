@@ -13,13 +13,12 @@ OUTPUT:
     Comprehensive verification report with gap analysis
 """
 
-import os
-import sys
 import json
-import subprocess
+import sys
+from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Dict, List, Any, Tuple
-from dataclasses import dataclass, asdict
+from typing import Any, Dict, List
+
 
 @dataclass
 class VerificationResult:
@@ -51,7 +50,7 @@ class UVaiVerificationSystem:
                         content = f.read()
                         if any(key in content for key in ['sk-', 'AIzaSy', 'xai-', 'gsk_']):
                             exposed_keys.append(str(env_file))
-                except Exception as e:
+                except Exception:
                     pass
 
         self.results.append(VerificationResult(
@@ -92,7 +91,7 @@ class UVaiVerificationSystem:
                     tool_count = content.count('"name"')
                     server_details[server_file.name] = tool_count
                     total_tools += tool_count
-            except Exception as e:
+            except Exception:
                 server_details[server_file.name] = 0
 
         self.results.append(VerificationResult(
@@ -191,9 +190,7 @@ class UVaiVerificationSystem:
 
         # Test if benchmark system can be imported
         try:
-            import sys
             # REMOVED: sys.path.append removed
-            import performance_benchmark_system
             import_status = "Import successful"
             severity = "MINOR"
         except Exception as e:

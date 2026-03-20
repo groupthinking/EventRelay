@@ -15,32 +15,36 @@ Perform Ruthless Solutions (remediation).
 Implement Fortification (preventative measures).
 """
 
-import asyncio
 import argparse
+import asyncio
 import json
 import logging
-import os
 import sys
-import traceback
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Any, Dict
+
+try:
+    import orjson
+    HAS_ORJSON = True
+except ImportError:
+    HAS_ORJSON = False
 
 # Set up path to include src
-import sys
-import traceback
-from pathlib import Path
-from typing import Dict, Any, List, Optional
 
-from typing import Dict, Any
 sys.path.append(str(Path(__file__).parent.parent / "src"))
 
 try:
-    from youtube_extension.backend.services.health_monitoring_service import get_health_monitoring_service, HealthStatus
-    from youtube_extension.backend.services.metrics_service import MetricsService
+    from youtube_extension.backend.services.database_cleanup_service import (
+        run_database_cleanup,
+    )
+    from youtube_extension.backend.services.health_monitoring_service import (
+        HealthStatus,
+        get_health_monitoring_service,
+    )
     from youtube_extension.backend.services.logging_service import get_logging_service
-    from youtube_extension.backend.services.database_cleanup_service import run_database_cleanup
-except ImportError as e:
+    from youtube_extension.backend.services.metrics_service import MetricsService
+except ImportError:
     # Print warning but don't fail immediately, allows dry-run in incomplete envs
     # print(f"Warning: Could not import services: {e}")
     pass
@@ -163,11 +167,14 @@ class AuditAgent:
 
         for log_file in files_to_scan:
             try:
-                with open(log_file, 'r') as f:
+                with open(log_file, 'rb') as f:
                     for line in f:
                         try:
                             if not line.strip(): continue
-                            entry = json.loads(line)
+                            if HAS_ORJSON:
+                                entry = orjson.loads(line)
+                            else:
+                                entry = json.loads(line.decode('utf-8'))
 
                             # Check timestamp
                             ts_str = entry.get("timestamp")
@@ -196,7 +203,8 @@ class AuditAgent:
                                 found_issues.append(entry)
                                 continue
 
-                        except json.JSONDecodeError:
+                        except Exception:
+                            # Catch any JSON decode error (both json and orjson)
                             continue
             except Exception as e:
                 logger.error(f"Error scanning {log_file}: {e}")
@@ -224,8 +232,12 @@ class AuditAgent:
             return
 
         try:
-            with open(metrics_file, 'r') as f:
-                data = json.load(f)
+            with open(metrics_file, 'rb') as f:
+                content = f.read()
+                if HAS_ORJSON:
+                    data = orjson.loads(content)
+                else:
+                    data = json.loads(content.decode('utf-8'))
 
             metrics = data.get("metrics", {})
             for name, metric_data in metrics.items():

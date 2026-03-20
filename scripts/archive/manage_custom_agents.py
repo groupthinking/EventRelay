@@ -22,13 +22,13 @@ Usage:
 import argparse
 import sys
 from pathlib import Path
-from typing import Optional
 
 # Add src to path - import the module file directly to avoid package dependencies
 agent_gap_module_path = Path(__file__).parent.parent / "src" / "youtube_extension" / "services" / "agents"
 sys.path.insert(0, str(agent_gap_module_path))
 
 import agent_gap_analyzer
+
 AgentGapAnalyzer = agent_gap_analyzer.AgentGapAnalyzer
 AgentRecommendation = agent_gap_analyzer.AgentRecommendation
 

@@ -5,6 +5,7 @@ on:
 permissions:
   pull-requests: write
   issues: write
+  pull-requests: write
 jobs:
   validate:
     runs-on: ubuntu-latest
@@ -18,7 +19,7 @@ jobs:
             if (pr.title.length < 10) {
               issues.push('❌ PR title too short (minimum 10 characters)');
             }
-            if (!/^(feat|fix|docs|style|refactor|test|chore|perf|ci|build|revert)(\(.+\))?:/.test(pr.title)) {
+            if (!/^(?:⚡\s*)?(feat|fix|docs|style|refactor|test|chore|perf|ci|build|revert)(\(.+\))?:/i.test(pr.title) && !pr.title.startsWith('⚡')) {
               issues.push('⚠️ PR title should follow conventional commits format');
             }
 
@@ -27,14 +28,20 @@ jobs:
             }
 
             const totalChanges = (pr.additions || 0) + (pr.deletions || 0);
+
+            // For warnings (like large PR), we don't fail the PR. We only fail for errors (like title format or description missing).
+            const errors = issues.filter(issue => issue.startsWith('❌'));
+            const warnings = issues.filter(issue => issue.startsWith('⚠️'));
+
             if (totalChanges > 500) {
-              issues.push(`⚠️ Large PR detected (${totalChanges} lines changed)`);
+              warnings.push(`⚠️ Large PR detected (${totalChanges} lines changed)`);
             }
 
-            if (issues.length > 0) {
+            if (errors.length > 0 || warnings.length > 0) {
+              const allIssues = [...errors, ...warnings];
               // Fork PRs get a read-only GITHUB_TOKEN; skip commenting to avoid errors
               if (pr.head.repo.full_name === pr.base.repo.full_name) {
-                const comment = `## 🔍 PR Validation\n\n${issues.join('\n')}`;
+                const comment = `## 🔍 PR Validation\n\n${allIssues.join('\n')}`;
                 await github.rest.issues.createComment({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
@@ -43,7 +50,13 @@ jobs:
                 });
               } else {
                 core.warning('Skipping PR comment for fork PR (read-only token)');
-                issues.forEach(issue => core.warning(issue));
+                allIssues.forEach(issue => core.warning(issue));
+              }
+              if (errors.length > 0) {
+                core.setFailed('PR validation failed due to errors');
+              }
+              if (issues.some(i => i.startsWith('❌'))) {
+                core.setFailed('PR validation failed');
               }
 
               const hasErrors = issues.some(issue => issue.includes('❌'));

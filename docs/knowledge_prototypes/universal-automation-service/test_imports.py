@@ -5,7 +5,7 @@ Tests each system independently to identify specific blockers
 """
 
 import sys
-from pathlib import Path
+
 
 def test_gemini():
     """Test Gemini processor import"""
@@ -13,7 +13,6 @@ def test_gemini():
     print("Testing Gemini Processor Import")
     print("="*60)
     try:
-        from gemini_video_processor import GeminiVideoProcessor
         print("✅ Gemini processor imported successfully")
         return True
     except Exception as e:
@@ -31,7 +30,6 @@ def test_uvai():
         sys.path.insert(0, str(UVAI_PATH))
 
     try:
-        from tools.uvai_codex_universal_deployment import UVAICodexUniversalDeployment
         print("✅ UVAICodexUniversalDeployment imported successfully")
         return True
     except Exception as e:
@@ -49,7 +47,6 @@ def test_eventrelay():
         sys.path.insert(0, str(EVENTRELAY_PATH))
 
     try:
-        from youtube_extension.services.workflows.transcript_action_workflow import VideoToActionWorkflow
         print("✅ VideoToActionWorkflow imported successfully")
         return True
     except Exception as e:

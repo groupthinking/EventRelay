@@ -9,10 +9,10 @@ Exposes Google's LiteRT-LM (Edge LLM Runtime) capabilities as an MCP Server.
 import asyncio
 import json
 import logging
-import sys
 import os
 import shutil
-from typing import Dict, Any, Optional
+import sys
+from typing import Any, Dict, Optional
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, stream=sys.stderr)
@@ -147,19 +147,19 @@ class MCPServer:
 
     async def _run_inference(self, args: Dict[str, Any]) -> Dict[str, Any]:
         prompt = args.get("prompt")
-        
+
         # Validate prompt parameter
         if not prompt or not isinstance(prompt, str) or not prompt.strip():
             return {
                 "status": "error",
                 "message": "Invalid or empty prompt. Please provide a non-empty text prompt."
             }
-        
+
         model_path = args.get("model_path") or self.default_model_path
         image_path = args.get("image_path")
         audio_path = args.get("audio_path")
         backend = args.get("backend", "cpu")
-        
+
         # Validate backend parameter
         valid_backends = ["cpu", "gpu", "npu"]
         if backend not in valid_backends:

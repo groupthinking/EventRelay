@@ -6,8 +6,8 @@ Tests real business-focused video processing workflows
 """
 
 import asyncio
-import os
 import sys
+
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -16,7 +16,9 @@ load_dotenv()
 async def test_business_video_processing():
     """Test processing business-relevant educational content"""
     try:
-        from src.youtube_extension.backend.services.real_video_processor import RealVideoProcessor
+        from src.youtube_extension.backend.services.real_video_processor import (
+            RealVideoProcessor,
+        )
 
         # Business-focused educational content
         business_videos = [

@@ -15,14 +15,15 @@
     "lint": "eslint . --max-warnings 0"
   },
   "dependencies": {
-    "pg": "^8.11.0",
+    "@dataconnect/generated": "file:src/dataconnect-generated",
     "@octokit/rest": "^20.0.0",
-    "@slack/web-api": "^6.9.0"
+    "@slack/web-api": "^6.9.0",
+    "pg": "^8.11.0"
   },
   "devDependencies": {
-    "@types/pg": "^8.10.0",
     "@types/node": "^20",
-    "typescript": "^5",
-    "eslint": "^8"
+    "@types/pg": "^8.10.0",
+    "eslint": "^8",
+    "typescript": "^5"
   }
 }

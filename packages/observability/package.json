@@ -10,17 +10,18 @@
     "lint": "eslint . --max-warnings 0"
   },
   "dependencies": {
+    "@dataconnect/generated": "file:src/dataconnect-generated",
     "@opentelemetry/api": "^1.7.0",
-    "@opentelemetry/sdk-node": "^0.45.0",
-    "@opentelemetry/exporter-trace-otlp-grpc": "^0.45.0",
     "@opentelemetry/exporter-metrics-otlp-grpc": "^0.45.0",
+    "@opentelemetry/exporter-trace-otlp-grpc": "^0.45.0",
     "@opentelemetry/instrumentation": "^0.45.0",
     "@opentelemetry/resources": "^1.18.0",
+    "@opentelemetry/sdk-node": "^0.45.0",
     "@opentelemetry/semantic-conventions": "^1.18.0"
   },
   "devDependencies": {
     "@types/node": "^20",
-    "typescript": "^5",
-    "eslint": "^8"
+    "eslint": "^8",
+    "typescript": "^5"
   }
 }

@@ -25,6 +25,7 @@ python-dotenv>=1.0.0
 PyYAML>=6.0.0
 requests>=2.31.0
 Pillow>=10.0.0
+google-genai>=1.0.0
 google-generativeai>=0.3.0
 opentelemetry-distro>=0.40b0
 opentelemetry-exporter-otlp>=1.20.0
@@ -32,6 +33,7 @@ psutil>=5.9.0
 ffmpeg-python>=0.2.0
 qrcode[pil]>=7.0
 opencv-python>=4.8.0
+orjson>=3.9.0
 
 [deploy]
 docker>=6.1.0
@@ -93,3 +95,5 @@ gitpython>=3.1.0
 cachetools>=5.0.0
 google-cloud-storage>=2.13.0
 google-cloud-pubsub>=2.19.0
+google-cloud-vision>=3.7.0
+google-cloud-videointelligence>=2.13.0

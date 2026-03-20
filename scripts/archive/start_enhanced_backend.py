@@ -6,13 +6,14 @@ Enhanced Backend Startup Script
 Starts the enhanced FastAPI backend with proper configuration and health checks.
 """
 
+import asyncio
+import logging
 import os
 import sys
-import uvicorn
-import logging
-import asyncio
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
+
+import uvicorn
 from dotenv import load_dotenv
 
 # Configure logging
@@ -59,10 +60,10 @@ def check_dependencies() -> bool:
     logger.info("📦 Checking dependencies...")
 
     try:
-        import fastapi
-        import uvicorn
         import aiohttp
+        import fastapi
         import openai
+        import uvicorn
         logger.info("✅ Core dependencies available")
 
         # Check if video processor can be imported

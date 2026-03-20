@@ -5,19 +5,19 @@ Competitive pressure-driven video intake with learning outcome tracking
 """
 
 import asyncio
+import hashlib
 import json
 import logging
-import sqlite3
 import os
-from datetime import datetime
-from typing import Dict, Any, List, Optional
-import hashlib
-import mcp.server.stdio
-import mcp.types as types
-from mcp.server.lowlevel import Server
+import sqlite3
+from typing import Any, Dict, List
 
 # Import our innovation pressure engine
 from innovation_pressure_engine import InnovationPressureEngine
+
+import mcp.server.stdio
+import mcp.types as types
+from mcp.server.lowlevel import Server
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

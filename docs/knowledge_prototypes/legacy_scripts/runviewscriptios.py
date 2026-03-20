@@ -1,23 +1,19 @@
-import os
-import json
-import requests
-from typing import Dict, List, Optional, Tuple
-from dataclasses import dataclass
-from datetime import datetime
 import re
+from dataclasses import dataclass
+from typing import Dict, List
 
 # YouTube API and Transcript imports
 try:
-    from youtube_transcript_api import YouTubeTranscriptApi
     from googleapiclient.discovery import build
     from googleapiclient.errors import HttpError
+    from youtube_transcript_api import YouTubeTranscriptApi
 except ImportError:
     print("Please install required packages: pip install youtube-transcript-api google-api-python-client")
 
 # AI/ML imports
 try:
-    from transformers import pipeline, AutoTokenizer, AutoModelForSeq2SeqLM
     import torch
+    from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, pipeline
 except ImportError:
     print("Please install transformers: pip install transformers torch")
 

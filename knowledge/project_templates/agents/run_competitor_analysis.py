@@ -1,18 +1,18 @@
 import os
-import sys
-import json
+
 from gemini_client import GeminiInteractionClient
+
 
 def run_analysis():
     print("Initializing Competitor Analysis...")
-    
+
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
         print("Error: GEMINI_API_KEY not set.")
         return
 
     client = GeminiInteractionClient(api_key=api_key)
-    
+
     # Constructing the detailed research prompt
     prompt = """
     Perform a deep comprehensive analysis of the following competitors and tools in the AI/Video/Dev tools space:
@@ -42,26 +42,26 @@ def run_analysis():
         )
         interaction_id = interaction.get("id")
         print(f"Research Task Started! ID: {interaction_id}")
-        
+
         print("Polling for results (this may take several minutes)...")
         # Increasing timeout to 10 minutes for deep research
         result = client.wait_for_completion(interaction_id, timeout=600)
-        
+
         print("\n--- Research Complete ---")
         outputs = result.get("outputs", [])
-        
+
         report_content = ""
         for output in outputs:
             if output.get("type") == "text":
                 report_content += output.get("text")
-        
+
         # Save to file
         output_filename = "COMPETITOR_ANALYSIS_REPORT.md"
         with open(output_filename, "w") as f:
             f.write(report_content)
-            
+
         print(f"Report saved to: {output_filename}")
-        
+
     except Exception as e:
         print(f"Analysis Failed: {e}")
 

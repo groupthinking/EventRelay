@@ -11,12 +11,11 @@ This script:
 """
 
 import asyncio
-import json
-import os
 import subprocess
 import sys
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import List
+
 
 # Colors for output
 class Colors:

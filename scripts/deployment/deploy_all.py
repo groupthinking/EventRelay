@@ -6,8 +6,7 @@ Deploy all integrations with one command
 
 import asyncio
 import subprocess
-import sys
-import os
+
 
 async def deploy_all() -> None:
     """Deploy all YouTube Extension integrations"""

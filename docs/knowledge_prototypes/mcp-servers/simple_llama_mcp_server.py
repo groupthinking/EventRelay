@@ -7,10 +7,7 @@ This is a simplified version that focuses on tool registration
 """
 
 import asyncio
-import json
 import logging
-import sys
-from pathlib import Path
 
 # Add parent directory to path for imports
 # REMOVED: sys.path.insert with Path manipulation
@@ -105,7 +102,7 @@ async def main():
     logger.info("🚀 Simple Llama Agent MCP Server starting...")
     logger.info(f"📋 Available tools: {[tool['name'] for tool in TOOLS]}")
     logger.info("🔧 Server running in simple mode - tools registered successfully!")
-    
+
     # Keep the server running
     try:
         while True:

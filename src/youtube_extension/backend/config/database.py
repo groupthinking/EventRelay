@@ -16,6 +16,7 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Any, Optional
+
 try:
     from pydantic_settings import BaseSettings
 except ImportError:

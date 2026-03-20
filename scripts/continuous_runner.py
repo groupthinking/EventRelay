@@ -5,18 +5,14 @@ import asyncio
 import json
 import os
 from pathlib import Path
-from typing import Dict, Any
+from typing import Any, Dict
 
-import sys
 # Import from agents directory with fallback for standalone execution
 try:
     from ..agents.process_video_with_mcp import RealVideoProcessor
 except ImportError:
     # Fallback for standalone script execution
     from agents.process_video_with_mcp import RealVideoProcessor
-from pathlib import Path
-import json
-import os
 from datetime import datetime
 
 # Reuse existing implementer to turn actions into plans

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-import time
-import psutil
 import logging
-from pathlib import Path
+import time
+
+import psutil
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - [MONITOR] %(message)s')
 logger = logging.getLogger(__name__)

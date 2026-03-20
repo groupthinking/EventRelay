@@ -12,15 +12,15 @@ to polling-based monitoring.
 
 import sys
 import time
-from pathlib import Path
 from datetime import datetime
-from typing import Optional, Any
+from pathlib import Path
+from typing import Any
 
 # Try to import watchdog for efficient file monitoring
 WATCHDOG_AVAILABLE = False
 try:
-    from watchdog.observers import Observer
     from watchdog.events import FileSystemEventHandler
+    from watchdog.observers import Observer
     WATCHDOG_AVAILABLE = True
 except ImportError:
     # Define a dummy class for when watchdog is not available
