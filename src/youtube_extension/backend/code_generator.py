@@ -39,11 +39,19 @@ class ProjectCodeGenerator:
         logger.info(f"🏗️ Generating project: {project_config.get('type', 'web')}")
 
         try:
-            # Extract project information
-            extracted_info = video_analysis.get("extracted_info", {})
-            project_type = project_config.get("type", extracted_info.get("project_type", "web"))
+            # Normalize video context so every project reflects the specific tutorial
+            context = self._build_generation_context(video_analysis, project_config)
+            extracted_info = context["extracted_info"]
+            project_type = extracted_info.get("project_type", "web")
             technologies = extracted_info.get("technologies", ["javascript", "html", "css"])
-            features = project_config.get("features", extracted_info.get("features", []))
+            features = extracted_info.get("features", [])
+
+            # Carry enriched context forward for downstream generators
+            video_analysis = dict(video_analysis)
+            video_analysis["extracted_info"] = extracted_info
+            video_analysis["summary"] = context.get("summary", "")
+            video_analysis["key_concepts"] = context.get("key_concepts", [])
+            video_analysis["tutorial_steps"] = extracted_info.get("tutorial_steps", [])
 
             # Create temporary project directory
             temp_dir = tempfile.mkdtemp(prefix="uvai_project_")
@@ -91,6 +99,8 @@ class ProjectCodeGenerator:
         extracted_info = video_analysis.get("extracted_info", {})
         title = extracted_info.get("title", "UVAI React App")
         tutorial_steps = extracted_info.get("tutorial_steps", [])
+        summary = video_analysis.get("summary", "")
+        key_concepts = video_analysis.get("key_concepts", [])
 
         # Create package.json
         package_json = {
@@ -143,7 +153,14 @@ class ProjectCodeGenerator:
 
         # Generate main App component
         technologies = extracted_info.get("technologies", [])
-        app_component = self._generate_react_app_component(title, technologies, tutorial_steps, features)
+        app_component = self._generate_react_app_component(
+            title,
+            technologies,
+            tutorial_steps,
+            features,
+            summary,
+            key_concepts
+        )
         with open(src_dir / "App.js", "w") as f:
             f.write(app_component)
 
@@ -177,9 +194,18 @@ class ProjectCodeGenerator:
         title = extracted_info.get("title", "UVAI Web App")
         technologies = extracted_info.get("technologies", [])
         tutorial_steps = extracted_info.get("tutorial_steps", [])
+        summary = video_analysis.get("summary", "")
+        key_concepts = video_analysis.get("key_concepts", [])
 
         # Generate index.html
-        index_html = self._generate_vanilla_index_html(title, technologies, tutorial_steps, features)
+        index_html = self._generate_vanilla_index_html(
+            title,
+            technologies,
+            tutorial_steps,
+            features,
+            summary,
+            key_concepts
+        )
         with open(project_path / "index.html", "w") as f:
             f.write(index_html)
 
@@ -273,7 +299,15 @@ class ProjectCodeGenerator:
   </body>
 </html>'''
 
-    def _generate_react_app_component(self, title: str, technologies: list[str], tutorial_steps: list[str], features: list[str]) -> str:
+    def _generate_react_app_component(
+        self,
+        title: str,
+        technologies: list[str],
+        tutorial_steps: list[str],
+        features: list[str],
+        summary: str,
+        key_concepts: list[str]
+    ) -> str:
         """Generate the main React App component"""
         steps_jsx = ""
         if tutorial_steps:
@@ -295,6 +329,28 @@ class ProjectCodeGenerator:
         <div className="tech-cards">
 {tech_items}
         </div>
+      </section>'''
+
+        concepts_jsx = ""
+        if key_concepts:
+            concept_items = "\\n".join([
+                f"          <div key='{concept}' className='feature-card'>{concept}</div>"
+                for concept in key_concepts[:6]
+            ])
+            concepts_jsx = f'''
+      <section className="features">
+        <h2>Key Concepts From The Video</h2>
+        <div className="feature-cards">
+{concept_items}
+        </div>
+      </section>'''
+
+        summary_jsx = ""
+        if summary:
+            summary_jsx = f'''
+      <section className="welcome">
+        <h2>What This Tutorial Covers</h2>
+        <p>{summary[:500]}</p>
       </section>'''
 
         features_jsx = ""
@@ -326,7 +382,9 @@ function App() {{
              &ldquo;<strong>{title}</strong>&rdquo; and extracting the key
              technologies, features, and implementation steps.</p>
         </section>
+{summary_jsx}
 {tech_jsx}
+{concepts_jsx}
 {steps_jsx}
 {features_jsx}
       </main>
@@ -461,7 +519,15 @@ root.render(
 }}
 {responsive_css}'''
 
-    def _generate_vanilla_index_html(self, title: str, technologies: list[str], tutorial_steps: list[str], features: list[str]) -> str:
+    def _generate_vanilla_index_html(
+        self,
+        title: str,
+        technologies: list[str],
+        tutorial_steps: list[str],
+        features: list[str],
+        summary: str,
+        key_concepts: list[str]
+    ) -> str:
         """Generate index.html for vanilla JS projects"""
         steps_html = ""
         if tutorial_steps:
@@ -496,6 +562,27 @@ root.render(
       </div>
     </section>'''
 
+        summary_html = ""
+        if summary:
+            summary_html = f'''
+    <section class="welcome">
+      <h2>What This Tutorial Covers</h2>
+      <p>{summary[:500]}</p>
+    </section>'''
+
+        concepts_html = ""
+        if key_concepts:
+            concept_cards = "\\n".join(
+                [f'            <div class="feature-card">{concept}</div>' for concept in key_concepts[:6]]
+            )
+            concepts_html = f'''
+    <section class="features">
+      <h2>Key Concepts From The Video</h2>
+      <div class="feature-cards">
+{concept_cards}
+      </div>
+    </section>'''
+
         return f'''<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -518,7 +605,9 @@ root.render(
                    &ldquo;<strong>{title}</strong>&rdquo; and extracting the key
                    technologies, features, and implementation steps.</p>
             </section>
+{summary_html}
 {tech_html}
+{concepts_html}
 {steps_html}
 {features_html}
         </main>
@@ -767,8 +856,12 @@ if __name__ == "__main__":
         extracted_info = video_analysis.get("extracted_info", {})
         technologies = extracted_info.get("technologies", [])
         features = extracted_info.get("features", [])
+        summary = video_analysis.get("summary") or video_analysis.get("ai_analysis", {}).get("Content Summary", "")
+        key_concepts = video_analysis.get("key_concepts", [])
         tech_section = "\n".join([f"- {tech}" for tech in technologies]) if technologies else "- See source video for details"
         feature_section = "\n".join([f"- {f.replace('_', ' ').title()}" for f in features]) if features else "- See source video for details"
+        concepts_section = "\n".join([f"- {concept}" for concept in key_concepts]) if key_concepts else "- See source video for details"
+        summary_section = summary if summary else "Summary not available from analysis."
 
         return f'''# {title}
 
@@ -786,6 +879,12 @@ Watch the original video to follow along with the implementation details.
 
 ## Features
 {feature_section}
+
+## Video Summary
+{summary_section}
+
+## Key Concepts From The Tutorial
+{concepts_section}
 
 ## Getting Started
 
@@ -831,6 +930,109 @@ This is a starting point generated from video analysis. You can:
         if name and not name[0].isalpha():
             name = 'uvai-' + name
         return name[:50] if name else 'uvai-project'
+
+    def _build_generation_context(self, video_analysis: dict[str, Any], project_config: dict[str, Any]) -> dict[str, Any]:
+        """Combine video analysis, AI insights, and user config for generation."""
+        extracted_info = dict(video_analysis.get("extracted_info") or {})
+        metadata = video_analysis.get("metadata") or video_analysis.get("video_data") or {}
+        ai_analysis = video_analysis.get("ai_analysis") or {}
+
+        title = (
+            project_config.get("title")
+            or extracted_info.get("title")
+            or metadata.get("title")
+            or metadata.get("video_title")
+            or "UVAI Generated Project"
+        )
+
+        technologies = self._coerce_to_list(extracted_info.get("technologies"))
+        if not technologies:
+            technologies = (
+                self._coerce_to_list(ai_analysis.get("Related Topics"))
+                or self._coerce_to_list(ai_analysis.get("Key Concepts"))
+                or self._coerce_to_list(metadata.get("keywords"))
+            )
+        if not technologies:
+            technologies = ["javascript", "html", "css"]
+
+        features = project_config.get("features") or extracted_info.get("features") or []
+        if not features and technologies:
+            features = [tech.replace(" ", "_") for tech in technologies[:3]]
+
+        tutorial_steps = self._coerce_to_list(extracted_info.get("tutorial_steps"))
+        if not tutorial_steps:
+            tutorial_steps = self._derive_tutorial_steps(ai_analysis, video_analysis)
+
+        summary = self._extract_summary(ai_analysis, video_analysis)
+        key_concepts = self._coerce_to_list(ai_analysis.get("Key Concepts")) or technologies
+
+        extracted_info.update({
+            "title": title,
+            "technologies": technologies,
+            "features": features,
+            "tutorial_steps": tutorial_steps,
+            "project_type": project_config.get("type", extracted_info.get("project_type", "web"))
+        })
+
+        return {
+            "extracted_info": extracted_info,
+            "summary": summary,
+            "key_concepts": key_concepts
+        }
+
+    def _coerce_to_list(self, value: Any) -> list[str]:
+        """Convert common iterable or delimited strings into a clean list."""
+        if not value:
+            return []
+        if isinstance(value, list):
+            return [str(item) for item in value if str(item).strip()]
+        if isinstance(value, str):
+            parts = [part.strip() for part in value.replace("|", ",").split(",") if part.strip()]
+            return parts or [value.strip()]
+        return []
+
+    def _derive_tutorial_steps(self, ai_analysis: dict[str, Any], video_analysis: dict[str, Any]) -> list[str]:
+        """Derive tutorial steps from AI analysis, markdown, or transcript."""
+        steps: list[str] = []
+
+        learning_path = ai_analysis.get("Learning Path")
+        if isinstance(learning_path, str):
+            steps = [line.strip(" -•") for line in learning_path.replace("\r", "\n").split("\n") if line.strip()]
+
+        if not steps:
+            transcript_text = (video_analysis.get("transcript") or {}).get("text", "")
+            if transcript_text:
+                sentences = [segment.strip() for segment in transcript_text.split(".") if segment.strip()]
+                steps = sentences[:5]
+
+        if not steps:
+            markdown_text = video_analysis.get("markdown_analysis", "")
+            if isinstance(markdown_text, str):
+                steps = [
+                    line.strip(" -*")
+                    for line in markdown_text.splitlines()
+                    if line.strip().startswith(("-", "*"))
+                ][:5]
+
+        return steps[:8]
+
+    def _extract_summary(self, ai_analysis: dict[str, Any], video_analysis: dict[str, Any]) -> str:
+        """Extract a concise summary from AI analysis or available content."""
+        summary = ai_analysis.get("Content Summary")
+        if isinstance(summary, str) and summary.strip():
+            return summary.strip()
+
+        markdown_text = video_analysis.get("markdown_analysis")
+        if isinstance(markdown_text, str) and markdown_text.strip():
+            lines = [line.strip() for line in markdown_text.splitlines() if line.strip()]
+            if lines:
+                return " ".join(lines[:3])[:600]
+
+        transcript_text = (video_analysis.get("transcript") or {}).get("text", "")
+        if transcript_text:
+            return " ".join(transcript_text.split()[:120])
+
+        return ""
 
     def _create_basic_templates(self):
         """Create basic template files if they don't exist"""
