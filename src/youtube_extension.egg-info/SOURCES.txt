@@ -113,6 +113,7 @@ src/youtube_extension/backend/ai_code_generator.py
 src/youtube_extension/backend/ai_insights_processor.py
 src/youtube_extension/backend/build_plan.py
 src/youtube_extension/backend/cloud_ai_routes.py
+src/youtube_extension/backend/cloud_api_endpoints.py
 src/youtube_extension/backend/code_generator.py
 src/youtube_extension/backend/deployment_manager.py
 src/youtube_extension/backend/enhanced_video_processor.py
@@ -221,6 +222,7 @@ src/youtube_extension/processors/strategies.py
 src/youtube_extension/processors/video_processor.py
 src/youtube_extension/services/__init__.py
 src/youtube_extension/services/deployment_manager.py
+src/youtube_extension/services/skill_builder.py
 src/youtube_extension/services/video_subagent.py
 src/youtube_extension/services/agents/__init__.py
 src/youtube_extension/services/agents/action_implementer_agent.py
@@ -243,6 +245,11 @@ src/youtube_extension/services/ai/__init__.py
 src/youtube_extension/services/ai/gemini_service.py
 src/youtube_extension/services/ai/hybrid_processor_service.py
 src/youtube_extension/services/ai/speech_to_text_service.py
+src/youtube_extension/services/cloud/__init__.py
+src/youtube_extension/services/cloud/cloud_tasks_queue.py
+src/youtube_extension/services/cloud/cloud_video_processor.py
+src/youtube_extension/services/cloud/firestore_state.py
+src/youtube_extension/services/cloud/vertex_ai_agent.py
 src/youtube_extension/services/workflows/transcript_action_workflow.py
 src/youtube_extension/utils/__init__.py
 src/youtube_extension/utils/performance.py
@@ -255,5 +262,9 @@ src/youtube_extension/videopack/provenance.py
 src/youtube_extension/videopack/schema.py
 src/youtube_extension/videopack/validate.py
 src/youtube_extension/videopack/versioning.py
+tests/test_build_plan.py
 tests/test_code_generator.py
+tests/test_code_generator_unique_output.py
+tests/test_firestore_state.py
+tests/test_gemini_vision_integration.py
 tests/test_ml_models.py
