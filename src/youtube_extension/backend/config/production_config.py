@@ -31,7 +31,7 @@ class ProductionConfig:
         # Security Configuration
         self.allowed_origins = self._parse_list(os.getenv(
             "ALLOWED_ORIGINS",
-            "https://youtube-extension-frontend.vercel.app,https://*.vercel.app"
+            "https://uvai.io,https://www.uvai.io,https://api.uvai.io"
         ))
         self.api_key_header = os.getenv("API_KEY_HEADER", "X-API-Key")
         self.rate_limit_per_minute = int(os.getenv("RATE_LIMIT_PER_MINUTE", "300"))
