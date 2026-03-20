@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useState, useCallback } from 'react';
 import { clsx } from 'clsx';
 import { useRouter } from 'next/navigation';
+import { ArrowRight } from 'lucide-react';
 
 const STEPS = [
   { icon: '🔗', title: 'Paste a Video URL', desc: 'Drop any YouTube link — tutorials, talks, walkthroughs' },
@@ -38,6 +39,9 @@ export default function Home() {
         <div className="flex items-center gap-3">
           <Link href="/dashboard" className="btn btn-secondary py-2 text-sm">
             Dashboard
+          </Link>
+          <Link href="/prototype" className="btn btn-secondary py-2 text-sm">
+            Prototype
           </Link>
           <Link href="/playground" className="btn btn-ghost py-2 text-sm text-white/50">
             API
@@ -94,6 +98,16 @@ export default function Home() {
               {label}
             </button>
           ))}
+        </div>
+
+        <div className="mt-6 flex justify-center">
+          <Link
+            href="/prototype"
+            className="inline-flex items-center gap-2 rounded-full border border-primary-500/25 bg-primary-500/10 px-4 py-2 text-sm font-medium text-primary-200 transition hover:border-primary-500/40 hover:bg-primary-500/15"
+          >
+            Open the clickable product prototype
+            <ArrowRight className="h-4 w-4" />
+          </Link>
         </div>
       </div>
 

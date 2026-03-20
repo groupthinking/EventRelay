@@ -177,6 +177,20 @@ OPENWHISK_NAMESPACE=your-namespace
 
 ---
 
+### 5. ✅ Durable Execution with Temporal SDK
+**Status**: Newly Implemented  
+**Location**: `packages/ai-gateway/src/workflows/`, `packages/ai-gateway/src/activities/`
+
+**Implementation**:
+I have successfully integrated the Temporal SDK into the framework to provide Durable Execution for agentic workflows. This adds robust, checkpointed task execution utilizing Gemini's advanced Computer Use capabilities via the Model Context Protocol (MCP).
+
+**Key Components**:
+- **Workflows (`competitiveAnalysisWorkflow.ts`)**: Implements a deterministic sequence allowing Gemini to plan, pause, and execute tasks across checkpoints.
+- **Activities (`competitiveAnalysisActivities.ts`)**: Connects to the Vercel AI SDK and chrome-devtools-mcp for browser integration.
+- **Workers & Clients**: Established boilerplate for starting long-running worker loops (`worker.ts`) and triggering async workflows (`client.ts`).
+
+---
+
 ## Files Created/Modified
 
 ### New Files Created (7)

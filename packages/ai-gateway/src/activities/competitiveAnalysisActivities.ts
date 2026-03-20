@@ -1,5 +1,8 @@
-import { generateText } from 'ai';
+import { generateText, tool } from 'ai';
 import { google } from '@ai-sdk/google';
+import { z } from 'zod';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 
 /**
  * Competitive Analysis Activities
@@ -24,22 +27,45 @@ export async function planTask(url: string): Promise<string> {
 export async function extractUrlContent(url: string): Promise<string> {
   console.log(`[Activity] Extracting URL Content for ${url} via Gemini Computer Use (MCP)`);
   
-  // In a full MCP implementation, we'd initialize the MCP Client to connect to chrome-devtools-mcp
-  // and convert the MCP tools to Vercel AI SDK tools using a bridge or custom wrapper.
-  // This allows Gemini to autonomously invoke "navigate", "click", "evaluate_script" during generation.
-  
-  const { text } = await generateText({
-    model: MODEL,
-    system: "You are an AI agent with Computer Use capabilities via the Chrome DevTools MCP. Navigate to the user's requested URL, extract product offerings and pricing, and return a clean summary. Use your browser tools to bypass popups or scroll if needed.",
-    prompt: `Target URL: ${url}`,
-    // Example of how the tools would be bound if the MCP client was fully initialized:
-    // tools: {
-    //   navigate: tool({ description: 'Navigate to a URL', parameters: z.object({ url: z.string() }), execute: async ({url}) => mcp.callTool('navigate', {url}) }),
-    //   read_dom: tool({ description: 'Read DOM elements', parameters: z.object({ selector: z.string() }), execute: async ({selector}) => mcp.callTool('read_dom', {selector}) }),
-    // },
-    // maxSteps: 10, // Let the model reason and call tools iteratively
+  // Initialize the MCP Client to connect to chrome-devtools-mcp via stdio transport
+  const transport = new StdioClientTransport({
+    command: 'npx',
+    args: ['-y', 'chrome-devtools-mcp'], // Spawns the MCP server
   });
-  return text;
+  
+  const mcpClient = new Client({ name: 'gemini-worker', version: '1.0.0' }, { capabilities: {} });
+  await mcpClient.connect(transport);
+  
+  try {
+    const { text } = await generateText({
+      model: MODEL,
+      system: "You are an AI agent with Computer Use capabilities via the Chrome DevTools MCP. Navigate to the user's requested URL, extract product offerings and pricing, and return a clean summary. Use your browser tools to evaluate the DOM and navigate.",
+      prompt: `Target URL: ${url}`,
+      tools: {
+        navigate: tool({
+          description: 'Navigate the active Chrome tab to a URL',
+          parameters: z.object({ url: z.string() }),
+          execute: async ({ url }) => {
+            console.log(`[MCP Tool] Navigating to ${url}`);
+            return await mcpClient.callTool({ name: 'navigate', arguments: { url } });
+          }
+        }),
+        evaluate_script: tool({
+          description: 'Evaluate JavaScript in the active Chrome tab to extract content from the DOM',
+          parameters: z.object({ script: z.string() }),
+          execute: async ({ script }) => {
+            console.log(`[MCP Tool] Evaluating script...`);
+            return await mcpClient.callTool({ name: 'evaluate_script', arguments: { script } });
+          }
+        })
+      },
+      maxSteps: 10, // Let the model reason and call tools iteratively
+    });
+    return text;
+  } finally {
+    // Ensure we clean up the MCP process to prevent memory leaks
+    await mcpClient.close();
+  }
 }
 
 export async function analyzeVideo(videoUrl: string): Promise<string> {
