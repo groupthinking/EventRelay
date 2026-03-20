@@ -1,5 +1,19 @@
 {
+  "canonical_orchestrator": "mcpc",
   "tools": [
+    {
+      "name": "mcpc",
+      "description": "MCPC — Canonical MCP orchestrator. Consolidates round-table, tool management, and shared state from 8 previously scattered repos.",
+      "transport": "stdio",
+      "command": [
+        "node",
+        "mcp-servers/mcpc/dist/index.js"
+      ],
+      "health": {
+        "method": "tools/list",
+        "params": {}
+      }
+    },
     {
       "name": "youtube_uvai_processor",
       "transport": "stdio",

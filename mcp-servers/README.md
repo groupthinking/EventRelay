@@ -2,6 +2,23 @@
 
 This directory contains the Model Context Protocol (MCP) servers used in the EventRelay (UVAI) ecosystem.
 
+## Canonical Orchestrator — `mcpc/` ✅
+
+**`mcpc/`** is the **single canonical MCP server** for EventRelay. It consolidates functionality from 8 previously scattered repositories into one unified TypeScript package.
+
+| Consolidated Origin | Feature Ported |
+|---|---|
+| MCPC (canonical, TypeScript) | Server infrastructure |
+| MCP_ROUND_TABLE | `round_table` — multi-agent consensus |
+| Mcpcserver (JavaScript) | Merged into server infrastructure |
+| mcp-tools-extension | `list_tools` / `execute_tool_chain` |
+| shared-state | `state_set` / `state_get` / `state_list` / `state_delete` |
+| MCP_IOS | `platforms/ios/` _(future)_ |
+| MCP-management | **Archived** |
+| MESH | **Archived** |
+
+See [`mcpc/README.md`](mcpc/README.md) for full documentation.
+
 ## Core Python Suite (`python-suite/`)
 
 The primary intelligence suite for video processing and code analysis.
@@ -13,19 +30,18 @@ The primary intelligence suite for video processing and code analysis.
 | `code_analysis_server.py`          | Automated Code Review            | `scan_security`, `analyze_performance`, `check_style`  |
 | `cloudflare_server.py`             | Cloudflare Gateway Proxy         | `get_gateway_url`                                      |
 | `learning_analytics_mcp_server.py` | Analytics Engine                 | `get_learning_stats`, `track_event`                    |
-| `embeddings_mcp_server.py`         | **NEW** pgvector Semantic Search | `embed_text`, `search_similar`, `embed_video_analysis` |
+| `embeddings_mcp_server.py`         | pgvector Semantic Search         | `embed_text`, `search_similar`, `embed_video_analysis` |
 
 ## Specialized Servers
 
+- **`litert-mcp/`**: Google LiteRT-LM edge inference.
 - **`genkit-wrapper/`**: Firebase Genkit integration for model orchestration.
 - **`puppeteer-server/`**: Browser automation and web scraping. (External)
 - **`metacognition-tools/`**: Advanced reasoning tools (Fermi estimation, Red Teaming).
 - **`mcp-profiling/`**: Internal performance profiling and verification.
-- **`unified-analytics/`**: sophisticated metrics collection and graph analysis engine.
+- **`unified-analytics/`**: Metrics collection and graph analysis engine.
 
 ## External Active Servers
-
-The following are external or JS-based servers utilized by the system:
 
 - **`grok-server/`**: xAI Grok integration.
 - **`perplexity-mcp/`**: Perplexity AI search.
@@ -33,11 +49,9 @@ The following are external or JS-based servers utilized by the system:
 
 ## Central Coordination
 
-The ecosystem uses a **State Coordinator** for cross-MCP communication and distributed continuity:
-
-- **State Coordinator**: manages current server status and task orchestration.
-- **Continuity Fabric** (`shared-state/fabric.py`): The unique value proposition enabling cross-device and cross-application state continuity via vector clocks.
-- **Database**: `shared-state/mcp_state.db`
+- **MCPC Orchestrator** (`mcpc/`): canonical tool dispatch, round-table, state, and tool-chain execution.
+- **MCPC Python Adapter** (`src/mcp/mcpc_adapter.py`): connects EventRelay's Python backend to MCPC via stdio transport.
+- **Registry** (`src/mcp/mcp_registry.json`): lists all active MCP servers; `mcpc` is the `canonical_orchestrator`.
 
 ## Maintenance & Archiving
 
@@ -45,4 +59,4 @@ Redundant or prototype versions of these servers have been moved to `knowledge/p
 
 ---
 
-_Last Updated: January 9, 2026_
+_Last Updated: March 2026 — MCP Consolidation complete_
