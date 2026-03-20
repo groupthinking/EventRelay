@@ -933,51 +933,81 @@ This is a starting point generated from video analysis. You can:
 
     def _build_generation_context(self, video_analysis: dict[str, Any], project_config: dict[str, Any]) -> dict[str, Any]:
         """Combine video analysis, AI insights, and user config for generation."""
-        extracted_info = dict(video_analysis.get("extracted_info") or {})
-        metadata = video_analysis.get("metadata") or video_analysis.get("video_data") or {}
-        ai_analysis = video_analysis.get("ai_analysis") or {}
 
-        title = (
-            project_config.get("title")
-            or extracted_info.get("title")
-            or metadata.get("title")
-            or metadata.get("video_title")
-            or "UVAI Generated Project"
-        )
+        # Check if we have a structured BuildPlan (Stage 2: Semantic Logic Parsing)
+        build_plan = video_analysis.get("build_plan")
 
-        technologies = self._coerce_to_list(extracted_info.get("technologies"))
-        if not technologies:
-            technologies = (
-                self._coerce_to_list(ai_analysis.get("Related Topics"))
-                or self._coerce_to_list(ai_analysis.get("Key Concepts"))
-                or self._coerce_to_list(metadata.get("keywords"))
+        if build_plan:
+            # Use BuildPlan as primary source - this is the preferred path!
+            logger.info(f"✅ Using structured BuildPlan: {build_plan.get('title', 'Untitled')}")
+
+            extracted_info = {
+                "title": build_plan.get("title"),
+                "project_type": build_plan.get("project_type", "web"),
+                "technologies": build_plan.get("technologies", []),
+                "features": build_plan.get("features", []),
+                "tutorial_steps": [
+                    f"{step.get('title')}: {step.get('description')}"
+                    for step in build_plan.get("steps", [])[:8]
+                ],
+                "difficulty_level": build_plan.get("difficulty_level", "beginner"),
+                "prerequisites": build_plan.get("prerequisites", []),
+                "learning_objectives": build_plan.get("learning_objectives", []),
+            }
+
+            summary = build_plan.get("description", "")
+            key_concepts = build_plan.get("technologies", [])
+
+        else:
+            # Fallback to legacy extraction logic
+            logger.warning("⚠️ BuildPlan not found, falling back to legacy extraction")
+
+            extracted_info = dict(video_analysis.get("extracted_info") or {})
+            metadata = video_analysis.get("metadata") or video_analysis.get("video_data") or {}
+            ai_analysis = video_analysis.get("ai_analysis") or {}
+
+            title = (
+                project_config.get("title")
+                or extracted_info.get("title")
+                or metadata.get("title")
+                or metadata.get("video_title")
+                or "UVAI Generated Project"
             )
-        if not technologies:
-            technologies = ["javascript", "html", "css"]
 
-        features = project_config.get("features") or extracted_info.get("features") or []
-        if not features and technologies:
-            features = [tech.replace(" ", "_") for tech in technologies[:3]]
+            technologies = self._coerce_to_list(extracted_info.get("technologies"))
+            if not technologies:
+                technologies = (
+                    self._coerce_to_list(ai_analysis.get("Related Topics"))
+                    or self._coerce_to_list(ai_analysis.get("Key Concepts"))
+                    or self._coerce_to_list(metadata.get("keywords"))
+                )
+            if not technologies:
+                technologies = ["javascript", "html", "css"]
 
-        tutorial_steps = self._coerce_to_list(extracted_info.get("tutorial_steps"))
-        if not tutorial_steps:
-            tutorial_steps = self._derive_tutorial_steps(ai_analysis, video_analysis)
+            features = project_config.get("features") or extracted_info.get("features") or []
+            if not features and technologies:
+                features = [tech.replace(" ", "_") for tech in technologies[:3]]
 
-        summary = self._extract_summary(ai_analysis, video_analysis)
-        key_concepts = self._coerce_to_list(ai_analysis.get("Key Concepts")) or technologies
+            tutorial_steps = self._coerce_to_list(extracted_info.get("tutorial_steps"))
+            if not tutorial_steps:
+                tutorial_steps = self._derive_tutorial_steps(ai_analysis, video_analysis)
 
-        extracted_info.update({
-            "title": title,
-            "technologies": technologies,
-            "features": features,
-            "tutorial_steps": tutorial_steps,
-            "project_type": project_config.get("type", extracted_info.get("project_type", "web"))
-        })
+            summary = self._extract_summary(ai_analysis, video_analysis)
+            key_concepts = self._coerce_to_list(ai_analysis.get("Key Concepts")) or technologies
+
+            extracted_info.update({
+                "title": title,
+                "technologies": technologies,
+                "features": features,
+                "tutorial_steps": tutorial_steps,
+                "project_type": project_config.get("type", extracted_info.get("project_type", "web"))
+            })
 
         return {
             "extracted_info": extracted_info,
             "summary": summary,
-            "key_concepts": key_concepts
+            "key_concepts": key_concepts,
+            "build_plan": build_plan  # Pass through for generators that want raw access
         }
 
     def _coerce_to_list(self, value: Any) -> list[str]:
