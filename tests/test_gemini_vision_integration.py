@@ -187,8 +187,8 @@ class TestEnhancedVideoProcessorWithVision:
             processor = EnhancedVideoProcessor()
 
             # Test with a short coding tutorial
-            test_video_url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
-            test_video_id = "dQw4w9WgXcQ"
+            test_video_id = os.getenv("TEST_YOUTUBE_VIDEO_ID", "auJzb1D-fag")
+            test_video_url = f"https://www.youtube.com/watch?v={test_video_id}"
 
             visual_context = await processor._extract_visual_context(test_video_url, test_video_id)
 
