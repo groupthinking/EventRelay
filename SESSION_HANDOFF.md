@@ -1,7 +1,7 @@
 # EventRelay — Session Handoff & System Documentation
 
-> **Generated**: 2026-03-02 | **Repo**: [groupthinking/EventRelay](https://github.com/groupthinking/EventRelay)
-> **Frontend**: https://uvai.io | **Backend**: https://api.uvai.io (Cloud Run)
+> **Generated**: 2026-03-02 | **Repo**: [groupthinking/EventRelay](https://github.com/groupthinking/EventRelay)  
+> **Frontend**: https://uvai.io | **API**: https://api.uvai.io
 
 ---
 
@@ -38,7 +38,7 @@ The vision (from the owner's notes): *"You're building the first AI software fac
 |-----------|----------|-----|------------|
 | Frontend  | Vercel   | `uvai.io` | Next.js 14, React, Zustand, TypeScript |
 | Backend   | Cloud Run | `api.uvai.io` | FastAPI, Python 3.12, uvicorn |
-| Database  | SQLite (dev) / PostgreSQL (prod) | See infrastructure/terraform/ | Production-ready persistence |
+| Database  | SQLite (ephemeral) | `/tmp/uvai_data/app.db` | On Cloud Run container |
 | Repos     | GitHub   | `github.com/groupthinking/` | Auto-created by pipeline |
 
 ### Request Flow
