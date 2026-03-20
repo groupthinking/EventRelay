@@ -3,11 +3,11 @@
 Auto-Healing Wrapper - Integrates skill_builder with error handling
 Maintains flow with minimal attention by auto-applying learned resolutions
 """
-import sys
-import traceback
-from typing import Optional, Any, Callable, Type
 from types import TracebackType
+from typing import Any, Callable, Optional, Type
+
 from skill_builder import SkillBuilder, auto_resolve
+
 
 class AutoHealContext:
     """Context manager for automatic error resolution"""

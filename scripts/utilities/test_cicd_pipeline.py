@@ -6,9 +6,7 @@ This script simulates what the GitHub Actions workflows would do.
 
 import asyncio
 import json
-import os
 import sys
-from pathlib import Path
 from datetime import datetime
 
 # REMOVED: sys.path manipulations - using proper package imports instead

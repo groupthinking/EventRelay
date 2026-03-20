@@ -7,10 +7,10 @@ FastAPI router for API v1 endpoints.
 Provides versioned API endpoints with proper OpenAPI documentation.
 """
 
-from datetime import datetime
-from typing import Any, Optional
 import asyncio
 import uuid as _uuid
+from datetime import datetime
+from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
@@ -23,7 +23,9 @@ from youtube_extension.services.workflows.transcript_action_workflow import (
 
 # CloudEvents integration (optional — falls back to file sink)
 try:
-    from youtube_extension.integration.cloudevents_publisher import create_publisher as _create_publisher
+    from youtube_extension.integration.cloudevents_publisher import (
+        create_publisher as _create_publisher,
+    )
 
     _ce_publisher = _create_publisher(backend="file")
 except Exception:
@@ -72,9 +74,9 @@ from .models import (
     TranscriptActionRequest,
     TranscriptActionResponse,
     VideoJobStatusResponse,
+    VideoProcessingRequest,
     VideoProcessJobRequest,
     VideoProcessJobResponse,
-    VideoProcessingRequest,
     VideoToSoftwareRequest,
     VideoToSoftwareResponse,
 )

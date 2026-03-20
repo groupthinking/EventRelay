@@ -4,10 +4,10 @@ Setup script for deployment tokens.
 This script helps configure environment variables for testing real deployments.
 """
 
-import os
-import sys
 import getpass
+import os
 from pathlib import Path
+
 
 def setup_vercel_token():
     """Set up Vercel API token"""

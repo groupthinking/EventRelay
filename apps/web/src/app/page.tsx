@@ -6,14 +6,14 @@ import { clsx } from 'clsx';
 import { useRouter } from 'next/navigation';
 
 const STEPS = [
-  { icon: '🔗', title: 'Paste a URL', desc: 'YouTube, Google Drive, or any video link' },
-  { icon: '🧠', title: 'AI Analysis', desc: 'Transcript, events, actions, and insights extracted' },
-  { icon: '⚡', title: 'Get Results', desc: 'Structured data you can search, export, and act on' },
+  { icon: '🔗', title: 'Paste a Video URL', desc: 'Drop any YouTube link — tutorials, talks, walkthroughs' },
+  { icon: '🧠', title: 'AI Watches & Understands', desc: 'Gemini analyzes the video content, extracts technologies, concepts, and structure' },
+  { icon: '🚀', title: 'Get Insights & Code', desc: 'Receive a full breakdown — summary, actions, topics, and generated project scaffold' },
 ];
 
 const EXAMPLES = [
-  'https://www.youtube.com/watch?v=aircAruvnKk',
-  'https://www.youtube.com/watch?v=zjkBMFhNj_g',
+  { url: 'https://www.youtube.com/watch?v=aircAruvnKk', label: '3Blue1Brown — Neural Networks' },
+  { url: 'https://www.youtube.com/watch?v=zjkBMFhNj_g', label: 'Tech Tutorial' },
 ];
 
 export default function Home() {
@@ -40,7 +40,7 @@ export default function Home() {
             Dashboard
           </Link>
           <Link href="/playground" className="btn btn-ghost py-2 text-sm text-white/50">
-            API Docs
+            API
           </Link>
         </div>
       </nav>
@@ -49,14 +49,14 @@ export default function Home() {
       <div className="max-w-3xl mx-auto px-6 pt-20 pb-12 text-center">
         <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/[0.04] border border-white/[0.08] text-xs text-white/60 mb-8">
           <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-          Gemini + OpenAI • Real-time Processing
+          Powered by Gemini &amp; Vertex AI
         </div>
 
         <h1 className="text-4xl md:text-5xl font-black leading-tight mb-4">
-          Video → <span className="gradient-text">Intelligence</span>
+          Video → <span className="gradient-text">Software</span>
         </h1>
         <p className="text-white/40 text-lg max-w-xl mx-auto mb-10 leading-relaxed">
-          Paste a video URL and get transcripts, events, actions, and AI-powered insights in seconds.
+          Paste a YouTube URL. AI analyzes the content, extracts every technology, concept, and action item — then generates a project scaffold you can deploy.
         </p>
 
         {/* Input */}
@@ -69,7 +69,7 @@ export default function Home() {
               type="text"
               value={videoUrl}
               onChange={(e) => setVideoUrl(e.target.value)}
-              placeholder="Paste a YouTube URL..."
+              placeholder="https://youtube.com/watch?v=..."
               className="flex-1 px-4 py-3 bg-transparent text-white placeholder:text-white/30 focus:outline-none text-sm"
             />
             <button
@@ -77,21 +77,21 @@ export default function Home() {
               disabled={!videoUrl.trim()}
               className="btn btn-primary py-3 px-8 disabled:opacity-30 disabled:cursor-not-allowed"
             >
-              Analyze
+              Process Video
             </button>
           </div>
         </form>
 
         {/* Example URLs */}
-        <div className="flex flex-wrap items-center justify-center gap-2 mt-4">
+        <div className="flex flex-wrap items-center justify-center gap-3 mt-5">
           <span className="text-xs text-white/30">Try:</span>
-          {EXAMPLES.map((url) => (
+          {EXAMPLES.map(({ url, label }) => (
             <button
               key={url}
               onClick={() => { setVideoUrl(url); }}
-              className="text-xs text-primary-400/70 hover:text-primary-400 transition truncate max-w-[200px]"
+              className="text-xs px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.06] text-primary-400/80 hover:text-primary-400 hover:border-primary-500/30 transition"
             >
-              {url.replace('https://www.youtube.com/watch?v=', 'youtu.be/')}
+              {label}
             </button>
           ))}
         </div>
@@ -123,7 +123,7 @@ export default function Home() {
       {/* Footer */}
       <div className="border-t border-white/[0.06] py-6">
         <div className="max-w-3xl mx-auto px-6 flex items-center justify-between text-xs text-white/25">
-          <span>EventRelay • AI Video Intelligence</span>
+          <span>EventRelay • Agentic Video Execution Platform</span>
           <div className="flex items-center gap-4">
             <Link href="/playground" className="hover:text-white/50 transition">API</Link>
             <a href="https://github.com/groupthinking/EventRelay" target="_blank" rel="noopener noreferrer" className="hover:text-white/50 transition">GitHub</a>

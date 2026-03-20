@@ -31,10 +31,14 @@ jobs:
             }
 
             if (labels.size > 0) {
-              await github.rest.issues.addLabels({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.payload.pull_request.number,
-                labels: Array.from(labels)
-              });
+              try {
+                await github.rest.issues.addLabels({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: context.payload.pull_request.number,
+                  labels: Array.from(labels)
+                });
+              } catch (error) {
+                core.warning('Failed to add labels: ' + error.message);
+              }
             }

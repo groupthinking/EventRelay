@@ -17,7 +17,6 @@ from typing import Any
 from bs4 import BeautifulSoup
 from google.cloud import bigquery
 
-
 # Configuration
 PROJECT_ID = "uvai-730bb"
 DATASET_ID = "eventrelay_metadata"

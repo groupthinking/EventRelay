@@ -6,8 +6,8 @@ Tests actual video processing to verify if it's using real APIs or mock fallback
 """
 
 import asyncio
-import os
 import sys
+
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -17,7 +17,9 @@ async def test_real_video_processing():
     """Test real video processing with actual APIs"""
     try:
         # Import the real video processor
-        from src.youtube_extension.backend.services.real_video_processor import RealVideoProcessor
+        from src.youtube_extension.backend.services.real_video_processor import (
+            RealVideoProcessor,
+        )
 
         # Test video URL - Business-focused content
         test_video_url = "https://www.youtube.com/watch?v=hvL1339luv0"  # Python tutorial (business-relevant)

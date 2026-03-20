@@ -2,9 +2,8 @@
 from __future__ import annotations
 
 import asyncio
-from typing import List, Any
 from pathlib import Path
-import sys
+from typing import Any, List
 
 # Import from agents directory with fallback for standalone execution
 try:

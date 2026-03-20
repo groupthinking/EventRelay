@@ -5,9 +5,10 @@ Builds a dependency map for internal imports in the youtube_extension package
 """
 
 import re
-from pathlib import Path
 from collections import defaultdict
-from typing import Dict, Set, List
+from pathlib import Path
+from typing import Dict, List, Set
+
 
 class ImportMapper:
     def __init__(self, root_path: str) -> None:

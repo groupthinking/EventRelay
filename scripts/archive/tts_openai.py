@@ -13,12 +13,12 @@ Notes:
   - Falls back to 'tts-1' model if specified model is not available.
   - Uses 'wav' format by default for easy playback with afplay/aplay.
 """
-import os
-import sys
 import json
-import time
-import tempfile
+import os
 import subprocess
+import sys
+import tempfile
+
 import requests
 
 

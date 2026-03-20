@@ -8,25 +8,26 @@ import asyncio
 import json
 import logging
 import os
-import sys
-from datetime import datetime
-from typing import Dict, Any, List, Optional, Tuple
-from pathlib import Path
-from dataclasses import dataclass, asdict
 import re
+from dataclasses import asdict, dataclass
+from datetime import datetime
+from typing import Any, Dict, List
 
 # Import our enhanced video extractor
 from video_extractor_enhanced import (
-    EnhancedVideoExtractor, VideoContent, TranscriptSegment, VideoMetadata
+    EnhancedVideoExtractor,
+    TranscriptSegment,
+    VideoContent,
+    VideoMetadata,
 )
 
 # AI processing imports
 try:
-    import openai
-    from transformers import pipeline, AutoTokenizer, AutoModel
-    import torch
     import numpy as np
+    import openai
+    import torch
     from sentence_transformers import SentenceTransformer
+    from transformers import AutoModel, AutoTokenizer, pipeline
     HAS_AI_DEPS = True
 except ImportError:
     HAS_AI_DEPS = False

@@ -14,15 +14,16 @@ Usage:
 """
 
 # Standard imports
-import sys
-import os
+import argparse
 import asyncio
 import json
-import argparse
-from pathlib import Path
-from datetime import datetime
-from typing import Dict, Any, Optional
+import os
+import sys
 import warnings
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, Optional
+
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
@@ -92,7 +93,7 @@ class UniversalAutomationCoordinator:
         self.gemini_processor = None
         self.grok_service = None
         self.mcp_clients = {}
-        
+
         # Lazy load dependencies
         self._load_dependencies()
 
@@ -113,11 +114,13 @@ class UniversalAutomationCoordinator:
     def _load_dependencies(self):
         """Lazy load heavy dependencies"""
         global EVENTRELAY_AVAILABLE, DEPLOYMENT_MANAGER_AVAILABLE, UVAI_DEPLOYMENT_AVAILABLE, GEMINI_AVAILABLE
-        
+
         if self.mode in ["production", "hybrid"]:
             print("⏳ Loading EventRelay dependencies (this may take a moment)...")
             try:
-                from youtube_extension.services.workflows.transcript_action_workflow import VideoToActionWorkflow
+                from youtube_extension.services.workflows.transcript_action_workflow import (
+                    VideoToActionWorkflow,
+                )
                 self.eventrelay_workflow = VideoToActionWorkflow()
                 EVENTRELAY_AVAILABLE = True
                 print("✅ EventRelay TranscriptActionWorkflow initialized")
@@ -128,7 +131,9 @@ class UniversalAutomationCoordinator:
 
         if self.github_token:
             try:
-                from youtube_extension.backend.deployment_manager import DeploymentManager
+                from youtube_extension.backend.deployment_manager import (
+                    DeploymentManager,
+                )
                 self.deployment_manager = DeploymentManager(github_token=self.github_token)
                 DEPLOYMENT_MANAGER_AVAILABLE = True
                 print("✅ DeploymentManager initialized")
@@ -138,7 +143,9 @@ class UniversalAutomationCoordinator:
                 print(f"⚠️  DeploymentManager initialization failed: {e}")
 
             try:
-                from tools.uvai_codex_universal_deployment import UVAICodexUniversalDeployment
+                from tools.uvai_codex_universal_deployment import (
+                    UVAICodexUniversalDeployment,
+                )
                 self.uvai_deployer = UVAICodexUniversalDeployment(github_token=self.github_token)
                 UVAI_DEPLOYMENT_AVAILABLE = True
                 print("✅ UVAI Codex Universal Deployment initialized")
@@ -153,7 +160,7 @@ class UniversalAutomationCoordinator:
             integrations_path = Path(__file__).parent / "integrations"
             if str(integrations_path) not in sys.path:
                 sys.path.insert(0, str(integrations_path))
-                
+
             from grok_service import GrokService
             self.grok_service = GrokService(api_key=os.getenv("XAI_API_KEY"))
             print("✅ Grok Service (Global) initialized")
@@ -186,7 +193,7 @@ class UniversalAutomationCoordinator:
             if config_path.exists():
                 with open(config_path) as f:
                     config = json.load(f)
-                
+
                 servers = config.get("mcpServers", {})
                 for name, cfg in servers.items():
                     # Only initialize specific agents to avoid overhead
@@ -218,7 +225,7 @@ class UniversalAutomationCoordinator:
             Complete pipeline results with deployment URLs
         """
         print(f"\n{'='*80}")
-        print(f"🚀 UNIVERSAL AUTOMATION COORDINATOR")
+        print("🚀 UNIVERSAL AUTOMATION COORDINATOR")
         print(f"{'='*80}")
         print(f"📺 Video URL: {youtube_url}")
         print(f"⚙️  Mode: {self.mode}")
@@ -246,11 +253,11 @@ class UniversalAutomationCoordinator:
             if self.mcp_clients or self.grok_service:
                 print("🤖 STAGE 1.5: Multi-Modal Analysis & Agent Swarm")
                 print("-" * 80)
-                
+
                 # Direct Grok Integration (High Fidelity)
                 if self.grok_service:
                     print("   🧠 Engaging Grok Analysis Agent...")
-                    # Note: In a real run, we would pass transcript from EventRelay results 
+                    # Note: In a real run, we would pass transcript from EventRelay results
                     # but since EventRelay runs in Stage 2, we might do this in parallel or order differently.
                     # For now, we simulate the "Analysis" capability if we have metadata.
                     try:
@@ -295,7 +302,7 @@ class UniversalAutomationCoordinator:
                     print("✅ EventRelay processing complete")
                     print(f"   📊 Category: {eventrelay_result.get('processed_video_data', {}).get('category', 'N/A')}")
                     print(f"   📋 Actions: {len(eventrelay_result.get('processed_video_data', {}).get('actions', []))}")
-                    print(f"   💻 Project scaffold generated")
+                    print("   💻 Project scaffold generated")
                 else:
                     print(f"⚠️  EventRelay processing had issues: {eventrelay_result.get('error', 'Unknown')}")
                 print()
@@ -325,7 +332,7 @@ class UniversalAutomationCoordinator:
 
                     if deployment_result.get('deployments', {}).get('github'):
                         github_info = deployment_result['deployments']['github']
-                        print(f"✅ GitHub deployment successful")
+                        print("✅ GitHub deployment successful")
                         print(f"   📦 Repository: {github_info.get('repo_url', 'N/A')}")
                         print(f"   🌐 Live URL: {github_info.get('deployment_url', 'Pending')}")
                     print()
@@ -348,7 +355,7 @@ class UniversalAutomationCoordinator:
                     uvai_result = await self.uvai_deployer.universal_deploy(uvai_config)
                     results["stages"]["uvai_deployment"] = uvai_result
 
-                    print(f"✅ UVAI Codex validation complete")
+                    print("✅ UVAI Codex validation complete")
                     print(f"   🔒 Security score: {uvai_result.get('security_score', 'N/A')}")
                     print(f"   📊 Quality score: {uvai_result.get('quality_score', 'N/A')}")
                     print(f"   🌐 Production URL: {uvai_result.get('deployment_url', 'Pending')}")
@@ -367,14 +374,14 @@ class UniversalAutomationCoordinator:
             print(f"📊 Stages completed: {len(results['stages'])}")
 
             if results["stages"].get("deployment"):
-                print(f"\n🚀 DEPLOYED SERVICES:")
+                print("\n🚀 DEPLOYED SERVICES:")
                 deployment = results["stages"]["deployment"]
                 for platform, info in deployment.get("deployments", {}).items():
                     print(f"   • {platform.upper()}: {info.get('deployment_url', info.get('repo_url', 'N/A'))}")
 
             if results["stages"].get("uvai_deployment"):
                 uvai = results["stages"]["uvai_deployment"]
-                print(f"\n💰 REVENUE POTENTIAL:")
+                print("\n💰 REVENUE POTENTIAL:")
                 print(f"   • Estimated monthly: ${uvai.get('revenue_estimate', {}).get('monthly', '500-2000')}")
                 print(f"   • Service type: {uvai.get('service_type', 'SaaS/API')}")
 

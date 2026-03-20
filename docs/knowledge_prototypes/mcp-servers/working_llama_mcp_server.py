@@ -10,7 +10,6 @@ import asyncio
 import json
 import logging
 import sys
-from pathlib import Path
 
 # Add parent directory to path for imports
 # REMOVED: sys.path.insert with Path manipulation
@@ -113,12 +112,12 @@ async def handle_mcp_message(message, agent):
                 }
             }
             return response
-            
+
         elif message.get("method") == "tools/call":
             # Handle tool calls
             tool_name = message.get("params", {}).get("name")
             arguments = message.get("params", {}).get("arguments", {})
-            
+
             logger.info(f"Tool call: {tool_name}")
 
             # Route to real agent
@@ -187,7 +186,7 @@ async def handle_mcp_message(message, agent):
                 result = stats
             else:
                 raise ValueError(f"Unknown tool: {tool_name}")
-            
+
             response = {
                 "jsonrpc": "2.0",
                 "id": message.get("id"),
@@ -201,7 +200,7 @@ async def handle_mcp_message(message, agent):
                 }
             }
             return response
-            
+
         elif message.get("method") == "initialize":
             # Handle initialization
             response = {
@@ -219,11 +218,11 @@ async def handle_mcp_message(message, agent):
                 }
             }
             return response
-            
+
         else:
             logger.warning(f"Unknown method: {message.get('method')}")
             return None
-            
+
     except Exception as e:
         logger.error(f"Error handling message: {e}")
         error_response = {
@@ -241,7 +240,7 @@ async def main():
     logger.info("🚀 Working Llama Agent MCP Server starting...")
     logger.info(f"📋 Available tools: {[tool['name'] for tool in TOOLS]}")
     logger.info("🔧 Server implementing MCP protocol for Cursor integration")
-    
+
     # Initialize agent once
     agent = None
     try:
@@ -251,28 +250,28 @@ async def main():
         logger.info("✅ Llama Background Agent ready in MCP server")
     except Exception as e:
         logger.error(f"Failed to initialize Llama agent in MCP server: {e}")
-    
+
     # Read from stdin, write to stdout (MCP stdio protocol)
     reader = asyncio.StreamReader()
     protocol = asyncio.StreamReaderProtocol(reader)
-    
+
     # Set up stdin/stdout
     stdin_transport, _ = await asyncio.get_event_loop().connect_read_pipe(
         lambda: protocol, sys.stdin
     )
-    
+
     try:
         while True:
             # Read line from stdin
             line = await reader.readline()
             if not line:
                 break
-                
+
             try:
                 # Parse JSON message
                 message = json.loads(line.decode().strip())
                 logger.debug(f"Received: {message}")
-                
+
                 # Handle message and send response
                 response = await handle_mcp_message(message, agent)
                 if response:
@@ -280,12 +279,12 @@ async def main():
                     sys.stdout.write(response_json)
                     sys.stdout.flush()
                     logger.debug(f"Sent: {response}")
-                    
+
             except json.JSONDecodeError as e:
                 logger.error(f"Invalid JSON: {e}")
             except Exception as e:
                 logger.error(f"Error processing message: {e}")
-                
+
     except KeyboardInterrupt:
         logger.info("Server stopped by user")
     except Exception as e:

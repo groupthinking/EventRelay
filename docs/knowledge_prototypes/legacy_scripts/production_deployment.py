@@ -4,23 +4,17 @@ Production Deployment Configuration & Security Hardening
 Enterprise-grade deployment with security, secrets management, and infrastructure as code
 """
 
-import os
+import base64
 import json
 import logging
-import subprocess
+import os
 import secrets
-import hashlib
-from pathlib import Path
-from typing import Dict, Any, List
 from dataclasses import dataclass
-import yaml
+from pathlib import Path
+from typing import Any, Dict, List
 
 # Security imports
-import cryptography
 from cryptography.fernet import Fernet
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-import base64
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -102,7 +96,7 @@ class SecretsManager:
         if not self.secrets_file.exists():
             return {}
 
-        with open(self.secrets_file, 'r') as f:
+        with open(self.secrets_file) as f:
             encrypted_secrets = json.load(f)
 
         secrets = {}

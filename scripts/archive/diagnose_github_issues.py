@@ -6,13 +6,10 @@ Comprehensive diagnostic tool to identify root causes of GitHub processing bottl
 """
 
 import json
-import os
-import sys
-import subprocess
-from pathlib import Path
-from datetime import datetime
-from typing import Dict, List, Any
 import logging
+import sys
+from datetime import datetime
+from pathlib import Path
 
 logging.basicConfig(
     level=logging.INFO,

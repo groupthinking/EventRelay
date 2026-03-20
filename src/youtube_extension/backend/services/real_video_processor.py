@@ -16,13 +16,18 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
+from youtube_extension.utils import extract_video_id
+
 from .api_cost_monitor import cost_monitor
 from .real_ai_processor import (
     analyze_video_with_ai,
     get_ai_processor,
 )
-
-from youtube_extension.utils import extract_video_id
 
 # Import our real API services
 from .real_youtube_api import get_youtube_service
@@ -480,7 +485,7 @@ if __name__ == "__main__":
         processor = RealVideoProcessor()
 
         # Test with a real video (non-music, compliance-safe)
-        test_url = "https://www.youtube.com/watch?v=hvL1339luv0"
+        test_url = "https://www.youtube.com/watch?v=b1mjQIiH7r4"
 
         try:
             print("🧪 Testing Real Video Processor")

@@ -5,15 +5,13 @@ Specialized agent for extracting accurate transcripts from video content
 with robust fallback mechanisms and quality validation.
 """
 
-import re
-import time
 import json
 import logging
-from typing import Dict, List, Optional, Tuple, Any
-from dataclasses import dataclass
-from urllib.parse import urlparse, parse_qs
+import re
 import subprocess
-import sys
+import time
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional, Tuple
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -102,12 +100,12 @@ class VideoTranscriptionAgent:
             # Try auto-generated captions first
             transcript = self.youtube_transcript_api.get_transcript(video_id)
             return transcript, "transcript_api_auto"
-        except Exception as e1:
+        except Exception:
             try:
                 # Try manual captions
                 transcript = self.youtube_transcript_api.get_transcript(video_id, languages=['en'])
                 return transcript, "transcript_api_manual"
-            except Exception as e2:
+            except Exception:
                 try:
                     # Try all available languages
                     transcript_list = self.youtube_transcript_api.list_transcripts(video_id)

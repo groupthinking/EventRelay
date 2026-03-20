@@ -52,19 +52,21 @@ References:
 - https://docs.x.ai/docs/guides/tools/advanced-usage
 """
 
-import os
 import json
-import httpx
-from typing import Optional, List, Dict, Any, Generator, Callable
+import os
+from collections.abc import Generator
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import Any, Callable, Dict, List, Optional
+
+import httpx
 
 
 class GrokModel(str, Enum):
     """Available Grok models"""
     # Code models
     CODE_FAST_1 = "grok-code-fast-1"
-    
+
     # Grok 4 models
     GROK_4 = "grok-4-0709"
     GROK_4_FAST = "grok-4-fast"  # Alias for fast reasoning
@@ -72,11 +74,11 @@ class GrokModel(str, Enum):
     GROK_4_FAST_NON_REASONING = "grok-4-fast-non-reasoning"
     GROK_4_1_FAST_REASONING = "grok-4-1-fast-reasoning"
     GROK_4_1_FAST_NON_REASONING = "grok-4-1-fast-non-reasoning"
-    
+
     # Grok 3 models
     GROK_3 = "grok-3"
     GROK_3_MINI = "grok-3-mini"
-    
+
     # Grok 2 models
     GROK_2 = "grok-2-1212"
     GROK_2_VISION = "grok-2-vision-1212"
@@ -108,7 +110,7 @@ class Tool:
     function: Dict[str, Any] = field(default_factory=dict)
 
 
-@dataclass 
+@dataclass
 class MCPTool:
     """Remote MCP Tool configuration"""
     server_url: str
@@ -117,7 +119,7 @@ class MCPTool:
     allowed_tool_names: Optional[List[str]] = None
     authorization: Optional[str] = None
     extra_headers: Optional[Dict[str, str]] = None
-    
+
     def to_dict(self) -> Dict[str, Any]:
         result = {
             "type": "remote_mcp",
@@ -142,7 +144,7 @@ class MCPTool:
 class CodeExecutionTool:
     """Code Execution Tool - server-side Python execution"""
     type: str = "code_execution"
-    
+
     def to_dict(self) -> Dict[str, Any]:
         return {"type": self.type}
 
@@ -151,7 +153,7 @@ class CodeExecutionTool:
 class WebSearchTool:
     """Web Search Tool - server-side web search"""
     type: str = "web_search"
-    
+
     def to_dict(self) -> Dict[str, Any]:
         return {"type": self.type}
 
@@ -160,7 +162,7 @@ class WebSearchTool:
 class XSearchTool:
     """X (Twitter) Search Tool - server-side X/Twitter search"""
     type: str = "x_search"
-    
+
     def to_dict(self) -> Dict[str, Any]:
         return {"type": self.type}
 
@@ -169,7 +171,7 @@ class XSearchTool:
 class DocumentSearchTool:
     """Document Search Tool - search uploaded files"""
     type: str = "document_search"
-    
+
     def to_dict(self) -> Dict[str, Any]:
         return {"type": self.type}
 
@@ -179,7 +181,7 @@ class CollectionSearchTool:
     """Collection Search Tool - search knowledge bases"""
     type: str = "collection_search"
     collection_id: Optional[str] = None
-    
+
     def to_dict(self) -> Dict[str, Any]:
         result = {"type": self.type}
         if self.collection_id:
@@ -246,13 +248,13 @@ class AgenticResponse:
     pending_tool_calls: List[Dict]  # Client-side calls awaiting execution
     completed_tool_calls: List[Dict]  # Server-side calls already executed
     requires_action: bool  # True if client-side tools need execution
-    
+
     @classmethod
     def from_response(cls, response: ChatResponse) -> "AgenticResponse":
         """Parse a ChatResponse into an AgenticResponse"""
         pending = []
         completed = []
-        
+
         for call in response.tool_calls:
             # Server-side tools are already executed
             func_name = call.get("function", {}).get("name", "")
@@ -260,7 +262,7 @@ class AgenticResponse:
                 completed.append(call)
             else:
                 pending.append(call)
-        
+
         return cls(
             response=response,
             pending_tool_calls=pending,
@@ -281,9 +283,9 @@ class GrokClient:
     - Parallel tool calls support
     - Cache optimization
     """
-    
+
     BASE_URL = "https://api.x.ai/v1"
-    
+
     def __init__(
         self,
         api_key: Optional[str] = None,
@@ -293,7 +295,7 @@ class GrokClient:
         self.api_key = api_key or os.environ.get("XAI_API_KEY")
         if not self.api_key:
             raise ValueError("XAI_API_KEY required. Set env var or pass api_key.")
-        
+
         self.model = model
         self.timeout = timeout
         self._client = httpx.Client(
@@ -304,17 +306,17 @@ class GrokClient:
             },
             timeout=timeout
         )
-    
+
     def __enter__(self):
         return self
-    
+
     def __exit__(self, *args):
         self._client.close()
-    
+
     # =========================================================================
     # CHAT COMPLETIONS
     # =========================================================================
-    
+
     def chat(
         self,
         messages: List[Dict[str, str]],
@@ -351,26 +353,26 @@ class GrokClient:
             "top_p": top_p,
             "stream": stream,
         }
-        
+
         if max_tokens:
             payload["max_tokens"] = max_tokens
-        
+
         # Process tools
         if tools:
             payload["tools"] = self._process_tools(tools)
             payload["parallel_tool_calls"] = parallel_tool_calls
             if tool_choice:
                 payload["tool_choice"] = tool_choice
-        
+
         payload.update(kwargs)
-        
+
         if stream:
             return self._stream_chat(payload)
-        
+
         response = self._client.post("/chat/completions", json=payload)
         response.raise_for_status()
         return self._parse_response(response.json())
-    
+
     def _stream_chat(self, payload: Dict) -> Generator[StreamChunk, None, None]:
         """Stream chat completions with reasoning traces"""
         with self._client.stream("POST", "/chat/completions", json=payload) as response:
@@ -391,12 +393,12 @@ class GrokClient:
                         )
                     except json.JSONDecodeError:
                         continue
-    
+
     def _process_tools(self, tools: List[Any]) -> List[Dict]:
         """Convert tool objects to API format"""
         processed = []
         for tool in tools:
-            if isinstance(tool, (CodeExecutionTool, WebSearchTool, XSearchTool, 
+            if isinstance(tool, (CodeExecutionTool, WebSearchTool, XSearchTool,
                                 DocumentSearchTool, CollectionSearchTool)):
                 processed.append(tool.to_dict())
             elif isinstance(tool, MCPTool):
@@ -408,14 +410,14 @@ class GrokClient:
             elif callable(tool):
                 processed.append(self._function_to_tool(tool))
         return processed
-    
+
     def _function_to_tool(self, func: Callable) -> Dict:
         """Convert a Python function to tool schema"""
         import inspect
         sig = inspect.signature(func)
         params = {}
         required = []
-        
+
         for name, param in sig.parameters.items():
             param_type = "string"
             if param.annotation != inspect.Parameter.empty:
@@ -425,11 +427,11 @@ class GrokClient:
                     param_type = "number"
                 elif param.annotation == bool:
                     param_type = "boolean"
-            
+
             params[name] = {"type": param_type}
             if param.default == inspect.Parameter.empty:
                 required.append(name)
-        
+
         return {
             "type": "function",
             "function": {
@@ -442,13 +444,13 @@ class GrokClient:
                 }
             }
         }
-    
+
     def _parse_response(self, data: Dict) -> ChatResponse:
         """Parse API response into ChatResponse"""
         choice = data.get("choices", [{}])[0]
         message = choice.get("message", {})
         usage_data = data.get("usage", {})
-        
+
         return ChatResponse(
             id=data.get("id", ""),
             model=data.get("model", ""),
@@ -464,11 +466,11 @@ class GrokClient:
             finish_reason=choice.get("finish_reason", ""),
             raw=data
         )
-    
+
     # =========================================================================
     # TOOL CALL HANDLING
     # =========================================================================
-    
+
     def get_tool_call_type(self, tool_call: Dict) -> ToolCallType:
         """
         Determine if a tool call is server-side or client-side.
@@ -486,7 +488,7 @@ class GrokClient:
         if func_name in SERVER_SIDE_TOOLS:
             return ToolCallType.SERVER
         return ToolCallType.CLIENT
-    
+
     def parse_agentic_response(self, response: ChatResponse) -> AgenticResponse:
         """
         Parse a response into an AgenticResponse for easier handling.
@@ -502,7 +504,7 @@ class GrokClient:
                     # ... continue conversation with result
         """
         return AgenticResponse.from_response(response)
-    
+
     def execute_tool_calls(
         self,
         tool_calls: List[Dict],
@@ -523,7 +525,7 @@ class GrokClient:
             # Skip server-side tools (already executed)
             if self.get_tool_call_type(call) == ToolCallType.SERVER:
                 continue
-                
+
             func_name = call["function"]["name"]
             if func_name in functions:
                 try:
@@ -541,7 +543,7 @@ class GrokClient:
                         "content": f"Error: {str(e)}"
                     })
         return results
-    
+
     def run_agentic_loop(
         self,
         messages: List[Dict[str, str]],
@@ -579,23 +581,23 @@ class GrokClient:
             )
         """
         current_messages = messages.copy()
-        
+
         for _ in range(max_iterations):
             response = self.chat(current_messages, tools=tools, **kwargs)
-            
+
             # Check for client-side tool calls
             client_calls = [
                 call for call in response.tool_calls
                 if self.get_tool_call_type(call) == ToolCallType.CLIENT
             ]
-            
+
             if not client_calls:
                 # No more client-side calls, we're done
                 return response
-            
+
             # Execute client-side tools
             tool_results = self.execute_tool_calls(client_calls, functions)
-            
+
             # Add assistant response and tool results to messages
             current_messages.append({
                 "role": "assistant",
@@ -603,20 +605,20 @@ class GrokClient:
                 "tool_calls": response.tool_calls
             })
             current_messages.extend(tool_results)
-        
+
         return response
         return results
-    
+
     # =========================================================================
     # UTILITY ENDPOINTS
     # =========================================================================
-    
+
     def list_models(self) -> List[Dict]:
         """List available models"""
         response = self._client.get("/models")
         response.raise_for_status()
         return response.json().get("data", [])
-    
+
     def tokenize(self, text: str, model: Optional[str] = None) -> Dict:
         """Tokenize text and get token count"""
         response = self._client.post("/tokenize-text", json={
@@ -625,7 +627,7 @@ class GrokClient:
         })
         response.raise_for_status()
         return response.json()
-    
+
     def embeddings(self, input: str | List[str], model: str = "v1") -> Dict:
         """Generate text embeddings"""
         response = self._client.post("/embeddings", json={
@@ -634,7 +636,7 @@ class GrokClient:
         })
         response.raise_for_status()
         return response.json()
-    
+
     def generate_image(
         self,
         prompt: str,
@@ -651,7 +653,7 @@ class GrokClient:
         })
         response.raise_for_status()
         return response.json()
-    
+
     def search_documents(
         self,
         query: str,
@@ -674,11 +676,11 @@ class GrokClient:
         }
         if collection_id:
             payload["collection_id"] = collection_id
-            
+
         response = self._client.post("/documents/search", json=payload)
         response.raise_for_status()
         return response.json()
-    
+
     def get_api_key_info(self) -> Dict:
         """Get information about the current API key"""
         response = self._client.get("/api-key")
@@ -752,9 +754,9 @@ def function_tool(
 
 class AsyncGrokClient:
     """Async version of GrokClient"""
-    
+
     BASE_URL = "https://api.x.ai/v1"
-    
+
     def __init__(
         self,
         api_key: Optional[str] = None,
@@ -764,7 +766,7 @@ class AsyncGrokClient:
         self.api_key = api_key or os.environ.get("XAI_API_KEY")
         if not self.api_key:
             raise ValueError("XAI_API_KEY required")
-        
+
         self.model = model
         self.timeout = timeout
         self._client = httpx.AsyncClient(
@@ -775,13 +777,13 @@ class AsyncGrokClient:
             },
             timeout=timeout
         )
-    
+
     async def __aenter__(self):
         return self
-    
+
     async def __aexit__(self, *args):
         await self._client.aclose()
-    
+
     async def chat(
         self,
         messages: List[Dict[str, str]],
@@ -797,20 +799,20 @@ class AsyncGrokClient:
             "stream": stream,
             **kwargs
         }
-        
+
         if tools:
             payload["tools"] = [
                 t.to_dict() if hasattr(t, 'to_dict') else t
                 for t in tools
             ]
-        
+
         if stream:
             return self._stream_chat(payload)
-        
+
         response = await self._client.post("/chat/completions", json=payload)
         response.raise_for_status()
         return response.json()
-    
+
     async def _stream_chat(self, payload: Dict):
         """Async streaming"""
         async with self._client.stream("POST", "/chat/completions", json=payload) as response:
@@ -833,12 +835,12 @@ class AsyncGrokClient:
 if __name__ == "__main__":
     # Quick test
     client = GrokClient()
-    
+
     print("=== Available Models ===")
     models = client.list_models()
     for m in models:
         print(f"  - {m['id']}")
-    
+
     print("\n=== Simple Chat ===")
     response = client.chat([
         {"role": "user", "content": "Say 'Hello from Grok!' in one line"}

@@ -9,12 +9,13 @@ Env:
   OPENAI_API_KEY or API_KEY_OPENAI (required)
   OPENAI_CHAT_TTS_MODEL (default: gpt-4o-audio-preview)
 """
-import os
-import sys
-import json
 import base64
-import tempfile
+import json
+import os
 import subprocess
+import sys
+import tempfile
+
 import requests
 
 

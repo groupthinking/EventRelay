@@ -8,26 +8,24 @@ import asyncio
 import json
 import logging
 import os
-import sys
-from datetime import datetime
-from typing import Dict, Any, List, Optional, Union
-from pathlib import Path
-from dataclasses import dataclass, asdict
 import shutil
 import zipfile
-from urllib.parse import urlparse
-import hashlib
+from dataclasses import asdict, dataclass
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+from notebooklm_processor import VideoNotebook
 
 # Import our processors
 from video_extractor_enhanced import VideoContent
-from notebooklm_processor import VideoNotebook
 from videoprism_analyzer import VideoPrismAnalysis
 
 # Cloud storage imports (optional)
 try:
     import boto3
-    from google.cloud import storage as gcs
     import dropbox
+    from google.cloud import storage as gcs
     HAS_CLOUD_DEPS = True
 except ImportError:
     HAS_CLOUD_DEPS = False
@@ -36,10 +34,11 @@ except ImportError:
 # Email and notification imports (optional)
 try:
     import smtplib
+    from email import encoders
+    from email.mime.base import MIMEBase
     from email.mime.multipart import MIMEMultipart
     from email.mime.text import MIMEText
-    from email.mime.base import MIMEBase
-    from email import encoders
+
     import requests
     HAS_NOTIFICATION_DEPS = True
 except ImportError:

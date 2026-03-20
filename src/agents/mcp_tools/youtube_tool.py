@@ -13,8 +13,8 @@ from typing import Any
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-from youtube_extension.backend.video_processor_factory import get_video_processor
 from src.core.collections import SmartCollectionEngine
+from youtube_extension.backend.video_processor_factory import get_video_processor
 
 logger = logging.getLogger(__name__)
 

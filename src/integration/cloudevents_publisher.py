@@ -37,9 +37,9 @@ class CloudEvent:
     - time: Event timestamp
     - data: Event payload
     """
-    
+
     SPEC_VERSION = "1.0"
-    
+
     def __init__(
         self,
         source: str,
@@ -62,7 +62,7 @@ class CloudEvent:
         self.time = time or datetime.now(timezone.utc)
         self.data = data or {}
         self.extensions = extensions
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to CloudEvents JSON representation."""
         event = {
@@ -72,7 +72,7 @@ class CloudEvent:
             "type": self.type,
             "time": self.time.isoformat() if isinstance(self.time, datetime) else self.time,
         }
-        
+
         if self.subject:
             event["subject"] = self.subject
         if self.datacontenttype:
@@ -81,12 +81,12 @@ class CloudEvent:
             event["dataschema"] = self.dataschema
         if self.data is not None:
             event["data"] = self.data
-        
+
         # Add extension attributes
         event.update(self.extensions)
-        
+
         return event
-    
+
     def to_json(self) -> str:
         """Serialize to JSON string."""
         return json.dumps(self.to_dict())
@@ -100,7 +100,7 @@ class CloudEventsPublisher:
     - Apache OpenWhisk triggers
     - Local file sink (for testing)
     """
-    
+
     def __init__(
         self,
         backend: Literal["pubsub", "http", "openwhisk", "file"] = "pubsub",
@@ -120,11 +120,11 @@ class CloudEventsPublisher:
         self.openwhisk_auth = openwhisk_auth or os.getenv("OPENWHISK_AUTH")
         self.openwhisk_namespace = openwhisk_namespace or os.getenv("OPENWHISK_NAMESPACE", "guest")
         self.file_path = file_path or os.getenv("EVENTS_FILE_PATH", "/tmp/cloudevents.jsonl")
-        
+
         # Initialize backend clients
         self._pubsub_client = None
         self._http_client = None
-        
+
         if backend == "pubsub" and self.project_id:
             try:
                 self._pubsub_client = pubsub_v1.PublisherClient()
@@ -134,11 +134,11 @@ class CloudEventsPublisher:
                 logger.info(f"CloudEvents publisher initialized with Pub/Sub: {self._topic_path}")
             except Exception as e:
                 logger.warning(f"Failed to initialize Pub/Sub client: {e}")
-        
+
         if backend in ("http", "openwhisk"):
             self._http_client = httpx.AsyncClient(timeout=30.0)
             logger.info(f"CloudEvents publisher initialized with {backend} backend")
-    
+
     async def publish(
         self,
         source: str,
@@ -167,9 +167,9 @@ class CloudEventsPublisher:
             subject=subject,
             **kwargs
         )
-        
+
         logger.info(f"Publishing CloudEvent: type={type}, id={event.id}")
-        
+
         try:
             if self.backend == "pubsub":
                 return await self._publish_pubsub(event)
@@ -185,17 +185,17 @@ class CloudEventsPublisher:
         except Exception as e:
             logger.error(f"Failed to publish CloudEvent: {e}", exc_info=True)
             return None
-    
+
     async def _publish_pubsub(self, event: CloudEvent) -> Optional[str]:
         """Publish to Google Cloud Pub/Sub."""
         if not self._pubsub_client:
             logger.warning("Pub/Sub client not initialized")
             return None
-        
+
         try:
             # Pub/Sub requires bytes
             data = event.to_json().encode("utf-8")
-            
+
             # Add CloudEvents attributes as message attributes
             attributes = {
                 "ce_id": event.id,
@@ -203,7 +203,7 @@ class CloudEventsPublisher:
                 "ce_specversion": event.specversion,
                 "ce_type": event.type,
             }
-            
+
             future = self._pubsub_client.publish(
                 self._topic_path,
                 data,
@@ -215,23 +215,23 @@ class CloudEventsPublisher:
         except Exception as e:
             logger.error(f"Pub/Sub publish failed: {e}")
             return None
-    
+
     async def _publish_http(self, event: CloudEvent) -> Optional[str]:
         """Publish to HTTP webhook endpoint."""
         if not self.webhook_url:
             logger.warning("Webhook URL not configured")
             return None
-        
+
         if not self._http_client:
             logger.warning("HTTP client not initialized")
             return None
-        
+
         try:
             # CloudEvents HTTP binding: structured content mode
             headers = {
                 "Content-Type": "application/cloudevents+json",
             }
-            
+
             response = await self._http_client.post(
                 self.webhook_url,
                 json=event.to_dict(),
@@ -243,7 +243,7 @@ class CloudEventsPublisher:
         except Exception as e:
             logger.error(f"HTTP webhook publish failed: {e}")
             return None
-    
+
     async def _publish_openwhisk(self, event: CloudEvent) -> Optional[str]:
         """
         Publish to Apache OpenWhisk trigger.
@@ -254,25 +254,25 @@ class CloudEventsPublisher:
         if not all([self.openwhisk_api_host, self.openwhisk_auth]):
             logger.warning("OpenWhisk configuration incomplete")
             return None
-        
+
         if not self._http_client:
             logger.warning("HTTP client not initialized")
             return None
-        
+
         try:
             # Extract trigger name from event type or use default
             # Format: com.eventrelay.video.analyzed -> video_analyzed_trigger
             trigger_name = event.type.split(".")[-1].replace("-", "_") + "_trigger"
-            
+
             # OpenWhisk trigger URL
             url = (
                 f"{self.openwhisk_api_host}/api/v1/namespaces/"
                 f"{self.openwhisk_namespace}/triggers/{trigger_name}"
             )
-            
+
             # Basic auth
             username, password = self.openwhisk_auth.split(":")
-            
+
             response = await self._http_client.post(
                 url,
                 json=event.to_dict(),
@@ -280,7 +280,7 @@ class CloudEventsPublisher:
                 headers={"Content-Type": "application/json"}
             )
             response.raise_for_status()
-            
+
             logger.info(
                 f"Published CloudEvent {event.id} to OpenWhisk trigger: {trigger_name}"
             )
@@ -288,21 +288,21 @@ class CloudEventsPublisher:
         except Exception as e:
             logger.error(f"OpenWhisk publish failed: {e}")
             return None
-    
+
     async def _publish_file(self, event: CloudEvent) -> Optional[str]:
         """Write event to local file (for testing/development)."""
         try:
             import aiofiles
-            
+
             async with aiofiles.open(self.file_path, mode="a") as f:
                 await f.write(event.to_json() + "\n")
-            
+
             logger.info(f"Published CloudEvent {event.id} to file: {self.file_path}")
             return event.id
         except Exception as e:
             logger.error(f"File publish failed: {e}")
             return None
-    
+
     async def close(self):
         """Clean up resources."""
         if self._http_client:

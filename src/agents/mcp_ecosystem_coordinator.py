@@ -8,11 +8,13 @@ import abc
 import asyncio
 import json
 import logging
-import logging
 import os
 from dataclasses import asdict
 
-from youtube_extension.processors.enhanced_extractor import EnhancedVideoExtractor, VideoContent
+from youtube_extension.processors.enhanced_extractor import (
+    EnhancedVideoExtractor,
+    VideoContent,
+)
 
 # Add src/mcp to path for imports
 # REMOVED: sys.path.append removed
@@ -64,7 +66,7 @@ class MCPVideoProcessorServer(BaseMCPServer):
                 # or ensure process_video handles IDs (it extracts ID from URL, so URL is safer)
                 video_url = f"https://www.youtube.com/watch?v={video_id}"
                 content: VideoContent = await self.extractor.process_video(video_url)
-                
+
                 return {
                     "status": "success",
                     "result": content.summary,

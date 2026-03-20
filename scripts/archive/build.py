@@ -4,17 +4,15 @@ Production Build System for YouTube AI Extension
 Handles building, packaging, and deployment
 """
 
-import os
-import sys
-import json
-import shutil
-import zipfile
-import subprocess
 import argparse
-from pathlib import Path
-from datetime import datetime
-from typing import Dict, List, Optional, Any
+import json
 import logging
+import shutil
+import sys
+import zipfile
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')

@@ -31,8 +31,6 @@ except ImportError:
     logging.warning("Google AI not available - install: pip install google-genai")
 
 # Add shared modules to path
-import sys
-from pathlib import Path
 
 sys.path.append(str(Path(__file__).parents[2] / "mcp-servers" / "shared-state"))
 
@@ -840,7 +838,7 @@ async def main():
             video_url = default_video
 
     # Check for banned video IDs
-    from urllib.parse import urlparse, parse_qs
+    from urllib.parse import parse_qs, urlparse
 
     parsed = urlparse(video_url)
     video_id = None

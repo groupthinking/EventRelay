@@ -4,12 +4,12 @@ MCP-Compliant File Migration Script
 Handles safe file categorization and migration for architectural transformation
 """
 
-import os
-import shutil
 import json
+import shutil
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Set
-from dataclasses import dataclass, asdict
+from typing import Dict, List
+
 
 @dataclass
 class MigrationContext:

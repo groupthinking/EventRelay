@@ -3,8 +3,9 @@ Optional API key authentication middleware.
 When EVENTRELAY_API_KEY is set, requires X-API-Key header on mutation endpoints.
 When not set, all requests pass through (development mode).
 """
-import os
 import logging
+import os
+
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 

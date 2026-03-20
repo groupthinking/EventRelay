@@ -11,6 +11,7 @@ This script tests that the performance benchmarking system now properly:
 
 import asyncio
 
+
 async def test_performance_fixes():
     """Test that performance fixes work correctly"""
 
@@ -19,14 +20,19 @@ async def test_performance_fixes():
 
     try:
         # Import the performance benchmark system
-        from youtube_extension.backend.services.performance_benchmark_system import PerformanceBenchmarkSystem, benchmark_system
+        from youtube_extension.backend.services.performance_benchmark_system import (
+            PerformanceBenchmarkSystem,
+            benchmark_system,
+        )
 
         print("✅ Successfully imported performance benchmark system")
 
         # Test 1: Check if system properly detects missing components
         print("\n📋 Test 1: Component Availability Detection")
         try:
-            from youtube_extension.backend.services.performance_benchmark_system import OPTIMIZATION_COMPONENTS_AVAILABLE
+            from youtube_extension.backend.services.performance_benchmark_system import (
+                OPTIMIZATION_COMPONENTS_AVAILABLE,
+            )
             print(f"   Optimization components available: {OPTIMIZATION_COMPONENTS_AVAILABLE}")
 
             if not OPTIMIZATION_COMPONENTS_AVAILABLE:

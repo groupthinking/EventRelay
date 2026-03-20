@@ -5,13 +5,10 @@ Finally deploy the original request with all critical integrations
 """
 
 import asyncio
-import os
-import sys
-import shutil
 import json
-import subprocess
-from pathlib import Path
-from typing import Optional, Dict, List, Any
+import os
+import shutil
+
 
 class CoreDeploymentManager:
     """Deploy the core YouTube error integration with all enhancements"""

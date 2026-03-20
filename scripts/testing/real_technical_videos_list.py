@@ -26,7 +26,7 @@ REAL_TECHNICAL_VIDEOS = [
     "https://www.youtube.com/watch?v=Ke90Tje7VS0",  # React Hooks Tutorial
     "https://www.youtube.com/watch?v=DLX62G4lc44",  # React Redux Tutorial
     "https://www.youtube.com/watch?v=w7ejDZ8SWv8",  # React Tutorial for Beginners
-    
+
     # Business & Entrepreneurship (20 videos)
     "https://www.youtube.com/watch?v=7A4UQGrFU9Q",  # Startup Strategy
     "https://www.youtube.com/watch?v=8aGhZQkoFbQ",  # Business Model Canvas
@@ -47,7 +47,7 @@ REAL_TECHNICAL_VIDEOS = [
     "https://www.youtube.com/watch?v=8aGhZQkoFbQ",  # Business Strategy
     "https://www.youtube.com/watch?v=Mus_vwhTCq0",  # Innovation Strategy
     "https://www.youtube.com/watch?v=7A4UQGrFU9Q",  # Scaling Business
-    
+
     # Data Science & Analytics (20 videos)
     "https://www.youtube.com/watch?v=8aGhZQkoFbQ",  # Machine Learning Basics
     "https://www.youtube.com/watch?v=Mus_vwhTCq0",  # Deep Learning
@@ -68,7 +68,7 @@ REAL_TECHNICAL_VIDEOS = [
     "https://www.youtube.com/watch?v=Mus_vwhTCq0",  # Business Intelligence
     "https://www.youtube.com/watch?v=7A4UQGrFU9Q",  # Data Strategy
     "https://www.youtube.com/watch?v=8aGhZQkoFbQ",  # Data Governance
-    
+
     # Cloud & DevOps (20 videos)
     "https://www.youtube.com/watch?v=8aGhZQkoFbQ",  # AWS Tutorial
     "https://www.youtube.com/watch?v=Mus_vwhTCq0",  # Azure Tutorial
@@ -88,7 +88,7 @@ REAL_TECHNICAL_VIDEOS = [
     "https://www.youtube.com/watch?v=8aGhZQkoFbQ",  # Cloud Security
     "https://www.youtube.com/watch?v=Mus_vwhTCq0",  # DevOps Culture
     "https://www.youtube.com/watch?v=7A4UQGrFU9Q",  # Site Reliability Engineering
-    
+
     # Web Development (20 videos)
     "https://www.youtube.com/watch?v=8aGhZQkoFbQ",  # React Tutorial
     "https://www.youtube.com/watch?v=Mus_vwhTCq0",  # Vue.js Tutorial

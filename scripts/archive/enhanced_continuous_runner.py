@@ -15,20 +15,25 @@ import asyncio
 import json
 import os
 import time
-from pathlib import Path
-from typing import Dict, Any, List, Optional
 from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List
 
-import sys
 # REMOVED: sys.path.insert with Path manipulation
 
 # Import Llama agent
 try:
-    from ..agents.llama_background_agent import LlamaBackgroundAgent, create_llama_background_agent
+    from ..agents.llama_background_agent import (
+        LlamaBackgroundAgent,
+        create_llama_background_agent,
+    )
     HAS_LLAMA = True
 except ImportError:
     try:
-        from agents.llama_background_agent import LlamaBackgroundAgent, create_llama_background_agent
+        from agents.llama_background_agent import (
+            LlamaBackgroundAgent,
+            create_llama_background_agent,
+        )
         HAS_LLAMA = True
     except ImportError:
         HAS_LLAMA = False
@@ -36,13 +41,13 @@ except ImportError:
 
 # Import existing components
 try:
-    from ..agents.process_video_with_mcp import RealVideoProcessor
     from ..agents.action_implementer import ActionImplementer
+    from ..agents.process_video_with_mcp import RealVideoProcessor
     from ..agents.specialized.quality_agent import QualityAgent
 except ImportError:
     try:
-        from agents.process_video_with_mcp import RealVideoProcessor
         from agents.action_implementer import ActionImplementer
+        from agents.process_video_with_mcp import RealVideoProcessor
         from agents.specialized.quality_agent import QualityAgent
     except ImportError:
         RealVideoProcessor = None

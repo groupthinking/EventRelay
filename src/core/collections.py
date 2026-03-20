@@ -7,8 +7,8 @@ based on agent-generated analysis and metadata.
 """
 
 import logging
-from typing import List, Dict, Any, Optional
 from enum import Enum
+from typing import Any, Dict, List
 
 logger = logging.getLogger("smart_collections")
 
