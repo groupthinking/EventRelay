@@ -1,9 +1,18 @@
 import { NextResponse } from 'next/server';
 
-const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000';
+const rawBackendUrl = process.env.BACKEND_URL || '';
+const BACKEND_URL = rawBackendUrl.startsWith('http') ? rawBackendUrl : 'http://localhost:8000';
+const BACKEND_AVAILABLE = rawBackendUrl.startsWith('http');
 
 export async function POST(request: Request) {
   try {
+    if (!BACKEND_AVAILABLE) {
+      return NextResponse.json(
+        { answer: 'Chat requires a backend connection. Configure BACKEND_URL to enable the AI assistant.' },
+        { status: 503 }
+      );
+    }
+
     const body = await request.json();
 
     const response = await fetch(`${BACKEND_URL}/api/v1/chat`, {
