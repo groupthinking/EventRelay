@@ -1,0 +1,208 @@
+name: Real Video Processing (Cloud)
+
+on:
+  workflow_dispatch:
+    inputs:
+      video_url:
+        description: 'YouTube video URL or video ID to process'
+        required: true
+      processing_mode:
+        description: 'Processing mode: transcript | analysis | full'
+        required: false
+        default: 'full'
+        type: choice
+        options:
+          - transcript
+          - analysis
+          - full
+      store_results:
+        description: 'Store results as workflow artifact'
+        required: false
+        default: 'true'
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  process:
+    name: Process video in cloud
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install -e .[youtube,ml] 2>/dev/null || \
+            pip install yt-dlp requests google-generativeai
+
+      - name: Resolve video ID
+        id: resolve
+        run: |
+          INPUT="${{ github.event.inputs.video_url }}"
+          # Extract video ID from URL or use raw input as ID
+          VID=$(python3 - <<'EOF'
+          import re, sys
+          raw = "${{ github.event.inputs.video_url }}"
+          patterns = [
+              r'(?:v=|youtu\.be/|embed/|shorts/)([A-Za-z0-9_-]{11})',
+          ]
+          for pat in patterns:
+              m = re.search(pat, raw)
+              if m:
+                  print(m.group(1))
+                  sys.exit(0)
+          # Assume raw input is already a video ID
+          print(raw.strip())
+          EOF
+          )
+          echo "video_id=$VID" >> "$GITHUB_OUTPUT"
+          echo "Resolved video ID: $VID"
+
+      - name: Run transcript extraction
+        if: ${{ github.event.inputs.processing_mode == 'transcript' || github.event.inputs.processing_mode == 'full' }}
+        env:
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          VIDEO_ID: ${{ steps.resolve.outputs.video_id }}
+        run: |
+          python - <<'EOF'
+          import os, json, sys
+
+          video_id = os.environ["VIDEO_ID"]
+          print(f"Extracting transcript for video: {video_id}")
+
+          results_dir = "processing_results"
+          os.makedirs(results_dir, exist_ok=True)
+
+          transcript_text = None
+
+          # Try YouTube transcript API first (no auth needed)
+          try:
+              import urllib.request
+              url = f"https://www.youtube.com/watch?v={video_id}"
+              headers = {"User-Agent": "Mozilla/5.0"}
+              req = urllib.request.Request(url, headers=headers)
+              with urllib.request.urlopen(req, timeout=20) as resp:
+                  html = resp.read().decode("utf-8", errors="replace")
+              # Check video is accessible
+              if "Video unavailable" in html:
+                  raise ValueError("Video is unavailable")
+              print(f"Video page accessible: {video_id}")
+          except Exception as exc:
+              print(f"Warning: Could not verify video accessibility: {exc}", file=sys.stderr)
+
+          # Attempt yt-dlp subtitle extraction
+          try:
+              import subprocess, tempfile
+              with tempfile.TemporaryDirectory() as tmpdir:
+                  result = subprocess.run(
+                      ["yt-dlp", "--write-auto-sub", "--sub-lang", "en",
+                       "--skip-download", "--output", f"{tmpdir}/%(id)s",
+                       f"https://www.youtube.com/watch?v={video_id}"],
+                      capture_output=True, text=True, timeout=120
+                  )
+                  if result.returncode == 0:
+                      import glob
+                      sub_files = glob.glob(f"{tmpdir}/*.vtt") + glob.glob(f"{tmpdir}/*.srt")
+                      if sub_files:
+                          with open(sub_files[0]) as f:
+                              transcript_text = f.read()
+                          print(f"Extracted subtitles ({len(transcript_text)} chars)")
+                  else:
+                      print(f"yt-dlp stderr: {result.stderr[:500]}", file=sys.stderr)
+          except Exception as exc:
+              print(f"yt-dlp extraction failed: {exc}", file=sys.stderr)
+
+          output = {
+              "video_id": video_id,
+              "transcript": transcript_text,
+              "status": "success" if transcript_text else "no_transcript",
+          }
+          out_path = f"{results_dir}/transcript_{video_id}.json"
+          with open(out_path, "w") as f:
+              json.dump(output, f, indent=2)
+          print(f"Transcript result saved to {out_path}")
+          EOF
+
+      - name: Run AI analysis
+        if: ${{ github.event.inputs.processing_mode == 'analysis' || github.event.inputs.processing_mode == 'full' }}
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          VIDEO_ID: ${{ steps.resolve.outputs.video_id }}
+        run: |
+          python - <<'EOF'
+          import os, json
+
+          video_id = os.environ["VIDEO_ID"]
+          api_key = os.environ.get("GEMINI_API_KEY", "")
+          results_dir = "processing_results"
+          os.makedirs(results_dir, exist_ok=True)
+
+          transcript_path = f"{results_dir}/transcript_{video_id}.json"
+          transcript_text = None
+          if os.path.exists(transcript_path):
+              with open(transcript_path) as f:
+                  data = json.load(f)
+              transcript_text = data.get("transcript")
+
+          analysis = {"video_id": video_id, "status": "skipped", "events": []}
+
+          if api_key and transcript_text:
+              try:
+                  import google.generativeai as genai
+                  genai.configure(api_key=api_key)
+                  model = genai.GenerativeModel("gemini-1.5-flash")
+                  prompt = (
+                      f"Analyze the following video transcript and extract key events, "
+                      f"topics, and actionable insights:\n\n{transcript_text[:8000]}"
+                  )
+                  response = model.generate_content(prompt)
+                  analysis["result"] = response.text
+                  analysis["status"] = "success"
+                  print("AI analysis complete")
+              except Exception as exc:
+                  print(f"Gemini analysis failed: {exc}")
+                  analysis["status"] = "error"
+                  analysis["error"] = str(exc)
+          else:
+              reason = "no API key" if not api_key else "no transcript available"
+              print(f"Skipping AI analysis: {reason}")
+
+          out_path = f"{results_dir}/analysis_{video_id}.json"
+          with open(out_path, "w") as f:
+              json.dump(analysis, f, indent=2)
+          print(f"Analysis result saved to {out_path}")
+          EOF
+
+      - name: Upload processing results
+        if: ${{ github.event.inputs.store_results == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: video-processing-${{ steps.resolve.outputs.video_id }}
+          path: processing_results/
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Print summary
+        if: always()
+        run: |
+          VID="${{ steps.resolve.outputs.video_id }}"
+          echo "## Real Video Processing Summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Field | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|-------|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Video ID | $VID |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Mode | ${{ github.event.inputs.processing_mode }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Triggered by | ${{ github.actor }} |" >> "$GITHUB_STEP_SUMMARY"
+          if [ -d processing_results ]; then
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "### Output files" >> "$GITHUB_STEP_SUMMARY"
+            ls processing_results/ | while read f; do echo "- \`$f\`"; done >> "$GITHUB_STEP_SUMMARY"
+          fi

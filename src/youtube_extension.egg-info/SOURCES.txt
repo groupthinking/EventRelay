@@ -150,6 +150,7 @@ src/youtube_extension/backend/models/__init__.py
 src/youtube_extension/backend/models/analytics.py
 src/youtube_extension/backend/models/audit.py
 src/youtube_extension/backend/models/base.py
+src/youtube_extension/backend/models/build_plan.py
 src/youtube_extension/backend/models/cache.py
 src/youtube_extension/backend/models/learning.py
 src/youtube_extension/backend/models/tenant.py
@@ -159,6 +160,7 @@ src/youtube_extension/backend/repositories/__init__.py
 src/youtube_extension/backend/repositories/base.py
 src/youtube_extension/backend/services/api_cost_monitor.py
 src/youtube_extension/backend/services/cache_service.py
+src/youtube_extension/backend/services/comparative_analysis.py
 src/youtube_extension/backend/services/comprehensive_benchmarking.py
 src/youtube_extension/backend/services/data_service.py
 src/youtube_extension/backend/services/database_cleanup_service.py
@@ -253,6 +255,5 @@ src/youtube_extension/videopack/provenance.py
 src/youtube_extension/videopack/schema.py
 src/youtube_extension/videopack/validate.py
 src/youtube_extension/videopack/versioning.py
-tests/test_build_plan.py
 tests/test_code_generator.py
 tests/test_ml_models.py
