@@ -9,21 +9,47 @@ creating deployable applications from YouTube tutorial content.
 
 import json
 import logging
+import os
 import tempfile
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
+
+# Import AI Code Generator for enhanced generation
+try:
+    from youtube_extension.backend.ai_code_generator import AICodeGenerator
+    AI_CODE_GENERATOR_AVAILABLE = True
+except ImportError:
+    AICodeGenerator = None
+    AI_CODE_GENERATOR_AVAILABLE = False
+    logger.debug("AI Code Generator not available - using template-based generation only")
 
 class ProjectCodeGenerator:
     """
     Generates project code based on video analysis results
     """
 
-    def __init__(self):
+    def __init__(self, use_ai_generation: Optional[bool] = None):
         self.templates_dir = Path(__file__).parent / "templates"
         self.ensure_templates_directory()
+
+        # Determine if we should use AI generation
+        if use_ai_generation is None:
+            # Check environment variable (default to False for backward compatibility)
+            use_ai_generation = os.getenv("USE_AI_CODE_GENERATION", "false").lower() == "true"
+
+        self.use_ai_generation = use_ai_generation and AI_CODE_GENERATOR_AVAILABLE
+        self.ai_generator = None
+
+        if self.use_ai_generation:
+            try:
+                self.ai_generator = AICodeGenerator()
+                logger.info("✅ AI Code Generator enabled for enhanced project generation")
+            except Exception as e:
+                logger.warning(f"Failed to initialize AI Code Generator: {e}")
+                self.use_ai_generation = False
 
     def ensure_templates_directory(self):
         """Ensure templates directory exists"""
@@ -39,6 +65,14 @@ class ProjectCodeGenerator:
         logger.info(f"🏗️ Generating project: {project_config.get('type', 'web')}")
 
         try:
+            # If AI generation is enabled, delegate to AI generator
+            if self.use_ai_generation and self.ai_generator:
+                logger.info("🤖 Using AI-powered code generation")
+                return await self.ai_generator.generate_fullstack_project(video_analysis, project_config)
+
+            # Otherwise, use template-based generation
+            logger.info("📝 Using template-based code generation")
+
             # Normalize video context so every project reflects the specific tutorial
             context = self._build_generation_context(video_analysis, project_config)
             extracted_info = context["extracted_info"]
@@ -623,28 +657,77 @@ root.render(
 
     def _generate_vanilla_main_js(self, tutorial_steps: list[str], features: list[str]) -> str:
         """Generate main.js for vanilla projects"""
-        return '''// UVAI Generated JavaScript
-document.addEventListener('DOMContentLoaded', function() {
+
+        # Generate step-specific comments and code
+        step_comments = ""
+        if tutorial_steps:
+            step_comments = "\n    // Tutorial Steps from Video:\n"
+            for i, step in enumerate(tutorial_steps[:5], 1):
+                # Sanitize step for JavaScript comment
+                clean_step = step.replace("*/", "").replace("/*", "").strip()[:100]
+                step_comments += f"    // {i}. {clean_step}\n"
+
+        # Generate feature-specific initialization
+        feature_init = ""
+        if "responsive_design" in features:
+            feature_init += """
+    // Handle responsive design
+    window.addEventListener('resize', () => {
+        console.log('Window resized:', window.innerWidth);
+    });
+"""
+
+        if "api_integration" in features or "api" in str(features).lower():
+            feature_init += """
+    // API integration ready
+    async function fetchData(url) {
+        try {
+            const response = await fetch(url);
+            return await response.json();
+        } catch (error) {
+            console.error('API Error:', error);
+        }
+    }
+"""
+
+        return f'''// UVAI Generated JavaScript
+// This code was generated from video tutorial analysis
+{step_comments}
+document.addEventListener('DOMContentLoaded', function() {{
     console.log('App loaded successfully');
+    console.log('Tutorial steps:', {len(tutorial_steps)});
+    console.log('Features:', {json.dumps(features)});
 
     // Add interactive features based on video analysis
     addInteractiveFeatures();
-});
+{feature_init}
+}});
 
-function addInteractiveFeatures() {
+function addInteractiveFeatures() {{
     // Add animations
     const sections = document.querySelectorAll('section');
-    sections.forEach((section, index) => {
+    sections.forEach((section, index) => {{
         section.style.opacity = '0';
         section.style.transform = 'translateY(20px)';
 
-        setTimeout(() => {
+        setTimeout(() => {{
             section.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
             section.style.opacity = '1';
             section.style.transform = 'translateY(0)';
-        }, index * 200);
-    });
-}'''
+        }}, index * 200);
+    }});
+
+    // Add click handlers for interactive elements
+    const cards = document.querySelectorAll('.tech-card, .feature-card');
+    cards.forEach(card => {{
+        card.addEventListener('click', () => {{
+            card.style.transform = 'scale(1.05)';
+            setTimeout(() => {{
+                card.style.transform = 'scale(1)';
+            }}, 200);
+        }});
+    }});
+}}'''
 
     def _generate_vanilla_styles_css(self, features: list[str]) -> str:
         """Generate styles.css for vanilla projects"""
@@ -929,7 +1012,11 @@ This is a starting point generated from video analysis. You can:
         # Ensure it starts with a letter
         if name and not name[0].isalpha():
             name = 'uvai-' + name
-        return name[:50] if name else 'uvai-project'
+        # Return sanitized name or fallback (but prefer video-derived names)
+        result = name[:50] if name else 'uvai-generated-project'
+        if result and result != 'uvai-generated-project':
+            logger.info(f"📝 Generated project name: {result} (from: {name[:100]})")
+        return result
 
     def _build_generation_context(self, video_analysis: dict[str, Any], project_config: dict[str, Any]) -> dict[str, Any]:
         """Combine video analysis, AI insights, and user config for generation."""
@@ -1059,9 +1146,9 @@ This is a starting point generated from video analysis. You can:
 # Global instance
 _code_generator = None
 
-def get_code_generator() -> ProjectCodeGenerator:
+def get_code_generator(use_ai_generation: Optional[bool] = None) -> ProjectCodeGenerator:
     """Get or create global code generator instance"""
     global _code_generator
     if _code_generator is None:
-        _code_generator = ProjectCodeGenerator()
+        _code_generator = ProjectCodeGenerator(use_ai_generation=use_ai_generation)
     return _code_generator
