@@ -367,6 +367,7 @@ class VideoProcessingService:
                 "type": project_type,
                 "features": features or ["responsive_design", "modern_ui"],
                 "title": extracted_info.get("title", "UVAI Generated Project"),
+                "technologies": extracted_info.get("technologies", []),
                 "video_url": video_url
             }
 

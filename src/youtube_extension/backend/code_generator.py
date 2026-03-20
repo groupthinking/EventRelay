@@ -12,7 +12,7 @@ import logging
 import tempfile
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +23,7 @@ class ProjectCodeGenerator:
 
     def __init__(self):
         self.templates_dir = Path(__file__).parent / "templates"
+        self.ai_generator = self._load_ai_generator()
         self.ensure_templates_directory()
 
     def ensure_templates_directory(self):
@@ -45,6 +46,8 @@ class ProjectCodeGenerator:
             project_type = extracted_info.get("project_type", "web")
             technologies = extracted_info.get("technologies", ["javascript", "html", "css"])
             features = extracted_info.get("features", [])
+            title = extracted_info.get("title", "UVAI Generated Project")
+            slug = self._sanitize_name(title)
 
             # Carry enriched context forward for downstream generators
             video_analysis = dict(video_analysis)
@@ -53,8 +56,17 @@ class ProjectCodeGenerator:
             video_analysis["key_concepts"] = context.get("key_concepts", [])
             video_analysis["tutorial_steps"] = extracted_info.get("tutorial_steps", [])
 
-            # Create temporary project directory
-            temp_dir = tempfile.mkdtemp(prefix="uvai_project_")
+            # Attempt AI-powered generation first when configured
+            ai_result = await self._maybe_generate_with_ai(video_analysis, project_config, slug)
+            if ai_result:
+                ai_result["project_title"] = title
+                ai_result["project_slug"] = slug
+                ai_result["technologies"] = technologies
+                ai_result["features"] = features
+                return ai_result
+
+            # Create temporary project directory using the video-derived slug
+            temp_dir = tempfile.mkdtemp(prefix=f"{slug}_")
             project_path = Path(temp_dir)
 
             # Generate project structure based on type
@@ -71,6 +83,8 @@ class ProjectCodeGenerator:
             result["project_type"] = project_type
             result["technologies"] = technologies
             result["features"] = features
+            result["project_title"] = title
+            result["project_slug"] = slug
 
             logger.info(f"✅ Project generated successfully at {project_path}")
             return result
@@ -84,11 +98,12 @@ class ProjectCodeGenerator:
 
         extracted_info = video_analysis.get("extracted_info", {})
         extracted_info.get("title", "UVAI Generated Project")
+        tech_tokens = [tech.lower() for tech in technologies]
 
         # Determine the tech stack
-        if "react" in technologies:
+        if any(token.startswith("react") or "next" in token for token in tech_tokens):
             return await self._generate_react_project(project_path, video_analysis, features)
-        elif "vue" in technologies:
+        elif any("vue" in token for token in tech_tokens):
             return await self._generate_vue_project(project_path, video_analysis, features)
         else:
             return await self._generate_vanilla_js_project(project_path, video_analysis, features)
@@ -210,7 +225,14 @@ class ProjectCodeGenerator:
             f.write(index_html)
 
         # Generate main.js
-        main_js = self._generate_vanilla_main_js(tutorial_steps, features)
+        main_js = self._generate_vanilla_main_js(
+            title,
+            technologies,
+            tutorial_steps,
+            features,
+            summary,
+            key_concepts
+        )
         with open(project_path / "main.js", "w") as f:
             f.write(main_js)
 
@@ -529,56 +551,46 @@ root.render(
         key_concepts: list[str]
     ) -> str:
         """Generate index.html for vanilla JS projects"""
-        steps_html = ""
-        if tutorial_steps:
-            steps_list = "\\n".join([f"      <li>{step[:100]}...</li>" for step in tutorial_steps[:5]])
-            steps_html = f'''
+        steps_list = "\\n".join([f"      <li>{step[:100]}...</li>" for step in tutorial_steps[:5]]) if tutorial_steps else ""
+        steps_html = f'''
     <section class="tutorial-steps">
       <h2>Tutorial Steps</h2>
-      <ol>
+      <ol class="dynamic">
 {steps_list}
       </ol>
     </section>'''
 
-        tech_html = ""
-        if technologies:
-            tech_cards = "\\n".join([f'            <div class="tech-card">{tech}</div>' for tech in technologies])
-            tech_html = f'''
+        tech_cards = "\\n".join([f'            <div class="tech-card">{tech}</div>' for tech in technologies]) if technologies else ""
+        tech_html = f'''
     <section class="technologies">
       <h2>Technologies Used</h2>
-      <div class="tech-cards">
+      <div class="tech-cards dynamic">
 {tech_cards}
       </div>
     </section>'''
 
-        features_html = ""
-        if features:
-            feature_cards = "\\n".join([f'            <div class="feature-card">{feature.replace("_", " ").title()}</div>' for feature in features[:8]])
-            features_html = f'''
+        feature_cards = "\\n".join([f'            <div class="feature-card">{feature.replace("_", " ").title()}</div>' for feature in features[:8]]) if features else ""
+        features_html = f'''
     <section class="features">
       <h2>Features</h2>
-      <div class="feature-cards">
+      <div class="feature-cards dynamic">
 {feature_cards}
       </div>
     </section>'''
 
-        summary_html = ""
-        if summary:
-            summary_html = f'''
+        summary_html = f'''
     <section class="welcome">
       <h2>What This Tutorial Covers</h2>
-      <p>{summary[:500]}</p>
+      <p class="hero-summary">{(summary or "This project adapts the tutorial steps detected from the video.")[:500]}</p>
     </section>'''
 
-        concepts_html = ""
-        if key_concepts:
-            concept_cards = "\\n".join(
-                [f'            <div class="feature-card">{concept}</div>' for concept in key_concepts[:6]]
-            )
-            concepts_html = f'''
+        concept_cards = "\\n".join(
+            [f'            <div class="feature-card">{concept}</div>' for concept in key_concepts[:6]]
+        ) if key_concepts else ""
+        concepts_html = f'''
     <section class="features">
       <h2>Key Concepts From The Video</h2>
-      <div class="feature-cards">
+      <div class="feature-cards concept-cards dynamic">
 {concept_cards}
       </div>
     </section>'''
@@ -621,30 +633,101 @@ root.render(
 </body>
 </html>'''
 
-    def _generate_vanilla_main_js(self, tutorial_steps: list[str], features: list[str]) -> str:
-        """Generate main.js for vanilla projects"""
-        return '''// UVAI Generated JavaScript
-document.addEventListener('DOMContentLoaded', function() {
-    console.log('App loaded successfully');
+    def _generate_vanilla_main_js(
+        self,
+        title: str,
+        technologies: list[str],
+        tutorial_steps: list[str],
+        features: list[str],
+        summary: str,
+        key_concepts: list[str]
+    ) -> str:
+        """Generate main.js for vanilla projects with video-derived data"""
 
-    // Add interactive features based on video analysis
-    addInteractiveFeatures();
-});
+        steps_js = json.dumps(tutorial_steps[:8], ensure_ascii=False, indent=2)
+        features_js = json.dumps(
+            [feature.replace("_", " ").title() for feature in features[:8]] or ["Responsive Layout"],
+            ensure_ascii=False,
+            indent=2
+        )
+        technologies_js = json.dumps(technologies[:10] or ["JavaScript", "HTML", "CSS"], ensure_ascii=False, indent=2)
+        concepts_js = json.dumps(key_concepts[:6], ensure_ascii=False, indent=2)
+        summary_literal = json.dumps(summary.replace("\n", " ")[:400] if summary else "", ensure_ascii=False)
+        title_literal = json.dumps(title, ensure_ascii=False)
 
-function addInteractiveFeatures() {
-    // Add animations
-    const sections = document.querySelectorAll('section');
-    sections.forEach((section, index) => {
-        section.style.opacity = '0';
-        section.style.transform = 'translateY(20px)';
+        return f'''// UVAI Generated JavaScript enriched with video analysis
+const projectTitle = {title_literal};
+const tutorialSteps = {steps_js};
+const featureTags = {features_js};
+const technologiesUsed = {technologies_js};
+const keyConcepts = {concepts_js};
+const videoSummary = {summary_literal};
 
-        setTimeout(() => {
-            section.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
-            section.style.opacity = '1';
-            section.style.transform = 'translateY(0)';
-        }, index * 200);
-    });
-}'''
+function renderList(selector, items, emptyLabel) {{
+  const target = document.querySelector(selector);
+  if (!target) return;
+
+  if (!items || !items.length) {{
+    target.innerHTML = `<p class="muted">${{emptyLabel}}</p>`;
+    return;
+  }}
+
+  const list = document.createElement('ol');
+  list.className = 'pill-list';
+  items.forEach((item, index) => {{
+    const li = document.createElement('li');
+    li.textContent = `${{index + 1}}. ${{item}}`;
+    list.appendChild(li);
+  }});
+  target.appendChild(list);
+}}
+
+function renderCards(selector, items) {{
+  const target = document.querySelector(selector);
+  if (!target) return;
+  target.innerHTML = '';
+
+  items.forEach((item) => {{
+    const card = document.createElement('div');
+    card.className = 'info-card';
+    card.textContent = item;
+    target.appendChild(card);
+  }});
+}}
+
+function hydrateHero() {{
+  const heroTitle = document.querySelector('.app-header h1');
+  if (heroTitle) {{
+    heroTitle.textContent = projectTitle;
+  }}
+  const heroSummary = document.querySelector('.hero-summary');
+  if (heroSummary && videoSummary) {{
+    heroSummary.textContent = videoSummary;
+  }}
+}}
+
+function addInteractiveFeatures() {{
+  const sections = document.querySelectorAll('section');
+  sections.forEach((section, index) => {{
+    section.style.opacity = '0';
+    section.style.transform = 'translateY(20px)';
+
+    setTimeout(() => {{
+      section.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
+      section.style.opacity = '1';
+      section.style.transform = 'translateY(0)';
+    }}, index * 180);
+  }});
+}}
+
+document.addEventListener('DOMContentLoaded', function() {{
+  renderList('.tutorial-steps .dynamic', tutorialSteps, 'Tutorial steps were not detected in the transcript.');
+  renderCards('.feature-cards.dynamic', featureTags);
+  renderCards('.tech-cards.dynamic', technologiesUsed);
+  renderCards('.concept-cards.dynamic', keyConcepts);
+  hydrateHero();
+  addInteractiveFeatures();
+}});'''
 
     def _generate_vanilla_styles_css(self, features: list[str]) -> str:
         """Generate styles.css for vanilla projects"""
@@ -746,6 +829,36 @@ body {{
 
 .tutorial-steps li {{
     margin-bottom: 0.5rem;
+}}
+
+.pill-list {{
+    list-style: none;
+    padding-left: 0;
+}}
+
+.pill-list li {{
+    background: #eef2ff;
+    border: 1px solid #c7d2fe;
+    color: #4338ca;
+    padding: 0.65rem 0.9rem;
+    border-radius: 10px;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+}}
+
+.info-card {{
+    background: #f0f4f8;
+    border: 1px solid #d9e2ec;
+    padding: 0.9rem 1.2rem;
+    border-radius: 10px;
+    font-weight: 600;
+    color: #1f2937;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06);
+}}
+
+.muted {{
+    color: #6b7280;
+    font-style: italic;
 }}
 
 .app-footer {{
@@ -980,6 +1093,32 @@ This is a starting point generated from video analysis. You can:
             "key_concepts": key_concepts
         }
 
+    async def _maybe_generate_with_ai(
+        self,
+        video_analysis: dict[str, Any],
+        project_config: dict[str, Any],
+        slug: str
+    ) -> Optional[dict[str, Any]]:
+        """Attempt Gemini-powered generation when configured; fall back otherwise."""
+        if not self.ai_generator:
+            return None
+
+        ai_client = getattr(self.ai_generator, "client", None)
+        if not ai_client:
+            return None
+
+        enriched_config = dict(project_config)
+        enriched_config["project_slug"] = slug
+        extracted_info = video_analysis.get("extracted_info", {})
+        enriched_config.setdefault("features", extracted_info.get("features", []))
+        enriched_config.setdefault("title", extracted_info.get("title"))
+        enriched_config.setdefault("technologies", extracted_info.get("technologies", []))
+        try:
+            return await self.ai_generator.generate_fullstack_project(video_analysis, enriched_config)
+        except Exception as exc:  # pragma: no cover - AI path best-effort
+            logger.warning(f"AI generator failed, using template generation instead: {exc}")
+            return None
+
     def _coerce_to_list(self, value: Any) -> list[str]:
         """Convert common iterable or delimited strings into a clean list."""
         if not value:
@@ -990,6 +1129,16 @@ This is a starting point generated from video analysis. You can:
             parts = [part.strip() for part in value.replace("|", ",").split(",") if part.strip()]
             return parts or [value.strip()]
         return []
+
+    def _load_ai_generator(self):
+        """Lazily load the AI code generator if it's available."""
+        try:
+            from youtube_extension.backend.ai_code_generator import get_ai_code_generator  # noqa: I001
+
+            return get_ai_code_generator()
+        except Exception as exc:  # pragma: no cover - optional dependency
+            logger.info(f"AI code generator not available: {exc}")
+            return None
 
     def _derive_tutorial_steps(self, ai_analysis: dict[str, Any], video_analysis: dict[str, Any]) -> list[str]:
         """Derive tutorial steps from AI analysis, markdown, or transcript."""
@@ -1041,9 +1190,120 @@ This is a starting point generated from video analysis. You can:
         pass
 
     async def _generate_vue_project(self, project_path: Path, video_analysis: dict, features: list[str]) -> dict[str, Any]:
-        """Generate a Vue.js project (placeholder for future implementation)"""
-        # For now, fall back to vanilla JS
-        return await self._generate_vanilla_js_project(project_path, video_analysis, features)
+        """Generate a lightweight Vue.js project driven by tutorial data"""
+
+        extracted_info = video_analysis.get("extracted_info", {})
+        title = extracted_info.get("title", "UVAI Vue App")
+        technologies = extracted_info.get("technologies", [])
+        tutorial_steps = extracted_info.get("tutorial_steps", [])
+        summary = video_analysis.get("summary", "")
+        key_concepts = video_analysis.get("key_concepts", [])
+
+        index_html = f'''<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{title}</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app"></div>
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <script src="main.js"></script>
+</body>
+</html>'''
+
+        vue_state = {
+            "title": title,
+            "summary": summary,
+            "technologies": technologies[:8],
+            "features": [f.replace("_", " ").title() for f in features[:8]] or ["Responsive Layout"],
+            "keyConcepts": key_concepts[:6],
+            "tutorialSteps": tutorial_steps[:8],
+        }
+        main_js = f'''const state = {json.dumps(vue_state, ensure_ascii=False, indent=2)};
+
+const app = Vue.createApp({{
+  data() {{
+    return state;
+  }},
+  computed: {{
+    hasSteps() {{
+      return this.tutorialSteps && this.tutorialSteps.length > 0;
+    }},
+  }},
+  mounted() {{
+    this.$nextTick(() => {{
+      document.title = this.title;
+    }});
+  }},
+  template: `
+    <div class="app">
+      <header class="app-header">
+        <h1>{{{{ title }}}}</h1>
+        <p>Generated by UVAI from video analysis</p>
+      </header>
+      <main class="app-main">
+        <section class="welcome">
+          <h2>Built from Video Analysis</h2>
+          <p class="hero-summary">{{{{ summary || 'This Vue app mirrors the tutorial flow detected in the video.' }}}}</p>
+        </section>
+        <section class="technologies">
+          <h2>Technologies</h2>
+          <div class="tech-cards">
+            <div v-for="tech in technologies" :key="tech" class="tech-card">{{{{ tech }}}}</div>
+          </div>
+        </section>
+        <section class="features">
+          <h2>Features</h2>
+          <div class="feature-cards">
+            <div v-for="feature in features" :key="feature" class="feature-card">{{{{ feature }}}}</div>
+          </div>
+        </section>
+        <section class="features" v-if="keyConcepts.length">
+          <h2>Key Concepts</h2>
+          <div class="feature-cards">
+            <div v-for="concept in keyConcepts" :key="concept" class="feature-card">{{{{ concept }}}}</div>
+          </div>
+        </section>
+        <section class="tutorial-steps">
+          <h2>Tutorial Steps</h2>
+          <ol v-if="hasSteps()" class="pill-list">
+            <li v-for="(step, idx) in tutorialSteps" :key="idx">{{{{ idx + 1 }}}}. {{{{ step }}}}</li>
+          </ol>
+          <p v-else class="muted">Steps were not extracted; add them from the transcript to personalize further.</p>
+        </section>
+      </main>
+      <footer class="app-footer">
+        <p>Powered by UVAI</p>
+      </footer>
+    </div>
+  `
+}});
+
+app.mount('#app');'''
+
+        styles_css = self._generate_vanilla_styles_css(features)
+
+        with open(project_path / "index.html", "w") as f:
+            f.write(index_html)
+        with open(project_path / "main.js", "w") as f:
+            f.write(main_js)
+        with open(project_path / "styles.css", "w") as f:
+            f.write(styles_css)
+
+        readme = self._generate_readme(title, "Vue", video_analysis)
+        with open(project_path / "README.md", "w") as f:
+            f.write(readme)
+
+        return {
+            "framework": "vue",
+            "entry_point": "index.html",
+            "build_command": None,
+            "start_command": "Open index.html in browser",
+            "files_created": ["index.html", "main.js", "styles.css", "README.md"]
+        }
 
     async def _generate_mobile_project(self, project_path: Path, video_analysis: dict, technologies: list[str], features: list[str]) -> dict[str, Any]:
         """Generate a mobile project (placeholder for future implementation)"""

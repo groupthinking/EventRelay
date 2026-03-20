@@ -43,3 +43,32 @@ def test_generate_project_includes_video_specific_content(monkeypatch, tmp_path)
     assert "React Weather App" in app_text
     assert "state management" in app_text or "api calls" in app_text
 
+
+def test_vanilla_project_renders_tutorial_steps(tmp_path) -> None:
+    """Vanilla projects should still reflect tutorial-specific details."""
+
+    generator = ProjectCodeGenerator()
+    video_analysis = {
+        "metadata": {"title": "HTML Landing Page Tutorial", "keywords": ["html", "css"]},
+        "extracted_info": {
+            "title": "HTML Landing Page Tutorial",
+            "technologies": ["HTML", "CSS", "JavaScript"],
+            "tutorial_steps": ["Setup HTML structure", "Add hero section", "Deploy to Netlify"],
+            "features": ["responsive_design"],
+        },
+        "ai_analysis": {"Key Concepts": ["semantic html", "layout"]},
+    }
+    project_config = {"type": "web", "features": ["responsive_design"], "title": "HTML Landing Page Tutorial"}
+
+    result = asyncio.run(generator.generate_project(video_analysis, project_config))
+    generated_path = Path(result["project_path"])
+
+    main_js = (generated_path / "main.js").read_text()
+    assert "Setup HTML structure" in main_js
+    assert "Add hero section" in main_js
+
+    index_html = (generated_path / "index.html").read_text()
+    assert "feature-cards dynamic" in index_html
+    assert "tech-cards dynamic" in index_html
+
+    assert generated_path.name.startswith("html-landing-page-tutorial")

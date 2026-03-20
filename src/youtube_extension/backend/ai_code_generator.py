@@ -70,6 +70,13 @@ class AICodeGenerator:
             self.client = genai.Client(api_key=self.gemini_api_key)
             logger.info("✅ AI Code Generator initialized with Gemini")
 
+    def _slugify(self, title: str) -> str:
+        import re
+
+        slug = re.sub(r"[^a-zA-Z0-9\s-]", "", title).strip().lower()
+        slug = re.sub(r"\s+", "-", slug)
+        return slug[:60] if slug else "uvai-project"
+
     async def generate_fullstack_project(
         self,
         video_analysis: dict[str, Any],
@@ -119,7 +126,8 @@ class AICodeGenerator:
 
         # Create project directory in configured output location
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        project_name = f"uvai_{project_config.get('type', 'project')}_{timestamp}"
+        project_slug = self._slugify(str(project_config.get("project_slug") or title))
+        project_name = f"{project_slug}_{timestamp}"
         project_path = self.output_dir / project_name
         project_path.mkdir(parents=True, exist_ok=True)
 
@@ -142,7 +150,8 @@ class AICodeGenerator:
             "start_command": architecture.get("start_command", "npm run dev"),
             "architecture": architecture,
             "monetization": architecture.get("monetization", {}),
-            "ai_generated": True
+            "ai_generated": True,
+            "project_slug": project_slug
         }
 
     async def _determine_architecture(
