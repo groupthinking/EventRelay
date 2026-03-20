@@ -404,7 +404,7 @@ Provide a structured JSON response with visual_elements array containing:
                         if match:
                             try:
                                 visual_data = json.loads(match.group(1))
-                            except:
+                            except json.JSONDecodeError:
                                 visual_data = {'visual_elements': []}
                         else:
                             visual_data = {'visual_elements': []}
