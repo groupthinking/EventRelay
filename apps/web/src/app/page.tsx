@@ -6,6 +6,37 @@ import { clsx } from 'clsx';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/components/ui/Toast';
 
+// ─── URL Validation ────────────────────────────────────────────────────────────
+function validateVideoUrl(url: string): string | null {
+  if (!url.trim()) {
+    return 'Please enter a video URL';
+  }
+
+  try {
+    // Try to parse as URL
+    new URL(url);
+  } catch {
+    return 'Please enter a valid URL';
+  }
+
+  // Check if it's a recognized video platform
+  const videoPatterns = [
+    /youtube\.com/i,
+    /youtu\.be/i,
+    /drive\.google\.com/i,
+    /vimeo\.com/i,
+    /loom\.com/i,
+    /\.mp4$/i,
+    /\.webm$/i,
+  ];
+
+  if (!videoPatterns.some(pattern => pattern.test(url))) {
+    return 'URL must be from a supported platform (YouTube, Google Drive, Vimeo, etc.) or a direct video link';
+  }
+
+  return null;
+}
+
 // ─── Typewriter Hook ───────────────────────────────────────────────────────────
 function useTypewriter(words: string[], speed = 80, pause = 2200) {
   const [displayed, setDisplayed] = useState('');
@@ -231,8 +262,11 @@ function StatCard({ value, label }: { value: string; label: string }) {
 export default function Home() {
   const [videoUrl, setVideoUrl] = useState('');
   const [isFocused, setIsFocused] = useState(false);
+  const [urlError, setUrlError] = useState<string | null>(null);
+  const [pasting, setPasting] = useState(false);
   const router = useRouter();
   const typedWord = useTypewriter(USE_CASES);
+  const { addToast } = useToast();
 
   const handleProcess = useCallback(() => {
     const error = validateVideoUrl(videoUrl);
@@ -247,7 +281,7 @@ export default function Home() {
   const handleUrlChange = useCallback((value: string) => {
     setVideoUrl(value);
     if (urlError) setUrlError(null); // clear error on change
-  }, [urlError]);
+  }, []);
 
   const handlePasteFromClipboard = useCallback(async () => {
     try {
