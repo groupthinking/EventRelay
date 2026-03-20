@@ -1,6 +1,7 @@
 # Ray Serve ML Deployment — Quick Reference
 
 > **Last verified:** 2026-03-18 — 6/6 endpoints passing, 18h uptime, zero restarts.
+> **Image:** `us-central1-docker.pkg.dev/uvai-730bb/uvai-registry/ray-serve-uvai:latest`
 
 ## What's Running
 
@@ -80,6 +81,7 @@ rm -rf /tmp/ray-build
 |------|---------|
 | `Dockerfile.ray` | Custom Ray image with UVAI models baked in |
 | `ray-serve-config.yaml` | Ray Serve deployment config (autoscaling, routes) |
+| `ray-cluster.yaml` | Base RayCluster CRD |
 | `cloudbuild.yaml` | Google Cloud Build config |
 | `raycluster-image-patch.yaml` | K8s patch to swap the RayCluster image |
 
