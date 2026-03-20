@@ -7,6 +7,7 @@ Removes remaining active sys.path manipulations from core files
 import re
 from pathlib import Path
 
+
 def fix_syspath_in_file(file_path: Path) -> bool:
     """Remove active sys.path manipulations from a file"""
     try:

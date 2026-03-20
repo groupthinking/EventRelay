@@ -5,11 +5,13 @@ File System Watcher for Claude Code Changes
 Monitors project files and automatically validates changes made by Claude Code.
 """
 
-import time
 import subprocess
+import time
 from pathlib import Path
-from watchdog.observers import Observer
+
 from watchdog.events import FileSystemEventHandler
+from watchdog.observers import Observer
+
 
 class ClaudeCodeValidator(FileSystemEventHandler):
     """Validates files modified by Claude Code"""

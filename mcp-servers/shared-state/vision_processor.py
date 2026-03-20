@@ -12,13 +12,11 @@ All outputs are signed with QuantomCode ECDSA before caching/transmission.
 import asyncio
 import base64
 import hashlib
-import io
 import logging
 import os
 import time
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any, Optional
 
 try:
@@ -30,16 +28,14 @@ except ImportError:
 
 # Vision AI imports
 try:
-    from google.cloud import videointelligence
-    from google.cloud import storage
-    from google.cloud import vision
+    from google.cloud import storage, videointelligence, vision
 
     HAS_VISION_DEPS = True
 except ImportError:
     HAS_VISION_DEPS = False
     logging.warning("Google Cloud Vision/Video AI not available")
 
-from quantomcode_signer import QuantomCodeSigner, get_signer
+from quantomcode_signer import get_signer
 
 logger = logging.getLogger("VisionProcessor")
 

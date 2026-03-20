@@ -1,8 +1,9 @@
 import os
 import time
+from typing import Any, Dict, Optional
+
 import requests
-import json
-from typing import Optional, Dict, Any
+
 
 class GeminiInteractionClient:
     """
@@ -21,9 +22,9 @@ class GeminiInteractionClient:
             "Content-Type": "application/json"
         }
 
-    def create_interaction(self, 
-                           input_text: str, 
-                           agent: str = "deep-research-pro-preview-12-2025", 
+    def create_interaction(self,
+                           input_text: str,
+                           agent: str = "deep-research-pro-preview-12-2025",
                            background: bool = True) -> Dict[str, Any]:
         """
         Creates a new interaction with the specified agent.
@@ -33,7 +34,7 @@ class GeminiInteractionClient:
             "input": input_text,
             "background": background
         }
-        
+
         response = requests.post(self.BASE_URL, headers=self.headers, json=payload)
         response.raise_for_status()
         return response.json()
@@ -60,16 +61,16 @@ class GeminiInteractionClient:
         while time.time() - start_time < timeout:
             interaction = self.get_interaction(interaction_id)
             status = interaction.get("status")
-            
+
             print(f"Status: {status}...")
-            
+
             if status == "completed":
                 return interaction
             elif status in ["failed", "cancelled"]:
                 raise RuntimeError(f"Interaction ended with status: {status}")
-            
+
             time.sleep(poll_interval)
-            
+
         raise TimeoutError(f"Interaction {interaction_id} timed out after {timeout} seconds.")
 
 if __name__ == "__main__":

@@ -4,12 +4,12 @@ Phase 1.1: Core Package Import Analyzer
 Scans core Python files for import issues and sys.path manipulations
 """
 
-import os
-import sys
 import re
-from pathlib import Path
-from typing import Dict, List, Set
+import sys
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Dict, List
+
 
 @dataclass
 class ImportIssue:

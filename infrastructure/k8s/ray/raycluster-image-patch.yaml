@@ -1,0 +1,27 @@
+# RayCluster patch to use the custom UVAI Ray Serve image
+# with ML models baked in (no kubectl cp needed).
+#
+# Apply:
+#   kubectl patch raycluster uvai-ray-cluster -n gke-ray-system \
+#     --type merge --patch-file infrastructure/k8s/ray/raycluster-image-patch.yaml
+#
+# This updates both head + worker images so code is
+# available on every node without manual copying.
+
+spec:
+  headGroupSpec:
+    template:
+      spec:
+        containers:
+          - name: ray-head
+            image: us-central1-docker.pkg.dev/uvai-730bb/uvai-registry/ray-serve-uvai:latest
+  workerGroupSpecs:
+    - groupName: small-group
+      replicas: 1
+      minReplicas: 0
+      maxReplicas: 3
+      template:
+        spec:
+          containers:
+            - name: ray-worker
+              image: us-central1-docker.pkg.dev/uvai-730bb/uvai-registry/ray-serve-uvai:latest

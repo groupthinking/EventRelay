@@ -1,18 +1,17 @@
-import os
-import re
-import json
-import time
-import hashlib
-import logging
 import asyncio
-import subprocess
-import httpx
+import hashlib
+import json
+import logging
+import os
 import shutil
-from pathlib import Path
-from fastapi import FastAPI, Query, Request, UploadFile, File, HTTPException
-from fastapi.responses import JSONResponse, StreamingResponse
-from typing import Dict, Any, List, Optional
+import subprocess
+import time
 from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List
+
+import httpx
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 
 # --- App and Logging Setup ---
 app = FastAPI(title="Codebase Monitoring & Management Server")

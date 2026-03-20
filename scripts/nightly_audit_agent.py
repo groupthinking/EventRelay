@@ -15,16 +15,14 @@ Perform Ruthless Solutions (remediation).
 Implement Fortification (preventative measures).
 """
 
-import asyncio
 import argparse
+import asyncio
 import json
 import logging
-import os
 import sys
-import traceback
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Any, Dict
 
 try:
     import orjson
@@ -33,20 +31,20 @@ except ImportError:
     HAS_ORJSON = False
 
 # Set up path to include src
-import sys
-import traceback
-from pathlib import Path
-from typing import Dict, Any, List, Optional
 
-from typing import Dict, Any
 sys.path.append(str(Path(__file__).parent.parent / "src"))
 
 try:
-    from youtube_extension.backend.services.health_monitoring_service import get_health_monitoring_service, HealthStatus
-    from youtube_extension.backend.services.metrics_service import MetricsService
+    from youtube_extension.backend.services.database_cleanup_service import (
+        run_database_cleanup,
+    )
+    from youtube_extension.backend.services.health_monitoring_service import (
+        HealthStatus,
+        get_health_monitoring_service,
+    )
     from youtube_extension.backend.services.logging_service import get_logging_service
-    from youtube_extension.backend.services.database_cleanup_service import run_database_cleanup
-except ImportError as e:
+    from youtube_extension.backend.services.metrics_service import MetricsService
+except ImportError:
     # Print warning but don't fail immediately, allows dry-run in incomplete envs
     # print(f"Warning: Could not import services: {e}")
     pass

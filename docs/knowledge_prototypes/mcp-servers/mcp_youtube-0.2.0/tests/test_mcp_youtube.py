@@ -1,9 +1,10 @@
 import pathlib
 import sys
-from typing import Any, Callable, Dict, List, Tuple, Union, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+
 from mcp.server.fastmcp import Context
 
 # Add project root to sys.path so that `import mcp_youtube` works when the
@@ -94,4 +95,4 @@ async def test_get_metadata(monkeypatch: pytest.MonkeyPatch, mock_context: Conte
 
     assert result == dummy_info
     assert "--dump-json" in captured["args"]
-    assert "--no-download" in captured["args"] 
+    assert "--no-download" in captured["args"]

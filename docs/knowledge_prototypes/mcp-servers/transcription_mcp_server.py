@@ -11,7 +11,6 @@ import json
 import os
 import sys
 from typing import Any, Dict
-import requests
 
 BASE = os.getenv("YOUTUBE_EXTENSION_BASE", "http://localhost:8000")
 

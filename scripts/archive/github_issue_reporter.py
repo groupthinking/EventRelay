@@ -9,16 +9,16 @@ Integrates with the persistent issue tracker for recurrence detection and MCP co
 
 import argparse
 import asyncio
-import json
 import os
 import sys
 import traceback
-from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Any, Dict
 
 try:
     from uvai.api.v1.services.issue_tracker import (
-        get_issue_tracker, IssueSeverity, IssueCategory
+        IssueCategory,
+        IssueSeverity,
+        get_issue_tracker,
     )
 except ImportError:
     print("❌ Failed to import issue tracker service")

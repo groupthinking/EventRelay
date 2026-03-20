@@ -2,8 +2,8 @@
 # Universal context connection for all external systems
 
 from abc import ABC, abstractmethod
-from typing import Dict
 from datetime import datetime
+from typing import Dict
 
 
 class MCPContext:

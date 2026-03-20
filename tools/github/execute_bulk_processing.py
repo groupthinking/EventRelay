@@ -13,7 +13,6 @@ Usage:
 import argparse
 import subprocess
 import sys
-import time
 from datetime import datetime
 
 
@@ -22,9 +21,9 @@ def run_command(command: list, description: str) -> tuple[bool, str]:
     print(f"🔧 {description}...")
     try:
         result = subprocess.run(
-            command, 
-            capture_output=True, 
-            text=True, 
+            command,
+            capture_output=True,
+            text=True,
             check=True,
             timeout=300  # 5 minute timeout
         )
@@ -40,27 +39,27 @@ def main():
         description="Trigger automated bulk issue processing",
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    
+
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument('--dry-run', action='store_true',
                       help='Run analysis only (safe preview)')
-    group.add_argument('--execute', action='store_true', 
+    group.add_argument('--execute', action='store_true',
                       help='Execute bulk processing (requires confirmation)')
-    
+
     args = parser.parse_args()
-    
+
     print("🤖 BULK ISSUE PROCESSING TRIGGER")
     print("=" * 50)
     print(f"Mode: {'DRY RUN' if args.dry_run else 'EXECUTION'}")
     print(f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print()
-    
+
     if args.dry_run:
         # Run safe analysis
         success, output = run_command([
             'python', 'tools/bulk_issue_processor.py', '--analyze-only'
         ], "Running safe analysis")
-        
+
         if success:
             print("✅ Analysis completed successfully!")
             print("\nOutput:")
@@ -69,7 +68,7 @@ def main():
             print("❌ Analysis failed!")
             print(f"Error: {output}")
             sys.exit(1)
-            
+
     else:
         # Execute mode with confirmation
         print("⚠️  WARNING: This will make permanent changes to GitHub issues!")
@@ -78,19 +77,19 @@ def main():
         print("- Add explanatory comments to all closed issues")
         print("- Preserve legitimate security issues for manual review")
         print()
-        
+
         confirm = input("Type 'EXECUTE_BULK_PROCESSING' to confirm: ")
         if confirm != 'EXECUTE_BULK_PROCESSING':
             print("❌ Confirmation failed. Cancelled for safety.")
             sys.exit(1)
-        
+
         print("\n🚀 Executing automated bulk processing...")
-        
+
         # Use the GitHub Actions script for actual execution
         success, output = run_command([
             'python', '.github/workflows/scripts/automated_bulk_processor.py'
         ], "Executing bulk issue processing")
-        
+
         if success:
             print("✅ Bulk processing completed successfully!")
             print("\nOutput:")
@@ -99,7 +98,7 @@ def main():
             print("❌ Bulk processing failed!")
             print(f"Error: {output}")
             sys.exit(1)
-    
+
     print(f"\n🎉 Process completed at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
 

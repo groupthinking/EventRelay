@@ -15,21 +15,27 @@ import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Any, List, Tuple
+from typing import Any, Dict, List
 
 # REMOVED: sys.path manipulation - using proper relative imports instead
 
 try:
-    from ..services.real_youtube_api import RealYouTubeAPIService, get_youtube_service
-    from ..services.real_ai_processor import RealAIProcessorService, get_ai_processor
-    from ..services.real_video_processor import RealVideoProcessor, get_real_video_processor
     from ..services.api_cost_monitor import APICostMonitor, cost_monitor
+    from ..services.real_ai_processor import RealAIProcessorService, get_ai_processor
+    from ..services.real_video_processor import (
+        RealVideoProcessor,
+        get_real_video_processor,
+    )
+    from ..services.real_youtube_api import RealYouTubeAPIService, get_youtube_service
 except ImportError:
     try:
-        from services.real_youtube_api import RealYouTubeAPIService, get_youtube_service
-        from services.real_ai_processor import RealAIProcessorService, get_ai_processor
-        from services.real_video_processor import RealVideoProcessor, get_real_video_processor
         from services.api_cost_monitor import APICostMonitor, cost_monitor
+        from services.real_ai_processor import RealAIProcessorService, get_ai_processor
+        from services.real_video_processor import (
+            RealVideoProcessor,
+            get_real_video_processor,
+        )
+        from services.real_youtube_api import RealYouTubeAPIService, get_youtube_service
     except ImportError as e:
         print(f"❌ Failed to import real API services: {e}")
         print("Make sure you're running this script from the correct directory")
@@ -146,7 +152,7 @@ class RealAPIIntegrationVerifier:
             try:
                 video_id = service.extract_video_id(test_url)
                 id_extraction_success = len(video_id) == 11
-            except Exception as e:
+            except Exception:
                 id_extraction_success = False
                 video_id = None
 
@@ -261,7 +267,11 @@ class RealAPIIntegrationVerifier:
 
             for provider, processing_type in test_cases:
                 try:
-                    from services.real_ai_processor import AIProcessingRequest, AIProvider, ProcessingType
+                    from services.real_ai_processor import (
+                        AIProcessingRequest,
+                        AIProvider,
+                        ProcessingType,
+                    )
 
                     request = AIProcessingRequest(
                         content=test_content,

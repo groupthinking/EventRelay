@@ -8,21 +8,18 @@ Includes Vision-Reasoning Stack integration
 import asyncio
 import base64
 import json
+import logging
 import sqlite3
 import time
-from datetime import datetime
-from pathlib import Path
-from typing import Dict, Any, List, Optional
-import logging
-import aiofiles
+from dataclasses import asdict, dataclass
+from typing import Any, Dict, List, Optional
+
 import websockets
-from dataclasses import dataclass, asdict
-from contextlib import asynccontextmanager
+from hybrid_cache import get_cache
 
 # Vision-Reasoning Stack imports
-from quantomcode_signer import get_signer, QuantomCodeSigner
-from vision_processor import get_processor, VisionProcessor, VisionResult
-from hybrid_cache import get_cache, HybridCache
+from quantomcode_signer import get_signer
+from vision_processor import get_processor
 
 # Configure logging
 logging.basicConfig(

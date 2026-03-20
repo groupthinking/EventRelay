@@ -2,17 +2,15 @@
 # Enables autonomous agents to negotiate, collaborate, and share context with MCP integration
 
 import asyncio
-import json
 import logging
-import sys
 import os
-import time
+import sys
 import uuid
-from typing import Dict, List, Any, Optional, Callable
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from abc import ABC, abstractmethod
+from typing import Any, Callable, Dict, List, Optional
 
 # Ensure the lib directory is in sys.path FIRST before any relative imports
 _lib_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -28,7 +26,7 @@ if "connectors.mcp_base" in sys.modules:
 
 # Internal imports (relative within the connectors folder)
 from connectors.mcp_base import MCPContext
-from connectors.real_mcp_client import MCPClient, execute_mcp_tool
+from connectors.real_mcp_client import execute_mcp_tool
 
 logger = logging.getLogger(__name__)
 
@@ -176,7 +174,7 @@ class MCPEnabledA2AAgent(BaseAgent):
     def __init__(self, agent_id: str, capabilities: List[str]):
         super().__init__(agent_id, capabilities)
         self.mcp_context = MCPContext()
-        self.message_bus: Optional["A2AMessageBus"] = None
+        self.message_bus: Optional[A2AMessageBus] = None
         self.performance_stats = {
             "messages_sent": 0,
             "messages_received": 0,

@@ -8,9 +8,8 @@ Usage:
   python3 scripts/say_summary.py "short summary text"
 """
 import os
-import sys
 import subprocess
-import requests  # kept for future health checks
+import sys
 
 
 def main() -> None:

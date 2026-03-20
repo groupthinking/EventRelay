@@ -18,7 +18,7 @@ def verify_fibonacci():
         func = profiling_server.FUNCTION_REGISTRY['slow_fibonacci']
         source = inspect.getsource(func)
         print(f"Source code preview:\n{source.strip()}")
-        
+
         if "for _ in range" in source:
              print("\n[FINDING] slow_fibonacci is ITERATIVE (Fast). The 'slow' label is misleading.")
         elif "slow_fibonacci" in source and "return" in source and "(" in source: # Weak recursion check

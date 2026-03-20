@@ -27,29 +27,26 @@ from fastapi.responses import JSONResponse, RedirectResponse
 project_root = Path(__file__).parent.parent
 
 # Import services and container
-from .containers.service_container import get_service_container
-from .services.database_optimizer import (
-    initialize_database_optimization,
-    shutdown_database_optimization,
-)
-from .services.websocket_service import WebSocketService
-
-# from ..processors.video_processor import default_processor as video_processor
-
-# Import API routers
-# Import API routers
-from .api.v1.router import router as v1_router
-
 # Import integrations router
 # Import integrations router
 # try:
 #     from integrations.routes import router as integrations_router
 # except ImportError:
 #     integrations_router = None
-
 # Configure structured logging (Cloud Run captures stdout/stderr automatically)
 import os
 import sys
+
+# from ..processors.video_processor import default_processor as video_processor
+# Import API routers
+# Import API routers
+from .api.v1.router import router as v1_router
+from .containers.service_container import get_service_container
+from .services.database_optimizer import (
+    initialize_database_optimization,
+    shutdown_database_optimization,
+)
+from .services.websocket_service import WebSocketService
 
 log_level = os.getenv("LOG_LEVEL", "INFO").upper()
 logging.basicConfig(
@@ -154,6 +151,7 @@ app.add_middleware(
 # )
 
 from .middleware.rate_limiting import RateLimitMiddleware
+
 app.add_middleware(
     RateLimitMiddleware,
     requests_per_minute=60,
@@ -162,6 +160,7 @@ app.add_middleware(
 )
 
 from .middleware.api_key_auth import APIKeyAuthMiddleware
+
 app.add_middleware(APIKeyAuthMiddleware)
 
 # Include API version routers

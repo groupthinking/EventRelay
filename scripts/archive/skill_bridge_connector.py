@@ -6,16 +6,16 @@ Anti-bloat: <100 lines, extends existing systems
 """
 import json
 import sys
-import asyncio
-from pathlib import Path
 import threading
 import time
 from datetime import datetime
+from pathlib import Path
 
 # Add mcp-bridge to path
 sys.path.append('/Users/garvey/mcp-bridge')
 
 from skill_builder import SkillBuilder
+
 
 class CollectiveSkillBuilder(SkillBuilder):
     """Extended SkillBuilder with multi-agent network sharing"""

@@ -5,45 +5,101 @@ Code Generator for UVAI Video-to-Software Pipeline
 
 This module generates actual project code based on video analysis,
 creating deployable applications from YouTube tutorial content.
+
+Attempts AI-powered generation via Gemini first; falls back to
+template-based generation that still produces unique, video-specific output.
 """
 
+import hashlib
 import json
 import logging
+import os
 import tempfile
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
+# Import AI Code Generator for enhanced generation
+try:
+    from youtube_extension.backend.ai_code_generator import AICodeGenerator
+    AI_CODE_GENERATOR_AVAILABLE = True
+except ImportError:
+    AICodeGenerator = None  # type: ignore[assignment,misc]
+    AI_CODE_GENERATOR_AVAILABLE = False
+    logger.debug("AI Code Generator not available — using template-based generation only")
+
+
 class ProjectCodeGenerator:
     """
-    Generates project code based on video analysis results
+    Generates project code based on video analysis results.
+
+    Priority:
+      1. AICodeGenerator (Gemini-powered, full-stack, unique per video)
+      2. Template-based generation with video-specific customization
     """
 
-    def __init__(self):
+    def __init__(self, use_ai_generation: Optional[bool] = None):
         self.templates_dir = Path(__file__).parent / "templates"
         self.ensure_templates_directory()
+
+        # AI generation is ON by default when the key is present
+        if use_ai_generation is None:
+            use_ai_generation = bool(os.getenv("GEMINI_API_KEY"))
+
+        self.use_ai_generation = use_ai_generation and AI_CODE_GENERATOR_AVAILABLE
+        self.ai_generator: Optional[Any] = None
+
+        if self.use_ai_generation:
+            try:
+                self.ai_generator = AICodeGenerator()
+                logger.info("✅ AI Code Generator enabled — projects will be unique per video")
+            except Exception as e:
+                logger.warning(f"Failed to initialize AI Code Generator: {e}")
+                self.use_ai_generation = False
 
     def ensure_templates_directory(self):
         """Ensure templates directory exists"""
         self.templates_dir.mkdir(exist_ok=True)
-
-        # Create basic templates if they don't exist
         self._create_basic_templates()
 
     async def generate_project(self, video_analysis: dict[str, Any], project_config: dict[str, Any]) -> dict[str, Any]:
         """
-        Generate a complete project based on video analysis
+        Generate a complete project based on video analysis.
+
+        Tries AICodeGenerator first; falls back to template-based with
+        video-specific context injection.
         """
         logger.info(f"🏗️ Generating project: {project_config.get('type', 'web')}")
 
         try:
-            # Extract project information
-            extracted_info = video_analysis.get("extracted_info", {})
-            project_type = project_config.get("type", extracted_info.get("project_type", "web"))
+            # ── AI path (preferred) ─────────────────────────────────
+            if self.use_ai_generation and self.ai_generator:
+                logger.info("🤖 Using AI-powered code generation for unique output")
+                try:
+                    return await self.ai_generator.generate_fullstack_project(
+                        video_analysis, project_config
+                    )
+                except Exception as ai_err:
+                    logger.warning(f"AI generation failed, falling back to templates: {ai_err}")
+
+            # ── Template path (fallback) ────────────────────────────
+            logger.info("📝 Using template-based code generation")
+
+            # Normalize video context so every project reflects the specific tutorial
+            context = self._build_generation_context(video_analysis, project_config)
+            extracted_info = context["extracted_info"]
+            project_type = extracted_info.get("project_type", "web")
             technologies = extracted_info.get("technologies", ["javascript", "html", "css"])
-            features = project_config.get("features", extracted_info.get("features", []))
+            features = extracted_info.get("features", [])
+
+            # Carry enriched context forward for downstream generators
+            video_analysis = dict(video_analysis)
+            video_analysis["extracted_info"] = extracted_info
+            video_analysis["summary"] = context.get("summary", "")
+            video_analysis["key_concepts"] = context.get("key_concepts", [])
+            video_analysis["tutorial_steps"] = extracted_info.get("tutorial_steps", [])
 
             # Create temporary project directory
             temp_dir = tempfile.mkdtemp(prefix="uvai_project_")
@@ -71,13 +127,11 @@ class ProjectCodeGenerator:
             logger.error(f"❌ Project generation failed: {e}")
             raise
 
+    # ─── Web project routing ────────────────────────────────────────
+
     async def _generate_web_project(self, project_path: Path, video_analysis: dict, technologies: list[str], features: list[str]) -> dict[str, Any]:
         """Generate a web application project"""
 
-        extracted_info = video_analysis.get("extracted_info", {})
-        extracted_info.get("title", "UVAI Generated Project")
-
-        # Determine the tech stack
         if "react" in technologies:
             return await self._generate_react_project(project_path, video_analysis, features)
         elif "vue" in technologies:
@@ -85,12 +139,16 @@ class ProjectCodeGenerator:
         else:
             return await self._generate_vanilla_js_project(project_path, video_analysis, features)
 
+    # ─── React generator ────────────────────────────────────────────
+
     async def _generate_react_project(self, project_path: Path, video_analysis: dict, features: list[str]) -> dict[str, Any]:
         """Generate a React project"""
 
         extracted_info = video_analysis.get("extracted_info", {})
         title = extracted_info.get("title", "UVAI React App")
         tutorial_steps = extracted_info.get("tutorial_steps", [])
+        summary = video_analysis.get("summary", "")
+        key_concepts = video_analysis.get("key_concepts", [])
 
         # Create package.json
         package_json = {
@@ -120,7 +178,7 @@ class ProjectCodeGenerator:
             package_json["dependencies"]["@auth0/auth0-react"] = "^2.2.0"
         if "api_integration" in features:
             package_json["dependencies"]["axios"] = "^1.4.0"
-        if "responsive_design" in features or "tailwind" in video_analysis.get("extracted_info", {}).get("technologies", []):
+        if "responsive_design" in features or "tailwind" in extracted_info.get("technologies", []):
             package_json["dependencies"]["tailwindcss"] = "^3.3.0"
             package_json["devDependencies"] = {"autoprefixer": "^10.4.14", "postcss": "^8.4.24"}
 
@@ -143,7 +201,14 @@ class ProjectCodeGenerator:
 
         # Generate main App component
         technologies = extracted_info.get("technologies", [])
-        app_component = self._generate_react_app_component(title, technologies, tutorial_steps, features)
+        app_component = self._generate_react_app_component(
+            title,
+            technologies,
+            tutorial_steps,
+            features,
+            summary,
+            key_concepts
+        )
         with open(src_dir / "App.js", "w") as f:
             f.write(app_component)
 
@@ -170,26 +235,44 @@ class ProjectCodeGenerator:
             "files_created": ["package.json", "src/App.js", "src/index.js", "src/App.css", "public/index.html", "README.md"]
         }
 
+    # ─── Vanilla JS generator (the broken path — now fixed) ────────
+
     async def _generate_vanilla_js_project(self, project_path: Path, video_analysis: dict, features: list[str]) -> dict[str, Any]:
-        """Generate a vanilla JavaScript project"""
+        """Generate a vanilla JavaScript project with video-specific content"""
 
         extracted_info = video_analysis.get("extracted_info", {})
         title = extracted_info.get("title", "UVAI Web App")
         technologies = extracted_info.get("technologies", [])
         tutorial_steps = extracted_info.get("tutorial_steps", [])
+        summary = video_analysis.get("summary", "")
+        key_concepts = video_analysis.get("key_concepts", [])
+
+        # Derive a stable fingerprint from the video so every output is unique
+        video_data = video_analysis.get("video_data", video_analysis.get("metadata", {}))
+        video_id = video_data.get("video_id", "")
+        fingerprint = self._video_fingerprint(video_id, title, technologies)
 
         # Generate index.html
-        index_html = self._generate_vanilla_index_html(title, technologies, tutorial_steps, features)
+        index_html = self._generate_vanilla_index_html(
+            title,
+            technologies,
+            tutorial_steps,
+            features,
+            summary,
+            key_concepts
+        )
         with open(project_path / "index.html", "w") as f:
             f.write(index_html)
 
-        # Generate main.js
-        main_js = self._generate_vanilla_main_js(tutorial_steps, features)
+        # Generate main.js — NOW uses video-specific content
+        main_js = self._generate_vanilla_main_js(
+            title, tutorial_steps, features, key_concepts, fingerprint
+        )
         with open(project_path / "main.js", "w") as f:
             f.write(main_js)
 
-        # Generate styles.css
-        styles_css = self._generate_vanilla_styles_css(features)
+        # Generate styles.css — NOW uses video-derived accent color
+        styles_css = self._generate_vanilla_styles_css(features, fingerprint)
         with open(project_path / "styles.css", "w") as f:
             f.write(styles_css)
 
@@ -206,11 +289,10 @@ class ProjectCodeGenerator:
             "files_created": ["index.html", "main.js", "styles.css", "README.md"]
         }
 
+    # ─── API generators ─────────────────────────────────────────────
+
     async def _generate_api_project(self, project_path: Path, video_analysis: dict, technologies: list[str], features: list[str]) -> dict[str, Any]:
         """Generate an API project"""
-
-        extracted_info = video_analysis.get("extracted_info", {})
-        extracted_info.get("title", "UVAI API")
 
         if "python" in technologies:
             return await self._generate_python_api(project_path, video_analysis, features)
@@ -256,6 +338,28 @@ class ProjectCodeGenerator:
             "files_created": ["main.py", "requirements.txt", "README.md"]
         }
 
+    # ─── Fingerprint + color derivation ─────────────────────────────
+
+    @staticmethod
+    def _video_fingerprint(video_id: str, title: str, technologies: list[str]) -> str:
+        """Deterministic short hash from video metadata — ensures uniqueness."""
+        payload = f"{video_id}|{title}|{','.join(sorted(technologies))}"
+        return hashlib.sha256(payload.encode()).hexdigest()[:12]
+
+    @staticmethod
+    def _accent_from_fingerprint(fingerprint: str) -> str:
+        """Derive a unique HSL accent color from the video fingerprint."""
+        hue = int(fingerprint[:3], 16) % 360
+        return f"hsl({hue}, 65%, 52%)"
+
+    @staticmethod
+    def _accent_dark_from_fingerprint(fingerprint: str) -> str:
+        """Darker variant for hover states."""
+        hue = int(fingerprint[:3], 16) % 360
+        return f"hsl({hue}, 65%, 38%)"
+
+    # ─── HTML generators ────────────────────────────────────────────
+
     def _generate_index_html(self, title: str) -> str:
         """Generate index.html for React projects"""
         return f'''<!DOCTYPE html>
@@ -273,7 +377,15 @@ class ProjectCodeGenerator:
   </body>
 </html>'''
 
-    def _generate_react_app_component(self, title: str, technologies: list[str], tutorial_steps: list[str], features: list[str]) -> str:
+    def _generate_react_app_component(
+        self,
+        title: str,
+        technologies: list[str],
+        tutorial_steps: list[str],
+        features: list[str],
+        summary: str,
+        key_concepts: list[str]
+    ) -> str:
         """Generate the main React App component"""
         steps_jsx = ""
         if tutorial_steps:
@@ -295,6 +407,28 @@ class ProjectCodeGenerator:
         <div className="tech-cards">
 {tech_items}
         </div>
+      </section>'''
+
+        concepts_jsx = ""
+        if key_concepts:
+            concept_items = "\\n".join([
+                f"          <div key='{concept}' className='feature-card'>{concept}</div>"
+                for concept in key_concepts[:6]
+            ])
+            concepts_jsx = f'''
+      <section className="features">
+        <h2>Key Concepts From The Video</h2>
+        <div className="feature-cards">
+{concept_items}
+        </div>
+      </section>'''
+
+        summary_jsx = ""
+        if summary:
+            summary_jsx = f'''
+      <section className="welcome">
+        <h2>What This Tutorial Covers</h2>
+        <p>{summary[:500]}</p>
       </section>'''
 
         features_jsx = ""
@@ -326,7 +460,9 @@ function App() {{
              &ldquo;<strong>{title}</strong>&rdquo; and extracting the key
              technologies, features, and implementation steps.</p>
         </section>
+{summary_jsx}
 {tech_jsx}
+{concepts_jsx}
 {steps_jsx}
 {features_jsx}
       </main>
@@ -461,7 +597,15 @@ root.render(
 }}
 {responsive_css}'''
 
-    def _generate_vanilla_index_html(self, title: str, technologies: list[str], tutorial_steps: list[str], features: list[str]) -> str:
+    def _generate_vanilla_index_html(
+        self,
+        title: str,
+        technologies: list[str],
+        tutorial_steps: list[str],
+        features: list[str],
+        summary: str,
+        key_concepts: list[str]
+    ) -> str:
         """Generate index.html for vanilla JS projects"""
         steps_html = ""
         if tutorial_steps:
@@ -496,6 +640,27 @@ root.render(
       </div>
     </section>'''
 
+        summary_html = ""
+        if summary:
+            summary_html = f'''
+    <section class="welcome">
+      <h2>What This Tutorial Covers</h2>
+      <p>{summary[:500]}</p>
+    </section>'''
+
+        concepts_html = ""
+        if key_concepts:
+            concept_cards = "\\n".join(
+                [f'            <div class="feature-card">{concept}</div>' for concept in key_concepts[:6]]
+            )
+            concepts_html = f'''
+    <section class="features">
+      <h2>Key Concepts From The Video</h2>
+      <div class="feature-cards">
+{concept_cards}
+      </div>
+    </section>'''
+
         return f'''<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -518,7 +683,9 @@ root.render(
                    &ldquo;<strong>{title}</strong>&rdquo; and extracting the key
                    technologies, features, and implementation steps.</p>
             </section>
+{summary_html}
 {tech_html}
+{concepts_html}
 {steps_html}
 {features_html}
         </main>
@@ -532,33 +699,121 @@ root.render(
 </body>
 </html>'''
 
-    def _generate_vanilla_main_js(self, tutorial_steps: list[str], features: list[str]) -> str:
-        """Generate main.js for vanilla projects"""
-        return '''// UVAI Generated JavaScript
-document.addEventListener('DOMContentLoaded', function() {
-    console.log('App loaded successfully');
+    # ─── Vanilla JS (FIXED — now video-specific) ────────────────────
 
-    // Add interactive features based on video analysis
-    addInteractiveFeatures();
-});
+    def _generate_vanilla_main_js(
+        self,
+        title: str,
+        tutorial_steps: list[str],
+        features: list[str],
+        key_concepts: list[str],
+        fingerprint: str,
+    ) -> str:
+        """Generate main.js for vanilla projects — unique per video."""
 
-function addInteractiveFeatures() {
-    // Add animations
-    const sections = document.querySelectorAll('section');
-    sections.forEach((section, index) => {
-        section.style.opacity = '0';
-        section.style.transform = 'translateY(20px)';
+        # Build tutorial-step comments
+        step_block = ""
+        if tutorial_steps:
+            lines = []
+            for i, step in enumerate(tutorial_steps[:8], 1):
+                clean = step.replace("*/", "").replace("/*", "").strip()[:120]
+                lines.append(f"//   {i}. {clean}")
+            step_block = "// Tutorial steps extracted from video:\n" + "\n".join(lines)
 
-        setTimeout(() => {
-            section.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
-            section.style.opacity = '1';
-            section.style.transform = 'translateY(0)';
-        }, index * 200);
-    });
-}'''
+        # Build concept data
+        concept_json = json.dumps(key_concepts[:10]) if key_concepts else "[]"
 
-    def _generate_vanilla_styles_css(self, features: list[str]) -> str:
-        """Generate styles.css for vanilla projects"""
+        # Feature-specific helpers
+        extra_functions = ""
+        if "api_integration" in features or "api" in " ".join(features).lower():
+            extra_functions += """
+async function fetchData(endpoint) {
+  try {
+    const res = await fetch(endpoint);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
+  } catch (err) {
+    console.error('[UVAI] API fetch failed:', err);
+    return null;
+  }
+}
+"""
+        if "authentication" in features:
+            extra_functions += """
+function initAuth() {
+  console.log('[UVAI] Auth module placeholder — wire to your provider');
+}
+"""
+        if "database" in features:
+            extra_functions += """
+function initDatabase() {
+  console.log('[UVAI] Database module placeholder — wire to your backend');
+}
+"""
+
+        return f'''// ──────────────────────────────────────────────────
+// UVAI Generated JavaScript — {title}
+// Fingerprint: {fingerprint}
+// Generated: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+// ──────────────────────────────────────────────────
+{step_block}
+
+const PROJECT_META = {{
+  title: {json.dumps(title)},
+  fingerprint: "{fingerprint}",
+  concepts: {concept_json},
+  featureCount: {len(features)},
+}};
+
+document.addEventListener('DOMContentLoaded', () => {{
+  console.log(`[UVAI] "${{PROJECT_META.title}}" loaded — fp:${{PROJECT_META.fingerprint}}`);
+
+  renderConceptCards();
+  addInteractiveFeatures();
+}});
+
+function renderConceptCards() {{
+  const container = document.querySelector('.feature-cards');
+  if (!container || PROJECT_META.concepts.length === 0) return;
+
+  PROJECT_META.concepts.forEach(concept => {{
+    if (!document.querySelector(`.feature-card[data-concept="${{concept}}"]`)) {{
+      const card = document.createElement('div');
+      card.className = 'feature-card';
+      card.dataset.concept = concept;
+      card.textContent = concept;
+      container.appendChild(card);
+    }}
+  }});
+}}
+
+function addInteractiveFeatures() {{
+  const sections = document.querySelectorAll('section');
+  sections.forEach((section, idx) => {{
+    section.style.opacity = '0';
+    section.style.transform = 'translateY(20px)';
+    setTimeout(() => {{
+      section.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
+      section.style.opacity = '1';
+      section.style.transform = 'translateY(0)';
+    }}, idx * 150);
+  }});
+
+  document.querySelectorAll('.tech-card, .feature-card').forEach(card => {{
+    card.addEventListener('click', () => {{
+      card.style.transform = 'scale(1.08)';
+      setTimeout(() => {{ card.style.transform = 'scale(1)'; }}, 250);
+    }});
+  }});
+}}
+{extra_functions}'''
+
+    def _generate_vanilla_styles_css(self, features: list[str], fingerprint: str = "") -> str:
+        """Generate styles.css for vanilla projects — accent color derived from video."""
+
+        accent = self._accent_from_fingerprint(fingerprint) if fingerprint else "hsl(245, 65%, 52%)"
+        accent_dark = self._accent_dark_from_fingerprint(fingerprint) if fingerprint else "hsl(245, 65%, 38%)"
+
         responsive_css = ""
         if "responsive_design" in features:
             responsive_css = '''
@@ -576,7 +831,13 @@ function addInteractiveFeatures() {
     }
 }'''
 
-        return f'''* {{
+        return f'''/* Generated by UVAI — accent derived from video fingerprint */
+:root {{
+    --accent: {accent};
+    --accent-dark: {accent_dark};
+}}
+
+* {{
     margin: 0;
     padding: 0;
     box-sizing: border-box;
@@ -597,7 +858,7 @@ body {{
 }}
 
 .app-header {{
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, var(--accent) 0%, var(--accent-dark) 100%);
     color: white;
     padding: 2rem;
     text-align: center;
@@ -614,7 +875,7 @@ body {{
     background-color: #f8f9fa;
 }}
 
-.welcome, .tutorial-steps, .features {{
+.welcome, .tutorial-steps, .features, .technologies {{
     background: white;
     padding: 2rem;
     border-radius: 12px;
@@ -635,12 +896,18 @@ body {{
 }}
 
 .tech-card {{
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, var(--accent) 0%, var(--accent-dark) 100%);
     color: white;
     padding: 1rem 1.5rem;
     border-radius: 8px;
     font-weight: 600;
     font-size: 1rem;
+    cursor: pointer;
+    transition: transform 0.2s ease;
+}}
+
+.tech-card:hover {{
+    transform: scale(1.05);
 }}
 
 .feature-card {{
@@ -649,6 +916,12 @@ body {{
     border-radius: 8px;
     font-weight: 500;
     color: #1565c0;
+    cursor: pointer;
+    transition: transform 0.2s ease;
+}}
+
+.feature-card:hover {{
+    transform: scale(1.05);
 }}
 
 .tutorial-steps ol {{
@@ -666,6 +939,8 @@ body {{
     padding: 1rem;
 }}
 {responsive_css}'''
+
+    # ─── FastAPI generator ──────────────────────────────────────────
 
     def _generate_fastapi_main(self, title: str, features: list[str]) -> str:
         """Generate main.py for FastAPI projects"""
@@ -760,6 +1035,8 @@ if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)'''
 
+    # ─── README generator ───────────────────────────────────────────
+
     def _generate_readme(self, title: str, framework: str, video_analysis: dict) -> str:
         """Generate README.md"""
         video_data = video_analysis.get("video_data", {})
@@ -767,8 +1044,12 @@ if __name__ == "__main__":
         extracted_info = video_analysis.get("extracted_info", {})
         technologies = extracted_info.get("technologies", [])
         features = extracted_info.get("features", [])
+        summary = video_analysis.get("summary") or video_analysis.get("ai_analysis", {}).get("Content Summary", "")
+        key_concepts = video_analysis.get("key_concepts", [])
         tech_section = "\n".join([f"- {tech}" for tech in technologies]) if technologies else "- See source video for details"
         feature_section = "\n".join([f"- {f.replace('_', ' ').title()}" for f in features]) if features else "- See source video for details"
+        concepts_section = "\n".join([f"- {concept}" for concept in key_concepts]) if key_concepts else "- See source video for details"
+        summary_section = summary if summary else "Summary not available from analysis."
 
         return f'''# {title}
 
@@ -786,6 +1067,12 @@ Watch the original video to follow along with the implementation details.
 
 ## Features
 {feature_section}
+
+## Video Summary
+{summary_section}
+
+## Key Concepts From The Tutorial
+{concepts_section}
 
 ## Getting Started
 
@@ -821,6 +1108,8 @@ This is a starting point generated from video analysis. You can:
 ---
 *Generated with ❤️ by UVAI from [{video_url}]({video_url})*'''
 
+    # ─── Helpers ────────────────────────────────────────────────────
+
     def _sanitize_name(self, name: str) -> str:
         """Sanitize project name for package.json"""
         import re
@@ -830,36 +1119,137 @@ This is a starting point generated from video analysis. You can:
         # Ensure it starts with a letter
         if name and not name[0].isalpha():
             name = 'uvai-' + name
-        return name[:50] if name else 'uvai-project'
+        result = name[:50] if name else 'uvai-project'
+        if result and result != 'uvai-project':
+            logger.info(f"📝 Generated project name: {result}")
+        return result
+
+    def _build_generation_context(self, video_analysis: dict[str, Any], project_config: dict[str, Any]) -> dict[str, Any]:
+        """Combine video analysis, AI insights, and user config for generation."""
+        extracted_info = dict(video_analysis.get("extracted_info") or {})
+        metadata = video_analysis.get("metadata") or video_analysis.get("video_data") or {}
+        ai_analysis = video_analysis.get("ai_analysis") or {}
+
+        title = (
+            project_config.get("title")
+            or extracted_info.get("title")
+            or metadata.get("title")
+            or metadata.get("video_title")
+            or "UVAI Generated Project"
+        )
+
+        technologies = self._coerce_to_list(extracted_info.get("technologies"))
+        if not technologies:
+            technologies = (
+                self._coerce_to_list(ai_analysis.get("Related Topics"))
+                or self._coerce_to_list(ai_analysis.get("Key Concepts"))
+                or self._coerce_to_list(metadata.get("keywords"))
+            )
+        if not technologies:
+            technologies = ["javascript", "html", "css"]
+
+        features = project_config.get("features") or extracted_info.get("features") or []
+        if not features and technologies:
+            features = [tech.replace(" ", "_") for tech in technologies[:3]]
+
+        tutorial_steps = self._coerce_to_list(extracted_info.get("tutorial_steps"))
+        if not tutorial_steps:
+            tutorial_steps = self._derive_tutorial_steps(ai_analysis, video_analysis)
+
+        summary = self._extract_summary(ai_analysis, video_analysis)
+        key_concepts = self._coerce_to_list(ai_analysis.get("Key Concepts")) or technologies
+
+        extracted_info.update({
+            "title": title,
+            "technologies": technologies,
+            "features": features,
+            "tutorial_steps": tutorial_steps,
+            "project_type": project_config.get("type", extracted_info.get("project_type", "web"))
+        })
+
+        return {
+            "extracted_info": extracted_info,
+            "summary": summary,
+            "key_concepts": key_concepts
+        }
+
+    def _coerce_to_list(self, value: Any) -> list[str]:
+        """Convert common iterable or delimited strings into a clean list."""
+        if not value:
+            return []
+        if isinstance(value, list):
+            return [str(item) for item in value if str(item).strip()]
+        if isinstance(value, str):
+            parts = [part.strip() for part in value.replace("|", ",").split(",") if part.strip()]
+            return parts or [value.strip()]
+        return []
+
+    def _derive_tutorial_steps(self, ai_analysis: dict[str, Any], video_analysis: dict[str, Any]) -> list[str]:
+        """Derive tutorial steps from AI analysis, markdown, or transcript."""
+        steps: list[str] = []
+
+        learning_path = ai_analysis.get("Learning Path")
+        if isinstance(learning_path, str):
+            steps = [line.strip(" -•") for line in learning_path.replace("\r", "\n").split("\n") if line.strip()]
+
+        if not steps:
+            transcript_text = (video_analysis.get("transcript") or {}).get("text", "")
+            if transcript_text:
+                sentences = [segment.strip() for segment in transcript_text.split(".") if segment.strip()]
+                steps = sentences[:5]
+
+        if not steps:
+            markdown_text = video_analysis.get("markdown_analysis", "")
+            if isinstance(markdown_text, str):
+                steps = [
+                    line.strip(" -*")
+                    for line in markdown_text.splitlines()
+                    if line.strip().startswith(("-", "*"))
+                ][:5]
+
+        return steps[:8]
+
+    def _extract_summary(self, ai_analysis: dict[str, Any], video_analysis: dict[str, Any]) -> str:
+        """Extract a concise summary from AI analysis or available content."""
+        summary = ai_analysis.get("Content Summary")
+        if isinstance(summary, str) and summary.strip():
+            return summary.strip()
+
+        markdown_text = video_analysis.get("markdown_analysis")
+        if isinstance(markdown_text, str) and markdown_text.strip():
+            lines = [line.strip() for line in markdown_text.splitlines() if line.strip()]
+            if lines:
+                return " ".join(lines[:3])[:600]
+
+        transcript_text = (video_analysis.get("transcript") or {}).get("text", "")
+        if transcript_text:
+            return " ".join(transcript_text.split()[:120])
+
+        return ""
 
     def _create_basic_templates(self):
         """Create basic template files if they don't exist"""
-        # This method can be expanded to create template files
-        # For now, we generate everything programmatically
         pass
 
     async def _generate_vue_project(self, project_path: Path, video_analysis: dict, features: list[str]) -> dict[str, Any]:
         """Generate a Vue.js project (placeholder for future implementation)"""
-        # For now, fall back to vanilla JS
         return await self._generate_vanilla_js_project(project_path, video_analysis, features)
 
     async def _generate_mobile_project(self, project_path: Path, video_analysis: dict, technologies: list[str], features: list[str]) -> dict[str, Any]:
         """Generate a mobile project (placeholder for future implementation)"""
-        # For now, generate a responsive web app
         return await self._generate_web_project(project_path, video_analysis, technologies, features)
 
     async def _generate_node_api(self, project_path: Path, video_analysis: dict, features: list[str]) -> dict[str, Any]:
         """Generate a Node.js API project (placeholder for future implementation)"""
-        # For now, fall back to Python API
         return await self._generate_python_api(project_path, video_analysis, features)
 
 
 # Global instance
 _code_generator = None
 
-def get_code_generator() -> ProjectCodeGenerator:
+def get_code_generator(use_ai_generation: Optional[bool] = None) -> ProjectCodeGenerator:
     """Get or create global code generator instance"""
     global _code_generator
     if _code_generator is None:
-        _code_generator = ProjectCodeGenerator()
+        _code_generator = ProjectCodeGenerator(use_ai_generation=use_ai_generation)
     return _code_generator

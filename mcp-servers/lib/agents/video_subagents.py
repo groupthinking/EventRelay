@@ -10,19 +10,17 @@ and action generation. Each subagent provides specific video-to-action capabilit
 import asyncio
 import json
 import logging
-import hashlib
-import base64
-import sys
 import os
-from typing import Dict, List, Any, Optional
-from datetime import datetime, timedelta, timezone
+import sys
+from datetime import datetime, timezone
+from typing import Any, Dict, List
 
 # Ensure the lib directory is in sys.path FIRST before any relative imports
 _lib_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if _lib_dir not in sys.path:
     sys.path.insert(0, _lib_dir)
 
-from a2a import MCPEnabledA2AAgent, MessagePriority
+from a2a import MCPEnabledA2AAgent
 
 logger = logging.getLogger(__name__)
 
@@ -159,7 +157,7 @@ class TranscriptionAgent(MCPEnabledA2AAgent):
 
     def _generate_transcription_pipeline(self, media_info: Dict[str, Any]) -> str:
         """Generate transcription processing pipeline code"""
-        return f'''
+        return '''
 import asyncio
 from typing import Dict, Any
 
@@ -171,7 +169,7 @@ async def transcription_pipeline(media_info: Dict[str, Any]) -> Dict[str, Any]:
     duration = media_info.get("duration", 0)
 
     if duration > 3600:  # 1 hour limit
-        return {{"status": "error", "message": "Media too long for processing"}}
+        return {"status": "error", "message": "Media too long for processing"}
 
     # Process audio extraction
     audio_data = await extract_audio(media_info)
@@ -182,19 +180,19 @@ async def transcription_pipeline(media_info: Dict[str, Any]) -> Dict[str, Any]:
     # Perform speech recognition
     transcript = await speech_to_text(cleaned_audio)
 
-    return {{
+    return {
         "status": "success",
         "transcript": transcript,
         "processing_steps": ["extract", "clean", "transcribe"]
-    }}
+    }
 
 async def extract_audio(media_info):
     # Audio extraction logic
-    return {{"audio_stream": "processed"}}
+    return {"audio_stream": "processed"}
 
 async def reduce_noise(audio_data):
     # Noise reduction logic
-    return {{"cleaned_audio": True}}
+    return {"cleaned_audio": True}
 
 async def speech_to_text(audio_data):
     # Speech recognition logic

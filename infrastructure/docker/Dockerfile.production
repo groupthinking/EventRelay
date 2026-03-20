@@ -1,0 +1,47 @@
+# Dockerfile.production
+# Production build for YouTube Extension
+# Note: This builds upon the existing Dockerfile with production optimizations
+
+FROM python:3.11-slim
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user
+RUN groupadd -r appuser && useradd -r -g appuser appuser
+
+# Set working directory
+WORKDIR /app
+
+# Copy all files (matches existing Dockerfile pattern)
+COPY . /app/
+
+# Install Python packages with SSL trust configuration for constrained environments
+RUN pip install --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org \
+    fastapi uvicorn pytest python-dotenv pydantic aiofiles httpx requests python-multipart || \
+    echo "Warning: Some packages may not be available in constrained environments"
+
+# Create necessary directories and set permissions
+RUN mkdir -p logs && \
+    chown -R appuser:appuser /app
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# Switch to non-root user
+USER appuser
+
+# Expose port
+EXPOSE 8000
+
+# Start the application (matches existing server pattern)
+CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

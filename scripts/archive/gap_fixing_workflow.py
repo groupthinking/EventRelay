@@ -20,15 +20,14 @@ CURRENT GAPS TO FIX:
 2. Service Classes: 6 services → 8+ services
 """
 
-import os
-import sys
 import json
-import subprocess
+import sys
 import time
-from pathlib import Path
-from typing import Dict, List, Any, Tuple, Callable
 from dataclasses import dataclass, field
 from enum import Enum
+from pathlib import Path
+from typing import Any, Callable, Dict, List
+
 
 class ValidationStatus(Enum):
     PENDING = "pending"
@@ -289,7 +288,6 @@ class GapFixingWorkflow:
             try:
                 module_name = server_file.stem
                 # Try to import the module
-                import sys
 
                 __import__(module_name)
                 print(f"         ✓ {module_name} imported successfully")
@@ -370,7 +368,6 @@ class GapFixingWorkflow:
         for service_file in services_dir.glob("*service*.py"):
             try:
                 module_name = service_file.stem
-                import sys
 
                 __import__(f"services.{module_name}")
                 print(f"         ✓ {module_name} imported successfully")
@@ -406,7 +403,9 @@ class GapFixingWorkflow:
             except ImportError:
                 return {"passed": False, "error": f"Could not import 'youtube_extension'. sys.path is: {sys.path}"}
 
-            from youtube_extension.backend.containers.service_container import get_service_container
+            from youtube_extension.backend.containers.service_container import (
+                get_service_container,
+            )
 
             container = get_service_container()
             # Test basic container functionality

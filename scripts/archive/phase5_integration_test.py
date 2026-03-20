@@ -14,8 +14,7 @@ import os
 import sys
 import time
 from datetime import datetime
-from typing import Dict, List, Any, Optional
-from pathlib import Path
+from typing import Dict, List
 
 # Load environment variables from .env file
 try:
@@ -104,8 +103,6 @@ class IntegrationTestSuite:
 
             # Step 4: Test AI processing (basic import test)
             try:
-                import openai
-                import anthropic
 
                 self.log_test_result(
                     "AI Service Imports",
@@ -263,20 +260,20 @@ class IntegrationTestSuite:
         start_time = time.time()
 
         try:
-            from backend.services.comprehensive_benchmarking import ComprehensiveBenchmark
+            from backend.services.comprehensive_benchmarking import (
+                ComprehensiveBenchmark,
+            )
 
             benchmark_service = ComprehensiveBenchmark()
 
             # Benchmark basic imports (since we can't make real API calls without keys)
             meta_start = time.time()
-            from backend.services.real_youtube_api import RealYouTubeAPIService
             import time as time_module
             time_module.sleep(0.01)  # Simulate API call
             meta_duration = time.time() - meta_start
 
             # Benchmark transcript extraction simulation
             transcript_start = time.time()
-            import yt_dlp
             time_module.sleep(0.01)  # Simulate transcript extraction
             transcript_duration = time.time() - transcript_start
 
