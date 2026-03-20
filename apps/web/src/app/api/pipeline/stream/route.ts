@@ -17,6 +17,7 @@
 import { analyzeVideoWithGemini, type VideoAnalysisResult } from '@/lib/gemini-video-analyzer';
 import { hasGeminiKey } from '@/lib/gemini-client';
 import { publishEvent, EventTypes } from '@/lib/cloudevents';
+import { saveTrainingExample, TUNING_THRESHOLD } from '@/lib/training-store';
 
 const rawBackendUrl = process.env.BACKEND_URL || '';
 const BACKEND_URL = rawBackendUrl.startsWith('http') ? rawBackendUrl : '';
@@ -326,6 +327,30 @@ export async function POST(request: Request) {
             ),
           );
 
+          // ── Auto-save helper: persist analysis for fine-tuning ──
+          const saveForTraining = async (videoUrl: string, analysis: VideoAnalysisResult) => {
+            try {
+              const { saved, metadata, milestone } = await saveTrainingExample(
+                videoUrl,
+                analysis as unknown as Record<string, unknown>,
+              );
+              if (saved && milestone) {
+                console.log(`\n🎯 TRAINING MILESTONE: ${milestone}/${TUNING_THRESHOLD} examples collected!`);
+                if (milestone >= TUNING_THRESHOLD) {
+                  console.log('🚀 READY FOR FINE-TUNING! Call POST /api/training/trigger to start.');
+                }
+              }
+              if (saved) {
+                console.log(`[Training] Dataset: ${metadata.totalExamples} examples`);
+              } else {
+                console.log(`[Training] Skipped duplicate: ${videoUrl}`);
+              }
+            } catch (trainErr) {
+              // Training save failure must never break the pipeline
+              console.warn('[Training] Save failed (non-fatal):', trainErr);
+            }
+          };
+
           if (BACKEND_URL) {
             // Strategy 1: Proxy from backend
             // For now, call the REST endpoint and map to agent events
@@ -364,6 +389,7 @@ export async function POST(request: Request) {
                 for await (const event of generateAgentEvents(mappedAnalysis, startTime)) {
                   controller.enqueue(encoder.encode(event));
                 }
+                await saveForTraining(url, mappedAnalysis);
               } else {
                 throw new Error(`Backend returned ${response.status}`);
               }
@@ -375,6 +401,7 @@ export async function POST(request: Request) {
                 for await (const event of generateAgentEvents(analysis, startTime)) {
                   controller.enqueue(encoder.encode(event));
                 }
+                await saveForTraining(url, analysis);
               } else {
                 controller.enqueue(
                   encoder.encode(
@@ -399,6 +426,7 @@ export async function POST(request: Request) {
             for await (const event of generateAgentEvents(analysis, startTime)) {
               controller.enqueue(encoder.encode(event));
             }
+            await saveForTraining(url, analysis);
           }
         } catch (err) {
           controller.enqueue(

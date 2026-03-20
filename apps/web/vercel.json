@@ -3,7 +3,6 @@
   "installCommand": "npm install",
   "buildCommand": "npm run build",
   "outputDirectory": ".next",
-  "alias": ["uvai.io", "www.uvai.io"],
   "redirects": [
     {
       "source": "/(.*)",
@@ -32,33 +31,11 @@
       "has": [
         {
           "type": "host",
-          "value": "youtube-extension.vercel.app"
+          "value": "event-relay-web-garv1.vercel.app"
         }
       ],
       "destination": "https://uvai.io/$1",
       "permanent": true
-    },
-    {
-      "source": "/(.*)",
-      "has": [
-        {
-          "type": "host",
-          "value": "www.uvai.io"
-        }
-      ],
-      "destination": "https://uvai.io/$1",
-      "permanent": true
-    }
-  ],
-  "headers": [
-    {
-      "source": "/(.*)",
-      "headers": [
-        {
-          "key": "X-Canonical-Domain",
-          "value": "uvai.io"
-        }
-      ]
     }
   ]
 }
