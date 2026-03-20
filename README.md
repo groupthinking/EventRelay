@@ -5,6 +5,8 @@
 ![Node >= 20](https://img.shields.io/badge/Node-%3E%3D20-green)
 ![Python >= 3.11](https://img.shields.io/badge/Python-%3E%3D3.11-blue)
 
+> **Live:** [https://uvai.io](https://uvai.io) · **API:** [https://api.uvai.io](https://api.uvai.io)
+
 AI-powered video transcript capture, structured event extraction, and agent execution for YouTube content. Paste a URL → get a word-for-word transcript, typed events, actionable tasks, and AI-driven insights.
 
 ## Architecture

@@ -1,7 +1,7 @@
 # EventRelay — Session Handoff & System Documentation
 
 > **Generated**: 2026-03-02 | **Repo**: [groupthinking/EventRelay](https://github.com/groupthinking/EventRelay)  
-> **Frontend**: https://event-relay-web.vercel.app | **Backend**: https://eventrelay-production.up.railway.app
+> **Frontend**: https://uvai.io | **API**: https://api.uvai.io
 
 ---
 
@@ -36,9 +36,9 @@ The vision (from the owner's notes): *"You're building the first AI software fac
 
 | Component | Platform | URL | Tech Stack |
 |-----------|----------|-----|------------|
-| Frontend  | Vercel   | `event-relay-web.vercel.app` | Next.js 14, React, Zustand, TypeScript |
-| Backend   | Railway  | `eventrelay-production.up.railway.app` | FastAPI, Python 3.12, uvicorn |
-| Database  | SQLite (ephemeral) | `/tmp/uvai_data/app.db` | On Railway container |
+| Frontend  | Vercel   | `uvai.io` | Next.js 14, React, Zustand, TypeScript |
+| Backend   | Cloud Run | `api.uvai.io` | FastAPI, Python 3.12, uvicorn |
+| Database  | SQLite (ephemeral) | `/tmp/uvai_data/app.db` | On Cloud Run container |
 | Repos     | GitHub   | `github.com/groupthinking/` | Auto-created by pipeline |
 
 ### Request Flow
@@ -319,17 +319,17 @@ Three independent agents tested the system as: (1) an end user, (2) an LLM integ
 ### To Use the API
 ```bash
 # Analyze a video (fast, ~30s)
-curl -X POST https://event-relay-web.vercel.app/api/video \
+curl -X POST https://uvai.io/api/video \
   -H 'Content-Type: application/json' \
   -d '{"url": "https://www.youtube.com/watch?v=VIDEO_ID"}'
 
 # Full pipeline — analyze + generate code + create repo (slow, ~30-60s)
-curl -X POST https://event-relay-web.vercel.app/api/pipeline \
+curl -X POST https://uvai.io/api/pipeline \
   -H 'Content-Type: application/json' \
   -d '{"url": "https://www.youtube.com/watch?v=VIDEO_ID"}'
 
 # Backend direct (uses video_url, not url)
-curl -X POST https://eventrelay-production.up.railway.app/api/v1/video-to-software \
+curl -X POST https://api.uvai.io/api/v1/video-to-software \
   -H 'Content-Type: application/json' \
   -d '{"video_url": "https://www.youtube.com/watch?v=VIDEO_ID"}'
 

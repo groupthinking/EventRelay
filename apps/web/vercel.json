@@ -2,5 +2,38 @@
   "framework": "nextjs",
   "installCommand": "npm install",
   "buildCommand": "npm run build",
-  "outputDirectory": ".next"
+  "outputDirectory": ".next",
+  "alias": ["uvai.io", "www.uvai.io"],
+  "redirects": [
+    {
+      "source": "/(.*)",
+      "has": [{ "type": "host", "value": "event-relay-web.vercel.app" }],
+      "destination": "https://uvai.io/$1",
+      "permanent": true
+    },
+    {
+      "source": "/(.*)",
+      "has": [{ "type": "host", "value": "v0-uvai.vercel.app" }],
+      "destination": "https://uvai.io/$1",
+      "permanent": true
+    },
+    {
+      "source": "/(.*)",
+      "has": [{ "type": "host", "value": "youtube-extension.vercel.app" }],
+      "destination": "https://uvai.io/$1",
+      "permanent": true
+    },
+    {
+      "source": "/(.*)",
+      "has": [{ "type": "host", "value": "uvai-io.pages.dev" }],
+      "destination": "https://uvai.io/$1",
+      "permanent": true
+    },
+    {
+      "source": "/(.*)",
+      "has": [{ "type": "host", "value": "www.uvai.io" }],
+      "destination": "https://uvai.io/$1",
+      "permanent": true
+    }
+  ]
 }
