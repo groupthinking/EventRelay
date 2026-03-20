@@ -1,48 +1,27 @@
 # MCP Servers Ecosystem
 
-This directory contains the Model Context Protocol (MCP) servers used in the EventRelay (UVAI) ecosystem.
+Unified MCP entry points and shared infrastructure for EventRelay.
 
-## Core Python Suite (`python-suite/`)
+## Canonical Server (MCPC)
+- **Path:** `mcp-servers/mcpc/server.py`
+- **Tools:** `mcpc_status`, `route_task`, `ios_handoff`
+- **Merged:** MCPC + MCP_ROUND_TABLE + Mcpcserver + MCP_IOS (mobile hand-off)
+- **Archived:** MCP_ROUND_TABLE, MCP-CORE, MCP-management, MESH, mcp-tools-extension
 
-The primary intelligence suite for video processing and code analysis.
-
-| Server                             | Description                      | Key Tools                                              |
-| ---------------------------------- | -------------------------------- | ------------------------------------------------------ |
-| `youtube_uvai_mcp.py`              | Primary UVAI Processor           | `process_video`, `get_transcript`, `ai_reasoning`      |
-| `video_agent_server.py`            | Video Pipeline Orchestrator      | `transcribe_media`, `generate_actions`                 |
-| `code_analysis_server.py`          | Automated Code Review            | `scan_security`, `analyze_performance`, `check_style`  |
-| `cloudflare_server.py`             | Cloudflare Gateway Proxy         | `get_gateway_url`                                      |
-| `learning_analytics_mcp_server.py` | Analytics Engine                 | `get_learning_stats`, `track_event`                    |
-| `embeddings_mcp_server.py`         | **NEW** pgvector Semantic Search | `embed_text`, `search_similar`, `embed_video_analysis` |
+EventRelay consumes this server via `src/mcp/mcp_registry.json`.
 
 ## Specialized Servers
+- `litert-mcp/` — LiteRT-LM MCP server for local/edge inference.
+- `shared-state/` — State coordinator and continuity fabric.
 
-- **`genkit-wrapper/`**: Firebase Genkit integration for model orchestration.
-- **`puppeteer-server/`**: Browser automation and web scraping. (External)
-- **`metacognition-tools/`**: Advanced reasoning tools (Fermi estimation, Red Teaming).
-- **`mcp-profiling/`**: Internal performance profiling and verification.
-- **`unified-analytics/`**: sophisticated metrics collection and graph analysis engine.
+## Shared Libraries
+- `lib/` — Shared MCP connectors, agents, and client utilities.
 
-## External Active Servers
-
-The following are external or JS-based servers utilized by the system:
-
-- **`grok-server/`**: xAI Grok integration.
-- **`perplexity-mcp/`**: Perplexity AI search.
-- **`github/`**: Custom GitHub integration.
-
-## Central Coordination
-
-The ecosystem uses a **State Coordinator** for cross-MCP communication and distributed continuity:
-
-- **State Coordinator**: manages current server status and task orchestration.
-- **Continuity Fabric** (`shared-state/fabric.py`): The unique value proposition enabling cross-device and cross-application state continuity via vector clocks.
-- **Database**: `shared-state/mcp_state.db`
-
-## Maintenance & Archiving
-
-Redundant or prototype versions of these servers have been moved to `knowledge/prototypes/mcp-servers/` to maintain repository hygiene.
-
----
-
-_Last Updated: January 9, 2026_
+## Directory Map
+```
+mcp-servers/
+├── mcpc/            # Canonical MCPC unified server (platforms/ios for mobile)
+├── litert-mcp/      # LiteRT-LM MCP server
+├── shared-state/    # Coordinator and state fabric
+└── lib/             # Reusable connectors + agents
+```
