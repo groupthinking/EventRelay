@@ -5,9 +5,10 @@ Enhanced Video Processor with Multi-Modal AI Integration
 
 Integrates:
 1. Google Gemini API (OpenAI-compatible) for cost-effective transcription
-2. LiveKit for real-time video streaming and analysis
-3. Mozilla AI tools for enhanced video understanding
-4. MCP-first architecture for seamless integration
+2. Gemini Vision for frame-level visual analysis (Stage 1: Multimodal Ingestion)
+3. LiveKit for real-time video streaming and analysis
+4. Mozilla AI tools for enhanced video understanding
+5. MCP-first architecture for seamless integration
 """
 
 import asyncio
@@ -26,6 +27,16 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
+# Optional Gemini Vision integration for frame analysis
+try:
+    from src.youtube_extension.services.ai.gemini_service import GeminiService, GeminiConfig
+    GEMINI_VISION_AVAILABLE = True
+except ImportError:
+    GeminiService = None
+    GeminiConfig = None
+    GEMINI_VISION_AVAILABLE = False
+    logger.warning("Gemini Vision service not available - visual frame analysis will be skipped")
+
 class EnhancedVideoProcessor:
     """
     Enhanced video processor using Google Gemini API, LiveKit, and Mozilla AI tools
@@ -39,21 +50,37 @@ class EnhancedVideoProcessor:
             or os.getenv('OPENAI_API_KEY')  # Accept OpenAI key as fallback for testing
         )
         self.youtube_api_key = os.getenv('YOUTUBE_API_KEY')
-        
+
         # Validate required keys
         if not self.gemini_api_key:
             raise ValueError("GEMINI_API_KEY/GOOGLE_API_KEY/OPENAI_API_KEY must be set in environment variables")
         # YouTube API key is optional. When missing, metadata retrieval will degrade gracefully
         # and transcripts are attempted via youtube-transcript-api.
-        
+
         # Service URLs
         self.gemini_base_url = "https://generativelanguage.googleapis.com/v1beta"
         self.livekit_url = os.getenv('LIVEKIT_URL', 'ws://localhost:7880')
-        
+
         # Initialize components
         self.session = None
         # Don't initialize session in __init__ - will be done when needed
-        
+
+        # Initialize Gemini Vision service if available
+        self.gemini_vision = None
+        if GEMINI_VISION_AVAILABLE and self.gemini_api_key:
+            try:
+                config = GeminiConfig(
+                    api_key=self.gemini_api_key,
+                    model_name="gemini-2.0-flash-exp",
+                    temperature=0.2,
+                    max_output_tokens=4096
+                )
+                self.gemini_vision = GeminiService(config)
+                logger.info("✅ Gemini Vision service initialized for frame analysis")
+            except Exception as e:
+                logger.warning(f"Failed to initialize Gemini Vision: {e}")
+                self.gemini_vision = None
+
         logger.info("✅ EnhancedVideoProcessor initialized with validated API keys")
     
     async def _init_session(self):
@@ -96,26 +123,30 @@ class EnhancedVideoProcessor:
 
             # Step 4: Enhanced AI analysis using Gemini
             ai_analysis = await self._analyze_with_gemini(video_url, transcript, metadata)
-            
+
+            # Step 4.5: Visual analysis using Gemini Vision (Stage 1: Multimodal Ingestion)
+            visual_context = await self._extract_visual_context(video_url, video_id)
+
             # Step 5: Generate comprehensive markdown
             markdown_content = await self._generate_enhanced_markdown(
-                video_id, metadata, transcript, ai_analysis
+                video_id, metadata, transcript, ai_analysis, visual_context
             )
-            
+
             # Step 6: Save results
             save_path = await self._save_enhanced_result(video_id, metadata, markdown_content)
-            
+
             return {
                 'video_id': video_id,
                 'video_url': video_url,
                 'metadata': metadata,
                 'transcript': transcript,
                 'ai_analysis': ai_analysis,
+                'visual_context': visual_context,
                 'markdown_analysis': markdown_content,
                 'save_path': save_path,
                 'processing_time': datetime.now().isoformat(),
                 'success': True,
-                'pipeline': 'enhanced_youtube_first'
+                'pipeline': 'enhanced_multimodal_gemini_vision'
             }
             
         except Exception as e:
@@ -317,14 +348,107 @@ class EnhancedVideoProcessor:
                 'source': 'failed',
                 'fallback': True
             }
-    
-    async def _generate_enhanced_markdown(self, video_id: str, metadata: Dict, 
-                                        transcript: Dict, ai_analysis: Dict) -> str:
+
+    async def _extract_visual_context(self, video_url: str, video_id: str) -> Dict[str, Any]:
+        """
+        Extract visual context from video frames using Gemini Vision (Stage 1: Multimodal Ingestion)
+        """
+        if not self.gemini_vision:
+            logger.info("Gemini Vision not available - skipping visual analysis")
+            return {
+                'visual_elements': [],
+                'summary': 'Visual analysis not available',
+                'frame_analysis_count': 0,
+                'processing_timestamp': datetime.now()
+            }
+
+        try:
+            logger.info(f"🖼️ Starting visual analysis for {video_id}")
+
+            # Check if we have a local video file to analyze
+            # For YouTube videos, we typically don't download the video
+            # Instead, we can use the YouTube URL directly with Gemini
+            # Or extract key frames from the video
+
+            # Option 1: Use Gemini's YouTube URL processing (if available)
+            try:
+                result = await self.gemini_vision.process_youtube(
+                    video_url,
+                    prompt="""Analyze the visual content of this video and extract:
+1. Code snippets shown on screen (with language)
+2. Diagrams, flowcharts, or system architectures
+3. UI/UX elements being demonstrated
+4. Terminal commands or output
+5. Key visual concepts and demonstrations
+
+Provide a structured JSON response with visual_elements array containing:
+- timestamp: approximate timestamp
+- element_type: code|diagram|UI|terminal|text
+- content: extracted text or description
+- confidence: 0.0-1.0""",
+                    temperature=0.2,
+                    max_tokens=4096
+                )
+
+                if result.success:
+                    # Parse the response to extract visual elements
+                    import re
+                    response_text = result.response or ""
+
+                    # Try to extract JSON
+                    try:
+                        visual_data = json.loads(response_text)
+                    except json.JSONDecodeError:
+                        # Extract from code fence if present
+                        match = re.search(r'```json\s*(.+?)\s*```', response_text, re.DOTALL)
+                        if match:
+                            try:
+                                visual_data = json.loads(match.group(1))
+                            except:
+                                visual_data = {'visual_elements': []}
+                        else:
+                            visual_data = {'visual_elements': []}
+
+                    visual_elements = visual_data.get('visual_elements', [])
+
+                    logger.info(f"✅ Extracted {len(visual_elements)} visual elements from video")
+
+                    return {
+                        'visual_elements': visual_elements,
+                        'summary': visual_data.get('summary', f'Analyzed {len(visual_elements)} visual elements'),
+                        'frame_analysis_count': len(visual_elements),
+                        'processing_timestamp': datetime.now()
+                    }
+                else:
+                    logger.warning(f"Gemini YouTube analysis failed: {result.error}")
+
+            except Exception as yt_error:
+                logger.warning(f"YouTube URL analysis failed: {yt_error}, will skip visual analysis for now")
+
+            # Fallback: Return empty visual context
+            return {
+                'visual_elements': [],
+                'summary': 'Visual analysis not completed',
+                'frame_analysis_count': 0,
+                'processing_timestamp': datetime.now()
+            }
+
+        except Exception as e:
+            logger.error(f"Visual context extraction failed: {e}")
+            return {
+                'visual_elements': [],
+                'summary': f'Error: {str(e)}',
+                'frame_analysis_count': 0,
+                'processing_timestamp': datetime.now()
+            }
+
+    async def _generate_enhanced_markdown(self, video_id: str, metadata: Dict,
+                                        transcript: Dict, ai_analysis: Dict, visual_context: Optional[Dict] = None) -> str:
         """
         Generate comprehensive markdown using all available data
         """
         try:
-            # Create enhanced markdown template
+            # Create enhanced markdown template with visual context
             markdown = f"""# {metadata.get('title', 'Video Analysis')}
 
 ## 📺 Video Information
@@ -342,7 +466,57 @@ class EnhancedVideoProcessor:
 
 ## 💻 Technical Details
 {ai_analysis.get('Technical Details', ai_analysis.get('technical_details', 'Technical details not available'))}
+"""
 
+            # Add visual context section if available
+            if visual_context and visual_context.get('visual_elements'):
+                visual_elements = visual_context.get('visual_elements', [])
+                markdown += f"""
+## 🖼️ Visual Context Analysis (Stage 1: Multimodal Ingestion)
+
+### Summary
+{visual_context.get('summary', 'No visual summary available')}
+
+### Visual Elements Detected ({len(visual_elements)} elements)
+
+"""
+                # Group visual elements by type
+                elements_by_type = {}
+                for elem in visual_elements:
+                    elem_type = elem.get('element_type', 'unknown')
+                    if elem_type not in elements_by_type:
+                        elements_by_type[elem_type] = []
+                    elements_by_type[elem_type].append(elem)
+
+                # Display each type
+                for elem_type, elements in elements_by_type.items():
+                    icon_map = {
+                        'code': '💻',
+                        'diagram': '📊',
+                        'UI': '🎨',
+                        'terminal': '⌨️',
+                        'text': '📝'
+                    }
+                    icon = icon_map.get(elem_type, '📌')
+                    markdown += f"\n#### {icon} {elem_type.capitalize()}\n\n"
+
+                    for elem in elements:
+                        timestamp = elem.get('timestamp', 'N/A')
+                        content = elem.get('content', 'No content')
+                        confidence = elem.get('confidence', 0.0)
+
+                        # Format timestamp
+                        if isinstance(timestamp, (int, float)):
+                            minutes = int(timestamp // 60)
+                            seconds = int(timestamp % 60)
+                            ts_str = f"{minutes}:{seconds:02d}"
+                        else:
+                            ts_str = str(timestamp)
+
+                        markdown += f"**[{ts_str}]** (confidence: {confidence:.2f})\n```\n{content}\n```\n\n"
+
+            # Continue with rest of markdown
+            markdown += f"""
 ## 🛤️ Learning Path
 {ai_analysis.get('Learning Path', ai_analysis.get('learning_path', 'Learning path not available'))}
 
@@ -360,9 +534,9 @@ class EnhancedVideoProcessor:
 {transcript.get('text', 'Transcript not available')}
 
 ---
-*Generated by UVAI Enhanced Video Processor using Google Gemini API*
+*Generated by UVAI Enhanced Video Processor with Gemini Vision*
 *Processing Time: {datetime.now().isoformat()}*
-*Pipeline: Enhanced Gemini + LiveKit + Mozilla AI Tools*
+*Pipeline: Enhanced Multimodal (Gemini Vision + STT + AI Analysis)*
 """
             
             return markdown

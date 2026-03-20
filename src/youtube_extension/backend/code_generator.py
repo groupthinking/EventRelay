@@ -14,12 +14,57 @@ import hashlib
 import json
 import logging
 import os
+import re
 import tempfile
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Dict, Optional
+from urllib.parse import urlparse, parse_qs
 
 logger = logging.getLogger(__name__)
+
+
+def _extract_video_id(video_url: str) -> Optional[str]:
+    """Extract the YouTube video ID from a URL, returning None if not found."""
+    if not video_url:
+        return None
+    try:
+        parsed = urlparse(video_url)
+        if parsed.hostname in ("www.youtube.com", "youtube.com"):
+            qs = parse_qs(parsed.query)
+            return qs.get("v", [None])[0]
+        if parsed.hostname == "youtu.be":
+            return parsed.path.lstrip("/") or None
+    except Exception:
+        pass
+    return None
+
+
+def _build_title(extracted_info: Dict[str, Any], video_analysis: Dict[str, Any], default: str) -> str:
+    """Return a meaningful project title.
+
+    Priority:
+    1. Title from extracted_info (real AI-analysed title)
+    2. Title from video metadata
+    3. A label derived from the YouTube video ID so test runs produce
+       unique, identifiable names instead of the generic skeleton fallback
+    4. The supplied *default* string
+    """
+    title = extracted_info.get("title") or video_analysis.get("metadata", {}).get("title")
+    if title:
+        return title
+
+    video_url = (
+        video_analysis.get("video_data", {}).get("video_url")
+        or video_analysis.get("metadata", {}).get("video_url")
+        or video_analysis.get("video_url")
+    )
+    video_id = _extract_video_id(video_url)
+    if video_id:
+        return f"Video Project {video_id}"
+
+    return default
+
 
 # Import AI Code Generator for enhanced generation
 try:
@@ -145,7 +190,7 @@ class ProjectCodeGenerator:
         """Generate a React project"""
 
         extracted_info = video_analysis.get("extracted_info", {})
-        title = extracted_info.get("title", "UVAI React App")
+        title = _build_title(extracted_info, video_analysis, "UVAI React App")
         tutorial_steps = extracted_info.get("tutorial_steps", [])
         summary = video_analysis.get("summary", "")
         key_concepts = video_analysis.get("key_concepts", [])
@@ -1135,7 +1180,7 @@ This is a starting point generated from video analysis. You can:
             or extracted_info.get("title")
             or metadata.get("title")
             or metadata.get("video_title")
-            or "UVAI Generated Project"
+            or _build_title(extracted_info, video_analysis, "UVAI Generated Project")
         )
 
         technologies = self._coerce_to_list(extracted_info.get("technologies"))
