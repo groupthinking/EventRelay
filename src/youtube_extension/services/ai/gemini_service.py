@@ -1674,10 +1674,10 @@ Respond in JSON format:
                             # Try to extract JSON from response
                             response_text = result.response.strip()
 
-                            # Handle markdown code fences
-                            if response_text.startswith('```'):
-                                lines = response_text.split('\n')
-                                response_text = '\n'.join(lines[1:-1]) if len(lines) > 2 else response_text
+                            import re
+                            match = re.search(r'```(?:json)?\s*([\s\S]+?)\s*```', response_text)
+                            if match:
+                                response_text = match.group(1)
 
                             # Try parsing as JSON
                             try:
