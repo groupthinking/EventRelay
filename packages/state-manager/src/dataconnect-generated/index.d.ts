@@ -132,6 +132,42 @@ export interface VideoJob_Key {
   __typename?: 'VideoJob_Key';
 }
 
+interface CreateExampleJobRef {
+  /* Allow users to create refs without passing in DataConnect */
+  (vars: CreateExampleJobVariables): MutationRef<CreateExampleJobData, CreateExampleJobVariables>;
+  /* Allow users to pass in custom DataConnect instances */
+  (dc: DataConnect, vars: CreateExampleJobVariables): MutationRef<CreateExampleJobData, CreateExampleJobVariables>;
+  operationName: string;
+}
+export const createExampleJobRef: CreateExampleJobRef;
+
+export function createExampleJob(vars: CreateExampleJobVariables): MutationPromise<CreateExampleJobData, CreateExampleJobVariables>;
+export function createExampleJob(dc: DataConnect, vars: CreateExampleJobVariables): MutationPromise<CreateExampleJobData, CreateExampleJobVariables>;
+
+interface RecordExampleEventRef {
+  /* Allow users to create refs without passing in DataConnect */
+  (vars: RecordExampleEventVariables): MutationRef<RecordExampleEventData, RecordExampleEventVariables>;
+  /* Allow users to pass in custom DataConnect instances */
+  (dc: DataConnect, vars: RecordExampleEventVariables): MutationRef<RecordExampleEventData, RecordExampleEventVariables>;
+  operationName: string;
+}
+export const recordExampleEventRef: RecordExampleEventRef;
+
+export function recordExampleEvent(vars: RecordExampleEventVariables): MutationPromise<RecordExampleEventData, RecordExampleEventVariables>;
+export function recordExampleEvent(dc: DataConnect, vars: RecordExampleEventVariables): MutationPromise<RecordExampleEventData, RecordExampleEventVariables>;
+
+interface DeleteExampleEventRef {
+  /* Allow users to create refs without passing in DataConnect */
+  (vars: DeleteExampleEventVariables): MutationRef<DeleteExampleEventData, DeleteExampleEventVariables>;
+  /* Allow users to pass in custom DataConnect instances */
+  (dc: DataConnect, vars: DeleteExampleEventVariables): MutationRef<DeleteExampleEventData, DeleteExampleEventVariables>;
+  operationName: string;
+}
+export const deleteExampleEventRef: DeleteExampleEventRef;
+
+export function deleteExampleEvent(vars: DeleteExampleEventVariables): MutationPromise<DeleteExampleEventData, DeleteExampleEventVariables>;
+export function deleteExampleEvent(dc: DataConnect, vars: DeleteExampleEventVariables): MutationPromise<DeleteExampleEventData, DeleteExampleEventVariables>;
+
 interface ListVideoJobsRef {
   /* Allow users to create refs without passing in DataConnect */
   (): QueryRef<ListVideoJobsData, undefined>;
@@ -191,40 +227,4 @@ export const listFailedJobsRef: ListFailedJobsRef;
 
 export function listFailedJobs(): QueryPromise<ListFailedJobsData, undefined>;
 export function listFailedJobs(dc: DataConnect): QueryPromise<ListFailedJobsData, undefined>;
-
-interface CreateExampleJobRef {
-  /* Allow users to create refs without passing in DataConnect */
-  (vars: CreateExampleJobVariables): MutationRef<CreateExampleJobData, CreateExampleJobVariables>;
-  /* Allow users to pass in custom DataConnect instances */
-  (dc: DataConnect, vars: CreateExampleJobVariables): MutationRef<CreateExampleJobData, CreateExampleJobVariables>;
-  operationName: string;
-}
-export const createExampleJobRef: CreateExampleJobRef;
-
-export function createExampleJob(vars: CreateExampleJobVariables): MutationPromise<CreateExampleJobData, CreateExampleJobVariables>;
-export function createExampleJob(dc: DataConnect, vars: CreateExampleJobVariables): MutationPromise<CreateExampleJobData, CreateExampleJobVariables>;
-
-interface RecordExampleEventRef {
-  /* Allow users to create refs without passing in DataConnect */
-  (vars: RecordExampleEventVariables): MutationRef<RecordExampleEventData, RecordExampleEventVariables>;
-  /* Allow users to pass in custom DataConnect instances */
-  (dc: DataConnect, vars: RecordExampleEventVariables): MutationRef<RecordExampleEventData, RecordExampleEventVariables>;
-  operationName: string;
-}
-export const recordExampleEventRef: RecordExampleEventRef;
-
-export function recordExampleEvent(vars: RecordExampleEventVariables): MutationPromise<RecordExampleEventData, RecordExampleEventVariables>;
-export function recordExampleEvent(dc: DataConnect, vars: RecordExampleEventVariables): MutationPromise<RecordExampleEventData, RecordExampleEventVariables>;
-
-interface DeleteExampleEventRef {
-  /* Allow users to create refs without passing in DataConnect */
-  (vars: DeleteExampleEventVariables): MutationRef<DeleteExampleEventData, DeleteExampleEventVariables>;
-  /* Allow users to pass in custom DataConnect instances */
-  (dc: DataConnect, vars: DeleteExampleEventVariables): MutationRef<DeleteExampleEventData, DeleteExampleEventVariables>;
-  operationName: string;
-}
-export const deleteExampleEventRef: DeleteExampleEventRef;
-
-export function deleteExampleEvent(vars: DeleteExampleEventVariables): MutationPromise<DeleteExampleEventData, DeleteExampleEventVariables>;
-export function deleteExampleEvent(dc: DataConnect, vars: DeleteExampleEventVariables): MutationPromise<DeleteExampleEventData, DeleteExampleEventVariables>;
 

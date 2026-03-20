@@ -1,9 +1,18 @@
-import { ListVideoJobsData, GetVideoJobData, GetVideoJobVariables, ListJobEventsData, ListJobEventsVariables, ListVideoEmbeddingsData, ListVideoEmbeddingsVariables, ListFailedJobsData, CreateExampleJobData, CreateExampleJobVariables, RecordExampleEventData, RecordExampleEventVariables, DeleteExampleEventData, DeleteExampleEventVariables } from '../';
+import { CreateExampleJobData, CreateExampleJobVariables, RecordExampleEventData, RecordExampleEventVariables, DeleteExampleEventData, DeleteExampleEventVariables, ListVideoJobsData, GetVideoJobData, GetVideoJobVariables, ListJobEventsData, ListJobEventsVariables, ListVideoEmbeddingsData, ListVideoEmbeddingsVariables, ListFailedJobsData } from '../';
 import { UseDataConnectQueryResult, useDataConnectQueryOptions, UseDataConnectMutationResult, useDataConnectMutationOptions} from '@tanstack-query-firebase/react/data-connect';
 import { UseQueryResult, UseMutationResult} from '@tanstack/react-query';
 import { DataConnect } from 'firebase/data-connect';
 import { FirebaseError } from 'firebase/app';
 
+
+export function useCreateExampleJob(options?: useDataConnectMutationOptions<CreateExampleJobData, FirebaseError, CreateExampleJobVariables>): UseDataConnectMutationResult<CreateExampleJobData, CreateExampleJobVariables>;
+export function useCreateExampleJob(dc: DataConnect, options?: useDataConnectMutationOptions<CreateExampleJobData, FirebaseError, CreateExampleJobVariables>): UseDataConnectMutationResult<CreateExampleJobData, CreateExampleJobVariables>;
+
+export function useRecordExampleEvent(options?: useDataConnectMutationOptions<RecordExampleEventData, FirebaseError, RecordExampleEventVariables>): UseDataConnectMutationResult<RecordExampleEventData, RecordExampleEventVariables>;
+export function useRecordExampleEvent(dc: DataConnect, options?: useDataConnectMutationOptions<RecordExampleEventData, FirebaseError, RecordExampleEventVariables>): UseDataConnectMutationResult<RecordExampleEventData, RecordExampleEventVariables>;
+
+export function useDeleteExampleEvent(options?: useDataConnectMutationOptions<DeleteExampleEventData, FirebaseError, DeleteExampleEventVariables>): UseDataConnectMutationResult<DeleteExampleEventData, DeleteExampleEventVariables>;
+export function useDeleteExampleEvent(dc: DataConnect, options?: useDataConnectMutationOptions<DeleteExampleEventData, FirebaseError, DeleteExampleEventVariables>): UseDataConnectMutationResult<DeleteExampleEventData, DeleteExampleEventVariables>;
 
 export function useListVideoJobs(options?: useDataConnectQueryOptions<ListVideoJobsData>): UseDataConnectQueryResult<ListVideoJobsData, undefined>;
 export function useListVideoJobs(dc: DataConnect, options?: useDataConnectQueryOptions<ListVideoJobsData>): UseDataConnectQueryResult<ListVideoJobsData, undefined>;
@@ -19,12 +28,3 @@ export function useListVideoEmbeddings(dc: DataConnect, vars?: ListVideoEmbeddin
 
 export function useListFailedJobs(options?: useDataConnectQueryOptions<ListFailedJobsData>): UseDataConnectQueryResult<ListFailedJobsData, undefined>;
 export function useListFailedJobs(dc: DataConnect, options?: useDataConnectQueryOptions<ListFailedJobsData>): UseDataConnectQueryResult<ListFailedJobsData, undefined>;
-
-export function useCreateExampleJob(options?: useDataConnectMutationOptions<CreateExampleJobData, FirebaseError, CreateExampleJobVariables>): UseDataConnectMutationResult<CreateExampleJobData, CreateExampleJobVariables>;
-export function useCreateExampleJob(dc: DataConnect, options?: useDataConnectMutationOptions<CreateExampleJobData, FirebaseError, CreateExampleJobVariables>): UseDataConnectMutationResult<CreateExampleJobData, CreateExampleJobVariables>;
-
-export function useRecordExampleEvent(options?: useDataConnectMutationOptions<RecordExampleEventData, FirebaseError, RecordExampleEventVariables>): UseDataConnectMutationResult<RecordExampleEventData, RecordExampleEventVariables>;
-export function useRecordExampleEvent(dc: DataConnect, options?: useDataConnectMutationOptions<RecordExampleEventData, FirebaseError, RecordExampleEventVariables>): UseDataConnectMutationResult<RecordExampleEventData, RecordExampleEventVariables>;
-
-export function useDeleteExampleEvent(options?: useDataConnectMutationOptions<DeleteExampleEventData, FirebaseError, DeleteExampleEventVariables>): UseDataConnectMutationResult<DeleteExampleEventData, DeleteExampleEventVariables>;
-export function useDeleteExampleEvent(dc: DataConnect, options?: useDataConnectMutationOptions<DeleteExampleEventData, FirebaseError, DeleteExampleEventVariables>): UseDataConnectMutationResult<DeleteExampleEventData, DeleteExampleEventVariables>;
