@@ -1,4 +1,4 @@
-""name: 🚨 Emergency Stop - Halt All Processing
+name: 🚨 Emergency Stop - Halt All Processing
 
 on:
   workflow_dispatch:
