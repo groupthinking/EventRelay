@@ -14,12 +14,57 @@ import hashlib
 import json
 import logging
 import os
+import re
 import tempfile
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Dict, Optional
+from urllib.parse import urlparse, parse_qs
 
 logger = logging.getLogger(__name__)
+
+
+def _extract_video_id(video_url: str) -> Optional[str]:
+    """Extract the YouTube video ID from a URL, returning None if not found."""
+    if not video_url:
+        return None
+    try:
+        parsed = urlparse(video_url)
+        if parsed.hostname in ("www.youtube.com", "youtube.com"):
+            qs = parse_qs(parsed.query)
+            return qs.get("v", [None])[0]
+        if parsed.hostname == "youtu.be":
+            return parsed.path.lstrip("/") or None
+    except Exception:
+        pass
+    return None
+
+
+def _build_title(extracted_info: Dict[str, Any], video_analysis: Dict[str, Any], default: str) -> str:
+    """Return a meaningful project title.
+
+    Priority:
+    1. Title from extracted_info (real AI-analysed title)
+    2. Title from video metadata
+    3. A label derived from the YouTube video ID so test runs produce
+       unique, identifiable names instead of the generic skeleton fallback
+    4. The supplied *default* string
+    """
+    title = extracted_info.get("title") or video_analysis.get("metadata", {}).get("title")
+    if title:
+        return title
+
+    video_url = (
+        video_analysis.get("video_data", {}).get("video_url")
+        or video_analysis.get("metadata", {}).get("video_url")
+        or video_analysis.get("video_url")
+    )
+    video_id = _extract_video_id(video_url)
+    if video_id:
+        return f"Video Project {video_id}"
+
+    return default
+
 
 # Import AI Code Generator for enhanced generation
 try:
@@ -93,6 +138,7 @@ class ProjectCodeGenerator:
             project_type = extracted_info.get("project_type", "web")
             technologies = extracted_info.get("technologies", ["javascript", "html", "css"])
             features = extracted_info.get("features", [])
+            build_plan = context.get("build_plan")
 
             # Carry enriched context forward for downstream generators
             video_analysis = dict(video_analysis)
@@ -100,6 +146,8 @@ class ProjectCodeGenerator:
             video_analysis["summary"] = context.get("summary", "")
             video_analysis["key_concepts"] = context.get("key_concepts", [])
             video_analysis["tutorial_steps"] = extracted_info.get("tutorial_steps", [])
+            if build_plan:
+                video_analysis["build_plan"] = build_plan
 
             # Create temporary project directory
             temp_dir = tempfile.mkdtemp(prefix="uvai_project_")
@@ -145,7 +193,7 @@ class ProjectCodeGenerator:
         """Generate a React project"""
 
         extracted_info = video_analysis.get("extracted_info", {})
-        title = extracted_info.get("title", "UVAI React App")
+        title = _build_title(extracted_info, video_analysis, "UVAI React App")
         tutorial_steps = extracted_info.get("tutorial_steps", [])
         summary = video_analysis.get("summary", "")
         key_concepts = video_analysis.get("key_concepts", [])
@@ -1046,10 +1094,26 @@ if __name__ == "__main__":
         features = extracted_info.get("features", [])
         summary = video_analysis.get("summary") or video_analysis.get("ai_analysis", {}).get("Content Summary", "")
         key_concepts = video_analysis.get("key_concepts", [])
+        build_plan = video_analysis.get("build_plan") or extracted_info.get("build_plan", {})
         tech_section = "\n".join([f"- {tech}" for tech in technologies]) if technologies else "- See source video for details"
         feature_section = "\n".join([f"- {f.replace('_', ' ').title()}" for f in features]) if features else "- See source video for details"
         concepts_section = "\n".join([f"- {concept}" for concept in key_concepts]) if key_concepts else "- See source video for details"
         summary_section = summary if summary else "Summary not available from analysis."
+        build_plan_steps = []
+        if isinstance(build_plan, dict):
+            steps = build_plan.get("steps", [])
+            for idx, step in enumerate(steps[:5]):
+                action = step.get("action", "action")
+                target = step.get("target_file", "")
+                desc = step.get("description", "")
+                step_num = step.get("step_number", idx + 1)
+                detail = f"- Step {step_num}: {action}"
+                if target:
+                    detail += f" -> {target}"
+                if desc:
+                    detail += f" — {desc}"
+                build_plan_steps.append(detail)
+        build_plan_section = "\n".join(build_plan_steps) if build_plan_steps else "- Build plan not available from analysis."
 
         return f'''# {title}
 
@@ -1073,6 +1137,9 @@ Watch the original video to follow along with the implementation details.
 
 ## Key Concepts From The Tutorial
 {concepts_section}
+
+## Build Plan
+{build_plan_section}
 
 ## Getting Started
 
@@ -1129,13 +1196,14 @@ This is a starting point generated from video analysis. You can:
         extracted_info = dict(video_analysis.get("extracted_info") or {})
         metadata = video_analysis.get("metadata") or video_analysis.get("video_data") or {}
         ai_analysis = video_analysis.get("ai_analysis") or {}
+        build_plan = video_analysis.get("build_plan") or extracted_info.get("build_plan")
 
         title = (
             project_config.get("title")
             or extracted_info.get("title")
             or metadata.get("title")
             or metadata.get("video_title")
-            or "UVAI Generated Project"
+            or _build_title(extracted_info, video_analysis, "UVAI Generated Project")
         )
 
         technologies = self._coerce_to_list(extracted_info.get("technologies"))
@@ -1148,30 +1216,87 @@ This is a starting point generated from video analysis. You can:
         if not technologies:
             technologies = ["javascript", "html", "css"]
 
-        features = project_config.get("features") or extracted_info.get("features") or []
-        if not features and technologies:
-            features = [tech.replace(" ", "_") for tech in technologies[:3]]
+        # Check if we have a structured BuildPlan (Stage 2: Semantic Logic Parsing)
+        build_plan = video_analysis.get("build_plan")
 
+        if build_plan:
+            # Use BuildPlan as primary source - this is the preferred path!
+            logger.info(f"✅ Using structured BuildPlan: {build_plan.get('title', 'Untitled')}")
+
+            extracted_info = {
+                "title": build_plan.get("title"),
+                "project_type": build_plan.get("project_type", "web"),
+                "technologies": build_plan.get("technologies", []),
+                "features": build_plan.get("features", []),
+                "tutorial_steps": [
+                    f"{step.get('title')}: {step.get('description')}"
+                    for step in build_plan.get("steps", [])[:8]
+                ],
+                "difficulty_level": build_plan.get("difficulty_level", "beginner"),
+                "prerequisites": build_plan.get("prerequisites", []),
+                "learning_objectives": build_plan.get("learning_objectives", []),
+            }
+
+        build_plan_steps = self._build_plan_steps_to_list(build_plan) if build_plan else []
         tutorial_steps = self._coerce_to_list(extracted_info.get("tutorial_steps"))
+        if not tutorial_steps:
+            tutorial_steps = build_plan_steps
         if not tutorial_steps:
             tutorial_steps = self._derive_tutorial_steps(ai_analysis, video_analysis)
 
-        summary = self._extract_summary(ai_analysis, video_analysis)
-        key_concepts = self._coerce_to_list(ai_analysis.get("Key Concepts")) or technologies
+        else:
+            # Fallback to legacy extraction logic
+            logger.warning("⚠️ BuildPlan not found, falling back to legacy extraction")
+
+            extracted_info = dict(video_analysis.get("extracted_info") or {})
+            metadata = video_analysis.get("metadata") or video_analysis.get("video_data") or {}
+            ai_analysis = video_analysis.get("ai_analysis") or {}
+
+            title = (
+                project_config.get("title")
+                or extracted_info.get("title")
+                or metadata.get("title")
+                or metadata.get("video_title")
+                or "UVAI Generated Project"
+            )
 
         extracted_info.update({
             "title": title,
             "technologies": technologies,
             "features": features,
             "tutorial_steps": tutorial_steps,
-            "project_type": project_config.get("type", extracted_info.get("project_type", "web"))
+            "project_type": project_config.get("type", extracted_info.get("project_type", "web")),
+            "build_plan": build_plan,
         })
 
         return {
             "extracted_info": extracted_info,
+            "build_plan": build_plan,
             "summary": summary,
-            "key_concepts": key_concepts
+            "key_concepts": key_concepts,
+            "build_plan": build_plan  # Pass through for generators that want raw access
         }
+
+    def _build_plan_steps_to_list(self, build_plan: dict[str, Any] | None) -> list[str]:
+        """Convert BuildPlan steps into string instructions."""
+        if not build_plan or not isinstance(build_plan, dict):
+            return []
+        steps = []
+        for step in build_plan.get("steps", [])[:10]:
+            try:
+                number = step.get("step_number") or len(steps) + 1
+                action = step.get("action") or "action"
+                target = step.get("target_file") or ""
+                description = step.get("description") or ""
+                line = f"Step {number}: {action}"
+                if target:
+                    line += f" -> {target}"
+                if description:
+                    line += f" — {description}"
+                steps.append(line)
+            except Exception:
+                continue
+        return steps
 
     def _coerce_to_list(self, value: Any) -> list[str]:
         """Convert common iterable or delimited strings into a clean list."""

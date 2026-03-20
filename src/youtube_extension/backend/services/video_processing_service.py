@@ -301,7 +301,7 @@ class VideoProcessingService:
         }
 
         # Allow carrying forward additional fields for clients that need them
-        for key in ("cached", "errors", "pipeline"):
+        for key in ("cached", "errors", "pipeline", "build_plan", "extracted_info"):
             if key in result:
                 normalized[key] = result[key]
 
@@ -347,13 +347,15 @@ class VideoProcessingService:
 
             # Extract information based on processor format
             if video_analysis.get("success"):
-                extracted_info = {
+                extracted_info = video_analysis.get("extracted_info") or {
                     "title": video_analysis.get("metadata", {}).get("title", "UVAI Generated Project"),
                     "technologies": video_analysis.get("ai_analysis", {}).get("Related Topics", []),
                     "features": features or ["responsive_design", "modern_ui"],
                     "project_type": project_type,
                     "complexity": "intermediate"
                 }
+                if video_analysis.get("build_plan"):
+                    extracted_info["build_plan"] = video_analysis["build_plan"]
                 video_status = "success"
             elif video_analysis.get("status") == "success":
                 extracted_info = video_analysis.get("extracted_info", {})
@@ -427,6 +429,7 @@ class VideoProcessingService:
                 "video_analysis": {
                     "status": video_status,
                     "extracted_info": extracted_info,
+                    "build_plan": video_analysis.get("build_plan") or extracted_info.get("build_plan"),
                     "processing_pipeline": video_analysis.get("processing_pipeline", [])
                 },
                 "code_generation": {
