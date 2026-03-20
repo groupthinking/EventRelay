@@ -9,12 +9,20 @@ creating deployable applications from YouTube tutorial content.
 
 import json
 import logging
+import os
 import tempfile
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+# Attempt to import the AI-powered generator; fall back gracefully if unavailable
+try:
+    from youtube_extension.backend.ai_code_generator import AICodeGenerator
+    _AI_GENERATOR_CLASS = AICodeGenerator
+except Exception:  # pragma: no cover
+    _AI_GENERATOR_CLASS = None  # type: ignore[assignment]
 
 class ProjectCodeGenerator:
     """
@@ -34,10 +42,26 @@ class ProjectCodeGenerator:
 
     async def generate_project(self, video_analysis: dict[str, Any], project_config: dict[str, Any]) -> dict[str, Any]:
         """
-        Generate a complete project based on video analysis
+        Generate a complete project based on video analysis.
+
+        When ``GEMINI_API_KEY`` is set and the AI generator is importable the
+        request is delegated to :class:`AICodeGenerator` which produces
+        genuinely unique, video-specific output.  Otherwise the template-based
+        fallback is used.
         """
         logger.info(f"🏗️ Generating project: {project_config.get('type', 'web')}")
 
+        # --- Attempt AI-powered generation -----------------------------------
+        if _AI_GENERATOR_CLASS is not None and os.environ.get("GEMINI_API_KEY"):
+            try:
+                ai_gen = _AI_GENERATOR_CLASS()
+                if ai_gen.client is not None:
+                    logger.info("🤖 Using AI-powered code generator (Gemini)")
+                    return await ai_gen.generate_fullstack_project(video_analysis, project_config)
+            except Exception as ai_err:
+                logger.warning(f"AI generation failed, falling back to templates: {ai_err}")
+
+        # --- Template-based fallback -----------------------------------------
         try:
             # Normalize video context so every project reflects the specific tutorial
             context = self._build_generation_context(video_analysis, project_config)
@@ -83,7 +107,7 @@ class ProjectCodeGenerator:
         """Generate a web application project"""
 
         extracted_info = video_analysis.get("extracted_info", {})
-        extracted_info.get("title", "UVAI Generated Project")
+        title = extracted_info.get("title", "UVAI Generated Project")  # noqa: F841
 
         # Determine the tech stack
         if "react" in technologies:
@@ -236,7 +260,7 @@ class ProjectCodeGenerator:
         """Generate an API project"""
 
         extracted_info = video_analysis.get("extracted_info", {})
-        extracted_info.get("title", "UVAI API")
+        title = extracted_info.get("title", "UVAI API")  # noqa: F841
 
         if "python" in technologies:
             return await self._generate_python_api(project_path, video_analysis, features)
@@ -623,28 +647,62 @@ root.render(
 
     def _generate_vanilla_main_js(self, tutorial_steps: list[str], features: list[str]) -> str:
         """Generate main.js for vanilla projects"""
-        return '''// UVAI Generated JavaScript
-document.addEventListener('DOMContentLoaded', function() {
+        # Build step-logging lines from actual tutorial_steps
+        step_logs = ""
+        if tutorial_steps:
+            entries = ", ".join([f'"{step[:80].replace(chr(34), chr(39))}"' for step in tutorial_steps[:8]])
+            step_logs = f"""
+    // Tutorial steps extracted from the video
+    const tutorialSteps = [{entries}];
+    tutorialSteps.forEach(function(step, index) {{
+        console.log('Step ' + (index + 1) + ': ' + step);
+    }});
+"""
+
+        # Build feature-initialisation stubs from actual features list
+        feature_inits = ""
+        if features:
+            stubs = []
+            for feature in features[:6]:
+                fn_name = "init" + "".join(word.capitalize() for word in feature.replace("-", "_").split("_"))
+                stubs.append(f"""
+function {fn_name}() {{
+    // TODO: implement {feature.replace("_", " ")}
+    console.log('Initialising: {feature.replace("_", " ")}');
+}}""")
+            feature_calls = "\n    ".join(
+                "init" + "".join(w.capitalize() for w in f.replace("-", "_").split("_")) + "();"
+                for f in features[:6]
+            )
+            feature_inits = "\n".join(stubs) + f"""
+
+function initFeatures() {{
+    {feature_calls}
+}}"""
+
+        return f'''// UVAI Generated JavaScript
+document.addEventListener('DOMContentLoaded', function() {{
     console.log('App loaded successfully');
+{step_logs}
+    addInteractiveFeatures();{"""
+    initFeatures();""" if features else ""}
+}});
 
-    // Add interactive features based on video analysis
-    addInteractiveFeatures();
-});
-
-function addInteractiveFeatures() {
-    // Add animations
+function addInteractiveFeatures() {{
+    // Animate sections into view
     const sections = document.querySelectorAll('section');
-    sections.forEach((section, index) => {
+    sections.forEach(function(section, index) {{
         section.style.opacity = '0';
         section.style.transform = 'translateY(20px)';
 
-        setTimeout(() => {
+        setTimeout(function() {{
             section.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
             section.style.opacity = '1';
             section.style.transform = 'translateY(0)';
-        }, index * 200);
-    });
-}'''
+        }}, index * 200);
+    }});
+}}
+{feature_inits}'''
 
     def _generate_vanilla_styles_css(self, features: list[str]) -> str:
         """Generate styles.css for vanilla projects"""

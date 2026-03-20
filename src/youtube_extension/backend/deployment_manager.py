@@ -663,8 +663,15 @@ class DeploymentManager:
             }
 
     def _generate_repo_name(self, project_config: dict[str, Any]) -> str:
-        """Generate a repository name from project config"""
-        title = project_config.get("title", "uvai-project")
+        """Generate a repository name from project config, preferring video-derived titles."""
+        # Prefer the enriched title that `_build_generation_context` injects into
+        # project_config / video_analysis; fall back to the generic placeholder only
+        # when no meaningful title is available.
+        title = (
+            project_config.get("title")
+            or project_config.get("video_title")
+            or "uvai-project"
+        )
 
         # Sanitize title for repository name
         import re
