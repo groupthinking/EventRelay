@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { Analytics } from '@vercel/analytics/next';
 import './globals.css';
+import { ToastProvider } from '@/components/ui/Toast';
 
 // Font CSS variables are defined via <link> to Google Fonts in <head> and
 // resolved in globals.css / tailwind.config. This avoids next/font/google
@@ -94,7 +95,9 @@ export default function RootLayout({
 
         {/* Main content */}
         <div className="relative z-10">
-          {children}
+          <ToastProvider>
+            {children}
+          </ToastProvider>
         </div>
         <Analytics />
       </body>
