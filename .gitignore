@@ -161,3 +161,20 @@ UVAI_Digital_Refinery_Blueprint.pdf
 notebooklm_chrome_profile/
 src/utils/notebooklm_profile/
 src/utils/notebooklm_profile_v2/
+
+# --- SDK Generation (Stainless) ---
+# Generated SDKs are published to PyPI/npm, not committed to repo
+sdks/python/dist/
+sdks/python/build/
+sdks/python/*.egg-info/
+sdks/python/.pytest_cache/
+sdks/python/.mypy_cache/
+sdks/typescript/dist/
+sdks/typescript/build/
+sdks/typescript/node_modules/
+sdks/typescript/.turbo/
+sdks/typescript/*.tsbuildinfo
+
+# Keep SDK source code structure but ignore generated artifacts
+!sdks/python/README.md
+!sdks/typescript/README.md

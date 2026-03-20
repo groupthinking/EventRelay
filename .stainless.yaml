@@ -1,0 +1,99 @@
+# Stainless SDK Configuration
+# https://www.stainless.com/docs
+
+organization: groupthinking
+project: eventrelay
+
+# OpenAPI specification
+spec:
+  path: ./openapi.yaml
+  version: 3.1.0
+
+# SDKs to generate
+sdks:
+  python:
+    package_name: eventrelay
+    version: 1.0.0
+    output_dir: ./sdks/python
+    module_name: eventrelay
+    # PyPI publishing configuration
+    pypi:
+      enabled: true
+      package_name: eventrelay-sdk
+    # Python-specific configuration
+    config:
+      python_version: "3.9"
+      support_async: true
+      support_sync: true
+      use_pydantic: true
+
+  typescript:
+    package_name: "@groupthinking/eventrelay"
+    version: 1.0.0
+    output_dir: ./sdks/typescript
+    # npm publishing configuration
+    npm:
+      enabled: true
+      package_name: "@groupthinking/eventrelay"
+    # TypeScript-specific configuration
+    config:
+      target: "ES2020"
+      module: "commonjs"
+      declaration: true
+      strict: true
+
+# API configuration
+api:
+  base_url: https://api.uvai.io
+  base_url_env: EVENTRELAY_API_URL
+
+  # Authentication
+  auth:
+    type: header
+    header_name: X-API-Key
+    env_var: EVENTRELAY_API_KEY
+
+# Generation options
+options:
+  # Idiomatic code generation
+  idiomatic: true
+
+  # Error handling
+  error_handling:
+    enabled: true
+    wrap_errors: true
+
+  # Retries and timeouts
+  retries:
+    enabled: true
+    max_retries: 3
+    backoff_factor: 2
+
+  timeout:
+    default: 60
+    connect: 10
+
+  # Pagination support
+  pagination:
+    enabled: true
+    auto_paginate: true
+
+  # Streaming support
+  streaming:
+    enabled: true
+
+  # Documentation
+  docs:
+    generate: true
+    include_examples: true
+    format: markdown
+
+# CI/CD Integration
+ci:
+  # Automatically update SDK on OpenAPI spec changes
+  auto_update: true
+
+  # GitHub Actions workflow
+  github:
+    enabled: true
+    workflow_path: .github/workflows/stainless-sdk.yml

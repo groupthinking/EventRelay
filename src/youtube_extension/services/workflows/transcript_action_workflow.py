@@ -12,7 +12,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from src.shared.youtube import RobustYouTubeMetadata, RobustYouTubeService
+from shared.youtube import RobustYouTubeMetadata, RobustYouTubeService
 from youtube_extension.backend.services.metrics_service import MetricsService
 
 try:
