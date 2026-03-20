@@ -11,6 +11,7 @@ Project: gen-lang-client-0209671908
 """
 
 import asyncio
+import base64
 import json
 import os
 from dataclasses import dataclass, field
@@ -29,6 +30,7 @@ class VideoAnalysisResult:
     transcript_segments: Optional[list[dict]] = None
     timestamps: Optional[list[dict]] = None
     apis_detected: Optional[list[dict]] = None
+    build_plan: Optional[dict[str, Any]] = None
 
 
 class GeminiVideoService:
@@ -169,6 +171,87 @@ class GeminiVideoService:
                 summary=text, key_events=self._extract_events(text)
             )
 
+    async def generate_build_plan(
+        self,
+        video_url: str,
+        transcript_excerpt: str = "",
+        metadata: Optional[dict[str, Any]] = None,
+    ) -> dict[str, Any]:
+        """
+        Produce a structured BuildPlan JSON artifact directly from Gemini.
+
+        The plan is consumed by downstream generators, so the schema is explicit
+        and responseMimeType is set to application/json to avoid markdown fences.
+        """
+        model = self.DEFAULT_MODEL
+        metadata = metadata or {}
+        schema = {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string"},
+                "summary": {"type": "string"},
+                "prerequisites": {"type": "array", "items": {"type": "string"}},
+                "steps": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "step_number": {"type": "integer"},
+                            "action": {"type": "string"},
+                            "description": {"type": "string"},
+                            "target_file": {"type": "string"},
+                            "code": {"type": "string"},
+                            "dependencies": {"type": "array", "items": {"type": "integer"}},
+                            "prerequisites": {"type": "array", "items": {"type": "string"}},
+                        },
+                        "required": ["step_number", "action", "description", "target_file"],
+                    },
+                },
+            },
+            "required": ["title", "summary", "steps"],
+        }
+
+        prompt = f"""
+        You are deriving a deterministic build plan from a YouTube tutorial.
+        Use only observable instructions from the video transcript and visuals.
+        Output MUST be valid JSON that matches the provided schema.
+
+        Video URL: {video_url}
+        Title: {metadata.get('title', 'Unknown')}
+        Transcript excerpt (optional): {transcript_excerpt[:1800]}
+
+        Rules:
+        - Keep steps ordered and numbered starting at 1.
+        - Each step must include action type, target file, code snippet if visible, and dependencies.
+        - Dependencies reference earlier step_number values.
+        - Never include markdown fences or prose outside JSON.
+        """
+
+        payload = {
+            "contents": [{"parts": [{"text": video_url}, {"text": prompt}]}],
+            "generationConfig": {
+                "temperature": 0.3,
+                "topK": 32,
+                "topP": 1,
+                "maxOutputTokens": 4096,
+            },
+            "responseSchema": schema,
+            "responseMimeType": "application/json",
+        }
+
+        response = await self._make_request(model, payload)
+        raw_json = self._extract_json_content(response)
+        try:
+            return cast(dict[str, Any], json.loads(raw_json))
+        except Exception:
+            # Best-effort fallback to empty plan to avoid raising in pipelines
+            return {
+                "title": metadata.get("title", "Generated Build Plan"),
+                "summary": "Plan could not be parsed from Gemini response.",
+                "prerequisites": [],
+                "steps": [],
+            }
+
     async def _make_request(
         self, model: str, payload: dict, retries: int = 3
     ) -> dict:
@@ -218,6 +301,24 @@ class GeminiVideoService:
         if last_error is not None:
             raise last_error
         raise RuntimeError("API request failed after retries")
+
+    def _extract_json_content(self, response: dict[str, Any]) -> str:
+        """
+        Extract JSON content from Gemini response supporting both text and inlineData.
+        """
+        try:
+            parts = response["candidates"][0]["content"].get("parts", [])
+            for part in parts:
+                if "text" in part and part["text"]:
+                    return str(part["text"])
+                inline = part.get("inlineData") or part.get("inline_data")
+                if inline and inline.get("mimeType", "").endswith("json"):
+                    data = inline.get("data")
+                    if data:
+                        return base64.b64decode(data).decode("utf-8")
+        except Exception:
+            pass
+        return ""
 
     async def extract_technical_breakdown(
         self, video_url: str

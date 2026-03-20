@@ -71,6 +71,8 @@ class YouTubeMCPTool:
             # Extract data from result
             video_id = result.get("video_id", "unknown")
             metadata = result.get("metadata", {})
+            build_plan = result.get("build_plan")
+            extracted_info = result.get("extracted_info", {})
 
             # Generate markdown from result
             markdown_content = self._generate_markdown(result)
@@ -90,6 +92,8 @@ class YouTubeMCPTool:
                 ),
                 "markdown_content": markdown_content,
                 "transcript": transcript,
+                "build_plan": build_plan,
+                "extracted_info": extracted_info,
                 "cached": False,
                 "processing_time": result.get("processing_time", "0s"),
             }

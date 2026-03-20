@@ -136,6 +136,15 @@ ml = [
     "numpy>=1.24.0",
     "pandas>=2.0.0",
 ]
+# Google Cloud Platform services (Vertex AI, Firestore, Cloud Tasks, etc.)
+cloud = [
+    "google-cloud-aiplatform>=1.38.0",
+    "google-cloud-firestore>=2.13.0",
+    "google-cloud-tasks>=2.14.0",
+    "google-cloud-storage>=2.13.0",
+    "google-cloud-logging>=3.8.0",
+    "google-cloud-monitoring>=2.16.0",
+]
 
 [project.urls]
 Homepage = "https://github.com/uvai/youtube-extension"

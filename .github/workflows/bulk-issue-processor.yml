@@ -1,0 +1,167 @@
+name: Bulk Issue Processor
+
+# Process multiple issues at once: apply labels, generate summaries, or close stale items.
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Action to perform on matching issues'
+        required: true
+        type: choice
+        options:
+          - label
+          - summarize
+          - close-stale
+      label_name:
+        description: 'Label to apply (required for "label" action)'
+        required: false
+        default: 'needs-triage'
+      state_filter:
+        description: 'Issue state to filter: open | closed | all'
+        required: false
+        default: 'open'
+        type: choice
+        options:
+          - open
+          - closed
+          - all
+      stale_days:
+        description: 'Days of inactivity before an issue is considered stale (for close-stale)'
+        required: false
+        default: '90'
+      dry_run:
+        description: 'Dry run (list actions without executing)'
+        required: false
+        default: 'true'
+        type: boolean
+      max_issues:
+        description: 'Maximum number of issues to process'
+        required: false
+        default: '50'
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  process:
+    name: Bulk process issues
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Process issues
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ACTION: ${{ github.event.inputs.action }}
+          LABEL_NAME: ${{ github.event.inputs.label_name }}
+          STATE_FILTER: ${{ github.event.inputs.state_filter }}
+          STALE_DAYS: ${{ github.event.inputs.stale_days }}
+          DRY_RUN: ${{ github.event.inputs.dry_run }}
+          MAX_ISSUES: ${{ github.event.inputs.max_issues }}
+          REPO: ${{ github.repository }}
+        run: |
+          python - <<'PYEOF'
+          import os, json, subprocess, sys
+          from datetime import datetime, timezone, timedelta
+
+          action = os.environ["ACTION"]
+          label_name = os.environ.get("LABEL_NAME", "needs-triage")
+          state_filter = os.environ.get("STATE_FILTER", "open")
+          stale_days = int(os.environ.get("STALE_DAYS", "90"))
+          dry_run = os.environ.get("DRY_RUN", "true").lower() == "true"
+          max_issues = int(os.environ.get("MAX_ISSUES", "50"))
+          repo = os.environ["REPO"]
+
+          print(f"Action: {action} | State: {state_filter} | Dry run: {dry_run}")
+
+          # Fetch issues
+          result = subprocess.run(
+              ["gh", "issue", "list", "--repo", repo,
+               "--state", state_filter,
+               "--limit", str(max_issues),
+               "--json", "number,title,labels,updatedAt,state"],
+              capture_output=True, text=True
+          )
+          if result.returncode != 0:
+              print(f"Error fetching issues: {result.stderr}", file=sys.stderr)
+              sys.exit(1)
+
+          issues = json.loads(result.stdout)
+          print(f"Fetched {len(issues)} issues")
+
+          processed, skipped = 0, 0
+          now = datetime.now(timezone.utc)
+
+          for issue in issues:
+              number = issue["number"]
+              title = issue["title"]
+              updated_at = datetime.fromisoformat(issue["updatedAt"].replace("Z", "+00:00"))
+              existing_labels = [l["name"] for l in issue.get("labels", [])]
+
+              if action == "label":
+                  if label_name in existing_labels:
+                      print(f"  #{number} — already has label '{label_name}', skipping")
+                      skipped += 1
+                      continue
+                  if dry_run:
+                      print(f"  [DRY RUN] Would add label '{label_name}' to #{number}: {title}")
+                  else:
+                      r = subprocess.run(
+                          ["gh", "issue", "edit", str(number),
+                           "--repo", repo, "--add-label", label_name],
+                          capture_output=True, text=True
+                      )
+                      if r.returncode == 0:
+                          print(f"  ✓ Added label to #{number}: {title}")
+                      else:
+                          print(f"  ✗ Failed #{number}: {r.stderr}", file=sys.stderr)
+                  processed += 1
+
+              elif action == "summarize":
+                  print(f"  #{number}: {title} (updated {updated_at.date()})")
+                  processed += 1
+
+              elif action == "close-stale":
+                  days_old = (now - updated_at).days
+                  if days_old < stale_days:
+                      skipped += 1
+                      continue
+                  if dry_run:
+                      print(f"  [DRY RUN] Would close stale #{number} ({days_old}d): {title}")
+                  else:
+                      comment = (
+                          f"Closing this issue as it has been inactive for {days_old} days. "
+                          "Feel free to reopen if still relevant."
+                      )
+                      subprocess.run(
+                          ["gh", "issue", "comment", str(number),
+                           "--repo", repo, "--body", comment],
+                          capture_output=True
+                      )
+                      r = subprocess.run(
+                          ["gh", "issue", "close", str(number), "--repo", repo],
+                          capture_output=True, text=True
+                      )
+                      if r.returncode == 0:
+                          print(f"  ✓ Closed stale #{number} ({days_old}d): {title}")
+                      else:
+                          print(f"  ✗ Failed #{number}: {r.stderr}", file=sys.stderr)
+                  processed += 1
+
+          print(f"\nDone — processed={processed} skipped={skipped}")
+          PYEOF
+
+      - name: Print summary
+        if: always()
+        run: |
+          echo "## Bulk Issue Processor Summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Field | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|-------|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Action | ${{ github.event.inputs.action }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| State filter | ${{ github.event.inputs.state_filter }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Max issues | ${{ github.event.inputs.max_issues }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Dry run | ${{ github.event.inputs.dry_run }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Triggered by | ${{ github.actor }} |" >> "$GITHUB_STEP_SUMMARY"
