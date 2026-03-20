@@ -1,0 +1,4428 @@
+{
+  "components": {
+    "schemas": {
+      "AgentDispatchRequest": {
+        "description": "Request to dispatch agents for a set of events.",
+        "properties": {
+          "agent_types": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Specific agent types to dispatch",
+            "title": "Agent Types"
+          },
+          "events": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "transcript": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Transcript text \u2014 events will be auto-extracted if events list is empty",
+            "title": "Transcript"
+          }
+        },
+        "title": "AgentDispatchRequest",
+        "type": "object"
+      },
+      "ApiResponse": {
+        "description": "Standardized API response wrapper used by all endpoints.",
+        "properties": {
+          "data": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Response payload",
+            "title": "Data"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Additional error detail",
+            "title": "Detail"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Error message (when status='error')",
+            "title": "Error"
+          },
+          "request_id": {
+            "title": "Request Id",
+            "type": "string"
+          },
+          "status": {
+            "description": "'success' or 'error'",
+            "title": "Status",
+            "type": "string"
+          },
+          "timestamp": {
+            "format": "date-time",
+            "title": "Timestamp",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "ApiResponse",
+        "type": "object"
+      },
+      "CacheStats": {
+        "description": "Response model for cache statistics",
+        "example": {
+          "categories": {
+            "education": {
+              "count": 15,
+              "size_mb": 25.3
+            },
+            "technology": {
+              "count": 27,
+              "size_mb": 41.7
+            }
+          },
+          "newest_cache": "2024-01-01T14:30:00Z",
+          "oldest_cache": "2024-01-01T10:00:00Z",
+          "total_cached_videos": 42,
+          "total_size_mb": 67.0
+        },
+        "properties": {
+          "categories": {
+            "additionalProperties": true,
+            "description": "Cache by category",
+            "title": "Categories",
+            "type": "object"
+          },
+          "newest_cache": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Newest cache entry timestamp",
+            "title": "Newest Cache"
+          },
+          "oldest_cache": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Oldest cache entry timestamp",
+            "title": "Oldest Cache"
+          },
+          "total_cached_videos": {
+            "description": "Total cached videos",
+            "title": "Total Cached Videos",
+            "type": "integer"
+          },
+          "total_size_mb": {
+            "description": "Total cache size in MB",
+            "title": "Total Size Mb",
+            "type": "number"
+          }
+        },
+        "required": [
+          "total_cached_videos",
+          "categories",
+          "total_size_mb"
+        ],
+        "title": "CacheStats",
+        "type": "object"
+      },
+      "ChatRequest": {
+        "description": "Request model for chat endpoint",
+        "example": {
+          "context": "tooltip-assistant",
+          "query": "How can I process a YouTube video?",
+          "session_id": "user123",
+          "video_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+        },
+        "properties": {
+          "context": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": "tooltip-assistant",
+            "description": "Chat context",
+            "title": "Context"
+          },
+          "history": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Chat history",
+            "title": "History"
+          },
+          "query": {
+            "description": "User message",
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Query",
+            "type": "string"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": "default",
+            "description": "Session identifier",
+            "title": "Session Id"
+          },
+          "video_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Video identifier",
+            "title": "Video Id"
+          },
+          "video_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Video URL",
+            "title": "Video Url"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "ChatRequest",
+        "type": "object"
+      },
+      "ChatResponse": {
+        "description": "Response model for chat endpoint",
+        "example": {
+          "response": "I can help you process YouTube videos for analysis...",
+          "session_id": "user123",
+          "status": "success",
+          "timestamp": "2024-01-01T12:00:00Z"
+        },
+        "properties": {
+          "response": {
+            "description": "AI assistant response",
+            "title": "Response",
+            "type": "string"
+          },
+          "session_id": {
+            "description": "Session identifier",
+            "title": "Session Id",
+            "type": "string"
+          },
+          "status": {
+            "description": "Response status",
+            "title": "Status",
+            "type": "string"
+          },
+          "timestamp": {
+            "description": "Response timestamp",
+            "format": "date-time",
+            "title": "Timestamp",
+            "type": "string"
+          }
+        },
+        "required": [
+          "response",
+          "status",
+          "session_id",
+          "timestamp"
+        ],
+        "title": "ChatResponse",
+        "type": "object"
+      },
+      "ErrorResponse": {
+        "description": "Standard error response model",
+        "example": {
+          "detail": "Invalid YouTube URL format",
+          "error": "Validation error",
+          "error_type": "validation_error",
+          "path": "/api/v1/process-video",
+          "timestamp": "2024-01-01T12:00:00Z"
+        },
+        "properties": {
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Error details",
+            "title": "Detail"
+          },
+          "error": {
+            "description": "Error message",
+            "title": "Error",
+            "type": "string"
+          },
+          "error_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Error type/category",
+            "title": "Error Type"
+          },
+          "path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Request path",
+            "title": "Path"
+          },
+          "timestamp": {
+            "description": "Error timestamp",
+            "format": "date-time",
+            "title": "Timestamp",
+            "type": "string"
+          }
+        },
+        "required": [
+          "error",
+          "timestamp"
+        ],
+        "title": "ErrorResponse",
+        "type": "object"
+      },
+      "EventExtractRequest": {
+        "description": "Request to extract events from a transcript.",
+        "properties": {
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Job ID from video processing",
+            "title": "Job Id"
+          },
+          "transcript": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Raw transcript text",
+            "title": "Transcript"
+          },
+          "video_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Video Url"
+          }
+        },
+        "title": "EventExtractRequest",
+        "type": "object"
+      },
+      "FeedbackRequest": {
+        "description": "Request model for feedback submission",
+        "example": {
+          "comment": "Excellent video analysis results!",
+          "feedback_type": "quality",
+          "metadata": {
+            "source": "web_interface"
+          },
+          "rating": 5,
+          "user_id": "user123",
+          "video_id": "jNQXAC9IVRw"
+        },
+        "properties": {
+          "comment": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Feedback comment",
+            "title": "Comment"
+          },
+          "feedback_type": {
+            "description": "Type of feedback",
+            "title": "Feedback Type",
+            "type": "string"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": {},
+            "description": "Additional metadata",
+            "title": "Metadata"
+          },
+          "rating": {
+            "anyOf": [
+              {
+                "maximum": 5.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Rating (1-5)",
+            "title": "Rating"
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "User identifier",
+            "title": "User Id"
+          },
+          "video_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Related video ID",
+            "title": "Video Id"
+          }
+        },
+        "required": [
+          "feedback_type"
+        ],
+        "title": "FeedbackRequest",
+        "type": "object"
+      },
+      "FeedbackResponse": {
+        "description": "Response model for feedback submission",
+        "example": {
+          "feedback_id": "fb123456",
+          "message": "Thank you for your feedback!",
+          "status": "ok",
+          "timestamp": "2024-01-01T12:00:00Z"
+        },
+        "properties": {
+          "feedback_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Feedback identifier",
+            "title": "Feedback Id"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Response message",
+            "title": "Message"
+          },
+          "status": {
+            "description": "Submission status",
+            "title": "Status",
+            "type": "string"
+          },
+          "timestamp": {
+            "description": "Submission timestamp",
+            "format": "date-time",
+            "title": "Timestamp",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "timestamp"
+        ],
+        "title": "FeedbackResponse",
+        "type": "object"
+      },
+      "GeminiBatchRequest": {
+        "description": "Request payload for Gemini batch submission",
+        "properties": {
+          "batch_params": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Additional Gemini batch parameters",
+            "title": "Batch Params"
+          },
+          "model_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional model override",
+            "title": "Model Name"
+          },
+          "poll_interval": {
+            "anyOf": [
+              {
+                "minimum": 0.1,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": 5.0,
+            "description": "Polling interval when waiting",
+            "title": "Poll Interval"
+          },
+          "requests": {
+            "description": "List of generateContent requests",
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "minItems": 1,
+            "title": "Requests",
+            "type": "array"
+          },
+          "timeout": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": 600.0,
+            "description": "Maximum wait time in seconds",
+            "title": "Timeout"
+          },
+          "wait": {
+            "default": false,
+            "description": "Wait for completion before returning",
+            "title": "Wait",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "requests"
+        ],
+        "title": "GeminiBatchRequest",
+        "type": "object"
+      },
+      "GeminiBatchResponse": {
+        "description": "Response payload for Gemini batch submission",
+        "properties": {
+          "completed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "latency": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latency"
+          },
+          "operation": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Operation"
+          },
+          "result": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result"
+          },
+          "success": {
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success"
+        ],
+        "title": "GeminiBatchResponse",
+        "type": "object"
+      },
+      "GeminiCacheRequest": {
+        "description": "Request payload for Gemini cache creation",
+        "properties": {
+          "contents": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "items": {},
+                "type": "array"
+              }
+            ],
+            "description": "Prompt or content payload to cache",
+            "title": "Contents"
+          },
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Friendly name for the cache entry",
+            "title": "Display Name"
+          },
+          "generation_params": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Additional Gemini parameters",
+            "title": "Generation Params"
+          },
+          "model_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Specific model to use for caching",
+            "title": "Model Name"
+          },
+          "ttl_seconds": {
+            "default": 3600,
+            "description": "Cache time-to-live in seconds",
+            "minimum": 60.0,
+            "title": "Ttl Seconds",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "contents"
+        ],
+        "title": "GeminiCacheRequest",
+        "type": "object"
+      },
+      "GeminiCacheResponse": {
+        "description": "Response payload for Gemini cache creation",
+        "properties": {
+          "cache": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cache"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "latency": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latency"
+          },
+          "success": {
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success"
+        ],
+        "title": "GeminiCacheResponse",
+        "type": "object"
+      },
+      "GeminiTokenRequest": {
+        "description": "Request payload for Gemini ephemeral token creation",
+        "properties": {
+          "audience": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Audience claim for the token",
+            "title": "Audience"
+          },
+          "model_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Model alias to scope the token",
+            "title": "Model Name"
+          },
+          "token_params": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Additional token parameters",
+            "title": "Token Params"
+          },
+          "ttl_seconds": {
+            "anyOf": [
+              {
+                "minimum": 60.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Token time-to-live in seconds",
+            "title": "Ttl Seconds"
+          }
+        },
+        "title": "GeminiTokenRequest",
+        "type": "object"
+      },
+      "GeminiTokenResponse": {
+        "description": "Response payload for Gemini ephemeral token creation",
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "latency": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latency"
+          },
+          "success": {
+            "title": "Success",
+            "type": "boolean"
+          },
+          "token": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Token"
+          }
+        },
+        "required": [
+          "success"
+        ],
+        "title": "GeminiTokenResponse",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "HealthResponse": {
+        "description": "Response model for health checks",
+        "example": {
+          "components": {
+            "cache": "healthy",
+            "video_processor": "available"
+          },
+          "status": "healthy",
+          "timestamp": "2024-01-01T12:00:00Z",
+          "version": "2.0.0"
+        },
+        "properties": {
+          "components": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": {},
+            "description": "Component health details",
+            "title": "Components"
+          },
+          "status": {
+            "description": "Overall health status",
+            "title": "Status",
+            "type": "string"
+          },
+          "timestamp": {
+            "description": "Health check timestamp",
+            "format": "date-time",
+            "title": "Timestamp",
+            "type": "string"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "API version",
+            "title": "Version"
+          }
+        },
+        "required": [
+          "status",
+          "timestamp"
+        ],
+        "title": "HealthResponse",
+        "type": "object"
+      },
+      "MCPRequest": {
+        "properties": {
+          "method": {
+            "title": "Method",
+            "type": "string"
+          },
+          "params": {
+            "additionalProperties": true,
+            "title": "Params",
+            "type": "object"
+          }
+        },
+        "required": [
+          "method",
+          "params"
+        ],
+        "title": "MCPRequest",
+        "type": "object"
+      },
+      "MarkdownRequest": {
+        "description": "Request model for markdown processing",
+        "example": {
+          "force_regenerate": false,
+          "video_url": "https://www.youtube.com/watch?v=jNQXAC9IVRw"
+        },
+        "properties": {
+          "force_regenerate": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": false,
+            "description": "Force cache regeneration",
+            "title": "Force Regenerate"
+          },
+          "video_url": {
+            "description": "YouTube video URL",
+            "title": "Video Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "video_url"
+        ],
+        "title": "MarkdownRequest",
+        "type": "object"
+      },
+      "MarkdownResponse": {
+        "description": "Response model for markdown processing",
+        "example": {
+          "cached": false,
+          "markdown_content": "# Sample Video Analysis\n\n...",
+          "metadata": {
+            "duration": "3:32",
+            "title": "Sample Video"
+          },
+          "processing_time": "15.3s",
+          "save_path": "/path/to/analysis.md",
+          "status": "success",
+          "video_id": "jNQXAC9IVRw",
+          "video_url": "https://www.youtube.com/watch?v=jNQXAC9IVRw"
+        },
+        "properties": {
+          "cached": {
+            "description": "Whether result was cached",
+            "title": "Cached",
+            "type": "boolean"
+          },
+          "markdown_content": {
+            "description": "Generated markdown content",
+            "title": "Markdown Content",
+            "type": "string"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "description": "Video metadata",
+            "title": "Metadata",
+            "type": "object"
+          },
+          "processing_time": {
+            "description": "Processing duration",
+            "title": "Processing Time",
+            "type": "string"
+          },
+          "save_path": {
+            "description": "File save path",
+            "title": "Save Path",
+            "type": "string"
+          },
+          "status": {
+            "description": "Processing status",
+            "title": "Status",
+            "type": "string"
+          },
+          "video_id": {
+            "description": "YouTube video ID",
+            "title": "Video Id",
+            "type": "string"
+          },
+          "video_url": {
+            "description": "Original video URL",
+            "title": "Video Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "video_id",
+          "video_url",
+          "metadata",
+          "markdown_content",
+          "cached",
+          "save_path",
+          "processing_time",
+          "status"
+        ],
+        "title": "MarkdownResponse",
+        "type": "object"
+      },
+      "TranscriptActionRequest": {
+        "description": "Request model for transcript-to-action workflow",
+        "properties": {
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": "en",
+            "description": "Preferred transcript language",
+            "title": "Language"
+          },
+          "transcript_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional pre-fetched transcript text",
+            "title": "Transcript Text"
+          },
+          "video_options": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VideoClipOptions"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional Gemini video metadata controls (clip window, fps, resolution)"
+          },
+          "video_url": {
+            "description": "YouTube video URL",
+            "title": "Video Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "video_url"
+        ],
+        "title": "TranscriptActionRequest",
+        "type": "object"
+      },
+      "TranscriptActionResponse": {
+        "description": "Response model for transcript-to-action workflow",
+        "properties": {
+          "errors": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "title": "Metadata",
+            "type": "object"
+          },
+          "orchestration_meta": {
+            "additionalProperties": true,
+            "title": "Orchestration Meta",
+            "type": "object"
+          },
+          "outputs": {
+            "additionalProperties": true,
+            "title": "Outputs",
+            "type": "object"
+          },
+          "success": {
+            "title": "Success",
+            "type": "boolean"
+          },
+          "transcript": {
+            "additionalProperties": true,
+            "title": "Transcript",
+            "type": "object"
+          },
+          "video_url": {
+            "title": "Video Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "success",
+          "video_url",
+          "metadata",
+          "transcript",
+          "outputs",
+          "orchestration_meta"
+        ],
+        "title": "TranscriptActionResponse",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      },
+      "VideoClipOptions": {
+        "description": "Optional video clipping and sampling controls for Gemini processing.",
+        "properties": {
+          "end_seconds": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "End offset (seconds); must be greater than start_seconds when provided",
+            "title": "End Seconds"
+          },
+          "fps": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 30.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Sampling rate for Gemini video frames; defaults to API standard when omitted",
+            "title": "Fps"
+          },
+          "start_seconds": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Start offset (seconds) when requesting Gemini video processing",
+            "title": "Start Seconds"
+          }
+        },
+        "title": "VideoClipOptions",
+        "type": "object"
+      },
+      "VideoProcessJobRequest": {
+        "description": "Request to start async video processing.",
+        "properties": {
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": "en",
+            "description": "Transcript language",
+            "title": "Language"
+          },
+          "options": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Options"
+          },
+          "video_url": {
+            "description": "YouTube video URL",
+            "title": "Video Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "video_url"
+        ],
+        "title": "VideoProcessJobRequest",
+        "type": "object"
+      },
+      "VideoProcessingRequest": {
+        "description": "Request model for video processing",
+        "example": {
+          "options": {
+            "include_transcript": true,
+            "quality": "high"
+          },
+          "video_url": "https://www.youtube.com/watch?v=jNQXAC9IVRw"
+        },
+        "properties": {
+          "options": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": {},
+            "description": "Processing options",
+            "title": "Options"
+          },
+          "video_url": {
+            "description": "YouTube video URL",
+            "title": "Video Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "video_url"
+        ],
+        "title": "VideoProcessingRequest",
+        "type": "object"
+      },
+      "VideoToSoftwareRequest": {
+        "description": "Request model for video-to-software conversion",
+        "example": {
+          "deployment_target": "vercel",
+          "features": [
+            "responsive_design",
+            "dark_mode"
+          ],
+          "project_type": "web",
+          "video_url": "https://www.youtube.com/watch?v=bMknfKXIFA8"
+        },
+        "properties": {
+          "deployment_target": {
+            "default": "vercel",
+            "description": "Deployment platform",
+            "title": "Deployment Target",
+            "type": "string"
+          },
+          "features": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": [],
+            "description": "Additional features to implement",
+            "title": "Features"
+          },
+          "project_type": {
+            "default": "web",
+            "description": "Project type (web, api, ml, mobile)",
+            "title": "Project Type",
+            "type": "string"
+          },
+          "url": {
+            "description": "YouTube video URL",
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "title": "VideoToSoftwareRequest",
+        "type": "object"
+      },
+      "VideoToSoftwareResponse": {
+        "description": "Response model for video-to-software conversion",
+        "example": {
+          "build_status": "completed",
+          "code_generation": {
+            "framework": "React"
+          },
+          "deployment": {
+            "status": "success"
+          },
+          "deployment_target": "vercel",
+          "features_implemented": [
+            "responsive_design",
+            "dark_mode"
+          ],
+          "github_repo": "https://github.com/user/sample-video-app",
+          "live_url": "https://sample-video-app.vercel.app",
+          "processing_time": "45.2s",
+          "project_name": "sample-video-app",
+          "project_type": "web",
+          "status": "success",
+          "timestamp": "2024-01-01T12:00:00Z",
+          "video_analysis": {
+            "status": "success"
+          },
+          "video_url": "https://www.youtube.com/watch?v=bMknfKXIFA8"
+        },
+        "properties": {
+          "build_status": {
+            "description": "Build status",
+            "title": "Build Status",
+            "type": "string"
+          },
+          "code_generation": {
+            "additionalProperties": true,
+            "description": "Code generation details",
+            "title": "Code Generation",
+            "type": "object"
+          },
+          "deployment": {
+            "additionalProperties": true,
+            "description": "Deployment information",
+            "title": "Deployment",
+            "type": "object"
+          },
+          "deployment_target": {
+            "description": "Deployment target",
+            "title": "Deployment Target",
+            "type": "string"
+          },
+          "features_implemented": {
+            "description": "Implemented features",
+            "items": {
+              "type": "string"
+            },
+            "title": "Features Implemented",
+            "type": "array"
+          },
+          "github_repo": {
+            "description": "GitHub repository URL",
+            "title": "Github Repo",
+            "type": "string"
+          },
+          "live_url": {
+            "description": "Live deployment URL",
+            "title": "Live Url",
+            "type": "string"
+          },
+          "processing_time": {
+            "description": "Total processing time",
+            "title": "Processing Time",
+            "type": "string"
+          },
+          "project_name": {
+            "description": "Generated project name",
+            "title": "Project Name",
+            "type": "string"
+          },
+          "project_type": {
+            "description": "Project type",
+            "title": "Project Type",
+            "type": "string"
+          },
+          "status": {
+            "description": "Overall status",
+            "title": "Status",
+            "type": "string"
+          },
+          "timestamp": {
+            "description": "Completion timestamp",
+            "format": "date-time",
+            "title": "Timestamp",
+            "type": "string"
+          },
+          "video_analysis": {
+            "additionalProperties": true,
+            "description": "Video analysis results",
+            "title": "Video Analysis",
+            "type": "object"
+          },
+          "video_url": {
+            "description": "Original video URL",
+            "title": "Video Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "video_url",
+          "project_name",
+          "project_type",
+          "deployment_target",
+          "live_url",
+          "github_repo",
+          "build_status",
+          "processing_time",
+          "features_implemented",
+          "video_analysis",
+          "code_generation",
+          "deployment",
+          "status",
+          "timestamp"
+        ],
+        "title": "VideoToSoftwareResponse",
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "ApiKeyAuth": {
+        "in": "header",
+        "name": "X-API-Key",
+        "type": "apiKey"
+      }
+    }
+  },
+  "info": {
+    "description": "\n    ## UVAI Platform API\n\n    **Architecture Features:**\n    - \ud83c\udfd7\ufe0f **Service-Oriented Architecture** with dependency injection\n    - \ud83d\udccb **API Versioning** for backward compatibility\n    - \ud83d\udd04 **Real-time WebSocket** communication\n    - \ud83d\udcca **Comprehensive Monitoring** and health checks\n    - \ud83d\ude80 **Production-ready** with proper error handling\n\n    **Core Capabilities:**\n    - **Video Processing**: AI-powered analysis of YouTube videos\n    - **Markdown Generation**: Automated learning guides and summaries\n    - **Video-to-Software**: Convert videos into deployable applications\n    - **Caching System**: Intelligent caching for improved performance\n    - **Real-time Communication**: WebSocket support for live updates\n\n    **API Versions:**\n    - **v1**: Current stable API with all core features\n    - **Legacy**: Backward compatibility with original endpoints\n\n    **MCP Integration:**\n    - Multi-modal Content Processing with agent orchestration\n    - Support for multiple LLM providers (Gemini, Claude, GPT-4)\n    - Real-time video analysis and action generation\n    ",
+    "title": "YouTube Extension API",
+    "version": "2.0.0",
+    "x-logo": {
+      "url": "https://uvai.io/logo.png"
+    }
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/cache/stats": {
+      "get": {
+        "description": "Legacy cache stats endpoint",
+        "operationId": "legacy_cache_stats_api_cache_stats_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Legacy Cache Stats"
+      }
+    },
+    "/api/cache/{video_id}": {
+      "delete": {
+        "description": "Legacy cache clearing endpoint",
+        "operationId": "legacy_clear_video_cache_api_cache__video_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "video_id",
+            "required": true,
+            "schema": {
+              "title": "Video Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Legacy Clear Video Cache"
+      }
+    },
+    "/api/chat": {
+      "post": {
+        "description": "Legacy chat endpoint - redirects to v1 with data preservation",
+        "operationId": "legacy_chat_api_chat_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Request",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Legacy Chat"
+      }
+    },
+    "/api/process-video": {
+      "post": {
+        "description": "Legacy video processing endpoint",
+        "operationId": "legacy_process_video_api_process_video_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Request",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Legacy Process Video"
+      }
+    },
+    "/api/process-video-markdown": {
+      "post": {
+        "description": "Legacy markdown processing endpoint",
+        "operationId": "legacy_process_video_markdown_api_process_video_markdown_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Request",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Legacy Process Video Markdown"
+      }
+    },
+    "/api/v1/actions/{action_id}": {
+      "put": {
+        "description": "Update action completion status or metadata",
+        "operationId": "update_action_v1_api_v1_actions__action_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "action_id",
+            "required": true,
+            "schema": {
+              "title": "Action Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Payload",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Rate Limited"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Update action status",
+        "tags": [
+          "API v1"
+        ]
+      }
+    },
+    "/api/v1/actions/{video_id}": {
+      "get": {
+        "description": "Retrieve actions generated for a specific processed video",
+        "operationId": "get_actions_by_video_v1_api_v1_actions__video_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "video_id",
+            "required": true,
+            "schema": {
+              "title": "Video Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Rate Limited"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "List actions for a video",
+        "tags": [
+          "API v1"
+        ]
+      }
+    },
+    "/api/v1/agents/a2a/log": {
+      "get": {
+        "description": "Return recent A2A inter-agent messages.",
+        "operationId": "get_a2a_log_api_v1_agents_a2a_log_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "conversation_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Conversation Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Rate Limited"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Get A2A message log",
+        "tags": [
+          "API v1",
+          "Agents"
+        ]
+      }
+    },
+    "/api/v1/agents/a2a/send": {
+      "post": {
+        "description": "Send a context-share or tool-request message between agents.",
+        "operationId": "send_a2a_message_api_v1_agents_a2a_send_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "default": {},
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Rate Limited"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Send an A2A message between agents",
+        "tags": [
+          "API v1",
+          "Agents"
+        ]
+      }
+    },
+    "/api/v1/agents/dispatch": {
+      "post": {
+        "description": "Dispatch specialist agents to act on extracted events.",
+        "operationId": "dispatch_agents_api_v1_agents_dispatch_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentDispatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Rate Limited"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Dispatch agents for extracted events",
+        "tags": [
+          "API v1",
+          "Agents"
+        ]
+      }
+    },
+    "/api/v1/agents/{agent_id}/status": {
+      "get": {
+        "description": "Return the current status of an agent execution.",
+        "operationId": "get_agent_status_api_v1_agents__agent_id__status_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "title": "Agent Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Rate Limited"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Get agent execution status",
+        "tags": [
+          "API v1",
+          "Agents"
+        ]
+      }
+    },
+    "/api/v1/cache": {
+      "delete": {
+        "description": "Clear all cached video processing results",
+        "operationId": "clear_all_cache_v1_api_v1_cache_delete",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Rate Limited"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Clear All Cache",
+        "tags": [
+          "API v1"
+        ]
+      }
+    },
+    "/api/v1/cache/stats": {
+      "get": {
+        "description": "Get comprehensive statistics about cached video processing results",
+        "operationId": "get_cache_stats_v1_api_v1_cache_stats_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CacheStats"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Rate Limited"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Get Cache Statistics",
+        "tags": [
+          "API v1"
+        ]
+      }
+    },
+    "/api/v1/cache/{video_id}": {
+      "delete": {
+        "description": "Clear cached results for a specific video",
+        "operationId": "clear_video_cache_v1_api_v1_cache__video_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "video_id",
+            "required": true,
+            "schema": {
+              "title": "Video Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Rate Limited"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Clear Video Cache",
+        "tags": [
+          "API v1"
+        ]
+      },
+      "get": {
+        "description": "Retrieve cached analysis for a specific video by ID",
+        "operationId": "get_cached_video_v1_api_v1_cache__video_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "video_id",
+            "required": true,
+            "schema": {
+              "title": "Video Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "format",
+            "required": false,
+            "schema": {
+              "default": "markdown",
+              "title": "Format",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Rate Limited"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Get Cached Video Analysis",
+        "tags": [
+          "API v1"
+        ]
+      }
+    },
+    "/api/v1/capabilities": {
+      "get": {
+        "description": "Report availability info for video processing models",
+        "operationId": "get_capabilities_v1_api_v1_capabilities_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Capabilities V1 Api V1 Capabilities Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Rate Limited"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Model capabilities status",
+        "tags": [
+          "API v1"
+        ]
+      }
+    },
+    "/api/v1/chat": {
+      "post": {
+        "description": "Send a message to the AI assistant for help with video processing",
+        "operationId": "chat_v1_api_v1_chat_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Rate Limited"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Chat with AI Assistant",
+        "tags": [
+          "API v1"
+        ]
+      }
+    },
+    "/api/v1/events/extract": {
+      "post": {
+        "description": "Extract actionable events from a transcript or completed job.",
+        "operationId": "extract_events_api_v1_events_extract_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EventExtractRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Rate Limited"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Extract events from transcript",
+        "tags": [
+          "API v1",
+          "Events"
+        ]
+      }
+    },
+    "/api/v1/feedback": {
+      "post": {
+        "description": "Submit feedback about video processing results or the service",
+        "operationId": "submit_feedback_v1_api_v1_feedback_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeedbackRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedbackResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Rate Limited"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Submit Feedback",
+        "tags": [
+          "API v1"
+        ]
+      }
+    },
+    "/api/v1/health": {
+      "get": {
+        "description": "Get basic health status of the API and its components",
+        "operationId": "health_check_v1_api_v1_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Rate Limited"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Health Check",
+        "tags": [
+          "API v1"
+        ]
+      }
+    },
+    "/api/v1/health/detailed": {
+      "get": {
+        "description": "Get comprehensive health status including external connectors",
+        "operationId": "detailed_health_check_v1_api_v1_health_detailed_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Detailed Health Check V1 Api V1 Health Detailed Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Rate Limited"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Detailed Health Check",
+        "tags": [
+          "API v1"
+        ]
+      }
+    },
+    "/api/v1/hybrid/batch": {
+      "post": {
+        "description": "Submit a batch generateContent request and optionally wait for completion.",
+        "operationId": "submit_gemini_batch_api_v1_hybrid_batch_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GeminiBatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GeminiBatchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Rate Limited"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Submit Gemini batch job",
+        "tags": [
+          "API v1"
+        ]
+      }
+    },
+    "/api/v1/hybrid/cache": {
+      "post": {
+        "description": "Create a reusable Gemini cache entry via the hybrid processor.",
+        "operationId": "create_gemini_cache_api_v1_hybrid_cache_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GeminiCacheRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GeminiCacheResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Rate Limited"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Create Gemini cache session",
+        "tags": [
+          "API v1"
+        ]
+      }
+    },
+    "/api/v1/hybrid/ephemeral-token": {
+      "post": {
+        "description": "Generate a short-lived token suitable for client-side uploads.",
+        "operationId": "create_ephemeral_token_api_v1_hybrid_ephemeral_token_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GeminiTokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GeminiTokenResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Rate Limited"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Create Gemini ephemeral token",
+        "tags": [
+          "API v1"
+        ]
+      }
+    },
+    "/api/v1/learning-log": {
+      "get": {
+        "description": "Get learning log entries from processed videos",
+        "operationId": "get_learning_log_v1_api_v1_learning_log_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response Get Learning Log V1 Api V1 Learning Log Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Rate Limited"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Get Learning Log",
+        "tags": [
+          "API v1"
+        ]
+      }
+    },
+    "/api/v1/metrics": {
+      "get": {
+        "description": "Get system metrics in Prometheus format",
+        "operationId": "get_metrics_v1_api_v1_metrics_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              },
+              "text/plain": {}
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Rate Limited"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Get Metrics",
+        "tags": [
+          "API v1"
+        ]
+      }
+    },
+    "/api/v1/performance/alert": {
+      "post": {
+        "operationId": "ingest_performance_alert_v1_api_v1_performance_alert_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Payload",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Rate Limited"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Ingest frontend performance alert",
+        "tags": [
+          "API v1"
+        ]
+      }
+    },
+    "/api/v1/performance/report": {
+      "post": {
+        "operationId": "ingest_performance_report_v1_api_v1_performance_report_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Report",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Rate Limited"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Ingest frontend performance report",
+        "tags": [
+          "API v1"
+        ]
+      }
+    },
+    "/api/v1/process-video": {
+      "post": {
+        "description": "Process a YouTube video and extract information",
+        "operationId": "process_video_v1_api_v1_process_video_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VideoProcessingRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Rate Limited"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Process Video",
+        "tags": [
+          "API v1"
+        ]
+      }
+    },
+    "/api/v1/process-video-markdown": {
+      "post": {
+        "description": "Process a YouTube video and generate markdown analysis with caching",
+        "operationId": "process_video_markdown_v1_api_v1_process_video_markdown_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MarkdownRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarkdownResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Rate Limited"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Process Video to Markdown",
+        "tags": [
+          "API v1"
+        ]
+      }
+    },
+    "/api/v1/transcript-action": {
+      "post": {
+        "description": "Runs the transcript-to-action workflow, producing summaries, project scaffolds, and task boards.",
+        "operationId": "run_transcript_action_api_v1_transcript_action_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TranscriptActionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranscriptActionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Rate Limited"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Extract transcript and produce deployable action plan",
+        "tags": [
+          "API v1"
+        ]
+      }
+    },
+    "/api/v1/video-to-software": {
+      "post": {
+        "description": "Process a YouTube video and generate deployable software application",
+        "operationId": "video_to_software_v1_api_v1_video_to_software_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VideoToSoftwareRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VideoToSoftwareResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Rate Limited"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Convert Video to Software",
+        "tags": [
+          "API v1"
+        ]
+      }
+    },
+    "/api/v1/videos": {
+      "get": {
+        "description": "Get summary list of all processed videos",
+        "operationId": "list_videos_v1_api_v1_videos_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Videos V1 Api V1 Videos Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Rate Limited"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "List Processed Videos",
+        "tags": [
+          "API v1"
+        ]
+      }
+    },
+    "/api/v1/videos/process": {
+      "post": {
+        "description": "Create a background video-processing job and return immediately.",
+        "operationId": "start_video_processing_api_v1_videos_process_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VideoProcessJobRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Rate Limited"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Start async video processing",
+        "tags": [
+          "API v1",
+          "Videos"
+        ]
+      }
+    },
+    "/api/v1/videos/{job_id}/status": {
+      "get": {
+        "description": "Return the current status of a video-processing job.",
+        "operationId": "get_video_job_status_api_v1_videos__job_id__status_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Rate Limited"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Poll video processing status",
+        "tags": [
+          "API v1",
+          "Videos"
+        ]
+      }
+    },
+    "/api/v1/videos/{video_id}": {
+      "get": {
+        "description": "Get detailed information for a specific processed video",
+        "operationId": "get_video_detail_v1_api_v1_videos__video_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "video_id",
+            "required": true,
+            "schema": {
+              "title": "Video Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Rate Limited"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Get Video Details",
+        "tags": [
+          "API v1"
+        ]
+      }
+    },
+    "/connectors/health": {
+      "get": {
+        "description": "Legacy connector health endpoint",
+        "operationId": "legacy_connectors_health_connectors_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Legacy Connectors Health"
+      }
+    },
+    "/health": {
+      "get": {
+        "description": "Legacy health endpoint - redirects to v1",
+        "operationId": "legacy_health_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Legacy Health"
+      }
+    },
+    "/mcp": {
+      "post": {
+        "description": "Bridge endpoint to translate Frontend MCP JSON-RPC calls.\nMOCK IMPLEMENTATION to verify integration contract without heavy ML dependencies.",
+        "operationId": "handle_mcp_request_mcp_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MCPRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Handle Mcp Request"
+      }
+    },
+    "/metrics": {
+      "get": {
+        "description": "Legacy metrics endpoint",
+        "operationId": "legacy_metrics_metrics_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Legacy Metrics"
+      }
+    },
+    "/system/info": {
+      "get": {
+        "description": "Get comprehensive system information",
+        "operationId": "system_info_system_info_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "System Info"
+      }
+    }
+  },
+  "servers": [
+    {
+      "description": "Development server",
+      "url": "http://localhost:8000"
+    },
+    {
+      "description": "Production server",
+      "url": "https://api.uvai.io"
+    }
+  ],
+  "tags": [
+    {
+      "description": "Version 1 of the API - current stable release",
+      "name": "API v1"
+    },
+    {
+      "description": "Health check and monitoring endpoints",
+      "name": "Health"
+    },
+    {
+      "description": "Core video processing and analysis endpoints",
+      "name": "Video Processing"
+    },
+    {
+      "description": "Cache control and statistics endpoints",
+      "name": "Cache Management"
+    },
+    {
+      "description": "Data retrieval and analytics endpoints",
+      "name": "Data & Analytics"
+    }
+  ]
+}

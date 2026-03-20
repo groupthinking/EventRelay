@@ -138,6 +138,7 @@ htmlcov/
 instance/
 logs/
 node_modules/
+sdks/*/dist/
 pnpm-lock.yaml
 quantomcode_private.pem
 research/labs/archive/

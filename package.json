@@ -10,7 +10,9 @@
     "test": "turbo run test",
     "build:web": "cd apps/web && npm run build",
     "dev:web": "cd apps/web && npm run dev",
-    "install:all": "npm install"
+    "install:all": "npm install",
+    "sdk:openapi": "python scripts/export_openapi.py",
+    "sdk:generate": "npm run sdk:openapi && npx stainless generate --config stainless.config.ts"
   },
   "workspaces": [
     "apps/*",

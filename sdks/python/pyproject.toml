@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "eventrelay-sdk"
+version = "0.0.1"
+description = "Python client SDK for the EventRelay API (generated from OpenAPI via Stainless)."
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "httpx>=0.28.0",
+    "pydantic>=2.6.0",
+]
+authors = [{ name = "EventRelay" }]
+license = { text = "MIT" }
+keywords = ["eventrelay", "sdk", "openapi", "stainless"]
+
+[project.urls]
+Homepage = "https://github.com/groupthinking/EventRelay"
+Repository = "https://github.com/groupthinking/EventRelay"
+
+[tool.setuptools]
+package-dir = {"" = "."}
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["eventrelay_sdk*"]

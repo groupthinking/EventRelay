@@ -1,0 +1,29 @@
+{
+  "name": "eventrelay-sdk",
+  "version": "0.0.1",
+  "description": "TypeScript client SDK for the EventRelay API (generated from OpenAPI via Stainless).",
+  "type": "module",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "eventrelay",
+    "video-to-software",
+    "sdk",
+    "stainless",
+    "openapi"
+  ],
+  "author": "EventRelay",
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}

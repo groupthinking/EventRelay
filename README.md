@@ -78,6 +78,12 @@ PYTHONPATH=src python3 -m uvicorn youtube_extension.main:app --port 8000
 cd apps/web && BACKEND_URL=http://localhost:8000 npx next dev --port 3000
 ```
 
+### OpenAPI + SDKs
+
+- Export the backend schema: `python scripts/export_openapi.py` (writes `openapi/eventrelay.openapi.json`).
+- Generate typed SDKs with Stainless: `npm run sdk:generate` (requires `npx stainless`).
+- SDK packages live in `sdks/python` and `sdks/typescript` (see `sdks/README.md` for publish steps).
+
 Open http://localhost:3000/dashboard — paste a YouTube URL and watch it process.
 
 ## How It Works
