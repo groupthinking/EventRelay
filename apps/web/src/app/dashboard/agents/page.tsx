@@ -1,22 +1,37 @@
 'use client';
 
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import Link from 'next/link';
 import { clsx } from 'clsx';
 import AgentFlowVisualizer from '@/components/AgentFlowVisualizer';
 import TracePanel from '@/components/TracePanel';
 import ConsensusIndicator from '@/components/ConsensusIndicator';
 import type { PipelineState } from '@/lib/agent-types';
-import {
-  createDefaultAgents,
-  createDefaultConnections,
-  createNodePositions,
-  simulatePipeline,
-} from '@/lib/agent-pipeline';
+import { createNodePositions } from '@/lib/agent-pipeline';
+import { useAgentPipeline, type PipelineMode } from '@/lib/use-agent-pipeline';
+
+// ── Mode Badge ──
+
+const MODE_CONFIG: Record<PipelineMode, { label: string; color: string; bg: string } | null> = {
+  idle: null,
+  live:       { label: 'Live',       color: 'text-emerald-300', bg: 'bg-emerald-500/15' },
+  serverless: { label: 'Serverless', color: 'text-sky-300',     bg: 'bg-sky-500/15' },
+  demo:       { label: 'Demo',       color: 'text-amber-300',   bg: 'bg-amber-500/15' },
+};
+
+function ModeBadge({ mode }: { mode: PipelineMode }) {
+  const cfg = MODE_CONFIG[mode];
+  if (!cfg) return null;
+  return (
+    <span className={clsx('px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider', cfg.color, cfg.bg)}>
+      {cfg.label}
+    </span>
+  );
+}
 
 // ── Status Header Bar ──
 
-function PipelineStatusBar({ state }: { state: PipelineState }) {
+function PipelineStatusBar({ state, mode }: { state: PipelineState; mode: PipelineMode }) {
   const statusConfig = {
     idle:       { label: 'Ready',      color: 'text-white/40',     dot: 'bg-gray-500',    bg: 'bg-white/[0.03]' },
     validating: { label: 'Validating', color: 'text-amber-400',    dot: 'bg-amber-400',   bg: 'bg-amber-500/10' },
@@ -32,7 +47,7 @@ function PipelineStatusBar({ state }: { state: PipelineState }) {
   const total = agentList.length;
 
   return (
-    <div className="flex items-center gap-6">
+    <div className="flex items-center gap-4">
       {/* Status badge */}
       <div className={clsx('flex items-center gap-2 px-3 py-1.5 rounded-lg border border-white/[0.05]', cfg.bg)}>
         <span className="relative flex h-2 w-2">
@@ -45,6 +60,9 @@ function PipelineStatusBar({ state }: { state: PipelineState }) {
           {cfg.label}
         </span>
       </div>
+
+      {/* Mode badge */}
+      <ModeBadge mode={mode} />
 
       {/* Agent counts */}
       {state.status === 'processing' && (
@@ -195,67 +213,21 @@ function AgentDetailPanel({
 export default function AgentPipelinePage() {
   const [videoUrl, setVideoUrl] = useState('');
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
-  const cancelRef = useRef<(() => void) | null>(null);
-
-  const [pipelineState, setPipelineState] = useState<PipelineState>({
-    id: 'default',
-    videoUrl: '',
-    videoTitle: '',
-    status: 'idle',
-    agents: createDefaultAgents(),
-    connections: createDefaultConnections(),
-    trace: [],
-  });
+  const { state: pipelineState, mode, startPipeline, resetPipeline } = useAgentPipeline();
 
   const positions = createNodePositions();
 
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      cancelRef.current?.();
-    };
-  }, []);
-
   const handleStart = useCallback(() => {
     if (!videoUrl.trim()) return;
-
-    // Cancel any existing simulation
-    cancelRef.current?.();
-
-    // Reset state
-    setPipelineState({
-      id: `pipeline_${Date.now()}`,
-      videoUrl,
-      videoTitle: `Processing: ${videoUrl.length > 50 ? videoUrl.substring(0, 47) + '…' : videoUrl}`,
-      status: 'validating',
-      startedAt: new Date().toISOString(),
-      agents: createDefaultAgents(),
-      connections: createDefaultConnections(),
-      trace: [],
-    });
     setSelectedAgentId(null);
-
-    // Start simulation
-    const { cancel } = simulatePipeline(videoUrl, videoUrl, (newState) => {
-      setPipelineState(newState);
-    });
-    cancelRef.current = cancel;
-  }, [videoUrl]);
+    startPipeline(videoUrl);
+  }, [videoUrl, startPipeline]);
 
   const handleReset = useCallback(() => {
-    cancelRef.current?.();
     setSelectedAgentId(null);
-    setPipelineState({
-      id: 'default',
-      videoUrl: '',
-      videoTitle: '',
-      status: 'idle',
-      agents: createDefaultAgents(),
-      connections: createDefaultConnections(),
-      trace: [],
-    });
+    resetPipeline();
     setVideoUrl('');
-  }, []);
+  }, [resetPipeline]);
 
   return (
     <div className="h-screen flex flex-col text-white overflow-hidden bg-surface-950">
@@ -278,7 +250,7 @@ export default function AgentPipelinePage() {
           </div>
         </div>
 
-        <PipelineStatusBar state={pipelineState} />
+        <PipelineStatusBar state={pipelineState} mode={mode} />
       </nav>
 
       {/* Main content area: 3-column layout */}
