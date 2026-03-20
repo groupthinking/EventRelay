@@ -128,6 +128,33 @@ echo ""
 echo -e "${GREEN}=== Deployment Successful ===${NC}"
 echo "Service URL: ${SERVICE_URL}"
 echo ""
+
+# Step 6: Map custom domain api.uvai.io (idempotent)
+echo -e "${YELLOW}Step 6: Mapping custom domain api.uvai.io...${NC}"
+
+if gcloud run domain-mappings describe \
+    --domain=api.uvai.io \
+    --region="${REGION}" \
+    --project="${PROJECT_ID}" &>/dev/null; then
+    echo -e "${GREEN}✓ Domain mapping already exists for api.uvai.io${NC}"
+else
+    gcloud run domain-mappings create \
+        --service="${SERVICE_NAME}" \
+        --domain=api.uvai.io \
+        --region="${REGION}" \
+        --project="${PROJECT_ID}"
+    echo -e "${GREEN}✓ Domain mapping created for api.uvai.io${NC}"
+    echo ""
+    echo "ACTION REQUIRED: Add the following DNS records to GoDaddy for uvai.io:"
+    gcloud run domain-mappings describe \
+        --domain=api.uvai.io \
+        --region="${REGION}" \
+        --project="${PROJECT_ID}" \
+        --format='value(status.resourceRecords)'
+fi
+
+echo ""
 echo "Quick verification commands:"
 echo "  curl ${SERVICE_URL}/api/v1/health"
+echo "  curl https://api.uvai.io/api/v1/health"
 echo "  curl -X POST ${SERVICE_URL}/api/v1/chat -H 'Content-Type: application/json' -d '{\"message\": \"Hello\"}'"
