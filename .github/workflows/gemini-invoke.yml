@@ -1,0 +1,106 @@
+name: Gemini Invoke
+
+# Direct Gemini invocation from issue comments.
+# Usage: post a comment on any issue containing:
+#   @gemini <your prompt or question>
+#
+# Gemini will respond directly in the thread.
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  invoke:
+    name: Invoke Gemini
+    runs-on: ubuntu-latest
+    # Only trigger when @gemini (but not @gemini-cli) appears in the comment
+    if: >
+      contains(github.event.comment.body, '@gemini') &&
+      !contains(github.event.comment.body, '@gemini-cli')
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install google-generativeai
+        run: pip install google-generativeai
+
+      - name: Extract prompt
+        id: prompt
+        run: |
+          BODY="${{ github.event.comment.body }}"
+          # Everything after the first @gemini token is the prompt
+          PROMPT=$(python3 - <<'EOF'
+          import re, os
+          body = """${{ github.event.comment.body }}"""
+          # Remove the @gemini trigger and trim
+          prompt = re.sub(r'@gemini\b', '', body, count=1).strip()
+          print(prompt[:4000])
+          EOF
+          )
+          echo "prompt<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$PROMPT" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Invoke Gemini
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          USER_PROMPT: ${{ steps.prompt.outputs.prompt }}
+        run: |
+          python - <<'PYEOF'
+          import os, sys
+
+          api_key = os.environ.get("GEMINI_API_KEY", "")
+          issue_title = os.environ.get("ISSUE_TITLE", "")
+          issue_body = os.environ.get("ISSUE_BODY", "")[:2000]
+          user_prompt = os.environ.get("USER_PROMPT", "").strip()
+
+          if not api_key:
+              response = (
+                  "⚠️ **Gemini**: `GEMINI_API_KEY` secret is not configured.\n\n"
+                  "Please add it to this repository's secrets to enable Gemini invocations."
+              )
+          elif not user_prompt:
+              response = (
+                  "ℹ️ **Gemini**: No prompt detected after `@gemini`.\n\n"
+                  "Usage: `@gemini <your question or prompt>`"
+              )
+          else:
+              import google.generativeai as genai
+              genai.configure(api_key=api_key)
+              model = genai.GenerativeModel("gemini-1.5-flash")
+
+              system_context = (
+                  "You are a helpful AI assistant integrated into the EventRelay GitHub repository. "
+                  "EventRelay is an AI-powered video automation platform that transforms YouTube videos "
+                  "into actionable workflows. Answer questions clearly and concisely.\n\n"
+                  f"Issue context — Title: {issue_title}\nDescription: {issue_body}\n\n"
+              )
+              full_prompt = system_context + f"User question: {user_prompt}"
+
+              try:
+                  result = model.generate_content(full_prompt)
+                  response = f"## 🤖 Gemini Response\n\n{result.text}"
+              except Exception as exc:
+                  response = f"⚠️ Gemini invocation failed: {exc}"
+
+          print(response)
+          with open("/tmp/gemini_response.txt", "w") as f:
+              f.write(response)
+          PYEOF
+
+      - name: Post response
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          RESPONSE=$(cat /tmp/gemini_response.txt)
+          gh issue comment "${{ github.event.issue.number }}" \
+            --repo "${{ github.repository }}" \
+            --body "$RESPONSE"

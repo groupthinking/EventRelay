@@ -1,0 +1,104 @@
+name: Gemini PR Review
+
+# Automatically reviews every pull request using Gemini AI.
+
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  review:
+    name: AI-powered PR review
+    runs-on: ubuntu-latest
+    # Skip draft PRs
+    if: github.event.pull_request.draft == false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install google-generativeai
+        run: pip install google-generativeai
+
+      - name: Fetch PR diff
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr diff "${{ github.event.pull_request.number }}" \
+            --repo "${{ github.repository }}" > /tmp/pr.diff 2>/dev/null || true
+          echo "Diff size: $(wc -c < /tmp/pr.diff) bytes"
+
+      - name: Generate Gemini review
+        id: review
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          python - <<'PYEOF'
+          import os, sys
+
+          api_key = os.environ.get("GEMINI_API_KEY", "")
+          pr_title = os.environ.get("PR_TITLE", "")
+          pr_body = os.environ.get("PR_BODY", "")
+
+          # Read diff (truncate to stay within model limits)
+          try:
+              with open("/tmp/pr.diff") as f:
+                  diff = f.read()[:16000]
+          except FileNotFoundError:
+              diff = ""
+
+          if not api_key:
+              review = (
+                  "⚠️ **Gemini PR Review**: `GEMINI_API_KEY` secret is not configured.\n\n"
+                  "Add the secret to enable automated AI code review on pull requests."
+              )
+          elif not diff:
+              review = "ℹ️ **Gemini PR Review**: No diff available for this PR."
+          else:
+              import google.generativeai as genai
+              genai.configure(api_key=api_key)
+              model = genai.GenerativeModel("gemini-1.5-flash")
+
+              prompt = (
+                  "You are an expert software engineer performing a thorough code review. "
+                  "Analyze the pull request diff below and provide structured feedback.\n\n"
+                  "Format your review with these sections (omit sections with no findings):\n"
+                  "## Summary\n"
+                  "## 🐛 Bugs & Issues\n"
+                  "## 🔒 Security Concerns\n"
+                  "## ✅ Positive Aspects\n"
+                  "## 💡 Suggestions\n\n"
+                  f"**PR Title:** {pr_title}\n"
+                  f"**PR Description:** {pr_body[:2000]}\n\n"
+                  f"**Diff:**\n```diff\n{diff}\n```"
+              )
+
+              try:
+                  response = model.generate_content(prompt)
+                  review = f"## 🤖 Gemini Automated PR Review\n\n{response.text}"
+              except Exception as exc:
+                  review = f"⚠️ Gemini review failed: {exc}"
+
+          print(review)
+          with open("/tmp/review.txt", "w") as f:
+              f.write(review)
+          PYEOF
+
+      - name: Post review comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          REVIEW=$(cat /tmp/review.txt)
+          gh pr comment "${{ github.event.pull_request.number }}" \
+            --repo "${{ github.repository }}" \
+            --body "$REVIEW"

@@ -1,0 +1,97 @@
+name: Emergency Stop
+
+# Kill switch: cancels all currently running workflow runs except this one.
+# Useful when a runaway automation (e.g. autonomous-video-processing) needs to be halted.
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_workflow:
+        description: 'Workflow file name to cancel (e.g. autonomous-video-processing.yml). Leave blank to cancel ALL running workflows.'
+        required: false
+        default: ''
+      reason:
+        description: 'Reason for emergency stop (logged in summary)'
+        required: false
+        default: 'Manual emergency stop'
+      confirm:
+        description: 'Type CONFIRM to proceed'
+        required: true
+        default: ''
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  stop:
+    name: Cancel running workflows
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate confirmation
+        run: |
+          if [ "${{ github.event.inputs.confirm }}" != "CONFIRM" ]; then
+            echo "❌ Confirmation required. Type CONFIRM in the 'confirm' input to proceed."
+            exit 1
+          fi
+          echo "✅ Confirmation accepted"
+
+      - name: Cancel workflows
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET: ${{ github.event.inputs.target_workflow }}
+          CURRENT_RUN_ID: ${{ github.run_id }}
+          REPO: ${{ github.repository }}
+        run: |
+          python - <<'PYEOF'
+          import os, json, subprocess, sys
+
+          target = os.environ.get("TARGET", "").strip()
+          current_run_id = os.environ["CURRENT_RUN_ID"]
+          repo = os.environ["REPO"]
+
+          # Fetch in_progress and queued runs
+          cancelled, failed = 0, 0
+          for status in ("in_progress", "queued", "waiting"):
+              cmd = ["gh", "run", "list",
+                     "--repo", repo,
+                     "--status", status,
+                     "--limit", "100",
+                     "--json", "databaseId,workflowName,name,status"]
+              if target:
+                  cmd += ["--workflow", target]
+              result = subprocess.run(cmd, capture_output=True, text=True)
+              if result.returncode != 0:
+                  print(f"Warning: could not list {status} runs: {result.stderr}", file=sys.stderr)
+                  continue
+              runs = json.loads(result.stdout or "[]")
+              for run in runs:
+                  run_id = str(run["databaseId"])
+                  if run_id == current_run_id:
+                      print(f"  Skipping current run {run_id}")
+                      continue
+                  r = subprocess.run(
+                      ["gh", "run", "cancel", run_id, "--repo", repo],
+                      capture_output=True, text=True
+                  )
+                  if r.returncode == 0:
+                      print(f"  ✓ Cancelled run {run_id}: {run.get('workflowName', '')} ({status})")
+                      cancelled += 1
+                  else:
+                      print(f"  ✗ Failed to cancel {run_id}: {r.stderr.strip()}", file=sys.stderr)
+                      failed += 1
+
+          print(f"\nEmergency stop complete — cancelled={cancelled} failed={failed}")
+          PYEOF
+
+      - name: Print summary
+        if: always()
+        run: |
+          echo "## 🛑 Emergency Stop Summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Field | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|-------|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Target workflow | ${{ github.event.inputs.target_workflow || '(all)' }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Reason | ${{ github.event.inputs.reason }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Triggered by | ${{ github.actor }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Timestamp | $(date -u) |" >> "$GITHUB_STEP_SUMMARY"

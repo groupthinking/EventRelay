@@ -1,0 +1,155 @@
+name: Gemini CLI Dispatch
+
+# Triggered when someone comments @gemini-cli <command> on a PR or issue.
+# Supported commands:
+#   /review      — AI code review of the PR diff
+#   /summarize   — Summarize the issue or PR description
+#   /help        — List available commands
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  dispatch:
+    name: Dispatch Gemini command
+    runs-on: ubuntu-latest
+    # Only run when the comment contains @gemini-cli
+    if: >
+      contains(github.event.comment.body, '@gemini-cli') &&
+      (github.event.issue.pull_request != null || github.event.issue.number != null)
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # For PRs fetch the head ref so we can diff it
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install google-generativeai
+        run: pip install google-generativeai
+
+      - name: Parse command
+        id: parse
+        run: |
+          BODY="${{ github.event.comment.body }}"
+          # Extract the command that follows @gemini-cli
+          CMD=$(echo "$BODY" | grep -oP '(?<=@gemini-cli\s)/\S+' | head -1)
+          CMD=${CMD:-/help}
+          echo "command=$CMD" >> "$GITHUB_OUTPUT"
+          echo "Detected command: $CMD"
+
+      - name: Fetch PR diff (if applicable)
+        id: diff
+        if: github.event.issue.pull_request != null
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PR_NUMBER="${{ github.event.issue.number }}"
+          gh pr diff "$PR_NUMBER" --repo "${{ github.repository }}" > /tmp/pr.diff 2>/dev/null || true
+          DIFF_SIZE=$(wc -c < /tmp/pr.diff)
+          echo "diff_size=$DIFF_SIZE" >> "$GITHUB_OUTPUT"
+          echo "PR diff size: $DIFF_SIZE bytes"
+
+      - name: Run Gemini command
+        id: gemini
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          COMMAND: ${{ steps.parse.outputs.command }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          IS_PR: ${{ github.event.issue.pull_request != null }}
+        run: |
+          python - <<'PYEOF'
+          import os, sys, json
+
+          api_key = os.environ.get("GEMINI_API_KEY", "")
+          command = os.environ.get("COMMAND", "/help")
+          is_pr = os.environ.get("IS_PR", "false").lower() == "true"
+          issue_title = os.environ.get("ISSUE_TITLE", "")
+          issue_body = os.environ.get("ISSUE_BODY", "")
+          comment_body = os.environ.get("COMMENT_BODY", "")
+
+          if not api_key:
+              response = (
+                  "⚠️ **Gemini CLI**: `GEMINI_API_KEY` secret is not configured.\n\n"
+                  "Please add it to this repository's secrets to enable Gemini commands."
+              )
+              print(response)
+              with open("/tmp/gemini_response.txt", "w") as f:
+                  f.write(response)
+              sys.exit(0)
+
+          import google.generativeai as genai
+          genai.configure(api_key=api_key)
+          model = genai.GenerativeModel("gemini-1.5-flash")
+
+          if command == "/review":
+              diff_content = ""
+              try:
+                  with open("/tmp/pr.diff") as f:
+                      diff_content = f.read()[:12000]
+              except FileNotFoundError:
+                  pass
+              if not is_pr or not diff_content:
+                  response = "ℹ️ `/review` only works on pull requests with a diff."
+              else:
+                  prompt = (
+                      "You are an expert code reviewer. Review the following pull request diff "
+                      "and provide concise, actionable feedback. Focus on bugs, security issues, "
+                      "and code quality. Format your response with clear sections.\n\n"
+                      f"PR Title: {issue_title}\n\n"
+                      f"Diff:\n```diff\n{diff_content}\n```"
+                  )
+                  result = model.generate_content(prompt)
+                  response = f"## 🤖 Gemini Code Review\n\n{result.text}"
+
+          elif command == "/summarize":
+              context = f"Title: {issue_title}\n\nDescription:\n{issue_body[:6000]}"
+              label = "pull request" if is_pr else "issue"
+              prompt = (
+                  f"Summarize the following GitHub {label} in 3-5 bullet points. "
+                  f"Be concise and focus on the key points.\n\n{context}"
+              )
+              result = model.generate_content(prompt)
+              response = f"## 🤖 Gemini Summary\n\n{result.text}"
+
+          elif command == "/help":
+              response = (
+                  "## 🤖 Gemini CLI — Available Commands\n\n"
+                  "| Command | Description |\n"
+                  "|---------|-------------|\n"
+                  "| `@gemini-cli /review` | AI code review of the PR diff |\n"
+                  "| `@gemini-cli /summarize` | Summarize this issue or PR |\n"
+                  "| `@gemini-cli /help` | Show this help message |\n\n"
+                  "_Powered by Google Gemini 1.5 Flash_"
+              )
+
+          else:
+              response = (
+                  f"❓ Unknown command: `{command}`\n\n"
+                  "Use `@gemini-cli /help` to see available commands."
+              )
+
+          print(response)
+          with open("/tmp/gemini_response.txt", "w") as f:
+              f.write(response)
+          PYEOF
+
+      - name: Post response as comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          RESPONSE=$(cat /tmp/gemini_response.txt)
+          ISSUE_NUMBER="${{ github.event.issue.number }}"
+          gh issue comment "$ISSUE_NUMBER" \
+            --repo "${{ github.repository }}" \
+            --body "$RESPONSE"
