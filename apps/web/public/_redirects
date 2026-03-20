@@ -1,0 +1,4 @@
+# Cloudflare Pages redirect rules
+# Redirect all traffic from uvai-io.pages.dev to the canonical domain (uvai.io).
+# Status 301 = permanent redirect.
+https://uvai-io.pages.dev/*  https://uvai.io/:splat  301
