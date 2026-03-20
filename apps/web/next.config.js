@@ -1,4 +1,6 @@
 /** @type {import('next').NextConfig} */
+const CANONICAL_DOMAIN = 'uvai.io';
+
 const nextConfig = {
   reactStrictMode: true,
   images: {
