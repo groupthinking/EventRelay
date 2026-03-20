@@ -153,6 +153,7 @@ src/youtube_extension/backend/repositories/__init__.py
 src/youtube_extension/backend/repositories/base.py
 src/youtube_extension/backend/services/api_cost_monitor.py
 src/youtube_extension/backend/services/cache_service.py
+src/youtube_extension/backend/services/comparative_analysis.py
 src/youtube_extension/backend/services/comprehensive_benchmarking.py
 src/youtube_extension/backend/services/data_service.py
 src/youtube_extension/backend/services/database_cleanup_service.py

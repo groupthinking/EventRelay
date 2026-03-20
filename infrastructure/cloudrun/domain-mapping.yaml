@@ -1,0 +1,15 @@
+# Cloud Run Domain Mapping for api.uvai.io
+# Apply with: gcloud run domain-mappings create --service uvai-backend --domain api.uvai.io --region us-central1
+# Documentation: https://cloud.google.com/run/docs/mapping-custom-domains
+
+apiVersion: domains.cloudrun.com/v1alpha1
+kind: DomainMapping
+metadata:
+  name: api.uvai.io
+  namespace: uvai-730bb
+  labels:
+    cloud.googleapis.com/location: us-central1
+spec:
+  routeName: uvai-backend
+  certificateMode: AUTOMATIC
+  forceOverride: false

@@ -43,6 +43,16 @@ export class ModelRegistry {
         });
         break;
 
+      case 'liquidai':
+        // LiquidAI LFM2-VL is accessed via its MCP HTTP server.
+        // We use the OpenAI-compatible shim exposed by the HF Space so
+        // that the Vercel AI SDK can drive it through the same interface.
+        model = openai(config.model || 'lfm2-vl', {
+          baseURL: 'https://liquidai-lfm2-mcp.static.hf.space/v1',
+          apiKey: config.apiKey,
+        });
+        break;
+
       default:
         throw new Error(`Unsupported provider: ${config.provider}`);
     }
@@ -69,7 +79,8 @@ export const DEFAULT_MODELS: Record<AIProvider, string> = {
   claude: 'claude-3-5-sonnet-20241022',
   gemini: 'gemini-2.0-flash-exp',
   openai: 'gpt-4o',
+  liquidai: 'lfm2-vl',
 };
 
-// Default fallback order (Grok -> Claude -> Gemini)
-export const DEFAULT_FALLBACK_ORDER: AIProvider[] = ['grok', 'claude', 'gemini'];
+// Default fallback order (Grok -> Claude -> Gemini -> LiquidAI)
+export const DEFAULT_FALLBACK_ORDER: AIProvider[] = ['grok', 'claude', 'gemini', 'liquidai'];
