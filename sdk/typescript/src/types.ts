@@ -1,0 +1,181 @@
+/**
+ * EventRelay SDK — shared TypeScript types.
+ *
+ * These types mirror the Pydantic models in the backend
+ * (src/youtube_extension/backend/api/v1/models.py) and are derived from
+ * openapi/eventrelay.openapi.json.
+ */
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+export type JobStatus =
+  | "pending"
+  | "downloading"
+  | "transcribing"
+  | "extracting"
+  | "complete"
+  | "failed";
+
+export type AgentStatus = "queued" | "running" | "complete" | "failed";
+
+// ---------------------------------------------------------------------------
+// Video Processing
+// ---------------------------------------------------------------------------
+
+export interface VideoProcessJobRequest {
+  /** Full YouTube video URL */
+  video_url: string;
+  /** Transcript language code (default "en") */
+  language?: string;
+  /** Optional processing overrides */
+  options?: Record<string, unknown>;
+}
+
+export interface VideoProcessJobResponse {
+  job_id: string;
+  video_url: string;
+  status: JobStatus;
+}
+
+export interface VideoJobStatusResponse {
+  job_id: string;
+  status: JobStatus;
+  /** Progress percentage 0–100 */
+  progress: number;
+  video_url?: string;
+  transcript?: string;
+  metadata?: Record<string, unknown>;
+  error?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Event Extraction
+// ---------------------------------------------------------------------------
+
+export interface EventExtractRequest {
+  /** Job ID from video processing */
+  job_id?: string;
+  /** Raw transcript text */
+  transcript?: string;
+  video_url?: string;
+}
+
+export interface ExtractedEvent {
+  id: string;
+  /** "action" | "mention" | "topic" | "insight" */
+  type: string;
+  title: string;
+  description?: string;
+  /** Time in video, e.g. "02:15" */
+  timestamp?: string;
+  /** Confidence score 0–1 */
+  confidence: number;
+}
+
+export interface EventExtractResponse {
+  job_id?: string;
+  events: ExtractedEvent[];
+  event_count: number;
+}
+
+// ---------------------------------------------------------------------------
+// Agent Dispatch
+// ---------------------------------------------------------------------------
+
+export interface AgentDispatchRequest {
+  job_id?: string;
+  events?: Record<string, unknown>[];
+  /** Transcript — events will be auto-extracted when events is empty */
+  transcript?: string;
+  /** Restrict dispatch to specific agent type identifiers */
+  agent_types?: string[];
+}
+
+export interface AgentExecution {
+  agent_id: string;
+  agent_type: string;
+  status: AgentStatus;
+  progress: number;
+  event_id?: string;
+  result?: Record<string, unknown>;
+  error?: string;
+}
+
+export interface AgentDispatchResponse {
+  dispatch_id: string;
+  executions: AgentExecution[];
+}
+
+export interface AgentStatusResponse {
+  agent_id: string;
+  agent_type: string;
+  status: AgentStatus;
+  progress: number;
+  result?: Record<string, unknown>;
+  error?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Transcript Action
+// ---------------------------------------------------------------------------
+
+export interface TranscriptActionRequest {
+  video_url: string;
+  action?: string;
+  options?: Record<string, unknown>;
+}
+
+export interface TranscriptActionResponse {
+  video_url: string;
+  transcript?: Record<string, unknown>;
+  actions: Record<string, unknown>[];
+  status: string;
+}
+
+// ---------------------------------------------------------------------------
+// Chat
+// ---------------------------------------------------------------------------
+
+export interface ChatRequest {
+  query: string;
+  video_id?: string;
+  video_url?: string;
+  context?: string;
+  session_id?: string;
+  history?: Array<Record<string, string>>;
+}
+
+export interface ChatResponse {
+  response: string;
+  status: string;
+  session_id: string;
+  timestamp: string;
+}
+
+// ---------------------------------------------------------------------------
+// Health
+// ---------------------------------------------------------------------------
+
+export interface HealthResponse {
+  status: string;
+  version?: string;
+  timestamp?: string;
+  services?: Record<string, unknown>;
+}
+
+// ---------------------------------------------------------------------------
+// Client configuration
+// ---------------------------------------------------------------------------
+
+export interface EventRelayClientOptions {
+  /** API key — falls back to EVENTRELAY_API_KEY env variable */
+  apiKey?: string;
+  /** Base URL (default: https://api.uvai.io) */
+  baseUrl?: string;
+  /** HTTP timeout in milliseconds (default: 60000) */
+  timeout?: number;
+  /** Max retry attempts on transient errors (default: 2) */
+  maxRetries?: number;
+}

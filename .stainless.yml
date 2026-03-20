@@ -1,0 +1,105 @@
+# Stainless SDK Configuration for EventRelay
+# =============================================
+# This file configures the Stainless SDK generator to produce
+# type-safe Python and TypeScript clients from the EventRelay OpenAPI spec.
+#
+# Documentation: https://stainlessapi.com/docs/configuration
+# OpenAPI spec:  openapi/eventrelay.openapi.json
+
+organization:
+  name: eventrelay
+
+# Source OpenAPI specification
+openapi:
+  path: openapi/eventrelay.openapi.json
+
+# SDK targets to generate
+targets:
+  python:
+    package_name: eventrelay-sdk
+    project_name: eventrelay-sdk
+    production_repo: groupthinking/eventrelay-python
+
+  typescript:
+    package_name: "@eventrelay/sdk"
+    production_repo: groupthinking/eventrelay-node
+
+# API resource groupings — map paths to SDK resource classes
+resources:
+  videos:
+    methods:
+      process:
+        type: post
+        endpoint: POST /api/v1/videos/process
+      get_status:
+        type: get
+        endpoint: GET /api/v1/videos/{job_id}/status
+      list:
+        type: get
+        endpoint: GET /api/v1/videos
+      retrieve:
+        type: get
+        endpoint: GET /api/v1/videos/{video_id}
+      delete:
+        type: delete
+        endpoint: DELETE /api/v1/cache/{video_id}
+      process_markdown:
+        type: post
+        endpoint: POST /api/v1/process-video-markdown
+
+  events:
+    methods:
+      extract:
+        type: post
+        endpoint: POST /api/v1/events/extract
+
+  agents:
+    methods:
+      dispatch:
+        type: post
+        endpoint: POST /api/v1/agents/dispatch
+      get_status:
+        type: get
+        endpoint: GET /api/v1/agents/{agent_id}/status
+
+  transcript:
+    methods:
+      action:
+        type: post
+        endpoint: POST /api/v1/transcript-action
+
+  health:
+    methods:
+      check:
+        type: get
+        endpoint: GET /api/v1/health
+      detailed:
+        type: get
+        endpoint: GET /api/v1/health/detailed
+
+  chat:
+    methods:
+      send:
+        type: post
+        endpoint: POST /api/v1/chat
+
+# Authentication configuration
+environments:
+  production:
+    url: https://api.uvai.io
+  development:
+    url: http://localhost:8000
+
+# Pagination configuration
+pagination:
+  type: offset
+  page_param: page
+  page_size_param: page_size
+
+# Retry configuration
+retries:
+  default: 2
+  status_codes: [429, 500, 502, 503, 504]
+
+# Timeout defaults (seconds)
+timeout: 60.0
