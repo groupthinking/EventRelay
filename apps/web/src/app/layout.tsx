@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next';
+import { Analytics } from '@vercel/analytics/next';
 import './globals.css';
 
 // Font CSS variables are defined via <link> to Google Fonts in <head> and
@@ -8,37 +9,37 @@ import './globals.css';
 
 export const metadata: Metadata = {
   title: {
-    default: 'EventRelay — Turn Any Video into Structured Intelligence',
+    default: 'EventRelay — Video to Software',
     template: '%s | EventRelay',
   },
-  description: 'Paste a YouTube URL. Get transcripts, extracted events, action items, and AI-powered insights in seconds. Built for teams who learn from video.',
-  keywords: ['video intelligence', 'AI video analysis', 'event extraction', 'meeting transcription', 'action items', 'video API', 'YouTube analysis', 'EventRelay'],
-  authors: [{ name: 'EventRelay Team' }],
+  description: 'Paste a YouTube URL. AI analyzes the video, extracts technologies and concepts, generates a project scaffold, and deploys it.',
+  keywords: ['video to software', 'AI video analysis', 'video to code', 'agentic video', 'code generation', 'video API'],
+  authors: [{ name: 'EventRelay' }],
   creator: 'EventRelay',
   publisher: 'EventRelay',
-  metadataBase: new URL('https://eventrelay.ai'),
+  metadataBase: new URL('https://v0-uvai.vercel.app'),
   openGraph: {
     type: 'website',
     locale: 'en_US',
-    url: 'https://eventrelay.ai',
+    url: 'https://v0-uvai.vercel.app',
     siteName: 'EventRelay',
-    title: 'EventRelay — Turn Any Video into Structured Intelligence',
-    description: 'Paste a YouTube URL. Get transcripts, extracted events, action items, and AI-powered insights in seconds.',
+    title: 'EventRelay — Video to Software',
+    description: 'Paste a YouTube URL. AI analyzes the video, extracts technologies and concepts, generates a project scaffold, and deploys it.',
     images: [
       {
         url: '/og-image.png',
         width: 1200,
         height: 630,
-        alt: 'EventRelay — Video Intelligence Platform',
+        alt: 'EventRelay — Agentic Video Execution Platform',
       },
     ],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'EventRelay — Turn Any Video into Structured Intelligence',
-    description: 'Paste a YouTube URL. Get transcripts, extracted events, action items, and AI insights in seconds.',
+    title: 'EventRelay — Video to Software',
+    description: 'Paste a YouTube URL. AI analyzes the video, extracts technologies and concepts, generates a project scaffold, and deploys it.',
     images: ['/og-image.png'],
-    creator: '@eventrelay_ai',
+    creator: '@groupthinking',
   },
   robots: {
     index: true,
@@ -95,6 +96,7 @@ export default function RootLayout({
         <div className="relative z-10">
           {children}
         </div>
+        <Analytics />
       </body>
     </html>
   );

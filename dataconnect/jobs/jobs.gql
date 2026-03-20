@@ -5,9 +5,10 @@ mutation createVideoJob(
   $videoUrl: String!
   $source: String!
   $taskType: String!
-) @auth(level: PUBLIC) {
+) @auth(level: USER) {
   videoJob_insert(
     data: {
+      userId_expr: "auth.uid"
       videoUrl: $videoUrl
       source: $source
       taskType: $taskType
@@ -22,9 +23,9 @@ mutation updateJobStatus(
   $id: UUID!
   $status: String!
   $executedAgents: [String!]
-) @auth(level: PUBLIC) {
-  videoJob_update(
-    id: $id
+) @auth(level: USER) {
+  videoJob_updateMany(
+    where: { id: { eq: $id }, userId: { eq_expr: "auth.uid" } }
     data: {
       status: $status
       executedAgents: $executedAgents
@@ -35,9 +36,9 @@ mutation updateJobStatus(
 
 # Complete a job with result
 mutation completeJob($id: UUID!, $resultJson: String!, $title: String)
-@auth(level: PUBLIC) {
-  videoJob_update(
-    id: $id
+@auth(level: USER) {
+  videoJob_updateMany(
+    where: { id: { eq: $id }, userId: { eq_expr: "auth.uid" } }
     data: {
       status: "COMPLETED"
       resultJson: $resultJson
@@ -48,9 +49,9 @@ mutation completeJob($id: UUID!, $resultJson: String!, $title: String)
 }
 
 # Fail a job with error
-mutation failJob($id: UUID!, $error: String!) @auth(level: PUBLIC) {
-  videoJob_update(
-    id: $id
+mutation failJob($id: UUID!, $error: String!) @auth(level: USER) {
+  videoJob_updateMany(
+    where: { id: { eq: $id }, userId: { eq_expr: "auth.uid" } }
     data: { status: "FAILED", error: $error, updatedAt_expr: "request.time" }
   )
 }
@@ -61,9 +62,10 @@ mutation recordJobEvent(
   $eventType: String!
   $agent: String
   $details: String
-) @auth(level: PUBLIC) {
+) @auth(level: USER) {
   jobEvent_insert(
     data: {
+      userId_expr: "auth.uid"
       job: { id: $jobId }
       eventType: $eventType
       agent: $agent
@@ -73,8 +75,8 @@ mutation recordJobEvent(
 }
 
 # Get job by ID
-query getJob($id: UUID!) @auth(level: PUBLIC) {
-  videoJob(id: $id) {
+query getJob($id: UUID!) @auth(level: USER) {
+  videoJobs(where: { id: { eq: $id }, userId: { eq_expr: "auth.uid" } }) {
     id
     videoUrl
     source
@@ -90,8 +92,12 @@ query getJob($id: UUID!) @auth(level: PUBLIC) {
 }
 
 # List all jobs
-query listJobs($limit: Int = 50) @auth(level: PUBLIC) {
-  videoJobs(orderBy: [{ createdAt: DESC }], limit: $limit) {
+query listJobs($limit: Int = 50) @auth(level: USER) {
+  videoJobs(
+    where: { userId: { eq_expr: "auth.uid" } }
+    orderBy: [{ createdAt: DESC }]
+    limit: $limit
+  ) {
     id
     videoUrl
     source
@@ -104,9 +110,9 @@ query listJobs($limit: Int = 50) @auth(level: PUBLIC) {
 }
 
 # Get job events
-query getJobEvents($jobId: UUID!) @auth(level: PUBLIC) {
+query getJobEvents($jobId: UUID!) @auth(level: USER) {
   jobEvents(
-    where: { job: { id: { eq: $jobId } } }
+    where: { job: { id: { eq: $jobId }, userId: { eq_expr: "auth.uid" } } }
     orderBy: [{ timestamp: ASC }]
   ) {
     id
@@ -124,8 +130,12 @@ query getJobEvents($jobId: UUID!) @auth(level: PUBLIC) {
 # =============================================================================
 
 # List recent embeddings (similarity search done in application layer)
-query listEmbeddings($limit: Int = 100) @auth(level: PUBLIC) {
-  videoEmbeddings(orderBy: [{ createdAt: DESC }], limit: $limit) {
+query listEmbeddings($limit: Int = 100) @auth(level: USER) {
+  videoEmbeddings(
+    where: { job: { userId: { eq_expr: "auth.uid" } } }
+    orderBy: [{ createdAt: DESC }]
+    limit: $limit
+  ) {
     id
     segmentType
     segmentIndex
@@ -139,9 +149,9 @@ query listEmbeddings($limit: Int = 100) @auth(level: PUBLIC) {
 }
 
 # Get all embeddings for a specific job
-query getJobEmbeddings($jobId: UUID!) @auth(level: PUBLIC) {
+query getJobEmbeddings($jobId: UUID!) @auth(level: USER) {
   videoEmbeddings(
-    where: { job: { id: { eq: $jobId } } }
+    where: { job: { id: { eq: $jobId }, userId: { eq_expr: "auth.uid" } } }
     orderBy: [{ segmentType: ASC }, { segmentIndex: ASC }]
   ) {
     id
@@ -153,6 +163,6 @@ query getJobEmbeddings($jobId: UUID!) @auth(level: PUBLIC) {
 }
 
 # Delete embeddings for a job (for re-processing)
-mutation deleteJobEmbeddings($jobId: UUID!) @auth(level: PUBLIC) {
-  videoEmbedding_deleteMany(where: { job: { id: { eq: $jobId } } })
+mutation deleteJobEmbeddings($jobId: UUID!) @auth(level: USER) {
+  videoEmbedding_deleteMany(where: { job: { id: { eq: $jobId }, userId: { eq_expr: "auth.uid" } } })
 }

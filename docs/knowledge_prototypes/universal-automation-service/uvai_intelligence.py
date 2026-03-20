@@ -4,10 +4,9 @@ UVAI Intelligence Integration
 Connects to UVAI ecosystem MCP servers for intelligent processing
 """
 import json
-import os
 import sys
-from typing import Dict, Any, Optional, List
 from datetime import datetime
+from typing import Any, Dict
 
 # Add UVAI MCP servers to path
 UVAI_MCP_PATH = "/Users/garvey/Dev/OpenAI_Hub/projects/UVAI/mcp-ecosystem/servers"

@@ -18,7 +18,7 @@ import logging
 import re
 import sys
 from pathlib import Path
-from typing import Dict, List, Any, Set, Tuple
+from typing import Any, Dict, List, Tuple
 
 # Setup logging
 logging.basicConfig(

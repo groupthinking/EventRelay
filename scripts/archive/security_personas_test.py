@@ -10,15 +10,16 @@ Tests the system from different user perspectives:
 - Competitor
 """
 
-import os
 import asyncio
-import aiohttp
 import json
 import time
-from typing import Dict, List, Any, Optional
-from pathlib import Path
 from dataclasses import dataclass
 from enum import Enum
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+import aiohttp
+
 
 class UserPersona(Enum):
     FREE_USER = "free_user"

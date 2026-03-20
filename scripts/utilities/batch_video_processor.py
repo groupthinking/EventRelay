@@ -47,7 +47,7 @@ import os
 import sys
 import time
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional
 
 # Import baseline processor functions
 import simple_real_processor as srp

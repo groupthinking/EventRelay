@@ -9,14 +9,14 @@ Multi-tenant migration environment with comprehensive schema management.
 import asyncio
 import logging
 from logging.config import fileConfig
+
+# Path setup for imports
+from pathlib import Path
 from typing import Optional
 
 from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import create_async_engine
-
-# Path setup for imports
-from pathlib import Path
 
 backend_path = Path(__file__).parent.parent
 

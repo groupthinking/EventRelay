@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-import os
 import json
+import os
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import Any, List
 
 from googleapiclient.discovery import build  # type: ignore
-
 
 QUERIES = [
     # Educational / tutorials
@@ -47,7 +46,7 @@ def filter_available(youtube: Any, ids: List[str]) -> List[str]:
         res = youtube.videos().list(part="status", id=",".join(chunk)).execute()
         for it in res.get("items", []):
             st = it.get("status", {})
-            if st.get("privacyStatus") == "public" and not st.get("uploadStatus") in {"rejected", "failed"}:
+            if st.get("privacyStatus") == "public" and st.get("uploadStatus") not in {"rejected", "failed"}:
                 out.append(it.get("id"))
     return out
 

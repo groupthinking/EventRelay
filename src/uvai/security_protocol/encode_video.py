@@ -14,14 +14,13 @@ except ImportError:
     print("Run: pip install qrcode[pil]")
     sys.exit(1)
 
+import base64
 import json
 import os
-import base64
 
 try:
-    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives import hashes, serialization
     from cryptography.hazmat.primitives.asymmetric import ec
-    from cryptography.hazmat.primitives import serialization
 except ImportError:
     print("❌ Error: 'cryptography' is not installed.")
     print("Run: pip install cryptography")

@@ -7,7 +7,6 @@ from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Dict, List, Tuple
 
-
 BUFFER_SIZE = 65536  # 64 KiB
 
 

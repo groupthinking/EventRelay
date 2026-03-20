@@ -8,12 +8,13 @@ This script verifies the installation and configuration status of:
 - Development environment setup
 """
 
-import os
-import sys
 import json
+import os
 import subprocess
+import sys
 from pathlib import Path
-from typing import Dict, List, Tuple, Any
+from typing import Any, Dict
+
 
 class AIToolsVerifier:
     def __init__(self, repo_path: str = ".") -> None:

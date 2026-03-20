@@ -8,8 +8,8 @@ Provides clear guidance on missing requirements.
 """
 
 import os
-import sys
 import subprocess
+import sys
 from pathlib import Path
 from typing import Dict, List, Tuple
 

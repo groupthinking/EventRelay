@@ -128,7 +128,7 @@ async def analyze_segment(request: TemporalSegmentRequest):
             request.focus
         )
         await analyzer.close()
-        
+
         return {
             "segment": {
                 "start_time": request.start_time,
@@ -169,7 +169,7 @@ async def extract_temporal_events(request: TemporalEventsRequest):
             request.event_types
         )
         await analyzer.close()
-        
+
         # Convert to dict format
         events_data = [
             {
@@ -181,7 +181,7 @@ async def extract_temporal_events(request: TemporalEventsRequest):
             }
             for evt in events
         ]
-        
+
         # Publish to EventMesh if requested
         published_ids = []
         if request.publish_events:
@@ -201,7 +201,7 @@ async def extract_temporal_events(request: TemporalEventsRequest):
                 if event_id:
                     published_ids.append(event_id)
             await publisher.close()
-        
+
         return {
             "video_url": request.video_url,
             "events_count": len(events),
@@ -236,7 +236,7 @@ async def answer_temporal_question(request: TemporalQuestionRequest):
             request.time_context
         )
         await analyzer.close()
-        
+
         return {
             "question": request.question,
             "time_context": request.time_context,
@@ -268,14 +268,14 @@ async def create_timeline(request: TimelineRequest):
     try:
         if request.granularity not in ("fine", "medium", "coarse"):
             raise HTTPException(400, "Invalid granularity. Must be 'fine', 'medium', or 'coarse'")
-        
+
         analyzer = TemporalVideoAnalyzer()
         timeline = await analyzer.create_timeline(
             request.video_url,
             request.granularity
         )
         await analyzer.close()
-        
+
         return {
             "video_url": request.video_url,
             "granularity": request.granularity,
@@ -308,7 +308,7 @@ async def compare_segments(request: SegmentComparisonRequest):
             request.comparison_focus
         )
         await analyzer.close()
-        
+
         return {
             "video_url": request.video_url,
             "segments_compared": len(request.segments),
@@ -337,7 +337,7 @@ async def extract_tutorial_steps(request: TutorialStepsRequest):
         analyzer = TemporalVideoAnalyzer()
         steps = await analyzer.extract_tutorial_steps(request.video_url)
         await analyzer.close()
-        
+
         return {
             "video_url": request.video_url,
             "steps_count": len(steps),
@@ -384,30 +384,33 @@ async def analyze_with_schema(request: StructuredAnalysisRequest):
     ```
     """
     try:
-        from src.youtube_extension.services.ai.gemini_service import GeminiService, GeminiConfig
-        
+        from src.youtube_extension.services.ai.gemini_service import (
+            GeminiConfig,
+            GeminiService,
+        )
+
         config = GeminiConfig(
             response_schema=request.schema,
             response_mime_type="application/json"
         )
-        
+
         service = GeminiService(config)
-        
+
         # Construct prompt with video
         contents = [
             {"text": request.video_url},
             {"text": request.prompt}
         ]
-        
+
         result = await service.generate_content_async(
             contents,
             response_schema=request.schema
         )
-        
+
         # Parse structured result
         import json
         structured_result = json.loads(result.response) if isinstance(result.response, str) else result.response
-        
+
         # Publish as CloudEvent if requested
         event_id = None
         if request.publish_result:
@@ -420,7 +423,7 @@ async def analyze_with_schema(request: StructuredAnalysisRequest):
                 schema=json.dumps(request.schema)
             )
             await publisher.close()
-        
+
         return {
             "video_url": request.video_url,
             "structured_result": structured_result,
@@ -475,7 +478,7 @@ async def publish_video_event(
             subject=subject
         )
         await publisher.close()
-        
+
         return {
             "status": "published",
             "event_id": event_id,

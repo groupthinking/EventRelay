@@ -29,7 +29,7 @@ except ImportError:
     HAS_GCS = False
     logging.warning("Google Cloud Storage not available")
 
-from quantomcode_signer import QuantomCodeSigner, get_signer
+from quantomcode_signer import get_signer
 
 logger = logging.getLogger("HybridCache")
 

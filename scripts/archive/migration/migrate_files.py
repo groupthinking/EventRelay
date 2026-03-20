@@ -14,11 +14,10 @@ Usage:
 import argparse
 import json
 import logging
-import os
 import shutil
 import sys
 from pathlib import Path
-from typing import Dict, List, Any, Optional
+from typing import Any, Dict
 
 # Setup logging
 logging.basicConfig(

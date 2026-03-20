@@ -2,8 +2,9 @@ import asyncio
 import json
 import os
 import sys
-from typing import Dict, Any, Optional, List
 from dataclasses import dataclass
+from typing import Any, Dict, List, Optional
+
 
 @dataclass
 class MCPServerConfig:
@@ -57,7 +58,7 @@ class MCPClient:
                 line = await self.process.stdout.readline()
                 if not line:
                     break
-                
+
                 line_str = line.decode().strip()
                 if not line_str:
                     continue
@@ -85,7 +86,7 @@ class MCPClient:
 
         self._request_id += 1
         arguments = arguments or {}
-        
+
         request = {
             "jsonrpc": "2.0",
             "id": self._request_id,
@@ -95,14 +96,14 @@ class MCPClient:
                 "arguments": arguments
             }
         }
-        
+
         future = asyncio.get_event_loop().create_future()
         self._pending_requests[self._request_id] = future
-        
+
         input_data = json.dumps(request) + "\n"
         self.process.stdin.write(input_data.encode())
         await self.process.stdin.drain()
-        
+
         # Wait for response with simple timeout
         return await asyncio.wait_for(future, timeout=60.0)
 

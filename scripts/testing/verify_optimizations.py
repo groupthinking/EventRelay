@@ -6,10 +6,9 @@ Verifies that all GitHub processing bottleneck fixes have been applied correctly
 """
 
 import json
-import os
-from pathlib import Path
 import logging
 from datetime import datetime
+from pathlib import Path
 
 logging.basicConfig(
     level=logging.INFO,

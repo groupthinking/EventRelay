@@ -7,21 +7,20 @@ Production-ready specialized subagents for code analysis and refactoring tasks.
 Each subagent inherits from MCPEnabledA2AAgent and provides specific capabilities.
 """
 
-import asyncio
 import ast
-import json
+import asyncio
 import logging
-import sys
 import os
-from typing import Dict, List, Any, Optional
+import sys
 from datetime import datetime, timezone
+from typing import Any, Dict, List
 
 # Ensure the lib directory is in sys.path FIRST before any relative imports
 _lib_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if _lib_dir not in sys.path:
     sys.path.insert(0, _lib_dir)
 
-from a2a import MCPEnabledA2AAgent, MessagePriority
+from a2a import MCPEnabledA2AAgent
 
 logger = logging.getLogger(__name__)
 

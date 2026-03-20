@@ -10,11 +10,11 @@ requirements:
   pip install google-cloud-bigquery psycopg2-binary python-dotenv tableprint
 """
 import os
-import time
-from typing import List, Set
+from typing import Set
+
 import psycopg2
-from google.cloud import bigquery
 from dotenv import load_dotenv
+from google.cloud import bigquery
 
 # Load environment variables
 load_dotenv(override=True)

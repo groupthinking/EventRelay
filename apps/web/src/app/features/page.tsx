@@ -441,7 +441,7 @@ export default function FeaturesPage() {
                   <span key={j} className="text-yellow-400 text-sm">★</span>
                 ))}
               </div>
-              <p className="text-white/70 text-sm leading-relaxed mb-5">"{t.quote}"</p>
+              <p className="text-white/70 text-sm leading-relaxed mb-5">&quot;{t.quote}&quot;</p>
               <div className="flex items-center gap-3">
                 <div className={clsx('w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm text-white', t.color)}>
                   {t.avatar}

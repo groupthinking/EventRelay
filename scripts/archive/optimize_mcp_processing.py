@@ -11,11 +11,11 @@ Addresses the GitHub processing bottleneck by implementing:
 """
 
 import json
+import logging
 import os
 import sys
 from pathlib import Path
-from typing import Dict, Any
-import logging
+from typing import Any, Dict
 
 # Configure logging
 logging.basicConfig(

@@ -4,22 +4,22 @@ MCP Ecosystem Startup Script
 Starts all MCP servers with proper dependencies and coordination
 """
 
-import subprocess
-import asyncio
-import time
 import os
+import subprocess
 import sys
+import time
 from pathlib import Path
+
 BASE_DIR = Path(__file__).resolve().parent
 
 def install_dependencies():
     """Install required dependencies"""
     print("🔧 Installing required dependencies...")
-    
+
     # Python dependencies
     python_deps = [
         "mcp",
-        "websockets", 
+        "websockets",
         "aiofiles",
         "requests",
         "youtube-transcript-api",
@@ -29,46 +29,46 @@ def install_dependencies():
         "transformers",
         "torch"
     ]
-    
+
     for dep in python_deps:
         try:
             print(f"   Installing {dep}...")
-            subprocess.run([sys.executable, "-m", "pip", "install", dep], 
+            subprocess.run([sys.executable, "-m", "pip", "install", dep],
                          check=True, capture_output=True)
         except subprocess.CalledProcessError:
             print(f"   ⚠️  Failed to install {dep} - continuing anyway")
-    
+
     # Check Node.js dependencies
     try:
         subprocess.run(["node", "--version"], check=True, capture_output=True)
         print("   ✅ Node.js is available")
     except (subprocess.CalledProcessError, FileNotFoundError):
         print("   ⚠️  Node.js not found - universal-mcp-swarm may not work")
-    
+
     # Check uvx
     try:
         subprocess.run(["uvx", "--version"], check=True, capture_output=True)
         print("   ✅ uvx is available")
     except (subprocess.CalledProcessError, FileNotFoundError):
         print("   ⚠️  uvx not found - perplexity MCP may not work")
-    
+
     print("✅ Dependency installation completed")
 
 def start_coordinator():
     """Start the MCP State Coordinator"""
     print("🚀 Starting MCP State Coordinator...")
-    
+
     coordinator_script = str(BASE_DIR / "shared-state" / "state_coordinator.py")
-    
+
     if not os.path.exists(coordinator_script):
         print(f"   ❌ Coordinator script not found: {coordinator_script}")
         return None
-    
+
     try:
         process = subprocess.Popen([
             sys.executable, coordinator_script
         ], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        
+
         print(f"   ✅ State Coordinator started (PID: {process.pid})")
         return process
     except Exception as e:
@@ -78,7 +78,7 @@ def start_coordinator():
 def verify_ecosystem():
     """Verify the MCP ecosystem is working"""
     print("🔍 Verifying MCP ecosystem...")
-    
+
     # Check core components with fallbacks
     candidates = {
         "state_coordinator": [BASE_DIR / "shared-state" / "state_coordinator.py"],
@@ -96,7 +96,7 @@ def verify_ecosystem():
             print(f"   ✅ {name}")
         else:
             # All components are optional for partial startup
-            required = False 
+            required = False
             status = "MISSING (optional)"
             print(f"   ⚠️  {name}: {status}")
 
@@ -109,7 +109,7 @@ def start_mcp_server(name: str, command: list, env: dict = None):
     full_env = os.environ.copy()
     if env:
         full_env.update(env)
-    
+
     try:
         process = subprocess.Popen(command, env=full_env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         print(f"   ✅ {name} started (PID: {process.pid})")
@@ -223,7 +223,7 @@ def main():
     """Main startup function"""
     print("🎯 MCP ECOSYSTEM STARTUP")
     print("=" * 50)
-    
+
     # Verification-only mode
     if len(sys.argv) > 1 and sys.argv[1] in ("--verify", "-v"):
         ok = verify_ecosystem()
@@ -233,17 +233,17 @@ def main():
     if not verify_ecosystem():
         print("❌ Ecosystem verification failed")
         return
-    
+
     # Install dependencies
     install_dependencies()
-    
+
     # Start coordinator
     coordinator_process = start_coordinator()
-    
+
     if coordinator_process:
         print("\n⏳ Waiting for coordinator to initialize...")
         time.sleep(3)
-        
+
         # Check if coordinator is still running
         if coordinator_process.poll() is None:
             print("✅ MCP State Coordinator is running")
@@ -257,7 +257,7 @@ def main():
     # 1. YouTube UVAI Processor
     # Prioritize the copy we just made in servers/
     youtube_uvai_mcp_path = str(BASE_DIR / "servers" / "youtube_uvai_mcp.py")
-    
+
     if os.path.exists(youtube_uvai_mcp_path):
         mcp_servers.append(start_mcp_server(
             "YouTube UVAI Processor",
@@ -340,11 +340,11 @@ def main():
 
     # Create summary
     create_startup_summary()
-    
+
     print("\n🎉 MCP ECOSYSTEM IS READY!")
     print("\nUse MCP CLI (mcp_cli.py) to access all MCP servers.")
     print("The system will auto-repair failed servers.")
-    
+
     try:
         print("\nPress Ctrl+C to shutdown the ecosystem...")
         # Keep coordinator and servers running
