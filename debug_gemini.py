@@ -1,5 +1,7 @@
-import asyncio, os
+import asyncio
+
 from src.integration.gemini_video import GeminiVideoService
+
 
 async def main():
     svc = GeminiVideoService()

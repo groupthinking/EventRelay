@@ -1,11 +1,13 @@
-import requests
-import time
-import os
-import uuid
-import json
-import re
 import csv
-from supabase import create_client, Client
+import json
+import os
+import re
+import time
+import uuid
+
+import requests
+
+from supabase import Client, create_client
 
 # ==== CONFIGURATION ====
 ABACUS_API_KEYS = os.getenv('ABACUS_API_KEYS', '').split(',') or [
@@ -229,4 +231,4 @@ def main_agent():
     print("\n🎯 Agent Cycle Complete!")
 
 if __name__ == "__main__":
-    main_agent() 
+    main_agent()

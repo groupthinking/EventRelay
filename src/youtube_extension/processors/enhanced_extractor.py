@@ -55,6 +55,7 @@ from dataclasses import asdict, dataclass
 from enum import Enum
 
 import pandas as pd
+
 from youtube_extension.processors.scoring_engine import ScoringEngine
 
 # Configure logging

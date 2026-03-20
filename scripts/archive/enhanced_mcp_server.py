@@ -7,25 +7,29 @@ Combines YouTube transcript extraction, NotebookLM processing, and VideoPrism an
 import asyncio
 import json
 import logging
-import os
-import sys
-from datetime import datetime
-from typing import Dict, Any, List, Optional, Union
-from pathlib import Path
-from dataclasses import asdict
 import traceback
+from dataclasses import asdict
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+from notebooklm_processor import NotebookLMProcessor
 
 # Import our enhanced processors
 from video_extractor_enhanced import EnhancedVideoExtractor, VideoContent
-from notebooklm_processor import NotebookLMProcessor, VideoNotebook
-from videoprism_analyzer import VideoPrismAnalyzer, VideoPrismAnalysis
+from videoprism_analyzer import VideoPrismAnalyzer
 
 # MCP imports
 try:
     from mcp import McpServer
     from mcp.types import (
-        Tool, TextContent, CallToolResult,
-        GetPromptResult, Prompt, PromptMessage, PromptArgument
+        CallToolResult,
+        GetPromptResult,
+        Prompt,
+        PromptArgument,
+        PromptMessage,
+        TextContent,
+        Tool,
     )
     HAS_MCP = True
 except ImportError:

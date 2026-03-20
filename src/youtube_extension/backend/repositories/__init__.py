@@ -14,7 +14,7 @@ __all__ = ["BaseRepository"]
 
 # Try to import user repositories
 try:
-    from .user import UserRepository, UserProfileRepository, UserSessionRepository
+    from .user import UserProfileRepository, UserRepository, UserSessionRepository
 
     __all__.extend(["UserRepository", "UserProfileRepository", "UserSessionRepository"])
 except ImportError:
@@ -25,8 +25,8 @@ except ImportError:
 try:
     from .tenant import (
         TenantRepository,
-        TenantUserRepository,
         TenantSubscriptionRepository,
+        TenantUserRepository,
     )
 
     __all__.extend(
@@ -39,10 +39,10 @@ except ImportError:
 # Try to import video repositories
 try:
     from .video import (
-        VideoRepository,
-        VideoMetadataRepository,
         VideoAnalysisRepository,
+        VideoMetadataRepository,
         VideoProcessingJobRepository,
+        VideoRepository,
     )
 
     __all__.extend(

@@ -5,6 +5,13 @@ World-class video analysis using MCP proxy server to avoid rate limits
 """
 
 import asyncio
+
+# Import the MCP YouTube proxy from the project-root `shared/libs/` directory.
+# NOTE: There is a namespace collision — `src/shared/` and project-root `shared/`
+# are both valid packages.  Since `src/` is on sys.path via setuptools, Python
+# always resolves `import shared` to `src/shared/` first.  We use importlib to
+# load directly from the correct path.
+import importlib.util
 import json
 import logging
 import os
@@ -13,13 +20,6 @@ from pathlib import Path
 from typing import Any, Optional
 
 from dotenv import load_dotenv
-
-# Import the MCP YouTube proxy from the project-root `shared/libs/` directory.
-# NOTE: There is a namespace collision — `src/shared/` and project-root `shared/`
-# are both valid packages.  Since `src/` is on sys.path via setuptools, Python
-# always resolves `import shared` to `src/shared/` first.  We use importlib to
-# load directly from the correct path.
-import importlib.util
 
 _proxy_path = (
     Path(__file__).resolve().parent.parent.parent

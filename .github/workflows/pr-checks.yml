@@ -3,6 +3,7 @@ on:
   pull_request:
     types: [opened, reopened, synchronize, edited]
 permissions:
+  pull-requests: write
   issues: write
   pull-requests: write
 jobs:
@@ -53,5 +54,13 @@ jobs:
               }
               if (errors.length > 0) {
                 core.setFailed('PR validation failed due to errors');
+              }
+              if (issues.some(i => i.startsWith('❌'))) {
+                core.setFailed('PR validation failed');
+              }
+
+              const hasErrors = issues.some(issue => issue.includes('❌'));
+              if (hasErrors) {
+                core.setFailed('PR validation failed');
               }
             }

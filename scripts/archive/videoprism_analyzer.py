@@ -5,40 +5,44 @@ Advanced video analysis, categorization, and visual understanding
 """
 
 import asyncio
+import hashlib
 import json
 import logging
 import os
-import sys
-from datetime import datetime
-from typing import Dict, Any, List, Optional, Tuple, Union
-from pathlib import Path
-from dataclasses import dataclass, asdict
 import re
-import hashlib
-from urllib.parse import urlparse
+from dataclasses import asdict, dataclass
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List
 
 # Import our enhanced video extractor
 from video_extractor_enhanced import (
-    EnhancedVideoExtractor, VideoContent, TranscriptSegment, VideoMetadata
+    EnhancedVideoExtractor,
+    VideoContent,
+    VideoMetadata,
 )
 
 # Computer vision and ML imports
 try:
     import cv2
+    import matplotlib.pyplot as plt
     import numpy as np
-    from PIL import Image
+    import seaborn as sns
     import torch
     import torchvision.transforms as transforms
-    from transformers import (
-        pipeline, AutoProcessor, AutoModel,
-        BlipProcessor, BlipForConditionalGeneration,
-        CLIPProcessor, CLIPModel
-    )
+    from PIL import Image
     from sklearn.cluster import KMeans
     from sklearn.feature_extraction.text import TfidfVectorizer
     from sklearn.metrics.pairwise import cosine_similarity
-    import matplotlib.pyplot as plt
-    import seaborn as sns
+    from transformers import (
+        AutoModel,
+        AutoProcessor,
+        BlipForConditionalGeneration,
+        BlipProcessor,
+        CLIPModel,
+        CLIPProcessor,
+        pipeline,
+    )
     HAS_CV_DEPS = True
 except ImportError:
     HAS_CV_DEPS = False
@@ -473,9 +477,7 @@ class VideoPrismAnalyzer:
             colors = []
             for color in kmeans.cluster_centers_:
                 # Convert to hex
-                hex_color = '#{:02x}{:02x}{:02x}'.format(
-                    int(color[0]), int(color[1]), int(color[2])
-                )
+                hex_color = f'#{int(color[0]):02x}{int(color[1]):02x}{int(color[2]):02x}'
                 colors.append(hex_color)
 
             return colors

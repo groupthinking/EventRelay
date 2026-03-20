@@ -1,7 +1,7 @@
 """
 Shared constants for environment configuration tools
 """
-from typing import List, Dict
+from typing import Dict, List
 
 # Placeholder values that should be replaced
 PLACEHOLDER_VALUES: List[str] = [

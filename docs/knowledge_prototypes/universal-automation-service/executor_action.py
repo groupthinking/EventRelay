@@ -4,10 +4,9 @@ Self-Correcting Executor Integration
 Connects to production self-correcting executor for automated action execution
 """
 import json
-import os
 import sys
-from typing import Dict, Any, Optional, List
 from datetime import datetime
+from typing import Any, Dict, List
 
 # Add executor to path
 EXECUTOR_PATH = "/Users/garvey/self-correcting-executor-PRODUCTION/mcp_server"

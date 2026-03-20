@@ -1,8 +1,7 @@
 
-import asyncio
 import sys
 import unittest
-from unittest.mock import MagicMock, AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 # Add src to path
 sys.path.append("/Users/garvey/Dev/projects/EventRelay/src")
@@ -25,7 +24,11 @@ sys.modules['httpx'] = MagicMock()
 sys.modules['aiohttp'] = MagicMock() # Mock legacy dependency
 
 from agents.mcp_ecosystem_coordinator import MCPVideoProcessorServer
-from youtube_extension.processors.enhanced_extractor import VideoContent, VideoMetadata, ProcessingStage
+from youtube_extension.processors.enhanced_extractor import (
+    VideoContent,
+    VideoMetadata,
+)
+
 
 class TestUnifiedPipeline(unittest.IsolatedAsyncioTestCase):
     async def test_coordinator_integration(self):

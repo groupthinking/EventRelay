@@ -14,9 +14,7 @@
 import { VertexAI } from "@google-cloud/vertexai";
 import { Pool } from "pg";
 import {
-  listEmbeddings,
-  getJobEmbeddings,
-  deleteJobEmbeddings,
+  listVideoEmbeddings,
 } from "./dataconnect-generated/index.js";
 
 // =============================================================================
@@ -355,12 +353,16 @@ export async function embedJobAnalysis(
  * Get all embeddings for a job via Firebase Data Connect SDK
  */
 export async function getEmbeddingsForJob(jobId: string): Promise<EmbeddingRecord[]> {
-  const result = await getJobEmbeddings({ jobId: jobId as `${string}-${string}-${string}-${string}-${string}` });
-  return result.data.videoEmbeddings.map((e) => ({
-    id: e.id,
-    segmentType: e.segmentType,
-    segmentIndex: e.segmentIndex,
-    content: e.content,
+  const client = getPool();
+  const result = await client.query(
+    `SELECT id, segment_type, segment_index, content FROM video_embedding WHERE job_id = $1`,
+    [jobId]
+  );
+  return result.rows.map((row) => ({
+    id: row.id,
+    segmentType: row.segment_type,
+    segmentIndex: row.segment_index,
+    content: row.content,
     jobId,
   }));
 }
@@ -369,15 +371,16 @@ export async function getEmbeddingsForJob(jobId: string): Promise<EmbeddingRecor
  * Delete all embeddings for a job
  */
 export async function clearJobEmbeddings(jobId: string): Promise<void> {
-  await deleteJobEmbeddings({ jobId: jobId as `${string}-${string}-${string}-${string}-${string}` });
+  const client = getPool();
+  await client.query(`DELETE FROM video_embedding WHERE job_id = $1`, [jobId]);
 }
 
 /**
  * List recent embeddings
  */
 export async function listRecentEmbeddings(limit: number = 100): Promise<EmbeddingRecord[]> {
-  const result = await listEmbeddings({ limit });
-  return result.data.videoEmbeddings.map((e) => ({
+  const result = await listVideoEmbeddings({ limit });
+  return result.data.videoEmbeddings.map((e: any) => ({
     id: e.id,
     segmentType: e.segmentType,
     segmentIndex: e.segmentIndex,

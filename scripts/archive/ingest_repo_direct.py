@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """Direct SQL ingestion script that bypasses MCP server for RAG indexing."""
-import os
 import json
+import os
 import time
-import psycopg2
 from typing import List
-from google import genai
+
+import psycopg2
 from dotenv import load_dotenv
+from google import genai
 
 load_dotenv(override=True)
 

@@ -7,40 +7,33 @@ Integrates with shared state coordination system and provides comprehensive vide
 import asyncio
 import json
 import logging
-import sys
 import os
-import time
-from datetime import datetime
-from typing import Any, Dict, List, Optional, Sequence
-from urllib.parse import urlparse, parse_qs
 import re
-import websockets
 import sqlite3
-from pathlib import Path
+import sys
+from datetime import datetime
+from typing import Any, Dict, List, Optional
+
+import websockets
 
 # Add the existing UVAI path to import the existing processor
 # REMOVED: sys.path.append removed
-
 # MCP imports
 from mcp.server import Server
 from mcp.server.models import InitializationOptions
 from mcp.server.stdio import stdio_server
 from mcp.types import (
-    CallToolRequest,
     CallToolResult,
-    ListToolsRequest,
-    Tool,
     TextContent,
-    ImageContent,
-    EmbeddedResource
+    Tool,
 )
 
 # Video processing imports
 try:
-    from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsRetrievalError
+    import yt_dlp
     from googleapiclient.discovery import build
     from googleapiclient.errors import HttpError
-    import yt_dlp
+    from youtube_transcript_api import TranscriptsRetrievalError, YouTubeTranscriptApi
     HAS_VIDEO_DEPS = True
 except ImportError:
     HAS_VIDEO_DEPS = False
@@ -49,8 +42,8 @@ except ImportError:
 # AI/ML imports
 try:
     import openai
-    from transformers import pipeline
     import torch
+    from transformers import pipeline
     HAS_AI_DEPS = True
 except ImportError:
     HAS_AI_DEPS = False

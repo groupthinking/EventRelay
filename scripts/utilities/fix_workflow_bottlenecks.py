@@ -9,11 +9,10 @@ Automatically fixes all identified GitHub workflow bottlenecks:
 4. Prevents resource exhaustion
 """
 
-import os
+import logging
 import re
 from pathlib import Path
-from typing import Dict, Any, List
-import logging
+from typing import Any, Dict
 
 logging.basicConfig(
     level=logging.INFO,

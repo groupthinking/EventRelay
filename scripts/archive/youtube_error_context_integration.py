@@ -8,10 +8,9 @@ for codebase context and problem resolution
 import asyncio
 import json
 import logging
-import requests
-import traceback
 from datetime import datetime
-from typing import Dict, Any, List, Optional
+from typing import Any, Dict, List, Optional
+
 import mcp.server.stdio
 import mcp.types as types
 from mcp.server.lowlevel import Server

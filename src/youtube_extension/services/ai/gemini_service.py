@@ -14,7 +14,7 @@ import logging
 import mimetypes
 import os
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Optional, Union

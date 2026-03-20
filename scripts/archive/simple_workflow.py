@@ -7,12 +7,13 @@ Processes YouTube videos and generates actionable content immediately.
 import json
 import os
 import sys
-from pathlib import Path
-from typing import Dict, Any, Optional
 from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, Optional
 
 # Import our direct action generator
 from direct_action_generator import DirectActionGenerator
+
 
 class SimpleVideoWorkflow:
     """Simple, direct video-to-action workflow without complex agent coordination."""

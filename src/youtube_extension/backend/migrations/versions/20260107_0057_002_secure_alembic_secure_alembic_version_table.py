@@ -5,11 +5,10 @@ Revises: 001_initial_schema
 Create Date: 2026-01-07 00:57:13.364248
 
 """
-from typing import Sequence, Union
+from collections.abc import Sequence
+from typing import Union
 
-import sqlalchemy as sa
 from alembic import op
-from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision: str = '002_secure_alembic'

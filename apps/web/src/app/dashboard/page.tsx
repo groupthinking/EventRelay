@@ -440,6 +440,12 @@ function DashboardContent() {
         </div>
         
         <div className="flex items-center gap-4">
+          <Link
+            href="/dashboard/agents"
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-xs text-indigo-400 font-bold uppercase tracking-wider hover:bg-indigo-500/20 transition-all"
+          >
+            ⚡ Agent Pipeline
+          </Link>
           {processingCount > 0 ? (
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary-500/10 border border-primary-500/20">
               <span className="relative flex h-2 w-2">

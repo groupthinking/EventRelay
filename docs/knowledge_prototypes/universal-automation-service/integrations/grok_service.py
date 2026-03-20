@@ -1,7 +1,7 @@
+import json
 import os
 import sys
-import json
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
 
 # Add the directory containing grok_client.py to path
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -19,12 +19,12 @@ class GrokService:
     Service adapter for xAI Grok interactions, specifically focused on 
     Video Analysis and "Analysis Agent" roles.
     """
-    
+
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or os.environ.get("XAI_API_KEY") or os.environ.get("GROK_API_KEY")
         if not self.api_key:
             print("⚠️ GrokService initialized without API Key. Interactions will fail.")
-        
+
         # Default to the most capable model for reasoning
         self.model = GrokModel.GROK_4_0709 if hasattr(GrokModel, 'GROK_4_0709') else "grok-4-0709"
 
@@ -64,7 +64,7 @@ class GrokService:
                     ],
                     temperature=0.2
                 )
-                
+
                 # Attempt to parse JSON from response
                 content = response.content
                 # Simple cleanup if markdown code blocks are used
@@ -72,7 +72,7 @@ class GrokService:
                     content = content.split("```json")[1].split("```")[0]
                 elif "```" in content:
                     content = content.split("```")[1].split("```")[0]
-                    
+
                 return {
                     "raw_analysis": response.content,
                     "parsed": json.loads(content) if "{" in content else None,
@@ -96,7 +96,7 @@ class GrokService:
         Generate a comprehensive Implementation Plan (Markdown) and 
         extract any specific Python/Shell code blocks required to replicate the video's outcome.
         """
-        
+
         try:
             with GrokClient(api_key=self.api_key, model="grok-code-fast-1") as client:
                  response = client.chat(

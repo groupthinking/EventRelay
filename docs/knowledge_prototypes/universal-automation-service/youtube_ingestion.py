@@ -6,8 +6,9 @@ Connects to EventRelay MCP servers for video ingestion and analysis
 import json
 import os
 import sys
+from typing import Any, Dict
+
 import requests
-from typing import Dict, Any, Optional
 
 # Add EventRelay MCP servers to path
 EVENTRELAY_MCP_PATH = "/Users/garvey/Dev/OpenAI_Hub/projects/EventRelay/external/mcp_servers"

@@ -12,13 +12,13 @@ This script demonstrates all production capabilities:
 Run this script to showcase the system to investors.
 """
 
-import requests
-import json
-import time
-from datetime import datetime
 
 # Configuration
 import os
+import time
+from datetime import datetime
+
+import requests
 
 BASE_URL = "http://localhost:8000"
 # Read API key from environment to avoid committing secrets. Prefer PROD_API_KEY or UVAI_API_KEY.
