@@ -6,6 +6,39 @@ export const connectorConfig = {
   location: 'us-east4'
 };
 
+export const createExampleJobRef = (dcOrVars, vars) => {
+  const { dc: dcInstance, vars: inputVars} = validateArgs(connectorConfig, dcOrVars, vars, true);
+  dcInstance._useGeneratedSdk();
+  return mutationRef(dcInstance, 'CreateExampleJob', inputVars);
+}
+createExampleJobRef.operationName = 'CreateExampleJob';
+
+export function createExampleJob(dcOrVars, vars) {
+  return executeMutation(createExampleJobRef(dcOrVars, vars));
+}
+
+export const recordExampleEventRef = (dcOrVars, vars) => {
+  const { dc: dcInstance, vars: inputVars} = validateArgs(connectorConfig, dcOrVars, vars, true);
+  dcInstance._useGeneratedSdk();
+  return mutationRef(dcInstance, 'RecordExampleEvent', inputVars);
+}
+recordExampleEventRef.operationName = 'RecordExampleEvent';
+
+export function recordExampleEvent(dcOrVars, vars) {
+  return executeMutation(recordExampleEventRef(dcOrVars, vars));
+}
+
+export const deleteExampleEventRef = (dcOrVars, vars) => {
+  const { dc: dcInstance, vars: inputVars} = validateArgs(connectorConfig, dcOrVars, vars, true);
+  dcInstance._useGeneratedSdk();
+  return mutationRef(dcInstance, 'DeleteExampleEvent', inputVars);
+}
+deleteExampleEventRef.operationName = 'DeleteExampleEvent';
+
+export function deleteExampleEvent(dcOrVars, vars) {
+  return executeMutation(deleteExampleEventRef(dcOrVars, vars));
+}
+
 export const listVideoJobsRef = (dc) => {
   const { dc: dcInstance} = validateArgs(connectorConfig, dc, undefined);
   dcInstance._useGeneratedSdk();
@@ -59,38 +92,5 @@ listFailedJobsRef.operationName = 'ListFailedJobs';
 
 export function listFailedJobs(dc) {
   return executeQuery(listFailedJobsRef(dc));
-}
-
-export const createExampleJobRef = (dcOrVars, vars) => {
-  const { dc: dcInstance, vars: inputVars} = validateArgs(connectorConfig, dcOrVars, vars, true);
-  dcInstance._useGeneratedSdk();
-  return mutationRef(dcInstance, 'CreateExampleJob', inputVars);
-}
-createExampleJobRef.operationName = 'CreateExampleJob';
-
-export function createExampleJob(dcOrVars, vars) {
-  return executeMutation(createExampleJobRef(dcOrVars, vars));
-}
-
-export const recordExampleEventRef = (dcOrVars, vars) => {
-  const { dc: dcInstance, vars: inputVars} = validateArgs(connectorConfig, dcOrVars, vars, true);
-  dcInstance._useGeneratedSdk();
-  return mutationRef(dcInstance, 'RecordExampleEvent', inputVars);
-}
-recordExampleEventRef.operationName = 'RecordExampleEvent';
-
-export function recordExampleEvent(dcOrVars, vars) {
-  return executeMutation(recordExampleEventRef(dcOrVars, vars));
-}
-
-export const deleteExampleEventRef = (dcOrVars, vars) => {
-  const { dc: dcInstance, vars: inputVars} = validateArgs(connectorConfig, dcOrVars, vars, true);
-  dcInstance._useGeneratedSdk();
-  return mutationRef(dcInstance, 'DeleteExampleEvent', inputVars);
-}
-deleteExampleEventRef.operationName = 'DeleteExampleEvent';
-
-export function deleteExampleEvent(dcOrVars, vars) {
-  return executeMutation(deleteExampleEventRef(dcOrVars, vars));
 }
 
