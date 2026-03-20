@@ -9,6 +9,7 @@ import EventList from '@/components/EventList';
 import type { ExtractedEvent } from '@/lib/types';
 import { useDashboardStore } from '@/store/dashboard-store';
 import type { PipelineResult, Video } from '@/store/dashboard-store';
+import { useToast } from '@/components/ui/Toast';
 
 // ============================================
 // Helper
@@ -294,10 +295,12 @@ function SplitView({
 // ============================================
 function VideoCard({
   video,
-  onClick
+  onClick,
+  onRetry,
 }: {
   video: Video;
   onClick: () => void;
+  onRetry?: (url: string) => void;
 }) {
   const stages = video.pipelineResult !== undefined
     ? ['Ingest', 'Generate', 'Deploy', 'Live']
@@ -372,11 +375,384 @@ function VideoCard({
         )}
 
         {video.status === 'complete' && video.insights && (
+copilot/optimize-user-experience
+          <div className="mt-4 pt-4 border-t border-white/[0.05]">
+            {/* Pipeline deployment result */}
+            {video.pipelineResult && (
+              <div className="mb-3 space-y-2">
+                {video.pipelineResult.live_url && (
+                  <a
+                    href={video.pipelineResult.live_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 px-3 py-2 bg-green-500/10 border border-green-500/20 rounded-lg text-sm text-green-400 hover:bg-green-500/20 transition-colors"
+                  >
+                    🌐 <span className="font-medium">Live:</span> <span className="truncate">{video.pipelineResult.live_url}</span>
+                  </a>
+                )}
+                {video.pipelineResult.github_repo && (
+                  <a
+                    href={video.pipelineResult.github_repo}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 px-3 py-2 bg-purple-500/10 border border-purple-500/20 rounded-lg text-sm text-purple-400 hover:bg-purple-500/20 transition-colors"
+                  >
+                    📦 <span className="font-medium">Repo:</span> <span className="truncate">{video.pipelineResult.github_repo}</span>
+                  </a>
+                )}
+                {video.pipelineResult.code_generation && (
+                  <div className="flex items-center gap-2 text-xs text-white/40">
+                    <span>Framework: {video.pipelineResult.code_generation.framework}</span>
+                    <span>•</span>
+                    <span>{video.pipelineResult.code_generation.files_created.length} files</span>
+                  </div>
+                )}
+              </div>
+            )}
+            <div className="flex flex-wrap gap-2">
+              {video.insights.topics.slice(0, 3).map((topic) => (
+                <span
+                  key={topic}
+                  className="px-2.5 py-1 bg-primary-500/10 text-primary-400 border border-primary-500/20 rounded-lg text-xs font-medium"
+                >
+                  {topic}
+                </span>
+              ))}
+              {video.events && video.events.length > 0 && (
+                <span className="px-2.5 py-1 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-lg text-xs font-medium">
+                  {video.events.length} events
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Failed state */}
+        {video.status === 'failed' && (
+          <div className="mt-3 flex items-center gap-2">
+            <p className="text-xs text-red-400/70 flex-1">Processing failed.</p>
+            {onRetry && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onRetry(video.url); }}
+                className="text-xs px-3 py-1.5 rounded-lg bg-primary-500/10 text-primary-400 border border-primary-500/20 hover:bg-primary-500/20 transition-colors shrink-0"
+              >
+                ↺ Retry
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ============================================
+// Quick Start Guide (shown when no videos)
+// ============================================
+const STARTER_VIDEOS = [
+  { label: 'Y Combinator lecture', url: 'https://www.youtube.com/watch?v=aircAruvnKk' },
+  { label: 'Tech conference talk', url: 'https://www.youtube.com/watch?v=zjkBMFhNj_g' },
+];
+
+function QuickStartGuide({ onLoad }: { onLoad: (url: string) => void }) {
+  return (
+    <div className={clsx(
+      'bg-surface-900/50 backdrop-blur-xl rounded-2xl p-6',
+      'border border-white/[0.08]'
+    )}>
+      <h3 className="font-semibold text-white mb-2">Quick Start</h3>
+      <p className="text-xs text-white/40 mb-5 leading-relaxed">
+        Paste any YouTube URL or try one of these examples to see EventRelay in action.
+      </p>
+      <div className="space-y-2">
+        {STARTER_VIDEOS.map((v) => (
+          <button
+            key={v.url}
+            onClick={() => onLoad(v.url)}
+            className="w-full flex items-center gap-3 p-3 rounded-xl bg-white/[0.03] border border-white/[0.06] hover:border-primary-500/30 hover:bg-primary-500/5 transition-all text-left group"
+          >
+            <span className="text-xl">▶️</span>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm text-white/80 group-hover:text-white transition truncate">
+                {v.label}
+              </p>
+              <p className="text-xs text-white/30 truncate">{v.url.replace('https://www.youtube.com/watch?v=', 'youtu.be/')}</p>
+            </div>
+            <span className="text-primary-400 opacity-0 group-hover:opacity-100 transition text-xs font-semibold">
+              Try →
+            </span>
+          </button>
+        ))}
+      </div>
+
+      <div className="mt-5 pt-5 border-t border-white/[0.06]">
+        <div className="text-xs font-semibold text-white/30 uppercase tracking-wider mb-3">What you&apos;ll get</div>
+        <ul className="space-y-2">
+          {['Full transcript', 'Extracted events & actions', 'AI-powered insights', 'Searchable video chat'].map((item) => (
+            <li key={item} className="flex items-center gap-2 text-xs text-white/50">
+              <span className="text-green-400">✓</span>
+              {item}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
+// ============================================
+// Stats Summary Card (shown when has videos)
+// ============================================
+function StatsSummary({
+  videoCount,
+  completedCount,
+  totalEvents,
+}: {
+  videoCount: number;
+  completedCount: number;
+  totalEvents: number;
+}) {
+  return (
+    <div className={clsx(
+      'bg-surface-900/50 backdrop-blur-xl rounded-2xl p-6',
+      'border border-white/[0.08]'
+    )}>
+      <h3 className="font-semibold text-white mb-4">Session Stats</h3>
+      <div className="grid grid-cols-3 gap-3">
+        {[
+          { value: videoCount, label: 'Videos', icon: '🎬' },
+          { value: completedCount, label: 'Done', icon: '✅' },
+          { value: totalEvents, label: 'Events', icon: '⚡' },
+        ].map((s) => (
+          <div key={s.label} className="text-center p-3 rounded-xl bg-white/[0.03] border border-white/[0.05]">
+            <div className="text-lg mb-1">{s.icon}</div>
+            <div className="text-xl font-black text-white">{s.value}</div>
+            <div className="text-[10px] text-white/35 mt-0.5">{s.label}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ============================================
+// Activity Feed
+// ============================================
+function ActivityFeed({
+  activities,
+}: {
+  activities: { time: string; event: string; type: 'success' | 'info' | 'error' }[];
+}) {
+  if (activities.length === 0) {
+    return (
+      <div className={clsx(
+        'bg-surface-900/50 backdrop-blur-xl rounded-2xl p-6',
+        'border border-white/[0.08]'
+      )}>
+        <h3 className="font-semibold text-white mb-4">Activity Feed</h3>
+        <div className="flex flex-col items-center justify-center py-8 gap-3 text-center">
+          <div className="text-4xl opacity-20">📋</div>
+          <p className="text-sm text-white/30 leading-relaxed">
+            Activity will appear here as you process videos, extract events, and dispatch agents.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={clsx(
+      'bg-surface-900/50 backdrop-blur-xl rounded-2xl p-6',
+      'border border-white/[0.08]'
+    )}>
+      <h3 className="font-semibold text-white mb-5">Activity</h3>
+      <div className="space-y-4 max-h-72 overflow-y-auto pr-2">
+        {activities.map((activity, i) => (
+          <div
+            key={i}
+            className="flex items-start gap-3 text-sm animate-fade-in-up opacity-0"
+            style={{ animationDelay: `${i * 50}ms`, animationFillMode: 'forwards' }}
+          >
+            <div className="relative mt-1.5 flex-shrink-0">
+              <div
+                className={clsx(
+                  'w-2.5 h-2.5 rounded-full',
+                  activity.type === 'success' && 'bg-green-400',
+                  activity.type === 'error' && 'bg-red-400',
+                  activity.type === 'info' && 'bg-blue-400'
+                )}
+              />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-white/80 leading-snug text-xs">{activity.event}</p>
+              <p className="text-white/30 text-[10px] mt-0.5">{activity.time}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ============================================
+// Export Button (for completed videos)
+// ============================================
+function ExportMenu({ videos }: { videos: Video[] }) {
+  const [open, setOpen] = useState(false);
+  const completed = videos.filter((v) => v.status === 'complete');
+  if (completed.length === 0) return null;
+
+  const exportJSON = () => {
+    const data = completed.map((v) => ({
+      title: v.title,
+      transcript: v.transcript,
+      events: v.events,
+      insights: v.insights,
+    }));
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `eventrelay-export-${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    setOpen(false);
+  };
+
+  const exportCSV = () => {
+    const rows = ['Video Title,Event Type,Event Title,Timestamp,Confidence'];
+    completed.forEach((v) => {
+      (v.events || []).forEach((e) => {
+        rows.push(`"${v.title}","${e.type}","${e.title}","${e.timestamp || ''}","${Math.round(e.confidence * 100)}%"`);
+      });
+    });
+    const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `eventrelay-events-${Date.now()}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    setOpen(false);
+  };
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="btn btn-secondary py-2 px-4 text-sm flex items-center gap-2"
+      >
+        <span>↓</span> Export
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full mt-2 w-48 bg-surface-900 border border-white/[0.12] rounded-xl shadow-2xl z-30 overflow-hidden">
+          <button
+            onClick={exportJSON}
+            className="w-full text-left px-4 py-3 text-sm text-white/80 hover:bg-white/[0.06] transition flex items-center gap-2"
+          >
+            <span>&#123;&#125;</span> Export JSON
+          </button>
+          <button
+            onClick={exportCSV}
+            className="w-full text-left px-4 py-3 text-sm text-white/80 hover:bg-white/[0.06] transition flex items-center gap-2 border-t border-white/[0.06]"
+          >
+            <span>📊</span> Export CSV
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================
+// Video Detail Modal
+// ============================================
+function VideoDetailModal({
+  video,
+  onClose,
+  onExtractEvents,
+}: {
+  video: Video;
+  onClose: () => void;
+  onExtractEvents?: (videoId: string) => void;
+}) {
+  const [showAssistant, setShowAssistant] = useState(false);
+  const [activeTab, setActiveTab] = useState<'insights' | 'transcript' | 'events'>('insights');
+
+  const hasInsights = video.insights && (video.insights.summary !== 'Analysis complete' || video.insights.actions.length > 0);
+  const hasTranscript = !!video.transcript;
+  const hasEvents = video.events && video.events.length > 0;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md"
+      onClick={onClose}
+    >
+      <div
+        className={clsx(
+          'bg-surface-900 rounded-3xl border border-white/[0.08] flex overflow-hidden transition-all duration-500',
+          showAssistant ? 'max-w-5xl w-full h-[85vh]' : 'max-w-2xl w-full max-h-[85vh]',
+          'shadow-2xl shadow-black/50 animate-scale-in'
+        )}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Main Content */}
+        <div className={clsx(
+          "flex flex-col flex-1 min-w-0 transition-opacity duration-300",
+          showAssistant ? "border-r border-white/[0.08]" : ""
+        )}>
+          {/* Header */}
+          <div className="p-6 border-b border-white/[0.08]">
+            <div className="flex items-start justify-between">
+              <div className="flex-1 min-w-0 pr-4">
+                <h2 className="text-xl font-bold text-white truncate">{video.title}</h2>
+                <div className="flex items-center gap-3 mt-1.5">
+                  <p className="text-white/40 text-sm truncate">{video.url}</p>
+                  {video.status === 'complete' && (
+                    <span className="flex-shrink-0 px-2 py-0.5 rounded-full bg-green-500/15 text-green-400 text-xs font-medium">
+                      ✓ Complete
+                    </span>
+                  )}
+                </div>
+              </div>
+              <button
+                onClick={onClose}
+                className="w-10 h-10 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] flex items-center justify-center text-white/60 hover:text-white transition-all"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+
+          {/* Tab Navigation */}
+          <div className="px-6 border-b border-white/[0.08] flex gap-1">
+            {(['insights', 'transcript', 'events'] as const).map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={clsx(
+                  'px-4 py-3 text-sm font-medium capitalize transition-colors border-b-2 -mb-px',
+                  activeTab === tab
+                    ? 'border-primary-500 text-primary-400'
+                    : 'border-transparent text-white/40 hover:text-white/60'
+                )}
+              >
+                {tab}
+                {tab === 'events' && hasEvents && (
+                  <span className="ml-1.5 text-xs bg-primary-500/20 text-primary-400 px-1.5 py-0.5 rounded-full">
+                    {video.events!.length}
+                  </span>
+                )}
+                {tab === 'insights' && video.insights?.actions && video.insights.actions.length > 0 && (
+                  <span className="ml-1.5 text-xs bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded-full">
+                    {video.insights.actions.length}
+                  </span>
+                )}
+              </button>
           <div className="mt-auto flex flex-wrap gap-2 pt-4 border-t border-white/[0.05]">
             {video.insights.topics.slice(0, 2).map((topic) => (
               <span key={topic} className="px-2 py-1 bg-white/[0.05] text-white/70 rounded border border-white/[0.05] text-[10px] font-medium truncate max-w-[100px]">
                 {topic}
               </span>
+main
             ))}
             {video.events && video.events.length > 0 && (
               <span className="px-2 py-1 bg-primary-500/10 text-primary-400 rounded border border-primary-500/20 text-[10px] font-bold">
@@ -397,6 +773,7 @@ function DashboardContent() {
   const searchParams = useSearchParams();
   const [videoUrl, setVideoUrl] = useState('');
   const [filter, setFilter] = useState<'all' | 'processing' | 'complete' | 'failed'>('all');
+  const { addToast } = useToast();
 
   const videos = useDashboardStore((s) => s.videos);
   const selectedVideoId = useDashboardStore((s) => s.selectedVideoId);
@@ -414,12 +791,24 @@ function DashboardContent() {
     }
   }, [searchParams, processVideo]);
 
-  const handleAddVideo = useCallback(() => {
-    if (!videoUrl.trim()) return;
-    const url = videoUrl;
-    setVideoUrl('');
-    processVideo(url);
-  }, [videoUrl, processVideo]);
+  const handleAddVideo = useCallback(
+    (url?: string) => {
+      const targetUrl = url || videoUrl;
+      if (!targetUrl.trim()) return;
+      setVideoUrl('');
+      addToast('Video analysis started', 'info');
+      processVideo(targetUrl);
+    },
+    [videoUrl, processVideo, addToast],
+  );
+
+  const handleRetryVideo = useCallback(
+    (url: string) => {
+      addToast('Retrying video analysis…', 'info');
+      processVideo(url);
+    },
+    [processVideo, addToast],
+  );
 
   const filteredVideos = filter === 'all' ? videos : videos.filter((v) => v.status === filter);
   const processingCount = videos.filter((v) => v.status === 'processing').length;
@@ -522,6 +911,23 @@ function DashboardContent() {
                   ))}
                 </div>
               </div>
+            ) : filteredVideos.length === 0 ? (
+              <div className="text-center py-12 text-white/30 text-sm">
+                No {filter} videos.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                {filteredVideos.map((video) => (
+                  <VideoCard
+                    key={video.id}
+                    video={video}
+                    onClick={() => selectVideo(video.id)}
+                    onRetry={handleRetryVideo}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
 
               {filteredVideos.length === 0 ? (
                 <div className="py-20 text-center border border-dashed border-white/[0.1] rounded-3xl bg-white/[0.01]">
