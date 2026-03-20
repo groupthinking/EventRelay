@@ -127,6 +127,14 @@ class EnhancedVideoProcessor:
             # Step 4.5: Visual analysis using Gemini Vision (Stage 1: Multimodal Ingestion)
             visual_context = await self._extract_visual_context(video_url, video_id)
 
+            # Derive structured build plan for downstream deterministic generation
+            build_plan = await self._generate_build_plan(
+                video_url, metadata, transcript, ai_analysis
+            )
+            extracted_info = self._build_extracted_info(
+                metadata, ai_analysis, build_plan, transcript
+            )
+
             # Step 5: Generate comprehensive markdown
             markdown_content = await self._generate_enhanced_markdown(
                 video_id, metadata, transcript, ai_analysis, visual_context
