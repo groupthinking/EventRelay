@@ -369,9 +369,8 @@ describe('StateManager', () => {
       });
 
       it('does nothing if redis instance does not exist', async () => {
-        await manager.disconnect(); // upstash, no quit
-        // Just expect it doesn't throw
-        expect(true).toBe(true);
+        // For non-Redis providers, disconnect should be a no-op and resolve successfully
+        await expect(manager.disconnect()).resolves.toBeUndefined();
       });
     });
   });
