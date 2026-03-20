@@ -6,61 +6,36 @@
   "redirects": [
     {
       "source": "/(.*)",
-      "has": [{ "type": "host", "value": "event-relay-web.vercel.app" }],
+      "has": [
+        {
+          "type": "host",
+          "value": "event-relay-web.vercel.app"
+        }
+      ],
       "destination": "https://uvai.io/$1",
       "permanent": true
     },
     {
       "source": "/(.*)",
-      "has": [{ "type": "host", "value": "v0-uvai.vercel.app" }],
+      "has": [
+        {
+          "type": "host",
+          "value": "v0-uvai.vercel.app"
+        }
+      ],
       "destination": "https://uvai.io/$1",
       "permanent": true
     },
     {
       "source": "/(.*)",
-      "has": [{ "type": "host", "value": "youtube-extension.vercel.app" }],
+      "has": [
+        {
+          "type": "host",
+          "value": "event-relay-web-garv1.vercel.app"
+        }
+      ],
       "destination": "https://uvai.io/$1",
       "permanent": true
-    },
-    {
-      "source": "/(.*)",
-      "has": [{ "type": "host", "value": "uvai-io.pages.dev" }],
-      "destination": "https://uvai.io/$1",
-      "permanent": true
-    },
-    {
-      "source": "/(.*)",
-      "has": [{ "type": "host", "value": "sell.solutions" }],
-      "destination": "https://uvai.io/$1",
-      "permanent": true
-    },
-    {
-      "source": "/(.*)",
-      "has": [{ "type": "host", "value": "www.sell.solutions" }],
-      "destination": "https://uvai.io/$1",
-      "permanent": true
-    },
-    {
-      "source": "/(.*)",
-      "has": [{ "type": "host", "value": "myai.directory" }],
-      "destination": "https://uvai.io/$1",
-      "permanent": true
-    },
-    {
-      "source": "/(.*)",
-      "has": [{ "type": "host", "value": "www.myai.directory" }],
-      "destination": "https://uvai.io/$1",
-      "permanent": true
-    }
-  ],
-  "headers": [
-    {
-      "source": "/(.*)",
-      "headers": [
-        { "key": "X-Frame-Options", "value": "DENY" },
-        { "key": "X-Content-Type-Options", "value": "nosniff" },
-        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" }
-      ]
     }
   ]
 }
