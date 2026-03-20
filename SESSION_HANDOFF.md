@@ -1,7 +1,7 @@
 # EventRelay — Session Handoff & System Documentation
 
-> **Generated**: 2026-03-02 | **Repo**: [groupthinking/EventRelay](https://github.com/groupthinking/EventRelay)  
-> **Frontend**: https://event-relay-web.vercel.app | **Backend**: https://eventrelay-production.up.railway.app
+> **Generated**: 2026-03-02 | **Repo**: [groupthinking/EventRelay](https://github.com/groupthinking/EventRelay)
+> **Frontend**: https://uvai.io | **Backend**: https://api.uvai.io (Cloud Run)
 
 ---
 
@@ -36,20 +36,20 @@ The vision (from the owner's notes): *"You're building the first AI software fac
 
 | Component | Platform | URL | Tech Stack |
 |-----------|----------|-----|------------|
-| Frontend  | Vercel   | `event-relay-web.vercel.app` | Next.js 14, React, Zustand, TypeScript |
-| Backend   | Railway  | `eventrelay-production.up.railway.app` | FastAPI, Python 3.12, uvicorn |
-| Database  | SQLite (ephemeral) | `/tmp/uvai_data/app.db` | On Railway container |
+| Frontend  | Vercel   | `uvai.io` | Next.js 14, React, Zustand, TypeScript |
+| Backend   | Cloud Run | `api.uvai.io` | FastAPI, Python 3.12, uvicorn |
+| Database  | SQLite (dev) / PostgreSQL (prod) | See infrastructure/terraform/ | Production-ready persistence |
 | Repos     | GitHub   | `github.com/groupthinking/` | Auto-created by pipeline |
 
 ### Request Flow
 ```
 Browser → Vercel (Next.js)
-  ├── POST /api/pipeline        → Railway backend /api/v1/video-to-software
-  ├── POST /api/video           → Railway backend /api/v1/transcript-action (analysis only)
+  ├── POST /api/pipeline        → Cloud Run backend /api/v1/video-to-software
+  ├── POST /api/video           → Cloud Run backend /api/v1/transcript-action (analysis only)
   ├── POST /api/transcribe      → Gemini Google Search (direct)
   └── POST /api/extract-events  → Gemini structured output (direct)
 
-Railway Backend:
+Cloud Run Backend:
   /api/v1/video-to-software chains:
     Phase 1: EnhancedVideoProcessor.process_video(url)  → Gemini + YouTube analysis
     Phase 2: ProjectCodeGenerator.generate_project()     → HTML/JS/CSS in /tmp
@@ -61,12 +61,15 @@ Railway Backend:
 **Vercel (Frontend)**:
 | Key | Purpose |
 |-----|---------|
-| `BACKEND_URL` | Points to Railway backend (`https://eventrelay-production.up.railway.app`) |
+| `BACKEND_URL` | Points to Cloud Run backend (`https://uvai-backend-gpwz4wb5na-uc.a.run.app`) |
+| `NEXT_PUBLIC_BACKEND_URL` | Public backend URL for client-side calls |
+| `NEXT_PUBLIC_APP_URL` | Canonical frontend URL (`https://uvai.io`) |
+| `NEXT_PUBLIC_API_URL` | API subdomain (`https://api.uvai.io`) |
 | `GEMINI_API_KEY` | Gemini API (standard) |
 | `Vertex_AI_API_KEY` | Vertex AI Express Mode key (starts with `AQ.Ab8...`) |
 | `OPENAI_API_KEY` | OpenAI fallback for transcription |
 
-**Railway (Backend)**:
+**Cloud Run (Backend)**:
 | Key | Purpose |
 |-----|---------|
 | `GEMINI_API_KEY` | Video analysis via Gemini |
@@ -154,7 +157,7 @@ Returns pipeline metadata and available capabilities.
 **Note:** Uses `video_url` (not `url`) — different from frontend.
 
 #### `GET /docs` — Swagger UI
-Full interactive API docs at `https://eventrelay-production.up.railway.app/docs`
+Full interactive API docs at `https://api.uvai.io/docs`
 
 #### `GET /openapi.json` — OpenAPI Spec
 37+ endpoints documented. Machine-readable spec for LLM integration.
@@ -319,25 +322,25 @@ Three independent agents tested the system as: (1) an end user, (2) an LLM integ
 ### To Use the API
 ```bash
 # Analyze a video (fast, ~30s)
-curl -X POST https://event-relay-web.vercel.app/api/video \
+curl -X POST https://uvai.io/api/video \
   -H 'Content-Type: application/json' \
   -d '{"url": "https://www.youtube.com/watch?v=VIDEO_ID"}'
 
 # Full pipeline — analyze + generate code + create repo (slow, ~30-60s)
-curl -X POST https://event-relay-web.vercel.app/api/pipeline \
+curl -X POST https://uvai.io/api/pipeline \
   -H 'Content-Type: application/json' \
   -d '{"url": "https://www.youtube.com/watch?v=VIDEO_ID"}'
 
 # Backend direct (uses video_url, not url)
-curl -X POST https://eventrelay-production.up.railway.app/api/v1/video-to-software \
+curl -X POST https://api.uvai.io/api/v1/video-to-software \
   -H 'Content-Type: application/json' \
   -d '{"video_url": "https://www.youtube.com/watch?v=VIDEO_ID"}'
 
 # Check backend health
-curl https://eventrelay-production.up.railway.app/api/v1/health
+curl https://api.uvai.io/api/v1/health
 
 # Full API docs
-open https://eventrelay-production.up.railway.app/docs
+open https://api.uvai.io/docs
 ```
 
 ### Key Gotchas
