@@ -90,6 +90,9 @@ Provides Copilot with context about:
 - ✅ Test discovery configured
 - ✅ Copilot enabled for all relevant file types
 
+### Temporal SDK Integration
+- ✅ Successfully integrated the Temporal SDK into the framework to provide Durable Execution for agentic workflows.
+
 ## 📋 Setup Process
 
 Users can now:

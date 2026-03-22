@@ -64,7 +64,13 @@ function SplitView({
   onClose: () => void;
   onExtractEvents?: (videoId: string) => void;
 }) {
-  const [activeTab, setActiveTab] = useState<'analysis' | 'transcript' | 'actions'>('analysis');
+  const [activeTab, setActiveTab] = useState<'analysis' | 'transcript' | 'actions' | 'search'>('analysis');
+  const searchQuery = useDashboardStore((s) => s.searchQuery);
+  const setSearchQuery = useDashboardStore((s) => s.setSearchQuery);
+  const performSearch = useDashboardStore((s) => s.performSearch);
+  const searchResults = useDashboardStore((s) => s.searchResults);
+  const searchLoading = useDashboardStore((s) => s.searchLoading);
+
   const embedUrl = getYouTubeEmbedUrl(video.url);
 
   const hasInsights = video.insights && (video.insights.summary !== 'Analysis complete' || video.insights.actions.length > 0);
@@ -165,7 +171,7 @@ function SplitView({
       <div className="flex-1 flex flex-col bg-surface-900/50">
         {/* Tabs */}
         <div className="flex items-center px-6 border-b border-white/[0.05] gap-8 bg-surface-950/30">
-          {(['analysis', 'transcript', 'actions'] as const).map((tab) => (
+          {(['analysis', 'transcript', 'actions', 'search'] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -302,6 +308,62 @@ function SplitView({
                 events={video.events || []}
                 onExtract={onExtractEvents ? () => onExtractEvents(video.id) : undefined}
               />
+            </div>
+          )}
+
+          {activeTab === 'search' && (
+            <div className="max-w-4xl mx-auto animate-fade-in-up space-y-6">
+              <div className="bg-white/[0.02] border border-white/[0.05] p-6 rounded-2xl">
+                <h3 className="text-sm font-bold text-white/50 uppercase tracking-wider mb-4 flex items-center gap-2">
+                  <span className="text-primary-500">🔍</span> Multimodal Semantic Search
+                </h3>
+                <form 
+                  onSubmit={(e) => {
+                     e.preventDefault();
+                     performSearch(video.id, searchQuery);
+                  }}
+                  className="flex gap-3"
+                >
+                  <input
+                    type="text"
+                    placeholder="Search the video (e.g. 'architecture diagram' or 'next js deploy')..."
+                    className="flex-1 bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-primary-500/50 outline-none transition-colors"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                  <button 
+                    type="submit"
+                    className="px-6 py-3 bg-primary-500 text-white font-bold rounded-xl hover:bg-primary-600 transition-colors disabled:opacity-50"
+                    disabled={searchLoading || !searchQuery.trim()}
+                  >
+                    {searchLoading ? 'Searching...' : 'Search'}
+                  </button>
+                </form>
+              </div>
+
+              {searchResults.length > 0 ? (
+                <div className="space-y-4">
+                  <h4 className="text-xs font-bold text-white/40 uppercase tracking-wider">Top Results</h4>
+                  {searchResults.map((res: any, i: number) => (
+                    <div key={i} className="bg-surface-800 p-5 rounded-xl border border-white/[0.05] hover:border-primary-500/30 transition-colors">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-mono text-primary-400 bg-primary-500/10 px-2 py-1 rounded">
+                          {new Date(res.start * 1000).toISOString().substr(11, 8)} - {new Date((res.start + res.duration) * 1000).toISOString().substr(11, 8)}
+                        </span>
+                        <span className="text-xs text-white/30 font-mono">
+                          Score: {(res.score * 100).toFixed(1)}%
+                        </span>
+                      </div>
+                      <p className="text-sm text-white/70 leading-relaxed">{res.text}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-10 opacity-50">
+                  <span className="text-4xl block mb-3">💬</span>
+                  <p>Ask a question or search for a specific topic within the video.</p>
+                </div>
+              )}
             </div>
           )}
         </div>

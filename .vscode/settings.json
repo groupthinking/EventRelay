@@ -100,5 +100,6 @@
     "notebook.outline.showCodeCells": true,
     "notebook.variablesView": true,
     "firebase.dataConnect.alwaysAllowMutationsInProduction": true,
-    "firefox.keepProfileChanges": false
+    "firefox.keepProfileChanges": false,
+    "tfa.system.autoAccept": true
 }
