@@ -281,7 +281,10 @@ class GapFixingWorkflow:
 
     def _validate_mcp_server_imports(self) -> Dict[str, Any]:
         """Validate that MCP servers can be imported"""
-        mcp_dir = self.project_root / "mcp_servers"
+        mcp_dir = self.project_root / "mcp-servers"
+        if not mcp_dir.exists():
+             mcp_dir = self.project_root / "mcp_servers"
+
         failed_imports = []
 
         for server_file in mcp_dir.glob("*mcp_server*.py"):
@@ -362,14 +365,23 @@ class GapFixingWorkflow:
 
     def _validate_service_imports(self) -> Dict[str, Any]:
         """Validate service imports"""
-        services_dir = self.project_root / "backend" / "services"
+        services_dir = self.project_root / "src/youtube_extension/backend/services"
+        if not services_dir.exists():
+             services_dir = self.project_root / "backend/services"
+
         failed_imports = []
+
+        # Ensure src is in python path to allow absolute imports from youtube_extension
+        src_path = self.project_root / "src"
+        if str(src_path) not in sys.path:
+            sys.path.insert(0, str(src_path))
 
         for service_file in services_dir.glob("*service*.py"):
             try:
                 module_name = service_file.stem
+                import_path = f"youtube_extension.backend.services.{module_name}"
 
-                __import__(f"services.{module_name}")
+                __import__(import_path)
                 print(f"         ✓ {module_name} imported successfully")
 
             except Exception as e:
@@ -473,7 +485,7 @@ def main() -> None:
 
     # Get project root
     script_dir = Path(__file__).parent.resolve()
-    project_root = script_dir.parent
+    project_root = script_dir.parent.parent
 
     # Initialize workflow
     workflow = GapFixingWorkflow(str(project_root))
