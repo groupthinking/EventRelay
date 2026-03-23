@@ -1,9 +1,41 @@
 const fs = require('fs');
+const path = require('path');
 
-let yml = fs.readFileSync('.github/workflows/pr-checks.yml', 'utf8');
-yml = yml.replace('permissions:\n  pull-requests: write', 'permissions:\n  pull-requests: write\n  issues: write');
-fs.writeFileSync('.github/workflows/pr-checks.yml', yml);
+/**
+ * Local maintenance script to patch GitHub workflow permissions.
+ *
+ * This is intended to be run manually by maintainers (e.g. `node patch2.js`)
+ * and MUST NOT be executed in CI. It updates selected workflow files to grant
+ * `issues: write` alongside `pull-requests: write`.
+ */
 
-let yml2 = fs.readFileSync('.github/workflows/auto-label.yml', 'utf8');
-yml2 = yml2.replace('permissions:\n  pull-requests: write', 'permissions:\n  pull-requests: write\n  issues: write');
-fs.writeFileSync('.github/workflows/auto-label.yml', yml2);
+const WORKFLOWS_DIR = path.join(__dirname, '.github', 'workflows');
+const PERMISSIONS_OLD = 'permissions:\n  pull-requests: write';
+const PERMISSIONS_NEW = 'permissions:\n  pull-requests: write\n  issues: write';
+
+function patchWorkflowPermissions(fileName) {
+  const workflowPath = path.join(WORKFLOWS_DIR, fileName);
+  const original = fs.readFileSync(workflowPath, 'utf8');
+  const patched = original.replace(PERMISSIONS_OLD, PERMISSIONS_NEW);
+  fs.writeFileSync(workflowPath, patched);
+}
+
+function main() {
+  // Prevent accidental execution in CI environments.
+  if (process.env.CI) {
+    console.error('patch2.js must not be run in CI. Aborting without changes.');
+    process.exit(1);
+  }
+
+  try {
+    patchWorkflowPermissions('pr-checks.yml');
+    patchWorkflowPermissions('auto-label.yml');
+  } catch (error) {
+    console.error('Failed to patch workflow permissions:', error);
+    process.exit(1);
+  }
+}
+
+if (require.main === module) {
+  main();
+}
