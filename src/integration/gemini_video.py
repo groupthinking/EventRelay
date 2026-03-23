@@ -396,12 +396,10 @@ class GeminiVideoService:
         Returns:
             Structured BuildPlan as a dict conforming to the schema
         """
-        # Import schema function here to avoid circular dependencies
-        from youtube_extension.backend.models.build_plan import (
-            build_plan_to_gemini_schema,
-        )
+        # Import schema model here to avoid circular dependencies
+        from youtube_extension.backend.models.build_plan import BuildPlan
 
-        schema = response_schema or build_plan_to_gemini_schema()
+        schema = response_schema or BuildPlan.model_json_schema()
 
         prompt = """
         Analyze this video tutorial carefully and extract a structured build plan.
