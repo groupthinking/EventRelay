@@ -82,6 +82,20 @@ class VideoPackV0(BaseModel):
     code_snippets: List[CodeSnippet] = Field(default_factory=list)
     artifacts: List[ArtifactRef] = Field(default_factory=list)
 
+    # Deprecated fields kept for backward compatibility with earlier VideoPackV0 schemas.
+    # These may be removed in a future major version (e.g., VideoPackV1+).
+    chapters: Optional[Any] = Field(
+        default=None,
+        description="DEPRECATED: retained for backward compatibility with earlier VideoPackV0 schemas.",
+    )
+    code_cues: Optional[Any] = Field(
+        default=None,
+        description="DEPRECATED: retained for backward compatibility with earlier VideoPackV0 schemas.",
+    )
+    tasks: Optional[Any] = Field(
+        default=None,
+        description="DEPRECATED: retained for backward compatibility with earlier VideoPackV0 schemas.",
+    )
     # Stage 1: Multimodal Ingestion - Visual context from Gemini Vision
     visual_context: Optional[VisualContext] = Field(None, description="Visual analysis from video frames")
 
