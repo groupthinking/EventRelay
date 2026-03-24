@@ -608,8 +608,14 @@ function DashboardContent() {
 
               {filteredVideos.length === 0 ? (
                 <div className="py-20 text-center border border-dashed border-white/[0.1] rounded-3xl bg-white/[0.01]">
-                  <div className="text-4xl mb-4 opacity-30">📭</div>
-                  <p className="text-white/40 font-medium">No videos found in this category.</p>
+                  <p className="text-white/50 font-medium mb-2">No videos yet</p>
+                  <p className="text-white/30 text-sm mb-6 max-w-sm mx-auto">Paste a YouTube URL above to analyze your first video and start building your library.</p>
+                  <button
+                    onClick={() => document.querySelector<HTMLInputElement>('input[type="text"]')?.focus()}
+                    className="btn btn-primary px-5 py-2.5 text-sm"
+                  >
+                    Analyze a video
+                  </button>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
