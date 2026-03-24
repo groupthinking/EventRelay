@@ -50,7 +50,7 @@ export default function Home() {
       </nav>
 
       {/* Hero */}
-      <div className="max-w-3xl mx-auto px-6 pt-20 pb-12 text-center">
+      <div className="max-w-3xl mx-auto px-6 pt-20 pb-12">
         <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/[0.04] border border-white/[0.08] text-xs text-white/60 mb-8">
           <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
           Open source &bull; Self-hostable
@@ -59,7 +59,7 @@ export default function Home() {
         <h1 className="text-4xl md:text-5xl font-black leading-tight mb-4">
           Video → <span className="gradient-text">Software</span>
         </h1>
-        <p className="text-white/40 text-lg max-w-xl mx-auto mb-10 leading-relaxed">
+        <p className="text-white/40 text-lg max-w-xl mb-10 leading-relaxed">
           Paste a YouTube URL. AI analyzes the content, extracts every technology, concept, and action item — then generates a project scaffold you can deploy.
         </p>
 
@@ -87,7 +87,7 @@ export default function Home() {
         </form>
 
         {/* Example URLs */}
-        <div className="flex flex-wrap items-center justify-center gap-3 mt-5">
+        <div className="flex flex-wrap items-center gap-3 mt-5">
           <span className="text-xs text-white/30">Try:</span>
           {EXAMPLES.map(({ url, label }) => (
             <button
@@ -100,7 +100,7 @@ export default function Home() {
           ))}
         </div>
 
-        <div className="mt-6 flex justify-center">
+        <div className="mt-6 flex">
           <Link
             href="/prototype"
             className="inline-flex items-center gap-2 rounded-full border border-primary-500/25 bg-primary-500/10 px-4 py-2 text-sm font-medium text-primary-200 transition hover:border-primary-500/40 hover:bg-primary-500/15"
