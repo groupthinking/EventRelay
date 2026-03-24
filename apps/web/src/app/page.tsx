@@ -126,7 +126,7 @@ export default function Home() {
             >
               <span className="text-sm font-mono text-primary-400 pt-0.5 shrink-0">{step.num}</span>
               <div>
-                <h3 className="font-semibold text-white mb-1 text-left">{step.title}</h3>
+                <h2 className="font-semibold text-white mb-1 text-left text-base">{step.title}</h2>
                 <p className="text-sm text-white/40 leading-relaxed text-left">{step.desc}</p>
               </div>
             </div>
