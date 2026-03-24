@@ -35,6 +35,14 @@ qrcode[pil]>=7.0
 opencv-python>=4.8.0
 orjson>=3.9.0
 
+[cloud]
+google-cloud-aiplatform>=1.38.0
+google-cloud-firestore>=2.13.0
+google-cloud-tasks>=2.14.0
+google-cloud-storage>=2.13.0
+google-cloud-logging>=3.8.0
+google-cloud-monitoring>=2.16.0
+
 [deploy]
 docker>=6.1.0
 kubernetes>=28.1.0

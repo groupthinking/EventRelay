@@ -3,6 +3,7 @@ analysis
 backend
 connectors
 core
+dataconnect-generated
 integration
 mcp
 shared
