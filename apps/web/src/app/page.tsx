@@ -5,6 +5,8 @@ import { useState, useCallback } from 'react';
 import { clsx } from 'clsx';
 import { useRouter } from 'next/navigation';
 import { ArrowRight } from 'lucide-react';
+import Nav from '@/components/Nav';
+import Footer from '@/components/Footer';
 
 const STEPS = [
   { num: '01', title: 'Paste a Video URL', desc: 'Drop any YouTube link — tutorials, talks, walkthroughs' },
@@ -27,27 +29,8 @@ export default function Home() {
   }, [videoUrl, router]);
 
   return (
-    <div className="min-h-screen text-white">
-      {/* Nav */}
-      <nav className="flex items-center justify-between px-6 lg:px-12 py-4 border-b border-white/[0.05]">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center font-black text-lg shadow-lg shadow-primary-500/25">
-            U
-          </div>
-          <span className="font-bold text-xl tracking-tight">UVAI</span>
-        </div>
-        <div className="flex items-center gap-3">
-          <Link href="/dashboard" className="btn btn-secondary py-2 text-sm">
-            Dashboard
-          </Link>
-          <Link href="/prototype" className="btn btn-secondary py-2 text-sm">
-            Prototype
-          </Link>
-          <Link href="/playground" className="btn btn-ghost py-2 text-sm text-white/50">
-            API
-          </Link>
-        </div>
-      </nav>
+    <div className="min-h-screen text-white flex flex-col">
+      <Nav />
 
       {/* Hero */}
       <div className="max-w-3xl mx-auto px-6 pt-20 pb-12">
@@ -56,7 +39,7 @@ export default function Home() {
           Open source &bull; Self-hostable
         </div>
 
-        <h1 className="text-4xl md:text-5xl font-black leading-tight mb-4">
+        <h1 className="text-4xl md:text-5xl font-black leading-tight mb-4 font-heading">
           Video → <span className="gradient-text">Software</span>
         </h1>
         <p className="text-white/40 text-lg max-w-xl mb-10 leading-relaxed">
@@ -79,11 +62,16 @@ export default function Home() {
             <button
               type="submit"
               disabled={!videoUrl.trim()}
-              className="btn btn-primary py-3 px-8 disabled:opacity-30 disabled:cursor-not-allowed"
+              className="btn btn-primary py-3 px-8 disabled:opacity-30 disabled:cursor-not-allowed group relative"
+              title={!videoUrl.trim() ? 'Paste a YouTube URL first' : undefined}
             >
               Process Video
             </button>
           </div>
+          {/* F-009: Hint text when button is disabled */}
+          {!videoUrl.trim() && (
+            <p className="text-xs text-white/20 mt-2 ml-2">Paste a YouTube URL above to get started</p>
+          )}
         </form>
 
         {/* Example URLs */}
@@ -112,7 +100,7 @@ export default function Home() {
       </div>
 
       {/* How it works */}
-      <div className="max-w-2xl mx-auto px-6 pb-20">
+      <div className="max-w-2xl mx-auto px-6 pb-20 flex-1">
         <div className="space-y-0">
           {STEPS.map((step, i) => (
             <div
@@ -126,7 +114,7 @@ export default function Home() {
             >
               <span className="text-sm font-mono text-primary-400 pt-0.5 shrink-0">{step.num}</span>
               <div>
-                <h2 className="font-semibold text-white mb-1 text-left text-base">{step.title}</h2>
+                <h2 className="font-semibold text-white mb-1 text-left text-base font-heading">{step.title}</h2>
                 <p className="text-sm text-white/40 leading-relaxed text-left">{step.desc}</p>
               </div>
             </div>
@@ -134,16 +122,8 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Footer */}
-      <div className="border-t border-white/[0.06] py-6">
-        <div className="max-w-3xl mx-auto px-6 flex items-center justify-between text-xs text-white/25">
-          <span>UVAI • Video to Software</span>
-          <div className="flex items-center gap-4">
-            <Link href="/playground" className="hover:text-white/50 transition py-2 px-1">API</Link>
-            <a href="https://github.com/groupthinking/EventRelay" target="_blank" rel="noopener noreferrer" className="hover:text-white/50 transition py-2 px-1">GitHub</a>
-          </div>
-        </div>
-      </div>
+      <Footer variant="compact" />
     </div>
   );
 }
+

@@ -4,6 +4,8 @@ import { Suspense, useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { clsx } from 'clsx';
+import Nav from '@/components/Nav';
+import Footer from '@/components/Footer';
 import TranscriptViewer from '@/components/TranscriptViewer';
 import EventList from '@/components/EventList';
 import type { ExtractedEvent } from '@/lib/types';
@@ -510,41 +512,33 @@ function DashboardContent() {
   return (
     <div className="h-screen flex flex-col text-white overflow-hidden bg-surface-950">
       {/* Top Nav (Always visible) */}
-      <nav className="flex-none flex items-center justify-between px-6 py-4 border-b border-white/[0.05] bg-surface-900 z-50">
-        <div className="flex items-center gap-6">
-          <Link href="/" className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center font-black text-sm shadow-lg shadow-primary-500/25">
-              U
-            </div>
-            <span className="font-bold tracking-tight">UVAI</span>
-          </Link>
-          <div className="h-5 w-px bg-white/[0.08]" />
-          <span className="text-white/50 font-medium text-sm">Dashboard</span>
+      <Nav
+        subtitle="Dashboard"
+        rightSlot={
+          <div className="flex items-center gap-4">
+            <Link
+              href="/dashboard/agents"
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-xs text-indigo-400 font-bold uppercase tracking-wider hover:bg-indigo-500/20 transition-all"
+            >
+              ⚡ Agent Pipeline
+            </Link>
+            {processingCount > 0 ? (
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary-500/10 border border-primary-500/20">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-primary-400" />
+                </span>
+                <span className="text-xs text-primary-400 font-bold uppercase tracking-wider">{processingCount} Processing</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-green-500/10 border border-green-500/20">
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-green-400" />
+                <span className="text-xs text-green-400 font-bold uppercase tracking-wider">Ready</span>
+              </div>
+            )}
         </div>
-        
-        <div className="flex items-center gap-4">
-          <Link
-            href="/dashboard/agents"
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-xs text-indigo-400 font-bold uppercase tracking-wider hover:bg-indigo-500/20 transition-all"
-          >
-            ⚡ Agent Pipeline
-          </Link>
-          {processingCount > 0 ? (
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary-500/10 border border-primary-500/20">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-primary-400" />
-              </span>
-              <span className="text-xs text-primary-400 font-bold uppercase tracking-wider">{processingCount} Processing</span>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-green-500/10 border border-green-500/20">
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-green-400" />
-              <span className="text-xs text-green-400 font-bold uppercase tracking-wider">Ready</span>
-            </div>
-          )}
-        </div>
-      </nav>
+        }
+      />
 
       {/* Main Content Area */}
       {selectedVideo ? (
