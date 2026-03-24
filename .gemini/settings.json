@@ -1,0 +1,37 @@
+{
+  "mcpServers": {
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@github/github-mcp-server"],
+      "env": {
+        "GITHUB_TOKEN": "$GITHUB_TOKEN"
+      },
+      "trust": false
+    },
+    "shared-state": {
+      "command": "python",
+      "args": ["mcp-servers/shared-state/state_coordinator.py"],
+      "env": {
+        "PYTHONPATH": "mcp-servers/shared-state"
+      },
+      "trust": true
+    },
+    "git-workflow": {
+      "command": "node",
+      "args": ["tools/mcp/git_workflow_server.mjs"],
+      "env": {
+        "GIT_WORKSPACE_ROOT": ".",
+        "GIT_DEFAULT_REMOTE": "origin"
+      },
+      "trust": true
+    },
+    "stitch": {
+      "url": "https://stitch.googleapis.com/mcp",
+      "headers": {
+        "Authorization": "Bearer $STITCH_ACCESS_TOKEN",
+        "X-Goog-User-Project": "uvai-730bb"
+      },
+      "trust": false
+    }
+  }
+}

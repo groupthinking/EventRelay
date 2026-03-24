@@ -87,7 +87,10 @@ workflow_results/
 .directory
 .dmypy.json
 .env*
-.gemini/
+.gemini/*.log
+.gemini/tmp/
+.gemini/auth/
+.gemini/cache/
 .git
 .gitignore
 .idea/
