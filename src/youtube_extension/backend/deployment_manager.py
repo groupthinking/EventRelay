@@ -552,12 +552,15 @@ class DeploymentManager:
         }
 
         async with httpx.AsyncClient() as client:
-            # Get user info
+            # Get user info — check status before parsing to surface auth errors clearly
             user_response = await client.get("https://api.github.com/user", headers=headers)
+            if user_response.status_code != 200:
+                raise Exception(
+                    f"GitHub authentication failed: {user_response.status_code} - {user_response.text}"
+                )
             user_data = user_response.json()
             username = user_data["login"]
 
-            uploaded_files = []
             project_path_obj = Path(project_path)
 
             # Directories to exclude from GitHub upload (standard .gitignore patterns)
@@ -567,55 +570,100 @@ class DeploymentManager:
                 """Check if any parent directory is in the exclusion list"""
                 return any(part in EXCLUDED_DIRS for part in path.parts)
 
-            # Read all files to upload concurrently to improve performance further
-            upload_tasks = []
+            # Collect file list up-front; coroutines are created lazily inside workers
+            files_to_upload = [
+                (file_path, file_path.relative_to(project_path_obj))
+                for file_path in project_path_obj.rglob("*")
+                if not should_skip_path(file_path.relative_to(project_path_obj))
+                and file_path.is_file()
+                and not file_path.name.startswith('.')
+            ]
 
-            async def upload_file(client, file_path, relative_path):
+            async def upload_file(file_path: Path, relative_path: Path) -> Optional[str]:
+                """Upload a single file with retry/backoff for GitHub rate limits."""
                 try:
-                    # Read file content
-                    with open(file_path, 'rb') as f:
-                        content = f.read()
-
-                    # Encode content
+                    # Offload blocking disk I/O to a thread to avoid stalling the event loop
+                    content = await asyncio.to_thread(file_path.read_bytes)
                     encoded_content = base64.b64encode(content).decode('utf-8')
 
-                    # Upload file
                     file_data = {
                         "message": f"Add {relative_path}",
                         "content": encoded_content
                     }
 
                     upload_url = f"https://api.github.com/repos/{username}/{repo_name}/contents/{relative_path}"
-                    response = await client.put(upload_url, headers=headers, json=file_data)
 
-                    if response.status_code in [201, 200]:
-                        return str(relative_path)
-                    else:
-                        logger.warning(f"Failed to upload {relative_path}: {response.text}")
-                        return None
+                    # Retry with exponential backoff on 403/429 (rate limit / abuse detection).
+                    # max_retries=3 means 1 initial attempt + 3 retries = 4 total requests.
+                    max_retries = 3
+                    for attempt in range(max_retries + 1):
+                        response = await client.put(upload_url, headers=headers, json=file_data)
+                        if response.status_code in [200, 201]:
+                            return str(relative_path)
+                        elif response.status_code in [403, 429]:
+                            if attempt == max_retries:
+                                break  # exhausted all retries, no point sleeping
+                            try:
+                                retry_after = int(response.headers.get("Retry-After", 2 ** (attempt + 1)))
+                            except (ValueError, TypeError):
+                                retry_after = 2 ** (attempt + 1)
+                            logger.warning(
+                                f"Rate limited uploading {relative_path} "
+                                f"(attempt {attempt + 1}/{max_retries + 1}), retrying in {retry_after}s"
+                            )
+                            await asyncio.sleep(retry_after)
+                        else:
+                            logger.warning(
+                                f"Failed to upload {relative_path}: "
+                                f"{response.status_code} - {response.text}"
+                            )
+                            return None
+
+                    logger.error(f"Exhausted retries uploading {relative_path} due to rate limiting")
+                    return None
+                except asyncio.CancelledError:
+                    # Propagate cancellation so calling code can handle shutdown correctly
+                    raise
                 except Exception as e:
                     logger.warning(f"Error uploading {file_path}: {e}")
                     return None
 
-            # Collect tasks
-            for file_path in project_path_obj.rglob("*"):
-                # Skip excluded directories and dotfiles
-                if should_skip_path(file_path.relative_to(project_path_obj)):
-                    continue
-                if file_path.is_file() and not file_path.name.startswith('.'):
-                    relative_path = file_path.relative_to(project_path_obj)
-                    upload_tasks.append(upload_file(client, file_path, relative_path))
+            # Bounded worker-pool: only MAX_WORKERS coroutines exist at a time, keeping
+            # memory usage O(workers) rather than O(files) for large repositories.
+            # maxsize=MAX_WORKERS*2 keeps the queue bounded so producers don't outpace consumers.
+            MAX_WORKERS = 10
+            queue: asyncio.Queue = asyncio.Queue(maxsize=MAX_WORKERS * 2)
+            uploaded_files: list[str] = []
+            lock = asyncio.Lock()
 
-            # Run uploads concurrently with a semaphore to avoid overwhelming the GitHub API
-            # Secondary rate limit for GitHub is generally not strictly documented for concurrent writes but 10-20 concurrent requests is a safe maximum.
-            semaphore = asyncio.Semaphore(10)
+            async def worker() -> None:
+                while True:
+                    item = await queue.get()
+                    try:
+                        if item is None:
+                            return
+                        file_path, relative_path = item
+                        result = await upload_file(file_path, relative_path)
+                        if result is not None:
+                            async with lock:
+                                uploaded_files.append(result)
+                    finally:
+                        queue.task_done()
 
-            async def run_with_semaphore(coro):
-                async with semaphore:
-                    return await coro
+            # Start workers before filling the queue so they begin consuming immediately
+            worker_tasks = [asyncio.create_task(worker()) for _ in range(MAX_WORKERS)]
 
-            results = await asyncio.gather(*(run_with_semaphore(task) for task in upload_tasks))
-            uploaded_files = [res for res in results if res is not None]
+            for item in files_to_upload:
+                await queue.put(item)
+            # Sentinel values to signal each worker to stop
+            for _ in range(MAX_WORKERS):
+                await queue.put(None)
+
+            # return_exceptions=True prevents one unexpected worker error from cancelling others
+            results = await asyncio.gather(*worker_tasks, return_exceptions=True)
+            for exc in results:
+                if isinstance(exc, Exception):
+                    logger.error(f"Unexpected error in upload worker: {exc}")
 
         return {
             "files_uploaded": len(uploaded_files),
