@@ -7,9 +7,9 @@ import { useRouter } from 'next/navigation';
 import { ArrowRight } from 'lucide-react';
 
 const STEPS = [
-  { icon: '🔗', title: 'Paste a Video URL', desc: 'Drop any YouTube link — tutorials, talks, walkthroughs' },
-  { icon: '🧠', title: 'AI Watches & Understands', desc: 'Gemini analyzes the video content, extracts technologies, concepts, and structure' },
-  { icon: '🚀', title: 'Get Insights & Code', desc: 'Receive a full breakdown — summary, actions, topics, and generated project scaffold' },
+  { num: '01', title: 'Paste a Video URL', desc: 'Drop any YouTube link — tutorials, talks, walkthroughs' },
+  { num: '02', title: 'AI Watches & Understands', desc: 'Gemini analyzes the video content, extracts technologies, concepts, and structure' },
+  { num: '03', title: 'Get Insights & Code', desc: 'Receive a full breakdown — summary, actions, topics, and generated project scaffold' },
 ];
 
 const EXAMPLES = [
@@ -112,23 +112,23 @@ export default function Home() {
       </div>
 
       {/* How it works */}
-      <div className="max-w-3xl mx-auto px-6 pb-20">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="max-w-2xl mx-auto px-6 pb-20">
+        <div className="space-y-0">
           {STEPS.map((step, i) => (
             <div
               key={step.title}
               className={clsx(
-                'relative p-6 rounded-2xl bg-white/[0.03] border border-white/[0.06]',
+                'flex items-start gap-5 py-5',
+                i < STEPS.length - 1 && 'border-b border-white/[0.06]',
                 'animate-fade-in-up opacity-0'
               )}
               style={{ animationDelay: `${i * 150}ms`, animationFillMode: 'forwards' }}
             >
-              <div className="text-3xl mb-3">{step.icon}</div>
-              <div className="text-xs text-white/30 font-semibold uppercase tracking-wider mb-1">
-                Step {i + 1}
+              <span className="text-sm font-mono text-primary-400 pt-0.5 shrink-0">{step.num}</span>
+              <div>
+                <h3 className="font-semibold text-white mb-1 text-left">{step.title}</h3>
+                <p className="text-sm text-white/40 leading-relaxed text-left">{step.desc}</p>
               </div>
-              <h3 className="font-bold text-white mb-1">{step.title}</h3>
-              <p className="text-sm text-white/40 leading-relaxed">{step.desc}</p>
             </div>
           ))}
         </div>
