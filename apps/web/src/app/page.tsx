@@ -32,9 +32,9 @@ export default function Home() {
       <nav className="flex items-center justify-between px-6 lg:px-12 py-4 border-b border-white/[0.05]">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center font-black text-lg shadow-lg shadow-primary-500/25">
-            E
+            U
           </div>
-          <span className="font-bold text-xl tracking-tight">EventRelay</span>
+          <span className="font-bold text-xl tracking-tight">UVAI</span>
         </div>
         <div className="flex items-center gap-3">
           <Link href="/dashboard" className="btn btn-secondary py-2 text-sm">
@@ -137,7 +137,7 @@ export default function Home() {
       {/* Footer */}
       <div className="border-t border-white/[0.06] py-6">
         <div className="max-w-3xl mx-auto px-6 flex items-center justify-between text-xs text-white/25">
-          <span>EventRelay • Agentic Video Execution Platform</span>
+          <span>UVAI • Video to Software</span>
           <div className="flex items-center gap-4">
             <Link href="/playground" className="hover:text-white/50 transition">API</Link>
             <a href="https://github.com/groupthinking/EventRelay" target="_blank" rel="noopener noreferrer" className="hover:text-white/50 transition">GitHub</a>

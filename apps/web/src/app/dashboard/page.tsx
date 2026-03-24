@@ -514,9 +514,9 @@ function DashboardContent() {
         <div className="flex items-center gap-6">
           <Link href="/" className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center font-black text-sm shadow-lg shadow-primary-500/25">
-              E
+              U
             </div>
-            <span className="font-bold tracking-tight">EventRelay</span>
+            <span className="font-bold tracking-tight">UVAI</span>
           </Link>
           <div className="h-5 w-px bg-white/[0.08]" />
           <span className="text-white/50 font-medium text-sm">Dashboard</span>

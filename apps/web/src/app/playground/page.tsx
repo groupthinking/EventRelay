@@ -227,7 +227,7 @@ export default function APIPlaygroundPage() {
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-teal-500 to-teal-700 flex items-center justify-center font-black text-lg">
               U
             </div>
-            <span className="font-bold text-xl">UVAI.io</span>
+            <span className="font-bold text-xl">UVAI</span>
           </Link>
           <div className="h-6 w-px bg-white/10" />
           <span className="text-white/60">API Playground</span>
