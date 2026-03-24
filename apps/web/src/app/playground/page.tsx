@@ -19,7 +19,7 @@ function CodeEditor({ value, onChange, language = 'json' }: { value: string; onC
       <textarea
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full h-64 p-4 bg-slate-900 rounded-xl border border-white/10 font-mono text-sm text-white/80 resize-none focus:outline-none focus:border-violet-500/50"
+        className="w-full h-64 p-4 bg-slate-900 rounded-xl border border-white/10 font-mono text-sm text-white/80 resize-none focus:outline-none focus:border-teal-500/50"
         spellCheck={false}
       />
     </div>
@@ -32,7 +32,7 @@ function ResponseViewer({ response }: { response: APIResponse }) {
     return (
       <div className="flex items-center justify-center h-64 bg-slate-900 rounded-xl border border-white/10">
         <div className="text-center">
-          <div className="w-12 h-12 rounded-full border-4 border-violet-500 border-t-transparent animate-spin mx-auto mb-4" />
+          <div className="w-12 h-12 rounded-full border-4 border-teal-500 border-t-transparent animate-spin mx-auto mb-4" />
           <p className="text-white/60">Processing request...</p>
         </div>
       </div>
@@ -87,7 +87,7 @@ function EndpointCard({
       onClick={onClick}
       className={`w-full text-left p-4 rounded-xl border transition-all ${
         isSelected
-          ? 'bg-violet-500/10 border-violet-500/50'
+          ? 'bg-teal-500/10 border-teal-500/50'
           : 'bg-white/5 border-white/10 hover:bg-white/10'
       }`}
     >
@@ -224,7 +224,7 @@ export default function APIPlaygroundPage() {
       <nav className="relative z-50 flex items-center justify-between px-6 py-4 border-b border-white/5">
         <div className="flex items-center gap-6">
           <Link href="/" className="flex items-center gap-2">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center font-black text-lg">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-teal-500 to-teal-700 flex items-center justify-center font-black text-lg">
               U
             </div>
             <span className="font-bold text-xl">UVAI.io</span>
@@ -284,7 +284,7 @@ export default function APIPlaygroundPage() {
               </code>
               <button
                 onClick={handleSendRequest}
-                className="px-6 py-2 rounded-lg bg-gradient-to-r from-violet-600 to-purple-600 font-medium hover:opacity-90 transition"
+                className="px-6 py-2 rounded-lg bg-gradient-to-r from-teal-600 to-teal-700 font-medium hover:opacity-90 transition"
               >
                 Send Request
               </button>
