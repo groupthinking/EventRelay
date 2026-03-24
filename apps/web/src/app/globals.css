@@ -570,3 +570,64 @@ pre {
     background-position: 200% 0;
   }
 }
+
+/* ============================================
+   Stitch Dashboard Animations
+   ============================================ */
+
+@keyframes stitch-fade-in {
+  0% {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.stitch-fade-in {
+  animation: stitch-fade-in 0.5s cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+/* Staggered children — use with style={{ animationDelay }} */
+.stitch-fade-in:nth-child(1) { animation-delay: 0ms; }
+.stitch-fade-in:nth-child(2) { animation-delay: 80ms; }
+.stitch-fade-in:nth-child(3) { animation-delay: 160ms; }
+.stitch-fade-in:nth-child(4) { animation-delay: 240ms; }
+.stitch-fade-in:nth-child(5) { animation-delay: 320ms; }
+.stitch-fade-in:nth-child(6) { animation-delay: 400ms; }
+
+/* ============================================
+   Mobile Responsive — Dashboard Split View
+   ============================================ */
+
+@media (max-width: 768px) {
+  /* Collapse split-view to vertical stack on mobile */
+  .flex.flex-1.overflow-hidden {
+    flex-direction: column !important;
+  }
+  .flex.flex-1.overflow-hidden > div:first-child {
+    width: 100% !important;
+    min-width: unset !important;
+    max-height: 45vh;
+  }
+  .flex.flex-1.overflow-hidden > div:last-child {
+    width: 100% !important;
+  }
+}
+
+/* ============================================
+   Mobile Responsive — Landing Page
+   ============================================ */
+
+@media (max-width: 640px) {
+  /* Product mockup collapses to single column */
+  .grid[style*="grid-template-columns: 45% 55%"] {
+    grid-template-columns: 1fr !important;
+  }
+  /* Metrics bar wraps */
+  .grid-cols-4 {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
