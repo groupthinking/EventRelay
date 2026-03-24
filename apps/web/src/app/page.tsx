@@ -93,7 +93,7 @@ export default function Home() {
             <button
               key={url}
               onClick={() => { setVideoUrl(url); }}
-              className="text-xs px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.06] text-primary-400/80 hover:text-primary-400 hover:border-primary-500/30 transition"
+              className="text-xs px-4 py-2.5 rounded-lg bg-white/[0.04] border border-white/[0.06] text-primary-400/80 hover:text-primary-400 hover:border-primary-500/30 transition"
             >
               {label}
             </button>
@@ -139,8 +139,8 @@ export default function Home() {
         <div className="max-w-3xl mx-auto px-6 flex items-center justify-between text-xs text-white/25">
           <span>UVAI • Video to Software</span>
           <div className="flex items-center gap-4">
-            <Link href="/playground" className="hover:text-white/50 transition">API</Link>
-            <a href="https://github.com/groupthinking/EventRelay" target="_blank" rel="noopener noreferrer" className="hover:text-white/50 transition">GitHub</a>
+            <Link href="/playground" className="hover:text-white/50 transition py-2 px-1">API</Link>
+            <a href="https://github.com/groupthinking/EventRelay" target="_blank" rel="noopener noreferrer" className="hover:text-white/50 transition py-2 px-1">GitHub</a>
           </div>
         </div>
       </div>
