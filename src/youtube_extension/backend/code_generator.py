@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 from urllib.parse import urlparse, parse_qs
 
-from youtube_extension.backend.build_plan import BuildPlan, parse_build_plan
+from youtube_extension.backend.models.build_plan import BuildPlan
 
 logger = logging.getLogger(__name__)
 
@@ -1200,10 +1200,8 @@ This is a starting point generated from video analysis. You can:
     def _build_generation_context(self, video_analysis: dict[str, Any], project_config: dict[str, Any]) -> dict[str, Any]:
         """Combine video analysis, AI insights, and user config for generation.
 
-        This method now also runs Stage 2 Semantic Logic Parsing: it calls
-        :func:`~youtube_extension.backend.build_plan.parse_build_plan` to
-        produce a :class:`~youtube_extension.backend.build_plan.BuildPlan`
-        that downstream generators can consume deterministically.
+        Uses a structured BuildPlan (Stage 2 output) when available; falls back
+        to legacy extraction from ai_analysis and extracted_info.
         """
         extracted_info = dict(video_analysis.get("extracted_info") or {})
         metadata = video_analysis.get("metadata") or video_analysis.get("video_data") or {}
@@ -1228,49 +1226,34 @@ This is a starting point generated from video analysis. You can:
         if not technologies:
             technologies = ["javascript", "html", "css"]
 
-        # Check if we have a structured BuildPlan (Stage 2: Semantic Logic Parsing)
-        build_plan = video_analysis.get("build_plan")
-
         if build_plan:
             # Use BuildPlan as primary source - this is the preferred path!
-            logger.info(f"✅ Using structured BuildPlan: {build_plan.get('title', 'Untitled')}")
-
+            logger.info(f"✅ Using structured BuildPlan: {build_plan.get('video_title', 'Untitled')}")
+            features = build_plan.get("features", [])
+            summary = build_plan.get("summary", "")
+            key_concepts = build_plan.get("technologies", technologies)
+            tutorial_steps = [
+                f"Step {step.get('order', i + 1)}: {step.get('description', '')}"
+                for i, step in enumerate(build_plan.get("steps", [])[:8])
+            ]
             extracted_info = {
-                "title": build_plan.get("title"),
+                "title": build_plan.get("video_title") or title,
                 "project_type": build_plan.get("project_type", "web"),
-                "technologies": build_plan.get("technologies", []),
-                "features": build_plan.get("features", []),
-                "tutorial_steps": [
-                    f"{step.get('title')}: {step.get('description')}"
-                    for step in build_plan.get("steps", [])[:8]
-                ],
-                "difficulty_level": build_plan.get("difficulty_level", "beginner"),
-                "prerequisites": build_plan.get("prerequisites", []),
-                "learning_objectives": build_plan.get("learning_objectives", []),
+                "technologies": build_plan.get("technologies", technologies),
+                "features": features,
+                "tutorial_steps": tutorial_steps,
             }
-
-        build_plan_steps = self._build_plan_steps_to_list(build_plan) if build_plan else []
-        tutorial_steps = self._coerce_to_list(extracted_info.get("tutorial_steps"))
-        if not tutorial_steps:
-            tutorial_steps = build_plan_steps
-        if not tutorial_steps:
-            tutorial_steps = self._derive_tutorial_steps(ai_analysis, video_analysis)
-
         else:
             # Fallback to legacy extraction logic
             logger.warning("⚠️ BuildPlan not found, falling back to legacy extraction")
-
-            extracted_info = dict(video_analysis.get("extracted_info") or {})
-            metadata = video_analysis.get("metadata") or video_analysis.get("video_data") or {}
-            ai_analysis = video_analysis.get("ai_analysis") or {}
-
-            title = (
-                project_config.get("title")
-                or extracted_info.get("title")
-                or metadata.get("title")
-                or metadata.get("video_title")
-                or "UVAI Generated Project"
-            )
+            features = self._coerce_to_list(extracted_info.get("features"))
+            summary = ai_analysis.get("Content Summary", "")
+            key_concepts = self._coerce_to_list(ai_analysis.get("Key Concepts"))
+            tutorial_steps = self._coerce_to_list(extracted_info.get("tutorial_steps"))
+            if not tutorial_steps:
+                tutorial_steps = self._build_plan_steps_to_list(build_plan)
+            if not tutorial_steps:
+                tutorial_steps = self._derive_tutorial_steps(ai_analysis, video_analysis)
 
         extracted_info.update({
             "title": title,
@@ -1286,7 +1269,6 @@ This is a starting point generated from video analysis. You can:
             "build_plan": build_plan,
             "summary": summary,
             "key_concepts": key_concepts,
-            "build_plan": build_plan  # Pass through for generators that want raw access
         }
 
     def _build_plan_steps_to_list(self, build_plan: dict[str, Any] | None) -> list[str]:
