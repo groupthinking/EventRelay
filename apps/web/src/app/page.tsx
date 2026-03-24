@@ -53,7 +53,7 @@ export default function Home() {
       <div className="max-w-3xl mx-auto px-6 pt-20 pb-12 text-center">
         <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/[0.04] border border-white/[0.08] text-xs text-white/60 mb-8">
           <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-          Powered by Gemini &amp; Vertex AI
+          Open source &bull; Self-hostable
         </div>
 
         <h1 className="text-4xl md:text-5xl font-black leading-tight mb-4">
