@@ -192,6 +192,8 @@ class MCPOrchestrator:
 
         logger.info(f"Executing task {task_id} on server {server_id}")
 
+        # Initialize server_state before try block to avoid NameError in except block
+        server_state = None
         try:
             # Update server state
             server_state = self.registry.get_server_state(server_id)
