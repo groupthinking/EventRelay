@@ -293,7 +293,7 @@ class MCPServerRegistry:
                     headers["Authorization"] = f"Bearer {config.auth_token}"
 
                 async with session.get(
-                    url, headers=headers, timeout=config.timeout
+                    url, headers=headers, timeout=aiohttp.ClientTimeout(total=config.timeout)
                 ) as response:
                     response_time = time.time() - start_time
 
