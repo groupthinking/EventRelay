@@ -346,7 +346,8 @@ class MCPServerRegistry:
             try:
                 await self.health_check_task
             except asyncio.CancelledError:
-                pass
+                # Expected when cancelling the health check task; safe to ignore.
+                ...
         logger.info("Server health monitoring stopped")
 
     async def _monitoring_loop(self) -> None:
