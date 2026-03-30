@@ -173,6 +173,9 @@ class MCPServerState(BaseModel):
         default=0, description="Consecutive health check failures"
     )
     uptime_seconds: int = Field(default=0, description="Server uptime in seconds")
+    last_online_time: Optional[datetime] = Field(
+        default=None, description="Timestamp when server last came online"
+    )
 
     # Timestamps
     started_at: datetime = Field(default_factory=datetime.utcnow)

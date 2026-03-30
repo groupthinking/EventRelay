@@ -352,8 +352,11 @@ class MCPServerRegistry:
 
     async def _monitoring_loop(self) -> None:
         """Background health monitoring loop"""
+        monitoring_interval = 10  # seconds
         while self.monitoring_active:
             try:
+                loop_start_time = time.time()
+
                 # Check all servers that need health checking
                 tasks = []
                 for server_id, config in self.servers.items():
@@ -373,14 +376,25 @@ class MCPServerRegistry:
                     await asyncio.gather(*tasks, return_exceptions=True)
 
                 # Calculate uptime for online servers
+                current_time = datetime.utcnow()
                 for state in self.server_states.values():
+                    # Reset uptime when server transitions to ONLINE
                     if state.status == ServerStatus.ONLINE:
-                        state.uptime_seconds += 10  # Monitoring interval
+                        if not state.last_online_time:
+                            state.last_online_time = current_time
+                        # Calculate uptime from when server came online
+                        elapsed = (current_time - state.last_online_time).total_seconds()
+                        state.uptime_seconds = int(elapsed)
+                    else:
+                        # Clear online transition time for non-online servers
+                        state.last_online_time = None
 
             except Exception as e:
                 logger.error(f"Monitoring loop error: {e}")
 
-            await asyncio.sleep(10)  # Check every 10 seconds
+            loop_elapsed = time.time() - loop_start_time
+            sleep_time = max(0, monitoring_interval - loop_elapsed)
+            await asyncio.sleep(sleep_time)
 
     def get_registry_status(self) -> dict[str, Any]:
         """Get comprehensive registry status"""
