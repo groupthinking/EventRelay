@@ -33,3 +33,9 @@ yarn-error.log*
 # TypeScript
 *.tsbuildinfo
 next-env.d.ts
+
+# Compiled TypeScript artifacts (source is .ts/.tsx)
+src/**/*.js
+src/**/*.js.map
+src/**/*.d.ts
+!src/dataconnect-generated/**
