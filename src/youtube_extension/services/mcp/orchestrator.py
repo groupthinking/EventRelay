@@ -50,6 +50,12 @@ class MCPOrchestrator:
         # Orchestration state
         self.orchestration_active = False
         self.orchestration_task: Optional[asyncio.Task] = None
+        
+        # Track spawned execution tasks for proper cleanup
+        self.spawned_tasks: set[asyncio.Task] = set()
+        
+        # Maximum concurrent tasks
+        self.max_concurrent_spawn = 10
 
         # Performance metrics
         self.metrics = {
@@ -157,6 +163,27 @@ class MCPOrchestrator:
 
         return True
 
+    async def _execute_task_wrapper(self, task_id: str) -> None:
+        """
+        Wrapper for execute_task that handles exceptions and cleanup
+        
+        Args:
+            task_id: Task identifier
+        """
+        try:
+            await self.execute_task(task_id)
+        except asyncio.CancelledError:
+            # Task was cancelled, mark as cancelled if not already completed
+            task = self.tasks.get(task_id)
+            if task and task.status not in [MCPTaskStatus.COMPLETED, MCPTaskStatus.FAILED]:
+                task.status = MCPTaskStatus.CANCELLED
+                task.completed_at = datetime.utcnow()
+                self.metrics["cancelled_tasks"] += 1
+            raise
+        except Exception as e:
+            # Ensure exceptions are properly logged
+            logger.error(f"Unhandled exception in task {task_id}: {e}", exc_info=True)
+    
     async def execute_task(self, task_id: str) -> dict[str, Any]:
         """
         Execute a specific task
@@ -350,38 +377,73 @@ class MCPOrchestrator:
         logger.info("MCP Orchestration started")
 
     async def stop_orchestration(self) -> None:
-        """Stop the orchestration loop"""
+        """Stop the orchestration loop and cancel all spawned tasks"""
         self.orchestration_active = False
+        
+        # Cancel all spawned execution tasks
+        if self.spawned_tasks:
+            logger.info(f"Cancelling {len(self.spawned_tasks)} spawned tasks")
+            for task in self.spawned_tasks:
+                if not task.done():
+                    task.cancel()
+            
+            # Wait for all tasks to finish (they should complete quickly due to cancellation)
+            try:
+                await asyncio.gather(*self.spawned_tasks, return_exceptions=True)
+            except Exception as e:
+                logger.error(f"Error waiting for spawned tasks to cancel: {e}")
+            
+            self.spawned_tasks.clear()
+        
+        # Cancel the orchestration loop task
         if self.orchestration_task:
             self.orchestration_task.cancel()
             try:
                 await self.orchestration_task
             except asyncio.CancelledError:
                 pass
+        
         logger.info("MCP Orchestration stopped")
 
     async def _orchestration_loop(self) -> None:
         """Main orchestration loop"""
-        while self.orchestration_active:
-            try:
-                # Process queued tasks
-                if self.task_queue:
-                    # Process up to 10 tasks per iteration
-                    tasks_to_process = min(10, len(self.task_queue))
+        try:
+            while self.orchestration_active:
+                try:
+                    # Clean up completed spawned tasks
+                    completed = [task for task in self.spawned_tasks if task.done()]
+                    for task in completed:
+                        self.spawned_tasks.discard(task)
+                    
+                    # Process queued tasks respecting concurrent limit
+                    if self.task_queue:
+                        # Calculate how many more tasks we can spawn
+                        available_slots = self.max_concurrent_spawn - len(self.spawned_tasks)
+                        tasks_to_process = min(available_slots, len(self.task_queue))
 
-                    for _ in range(tasks_to_process):
-                        if not self.task_queue:
-                            break
+                        for _ in range(tasks_to_process):
+                            if not self.task_queue:
+                                break
 
-                        task_id = self.task_queue.popleft()
-                        asyncio.create_task(self.execute_task(task_id))
+                            task_id = self.task_queue.popleft()
+                            # Create task using wrapper for proper error handling
+                            spawned_task = asyncio.create_task(self._execute_task_wrapper(task_id))
+                            self.spawned_tasks.add(spawned_task)
 
-                # Small delay to prevent CPU spinning
-                await asyncio.sleep(0.1)
+                    # Small delay to prevent CPU spinning
+                    await asyncio.sleep(0.1)
 
-            except Exception as e:
-                logger.error(f"Orchestration loop error: {e}")
-                await asyncio.sleep(1)
+                except Exception as e:
+                    logger.error(f"Orchestration loop error: {e}", exc_info=True)
+                    await asyncio.sleep(1)
+        finally:
+            # Cleanup: cancel all remaining spawned tasks
+            if self.spawned_tasks:
+                logger.info(f"Orchestration loop ending, cleaning up {len(self.spawned_tasks)} spawned tasks")
+                for task in self.spawned_tasks:
+                    if not task.done():
+                        task.cancel()
+                # Don't wait here as we're already stopping
 
     def get_orchestrator_status(self) -> dict[str, Any]:
         """Get comprehensive orchestrator status"""
