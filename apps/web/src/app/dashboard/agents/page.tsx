@@ -3,6 +3,7 @@
 import { useState, useCallback } from 'react';
 import Link from 'next/link';
 import { clsx } from 'clsx';
+import Nav from '@/components/Nav';
 import AgentFlowVisualizer from '@/components/AgentFlowVisualizer';
 import TracePanel from '@/components/TracePanel';
 import ConsensusIndicator from '@/components/ConsensusIndicator';
@@ -232,15 +233,8 @@ export default function AgentPipelinePage() {
   return (
     <div className="h-screen flex flex-col text-white overflow-hidden bg-surface-950">
       {/* Navigation */}
-      <nav className="flex-none flex items-center justify-between px-6 py-3 border-b border-white/[0.05] bg-surface-900/80 backdrop-blur-xl z-50">
-        <div className="flex items-center gap-5">
-          <Link href="/" className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center font-black text-sm shadow-lg shadow-primary-500/25">
-              E
-            </div>
-            <span className="font-bold tracking-tight text-sm">EventRelay</span>
-          </Link>
-          <div className="h-5 w-px bg-white/[0.08]" />
+      <Nav
+        subtitle={
           <div className="flex items-center gap-1">
             <Link href="/dashboard" className="text-white/40 hover:text-white/60 text-sm transition">
               Dashboard
@@ -248,10 +242,9 @@ export default function AgentPipelinePage() {
             <span className="text-white/20 mx-1">/</span>
             <span className="text-white/70 text-sm font-medium">Agent Pipeline</span>
           </div>
-        </div>
-
-        <PipelineStatusBar state={pipelineState} mode={mode} />
-      </nav>
+        }
+        rightSlot={<PipelineStatusBar state={pipelineState} mode={mode} />}
+      />
 
       {/* Main content area: 3-column layout */}
       <div className="flex-1 flex overflow-hidden">

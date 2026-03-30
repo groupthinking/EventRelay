@@ -17,6 +17,7 @@
 import { analyzeVideoWithGemini, type VideoAnalysisResult } from '@/lib/gemini-video-analyzer';
 import { hasGeminiKey } from '@/lib/gemini-client';
 import { publishEvent, EventTypes } from '@/lib/cloudevents';
+import { saveTrainingExample, TUNING_THRESHOLD } from '@/lib/training-store';
 
 const rawBackendUrl = process.env.BACKEND_URL || '';
 const BACKEND_URL = rawBackendUrl.startsWith('http') ? rawBackendUrl : '';
@@ -132,6 +133,14 @@ async function* generateAgentEvents(
   });
   yield makeEvent({
     type: 'agent_update',
+    agentId: 'embedding_agent',
+    agentName: 'SemanticEmbeddingAgent',
+    status: 'running',
+    progress: 0,
+    timestamp: new Date().toISOString(),
+  });
+  yield makeEvent({
+    type: 'agent_update',
     agentId: 'visual_analyst',
     agentName: 'VisualAnalyst',
     status: 'running',
@@ -178,6 +187,18 @@ async function* generateAgentEvents(
       events: analysis.events?.length || 0,
       dataLabel: 'Frames',
     },
+    timestamp: new Date().toISOString(),
+  });
+
+  // Embedding agent completes
+  await sleep(200);
+  yield makeEvent({
+    type: 'agent_update',
+    agentId: 'embedding_agent',
+    agentName: 'SemanticEmbeddingAgent',
+    status: 'complete',
+    duration: parseFloat(elapsed()),
+    data: { dataLabel: 'Vector Embeddings' },
     timestamp: new Date().toISOString(),
   });
 
@@ -278,8 +299,8 @@ async function* generateAgentEvents(
     status: 'complete',
     duration: parseFloat(elapsed()),
     data: {
-      totalAgents: 8,
-      completedAgents: 8,
+      totalAgents: 9,
+      completedAgents: 9,
       mode: 'gemini-sse',
     },
     timestamp: new Date().toISOString(),
@@ -326,6 +347,58 @@ export async function POST(request: Request) {
             ),
           );
 
+          // ── Auto-save helper: persist analysis for fine-tuning ──
+          const saveForTraining = async (videoUrl: string, analysis: VideoAnalysisResult) => {
+            try {
+              const { saved, metadata, milestone } = await saveTrainingExample(
+                videoUrl,
+                analysis as unknown as Record<string, unknown>,
+              );
+              if (saved && milestone) {
+                console.log(`\n🎯 TRAINING MILESTONE: ${milestone}/${TUNING_THRESHOLD} examples collected!`);
+                if (milestone >= TUNING_THRESHOLD) {
+                  console.log('🚀 READY FOR FINE-TUNING! Call POST /api/training/trigger to start.');
+                }
+              }
+              if (saved) {
+                console.log(`[Training] Dataset: ${metadata.totalExamples} examples`);
+              } else {
+                console.log(`[Training] Skipped duplicate: ${videoUrl}`);
+              }
+            } catch (trainErr) {
+              // Training save failure must never break the pipeline
+              console.warn('[Training] Save failed (non-fatal):', trainErr);
+            }
+          };
+
+          const processEmbeddings = async (videoUrl: string, analysis: VideoAnalysisResult) => {
+            try {
+               let segments = analysis.transcript;
+               if (!segments || segments.length === 0) {
+                 const { fetchTranscript } = await import('@/lib/transcription-service');
+                 const result = await fetchTranscript({ url: videoUrl });
+                 if (result.success && result.segments && result.segments.length > 0) {
+                   segments = result.segments.map(s => ({
+                     start: s.start,
+                     duration: s.duration,
+                     text: s.text || ''
+                   }));
+                 }
+               }
+               
+               if (segments && segments.length > 0) {
+                 const { chunkTranscript, generateEmbeddingsForChunks } = await import('@/lib/gemini-embedding');
+                 const { saveEmbeddings } = await import('@/lib/embedding-store');
+                 const chunks = chunkTranscript(segments);
+                 const embeddedChunks = await generateEmbeddingsForChunks(chunks);
+                 const videoId = videoUrl.match(/[?&]v=([^&]+)/)?.[1] || videoUrl.replace(/[^a-zA-Z0-9_-]/g, '_');
+                 await saveEmbeddings(videoId, embeddedChunks);
+               }
+            } catch (err) {
+               console.warn('[Embeddings] Failed to generate/save:', err);
+            }
+          };
+
           if (BACKEND_URL) {
             // Strategy 1: Proxy from backend
             // For now, call the REST endpoint and map to agent events
@@ -364,6 +437,9 @@ export async function POST(request: Request) {
                 for await (const event of generateAgentEvents(mappedAnalysis, startTime)) {
                   controller.enqueue(encoder.encode(event));
                 }
+                const trackTask2 = processEmbeddings(url, mappedAnalysis);
+                await saveForTraining(url, mappedAnalysis);
+                await trackTask2;
               } else {
                 throw new Error(`Backend returned ${response.status}`);
               }
@@ -375,6 +451,9 @@ export async function POST(request: Request) {
                 for await (const event of generateAgentEvents(analysis, startTime)) {
                   controller.enqueue(encoder.encode(event));
                 }
+                const trackTask2 = processEmbeddings(url, analysis);
+                await saveForTraining(url, analysis);
+                await trackTask2;
               } else {
                 controller.enqueue(
                   encoder.encode(
@@ -399,6 +478,9 @@ export async function POST(request: Request) {
             for await (const event of generateAgentEvents(analysis, startTime)) {
               controller.enqueue(encoder.encode(event));
             }
+            const trackTask2 = processEmbeddings(url, analysis);
+            await saveForTraining(url, analysis);
+            await trackTask2;
           }
         } catch (err) {
           controller.enqueue(

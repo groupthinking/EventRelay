@@ -10,17 +10,17 @@ module.exports = {
       colors: {
         // Brand colors
         primary: {
-          50: '#faf5ff',
-          100: '#f3e8ff',
-          200: '#e9d5ff',
-          300: '#d8b4fe',
-          400: '#a78bfa',
-          500: '#8b5cf6',
-          600: '#7c3aed',
-          700: '#6d28d9',
-          800: '#5b21b6',
-          900: '#4c1d95',
-          950: '#2e1065',
+          50: '#f0fdfa',
+          100: '#ccfbf1',
+          200: '#99f6e4',
+          300: '#5eead4',
+          400: '#2dd4bf',
+          500: '#14b8a6',
+          600: '#0d9488',
+          700: '#0f766e',
+          800: '#115e59',
+          900: '#134e4a',
+          950: '#042f2e',
         },
         accent: {
           50: '#ecfeff',
@@ -69,8 +69,8 @@ module.exports = {
         xs: '2px',
       },
       boxShadow: {
-        'glow': '0 0 60px -12px rgba(139, 92, 246, 0.4)',
-        'glow-lg': '0 0 80px -12px rgba(139, 92, 246, 0.5)',
+        'glow': '0 0 60px -12px rgba(20, 184, 166, 0.4)',
+        'glow-lg': '0 0 80px -12px rgba(20, 184, 166, 0.5)',
         'glow-accent': '0 0 60px -12px rgba(34, 211, 238, 0.4)',
         'inner-glow': 'inset 0 2px 4px 0 rgba(255, 255, 255, 0.06)',
       },
@@ -92,11 +92,11 @@ module.exports = {
         'pulse-glow': {
           '0%, 100%': {
             opacity: '1',
-            boxShadow: '0 0 20px rgba(139, 92, 246, 0.4)',
+            boxShadow: '0 0 20px rgba(20, 184, 166, 0.4)',
           },
           '50%': {
             opacity: '0.8',
-            boxShadow: '0 0 40px rgba(139, 92, 246, 0.6)',
+            boxShadow: '0 0 40px rgba(20, 184, 166, 0.6)',
           },
         },
         shimmer: {
@@ -142,11 +142,11 @@ module.exports = {
         'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
         'gradient-conic': 'conic-gradient(from 180deg at 50% 50%, var(--tw-gradient-stops))',
         'mesh': `
-          radial-gradient(at 40% 20%, rgba(139, 92, 246, 0.15) 0px, transparent 50%),
+          radial-gradient(at 40% 20%, rgba(20, 184, 166, 0.15) 0px, transparent 50%),
           radial-gradient(at 80% 0%, rgba(34, 211, 238, 0.1) 0px, transparent 50%),
-          radial-gradient(at 0% 50%, rgba(139, 92, 246, 0.1) 0px, transparent 50%),
+          radial-gradient(at 0% 50%, rgba(20, 184, 166, 0.1) 0px, transparent 50%),
           radial-gradient(at 80% 50%, rgba(34, 211, 238, 0.08) 0px, transparent 50%),
-          radial-gradient(at 0% 100%, rgba(139, 92, 246, 0.1) 0px, transparent 50%),
+          radial-gradient(at 0% 100%, rgba(20, 184, 166, 0.1) 0px, transparent 50%),
           radial-gradient(at 80% 100%, rgba(34, 211, 238, 0.08) 0px, transparent 50%)
         `,
       },

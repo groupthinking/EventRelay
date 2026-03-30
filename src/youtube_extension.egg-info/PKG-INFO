@@ -120,6 +120,13 @@ Requires-Dist: google-generativeai>=0.3.0; extra == "ml"
 Requires-Dist: cohere>=4.37.0; extra == "ml"
 Requires-Dist: numpy>=1.24.0; extra == "ml"
 Requires-Dist: pandas>=2.0.0; extra == "ml"
+Provides-Extra: cloud
+Requires-Dist: google-cloud-aiplatform>=1.38.0; extra == "cloud"
+Requires-Dist: google-cloud-firestore>=2.13.0; extra == "cloud"
+Requires-Dist: google-cloud-tasks>=2.14.0; extra == "cloud"
+Requires-Dist: google-cloud-storage>=2.13.0; extra == "cloud"
+Requires-Dist: google-cloud-logging>=3.8.0; extra == "cloud"
+Requires-Dist: google-cloud-monitoring>=2.16.0; extra == "cloud"
 Dynamic: license-file
 
 # 🎯 EventRelay — AI Video Processing & Event Extraction Platform

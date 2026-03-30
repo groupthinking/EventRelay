@@ -30,6 +30,13 @@ export interface PipelineResult {
   } | null;
 }
 
+export interface Action {
+  title: string;
+  description: string;
+  category: string;
+  estimatedMinutes?: number | null;
+}
+
 export interface Video {
   id: string;
   title: string;
@@ -45,7 +52,7 @@ export interface Video {
   pipelineResult?: PipelineResult;
   insights?: {
     summary: string;
-    actions: string[];
+    actions: Action[];
     sentiment: string;
     topics: string[];
   };
@@ -55,6 +62,13 @@ export interface Activity {
   time: string;
   event: string;
   type: 'success' | 'info' | 'error';
+}
+
+export interface SearchResult {
+  start: number;
+  duration: number;
+  text: string;
+  score: number;
 }
 
 interface DashboardState {
@@ -80,6 +94,13 @@ interface DashboardState {
   deployPipeline: (url: string) => Promise<void>;
   extractEvents: (videoId: string) => void;
   dispatchAgents: (videoId: string) => void;
+
+  // Search actions
+  searchQuery: string;
+  searchResults: SearchResult[];
+  searchLoading: boolean;
+  setSearchQuery: (query: string) => void;
+  performSearch: (videoId: string, query: string) => Promise<void>;
 }
 
 export const useDashboardStore = create<DashboardState>((set, get) => ({
@@ -87,6 +108,10 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   activities: [],
   selectedVideoId: null,
   loading: true,
+
+  searchQuery: '',
+  searchResults: [],
+  searchLoading: false,
 
   selectedVideo: () => {
     const { videos, selectedVideoId } = get();
@@ -107,7 +132,12 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       selectedVideoId: s.selectedVideoId === id ? null : s.selectedVideoId,
     })),
 
-  selectVideo: (id) => set({ selectedVideoId: id }),
+  selectVideo: (id) => set({ 
+    selectedVideoId: id,
+    searchQuery: '',
+    searchResults: [],
+    searchLoading: false,
+  }),
 
   addActivity: (event, type) => {
     const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -117,6 +147,34 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   },
 
   setLoading: (loading) => set({ loading }),
+  setSearchQuery: (query) => set({ searchQuery: query }),
+
+  // ── Perform semantic RAG search against video chunks ──
+  performSearch: async (videoId, query) => {
+    if (!query.trim()) {
+      set({ searchResults: [] });
+      return;
+    }
+    
+    set({ searchLoading: true });
+    get().addActivity(`Searching for: "${query}"`, 'info');
+
+    try {
+      const res = await fetch(`/api/video/search?videoId=${encodeURIComponent(videoId)}&q=${encodeURIComponent(query)}`);
+      if (!res.ok) {
+        throw new Error(await res.text());
+      }
+      const data = await res.json();
+      set({ searchResults: data.results || [] });
+      get().addActivity(`Found ${data.results?.length || 0} matching segments`, 'success');
+    } catch (err) {
+      console.error('Search error:', err);
+      get().addActivity('Search failed. Video may not have finished embedding.', 'error');
+      set({ searchResults: [] });
+    } finally {
+      set({ searchLoading: false });
+    }
+  },
 
   // ── Process a video URL via the Next.js API route ──
   processVideo: async (url) => {
@@ -230,7 +288,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
               })),
               insights: {
                 summary: summary || videoTitle,
-                actions: actions?.map((a: { title: string }) => a.title) || [],
+                actions: actions || [],
                 sentiment: get().videos.find(v => v.id === id)?.insights?.sentiment || 'Neutral',
                 topics: topics || [],
               },
@@ -353,7 +411,8 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       events.push({
         id: `evt_${videoId}_${i}`,
         type: 'action',
-        title: action,
+        title: action.title,
+        description: action.description,
         confidence: 0.85,
       });
     });

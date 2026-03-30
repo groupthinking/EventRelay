@@ -1,0 +1,29 @@
+# Dockerfile.autonomous — UVAI Real Video Processor
+FROM python:3.11-slim
+
+# System deps: ffmpeg + multimedia libs
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg \
+    libavcodec-extra \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy source
+COPY . .
+
+# Python deps (mirror workflow)
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir \
+        youtube-transcript-api \
+        google-api-python-client \
+        yt-dlp \
+        python-dotenv \
+        opentelemetry-api \
+        opentelemetry-sdk \
+        opentelemetry-exporter-otlp-proto-grpc \
+        mcp
+
+ENV PYTHONUNBUFFERED=1
+
+CMD ["python3", "simple_real_processor.py", "--help"]
