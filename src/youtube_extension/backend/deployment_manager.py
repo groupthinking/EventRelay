@@ -15,6 +15,7 @@ import logging
 import os
 import subprocess
 import sys
+import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
@@ -671,11 +672,13 @@ class DeploymentManager:
         name = re.sub(r'[^a-zA-Z0-9\s-]', '', title.lower())
         name = re.sub(r'\s+', '-', name.strip())
 
-        # Ensure it's not too long and add timestamp
+        # Ensure it's not too long and add unique identifier
         name = name[:30]
-        timestamp = int(asyncio.get_event_loop().time()) % 10000
+        # Use UUID for guaranteed uniqueness (4.3 billion combinations)
+        # This prevents collision issues that occurred with timestamp-based IDs
+        unique_id = uuid.uuid4().hex[:8]
 
-        return f"{name}-{timestamp}" if name else f"uvai-project-{timestamp}"
+        return f"{name}-{unique_id}" if name else f"uvai-project-{unique_id}"
 
     def _generate_random_id(self) -> str:
         """Generate a random ID for URLs"""
