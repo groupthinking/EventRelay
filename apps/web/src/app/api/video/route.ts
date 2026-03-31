@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { publishEvent, EventTypes } from '@/lib/cloudevents';
 import { analyzeVideoWithGemini } from '@/lib/gemini-video-analyzer';
 import { hasGeminiKey } from '@/lib/gemini-client';
+import { saveTrainingExample } from '@/lib/training-store';
 
 // Backend URL with validation - skip if not a valid URL
 const rawBackendUrl = process.env.BACKEND_URL || '';
@@ -103,6 +104,13 @@ export async function POST(request: Request) {
 
         await publishEvent(EventTypes.PIPELINE_COMPLETED, { strategy: 'backend', success: result.success, agents: result.orchestration_meta?.agents_used || [] }, url);
 
+        // Save as training example for Vertex AI fine-tuning
+        if (result.success) {
+          saveTrainingExample(url, result).catch((e) =>
+            console.warn('[Training] Failed to save example:', e),
+          );
+        }
+
         return NextResponse.json({
           id: `vid_${Date.now().toString(36)}`,
           status: result.success ? 'complete' : 'failed',
@@ -139,6 +147,11 @@ export async function POST(request: Request) {
           transcriptSegments: analysis.transcript?.length || 0,
           events: analysis.events?.length || 0,
         }, url);
+
+        // Save as training example for Vertex AI fine-tuning
+        saveTrainingExample(url, analysis).catch((e) =>
+          console.warn('[Training] Failed to save example:', e),
+        );
 
         return NextResponse.json({
           id: `vid_${Date.now().toString(36)}`,

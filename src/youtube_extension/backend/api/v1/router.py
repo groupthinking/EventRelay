@@ -412,6 +412,12 @@ async def run_transcript_action(
     hybrid_processor: HybridProcessorService = Depends(get_hybrid_processor_service),
     metrics_service: MetricsService = Depends(get_metrics_service),
 ) -> TranscriptActionResponse:
+    await _emit_event(
+        "com.eventrelay.transcript.received",
+        {"url": request.video_url, "language": request.language},
+        request.video_url,
+    )
+
     workflow = TranscriptActionWorkflow(
         orchestrator=orchestrator,
         hybrid_processor=hybrid_processor,
@@ -424,6 +430,23 @@ async def run_transcript_action(
         transcript_text=request.transcript_text,
         video_options=request.video_options,
     )
+
+    if result.get("success"):
+        await _emit_event(
+            "com.eventrelay.transcript.completed",
+            {
+                "url": request.video_url,
+                "agents_used": result.get("orchestration_meta", {}).get("agents_used", []),
+                "processing_time": result.get("orchestration_meta", {}).get("processing_time"),
+            },
+            request.video_url,
+        )
+    else:
+        await _emit_event(
+            "com.eventrelay.transcript.failed",
+            {"url": request.video_url, "errors": result.get("errors", [])},
+            request.video_url,
+        )
 
     return TranscriptActionResponse(**result)
 
