@@ -52,7 +52,18 @@ export async function fetchWithRetry(
         throw new EventRelayAPIError(response.status, response.statusText, body);
       }
 
-      return response.json();
+      const json = await response.json();
+      // Unwrap ApiResponse envelope if present
+      if (
+        json &&
+        typeof json === "object" &&
+        "status" in json &&
+        "data" in json &&
+        (json.status === "success" || json.status === "error")
+      ) {
+        return json.data;
+      }
+      return json;
     } catch (err) {
       clearTimeout(timerId);
       lastError = err;
