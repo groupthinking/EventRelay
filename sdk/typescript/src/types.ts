@@ -122,16 +122,27 @@ export interface AgentStatusResponse {
 // ---------------------------------------------------------------------------
 
 export interface TranscriptActionRequest {
-  video_url: string;
-  action?: string;
-  options?: Record<string, unknown>;
+  /** Transcript language code (default "en") */
+  language?: string;
+  /** Raw transcript text to run actions against */
+  transcript_text: string;
+  /** Optional video-related options (e.g., URL, id, processing hints) */
+  video_options?: Record<string, unknown>;
 }
 
 export interface TranscriptActionResponse {
-  video_url: string;
-  transcript?: Record<string, unknown>;
-  actions: Record<string, unknown>[];
-  status: string;
+  /** Whether the transcript action orchestration completed successfully */
+  success: boolean;
+  /** Additional metadata about the transcript/action run */
+  metadata?: Record<string, unknown>;
+  /** Canonical transcript representation or enriched transcript payload */
+  transcript?: string | Record<string, unknown>;
+  /** Outputs produced by transcript actions */
+  outputs?: Array<Record<string, unknown>>;
+  /** Errors encountered during orchestration or action execution */
+  errors?: Array<unknown>;
+  /** Low-level orchestration/debugging information */
+  orchestration_meta?: Record<string, unknown>;
 }
 
 // ---------------------------------------------------------------------------
