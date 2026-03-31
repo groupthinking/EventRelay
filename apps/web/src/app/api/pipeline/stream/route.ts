@@ -124,42 +124,83 @@ async function pollBackendJob(
   controller: ReadableStreamDefaultController<Uint8Array>,
   encoder: TextEncoder,
 ): Promise<BackendVideoJobStatus> {
+  let lastError: Error | null = null;
+
   for (let attempt = 0; attempt < MAX_JOB_POLL_ATTEMPTS; attempt += 1) {
     await sleep(JOB_POLL_INTERVAL_MS);
-    const response = await fetch(statusUrl, {
-      cache: 'no-store',
-      headers: { 'Content-Type': 'application/json' },
-    });
-    if (!response.ok) {
-      throw new Error(`Job status returned ${response.status}`);
-    }
 
-    const payload = await response.json();
-    const job = (payload.data || payload) as BackendVideoJobStatus;
+    try {
+      const response = await fetch(statusUrl, {
+        cache: 'no-store',
+        headers: { 'Content-Type': 'application/json' },
+      });
 
-    controller.enqueue(
-      encoder.encode(
-        makeEvent({
-          type: 'agent_update',
-          agentId: 'async_queue',
-          agentName: 'AsyncVideoQueue',
-          status: job.status === 'failed' ? 'error' : 'running',
-          progress: Math.max(0, Math.min(100, Math.round(job.progress || 0))),
-          data: {
-            jobId: job.job_id,
-            stage: job.status,
-          },
-          timestamp: new Date().toISOString(),
-        }),
-      ),
-    );
+      if (!response.ok) {
+        // Fail fast on client errors (4xx)
+        if (response.status >= 400 && response.status < 500) {
+          throw new Error(`Job status endpoint returned ${response.status}: client error (cannot retry)`);
+        }
 
-    if (job.status === 'complete' || job.status === 'failed') {
-      return job;
+        // For server errors (5xx), log and retry
+        if (response.status >= 500) {
+          lastError = new Error(`Job status endpoint returned ${response.status}: server error (will retry)`);
+          console.warn(`[Job Polling] Attempt ${attempt + 1}: ${lastError.message}`);
+          continue;
+        }
+
+        // For other non-ok responses, fail
+        throw new Error(`Job status returned unexpected status ${response.status}`);
+      }
+
+      const payload = await response.json();
+      const job = (payload.data || payload) as BackendVideoJobStatus;
+
+      controller.enqueue(
+        encoder.encode(
+          makeEvent({
+            type: 'agent_update',
+            agentId: 'async_queue',
+            agentName: 'AsyncVideoQueue',
+            status: job.status === 'failed' ? 'error' : 'running',
+            progress: Math.max(0, Math.min(100, Math.round(job.progress || 0))),
+            data: {
+              jobId: job.job_id,
+              stage: job.status,
+            },
+            timestamp: new Date().toISOString(),
+          }),
+        ),
+      );
+
+      if (job.status === 'complete' || job.status === 'failed') {
+        return job;
+      }
+
+      // Clear last error on successful poll
+      lastError = null;
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+
+      // If it's a 4xx error, fail immediately (already thrown above)
+      if (errorMsg.includes('client error (cannot retry)')) {
+        throw err;
+      }
+
+      // Log the error but continue retrying for other cases
+      lastError = err instanceof Error ? err : new Error(errorMsg);
+      console.warn(`[Job Polling] Attempt ${attempt + 1} failed: ${lastError.message}`);
+
+      // Continue to next attempt
+      continue;
     }
   }
 
-  throw new Error('Timed out waiting for async video job to complete');
+  // All retries exhausted
+  if (lastError) {
+    throw new Error(`Timed out waiting for async video job to complete after ${MAX_JOB_POLL_ATTEMPTS} attempts. Last error: ${lastError.message}`);
+  }
+
+  throw new Error('Timed out waiting for async video job to complete (job status never reached complete or failed)');
 }
 
 /**
