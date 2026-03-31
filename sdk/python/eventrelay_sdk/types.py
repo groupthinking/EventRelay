@@ -156,20 +156,31 @@ class AgentStatusResponse(BaseModel):
 
 
 class TranscriptActionRequest(BaseModel):
-    """Request to run the transcript-action workflow."""
+    """Request body for the /api/v1/transcript-action endpoint."""
 
-    video_url: str = Field(..., description="YouTube video URL")
-    action: Optional[str] = Field(None, description="Specific action to perform")
-    options: Optional[dict[str, Any]] = Field(default_factory=dict)
+    language: Optional[str] = Field(
+        None,
+        description="Optional language code for transcript processing",
+    )
+    transcript_text: Optional[str] = Field(
+        None,
+        description="Raw transcript text to process",
+    )
+    video_options: Optional[dict[str, Any]] = Field(
+        default_factory=dict,
+        description="Additional options for video/transcript processing",
+    )
 
 
 class TranscriptActionResponse(BaseModel):
-    """Response from the transcript-action workflow."""
+    """Response body from the /api/v1/transcript-action endpoint."""
 
-    video_url: str
+    success: bool
+    metadata: Optional[dict[str, Any]] = None
     transcript: Optional[dict[str, Any]] = None
-    actions: list[dict[str, Any]] = Field(default_factory=list)
-    status: str = "success"
+    outputs: Optional[list[dict[str, Any]]] = None
+    errors: Optional[list[str]] = None
+    orchestration_meta: Optional[dict[str, Any]] = None
 
 
 # ---------------------------------------------------------------------------
