@@ -4,6 +4,8 @@ import { Suspense, useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { clsx } from 'clsx';
+import Nav from '@/components/Nav';
+import Footer from '@/components/Footer';
 import TranscriptViewer from '@/components/TranscriptViewer';
 import EventList from '@/components/EventList';
 import type { ExtractedEvent } from '@/lib/types';
@@ -34,17 +36,21 @@ function ProcessingStage({
   return (
     <div
       className={clsx(
-        'flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-300',
-        isComplete && 'bg-green-500/15 text-green-400 border border-green-500/20',
-        isActive && 'bg-primary-500/15 text-primary-400 border border-primary-500/20',
-        !isComplete && !isActive && 'bg-white/[0.03] text-white/30 border border-white/[0.05]'
+        'flex items-center gap-2 px-3 py-1.5 text-xs font-bold uppercase tracking-widest transition-all duration-300',
+        isComplete && 'text-green-400',
+        isActive && 'text-[#6af2de]',
+        !isComplete && !isActive && 'text-white/25'
       )}
+      style={{
+        background: isComplete ? 'rgba(34, 197, 94, 0.08)' : isActive ? 'rgba(106, 242, 222, 0.08)' : 'rgba(37, 37, 44, 0.4)',
+        borderLeft: isComplete ? '2px solid #22c55e' : isActive ? '2px solid #6af2de' : '2px solid transparent',
+      }}
     >
       {isComplete && <span className="text-green-400">✓</span>}
       {isActive && (
         <span className="relative flex h-2 w-2">
-          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary-400 opacity-75" />
-          <span className="relative inline-flex rounded-full h-2 w-2 bg-primary-400" />
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style={{ background: '#6af2de' }} />
+          <span className="relative inline-flex rounded-full h-2 w-2" style={{ background: '#6af2de' }} />
         </span>
       )}
       {stage}
@@ -85,12 +91,13 @@ function SplitView({
   return (
     <div className="flex flex-1 overflow-hidden">
       {/* Left Panel (40%) - Video & Metadata */}
-      <div className="w-[40%] flex flex-col border-r border-white/[0.05] bg-surface-900 min-w-[320px]">
+      <div className="w-[40%] flex flex-col min-w-[320px]" style={{ background: '#0e0e13', borderRight: '1px solid rgba(255,255,255,0.05)' }}>
         {/* Header */}
-        <div className="p-4 flex items-center justify-between border-b border-white/[0.05] bg-surface-950">
+        <div className="p-4 flex items-center justify-between" style={{ background: 'rgba(25, 25, 31, 0.9)', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
           <button
             onClick={onClose}
-            className="flex items-center gap-2 text-sm text-white/50 hover:text-white transition-colors"
+            className="flex items-center gap-2 text-sm transition-colors hover:text-white"
+            style={{ color: 'rgba(248,245,253,0.4)', fontFamily: 'var(--font-heading)', letterSpacing: '0.05em', fontSize: '12px', textTransform: 'uppercase' }}
           >
             <span className="text-lg">←</span> Back to Library
           </button>
@@ -114,29 +121,38 @@ function SplitView({
 
         {/* Scrollable Metadata */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          {/* Breadcrumb */}
+          <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.2em]" style={{ color: 'rgba(248,245,253,0.35)' }}>
+            <span>Dashboard</span>
+            <span>›</span>
+            <span style={{ color: '#6af2de' }}>Analysis</span>
+          </div>
           <div>
-            <h2 className="text-2xl font-bold text-white mb-2">{video.title}</h2>
-            <p className="text-sm text-white/40 break-all">{video.url}</p>
+            <h2 className="font-heading text-2xl font-bold tracking-tight mb-2" style={{ color: '#f8f5fd' }}>{video.title}</h2>
+            <p className="text-sm break-all" style={{ color: 'rgba(248,245,253,0.3)' }}>{video.url}</p>
           </div>
 
           <div className="flex items-center gap-3">
             <span
-              className={clsx(
-                'px-3 py-1.5 rounded-lg text-xs font-semibold',
-                video.status === 'complete' && 'bg-green-500/20 text-green-400',
-                video.status === 'failed' && 'bg-red-500/20 text-red-400',
-                video.status === 'processing' && 'bg-primary-500/20 text-primary-400 animate-pulse'
-              )}
+              className="text-[10px] font-bold uppercase tracking-widest px-3 py-1"
+              style={{
+                background: video.status === 'complete' ? 'rgba(34,197,94,0.1)' : video.status === 'failed' ? 'rgba(255,113,108,0.1)' : 'rgba(106,242,222,0.1)',
+                color: video.status === 'complete' ? '#22c55e' : video.status === 'failed' ? '#ff716c' : '#6af2de',
+                borderLeft: `2px solid ${video.status === 'complete' ? '#22c55e' : video.status === 'failed' ? '#ff716c' : '#6af2de'}`,
+              }}
             >
               {video.status.toUpperCase()}
             </span>
-            {video.status === 'processing' && <span className="text-sm text-white/50">{video.progress}%</span>}
+            {video.status === 'processing' && <span className="text-sm font-mono" style={{ color: '#6af2de' }}>{video.progress}%</span>}
           </div>
 
           {/* Processing stages */}
           {video.status === 'processing' && (
-            <div className="flex flex-col gap-2 p-4 bg-white/[0.02] rounded-xl border border-white/[0.05]">
-              <h3 className="text-xs font-medium text-white/40 uppercase tracking-wider mb-2">Processing Pipeline</h3>
+            <div className="flex flex-col gap-1 p-5" style={{ background: 'rgba(37, 37, 44, 0.4)', backdropFilter: 'blur(20px)' }}>
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-1 h-4" style={{ background: '#6af2de' }} />
+                <h3 className="font-heading text-xs font-bold uppercase tracking-widest" style={{ color: '#f8f5fd' }}>Processing Pipeline</h3>
+              </div>
               {stages.map((stage, i) => (
                 <ProcessingStage
                   key={stage}
@@ -159,32 +175,40 @@ function SplitView({
                 a.click();
                 URL.revokeObjectURL(a.href);
               }}
-              className="w-full py-3 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] border border-white/[0.08] text-sm font-medium transition-all"
+              className="w-full py-3 font-heading font-bold text-xs tracking-wider uppercase transition-all"
+              style={{
+                background: 'rgba(16, 183, 165, 0.9)',
+                color: '#002b26',
+                boxShadow: '0 0 15px rgba(16,183,165,0.3)',
+              }}
             >
-              Download Raw Transcript
+              Export Report
             </button>
           )}
         </div>
       </div>
 
       {/* Right Panel (60%) - Intelligence Feed */}
-      <div className="flex-1 flex flex-col bg-surface-900/50">
+      <div className="flex-1 flex flex-col" style={{ background: '#131318', borderLeft: '1px solid rgba(255,255,255,0.05)' }}>
         {/* Tabs */}
-        <div className="flex items-center px-6 border-b border-white/[0.05] gap-8 bg-surface-950/30">
+        <div className="flex" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', background: 'rgba(25, 25, 31, 0.9)' }}>
           {(['analysis', 'transcript', 'actions', 'search'] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={clsx(
-                'py-4 text-sm font-medium capitalize border-b-2 transition-colors relative',
-                activeTab === tab
-                  ? 'border-primary-500 text-primary-400'
-                  : 'border-transparent text-white/40 hover:text-white/70'
-              )}
+              className="relative px-6 py-5 font-heading text-xs tracking-[0.2em] uppercase transition-colors"
+              style={{
+                color: activeTab === tab ? '#6af2de' : 'rgba(248,245,253,0.35)',
+                borderBottom: activeTab === tab ? '2px solid #6af2de' : '2px solid transparent',
+                background: activeTab === tab ? 'rgba(106, 242, 222, 0.05)' : 'transparent',
+                fontWeight: activeTab === tab ? 700 : 500,
+              }}
             >
-              {tab}
+              {tab === 'analysis' ? 'Summary' : tab}
               {tab === 'actions' && hasEvents && (
-                <span className="absolute -top-1 -right-4 text-[10px] bg-primary-500/20 text-primary-400 px-1.5 py-0.5 rounded-full">
+                <span className="absolute -top-1 -right-1 text-[9px] font-bold px-1.5 py-0.5 rounded-sm"
+                  style={{ background: 'rgba(106,242,222,0.15)', color: '#6af2de' }}
+                >
                   {video.events!.length}
                 </span>
               )}
@@ -195,28 +219,34 @@ function SplitView({
         {/* Tab Content */}
         <div className="flex-1 overflow-y-auto p-8 relative">
           {activeTab === 'analysis' && hasInsights && (
-            <div className="max-w-3xl space-y-8 animate-fade-in-up">
+            <div className="max-w-3xl space-y-10 stitch-fade-in">
               {/* Summary */}
               <section>
-                <h3 className="text-sm font-bold text-white/50 uppercase tracking-wider mb-4 flex items-center gap-2">
-                  <span className="text-primary-500">❖</span> Executive Summary
-                </h3>
-                <div className="p-6 rounded-2xl bg-white/[0.02] border border-white/[0.05]">
-                  <p className="text-white/80 leading-relaxed text-lg">{video.insights!.summary}</p>
+                <div className="flex items-center gap-3 mb-5">
+                  <div className="w-1 h-6" style={{ background: '#6af2de' }} />
+                  <h3 className="font-heading text-xl font-bold tracking-tight" style={{ color: '#f8f5fd' }}>Intelligence Synthesis</h3>
+                </div>
+                <div className="space-y-4 leading-relaxed text-lg" style={{ color: 'rgba(172, 170, 177, 1)' }}>
+                  <p>{video.insights!.summary}</p>
                 </div>
               </section>
 
               {/* Topics */}
               {video.insights!.topics.length > 0 && (
                 <section>
-                  <h3 className="text-sm font-bold text-white/50 uppercase tracking-wider mb-4 flex items-center gap-2">
-                    <span className="text-blue-500">❖</span> Key Topics
-                  </h3>
+                  <div className="flex items-center gap-3 mb-5">
+                    <div className="w-1 h-6" style={{ background: '#6af2de' }} />
+                    <h3 className="font-heading text-xl font-bold tracking-tight" style={{ color: '#f8f5fd' }}>Extracted Metadata</h3>
+                  </div>
                   <div className="flex flex-wrap gap-2">
-                    {video.insights!.topics.map((topic) => (
+                    {video.insights!.topics.map((topic, i) => (
                       <span
                         key={topic}
-                        className="px-4 py-2 rounded-xl bg-blue-500/10 text-blue-400 border border-blue-500/20 text-sm font-medium"
+                        className="text-[10px] font-bold uppercase tracking-widest px-3 py-1"
+                        style={{
+                          background: 'rgba(37, 37, 44, 1)',
+                          color: i < 2 ? '#6af2de' : i < 4 ? '#69ccff' : 'rgba(172, 170, 177, 1)',
+                        }}
                       >
                         {topic}
                       </span>
@@ -226,50 +256,61 @@ function SplitView({
               )}
 
               {/* Sentiments & Action Items */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {video.insights!.actions.length > 0 && (
-                  <section className="col-span-full md:col-span-1">
-                    <h3 className="text-sm font-bold text-white/50 uppercase tracking-wider mb-4 flex items-center gap-2">
-                      <span className="text-green-500">❖</span> Extracted Tasks
-                    </h3>
-                    <ul className="space-y-4">
-                      {video.insights!.actions.map((action, i) => (
-                        <li
-                          key={i}
-                          className="flex items-start gap-3 p-4 rounded-xl bg-white/[0.02] border border-white/[0.05] hover:bg-white/[0.05] transition-colors"
-                        >
-                          <input
-                            type="checkbox"
-                            className="mt-1.5 h-4 w-4 rounded border-white/20 bg-white/5 text-primary-500 cursor-pointer"
-                          />
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-1">
-                              {action.category && (
-                                <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-primary-500/10 text-primary-400 border border-primary-500/20">
-                                  {action.category}
-                                </span>
-                              )}
-                              {action.estimatedMinutes && (
-                                <span className="text-xs text-white/40">
-                                  ⏱ {action.estimatedMinutes}m
-                                </span>
-                              )}
-                            </div>
-                            <h4 className="text-white/90 text-sm font-semibold leading-relaxed">
-                              {action.title}
-                            </h4>
-                            {action.description && (
-                              <p className="text-white/60 text-xs mt-1 leading-relaxed">
-                                {action.description}
-                              </p>
-                            )}
+              {/* Directive Protocols (Action Items) */}
+              {video.insights!.actions.length > 0 && (
+                <section>
+                  <div className="flex items-center justify-between mb-6">
+                    <div className="flex items-center gap-3">
+                      <div className="w-1 h-6" style={{ background: '#6af2de' }} />
+                      <h3 className="font-heading text-xl font-bold tracking-tight" style={{ color: '#f8f5fd' }}>Directive Protocols</h3>
+                    </div>
+                    <span className="text-[10px] uppercase tracking-widest" style={{ color: 'rgba(248,245,253,0.35)' }}>
+                      {video.insights!.actions.length} Pending Actions
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {video.insights!.actions.map((action, i) => (
+                      <div
+                        key={i}
+                        className="p-6 cursor-pointer transition-all stitch-fade-in"
+                        style={{
+                          background: 'rgba(37, 37, 44, 0.4)',
+                          backdropFilter: 'blur(20px)',
+                          borderLeft: i === 0 ? '2px solid rgba(159, 5, 25, 0.8)' : '2px solid rgba(16, 183, 165, 0.8)',
+                          animationDelay: `${i * 100}ms`,
+                        }}
+                      >
+                        <div className="flex justify-between items-start mb-4">
+                          <span
+                            className="px-2 py-0.5 text-[10px] font-bold tracking-widest uppercase rounded-sm"
+                            style={{
+                              background: i === 0 ? 'rgba(159,5,25,0.2)' : 'rgba(16,183,165,0.2)',
+                              color: i === 0 ? '#ff716c' : '#6af2de',
+                            }}
+                          >
+                            {action.category || (i === 0 ? 'Critical' : 'Strategic')}
+                          </span>
+                          <input type="checkbox" className="h-4 w-4 rounded border-white/20 bg-transparent cursor-pointer" />
+                        </div>
+                        <p className="font-heading font-medium text-sm leading-tight mb-3" style={{ color: '#f8f5fd' }}>
+                          {action.title}
+                        </p>
+                        {action.description && (
+                          <p className="text-xs leading-relaxed" style={{ color: 'rgba(172, 170, 177, 0.8)' }}>
+                            {action.description}
+                          </p>
+                        )}
+                        {action.estimatedMinutes && (
+                          <div className="flex items-center gap-2 mt-3 text-[10px]" style={{ color: 'rgba(248,245,253,0.35)' }}>
+                            <span>⏱</span>
+                            <span>Est. {action.estimatedMinutes}m</span>
                           </div>
-                        </li>
-                      ))}
-                    </ul>
-                  </section>
-                )}
-              </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
             </div>
           )}
 
@@ -313,10 +354,11 @@ function SplitView({
 
           {activeTab === 'search' && (
             <div className="max-w-4xl mx-auto animate-fade-in-up space-y-6">
-              <div className="bg-white/[0.02] border border-white/[0.05] p-6 rounded-2xl">
-                <h3 className="text-sm font-bold text-white/50 uppercase tracking-wider mb-4 flex items-center gap-2">
-                  <span className="text-primary-500">🔍</span> Multimodal Semantic Search
-                </h3>
+              <div className="p-6" style={{ background: 'rgba(37, 37, 44, 0.4)', backdropFilter: 'blur(20px)' }}>
+                <div className="flex items-center gap-3 mb-5">
+                  <div className="w-1 h-6" style={{ background: '#6af2de' }} />
+                  <h3 className="font-heading text-lg font-bold tracking-tight" style={{ color: '#f8f5fd' }}>Semantic Search</h3>
+                </div>
                 <form 
                   onSubmit={(e) => {
                      e.preventDefault();
@@ -327,13 +369,15 @@ function SplitView({
                   <input
                     type="text"
                     placeholder="Search the video (e.g. 'architecture diagram' or 'next js deploy')..."
-                    className="flex-1 bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-primary-500/50 outline-none transition-colors"
+                    className="flex-1 px-4 py-3 text-sm focus:outline-none transition-colors"
+                    style={{ background: 'rgba(25, 25, 31, 0.8)', border: '1px solid rgba(106, 242, 222, 0.15)', color: '#f8f5fd' }}
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                   />
                   <button 
                     type="submit"
-                    className="px-6 py-3 bg-primary-500 text-white font-bold rounded-xl hover:bg-primary-600 transition-colors disabled:opacity-50"
+                    className="px-6 py-3 font-heading font-bold text-xs tracking-wider uppercase transition-all disabled:opacity-30 active:scale-95"
+                    style={{ background: 'rgba(16, 183, 165, 0.9)', color: '#002b26', boxShadow: '0 0 15px rgba(16,183,165,0.3)' }}
                     disabled={searchLoading || !searchQuery.trim()}
                   >
                     {searchLoading ? 'Searching...' : 'Search'}
@@ -510,41 +554,33 @@ function DashboardContent() {
   return (
     <div className="h-screen flex flex-col text-white overflow-hidden bg-surface-950">
       {/* Top Nav (Always visible) */}
-      <nav className="flex-none flex items-center justify-between px-6 py-4 border-b border-white/[0.05] bg-surface-900 z-50">
-        <div className="flex items-center gap-6">
-          <Link href="/" className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center font-black text-sm shadow-lg shadow-primary-500/25">
-              E
-            </div>
-            <span className="font-bold tracking-tight">EventRelay</span>
-          </Link>
-          <div className="h-5 w-px bg-white/[0.08]" />
-          <span className="text-white/50 font-medium text-sm">Dashboard</span>
+      <Nav
+        subtitle="Dashboard"
+        rightSlot={
+          <div className="flex items-center gap-4">
+            <Link
+              href="/dashboard/agents"
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-xs text-indigo-400 font-bold uppercase tracking-wider hover:bg-indigo-500/20 transition-all"
+            >
+              ⚡ Agent Pipeline
+            </Link>
+            {processingCount > 0 ? (
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary-500/10 border border-primary-500/20">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-primary-400" />
+                </span>
+                <span className="text-xs text-primary-400 font-bold uppercase tracking-wider">{processingCount} Processing</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-green-500/10 border border-green-500/20">
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-green-400" />
+                <span className="text-xs text-green-400 font-bold uppercase tracking-wider">Ready</span>
+              </div>
+            )}
         </div>
-        
-        <div className="flex items-center gap-4">
-          <Link
-            href="/dashboard/agents"
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-xs text-indigo-400 font-bold uppercase tracking-wider hover:bg-indigo-500/20 transition-all"
-          >
-            ⚡ Agent Pipeline
-          </Link>
-          {processingCount > 0 ? (
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary-500/10 border border-primary-500/20">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-primary-400" />
-              </span>
-              <span className="text-xs text-primary-400 font-bold uppercase tracking-wider">{processingCount} Processing</span>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-green-500/10 border border-green-500/20">
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-green-400" />
-              <span className="text-xs text-green-400 font-bold uppercase tracking-wider">Ready</span>
-            </div>
-          )}
-        </div>
-      </nav>
+        }
+      />
 
       {/* Main Content Area */}
       {selectedVideo ? (
@@ -557,48 +593,50 @@ function DashboardContent() {
         <div className="flex-1 overflow-y-auto p-6 lg:p-10">
           <div className="max-w-6xl mx-auto space-y-10">
             {/* Input Section */}
-            <div className="bg-surface-900/50 p-8 rounded-3xl border border-white/[0.05] flex flex-col items-center justify-center text-center">
-              <h1 className="text-3xl font-black mb-3">Analyze New Video</h1>
-              <p className="text-white/40 mb-8 max-w-lg">
+            <div className="p-10 flex flex-col items-center justify-center text-center" style={{ background: 'rgba(25, 25, 31, 0.8)', border: '1px solid rgba(106, 242, 222, 0.08)' }}>
+              <span className="text-[10px] tracking-[0.3em] uppercase mb-4 block" style={{ color: '#6af2de', fontFamily: 'var(--font-heading)' }}>Video Intelligence Engine</span>
+              <h1 className="font-heading text-4xl font-bold tracking-tighter mb-3" style={{ color: '#f8f5fd' }}>Analyze New Video</h1>
+              <p className="mb-8 max-w-lg" style={{ color: 'rgba(248,245,253,0.4)' }}>
                 Paste a YouTube URL to extract intelligence, generate transcripts, and identify actionable events.
               </p>
-              <form onSubmit={(e) => { e.preventDefault(); handleAddVideo(); }} className="w-full max-w-2xl flex gap-3">
-                <div className="flex-1 flex items-center bg-white/[0.03] border border-white/[0.08] rounded-2xl px-4 py-2 focus-within:border-primary-500/50 focus-within:ring-2 focus-within:ring-primary-500/10 transition-all">
-                  <span className="text-white/30 mr-2">🔗</span>
+              <form onSubmit={(e) => { e.preventDefault(); handleAddVideo(); }} className="w-full max-w-2xl">
+                <div className="flex gap-2 p-2 rounded-xl transition-all" style={{ background: 'rgba(25, 25, 31, 0.8)', border: '1px solid rgba(106, 242, 222, 0.15)' }}>
                   <input
                     type="text"
                     value={videoUrl}
                     onChange={(e) => setVideoUrl(e.target.value)}
                     placeholder="https://youtube.com/watch?v=..."
-                    className="flex-1 bg-transparent border-none outline-none text-white placeholder:text-white/30"
+                    className="flex-1 px-4 py-3 bg-transparent text-white placeholder:text-white/20 focus:outline-none text-sm"
                   />
+                  <button
+                    type="submit"
+                    disabled={!videoUrl.trim()}
+                    className="px-8 py-3 font-bold text-sm transition-all active:scale-95 disabled:opacity-30"
+                    style={{ background: 'linear-gradient(135deg, #6af2de, #10b7a5)', color: '#002b26' }}
+                  >
+                    Analyze Footage
+                  </button>
                 </div>
-                <button
-                  type="submit"
-                  disabled={!videoUrl.trim()}
-                  className="btn btn-primary py-3 px-8 rounded-2xl font-bold tracking-wide disabled:opacity-50"
-                >
-                  Analyze
-                </button>
               </form>
             </div>
 
             {/* Library Section */}
             <div>
               <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-bold flex items-center gap-3">
-                  <span className="p-1.5 rounded-lg bg-white/[0.05] border border-white/[0.05]">📚</span>
-                  Your Library
-                </h2>
-                <div className="flex bg-white/[0.02] p-1 rounded-xl border border-white/[0.05]">
+                <div className="flex items-center gap-3">
+                  <div className="w-1 h-6" style={{ background: '#6af2de' }} />
+                  <h2 className="font-heading text-xl font-bold tracking-tight" style={{ color: '#f8f5fd' }}>Your Library</h2>
+                </div>
+                <div className="flex p-1" style={{ background: 'rgba(25, 25, 31, 0.8)', border: '1px solid rgba(72, 71, 77, 0.15)' }}>
                   {(['all', 'processing', 'complete', 'failed'] as const).map((f) => (
                     <button
                       key={f}
                       onClick={() => setFilter(f)}
-                      className={clsx(
-                        'px-4 py-1.5 rounded-lg text-xs font-semibold capitalize transition-all',
-                        filter === f ? 'bg-white/10 text-white shadow-sm' : 'text-white/40 hover:text-white/70 hover:bg-white/[0.02]'
-                      )}
+                      className="px-4 py-1.5 text-xs font-heading font-bold uppercase tracking-widest transition-all"
+                      style={{
+                        color: filter === f ? '#6af2de' : 'rgba(248,245,253,0.35)',
+                        background: filter === f ? 'rgba(106, 242, 222, 0.08)' : 'transparent',
+                      }}
                     >
                       {f}
                     </button>
@@ -608,8 +646,14 @@ function DashboardContent() {
 
               {filteredVideos.length === 0 ? (
                 <div className="py-20 text-center border border-dashed border-white/[0.1] rounded-3xl bg-white/[0.01]">
-                  <div className="text-4xl mb-4 opacity-30">📭</div>
-                  <p className="text-white/40 font-medium">No videos found in this category.</p>
+                  <p className="text-white/50 font-medium mb-2">No videos yet</p>
+                  <p className="text-white/30 text-sm mb-6 max-w-sm mx-auto">Paste a YouTube URL above to analyze your first video and start building your library.</p>
+                  <button
+                    onClick={() => document.querySelector<HTMLInputElement>('input[type="text"]')?.focus()}
+                    className="btn btn-primary px-5 py-2.5 text-sm"
+                  >
+                    Analyze a video
+                  </button>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

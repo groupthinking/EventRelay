@@ -33,6 +33,7 @@
   },
   "dependencies": {
     "@dataconnect/generated": "file:src/dataconnect-generated",
+    "@google-cloud/text-to-speech": "^6.4.0",
     "chrome-devtools-mcp": "^0.10.2"
   }
 }

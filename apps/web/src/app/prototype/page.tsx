@@ -630,10 +630,10 @@ export default function PrototypePage() {
           <div className="flex items-center gap-4">
             <Link href="/" className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-primary-500 to-primary-700 font-black shadow-lg shadow-primary-500/20">
-                E
+                U
               </div>
               <div>
-                <p className="text-sm font-semibold tracking-tight">EventRelay</p>
+                <p className="text-sm font-semibold tracking-tight">UVAI</p>
                 <p className="text-xs text-white/40">Interactive prototype</p>
               </div>
             </Link>

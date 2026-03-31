@@ -32,6 +32,12 @@ except ImportError:
 
 try:
     from google.generativeai import types as genai_types
+    # Part/Content moved to protos in newer versions of the deprecated SDK
+    if not hasattr(genai_types, "Part"):
+        from google.generativeai import protos as _protos
+        genai_types.Part = _protos.Part
+        genai_types.Content = _protos.Content
+        genai_types.FileData = _protos.FileData
 except ImportError:
     genai_types = None
 
@@ -933,10 +939,15 @@ class GeminiService:
                     self.logger.warning("Invalid video metadata supplied: %s", exc)
 
             if genai_types and metadata_obj:
-                video_part = genai_types.Part(
-                    file_data=genai_types.FileData(file_uri=getattr(video_file, 'uri', video_file.name)),
-                    video_metadata=metadata_obj,
-                )
+                try:
+                    video_part = genai_types.Part(
+                        file_data=genai_types.FileData(file_uri=getattr(video_file, 'uri', video_file.name)),
+                        video_metadata=metadata_obj,
+                    )
+                except (TypeError, ValueError):
+                    video_part = genai_types.Part(
+                        file_data=genai_types.FileData(file_uri=getattr(video_file, 'uri', video_file.name)),
+                    )
                 prompt_part = genai_types.Part(text=prompt)
                 content = genai_types.Content(role="user", parts=[video_part, prompt_part])
                 response = self._model.generate_content(
@@ -1172,10 +1183,15 @@ class GeminiService:
                 except Exception as exc:
                     self.logger.warning("Invalid YouTube video metadata supplied: %s", exc)
 
-            youtube_part = genai_types.Part(
-                file_data=genai_types.FileData(file_uri=youtube_url),
-                video_metadata=metadata_obj,
-            )
+            try:
+                youtube_part = genai_types.Part(
+                    file_data=genai_types.FileData(file_uri=youtube_url),
+                    video_metadata=metadata_obj,
+                )
+            except (TypeError, ValueError):
+                youtube_part = genai_types.Part(
+                    file_data=genai_types.FileData(file_uri=youtube_url),
+                )
             prompt_part = genai_types.Part(text=prompt)
             content = genai_types.Content(role="user", parts=[youtube_part, prompt_part])
             return self._model.generate_content(

@@ -9,34 +9,34 @@ import './globals.css';
 
 export const metadata: Metadata = {
   title: {
-    default: 'EventRelay — Video to Software',
-    template: '%s | EventRelay',
+    default: 'UVAI — Video to Software',
+    template: '%s | UVAI',
   },
   description: 'Paste a YouTube URL. AI analyzes the video, extracts technologies and concepts, generates a project scaffold, and deploys it.',
-  keywords: ['video to software', 'AI video analysis', 'video to code', 'agentic video', 'code generation', 'video API'],
-  authors: [{ name: 'EventRelay' }],
-  creator: 'EventRelay',
-  publisher: 'EventRelay',
+  keywords: ['video to software', 'AI video analysis', 'video to code', 'agentic video', 'code generation', 'video API', 'UVAI'],
+  authors: [{ name: 'UVAI' }],
+  creator: 'UVAI',
+  publisher: 'UVAI',
   metadataBase: new URL('https://v0-uvai.vercel.app'),
   openGraph: {
     type: 'website',
     locale: 'en_US',
     url: 'https://v0-uvai.vercel.app',
-    siteName: 'EventRelay',
-    title: 'EventRelay — Video to Software',
+    siteName: 'UVAI',
+    title: 'UVAI — Video to Software',
     description: 'Paste a YouTube URL. AI analyzes the video, extracts technologies and concepts, generates a project scaffold, and deploys it.',
     images: [
       {
         url: '/og-image.png',
         width: 1200,
         height: 630,
-        alt: 'EventRelay — Agentic Video Execution Platform',
+        alt: 'UVAI — Agentic Video Execution Platform',
       },
     ],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'EventRelay — Video to Software',
+    title: 'UVAI — Video to Software',
     description: 'Paste a YouTube URL. AI analyzes the video, extracts technologies and concepts, generates a project scaffold, and deploys it.',
     images: ['/og-image.png'],
     creator: '@groupthinking',
@@ -64,7 +64,7 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#8b5cf6' },
+    { media: '(prefers-color-scheme: light)', color: '#14b8a6' },
     { media: '(prefers-color-scheme: dark)', color: '#020617' },
   ],
   width: 'device-width',
@@ -83,7 +83,7 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link
-          href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&family=JetBrains+Mono:wght@100..800&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&family=JetBrains+Mono:wght@100..800&family=Space+Grotesk:wght@300..700&display=swap"
           rel="stylesheet"
         />
       </head>

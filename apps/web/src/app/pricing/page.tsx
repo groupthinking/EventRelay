@@ -3,6 +3,8 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { clsx } from 'clsx';
+import Nav from '@/components/Nav';
+import Footer from '@/components/Footer';
 
 // ─── Data ──────────────────────────────────────────────────────────────────────
 
@@ -52,7 +54,7 @@ const FAQS = [
   },
   {
     q: 'Do you offer refunds?',
-    a: "Yes. If you're not satisfied within the first 30 days of a paid plan, we'll issue a full refund — no questions asked. Just email us at billing@eventrelay.ai.",
+    a: "Yes. If you're not satisfied within the first 30 days of a paid plan, we'll issue a full refund — no questions asked. Just email us at billing@uvai.io.",
   },
   {
     q: 'How does annual billing work?',
@@ -114,32 +116,7 @@ export default function PricingPage() {
   return (
     <div className="min-h-screen text-white overflow-x-hidden">
 
-      {/* ── Nav ─────────────────────────────────────────────────────────────── */}
-      <nav className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-6 lg:px-12 py-4 border-b border-white/[0.05] bg-surface-950/80 backdrop-blur-xl">
-        <Link href="/" className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center font-black text-base shadow-lg shadow-primary-500/25">
-            E
-          </div>
-          <span className="font-bold text-lg tracking-tight">EventRelay</span>
-          <span className="hidden sm:block px-2 py-0.5 rounded-full bg-primary-500/15 text-primary-400 text-xs font-semibold border border-primary-500/20">
-            BETA
-          </span>
-        </Link>
-        <div className="flex items-center gap-3">
-          <Link href="/features" className="hidden md:block text-sm text-white/50 hover:text-white transition px-3 py-2">
-            Features
-          </Link>
-          <Link href="/pricing" className="hidden md:block text-sm text-white/80 hover:text-white transition px-3 py-2">
-            Pricing
-          </Link>
-          <Link href="/dashboard" className="btn btn-secondary py-2 px-4 text-sm">
-            Dashboard
-          </Link>
-          <Link href="/dashboard" className="btn btn-primary py-2 px-4 text-sm">
-            Get started free →
-          </Link>
-        </div>
-      </nav>
+      <Nav fixed />
 
       {/* ── Hero ────────────────────────────────────────────────────────────── */}
       <section className="relative pt-32 pb-16 px-6 text-center max-w-4xl mx-auto">
@@ -156,7 +133,7 @@ export default function PricingPage() {
         </div>
 
         <h1
-          className="text-5xl md:text-6xl font-black leading-tight tracking-tight mb-5 animate-fade-in-up opacity-0"
+          className="text-5xl md:text-6xl font-black leading-tight tracking-tight mb-5 animate-fade-in-up opacity-0 font-heading"
           style={{ animationDelay: '80ms', animationFillMode: 'forwards' }}
         >
           Simple,{' '}
@@ -310,7 +287,7 @@ export default function PricingPage() {
             </ul>
 
             <a
-              href="mailto:enterprise@eventrelay.ai"
+              href="mailto:enterprise@uvai.io"
               className="btn btn-secondary py-3.5 w-full text-sm text-center border-cyan-500/20 hover:border-cyan-500/40"
             >
               Contact sales →
@@ -327,7 +304,7 @@ export default function PricingPage() {
             <h3 className="font-bold text-white mb-1 text-lg">30-day money-back guarantee</h3>
             <p className="text-sm text-white/50 leading-relaxed">
               Not happy? We&apos;ll refund 100% of your payment within the first 30 days — no questions asked, no hoops to jump through.
-              We stand behind EventRelay because we use it ourselves.
+              We stand behind UVAI because we use it ourselves.
             </p>
           </div>
         </div>
@@ -336,7 +313,7 @@ export default function PricingPage() {
       {/* ── Feature comparison table ─────────────────────────────────────────── */}
       <section className="max-w-4xl mx-auto px-6 mb-24">
         <div className="text-center mb-10">
-          <h2 className="text-3xl font-black tracking-tight mb-3">Compare plans</h2>
+          <h2 className="text-3xl font-black tracking-tight mb-3 font-heading">Compare plans</h2>
           <p className="text-white/40">Everything you need to make the right choice.</p>
         </div>
 
@@ -408,7 +385,7 @@ export default function PricingPage() {
             We&apos;re a small team and we read every email. Reach out and we&apos;ll get back to you within a few hours.
           </p>
           <a
-            href="mailto:hello@eventrelay.ai"
+            href="mailto:hello@uvai.io"
             className="btn btn-secondary py-3 px-6 text-sm inline-flex"
           >
             Email us →
@@ -419,7 +396,7 @@ export default function PricingPage() {
       {/* ── Final CTA ───────────────────────────────────────────────────────── */}
       <section className="max-w-3xl mx-auto px-6 pb-24 text-center">
         <div className="p-12 rounded-3xl bg-gradient-to-br from-primary-500/15 via-primary-500/5 to-cyan-500/5 border border-primary-500/20">
-          <h2 className="text-3xl md:text-4xl font-black mb-4">
+          <h2 className="text-3xl md:text-4xl font-black mb-4 font-heading">
             Start for free today
           </h2>
           <p className="text-white/50 mb-8 max-w-lg mx-auto">
@@ -435,64 +412,7 @@ export default function PricingPage() {
         </div>
       </section>
 
-      {/* ── Footer ──────────────────────────────────────────────────────────── */}
-      <footer className="border-t border-white/[0.06] py-10">
-        <div className="max-w-6xl mx-auto px-6">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-10">
-            <div>
-              <div className="flex items-center gap-2 mb-4">
-                <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center font-black text-xs">
-                  E
-                </div>
-                <span className="font-bold text-sm">EventRelay</span>
-              </div>
-              <p className="text-xs text-white/30 leading-relaxed">
-                AI-powered video intelligence for teams and individuals.
-              </p>
-            </div>
-            <div>
-              <div className="text-xs font-semibold text-white/40 uppercase tracking-wider mb-4">Product</div>
-              <ul className="space-y-2.5 text-xs text-white/35">
-                {[['Dashboard', '/dashboard'], ['Features', '/features'], ['Pricing', '/pricing'], ['API Docs', '/playground']].map(([label, href]) => (
-                  <li key={label}>
-                    <Link href={href} className="hover:text-white/60 transition">{label}</Link>
-                  </li>
-                ))}
-              </ul>
-            </div>
-            <div>
-              <div className="text-xs font-semibold text-white/40 uppercase tracking-wider mb-4">Use Cases</div>
-              <ul className="space-y-2.5 text-xs text-white/35">
-                {['Meeting Notes', 'Conference Talks', 'Tutorials', 'Product Demos', 'Podcasts'].map((u) => (
-                  <li key={u}><span className="cursor-default">{u}</span></li>
-                ))}
-              </ul>
-            </div>
-            <div>
-              <div className="text-xs font-semibold text-white/40 uppercase tracking-wider mb-4">Links</div>
-              <ul className="space-y-2.5 text-xs text-white/35">
-                <li>
-                  <a href="https://github.com/groupthinking/EventRelay" target="_blank" rel="noopener noreferrer" className="hover:text-white/60 transition">
-                    GitHub
-                  </a>
-                </li>
-                <li>
-                  <a href="https://www.producthunt.com" target="_blank" rel="noopener noreferrer" className="hover:text-white/60 transition">
-                    Product Hunt
-                  </a>
-                </li>
-              </ul>
-            </div>
-          </div>
-          <div className="border-t border-white/[0.05] pt-6 flex flex-col md:flex-row items-center justify-between gap-3 text-xs text-white/25">
-            <span>© 2026 EventRelay. MIT License.</span>
-            <div className="flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-              <span>All systems operational</span>
-            </div>
-          </div>
-        </div>
-      </footer>
+      <Footer />
     </div>
   );
 }
