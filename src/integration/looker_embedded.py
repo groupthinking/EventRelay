@@ -84,8 +84,7 @@ class LookerEmbeddedService:
             access_filters_json
         ]
         
-        string_to_sign = "
-".join(signature_payload)
+        string_to_sign = "\n".join(signature_payload)
         signature = self._sign_embed_url(string_to_sign)
 
         # 4. Construct URL parameters
