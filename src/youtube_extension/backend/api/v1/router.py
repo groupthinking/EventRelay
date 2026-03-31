@@ -1260,12 +1260,22 @@ async def process_video_task(
     if not x_cloudtasks_taskname:
         raise HTTPException(status_code=403, detail="Only Cloud Tasks can call this endpoint")
 
-    metadata = payload.get("metadata") if isinstance(payload, dict) else {}
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Invalid task payload: expected JSON object")
+
+    metadata = payload.get("metadata") or {}
     job_id = metadata.get("job_id")
     if not job_id:
         raise HTTPException(status_code=400, detail="Missing job_id in task payload")
     if job_id not in x_cloudtasks_taskname:
         raise HTTPException(status_code=403, detail="Task name does not match queued job")
+
+    video_url = payload.get("video_url")
+    if not isinstance(video_url, str) or not video_url.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Missing or invalid 'video_url' in task payload",
+        )
 
     job = _video_jobs.setdefault(
         job_id,
@@ -1273,14 +1283,14 @@ async def process_video_task(
             job_id=job_id,
             status=JobStatus.pending,
             progress=0.0,
-            video_url=payload.get("video_url"),
+            video_url=video_url,
         ),
     )
     job.status = JobStatus.pending
     await _run_video_job(
         job_id,
         VideoProcessJobRequest(
-            video_url=payload.get("video_url"),
+            video_url=video_url,
             language=metadata.get("language", "en"),
             options=metadata.get("video_options") or {},
         ),
