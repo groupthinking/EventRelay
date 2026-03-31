@@ -360,6 +360,28 @@ class TranscriptActionWorkflow:
                 ordered_sources.append(source)
         return ordered_sources
 
+    @staticmethod
+    def _normalize_transcript_source(actual_source: str) -> str:
+        """Normalize actual service source names to routing category names for ML consistency.
+        
+        Maps actual sources returned by services to the routing names used in _build_transcript_source_order,
+        ensuring ML model training/inference uses consistent source names.
+        """
+        # YouTube API sources map to "youtube_api"
+        if actual_source in {"youtube_transcript_api", "innertube_android", "youtube_search_python"}:
+            return "youtube_api"
+        
+        # Speech-to-Text sources map to "speech_v2"
+        if actual_source.startswith("speech_to_text_v2"):
+            return "speech_v2"
+        
+        # Gemini sources map to their category
+        if actual_source in {"gemini_video", "gemini_video_file"}:
+            return actual_source
+        
+        # Fallback: return as-is for unknown sources
+        return actual_source
+
     async def _record_transcript_outcome(
         self,
         metadata: dict[str, Any],
@@ -389,9 +411,11 @@ class TranscriptActionWorkflow:
             ),
         )
         try:
+            actual_source = str(transcript.get("source") or "unknown")
+            normalized_source = self._normalize_transcript_source(actual_source)
             await self._ml_client.record_transcript_outcome(
                 metadata=metadata,
-                actual_source=str(transcript.get("source") or "unknown"),
+                actual_source=normalized_source,
                 actual_quality=actual_quality,
                 success=success,
             )
