@@ -7,7 +7,6 @@ a running EventRelay server, using httpx's mock transport.
 
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
 
@@ -29,7 +28,6 @@ from eventrelay_sdk.types import (
     AgentStatus,
     AgentStatusResponse,
     ChatRequest,
-    ChatResponse,
     EventExtractRequest,
     EventExtractResponse,
     ExtractedEvent,
