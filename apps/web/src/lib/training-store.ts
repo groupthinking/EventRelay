@@ -116,11 +116,19 @@ async function exportTrainingExampleToBigQuery(
   });
 
   if (!tokenResponse?.ok) {
+    console.debug(
+      '[Training] Metadata server returned error for BigQuery export (status: ' +
+      tokenResponse.status + '). Training data saved locally but will not be exported to BigQuery.'
+    );
     return;
   }
 
   const tokenData = (await tokenResponse.json()) as { access_token?: string };
   if (!tokenData.access_token) {
+    console.debug(
+      '[Training] Google Cloud access token missing from metadata response. ' +
+      'Training data saved locally but will not be exported to BigQuery.'
+    );
     return;
   }
 
