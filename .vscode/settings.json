@@ -47,7 +47,10 @@
     "workbench.experimental.share.enabled": true,
     "workbench.startupEditor": "terminal",
     "workbench.editor.autoLockGroups": {
-        "vscode.videoPreview": true
+        "vscode.videoPreview": true,
+        "antigravity.globalArtifactsEditorInput": true,
+        "default": true,
+        "antigravity.artifactsEditorInput": true
     },
     "workbench.editor.enablePreviewFromQuickOpen": true,
     "testing.automaticallyOpenPeekView": "failureAnywhere",
@@ -100,5 +103,8 @@
     "notebook.outline.showCodeCells": true,
     "notebook.variablesView": true,
     "firebase.dataConnect.alwaysAllowMutationsInProduction": true,
-    "firefox.keepProfileChanges": false
+    "firefox.keepProfileChanges": false,
+    "tfa.system.autoAccept": true,
+    "workbench.editor.alwaysShowEditorActions": true,
+    "workbench.editor.preferHistoryBasedLanguageDetection": true
 }

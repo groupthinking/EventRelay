@@ -168,8 +168,10 @@ app.include_router(v1_router)
 
 # Include MCP Bridge Router
 from .api import mcp_bridge
+from .api.reporting_routes import router as reporting_router
 
 app.include_router(mcp_bridge.router)
+app.include_router(reporting_router)
 
 # Include integrations router if available
 # if integrations_router:
