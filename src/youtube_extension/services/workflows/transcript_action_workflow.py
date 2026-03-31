@@ -34,6 +34,7 @@ from youtube_extension.services.ai.speech_to_text_service import (
     SpeechToTextResult,
     SpeechToTextService,
 )
+from youtube_extension.services.skill_builder import get_skill_builder
 
 if TYPE_CHECKING:  # pragma: no cover - typing helpers
     from youtube_extension.services.ai.hybrid_processor_service import (
@@ -79,6 +80,7 @@ class TranscriptActionWorkflow:
             self._hybrid_processor = hybrid_processor
         self._speech_service = speech_service or SpeechToTextService()
         self._metrics_service = metrics_service
+        self._skill_builder = get_skill_builder()
 
     async def run(
         self,
@@ -92,7 +94,35 @@ class TranscriptActionWorkflow:
         gemini_transcript: dict[str, Any] = {}
 
         async with self._youtube_service_factory() as yt_service:
-            metadata = await yt_service.get_video_metadata(video_url)
+            try:
+                metadata = await yt_service.get_video_metadata(video_url)
+            except Exception as meta_err:
+                logger.warning("Metadata fetch failed for %s: %s — using minimal metadata", video_url, meta_err)
+                import re as _re
+                video_id_match = _re.search(r"(?:v=|/)([a-zA-Z0-9_-]{11})", video_url)
+                video_id = video_id_match.group(1) if video_id_match else "unknown"
+                metadata = RobustYouTubeMetadata(
+                    video_id=video_id,
+                    title=f"Video {video_id}",
+                    description="",
+                    channel_id="",
+                    channel_title="Unknown",
+                    published_at="",
+                    duration="PT0S",
+                    view_count=0,
+                    like_count=0,
+                    comment_count=0,
+                    thumbnail_urls={},
+                    tags=[],
+                    category_id="",
+                    default_language="en",
+                    default_audio_language="en",
+                    live_broadcast_content="none",
+                    transcript_available=False,
+                    transcript_segments=0,
+                    source_api="fallback",
+                )
+
             if transcript_text is not None:
                 transcript = {
                     "text": transcript_text,
@@ -169,6 +199,19 @@ class TranscriptActionWorkflow:
             video_metadata=video_metadata,
         )
 
+        # Record outcome for continuous learning
+        self._skill_builder.record_deployment(
+            framework="video_analysis",
+            deployment_target=transcript.get("source", "pipeline"),
+            success=orchestration["success"],
+            error_message="; ".join(orchestration["errors"]) if orchestration["errors"] else None,
+            config={
+                "agents_used": orchestration["agents_used"],
+                "transcript_source": transcript.get("source"),
+                "processing_time": orchestration["processing_time"],
+            },
+        )
+
         return {
             "success": orchestration["success"],
             "video_url": video_url,
@@ -201,6 +244,19 @@ class TranscriptActionWorkflow:
 
         if video_metadata:
             agent_input["video_metadata"] = video_metadata
+
+        # Inject learned lessons from previous pipeline runs
+        skill_context = self._skill_builder.get_context(
+            framework="video_analysis",
+            deployment_target=transcript.get("source", "pipeline"),
+        )
+        if skill_context.get("has_data"):
+            agent_input["learned_lessons"] = skill_context["lessons"]
+            logger.info(
+                "Injected %d learned lessons (success_rate=%.2f)",
+                len(skill_context["lessons"]),
+                skill_context.get("success_rate", 0),
+            )
 
         agent_configs = {
             "transcript_action": {

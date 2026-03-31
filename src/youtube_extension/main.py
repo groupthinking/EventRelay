@@ -66,7 +66,7 @@ app.add_middleware(SecurityHeadersMiddleware)
 
 # API key auth middleware
 try:
-    from .backend.middleware.api_key_auth import APIKeyMiddleware
+    from .backend.middleware.api_key_auth import APIKeyAuthMiddleware as APIKeyMiddleware
 
     app.add_middleware(APIKeyMiddleware)
     logger.info("API key auth middleware loaded")
