@@ -172,10 +172,23 @@ export interface ChatResponse {
 export interface HealthResponse {
   status: string;
   version?: string;
-  timestamp?: string;
-  services?: Record<string, unknown>;
+  /** Server time when this health snapshot was generated (ISO 8601). */
+  timestamp: string;
+  /** Health status of core components, keyed by component name. */
+  components: Record<string, unknown>;
 }
 
+/** Response type for /api/v1/health/detailed */
+export interface HealthDetailedResponse {
+  /** Basic system health information. */
+  basic: Record<string, unknown>;
+  /** Connector-specific health information. */
+  connectors: Record<string, unknown>;
+  /** Pipeline and processing health information. */
+  pipeline: Record<string, unknown>;
+  /** Server time when this detailed health snapshot was generated (ISO 8601). */
+  timestamp: string;
+}
 // ---------------------------------------------------------------------------
 // Client configuration
 // ---------------------------------------------------------------------------
