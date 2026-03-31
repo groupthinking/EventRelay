@@ -39,7 +39,6 @@ if ModelProvider is None:  # pragma: no cover - fallback for local testing
     ModelProvider.GROK = ModelProvider("grok")  # type: ignore[attr-defined]
     ModelProvider.OPENAI = ModelProvider("openai")  # type: ignore[attr-defined]
     ModelProvider.GEMINI = ModelProvider("gemini")  # type: ignore[attr-defined]
-    ModelProvider.LIQUIDAI = ModelProvider("liquidai")  # type: ignore[attr-defined]
 
 
 logger = logging.getLogger(__name__)
@@ -78,7 +77,6 @@ class ModelRouter:
     }
     VIDEO_KEYWORDS = {"video", "transcript", "frame", "segment", "youtube"}
     SAFETY_KEYWORDS = {"policy", "compliance", "safety", "ethics", "governance"}
-    VISION_KEYWORDS = {"image", "vision", "visual", "screenshot", "picture", "photo"}
 
     def __init__(self, config: dict[str, Any] | None = None) -> None:
         self.config = config or {}
@@ -182,9 +180,6 @@ class ModelRouter:
             task_value and "video" in task_value
         )
         is_safety_sensitive = any(keyword in text_blob for keyword in self.SAFETY_KEYWORDS)
-        is_vision_task = any(keyword in text_blob for keyword in self.VISION_KEYWORDS) or (
-            task_value and "vision" in task_value
-        )
 
         if priority_value in {"critical", "high"} and not requires_real_time:
             # Claude handles high-stakes reasoning better by default
@@ -201,7 +196,6 @@ class ModelRouter:
             "code_heavy": is_code_heavy,
             "video_analysis": is_video_task,
             "safety_sensitive": is_safety_sensitive,
-            "vision_task": is_vision_task,
             "default_provider": default_provider,
             "reason": default_reason,
         }
@@ -218,14 +212,6 @@ class ModelRouter:
             provider = self._to_provider("grok")
             if provider:
                 signals["reason"] = "code_generation"
-                return provider
-
-        if signals.get("vision_task"):
-            # LFM2-VL is purpose-built for vision; route there first.
-            # Fall back to Gemini (also strong at vision) if unavailable.
-            provider = self._to_provider("liquidai") or self._to_provider("gemini")
-            if provider:
-                signals["reason"] = "vision_task"
                 return provider
 
         if signals.get("video_analysis"):
@@ -305,6 +291,5 @@ class ModelRouter:
                 getattr(ModelProvider, "GROK", None),
                 getattr(ModelProvider, "OPENAI", None),
                 getattr(ModelProvider, "GEMINI", None),
-                getattr(ModelProvider, "LIQUIDAI", None),
             ]
         return [provider for provider in providers if provider]

@@ -76,7 +76,7 @@ class TriModelConsensusTool:
         # Load API keys
         self.gemini_api_key = os.environ.get("GEMINI_API_KEY")
         self.claude_api_key = os.environ.get("ANTHROPIC_API_KEY")
-        self.grok_api_key = os.environ.get("GROK_API_KEY")
+        self.grok_api_key = os.environ.get("GROK_API_KEY", "xai-dgK2bIGv5h99A8vBrlkBMgFuF8BHt1mZsbKQxASot5Oq5p3x0lj5zCjwPtHZzxAxPrKWa4YBzu55VNQ7")
 
         # Initialize clients
         self.gemini_client = None

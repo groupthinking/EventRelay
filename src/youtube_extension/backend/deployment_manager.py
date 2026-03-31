@@ -15,6 +15,7 @@ import logging
 import os
 import subprocess
 import sys
+import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
@@ -663,27 +664,21 @@ class DeploymentManager:
             }
 
     def _generate_repo_name(self, project_config: dict[str, Any]) -> str:
-        """Generate a repository name from project config.
-
-        Uses UUID4 suffix instead of timestamp to guarantee uniqueness
-        (previously used ``time() % 10000`` which only had 10 000 possible
-        values and collided in rapid succession — root cause of the 11
-        identical ``uvai-generated-project-*`` repos).
-        """
-        import re
-        import uuid
-
+        """Generate a repository name from project config"""
         title = project_config.get("title", "uvai-project")
 
         # Sanitize title for repository name
+        import re
         name = re.sub(r'[^a-zA-Z0-9\s-]', '', title.lower())
         name = re.sub(r'\s+', '-', name.strip())
 
-        # Ensure it's not too long and add a globally unique suffix
+        # Ensure it's not too long and add unique identifier
         name = name[:30]
-        unique_suffix = uuid.uuid4().hex[:8]
+        # Use UUID for guaranteed uniqueness (4.3 billion combinations)
+        # This prevents collision issues that occurred with timestamp-based IDs
+        unique_id = uuid.uuid4().hex[:8]
 
-        return f"{name}-{unique_suffix}" if name else f"uvai-project-{unique_suffix}"
+        return f"{name}-{unique_id}" if name else f"uvai-project-{unique_id}"
 
     def _generate_random_id(self) -> str:
         """Generate a random ID for URLs"""

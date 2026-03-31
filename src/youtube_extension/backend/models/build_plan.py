@@ -1,26 +1,11 @@
 """
+BuildPlan - Structured instruction extraction for Stage 2 parsing.
 
 This module defines the structured output schema for video analysis that transforms
 raw transcripts and visual cues into actionable, deterministic build instructions.
 
 The BuildPlan is the primary artifact that flows from Stage 2 (Semantic Logic Parsing)
 to Stage 3 (Code Generation), eliminating the need for loose text and template fallbacks.
-"""
-
-from enum import Enum
-from typing import Any, Optional
-BuildPlan — Structured instruction extraction for Stage 2 parsing.
-
-Replaces loose text extraction with a deterministic, structured output
-that Stage 3 (code generation) can consume directly.
-
-Usage:
-    from youtube_extension.backend.models.build_plan import BuildPlan, BuildStep
-
-    # Gemini returns JSON matching this schema
-    plan = BuildPlan.model_validate(gemini_response)
-    for step in plan.steps:
-        print(f"{step.action} → {step.target_file}")
 """
 
 from __future__ import annotations

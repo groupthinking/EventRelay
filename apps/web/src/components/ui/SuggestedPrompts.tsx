@@ -18,9 +18,9 @@ const SUGGESTED_TOPICS = [
     id: 'fermi-paradox',
     label: 'Fermi Paradox',
     icon: '👽',
-    gradient: 'from-purple-500/20 to-violet-500/20',
-    borderColor: 'border-purple-500/30',
-    textColor: 'text-purple-400',
+    gradient: 'from-sky-500/20 to-indigo-500/20',
+    borderColor: 'border-sky-500/30',
+    textColor: 'text-sky-400',
     query: 'fermi paradox'
   },
   {

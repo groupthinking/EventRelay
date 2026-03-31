@@ -2,18 +2,13 @@
 """
 Tests for code_generator.py — verifying unique output per video.
 
+Regression tests for issue #122: undefined variables in _build_generation_context.
+
 Run: python -m pytest tests/test_code_generator_unique_output.py -v
 """
 
-import asyncio
-import json
 import os
-import sys
 from pathlib import Path
-
-# Add the project root so imports resolve
-PROJECT_ROOT = Path(__file__).parent.parent
-sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 import pytest
 
@@ -30,7 +25,7 @@ def generator():
 
 
 def _make_video_analysis(video_id: str, title: str, technologies: list, summary: str = "", steps: list = None):
-    """Helper to build a realistic video_analysis dict."""
+    """Helper to build a realistic video_analysis dict without a build_plan."""
     return {
         "video_data": {"video_id": video_id, "video_url": f"https://youtube.com/watch?v={video_id}"},
         "metadata": {"title": title, "keywords": technologies},
@@ -65,7 +60,6 @@ async def test_different_videos_produce_different_js(generator):
     path_a = Path(result_a["project_path"])
     path_b = Path(result_b["project_path"])
 
-    # Read main.js (or App.js for react) from each
     js_a = _read_js(path_a, result_a)
     js_b = _read_js(path_b, result_b)
 
@@ -102,8 +96,6 @@ async def test_same_video_produces_deterministic_output(generator):
     js_1 = _read_js(Path(result_1["project_path"]), result_1)
     js_2 = _read_js(Path(result_2["project_path"]), result_2)
 
-    # Fingerprint is deterministic, so structure should match
-    # (timestamps will differ, but the fingerprint and content sections should match)
     fp_1 = _extract_fingerprint(js_1)
     fp_2 = _extract_fingerprint(js_2)
     assert fp_1 == fp_2, "Same video should produce the same fingerprint"

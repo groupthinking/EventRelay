@@ -61,6 +61,8 @@ src/integration/data_pipeline.py
 src/integration/gemini_video.py
 src/integration/gemini_video_fix.py
 src/integration/health_checker.py
+src/integration/looker_embed.py
+src/integration/looker_embedded.py
 src/integration/mcp_orchestrator.py
 src/integration/openai_voice.py
 src/integration/performance_monitor.py
@@ -111,7 +113,6 @@ src/youtube_extension.egg-info/top_level.txt
 src/youtube_extension/backend/__init__.py
 src/youtube_extension/backend/ai_code_generator.py
 src/youtube_extension/backend/ai_insights_processor.py
-src/youtube_extension/backend/build_plan.py
 src/youtube_extension/backend/cloud_ai_routes.py
 src/youtube_extension/backend/cloud_api_endpoints.py
 src/youtube_extension/backend/code_generator.py
@@ -126,6 +127,7 @@ src/youtube_extension/backend/api/__init__.py
 src/youtube_extension/backend/api/advanced_video_routes.py
 src/youtube_extension/backend/api/event_routes.py
 src/youtube_extension/backend/api/mcp_bridge.py
+src/youtube_extension/backend/api/reporting_routes.py
 src/youtube_extension/backend/api/v1/__init__.py
 src/youtube_extension/backend/api/v1/models.py
 src/youtube_extension/backend/api/v1/router.py
@@ -262,9 +264,5 @@ src/youtube_extension/videopack/provenance.py
 src/youtube_extension/videopack/schema.py
 src/youtube_extension/videopack/validate.py
 src/youtube_extension/videopack/versioning.py
-tests/test_build_plan.py
 tests/test_code_generator.py
-tests/test_code_generator_unique_output.py
-tests/test_firestore_state.py
-tests/test_gemini_vision_integration.py
 tests/test_ml_models.py

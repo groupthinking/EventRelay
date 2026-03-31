@@ -40,3 +40,37 @@ export async function GET() {
     });
   }
 }
+
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+    
+    const response = await fetch(`${BACKEND_URL}/api/v1/reporting/embed/dashboard`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        dashboard_id: body.dashboard_id || 'events_overview',
+        tenant_id: body.tenant_id || 'tenant_default',
+        user_id: body.user_id || 'user_demo',
+        user_email: body.user_email || 'demo@example.com'
+      }),
+      signal: AbortSignal.timeout(5000),
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Backend Looker service failed: ${response.status} ${errText}`);
+    }
+
+    const data = await response.json();
+    return NextResponse.json(data);
+  } catch (error) {
+    console.error('Dashboard embed error:', error);
+    return NextResponse.json(
+      { error: 'Failed to retrieve dashboard embed URL' },
+      { status: 500 }
+    );
+  }
+}

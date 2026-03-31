@@ -1,4 +1,4 @@
-export type AIProvider = 'grok' | 'claude' | 'gemini' | 'openai' | 'liquidai';
+export type AIProvider = 'grok' | 'claude' | 'gemini' | 'openai';
 
 export interface AIGatewayConfig {
   providers: AIProvider[];

@@ -87,7 +87,14 @@ export async function POST(request: Request) {
 
         const insights = {
           summary: summaryText,
-          actions: transcriptAction.task_board?.tasks?.map((t: { title?: string }) => t.title) || [],
+          actions: Object.values(transcriptAction.task_board || {}).flatMap((col: any) => 
+            Array.isArray(col) ? col.map((t: any) => ({
+              title: t.title || 'Untitled',
+              description: t.definition_of_done || t.description || '',
+              category: t.owner_role || 'General',
+              estimatedMinutes: t.estimate_days ? parseFloat(t.estimate_days) * 24 * 60 : null
+            })) : []
+          ),
           topics: transcriptAction.metadata?.topics || [],
           sentiment: personalityAgent.personality_map?.video_intent?.primary || 'Neutral',
           strategy: strategyAgent.strategic_analysis || null,
@@ -141,7 +148,7 @@ export async function POST(request: Request) {
             success: true,
             insights: {
               summary: analysis.summary,
-              actions: analysis.actions?.map((a) => a.title) || [],
+              actions: analysis.actions || [],
               topics: analysis.topics || [],
               sentiment: 'Neutral',
             },
@@ -185,7 +192,7 @@ export async function POST(request: Request) {
       console.error('Transcript extraction failed:', e);
     }
 
-    let extraction: { events?: Array<{ type: string; title: string; description?: string; timestamp?: string; priority?: string }>; actions?: Array<{ title: string }>; summary?: string; topics?: string[] } = {};
+    let extraction: { events?: Array<{ type: string; title: string; description?: string; timestamp?: string; priority?: string }>; actions?: Array<{ title: string; description?: string; category?: string; estimatedMinutes?: number }>; summary?: string; topics?: string[] } = {};
     if (transcript) {
       try {
         await publishEvent(EventTypes.EXTRACTION_STARTED, { transcriptLength: transcript.length }, url);
@@ -221,7 +228,7 @@ export async function POST(request: Request) {
         success: hasResults,
         insights: {
           summary: extraction.summary || (hasResults ? 'Transcript extracted successfully' : 'Could not extract transcript — configure GEMINI_API_KEY'),
-          actions: extraction.actions?.map((a) => a.title) || [],
+          actions: extraction.actions || [],
           topics: extraction.topics || [],
           sentiment: 'Neutral',
         },

@@ -94,10 +94,6 @@ class AICodeGenerator:
         # Extract information from video analysis
         extracted = video_analysis.get("extracted_info", {})
         video_analysis.get("ai_analysis", {})
-        build_plan = video_analysis.get("build_plan") or extracted.get("build_plan")
-        if build_plan:
-            video_analysis["build_plan"] = build_plan
-            extracted["build_plan"] = build_plan
 
         title = extracted.get("title", "AI Generated Project")
         technologies = extracted.get("technologies", [])
@@ -558,9 +554,6 @@ Return ONLY the code."""
         """Use AI to generate a specific file"""
 
         extracted = video_analysis.get("extracted_info", {})
-        build_plan_context = self._summarize_build_plan(
-            video_analysis.get("build_plan") or extracted.get("build_plan")
-        )
 
         prompt = f"""You are generating code for a {architecture['type']} application.
 
@@ -570,9 +563,6 @@ PROJECT CONTEXT:
 - Framework: {architecture['framework']}
 - Styling: {architecture.get('frontend', {}).get('styling', 'tailwind')}
 - Features: {json.dumps(architecture.get('features', []))}
-
-BUILD PLAN:
-{build_plan_context}
 
 TASK: Generate {description}
 
@@ -614,29 +604,6 @@ TASK: Generate {description}
         except Exception as e:
             logger.error(f"AI file generation failed for {description}: {e}")
             return f"// Error generating {description}: {e}\n// Please implement manually"
-
-    def _summarize_build_plan(self, build_plan: Any) -> str:
-        """Render build plan steps into a concise, prompt-friendly string."""
-        if not build_plan or not isinstance(build_plan, dict):
-            return "- No structured build plan provided."
-
-        lines = []
-        for idx, step in enumerate(build_plan.get("steps", [])[:8]):
-            action = step.get("action", "action")
-            target = step.get("target_file", "")
-            desc = step.get("description", "")
-            deps = step.get("dependencies", [])
-            step_num = step.get("step_number", idx + 1)
-            line = f"- Step {step_num}: {action}"
-            if target:
-                line += f" -> {target}"
-            if desc:
-                line += f" — {desc}"
-            if deps:
-                line += f" (depends on {deps})"
-            lines.append(line)
-
-        return "\n".join(lines) if lines else "- No structured build plan provided."
 
     async def _generate_package_json(
         self,

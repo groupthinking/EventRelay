@@ -7,8 +7,7 @@
   "exports": {
     "./postgres": "./dist/postgres.js",
     "./github": "./dist/github.js",
-    "./slack": "./dist/slack.js",
-    "./liquidai": "./dist/liquidai.js"
+    "./slack": "./dist/slack.js"
   },
   "scripts": {
     "build": "tsc",

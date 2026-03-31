@@ -23,19 +23,8 @@ export default function AgentDashboard({ executions, loading, className }: Agent
         <h3 className="text-sm font-semibold text-white/50 uppercase tracking-wider">
           Agent Executions
         </h3>
-        <div className="space-y-2">
-          {[1, 2, 3].map((n) => (
-            <div key={n} className="p-3.5 rounded-xl border border-white/[0.06] space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="skeleton w-2 h-2 rounded-full" />
-                  <div className="skeleton h-4 w-28 rounded" />
-                </div>
-                <div className="skeleton h-3 w-14 rounded" />
-              </div>
-              <div className="skeleton h-1.5 w-full rounded-full" />
-            </div>
-          ))}
+        <div className="flex items-center gap-2 text-sm text-white/40 py-6 justify-center">
+          <span className="animate-spin">⚙️</span> Dispatching agents…
         </div>
       </div>
     );
@@ -73,11 +62,7 @@ export default function AgentDashboard({ executions, loading, className }: Agent
             >
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
-                  <span className={clsx(
-                    'w-2 h-2 rounded-full',
-                    style.dot,
-                    exec.status === 'running' && 'animate-pulse'
-                  )} />
+                  <span className={clsx('w-2 h-2 rounded-full', style.dot)} />
                   <span className="text-sm font-medium text-white/80">{exec.agent_type}</span>
                 </div>
                 <span className={clsx('text-xs font-medium capitalize', style.text)}>

@@ -221,39 +221,7 @@ class RealVideoProcessor:
                     'processing_providers': []
                 }
 
-            # Step 3: Extract BuildPlan (Stage 2: Semantic Logic Parsing)
-            logger.info(f"🏗️ Extracting BuildPlan for {video_id}")
-            build_plan = None
-
-            try:
-                from integration.gemini_video import GeminiVideoService
-
-                gemini_service = GeminiVideoService()
-                build_plan = await gemini_service.extract_build_plan(video_url)
-                await gemini_service.close()
-
-                processing_steps.append({
-                    'step': 'build_plan_extraction',
-                    'status': 'completed',
-                    'steps_extracted': len(build_plan.get('steps', [])),
-                    'project_type': build_plan.get('project_type'),
-                    'timestamp': datetime.now(timezone.utc).isoformat()
-                })
-
-                logger.info(f"   ✅ BuildPlan extracted: {build_plan.get('title', 'Untitled')} ({len(build_plan.get('steps', []))} steps)")
-
-            except Exception as e:
-                error_msg = f"BuildPlan extraction failed: {e}"
-                logger.warning(error_msg)
-                processing_steps.append({
-                    'step': 'build_plan_extraction',
-                    'status': 'failed',
-                    'error': error_msg,
-                    'timestamp': datetime.now(timezone.utc).isoformat()
-                })
-                # Continue without BuildPlan - fallback to existing logic
-
-            # Step 4: Compile comprehensive result
+            # Step 3: Compile comprehensive result
             processing_time = (datetime.now(timezone.utc) - start_time).total_seconds()
 
             # Get cost monitoring data
@@ -273,9 +241,6 @@ class RealVideoProcessor:
 
                 # AI Analysis results
                 'ai_analysis': ai_analysis,
-
-                # Stage 2: Structured BuildPlan (new!)
-                'build_plan': build_plan,
 
                 # Processing metadata
                 'processing_steps': processing_steps,
@@ -301,7 +266,6 @@ class RealVideoProcessor:
                     'has_transcript': youtube_data['transcript']['has_transcript'],
                     'transcript_quality': 'high' if youtube_data['transcript']['segment_count'] > 50 else 'medium' if youtube_data['transcript']['segment_count'] > 10 else 'low',
                     'ai_analysis_success': ai_analysis.get('success', False),
-                    'has_build_plan': build_plan is not None,
                     'processing_success_rate': len([s for s in processing_steps if s['status'] == 'completed']) / len(processing_steps) if processing_steps else 0
                 }
             }
