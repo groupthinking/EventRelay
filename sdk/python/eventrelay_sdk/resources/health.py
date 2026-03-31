@@ -29,7 +29,7 @@ class HealthResource:
         """Perform a detailed health check including all sub-services.
 
         Returns:
-            :class:`HealthResponse` with ``services`` breakdown.
+            :class:`HealthResponse` with ``components`` breakdown.
         """
         response = self._client._get("/api/v1/health/detailed")
         return HealthResponse.model_validate(response)

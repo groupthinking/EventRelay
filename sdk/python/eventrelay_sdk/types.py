@@ -206,9 +206,9 @@ class HealthResponse(BaseModel):
     """Health check response."""
 
     status: str
+    timestamp: datetime
     version: Optional[str] = None
-    timestamp: Optional[datetime] = None
-    services: Optional[dict[str, Any]] = None
+    components: Optional[dict[str, Any]] = None
 
 
 # ---------------------------------------------------------------------------

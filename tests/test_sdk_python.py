@@ -172,7 +172,7 @@ class TestAgentModels:
 
 class TestHealthModels:
     def test_health_response_parse(self) -> None:
-        data = {"status": "healthy", "version": "2.0.0"}
+        data = {"status": "healthy", "version": "2.0.0", "timestamp": "2024-01-01T00:00:00"}
         resp = HealthResponse.model_validate(data)
         assert resp.status == "healthy"
         assert resp.version == "2.0.0"
@@ -316,7 +316,7 @@ class TestEventRelayClient:
         assert result.status == AgentStatus.complete
 
     def test_health_check(self) -> None:
-        routes = {("GET", "/api/v1/health"): {"status": "healthy"}}
+        routes = {("GET", "/api/v1/health"): {"status": "healthy", "timestamp": "2024-01-01T00:00:00"}}
         client = self._make_client(routes)
         result = client.health.check()
         assert isinstance(result, HealthResponse)
@@ -326,13 +326,14 @@ class TestEventRelayClient:
         routes = {
             ("GET", "/api/v1/health/detailed"): {
                 "status": "healthy",
-                "services": {"database": "ok", "cache": "ok"},
+                "timestamp": "2024-01-01T00:00:00",
+                "components": {"database": "ok", "cache": "ok"},
             }
         }
         client = self._make_client(routes)
         result = client.health.detailed()
         assert isinstance(result, HealthResponse)
-        assert result.services is not None
+        assert result.components is not None
 
     def test_client_context_manager(self) -> None:
         routes = {("GET", "/api/v1/health"): {"status": "healthy"}}
