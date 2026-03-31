@@ -64,7 +64,7 @@ export async function POST(request: Request) {
 
           if (result.async_processing && result.job_id) {
             await publishEvent(
-              EventTypes.PIPELINE_COMPLETED,
+              EventTypes.PIPELINE_QUEUED,
               { strategy: 'backend-async', queued: true, jobId: result.job_id },
               url,
             );
