@@ -162,3 +162,6 @@ notebooklm_chrome_profile/
 src/utils/notebooklm_profile/
 src/utils/notebooklm_profile_v2/
 .gstack/
+
+# Claude Code worktrees (session-specific, should not be tracked)
+.claude/worktrees/
