@@ -23,9 +23,9 @@ import path from 'path';
 const TRAINING_DIR = path.join(process.cwd(), 'data', 'training');
 const TRAINING_FILE = path.join(TRAINING_DIR, 'video-analysis.jsonl');
 const METADATA_FILE = path.join(TRAINING_DIR, 'metadata.json');
-const BIGQUERY_PROJECT_ID = process.env.GOOGLE_CLOUD_PROJECT || 'uvai-730bb';
-const BIGQUERY_DATASET = process.env.TRAINING_BIGQUERY_DATASET || 'eventrelay_training';
-const BIGQUERY_TABLE = process.env.TRAINING_BIGQUERY_TABLE || 'video_analysis_examples';
+const BIGQUERY_PROJECT_ID = process.env.GOOGLE_CLOUD_PROJECT;
+const BIGQUERY_DATASET = process.env.TRAINING_BIGQUERY_DATASET;
+const BIGQUERY_TABLE = process.env.TRAINING_BIGQUERY_TABLE;
 
 /** Thresholds for auto-tuning triggers */
 export const TUNING_THRESHOLD = 100;
