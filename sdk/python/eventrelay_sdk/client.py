@@ -19,6 +19,7 @@ from typing import Any, Optional
 import httpx
 
 from .resources.agents import AgentsResource, AsyncAgentsResource
+from .types import ApiResponse
 from .resources.chat import AsyncChatResource, ChatResource
 from .resources.events import AsyncEventsResource, EventsResource
 from .resources.health import AsyncHealthResource, HealthResource
@@ -94,7 +95,12 @@ class EventRelayClient:
                     attempt += 1
                     continue
                 response.raise_for_status()
-                return response.json()
+                data = response.json()
+                # Unwrap ApiResponse envelope if present
+                if isinstance(data, dict) and "status" in data and "data" in data:
+                    api_response = ApiResponse.model_validate(data)
+                    return api_response.data
+                return data
             except httpx.HTTPStatusError as exc:
                 last_exc = exc
                 if exc.response.status_code not in _RETRY_STATUS_CODES:
@@ -194,7 +200,12 @@ class AsyncEventRelayClient:
                     attempt += 1
                     continue
                 response.raise_for_status()
-                return response.json()
+                data = response.json()
+                # Unwrap ApiResponse envelope if present
+                if isinstance(data, dict) and "status" in data and "data" in data:
+                    api_response = ApiResponse.model_validate(data)
+                    return api_response.data
+                return data
             except httpx.HTTPStatusError as exc:
                 last_exc = exc
                 if exc.response.status_code not in _RETRY_STATUS_CODES:
