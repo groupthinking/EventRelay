@@ -15,6 +15,7 @@ import logging
 import os
 import subprocess
 import sys
+import urllib.parse
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
@@ -493,8 +494,8 @@ class DeploymentManager:
             "Accept": "application/vnd.github.v3+json"
         }
 
-        # Use httpx.AsyncClient for non-blocking HTTP requests
-        async with httpx.AsyncClient() as client:
+        # Use httpx.AsyncClient for non-blocking HTTP requests with explicit timeouts
+        async with httpx.AsyncClient(timeout=httpx.Timeout(timeout=30.0, connect=10.0)) as client:
             # Get user info
             user_response = await client.get("https://api.github.com/user", headers=headers)
             if user_response.status_code != 200:
@@ -551,7 +552,7 @@ class DeploymentManager:
             "Accept": "application/vnd.github.v3+json"
         }
 
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(timeout=30.0, connect=10.0)) as client:
             # Get user info — check status before parsing to surface auth errors clearly
             user_response = await client.get("https://api.github.com/user", headers=headers)
             if user_response.status_code != 200:
@@ -570,14 +571,18 @@ class DeploymentManager:
                 """Check if any parent directory is in the exclusion list"""
                 return any(part in EXCLUDED_DIRS for part in path.parts)
 
-            # Collect file list up-front; coroutines are created lazily inside workers
-            files_to_upload = [
-                (file_path, file_path.relative_to(project_path_obj))
-                for file_path in project_path_obj.rglob("*")
-                if not should_skip_path(file_path.relative_to(project_path_obj))
-                and file_path.is_file()
-                and not file_path.name.startswith('.')
-            ]
+            # Stream file list via generator to keep memory usage bounded (O(1) path objects
+            # resident at a time), rather than materializing all paths up-front (O(files)).
+            def iter_files_to_upload():
+                for file_path in project_path_obj.rglob("*"):
+                    relative_path = file_path.relative_to(project_path_obj)
+                    if should_skip_path(relative_path):
+                        continue
+                    if not file_path.is_file():
+                        continue
+                    if file_path.name.startswith('.'):
+                        continue
+                    yield file_path, relative_path
 
             async def upload_file(file_path: Path, relative_path: Path) -> Optional[str]:
                 """Upload a single file with retry/backoff for GitHub rate limits."""
@@ -591,9 +596,17 @@ class DeploymentManager:
                         "content": encoded_content
                     }
 
-                    upload_url = f"https://api.github.com/repos/{username}/{repo_name}/contents/{relative_path}"
+                    # Use POSIX path separators and percent-encode path segments for the
+                    # GitHub Contents API URL to handle spaces, # and other special chars.
+                    encoded_path = "/".join(
+                        urllib.parse.quote(part, safe="") for part in relative_path.parts
+                    )
+                    upload_url = f"https://api.github.com/repos/{username}/{repo_name}/contents/{encoded_path}"
 
-                    # Retry with exponential backoff on 403/429 (rate limit / abuse detection).
+                    # Retry with exponential backoff on rate-limit responses only.
+                    # GitHub returns 429 for secondary rate limits, and 403 with
+                    # X-RateLimit-Remaining: 0 or a Retry-After header for primary rate limits.
+                    # Other 403s (auth/permissions failures) are non-retriable.
                     # max_retries=3 means 1 initial attempt + 3 retries = 4 total requests.
                     max_retries = 3
                     for attempt in range(max_retries + 1):
@@ -601,6 +614,18 @@ class DeploymentManager:
                         if response.status_code in [200, 201]:
                             return str(relative_path)
                         elif response.status_code in [403, 429]:
+                            # Distinguish retriable rate-limit 403s from non-retriable auth 403s
+                            is_rate_limit = (
+                                response.status_code == 429
+                                or response.headers.get("X-RateLimit-Remaining") == "0"
+                                or "Retry-After" in response.headers
+                            )
+                            if not is_rate_limit:
+                                logger.warning(
+                                    f"Non-retriable 403 uploading {relative_path} "
+                                    f"(auth/permissions failure): {response.text}"
+                                )
+                                return None
                             if attempt == max_retries:
                                 break  # exhausted all retries, no point sleeping
                             try:
@@ -653,17 +678,22 @@ class DeploymentManager:
             # Start workers before filling the queue so they begin consuming immediately
             worker_tasks = [asyncio.create_task(worker()) for _ in range(MAX_WORKERS)]
 
-            for item in files_to_upload:
+            for item in iter_files_to_upload():
                 await queue.put(item)
             # Sentinel values to signal each worker to stop
             for _ in range(MAX_WORKERS):
                 await queue.put(None)
 
-            # return_exceptions=True prevents one unexpected worker error from cancelling others
+            # return_exceptions=True prevents one unexpected worker error from cancelling others,
+            # but we still need to fail the overall operation if any worker crashed.
             results = await asyncio.gather(*worker_tasks, return_exceptions=True)
-            for exc in results:
-                if isinstance(exc, Exception):
+            worker_errors = [exc for exc in results if isinstance(exc, Exception)]
+            if worker_errors:
+                for exc in worker_errors:
                     logger.error(f"Unexpected error in upload worker: {exc}")
+                raise RuntimeError(
+                    f"{len(worker_errors)} GitHub upload worker(s) failed; aborting upload."
+                )
 
         return {
             "files_uploaded": len(uploaded_files),
