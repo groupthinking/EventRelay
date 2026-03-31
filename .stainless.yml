@@ -93,8 +93,8 @@ environments:
 # Pagination configuration
 pagination:
   type: offset
-  page_param: page
-  page_size_param: page_size
+  page_param: offset
+  page_size_param: limit
 
 # Retry configuration
 retries:
