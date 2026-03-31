@@ -115,10 +115,10 @@ async function exportTrainingExampleToBigQuery(
     return null;
   });
 
-  if (!tokenResponse?.ok) {
+  if (!tokenResponse || !tokenResponse.ok) {
     console.debug(
       '[Training] Metadata server returned error for BigQuery export (status: ' +
-      tokenResponse.status + '). Training data saved locally but will not be exported to BigQuery.'
+      (tokenResponse?.status || 'unavailable') + '). Training data saved locally but will not be exported to BigQuery.'
     );
     return;
   }
