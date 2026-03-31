@@ -7,16 +7,16 @@ consolidating scattered MCP functionality into a single, cohesive system.
 Architecture:
 - Unified Orchestrator: Central coordination point for all MCP operations
 - Server Registry: Manages MCP server connections and discovery
-- Context Manager: Handles context lifecycle and sharing
-- Protocol Bridge: Integrates with external protocols
-- State Coordinator: Cross-server communication and state management
+- Shared Types: Common configuration, capability, and task models
+
+The orchestrator and registry together handle context lifecycle and sharing,
+protocol integration with external systems, and cross-server state management.
 
 Key Features:
 - Protocol-first composability with zero manual glue code
-- Agent-to-Agent (A2A) communication
-- Cross-device state continuity
 - Intelligent task routing and load balancing
 - Health monitoring and auto-recovery
+- Type-safe operations with Pydantic models
 """
 
 from .orchestrator import MCPOrchestrator, get_orchestrator

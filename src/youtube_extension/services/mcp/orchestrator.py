@@ -50,12 +50,15 @@ class MCPOrchestrator:
         # Orchestration state
         self.orchestration_active = False
         self.orchestration_task: Optional[asyncio.Task] = None
-        
-        # Track spawned execution tasks for proper cleanup
-        self.spawned_tasks: set[asyncio.Task] = set()
-        
+
+        # Track spawned execution tasks by task_id for cancellation support
+        self.spawned_tasks: dict[str, asyncio.Task] = {}
+
         # Maximum concurrent tasks
         self.max_concurrent_spawn = 10
+
+        # Maximum number of tasks to retain in memory (older completed tasks are evicted)
+        self.max_tasks_retained = 5000
 
         # Performance metrics
         self.metrics = {
@@ -106,6 +109,22 @@ class MCPOrchestrator:
         self.tasks[task_id] = task
         self.metrics["total_tasks"] += 1
 
+        # Evict oldest completed/failed/cancelled tasks if retention limit is exceeded
+        if len(self.tasks) > self.max_tasks_retained:
+            terminal_states = {MCPTaskStatus.COMPLETED, MCPTaskStatus.FAILED, MCPTaskStatus.CANCELLED}
+            evict_ids = sorted(
+                [
+                    tid for tid, t in self.tasks.items()
+                    if t.status in terminal_states and tid not in self.active_tasks
+                ],
+                key=lambda tid: self.tasks[tid].created_at,
+            )
+            # Evict enough tasks to bring the count to 90% of the limit
+            target_size = int(self.max_tasks_retained * 0.9)
+            evict_count = max(1, len(self.tasks) - target_size)
+            for tid in evict_ids[:evict_count]:
+                del self.tasks[tid]
+
         # Check if dependencies are met
         if await self._check_dependencies(task_id):
             self.task_queue.append(task_id)
@@ -154,6 +173,23 @@ class MCPOrchestrator:
         if task_id in self.task_queue:
             self.task_queue.remove(task_id)
 
+        # Cancel the underlying asyncio task if it is currently executing
+        if task_id in self.spawned_tasks:
+            asyncio_task = self.spawned_tasks.pop(task_id)
+            if not asyncio_task.done():
+                asyncio_task.cancel()
+            # Decrement server counter so load tracking stays consistent
+            if task.assigned_server:
+                server_state = self.registry.get_server_state(task.assigned_server)
+                if server_state and server_state.current_tasks > 0:
+                    server_state.current_tasks -= 1
+                    server_config = self.registry.get_server(task.assigned_server)
+                    if server_config:
+                        server_state.load_factor = max(
+                            0.0,
+                            server_state.current_tasks / server_config.max_concurrent_tasks,
+                        )
+
         # Remove from active tasks
         if task_id in self.active_tasks:
             del self.active_tasks[task_id]
@@ -166,23 +202,29 @@ class MCPOrchestrator:
     async def _execute_task_wrapper(self, task_id: str) -> None:
         """
         Wrapper for execute_task that handles exceptions and cleanup
-        
+
         Args:
             task_id: Task identifier
         """
         try:
             await self.execute_task(task_id)
         except asyncio.CancelledError:
-            # Task was cancelled, mark as cancelled if not already completed
+            # Task was cancelled externally; only update state if not already finalised
             task = self.tasks.get(task_id)
-            if task and task.status not in [MCPTaskStatus.COMPLETED, MCPTaskStatus.FAILED]:
+            if task and task.status not in [
+                MCPTaskStatus.COMPLETED,
+                MCPTaskStatus.FAILED,
+                MCPTaskStatus.CANCELLED,
+            ]:
                 task.status = MCPTaskStatus.CANCELLED
                 task.completed_at = datetime.utcnow()
                 self.metrics["cancelled_tasks"] += 1
             raise
         except Exception as e:
-            # Ensure exceptions are properly logged
             logger.error(f"Unhandled exception in task {task_id}: {e}", exc_info=True)
+        finally:
+            # Always clean up the spawned_tasks entry
+            self.spawned_tasks.pop(task_id, None)
     
     async def execute_task(self, task_id: str) -> dict[str, Any]:
         """
@@ -224,12 +266,12 @@ class MCPOrchestrator:
         try:
             # Update server state
             server_state = self.registry.get_server_state(server_id)
-            if server_state:
+            server_config = self.registry.get_server(server_id)
+            if server_state and server_config:
                 server_state.current_tasks += 1
                 server_state.load_factor = min(
                     1.0,
-                    server_state.current_tasks
-                    / self.registry.get_server(server_id).max_concurrent_tasks,
+                    server_state.current_tasks / server_config.max_concurrent_tasks,
                 )
 
             # Execute task (placeholder - actual implementation would call server)
@@ -246,13 +288,12 @@ class MCPOrchestrator:
             self._update_average_task_time(task_time)
 
             # Update server state
-            if server_state:
+            if server_state and server_config:
                 server_state.current_tasks -= 1
                 server_state.total_tasks_completed += 1
                 server_state.load_factor = max(
                     0.0,
-                    server_state.current_tasks
-                    / self.registry.get_server(server_id).max_concurrent_tasks,
+                    server_state.current_tasks / server_config.max_concurrent_tasks,
                 )
 
             # Move to completed
@@ -296,28 +337,25 @@ class MCPOrchestrator:
         self, server_id: str, task: MCPTask
     ) -> dict[str, Any]:
         """
-        Execute task on a specific server
+        Execute task on a specific server via MCP/JSON-RPC.
 
-        Args:
-            server_id: Server identifier
-            task: Task to execute
-
-        Returns:
-            Execution result
+        NOTE: Real MCP server communication is not yet implemented.
+        This method raises NotImplementedError to make it clear that the
+        orchestrator must not be used in production until this path is wired up.
         """
         config = self.registry.get_server(server_id)
         if not config:
-            raise ValueError(f"Server not found: {server_id}")
+            raise ValueError(f"Cannot execute task {task.task_id}: MCP server not found: {server_id}")
 
-        # TODO: Implement actual server communication
-        # For now, simulate execution
-        await asyncio.sleep(0.1)
-
-        return {
-            "server_id": server_id,
-            "task_type": task.task_type,
-            "message": f"Task executed on {config.name}",
-        }
+        logger.error(
+            "MCP server execution is not implemented: server_id=%s, task_type=%s",
+            server_id,
+            task.task_type,
+        )
+        raise NotImplementedError(
+            "MCPOrchestrator._execute_on_server is not implemented. "
+            "Wire up real MCP server communication before using this in production."
+        )
 
     async def _check_dependencies(self, task_id: str) -> bool:
         """
@@ -379,22 +417,22 @@ class MCPOrchestrator:
     async def stop_orchestration(self) -> None:
         """Stop the orchestration loop and cancel all spawned tasks"""
         self.orchestration_active = False
-        
+
         # Cancel all spawned execution tasks
         if self.spawned_tasks:
             logger.info(f"Cancelling {len(self.spawned_tasks)} spawned tasks")
-            for task in self.spawned_tasks:
-                if not task.done():
-                    task.cancel()
-            
-            # Wait for all tasks to finish (they should complete quickly due to cancellation)
+            for asyncio_task in self.spawned_tasks.values():
+                if not asyncio_task.done():
+                    asyncio_task.cancel()
+
+            # Wait for all tasks to finish
             try:
-                await asyncio.gather(*self.spawned_tasks, return_exceptions=True)
+                await asyncio.gather(*self.spawned_tasks.values(), return_exceptions=True)
             except Exception as e:
                 logger.error(f"Error waiting for spawned tasks to cancel: {e}")
-            
+
             self.spawned_tasks.clear()
-        
+
         # Cancel the orchestration loop task
         if self.orchestration_task:
             self.orchestration_task.cancel()
@@ -402,7 +440,7 @@ class MCPOrchestrator:
                 await self.orchestration_task
             except asyncio.CancelledError:
                 pass
-        
+
         logger.info("MCP Orchestration stopped")
 
     async def _orchestration_loop(self) -> None:
@@ -411,10 +449,10 @@ class MCPOrchestrator:
             while self.orchestration_active:
                 try:
                     # Clean up completed spawned tasks
-                    completed = [task for task in self.spawned_tasks if task.done()]
-                    for task in completed:
-                        self.spawned_tasks.discard(task)
-                    
+                    done_ids = [tid for tid, t in self.spawned_tasks.items() if t.done()]
+                    for tid in done_ids:
+                        del self.spawned_tasks[tid]
+
                     # Process queued tasks respecting concurrent limit
                     if self.task_queue:
                         # Calculate how many more tasks we can spawn
@@ -428,11 +466,13 @@ class MCPOrchestrator:
                             task_id = self.task_queue.popleft()
                             # Create task using wrapper for proper error handling
                             spawned_task = asyncio.create_task(self._execute_task_wrapper(task_id))
-                            self.spawned_tasks.add(spawned_task)
+                            self.spawned_tasks[task_id] = spawned_task
 
                     # Small delay to prevent CPU spinning
                     await asyncio.sleep(0.1)
 
+                except asyncio.CancelledError:
+                    raise
                 except Exception as e:
                     logger.error(f"Orchestration loop error: {e}", exc_info=True)
                     await asyncio.sleep(1)
@@ -440,10 +480,9 @@ class MCPOrchestrator:
             # Cleanup: cancel all remaining spawned tasks
             if self.spawned_tasks:
                 logger.info(f"Orchestration loop ending, cleaning up {len(self.spawned_tasks)} spawned tasks")
-                for task in self.spawned_tasks:
-                    if not task.done():
-                        task.cancel()
-                # Don't wait here as we're already stopping
+                for asyncio_task in self.spawned_tasks.values():
+                    if not asyncio_task.done():
+                        asyncio_task.cancel()
 
     def get_orchestrator_status(self) -> dict[str, Any]:
         """Get comprehensive orchestrator status"""

@@ -7,6 +7,7 @@ all MCP implementations in EventRelay.
 
 import asyncio
 import logging
+import os
 import time
 from collections import defaultdict
 from datetime import datetime, timedelta
@@ -29,9 +30,8 @@ class MCPServerRegistry:
     - mcp-servers/shared-state/state_coordinator.py
     """
 
-    def __init__(self, config_path: Optional[str] = None):
-        """Initialize the unified server registry"""
-        self.config_path = config_path or "./.runtime/mcp_servers.json"
+    def __init__(self) -> None:
+        """Initialize the unified server registry (in-memory only)"""
         self.servers: dict[str, MCPServerConfig] = {}
         self.server_states: dict[str, MCPServerState] = {}
         self.capability_index: dict[MCPCapability, set[str]] = defaultdict(set)
@@ -39,6 +39,8 @@ class MCPServerRegistry:
         # Health monitoring
         self.monitoring_active = False
         self.health_check_task: Optional[asyncio.Task] = None
+        # Shared HTTP session for health checks (created/closed with monitoring)
+        self._health_session: Optional[aiohttp.ClientSession] = None
 
         logger.info("MCP Server Registry initialized")
 
@@ -65,6 +67,11 @@ class MCPServerRegistry:
         """
         if server_id in self.servers:
             logger.warning(f"Server {server_id} already registered, updating...")
+            # Remove stale capabilities from the index before re-registering
+            for old_capability in self.servers[server_id].capabilities:
+                self.capability_index[old_capability].discard(server_id)
+                if not self.capability_index[old_capability]:
+                    del self.capability_index[old_capability]
 
         config = MCPServerConfig(
             id=server_id, name=name, endpoint=endpoint, capabilities=capabilities, **kwargs
@@ -72,10 +79,11 @@ class MCPServerRegistry:
 
         self.servers[server_id] = config
 
-        # Initialize server state
-        self.server_states[server_id] = MCPServerState(
-            server_id=server_id, status=ServerStatus.OFFLINE
-        )
+        # Initialize server state only for new registrations; preserve existing state on updates
+        if server_id not in self.server_states:
+            self.server_states[server_id] = MCPServerState(
+                server_id=server_id, status=ServerStatus.OFFLINE
+            )
 
         # Update capability index
         for capability in capabilities:
@@ -212,8 +220,6 @@ class MCPServerRegistry:
                 continue
 
             # Calculate composite score
-            # Higher priority tasks prefer higher priority servers
-            priority_score = (6 - config.priority) / 5.0  # 1=best, 5=worst
             priority_match = 1.0 - abs(config.priority - priority) / 5.0
 
             # Lower load is better
@@ -282,51 +288,60 @@ class MCPServerRegistry:
         if not config or not state:
             return False
 
+        session = self._health_session
+        own_session = session is None
+        if own_session:
+            session = aiohttp.ClientSession()
+
+        assert session is not None  # satisfied by the branch above
         try:
             start_time = time.time()
+            url = f"{config.endpoint}/health"
+            headers = {}
 
-            async with aiohttp.ClientSession() as session:
-                url = f"{config.endpoint}/health"
-                headers = {}
+            if config.auth_token:
+                headers["Authorization"] = f"Bearer {config.auth_token}"
 
-                if config.auth_token:
-                    headers["Authorization"] = f"Bearer {config.auth_token}"
+            async with session.get(
+                url, headers=headers, timeout=aiohttp.ClientTimeout(total=config.timeout)
+            ) as response:
+                response_time = time.time() - start_time
 
-                async with session.get(
-                    url, headers=headers, timeout=aiohttp.ClientTimeout(total=config.timeout)
-                ) as response:
-                    response_time = time.time() - start_time
+                if response.status == 200:
+                    state.status = ServerStatus.ONLINE
+                    state.last_health_check = datetime.utcnow()
+                    state.consecutive_failures = 0
 
-                    if response.status == 200:
-                        # Update state
-                        state.status = ServerStatus.ONLINE
-                        state.last_health_check = datetime.utcnow()
-                        state.consecutive_failures = 0
-
-                        # Update average response time (exponential moving average)
-                        if state.average_response_time == 0:
-                            state.average_response_time = response_time
-                        else:
-                            state.average_response_time = (
-                                0.7 * state.average_response_time + 0.3 * response_time
-                            )
-
-                        return True
+                    # Update average response time (exponential moving average)
+                    if state.average_response_time == 0:
+                        state.average_response_time = response_time
                     else:
-                        state.status = ServerStatus.ERROR
-                        state.consecutive_failures += 1
-                        return False
+                        state.average_response_time = (
+                            0.7 * state.average_response_time + 0.3 * response_time
+                        )
+
+                    return True
+                else:
+                    state.status = ServerStatus.ERROR
+                    state.last_health_check = datetime.utcnow()
+                    state.consecutive_failures += 1
+                    return False
 
         except asyncio.TimeoutError:
             logger.warning(f"Health check timeout for server {server_id}")
             state.status = ServerStatus.OFFLINE
+            state.last_health_check = datetime.utcnow()
             state.consecutive_failures += 1
             return False
         except Exception as e:
             logger.warning(f"Health check failed for server {server_id}: {e}")
             state.status = ServerStatus.ERROR
+            state.last_health_check = datetime.utcnow()
             state.consecutive_failures += 1
             return False
+        finally:
+            if own_session:
+                await session.close()
 
     async def start_monitoring(self) -> None:
         """Start health monitoring loop"""
@@ -335,6 +350,7 @@ class MCPServerRegistry:
             return
 
         self.monitoring_active = True
+        self._health_session = aiohttp.ClientSession()
         self.health_check_task = asyncio.create_task(self._monitoring_loop())
         logger.info("Server health monitoring started")
 
@@ -348,11 +364,14 @@ class MCPServerRegistry:
             except asyncio.CancelledError:
                 # Expected when cancelling the health check task; safe to ignore.
                 ...
+        if self._health_session:
+            await self._health_session.close()
+            self._health_session = None
         logger.info("Server health monitoring stopped")
 
     async def _monitoring_loop(self) -> None:
         """Background health monitoring loop"""
-        monitoring_interval = 10  # seconds
+        monitoring_interval = int(os.getenv("MCP_MONITORING_INTERVAL", "10"))
         while self.monitoring_active:
             try:
                 loop_start_time = time.time()
@@ -389,6 +408,8 @@ class MCPServerRegistry:
                         # Clear online transition time for non-online servers
                         state.last_online_time = None
 
+            except asyncio.CancelledError:
+                raise
             except Exception as e:
                 logger.error(f"Monitoring loop error: {e}")
 

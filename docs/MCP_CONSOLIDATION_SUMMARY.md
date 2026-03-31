@@ -252,17 +252,20 @@ For each external repository:
 
 ### Unit Tests (Future Work)
 
-```bash
-pytest tests/unit/services/mcp/test_orchestrator.py -v
-pytest tests/unit/services/mcp/test_registry.py -v
-pytest tests/unit/services/mcp/test_types.py -v
-```
+Dedicated unit tests for the MCP layer have not yet been added to this repository.
+As follow-up work, introduce targeted unit tests under `tests/unit/services/mcp/`
+covering the orchestrator, registry, and types once those files are created.
 
 ### Integration Tests (Future Work)
 
-```bash
-pytest tests/integration/mcp/ -v --slow
-```
+End-to-end and integration tests exercising the MCP orchestration flow are also pending.
+After the MCP test suite is created, add integration tests that cover:
+
+- Registration and health monitoring of multiple MCP servers
+- Orchestration of concurrent MCP tool calls
+- Error handling, retries, and cancellation behavior across the full workflow
+
+These tests can then be wired into the standard `pytest tests/ -v --cov` run.
 
 ## Conclusion
 

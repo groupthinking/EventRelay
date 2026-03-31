@@ -327,5 +327,5 @@ registry.register_server(...)
 ## Resources
 
 - [MCP Specification](https://modelcontextprotocol.io/docs)
-- [EventRelay MCP README](../../../src/youtube_extension/services/mcp/README.md)
-- [Architecture Documentation](../../../CLAUDE.md)
+- [EventRelay MCP README](../src/youtube_extension/services/mcp/README.md)
+- [Architecture Documentation](../CLAUDE.md)

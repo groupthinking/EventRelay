@@ -107,7 +107,7 @@ await registry.start_monitoring()
 ### Finding Servers by Capability
 
 ```python
-from youtube_extension.services.mcp import get_registry, MCPCapability
+from youtube_extension.services.mcp import get_registry, MCPCapability, ServerStatus
 
 registry = get_registry()
 
@@ -220,9 +220,13 @@ Servers are configured via `MCPServerConfig`:
 
 ### Environment Variables
 
-- `MCP_REGISTRY_PATH` - Path to server registry config (default: `./.runtime/mcp_servers.json`)
-- `MCP_CONTEXT_PATH` - Path to context storage (default: `./data/mcp_contexts/`)
-- `MCP_MONITORING_INTERVAL` - Health check interval in seconds (default: 30)
+The following environment variables are planned configuration hooks. `MCP_MONITORING_INTERVAL`
+is already wired into the registry; `MCP_REGISTRY_PATH` and `MCP_CONTEXT_PATH` are **not yet
+implemented** and are listed here as intended future configuration points.
+
+- `MCP_MONITORING_INTERVAL` - Health check loop interval in seconds (default: `10`)
+- `MCP_REGISTRY_PATH` - *(Planned)* Path to server registry config (default target: `./.runtime/mcp_servers.json`)
+- `MCP_CONTEXT_PATH` - *(Planned)* Path to context storage (default target: `./data/mcp_contexts/`)
 
 ## Migration Guide
 
@@ -274,25 +278,20 @@ task_id = await orchestrator.submit_task(...)
 
 ## Testing
 
-### Unit Tests
+Dedicated unit tests for the MCP layer have not yet been added to this repository.
+As follow-up work, introduce targeted unit tests for the orchestrator, registry, and types
+under `tests/unit/services/mcp/` once those tests are implemented.
 
-```bash
-# Run MCP orchestrator tests
-pytest tests/unit/services/mcp/test_orchestrator.py -v
+### Integration Tests (Future Work)
 
-# Run registry tests
-pytest tests/unit/services/mcp/test_registry.py -v
+End-to-end and integration tests exercising the MCP orchestration flow are also pending.
+After the MCP test suite is created, add integration tests that cover:
 
-# Run all MCP tests
-pytest tests/unit/services/mcp/ -v
-```
+- Registration and health monitoring of multiple MCP servers
+- Orchestration of concurrent MCP tool calls
+- Error handling, retries, and cancellation behavior across the full workflow
 
-### Integration Tests
-
-```bash
-# Run full MCP integration tests
-pytest tests/integration/mcp/ -v --slow
-```
+These tests can then be wired into the standard `pytest tests/ -v --cov` run.
 
 ## Performance
 
@@ -341,5 +340,5 @@ When adding new MCP functionality:
 ## References
 
 - [Model Context Protocol Specification](https://modelcontextprotocol.io/docs)
-- [EventRelay Architecture](../../README.md)
-- [MCP Server Implementation Guide](../../../mcp-servers/README.md)
+- [EventRelay Architecture](../../../../README.md)
+- [MCP Server Implementation Guide](../../../../mcp-servers/README.md)

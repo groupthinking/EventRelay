@@ -7,8 +7,9 @@ Provides consistent type definitions across all MCP components.
 from datetime import datetime
 from enum import Enum
 from typing import Any, Optional
+from urllib.parse import urlparse
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class ServerStatus(str, Enum):
@@ -66,28 +67,28 @@ class MCPServerConfig(BaseModel):
 
     id: str = Field(..., description="Unique server identifier")
     name: str = Field(..., description="Human-readable server name")
-    endpoint: str = Field(..., description="Server endpoint URL")
+    endpoint: str = Field(..., description="Server endpoint URL (must start with http:// or https://)")
     capabilities: list[MCPCapability] = Field(
         default_factory=list, description="Server capabilities"
     )
 
     # Connection details
     protocol: str = Field(default="http", description="Communication protocol")
-    port: Optional[int] = Field(default=None, description="Server port")
+    port: Optional[int] = Field(default=None, description="Server port", ge=1, le=65535)
     auth_token: Optional[str] = Field(default=None, description="Authentication token")
 
     # Health monitoring
     health_check_interval: int = Field(
-        default=30, description="Health check interval in seconds"
+        default=30, ge=1, description="Health check interval in seconds"
     )
-    timeout: int = Field(default=30, description="Request timeout in seconds")
+    timeout: int = Field(default=30, ge=1, description="Request timeout in seconds")
 
     # Priority and load
     priority: int = Field(
         default=3, ge=1, le=5, description="Server priority (1=critical, 5=low)"
     )
     max_concurrent_tasks: int = Field(
-        default=10, description="Maximum concurrent tasks"
+        default=10, ge=1, description="Maximum concurrent tasks"
     )
 
     # Metadata
@@ -96,6 +97,15 @@ class MCPServerConfig(BaseModel):
     metadata: dict[str, Any] = Field(
         default_factory=dict, description="Additional metadata"
     )
+
+    @model_validator(mode="after")
+    def validate_endpoint_scheme(self) -> "MCPServerConfig":
+        parsed = urlparse(self.endpoint)
+        if parsed.scheme not in ("http", "https") or not parsed.netloc:
+            raise ValueError(
+                f"endpoint must be a valid http:// or https:// URL, got: {self.endpoint!r}"
+            )
+        return self
 
 
 class MCPTask(BaseModel):
