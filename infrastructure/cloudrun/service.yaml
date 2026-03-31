@@ -23,8 +23,9 @@ spec:
     spec:
       # Allow 80 concurrent requests per container (FastAPI handles concurrency well)
       containerConcurrency: 80
-      # 5 minute timeout for long-running video processing
-      timeoutSeconds: 300
+      # 60 minute timeout – required for long-video Gemini analysis and
+      # for the Cloud Tasks task-handler (/api/v3/process-video-task)
+      timeoutSeconds: 3600
       serviceAccountName: uvai-backend@uvai-730bb.iam.gserviceaccount.com
       containers:
         - image: gcr.io/uvai-730bb/uvai-backend:latest

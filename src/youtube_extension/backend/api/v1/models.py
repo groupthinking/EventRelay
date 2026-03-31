@@ -221,6 +221,14 @@ class VideoProcessingRequest(BaseModel):
 
     video_url: str = Field(..., description="YouTube video URL")
     options: Optional[dict[str, Any]] = Field({}, description="Processing options")
+    background: bool = Field(
+        False,
+        description=(
+            "When True, processing runs in the background and the response "
+            "contains a job_id that can be polled at GET /api/v1/videos/{job_id}/status. "
+            "Recommended for long videos (60+ minutes) to avoid HTTP timeouts."
+        ),
+    )
 
     @validator("video_url")
     def validate_video_url(cls, value: str) -> str:
@@ -237,6 +245,7 @@ class VideoProcessingRequest(BaseModel):
             "example": {
                 "video_url": "https://www.youtube.com/watch?v=jNQXAC9IVRw",
                 "options": {"quality": "high", "include_transcript": True},
+                "background": False,
             }
         }
 

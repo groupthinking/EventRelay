@@ -538,7 +538,12 @@ async def chat_v1(
 @router.post(
     "/process-video",
     summary="Process Video",
-    description="Process a YouTube video and extract information",
+    description=(
+        "Process a YouTube video and extract information. "
+        "Set `background=true` for long videos (60+ minutes) to avoid HTTP timeouts: "
+        "the response will contain a `job_id` that can be polled at "
+        "GET /api/v1/videos/{job_id}/status."
+    ),
 )
 async def process_video_v1(
     request: VideoProcessingRequest,
@@ -546,10 +551,42 @@ async def process_video_v1(
         get_video_processing_service
     ),
 ):
-    """Basic video processing endpoint"""
+    """Basic video processing endpoint.
+
+    For long videos (60+ minutes) pass ``background=true`` in the request body.
+    The endpoint will return immediately with a ``job_id``; the actual processing
+    runs as an asyncio background task.  Poll
+    ``GET /api/v1/videos/{job_id}/status`` for progress and the final result.
+    """
+    await _emit_event("com.eventrelay.video.received", {"url": request.video_url}, request.video_url)
+
+    # ── Background (non-blocking) path ────────────────────────────────────────
+    # For long videos, return a job_id immediately so the HTTP connection is
+    # released before any upstream proxy/CDN/Cloud Run timeout is reached.
+    if request.background:
+        logger.info(f"Background video processing requested: {request.video_url}")
+        job_request = VideoProcessJobRequest(
+            video_url=request.video_url,
+            options=request.options or {},
+        )
+        job_id = f"job_{_uuid.uuid4().hex[:10]}"
+        job = VideoJobStatusResponse(
+            job_id=job_id,
+            status=JobStatus.pending,
+            progress=0.0,
+            video_url=request.video_url,
+        )
+        _video_jobs[job_id] = job
+        asyncio.create_task(_run_video_job(job_id, job_request))
+        return VideoProcessJobResponse(
+            job_id=job_id,
+            video_url=request.video_url,
+            status=JobStatus.pending,
+        )
+
+    # ── Synchronous (blocking) path ───────────────────────────────────────────
     try:
         logger.info(f"Video processing request: {request.video_url}")
-        await _emit_event("com.eventrelay.video.received", {"url": request.video_url}, request.video_url)
 
         result = await video_processing_service.process_video_basic(
             request.video_url, request.options

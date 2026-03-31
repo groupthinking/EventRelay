@@ -336,7 +336,7 @@ class ErrorHandlingMiddleware(BaseHTTPMiddleware):
         enable_request_tracking: bool = True,
         enable_performance_monitoring: bool = True,
         max_request_size: int = 10 * 1024 * 1024,  # 10MB
-        timeout_seconds: float = 7200.0  # 5 minutes
+        timeout_seconds: float = 7200.0  # 2 hours – accommodates long video processing
     ):
         super().__init__(app)
         self.debug = debug
