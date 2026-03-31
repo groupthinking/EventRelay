@@ -149,7 +149,7 @@ export async function POST(request: Request) {
         }, url);
 
         // Save as training example for Vertex AI fine-tuning
-        saveTrainingExample(url, analysis as unknown as Record<string, unknown>).catch((e) =>
+        saveTrainingExample(url, analysis).catch((e) =>
           console.warn('[Training] Failed to save example:', e),
         );
 

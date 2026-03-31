@@ -106,7 +106,7 @@ async function saveMetadata(meta: DatasetMetadata): Promise<void> {
  */
 export async function saveTrainingExample(
   videoUrl: string,
-  analysisOutput: Record<string, unknown>,
+  analysisOutput: object,
 ): Promise<{ saved: boolean; metadata: DatasetMetadata; milestone: number | null }> {
   await ensureDir();
 
@@ -147,7 +147,7 @@ export async function saveTrainingExample(
   meta.totalExamples += 1;
   meta.lastUpdated = new Date().toISOString();
   meta.lastVideoUrl = videoUrl;
-  meta.lastVideoTitle = (analysisOutput.title as string) || 'Unknown';
+  meta.lastVideoTitle = String((analysisOutput as Record<string, unknown>).title ?? 'Unknown');
   meta.videosProcessed.push(videoUrl);
   await saveMetadata(meta);
 

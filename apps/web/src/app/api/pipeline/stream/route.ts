@@ -352,7 +352,7 @@ export async function POST(request: Request) {
             try {
               const { saved, metadata, milestone } = await saveTrainingExample(
                 videoUrl,
-                analysis as unknown as Record<string, unknown>,
+                analysis,
               );
               if (saved && milestone) {
                 console.log(`\n🎯 TRAINING MILESTONE: ${milestone}/${TUNING_THRESHOLD} examples collected!`);
