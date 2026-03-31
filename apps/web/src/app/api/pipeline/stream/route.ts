@@ -21,6 +21,8 @@ import { saveTrainingExample, TUNING_THRESHOLD } from '@/lib/training-store';
 
 const rawBackendUrl = process.env.BACKEND_URL || '';
 const BACKEND_URL = rawBackendUrl.startsWith('http') ? rawBackendUrl : '';
+const JOB_POLL_INTERVAL_MS = 2000;
+const MAX_JOB_POLL_ATTEMPTS = 90;
 
 /** Shape of each SSE message sent to the frontend. */
 interface AgentStreamEvent {
@@ -122,8 +124,8 @@ async function pollBackendJob(
   controller: ReadableStreamDefaultController<Uint8Array>,
   encoder: TextEncoder,
 ): Promise<BackendVideoJobStatus> {
-  for (let attempt = 0; attempt < 90; attempt += 1) {
-    await sleep(2000);
+  for (let attempt = 0; attempt < MAX_JOB_POLL_ATTEMPTS; attempt += 1) {
+    await sleep(JOB_POLL_INTERVAL_MS);
     const response = await fetch(statusUrl, {
       cache: 'no-store',
       headers: { 'Content-Type': 'application/json' },

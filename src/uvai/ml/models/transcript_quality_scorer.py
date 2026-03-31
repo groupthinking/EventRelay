@@ -101,6 +101,7 @@ class TranscriptQualityScorer:
     TIER2_LANGUAGES: set[str] = {
         "it", "nl", "ru", "ar", "hi", "id", "tr", "pl",
     }
+    MAX_SOURCE_ADJUSTMENT = 0.35
 
     def __init__(self) -> None:
         self._weights: dict[str, float] | None = None
@@ -414,8 +415,8 @@ class TranscriptQualityScorer:
             target_quality - (base_prior + current_adjustment)
         )
         self._source_adjustments[actual_source] = max(
-            -0.35,
-            min(0.35, updated_adjustment),
+            -self.MAX_SOURCE_ADJUSTMENT,
+            min(self.MAX_SOURCE_ADJUSTMENT, updated_adjustment),
         )
         self._weights = dict(self._source_adjustments)
         self._version = "1.1.0-online"

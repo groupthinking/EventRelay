@@ -1264,6 +1264,8 @@ async def process_video_task(
     job_id = metadata.get("job_id")
     if not job_id:
         raise HTTPException(status_code=400, detail="Missing job_id in task payload")
+    if job_id not in x_cloudtasks_taskname:
+        raise HTTPException(status_code=403, detail="Task name does not match queued job")
 
     job = _video_jobs.setdefault(
         job_id,

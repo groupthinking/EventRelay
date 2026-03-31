@@ -110,7 +110,10 @@ async function exportTrainingExampleToBigQuery(
   const tokenResponse = await fetch(
     'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token',
     { headers: { 'Metadata-Flavor': 'Google' } },
-  ).catch(() => null);
+  ).catch((error) => {
+    console.debug('[Training] Metadata server unavailable for BigQuery export:', error);
+    return null;
+  });
 
   if (!tokenResponse?.ok) {
     return;

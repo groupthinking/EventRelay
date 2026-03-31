@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -23,7 +24,11 @@ class UVAIMLClient:
 
     async def score_transcript(self, metadata: dict[str, Any]) -> dict[str, Any]:
         if self.base_url:
-            result = self._post_json("/score-transcript", {"metadata": metadata})
+            result = await asyncio.to_thread(
+                self._post_json,
+                "/score-transcript",
+                {"metadata": metadata},
+            )
             if result is not None:
                 return result
 
@@ -53,7 +58,11 @@ class UVAIMLClient:
             "success": success,
         }
         if self.base_url:
-            result = self._post_json("/score-transcript/outcome", payload)
+            result = await asyncio.to_thread(
+                self._post_json,
+                "/score-transcript/outcome",
+                payload,
+            )
             if result is not None:
                 return result
 
@@ -80,7 +89,11 @@ class UVAIMLClient:
             "video_context": video_context or {},
         }
         if self.base_url:
-            result = self._post_json("/rank-actions", payload)
+            result = await asyncio.to_thread(
+                self._post_json,
+                "/rank-actions",
+                payload,
+            )
             if result is not None:
                 return result
 
@@ -117,7 +130,11 @@ class UVAIMLClient:
             "time_to_complete_seconds": time_to_complete_seconds,
         }
         if self.base_url:
-            result = self._post_json("/rank-actions/feedback", payload)
+            result = await asyncio.to_thread(
+                self._post_json,
+                "/rank-actions/feedback",
+                payload,
+            )
             if result is not None:
                 return result
 

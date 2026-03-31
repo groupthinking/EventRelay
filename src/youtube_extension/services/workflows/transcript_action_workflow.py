@@ -56,6 +56,11 @@ class TranscriptActionWorkflow:
     """End-to-end pipeline from transcript extraction to action plan generation."""
 
     ASYNC_VIDEO_THRESHOLD_SECONDS = 15 * 60
+    TRANSCRIPT_OUTCOME_BASE_SCORE = 0.6
+    TRANSCRIPT_OUTCOME_WORD_DIVISOR = 600.0
+    TRANSCRIPT_OUTCOME_WORD_CAP = 0.25
+    TRANSCRIPT_OUTCOME_SEGMENT_DIVISOR = 50.0
+    TRANSCRIPT_OUTCOME_SEGMENT_CAP = 0.15
 
     def __init__(
         self,
@@ -360,9 +365,19 @@ class TranscriptActionWorkflow:
             1.0,
             max(
                 0.0,
-                (0.6 if success else 0.0)
-                + min(word_count / 600.0, 0.25)
-                + min(segment_count / 50.0, 0.15),
+                (
+                    self.TRANSCRIPT_OUTCOME_BASE_SCORE
+                    if success
+                    else 0.0
+                )
+                + min(
+                    word_count / self.TRANSCRIPT_OUTCOME_WORD_DIVISOR,
+                    self.TRANSCRIPT_OUTCOME_WORD_CAP,
+                )
+                + min(
+                    segment_count / self.TRANSCRIPT_OUTCOME_SEGMENT_DIVISOR,
+                    self.TRANSCRIPT_OUTCOME_SEGMENT_CAP,
+                ),
             ),
         )
         try:

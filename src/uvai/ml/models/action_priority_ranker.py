@@ -95,6 +95,8 @@ class ActionPriorityRanker:
         (r"\b(by|before|deadline|due)\b", 0.06),  # Contains deadline language
         (r"step \d|phase \d", 0.05),  # Contains step/phase reference
     ]
+    MAX_VERB_FEEDBACK_WEIGHT = 0.20
+    MAX_GLOBAL_FEEDBACK_BIAS = 0.10
 
     def __init__(self) -> None:
         self._training_samples: int = 0
@@ -333,9 +335,9 @@ class ActionPriorityRanker:
 
         learning_rate = min(0.20, 1.0 / max(self._training_samples, 1) ** 0.5)
         self._global_feedback_bias = max(
-            -0.10,
+            -self.MAX_GLOBAL_FEEDBACK_BIAS,
             min(
-                0.10,
+                self.MAX_GLOBAL_FEEDBACK_BIAS,
                 self._global_feedback_bias
                 + learning_rate * (target_outcome - 0.5) * 0.1,
             ),
@@ -345,8 +347,8 @@ class ActionPriorityRanker:
                 learning_rate * (target_outcome - 0.5)
             )
             self._verb_feedback_weights[first_word] = max(
-                -0.20,
-                min(0.20, updated_weight),
+                -self.MAX_VERB_FEEDBACK_WEIGHT,
+                min(self.MAX_VERB_FEEDBACK_WEIGHT, updated_weight),
             )
         self._version = "1.1.0-online"
         logger.info(
