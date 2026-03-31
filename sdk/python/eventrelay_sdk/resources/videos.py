@@ -2,12 +2,9 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Optional
+from typing import Any, Optional
 
 from ..types import VideoJobStatusResponse, VideoProcessJobRequest, VideoProcessJobResponse
-
-if TYPE_CHECKING:
-    import httpx
 
 
 class VideosResource:
