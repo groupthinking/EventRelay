@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any
 from urllib.parse import parse_qs, urlparse
 
 from src.shared.youtube import RobustYouTubeMetadata, RobustYouTubeService
+from src.youtube_extension.utils.video_utils import extract_video_id
 from uvai.ml.client import UVAIMLClient, get_uvai_ml_client
 from youtube_extension.backend.services.metrics_service import MetricsService
 from youtube_extension.utils import parse_duration_to_seconds
@@ -224,9 +225,16 @@ class TranscriptActionWorkflow:
         parsed = urlparse(video_url)
         query_params = parse_qs(parsed.query)
         is_playlist_path = parsed.path.rstrip("/").endswith("/playlist")
-        playlist_without_video = bool(query_params.get("list")) and not bool(
-            query_params.get("v")
-        )
+        
+        # Try to extract video ID from the URL (supports both youtu.be/ and v= formats)
+        try:
+            extract_video_id(video_url)
+            has_video_id = True
+        except ValueError:
+            has_video_id = False
+        
+        # Reject if it's a playlist path or if there's a list parameter but no video ID
+        playlist_without_video = bool(query_params.get("list")) and not has_video_id
         if is_playlist_path or playlist_without_video:
             raise ValueError(
                 "Playlist URLs are not supported. Please provide a single YouTube video URL."
