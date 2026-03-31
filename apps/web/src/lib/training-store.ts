@@ -23,6 +23,9 @@ import path from 'path';
 const TRAINING_DIR = path.join(process.cwd(), 'data', 'training');
 const TRAINING_FILE = path.join(TRAINING_DIR, 'video-analysis.jsonl');
 const METADATA_FILE = path.join(TRAINING_DIR, 'metadata.json');
+const BIGQUERY_PROJECT_ID = process.env.GOOGLE_CLOUD_PROJECT || 'uvai-730bb';
+const BIGQUERY_DATASET = process.env.TRAINING_BIGQUERY_DATASET || 'eventrelay_training';
+const BIGQUERY_TABLE = process.env.TRAINING_BIGQUERY_TABLE || 'video_analysis_examples';
 
 /** Thresholds for auto-tuning triggers */
 export const TUNING_THRESHOLD = 100;
@@ -98,6 +101,60 @@ async function saveMetadata(meta: DatasetMetadata): Promise<void> {
   await fs.writeFile(METADATA_FILE, JSON.stringify(meta, null, 2), 'utf-8');
 }
 
+async function exportTrainingExampleToBigQuery(
+  videoUrl: string,
+  analysisOutput: Record<string, unknown>,
+  example: TrainingExample,
+  metadata: DatasetMetadata,
+): Promise<void> {
+  const tokenResponse = await fetch(
+    'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token',
+    { headers: { 'Metadata-Flavor': 'Google' } },
+  ).catch(() => null);
+
+  if (!tokenResponse?.ok) {
+    return;
+  }
+
+  const tokenData = (await tokenResponse.json()) as { access_token?: string };
+  if (!tokenData.access_token) {
+    return;
+  }
+
+  const insertUrl =
+    `https://bigquery.googleapis.com/bigquery/v2/projects/${BIGQUERY_PROJECT_ID}` +
+    `/datasets/${BIGQUERY_DATASET}/tables/${BIGQUERY_TABLE}/insertAll`;
+
+  const insertId = Buffer.from(videoUrl).toString('base64url');
+  const insertResponse = await fetch(insertUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${tokenData.access_token}`,
+    },
+    body: JSON.stringify({
+      rows: [
+        {
+          insertId,
+          json: {
+            video_url: videoUrl,
+            video_title: String(analysisOutput.title || metadata.lastVideoTitle || 'Unknown'),
+            exported_at: new Date().toISOString(),
+            total_examples: metadata.totalExamples,
+            analysis_output: analysisOutput,
+            training_example: example,
+          },
+        },
+      ],
+    }),
+  });
+
+  if (!insertResponse.ok) {
+    const errorText = await insertResponse.text().catch(() => '');
+    throw new Error(`BigQuery export failed: ${insertResponse.status} ${errorText}`);
+  }
+}
+
 /**
  * Save a pipeline run as a training example.
  *
@@ -150,6 +207,12 @@ export async function saveTrainingExample(
   meta.lastVideoTitle = (analysisOutput.title as string) || 'Unknown';
   meta.videosProcessed.push(videoUrl);
   await saveMetadata(meta);
+
+  try {
+    await exportTrainingExampleToBigQuery(videoUrl, analysisOutput, example, meta);
+  } catch (error) {
+    console.warn('[Training] BigQuery export failed (non-fatal):', error);
+  }
 
   // Check if we hit a milestone
   const milestone = TUNING_NOTIFY_AT.find((n) => n === meta.totalExamples) || null;

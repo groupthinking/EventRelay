@@ -99,6 +99,8 @@ class ActionPriorityRanker:
     def __init__(self) -> None:
         self._training_samples: int = 0
         self._version: str = "1.0.0-heuristic"
+        self._verb_feedback_weights: dict[str, float] = {}
+        self._global_feedback_bias: float = 0.0
 
     def rank(
         self,
@@ -192,6 +194,10 @@ class ActionPriorityRanker:
             # Check whole text for strong verbs
             has_strong = any(v in text_lower for v in self.STRONG_VERBS)
             features["verb_strength"] = 0.10 if has_strong else 0.0
+        features["learned_feedback"] = self._global_feedback_bias + self._verb_feedback_weights.get(
+            first_verb,
+            0.0,
+        )
 
         # --- Specificity (regex patterns) ---
         specificity_total = 0.0
@@ -315,11 +321,40 @@ class ActionPriorityRanker:
         """
 
         self._training_samples += 1
+        normalized_text = action_text.lower().strip()
+        first_word = normalized_text.split()[0] if normalized_text else ""
+        target_outcome = 0.0
+        if user_clicked:
+            target_outcome += 0.4
+        if user_completed:
+            target_outcome += 0.6
+        if time_to_complete_seconds and time_to_complete_seconds <= 300:
+            target_outcome = min(1.0, target_outcome + 0.1)
+
+        learning_rate = min(0.20, 1.0 / max(self._training_samples, 1) ** 0.5)
+        self._global_feedback_bias = max(
+            -0.10,
+            min(
+                0.10,
+                self._global_feedback_bias
+                + learning_rate * (target_outcome - 0.5) * 0.1,
+            ),
+        )
+        if first_word:
+            updated_weight = self._verb_feedback_weights.get(first_word, 0.0) + (
+                learning_rate * (target_outcome - 0.5)
+            )
+            self._verb_feedback_weights[first_word] = max(
+                -0.20,
+                min(0.20, updated_weight),
+            )
+        self._version = "1.1.0-online"
         logger.info(
-            "Action feedback sample %d: clicked=%s completed=%s",
+            "Action feedback sample %d: clicked=%s completed=%s verb_weight=%.4f",
             self._training_samples,
             user_clicked,
             user_completed,
+            self._verb_feedback_weights.get(first_word, 0.0),
         )
 
     @property
@@ -331,4 +366,5 @@ class ActionPriorityRanker:
             "version": self._version,
             "training_samples": self._training_samples,
             "mode": "learned" if self._training_samples > 500 else "heuristic",
+            "verb_feedback_weights": dict(self._verb_feedback_weights),
         }

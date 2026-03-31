@@ -607,6 +607,11 @@ class TranscriptActionResponse(BaseModel):
     outputs: dict[str, Any]
     errors: list[str] = Field(default_factory=list)
     orchestration_meta: dict[str, Any]
+    async_processing: bool = False
+    job_id: Optional[str] = None
+    job_status: Optional[JobStatus] = None
+    status_url: Optional[str] = None
+    processing_transport: Optional[str] = None
 
 
 class FeedbackRequest(BaseModel):

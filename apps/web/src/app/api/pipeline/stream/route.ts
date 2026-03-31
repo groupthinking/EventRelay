@@ -34,6 +34,27 @@ interface AgentStreamEvent {
   timestamp: string;
 }
 
+interface BackendTranscriptActionResponse {
+  success: boolean;
+  async_processing?: boolean;
+  job_id?: string;
+  job_status?: string;
+  status_url?: string;
+  processing_transport?: string;
+  outputs?: Record<string, any>;
+  transcript?: Record<string, any>;
+}
+
+interface BackendVideoJobStatus {
+  job_id: string;
+  status: 'pending' | 'downloading' | 'transcribing' | 'extracting' | 'complete' | 'failed';
+  progress: number;
+  video_url?: string;
+  transcript?: string;
+  metadata?: Record<string, any>;
+  error?: string;
+}
+
 function makeEvent(event: AgentStreamEvent): string {
   return `data: ${JSON.stringify(event)}\n\n`;
 }
@@ -41,6 +62,102 @@ function makeEvent(event: AgentStreamEvent): string {
 /** Small helper to sleep in a streaming context. */
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
+}
+
+function mapTaskBoardActions(taskBoard: Record<string, unknown> | undefined) {
+  if (!taskBoard || typeof taskBoard !== 'object') return [];
+  return Object.entries(taskBoard).flatMap(([column, items]) =>
+    Array.isArray(items)
+      ? items.map((item) => {
+          const task = (item ?? {}) as Record<string, unknown>;
+          return {
+            title: String(task.title || 'Untitled'),
+            description: String(task.definition_of_done || task.description || ''),
+            category: column,
+            estimatedMinutes:
+              typeof task.estimate_days === 'number'
+                ? task.estimate_days * 24 * 60
+                : null,
+          };
+        })
+      : [],
+  );
+}
+
+function mapBackendResultToAnalysis(result: Record<string, any>): VideoAnalysisResult {
+  const transcriptAction = result.outputs?.transcript_action?.data || {};
+  const rankedActions = Array.isArray(transcriptAction.priority_ranked_actions)
+    ? transcriptAction.priority_ranked_actions.map((action: Record<string, unknown>) => ({
+        title: String(action.text || 'Untitled action'),
+        description: String(action.reasoning || ''),
+        category: String(action.tier || 'build'),
+        estimatedMinutes: null,
+      }))
+    : [];
+  const taskBoardActions = mapTaskBoardActions(transcriptAction.task_board);
+
+  return {
+    title:
+      result.metadata?.title ||
+      result.outputs?.transcript_action?.data?.summary ||
+      'Video Analysis',
+    summary:
+      typeof transcriptAction.summary === 'string'
+        ? transcriptAction.summary
+        : 'Analysis complete',
+    transcript: Array.isArray(result.transcript?.segments)
+      ? result.transcript.segments
+      : [],
+    events: [],
+    actions: rankedActions.length > 0 ? rankedActions : taskBoardActions,
+    topics: transcriptAction.metadata?.topics || [],
+    architectureCode: '',
+    ingestScript: '',
+    e22Snippets: [],
+  };
+}
+
+async function pollBackendJob(
+  statusUrl: string,
+  controller: ReadableStreamDefaultController<Uint8Array>,
+  encoder: TextEncoder,
+): Promise<BackendVideoJobStatus> {
+  for (let attempt = 0; attempt < 90; attempt += 1) {
+    await sleep(2000);
+    const response = await fetch(statusUrl, {
+      cache: 'no-store',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    if (!response.ok) {
+      throw new Error(`Job status returned ${response.status}`);
+    }
+
+    const payload = await response.json();
+    const job = (payload.data || payload) as BackendVideoJobStatus;
+
+    controller.enqueue(
+      encoder.encode(
+        makeEvent({
+          type: 'agent_update',
+          agentId: 'async_queue',
+          agentName: 'AsyncVideoQueue',
+          status: job.status === 'failed' ? 'error' : 'running',
+          progress: Math.max(0, Math.min(100, Math.round(job.progress || 0))),
+          data: {
+            jobId: job.job_id,
+            stage: job.status,
+          },
+          timestamp: new Date().toISOString(),
+        }),
+      ),
+    );
+
+    if (job.status === 'complete' || job.status === 'failed') {
+      return job;
+    }
+  }
+
+  throw new Error('Timed out waiting for async video job to complete');
 }
 
 /**
@@ -413,30 +530,55 @@ export async function POST(request: Request) {
               if (response.ok) {
                 const result = await response.json();
                 // Map backend result to agent events
-                const mappedAnalysis: VideoAnalysisResult = {
-                  title: result.outputs?.transcript_action?.data?.summary || 'Video Analysis',
-                  summary: typeof result.outputs?.transcript_action?.data?.summary === 'string'
-                    ? result.outputs.transcript_action.data.summary
-                    : 'Analysis complete',
-                  transcript: [],
-                  events: [],
-                  actions: result.outputs?.transcript_action?.data?.task_board?.tasks?.map(
-                    (t: { title?: string; description?: string }) => ({
-                      title: t.title || '',
-                      description: t.description || '',
-                      category: 'build',
-                      estimatedMinutes: null,
-                    }),
-                  ) || [],
-                  topics: result.outputs?.transcript_action?.data?.metadata?.topics || [],
-                  architectureCode: '',
-                  ingestScript: '',
-                  e22Snippets: [],
-                };
+                 const transcriptResult = result as BackendTranscriptActionResponse;
+                 if (transcriptResult.async_processing && transcriptResult.status_url) {
+                   controller.enqueue(
+                     encoder.encode(
+                       makeEvent({
+                         type: 'agent_update',
+                         agentId: 'async_queue',
+                         agentName: 'AsyncVideoQueue',
+                         status: 'running',
+                         progress: 5,
+                         data: {
+                           jobId: transcriptResult.job_id,
+                           transport: transcriptResult.processing_transport,
+                         },
+                         timestamp: new Date().toISOString(),
+                       }),
+                     ),
+                   );
 
-                for await (const event of generateAgentEvents(mappedAnalysis, startTime)) {
-                  controller.enqueue(encoder.encode(event));
-                }
+                   const statusUrl = transcriptResult.status_url.startsWith('http')
+                     ? transcriptResult.status_url
+                     : `${BACKEND_URL}${transcriptResult.status_url}`;
+                   const job = await pollBackendJob(statusUrl, controller, encoder);
+                   if (job.status === 'failed') {
+                     throw new Error(job.error || 'Async transcript job failed');
+                   }
+
+                   const mappedAnalysis = mapBackendResultToAnalysis({
+                     metadata: job.metadata?.metadata || {},
+                     transcript: {
+                       text: job.transcript || '',
+                       segments: [],
+                     },
+                     outputs: job.metadata?.outputs || {},
+                   });
+                   for await (const event of generateAgentEvents(mappedAnalysis, startTime)) {
+                     controller.enqueue(encoder.encode(event));
+                   }
+                   const trackTask2 = processEmbeddings(url, mappedAnalysis);
+                   await saveForTraining(url, mappedAnalysis);
+                   await trackTask2;
+                   return;
+                 }
+
+                 const mappedAnalysis = mapBackendResultToAnalysis(result);
+
+                 for await (const event of generateAgentEvents(mappedAnalysis, startTime)) {
+                   controller.enqueue(encoder.encode(event));
+                 }
                 const trackTask2 = processEmbeddings(url, mappedAnalysis);
                 await saveForTraining(url, mappedAnalysis);
                 await trackTask2;

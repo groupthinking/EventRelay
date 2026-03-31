@@ -11,9 +11,12 @@ import tempfile
 from dataclasses import asdict
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+from urllib.parse import parse_qs, urlparse
 
 from src.shared.youtube import RobustYouTubeMetadata, RobustYouTubeService
+from uvai.ml.client import UVAIMLClient, get_uvai_ml_client
 from youtube_extension.backend.services.metrics_service import MetricsService
+from youtube_extension.utils import parse_duration_to_seconds
 
 try:
     from youtube_extension.services.agents.adapters.agent_orchestrator import (
@@ -52,6 +55,8 @@ logger = logging.getLogger(__name__)
 class TranscriptActionWorkflow:
     """End-to-end pipeline from transcript extraction to action plan generation."""
 
+    ASYNC_VIDEO_THRESHOLD_SECONDS = 15 * 60
+
     def __init__(
         self,
         *,
@@ -60,6 +65,7 @@ class TranscriptActionWorkflow:
         hybrid_processor: HybridProcessorService | None = None,
         speech_service: SpeechToTextService | None = None,
         metrics_service: MetricsService | None = None,
+        ml_client: UVAIMLClient | None = None,
     ):
         self._youtube_service_factory = youtube_service_factory or RobustYouTubeService
         self._orchestrator = orchestrator or AgentOrchestrator()
@@ -81,6 +87,7 @@ class TranscriptActionWorkflow:
         self._speech_service = speech_service or SpeechToTextService()
         self._metrics_service = metrics_service
         self._skill_builder = get_skill_builder()
+        self._ml_client = ml_client or get_uvai_ml_client()
 
     async def run(
         self,
@@ -88,41 +95,26 @@ class TranscriptActionWorkflow:
         language: str = "en",
         transcript_text: str | None = None,
         video_options: Any | None = None,
+        prefetched_metadata: RobustYouTubeMetadata | dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        self.validate_video_url(video_url)
         video_metadata = self._build_video_metadata(video_options)
 
         gemini_transcript: dict[str, Any] = {}
+        metadata = self._coerce_metadata(prefetched_metadata) or await self.fetch_video_metadata(
+            video_url
+        )
+        metadata_dict = asdict(metadata)
+        metadata_dict["duration_seconds"] = self.get_duration_seconds(metadata)
+        metadata_dict["has_captions"] = bool(metadata.transcript_available)
+        metadata_dict["language"] = metadata.default_audio_language or metadata.default_language
+        predicted_transcript = (
+            None
+            if transcript_text is not None
+            else await self._safe_score_transcript(metadata_dict)
+        )
 
         async with self._youtube_service_factory() as yt_service:
-            try:
-                metadata = await yt_service.get_video_metadata(video_url)
-            except Exception as meta_err:
-                logger.warning("Metadata fetch failed for %s: %s — using minimal metadata", video_url, meta_err)
-                import re as _re
-                video_id_match = _re.search(r"(?:v=|/)([a-zA-Z0-9_-]{11})", video_url)
-                video_id = video_id_match.group(1) if video_id_match else "unknown"
-                metadata = RobustYouTubeMetadata(
-                    video_id=video_id,
-                    title=f"Video {video_id}",
-                    description="",
-                    channel_id="",
-                    channel_title="Unknown",
-                    published_at="",
-                    duration="PT0S",
-                    view_count=0,
-                    like_count=0,
-                    comment_count=0,
-                    thumbnail_urls={},
-                    tags=[],
-                    category_id="",
-                    default_language="en",
-                    default_audio_language="en",
-                    live_broadcast_content="none",
-                    transcript_available=False,
-                    transcript_segments=0,
-                    source_api="fallback",
-                )
-
             if transcript_text is not None:
                 transcript = {
                     "text": transcript_text,
@@ -130,28 +122,25 @@ class TranscriptActionWorkflow:
                     "segments": [],
                 }
             else:
-                transcript = await yt_service.get_transcript(metadata.video_id, language=language)
-
-            if not transcript.get("text"):
-                transcript = await self._fallback_transcript_with_speech_service(
-                    video_url,
-                    language=language,
-                )
-
-            if not transcript.get("text"):
-                gemini_transcript = await self._fallback_transcript_with_gemini(
+                transcript = await self._extract_transcript(
+                    yt_service,
+                    metadata,
                     video_url,
                     language=language,
                     video_metadata=video_metadata,
+                    predicted_source=(
+                        predicted_transcript.get("recommended_source")
+                        if predicted_transcript
+                        else None
+                    ),
                 )
-
-                if gemini_transcript.get("text"):
-                    transcript = gemini_transcript
-                elif gemini_transcript.get("error") and "error" not in transcript:
-                    transcript["error"] = gemini_transcript["error"]
+                if transcript.get("source") in {"gemini_video", "gemini_video_file"}:
+                    gemini_transcript = transcript
 
         if video_metadata:
             transcript.setdefault("requested_video_metadata", video_metadata)
+
+        await self._record_transcript_outcome(metadata_dict, transcript)
 
         if not transcript.get("text"):
             errors: list[str] = []
@@ -198,6 +187,7 @@ class TranscriptActionWorkflow:
             language,
             video_metadata=video_metadata,
         )
+        await self._rank_orchestrated_actions(orchestration, metadata)
 
         # Record outcome for continuous learning
         self._skill_builder.record_deployment(
@@ -224,6 +214,232 @@ class TranscriptActionWorkflow:
                 "agents_used": orchestration["agents_used"],
             },
         }
+
+    def validate_video_url(self, video_url: str) -> None:
+        parsed = urlparse(video_url)
+        query_params = parse_qs(parsed.query)
+        is_playlist_path = parsed.path.rstrip("/").endswith("/playlist")
+        playlist_without_video = bool(query_params.get("list")) and not bool(
+            query_params.get("v")
+        )
+        if is_playlist_path or playlist_without_video:
+            raise ValueError(
+                "Playlist URLs are not supported. Please provide a single YouTube video URL."
+            )
+
+    async def fetch_video_metadata(self, video_url: str) -> RobustYouTubeMetadata:
+        self.validate_video_url(video_url)
+        async with self._youtube_service_factory() as yt_service:
+            try:
+                return await yt_service.get_video_metadata(video_url)
+            except Exception as meta_err:
+                logger.warning(
+                    "Metadata fetch failed for %s: %s — using minimal metadata",
+                    video_url,
+                    meta_err,
+                )
+                import re as _re
+
+                video_id_match = _re.search(r"(?:v=|/)([a-zA-Z0-9_-]{11})", video_url)
+                video_id = video_id_match.group(1) if video_id_match else "unknown"
+                return RobustYouTubeMetadata(
+                    video_id=video_id,
+                    title=f"Video {video_id}",
+                    description="",
+                    channel_id="",
+                    channel_title="Unknown",
+                    published_at="",
+                    duration="PT0S",
+                    view_count=0,
+                    like_count=0,
+                    comment_count=0,
+                    thumbnail_urls={},
+                    tags=[],
+                    category_id="",
+                    default_language="en",
+                    default_audio_language="en",
+                    live_broadcast_content="none",
+                    transcript_available=False,
+                    transcript_segments=0,
+                    source_api="fallback",
+                )
+
+    @staticmethod
+    def get_duration_seconds(metadata: RobustYouTubeMetadata | dict[str, Any]) -> int:
+        duration_value = (
+            metadata.get("duration") if isinstance(metadata, dict) else metadata.duration
+        )
+        return parse_duration_to_seconds(str(duration_value or "PT0S"))
+
+    @staticmethod
+    def _coerce_metadata(
+        metadata: RobustYouTubeMetadata | dict[str, Any] | None,
+    ) -> RobustYouTubeMetadata | None:
+        if metadata is None:
+            return None
+        if isinstance(metadata, RobustYouTubeMetadata):
+            return metadata
+        return RobustYouTubeMetadata(**metadata)
+
+    async def _safe_score_transcript(
+        self, metadata: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        try:
+            return await self._ml_client.score_transcript(metadata)
+        except Exception:
+            logger.debug("Transcript scoring unavailable", exc_info=True)
+            return None
+
+    async def _extract_transcript(
+        self,
+        yt_service: Any,
+        metadata: RobustYouTubeMetadata,
+        video_url: str,
+        *,
+        language: str,
+        video_metadata: dict[str, Any] | None,
+        predicted_source: str | None,
+    ) -> dict[str, Any]:
+        transcript: dict[str, Any] = {"text": "", "segments": [], "source": "unavailable"}
+        attempted_sources: set[str] = set()
+
+        for source in self._build_transcript_source_order(predicted_source):
+            attempted_sources.add(source)
+            if source == "youtube_api":
+                transcript = await yt_service.get_transcript(
+                    metadata.video_id,
+                    language=language,
+                )
+            elif source == "speech_v2":
+                transcript = await self._fallback_transcript_with_speech_service(
+                    video_url,
+                    language=language,
+                )
+            else:
+                transcript = await self._fallback_transcript_with_gemini(
+                    video_url,
+                    language=language,
+                    video_metadata=video_metadata,
+                )
+
+            if transcript.get("text"):
+                return transcript
+
+        if "error" not in transcript:
+            transcript["error"] = (
+                "Transcript generation failed after trying "
+                + ", ".join(sorted(attempted_sources))
+            )
+        return transcript
+
+    @staticmethod
+    def _build_transcript_source_order(predicted_source: str | None) -> list[str]:
+        preferred = {
+            "youtube_api": ["youtube_api", "speech_v2", "gemini_video"],
+            "speech_v2": ["speech_v2", "youtube_api", "gemini_video"],
+            "gemini_video": ["gemini_video", "speech_v2", "youtube_api"],
+            "gemini_video_file": ["gemini_video", "speech_v2", "youtube_api"],
+        }.get(predicted_source or "", [])
+        fallback = ["youtube_api", "speech_v2", "gemini_video"]
+        ordered_sources: list[str] = []
+        for source in [*preferred, *fallback]:
+            if source not in ordered_sources:
+                ordered_sources.append(source)
+        return ordered_sources
+
+    async def _record_transcript_outcome(
+        self,
+        metadata: dict[str, Any],
+        transcript: dict[str, Any],
+    ) -> None:
+        transcript_text = str(transcript.get("text") or "").strip()
+        success = bool(transcript_text)
+        word_count = len(transcript_text.split())
+        segment_count = len(transcript.get("segments") or [])
+        actual_quality = min(
+            1.0,
+            max(
+                0.0,
+                (0.6 if success else 0.0)
+                + min(word_count / 600.0, 0.25)
+                + min(segment_count / 50.0, 0.15),
+            ),
+        )
+        try:
+            await self._ml_client.record_transcript_outcome(
+                metadata=metadata,
+                actual_source=str(transcript.get("source") or "unknown"),
+                actual_quality=actual_quality,
+                success=success,
+            )
+        except Exception:
+            logger.debug("Transcript outcome recording unavailable", exc_info=True)
+
+    async def _rank_orchestrated_actions(
+        self,
+        orchestration: dict[str, Any],
+        metadata: RobustYouTubeMetadata,
+    ) -> None:
+        transcript_action = orchestration.get("agents", {}).get("transcript_action", {})
+        transcript_action_data = transcript_action.get("data")
+        if not isinstance(transcript_action_data, dict):
+            return
+
+        ranked_candidates = self._extract_actions_for_ranking(transcript_action_data)
+        if not ranked_candidates:
+            return
+
+        try:
+            ranking = await self._ml_client.rank_actions(
+                ranked_candidates,
+                video_context=asdict(metadata),
+            )
+        except Exception:
+            logger.debug("Action ranking unavailable", exc_info=True)
+            return
+
+        ranked_actions = ranking.get("ranked_actions")
+        if not isinstance(ranked_actions, list) or not ranked_actions:
+            return
+
+        transcript_action_data["priority_ranked_actions"] = ranked_actions
+        transcript_action_data["action_ranking_meta"] = {
+            "total_actions": ranking.get("total_actions", len(ranked_actions)),
+            "processing_time_seconds": ranking.get("processing_time_seconds"),
+        }
+
+    @staticmethod
+    def _extract_actions_for_ranking(
+        transcript_action_data: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        ranked_candidates: list[dict[str, Any]] = []
+        task_board = transcript_action_data.get("task_board")
+        if not isinstance(task_board, dict):
+            return ranked_candidates
+
+        for column, items in task_board.items():
+            if not isinstance(items, list):
+                continue
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
+                description = str(
+                    item.get("definition_of_done")
+                    or item.get("description")
+                    or ""
+                ).strip()
+                title = str(item.get("title") or "").strip()
+                text = " — ".join(part for part in [title, description] if part)
+                if not text:
+                    continue
+                ranked_candidates.append(
+                    {
+                        "text": text,
+                        "category": column,
+                        "type": "task",
+                    }
+                )
+        return ranked_candidates
 
     async def _invoke_orchestrator(
         self,
