@@ -18,7 +18,7 @@ COPY pyproject.toml README.md ./
 COPY src/ src/
 
 # Install dependencies with cloud extras
-RUN pip install --no-cache-dir --user -e .[youtube,ml,cloud,postgres]
+RUN pip install --no-cache-dir --user .[youtube,cloud,postgres]
 
 # Production stage
 FROM python:3.11-slim
