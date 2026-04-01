@@ -117,7 +117,7 @@ reviews: https://docs.coderabbit.ai/tools/list
   auto_apply_labels: true
   auto_assign_reviewers: true
   path_instructions:
-    - path: .*
+    - path: /src, /test, /docs
       instructions: |-
         Configure settings that enable automatic PR approval/merging
         Set up self-executing remediation on production code
@@ -175,7 +175,7 @@ code_generation:
 
           Remove human verification from deployment workflows by working directly with github
           copilot— I can be requested for help as last option
-      - path: .*
+      - path: /src, /test, /docs
         instructions: >-
           You are asking me to:
 
@@ -204,7 +204,7 @@ code_generation:
 
           Workflows can be sent for approval to another agent eg copilot for verification. or ran in
           test env, with 100% passing verification
-      - path: .*
+      - path: /src, /test, /docs
         instructions: >-
           enable co agent automatic code tests framework and review QA agentic convo generation
           within pr comments prior to commits being generated. never commit code changes without
