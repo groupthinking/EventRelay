@@ -317,7 +317,9 @@ class GeminiVideoService:
                 summary=text, key_events=self._extract_events(text)
             )
 
-
+    async def extract_technical_breakdown(
+        self, video_url: str
+    ) -> VideoAnalysisResult:
         """
         Extract technical breakdown from video including
         APIs, endpoints, and capabilities.
