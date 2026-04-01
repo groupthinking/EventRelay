@@ -8,15 +8,22 @@ Provider: Google AI Platform
 Models: gemini-2.5-pro (latest with video), gemini-2.0-flash (fast)
 Endpoint: https://generativelanguage.googleapis.com/v1beta/models/
 Project: gen-lang-client-0209671908
+
+Failover: If Gemini video processing fails, the backup is GROK
+(xAI). Grok provides unified multimodal reasoning with strong
+X-native integration. The failover is automatic and transparent.
 """
 
 import asyncio
 import json
+import logging
 import os
 from dataclasses import dataclass, field
 from typing import Any, Literal, Optional, cast
 
 import httpx
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -46,11 +53,19 @@ class GeminiVideoService:
     - gemini-2.5-pro: Latest with best reasoning
     - gemini-2.5-flash: Fast, cost-effective
     - gemini-2.0-flash-thinking-exp: Experimental thinking
+
+    Failover Strategy:
+    - Primary: Gemini (Google AI)
+    - Backup: GROK (xAI) — activated automatically when Gemini fails
     """
 
     BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
     DEFAULT_MODEL = "gemini-2.5-pro"
     FALLBACK_MODEL = "gemini-2.0-flash"
+
+    # Grok (xAI) fallback configuration
+    GROK_API_URL = "https://api.x.ai/v1/chat/completions"
+    GROK_MODEL = "grok-4-0709"
 
     # API keys loaded from environment
     API_KEYS: list[str] = []
@@ -75,6 +90,15 @@ class GeminiVideoService:
         # Longer timeout for video processing
         self.client = httpx.AsyncClient(timeout=180.0)
         self._key_index = 0
+
+        # Grok fallback API key (xAI)
+        self.grok_api_key: Optional[str] = (
+            os.environ.get("XAI_API_KEY")
+            or os.environ.get("XAI_GROK4_API")
+            or os.environ.get("XAI_GROK4_OR_3_API")
+            or os.environ.get("XAI_GROK_3_OR_2_ONLY_API")
+            or os.environ.get("GROK_API_KEY")
+        )
 
     def _rotate_key(self) -> None:
         """Rotate to next API key on rate limit."""
@@ -152,22 +176,31 @@ class GeminiVideoService:
                 },
             }
 
-        response = await self._make_request(model, payload)
-        text = response["candidates"][0]["content"]["parts"][0]["text"]
-
-        # Parse JSON response if possible
         try:
-            parsed = json.loads(text)
-            return VideoAnalysisResult(
-                summary=parsed.get("summary", text),
-                key_events=parsed.get("key_events", []),
-                timestamps=parsed.get("timestamps", []),
-                apis_detected=parsed.get("apis", []),
+            response = await self._make_request(model, payload)
+            text = response["candidates"][0]["content"]["parts"][0]["text"]
+
+            # Parse JSON response if possible
+            try:
+                parsed = json.loads(text)
+                return VideoAnalysisResult(
+                    summary=parsed.get("summary", text),
+                    key_events=parsed.get("key_events", []),
+                    timestamps=parsed.get("timestamps", []),
+                    apis_detected=parsed.get("apis", []),
+                )
+            except json.JSONDecodeError:
+                return VideoAnalysisResult(
+                    summary=text, key_events=self._extract_events(text)
+                )
+        except Exception as gemini_error:
+            # Gemini failed — activate Grok backup as per failover policy
+            logger.warning(
+                "Gemini video processing failed (%s); "
+                "activating Grok fallback.",
+                gemini_error,
             )
-        except json.JSONDecodeError:
-            return VideoAnalysisResult(
-                summary=text, key_events=self._extract_events(text)
-            )
+            return await self._call_grok_fallback(video_url, prompt)
 
     async def _make_request(
         self, model: str, payload: dict, retries: int = 3
@@ -218,6 +251,75 @@ class GeminiVideoService:
         if last_error is not None:
             raise last_error
         raise RuntimeError("API request failed after retries")
+
+    async def _call_grok_fallback(
+        self, video_url: str, prompt: str
+    ) -> VideoAnalysisResult:
+        """
+        Grok (xAI) fallback for video analysis when Gemini fails.
+
+        Activated automatically per the failover policy:
+        "If Gemini video processing and intelligence fails,
+        the backup must be GROK."
+
+        Uses the xAI OpenAI-compatible chat endpoint with a
+        descriptive prompt that includes the video URL so Grok
+        can apply its native multimodal/X-integration capabilities.
+        """
+        if not self.grok_api_key:
+            raise RuntimeError(
+                "Gemini video processing failed and no Grok API key is "
+                "configured (set XAI_API_KEY or XAI_GROK4_API). "
+                "Cannot complete video analysis."
+            )
+
+        logger.info("Using Grok as video intelligence backup for: %s", video_url)
+        headers = {
+            "Authorization": f"Bearer {self.grok_api_key}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "model": self.GROK_MODEL,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        "You are an expert video content analyzer with "
+                        "native multimodal capabilities."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": (
+                        f"Analyze this video: {video_url}\n\n{prompt}"
+                    ),
+                },
+            ],
+            "max_tokens": 8192,
+            "temperature": 0.4,
+        }
+
+        response = await self.client.post(
+            self.GROK_API_URL,
+            headers=headers,
+            json=payload,
+        )
+        response.raise_for_status()
+        data = cast(dict[Any, Any], response.json())
+        text = data["choices"][0]["message"]["content"]
+
+        try:
+            parsed = json.loads(text)
+            return VideoAnalysisResult(
+                summary=parsed.get("summary", text),
+                key_events=parsed.get("key_events", []),
+                timestamps=parsed.get("timestamps", []),
+                apis_detected=parsed.get("apis", []),
+            )
+        except json.JSONDecodeError:
+            return VideoAnalysisResult(
+                summary=text, key_events=self._extract_events(text)
+            )
 
     async def extract_technical_breakdown(
         self, video_url: str
