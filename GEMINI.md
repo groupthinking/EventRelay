@@ -59,7 +59,7 @@ Run `/mcp` inside Gemini CLI to verify connected servers and available tools.
 pip install -e .[dev,youtube,ml]
 
 # Run backend server
-uvicorn src.youtube_extension.main:app --reload --port 8000
+uvicorn youtube_extension.main:app --reload --port 8000
 
 # Tests
 pytest tests/ -v
