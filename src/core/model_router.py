@@ -215,9 +215,16 @@ class ModelRouter:
                 return provider
 
         if signals.get("video_analysis"):
-            provider = self._to_provider("claude")
+            # Gemini is the primary provider for video analysis.
+            # If unavailable, fall back to Grok per the failover policy:
+            # "If Gemini video processing fails, the backup is GROK."
+            provider = self._to_provider("gemini")
             if provider:
                 signals["reason"] = "video_analysis"
+                return provider
+            provider = self._to_provider("grok")
+            if provider:
+                signals["reason"] = "video_analysis_grok_fallback"
                 return provider
 
         if signals.get("safety_sensitive"):
