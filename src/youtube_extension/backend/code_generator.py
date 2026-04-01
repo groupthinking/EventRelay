@@ -1112,6 +1112,7 @@ if __name__ == "__main__":
                 action = step.get("action", "action")
                 target = step.get("target_file", "")
                 desc = step.get("description", "")
+                # Prefer normalized BuildPlan ordering, then legacy step_number, then position.
                 step_num = step.get("order", step.get("step_number", idx + 1))
                 detail = f"- Step {step_num}: {action}"
                 if target:
@@ -1207,6 +1208,7 @@ This is a starting point generated from video analysis. You can:
         metadata = video_analysis.get("metadata") or video_analysis.get("video_data") or {}
         ai_analysis = video_analysis.get("ai_analysis") or {}
         build_plan = video_analysis.get("build_plan") or extracted_info.get("build_plan")
+        # Upstream callers may pass either a Pydantic BuildPlan or a plain dict.
         if hasattr(build_plan, "model_dump"):
             build_plan = build_plan.model_dump()
 
