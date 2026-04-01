@@ -59,14 +59,45 @@ export async function POST(request: Request) {
         clearTimeout(timeout);
       }
 
-      if (response.ok) {
-        const result = await response.json();
+        if (response.ok) {
+          const result = await response.json();
 
-        const transcriptAction = result.outputs?.transcript_action?.data || {};
-        const personalityAgent = result.outputs?.personality_agent?.data || {};
-        const strategyAgent = result.outputs?.strategy_agent?.data || {};
+          if (result.async_processing && result.job_id) {
+            await publishEvent(
+              EventTypes.PIPELINE_QUEUED,
+              { strategy: 'backend-async', queued: true, jobId: result.job_id },
+              url,
+            );
 
-        let summaryText = 'Video analyzed successfully';
+            return NextResponse.json({
+              id: result.job_id,
+              status: 'queued',
+              processing_time_ms: 0,
+              result: {
+                success: true,
+                async: true,
+                poll_url: result.status_url,
+                transcript_segments: 0,
+                agents_used: [],
+                errors: [],
+                raw_response: result,
+              },
+            });
+          }
+
+          const transcriptAction = result.outputs?.transcript_action?.data || {};
+          const personalityAgent = result.outputs?.personality_agent?.data || {};
+          const strategyAgent = result.outputs?.strategy_agent?.data || {};
+          const rankedActions = Array.isArray(transcriptAction.priority_ranked_actions)
+            ? transcriptAction.priority_ranked_actions.map((action: any) => ({
+                title: action.text || 'Untitled',
+                description: action.reasoning || '',
+                category: action.tier || 'General',
+                estimatedMinutes: null,
+              }))
+            : [];
+
+          let summaryText = 'Video analyzed successfully';
         const rawSummary = transcriptAction.summary;
         if (typeof rawSummary === 'string') {
           summaryText = rawSummary;
@@ -88,14 +119,16 @@ export async function POST(request: Request) {
 
         const insights = {
           summary: summaryText,
-          actions: Object.values(transcriptAction.task_board || {}).flatMap((col: any) => 
-            Array.isArray(col) ? col.map((t: any) => ({
-              title: t.title || 'Untitled',
-              description: t.definition_of_done || t.description || '',
-              category: t.owner_role || 'General',
-              estimatedMinutes: t.estimate_days ? parseFloat(t.estimate_days) * 24 * 60 : null
-            })) : []
-          ),
+          actions: rankedActions.length > 0
+            ? rankedActions
+            : Object.values(transcriptAction.task_board || {}).flatMap((col: any) =>
+                Array.isArray(col) ? col.map((t: any) => ({
+                  title: t.title || 'Untitled',
+                  description: t.definition_of_done || t.description || '',
+                  category: t.owner_role || 'General',
+                  estimatedMinutes: t.estimate_days ? parseFloat(t.estimate_days) * 24 * 60 : null
+                })) : []
+              ),
           topics: transcriptAction.metadata?.topics || [],
           sentiment: personalityAgent.personality_map?.video_intent?.primary || 'Neutral',
           strategy: strategyAgent.strategic_analysis || null,

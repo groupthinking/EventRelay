@@ -8,15 +8,25 @@ Provides versioned API endpoints with proper OpenAPI documentation.
 """
 
 import asyncio
+import logging
+import os
 import uuid as _uuid
+from dataclasses import asdict
 from datetime import datetime
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 
+from src.shared.youtube import RobustYouTubeMetadata
+from uvai.ml.client import get_uvai_ml_client
 from youtube_extension.services.agents import AgentOrchestrator
 from youtube_extension.services.ai import HybridProcessorService
+from youtube_extension.services.cloud.cloud_tasks_queue import (
+    CloudTasksQueueService,
+    TaskConfig,
+    VideoProcessingTask,
+)
 from youtube_extension.services.workflows.transcript_action_workflow import (
     TranscriptActionWorkflow,
 )
@@ -82,8 +92,6 @@ from .models import (
 )
 
 performance_monitor = PerformanceMonitor()
-
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -408,6 +416,7 @@ async def create_ephemeral_token(
 )
 async def run_transcript_action(
     request: TranscriptActionRequest,
+    http_request: Request,
     orchestrator: AgentOrchestrator = Depends(get_agent_orchestrator_service),
     hybrid_processor: HybridProcessorService = Depends(get_hybrid_processor_service),
     metrics_service: MetricsService = Depends(get_metrics_service),
@@ -424,14 +433,43 @@ async def run_transcript_action(
         metrics_service=metrics_service,
     )
 
-    result = await workflow.run(
-        request.video_url,
-        language=request.language,
-        transcript_text=request.transcript_text,
-        video_options=request.video_options,
+    try:
+        metadata = await workflow.fetch_video_metadata(request.video_url)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    duration_seconds = workflow.get_duration_seconds(metadata)
+    is_long_video = (
+        request.transcript_text is None
+        and duration_seconds > TranscriptActionWorkflow.ASYNC_VIDEO_THRESHOLD_SECONDS
     )
 
-    if result.get("success"):
+    if is_long_video:
+        result = await _queue_transcript_action_job(
+            request,
+            metadata=metadata,
+            http_request=http_request,
+        )
+    else:
+        result = await workflow.run(
+            request.video_url,
+            language=request.language,
+            transcript_text=request.transcript_text,
+            video_options=request.video_options,
+            prefetched_metadata=metadata,
+        )
+
+    if result.get("async_processing"):
+        await _emit_event(
+            "com.eventrelay.transcript.queued",
+            {
+                "url": request.video_url,
+                "job_id": result.get("job_id"),
+                "duration_seconds": duration_seconds,
+            },
+            request.video_url,
+        )
+    elif result.get("success"):
         await _emit_event(
             "com.eventrelay.transcript.completed",
             {
@@ -875,6 +913,37 @@ async def update_action_v1(action_id: str, payload: dict[str, Any]):
     try:
         repo = ActionRepository()
         success = repo.update(action_id, **payload)
+        if success:
+            action_text = str(
+                payload.get("action_text")
+                or payload.get("title")
+                or payload.get("description")
+                or ""
+            ).strip()
+            if action_text:
+                status_value = str(payload.get("status") or "").lower()
+                completed = bool(payload.get("completed")) or status_value in {
+                    "done",
+                    "complete",
+                    "completed",
+                }
+                clicked = bool(payload.get("clicked")) or completed
+                time_to_complete = payload.get("time_to_complete_seconds")
+                try:
+                    time_to_complete_seconds = (
+                        float(time_to_complete) if time_to_complete is not None else None
+                    )
+                except (TypeError, ValueError):
+                    time_to_complete_seconds = None
+                try:
+                    await get_uvai_ml_client().record_action_feedback(
+                        action_text=action_text,
+                        clicked=clicked,
+                        completed=completed,
+                        time_to_complete_seconds=time_to_complete_seconds,
+                    )
+                except Exception:
+                    logger.debug("Action feedback recording failed", exc_info=True)
         return {"success": bool(success)}
     except Exception as e:
         logger.error(f"Error updating action {action_id}: {e}")
@@ -896,6 +965,22 @@ async def submit_feedback_v1(
         success = data_service.save_feedback(request.dict())
 
         if success:
+            action_text = str((request.metadata or {}).get("action_text") or "").strip()
+            if action_text:
+                try:
+                    await get_uvai_ml_client().record_action_feedback(
+                        action_text=action_text,
+                        clicked=bool((request.metadata or {}).get("clicked")),
+                        completed=bool((request.metadata or {}).get("completed")),
+                        time_to_complete_seconds=(
+                            float((request.metadata or {}).get("time_to_complete_seconds"))
+                            if (request.metadata or {}).get("time_to_complete_seconds")
+                            is not None
+                            else None
+                        ),
+                    )
+                except Exception:
+                    logger.debug("Feedback action ranking update failed", exc_info=True)
             return FeedbackResponse(
                 status="ok",
                 message="Thank you for your feedback!",
@@ -978,6 +1063,107 @@ _agent_executions: dict[str, AgentExecution] = {}
 _dispatches: dict[str, AgentDispatchResponse] = {}
 
 
+def _absolute_status_url(request: Request, job_id: str) -> str:
+    base_url = str(request.base_url).rstrip("/")
+    return f"{base_url}/api/v1/videos/{job_id}/status"
+
+
+async def _queue_transcript_action_job(
+    request: TranscriptActionRequest,
+    *,
+    metadata: RobustYouTubeMetadata,
+    http_request: Request,
+) -> dict[str, Any]:
+    job_id = f"job_{_uuid.uuid4().hex[:10]}"
+    job = VideoJobStatusResponse(
+        job_id=job_id,
+        status=JobStatus.pending,
+        progress=0.0,
+        video_url=request.video_url,
+        metadata={
+            "async_processing": True,
+            "video_id": metadata.video_id,
+            "duration": metadata.duration,
+            "duration_seconds": TranscriptActionWorkflow.get_duration_seconds(metadata),
+        },
+    )
+    _video_jobs[job_id] = job
+
+    video_request = VideoProcessJobRequest(
+        video_url=request.video_url,
+        language=request.language,
+        options=(
+            request.video_options.model_dump()
+            if hasattr(request.video_options, "model_dump")
+            else request.video_options
+        )
+        or {},
+    )
+
+    queued_transport = "local_background"
+    cloud_task_payload = {
+        "pipeline": "transcript_action",
+        "job_id": job_id,
+        "language": request.language or "en",
+        "transcript_text": request.transcript_text,
+        "video_options": video_request.options,
+        "prefetched_metadata": asdict(metadata),
+    }
+
+    try:
+        service_url = str(http_request.base_url).rstrip("/")
+        queue_service = CloudTasksQueueService(
+            project_id=os.getenv("GOOGLE_CLOUD_PROJECT"),
+            service_url=service_url,
+            task_path="/api/v1/process-video-task",
+        )
+        queue_service.initialize()
+        try:
+            await queue_service.enqueue_video_processing(
+                VideoProcessingTask(
+                    video_id=metadata.video_id,
+                    video_url=request.video_url,
+                    metadata=cloud_task_payload,
+                ),
+                TaskConfig(task_name=job_id),
+            )
+            queued_transport = "cloud_tasks"
+        finally:
+            queue_service.close()
+    except Exception as exc:
+        logger.info("Cloud Tasks unavailable for %s, using local background task: %s", job_id, exc)
+        asyncio.create_task(
+            _run_video_job(
+                job_id,
+                video_request,
+                prefetched_metadata=metadata,
+                transcript_text=request.transcript_text,
+            )
+        )
+
+    metadata_payload = asdict(metadata)
+    metadata_payload["duration_seconds"] = TranscriptActionWorkflow.get_duration_seconds(metadata)
+    metadata_payload["async_processing"] = True
+
+    return {
+        "success": True,
+        "video_url": request.video_url,
+        "metadata": metadata_payload,
+        "transcript": {},
+        "outputs": {},
+        "errors": [],
+        "orchestration_meta": {
+            "processing_time": 0.0,
+            "agents_used": [],
+        },
+        "async_processing": True,
+        "job_id": job_id,
+        "job_status": JobStatus.pending,
+        "status_url": _absolute_status_url(http_request, job_id),
+        "processing_transport": queued_transport,
+    }
+
+
 # ============================================================
 # Video Processing – async job API
 # ============================================================
@@ -1009,7 +1195,13 @@ async def start_video_processing(request: VideoProcessJobRequest):
     )
 
 
-async def _run_video_job(job_id: str, request: VideoProcessJobRequest):
+async def _run_video_job(
+    job_id: str,
+    request: VideoProcessJobRequest,
+    *,
+    prefetched_metadata: RobustYouTubeMetadata | dict[str, Any] | None = None,
+    transcript_text: str | None = None,
+):
     """Background coroutine that drives the transcript-action workflow."""
     job = _video_jobs[job_id]
     try:
@@ -1023,9 +1215,11 @@ async def _run_video_job(job_id: str, request: VideoProcessJobRequest):
         result = await workflow.run(
             video_url=request.video_url,
             language=request.language or "en",
+            transcript_text=transcript_text,
+            video_options=request.options,
+            prefetched_metadata=prefetched_metadata,
         )
 
-        job.status = JobStatus.complete
         job.progress = 100.0
         job.transcript = (
             result.get("transcript", {}).get("text")
@@ -1036,11 +1230,78 @@ async def _run_video_job(job_id: str, request: VideoProcessJobRequest):
             "success": result.get("success", False),
             "agents_used": result.get("orchestration_meta", {}).get("agents_used", []),
             "outputs": result.get("outputs", {}),
+            "metadata": result.get("metadata", {}),
+            "orchestration_meta": result.get("orchestration_meta", {}),
         }
+        if result.get("success"):
+            job.status = JobStatus.complete
+        else:
+            job.status = JobStatus.failed
+            errors = result.get("errors") or []
+            job.error = "; ".join(str(error) for error in errors if error) or (
+                "Transcript-action workflow failed"
+            )
     except Exception as exc:
         job.status = JobStatus.failed
         job.error = str(exc)
         logger.error(f"Video job {job_id} failed: {exc}")
+
+
+@router.post(
+    "/process-video-task",
+    summary="Cloud Tasks handler for transcript-action jobs",
+    tags=["Videos"],
+)
+async def process_video_task(
+    payload: dict[str, Any],
+    x_cloudtasks_taskname: Optional[str] = Header(None),
+):
+    """Process a queued transcript-action job dispatched by Cloud Tasks."""
+    if not x_cloudtasks_taskname:
+        raise HTTPException(status_code=403, detail="Only Cloud Tasks can call this endpoint")
+
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Invalid task payload: expected JSON object")
+
+    metadata = payload.get("metadata") or {}
+    job_id = metadata.get("job_id")
+    if not job_id:
+        raise HTTPException(status_code=400, detail="Missing job_id in task payload")
+    if job_id not in x_cloudtasks_taskname:
+        raise HTTPException(status_code=403, detail="Task name does not match queued job")
+
+    video_url = payload.get("video_url")
+    if not isinstance(video_url, str) or not video_url.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Missing or invalid 'video_url' in task payload",
+        )
+
+    job = _video_jobs.setdefault(
+        job_id,
+        VideoJobStatusResponse(
+            job_id=job_id,
+            status=JobStatus.pending,
+            progress=0.0,
+            video_url=video_url,
+        ),
+    )
+    job.status = JobStatus.pending
+    await _run_video_job(
+        job_id,
+        VideoProcessJobRequest(
+            video_url=video_url,
+            language=metadata.get("language", "en"),
+            options=metadata.get("video_options") or {},
+        ),
+        prefetched_metadata=metadata.get("prefetched_metadata"),
+        transcript_text=metadata.get("transcript_text"),
+    )
+    return {
+        "success": job.status == JobStatus.complete,
+        "job_id": job_id,
+        "task_name": x_cloudtasks_taskname,
+    }
 
 
 @router.get(

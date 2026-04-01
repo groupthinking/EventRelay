@@ -217,6 +217,56 @@ def test_model_info() -> None:
     )
 
 
+def test_transcript_quality_scorer_updates_weights_from_outcomes() -> None:
+    """Recorded outcomes should move the scorer into learned mode."""
+
+    scorer = TranscriptQualityScorer()
+    metadata = {
+        "title": "Deep dive",
+        "duration_seconds": 1800,
+        "has_captions": False,
+        "language": "en",
+    }
+    features = scorer.extract_features(metadata)
+
+    before = scorer.model_info["source_adjustments"]["speech_v2"]
+    scorer.record_outcome(
+        features=features,
+        actual_source="speech_v2",
+        actual_quality=0.96,
+        success=True,
+    )
+    after = scorer.model_info["source_adjustments"]["speech_v2"]
+
+    assert after > before
+    assert scorer.model_info["mode"] == "learned"
+
+
+def test_action_priority_ranker_uses_feedback_weights() -> None:
+    """Positive feedback should boost similar future actions."""
+
+    ranker = ActionPriorityRanker()
+    actions = [
+        "Deploy the service to production now",
+        "Review the notes later",
+    ]
+
+    baseline = ranker.rank(actions)
+    baseline_score = baseline.ranked_actions[0].priority_score
+
+    ranker.record_feedback(
+        action_text="Deploy the service to production now",
+        user_clicked=True,
+        user_completed=True,
+        time_to_complete_seconds=120,
+    )
+    updated = ranker.rank(actions)
+    updated_score = updated.ranked_actions[0].priority_score
+
+    assert updated_score >= baseline_score
+    assert "deploy" in updated.ranked_actions[0].original_text.lower()
+
+
 if __name__ == "__main__":
     tests = [
         (
