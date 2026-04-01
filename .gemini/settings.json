@@ -30,7 +30,7 @@
       "url": "https://stitch.googleapis.com/mcp",
       "headers": {
         "Authorization": "Bearer $STITCH_ACCESS_TOKEN",
-        "X-Goog-User-Project": "uvai-730bb"
+        "X-Goog-User-Project": "$STITCH_USER_PROJECT"
       },
       "trust": false
     }
