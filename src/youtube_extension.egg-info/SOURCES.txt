@@ -203,6 +203,8 @@ src/youtube_extension/core/mcp/context_manager.py
 src/youtube_extension/core/mcp/protocol_bridge.py
 src/youtube_extension/core/mcp/server_registry.py
 src/youtube_extension/core/mcp/validation.py
+src/youtube_extension/integration/__init__.py
+src/youtube_extension/integration/cloudevents_publisher.py
 src/youtube_extension/integrations/__init__.py
 src/youtube_extension/integrations/cloud_ai.py
 src/youtube_extension/integrations/cloud_ai/__init__.py
