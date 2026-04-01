@@ -17,7 +17,6 @@ Creating a video intelligence platform that processes video, extracts transcript
 
 ### Guidelines & Rules
 
-- **Follow:** Repository Antigravity knowledge and guidance
 - **Adhere to:** Rules listed in Antigravity
 
 ---
