@@ -32,7 +32,7 @@ curl -sI "$VIDEO_URL" | head -1
 
 ### Step 2: Route to Agent Pipeline
 
-Based on the rules in `.github/agent/rules/video-prompt.md`:
+Based on the rules in `.github/agent/rules/video-intent-validation.md`:
 
 | Task Type          | Agent Chain         | Output                     |
 | ------------------ | ------------------- | -------------------------- |
