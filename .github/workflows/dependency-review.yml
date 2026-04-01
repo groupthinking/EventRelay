@@ -21,26 +21,4 @@ jobs:
         with:
           fail-on-severity: moderate
           allow-licenses: MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC, Python-2.0
-          deny-licenses: GPL-2.0, GPL-3.0, AGPL-3.0
           comment-summary-in-pr: always
-          comment-summary-in-pr-title: "Dependency Review Summary"
-          comment-summary-in-pr-body: |
-            ## 📦 Dependency Review Results
-            
-            **Summary**: {{ summary }}
-            
-            **Vulnerabilities**: {{ vulnerabilities }}
-            **Licenses**: {{ licenses }}
-            **Dependencies**: {{ dependencies }}
-            
-            {% if vulnerabilities > 0 %}
-            ⚠️ **Security vulnerabilities detected!** Please review and update dependencies.
-            {% endif %}
-            
-            {% if licenses > 0 %}
-            ⚠️ **License issues detected!** Please review license compatibility.
-            {% endif %}
-            
-            {% if vulnerabilities == 0 and licenses == 0 %}
-            ✅ **All dependencies are secure and properly licensed!**
-            {% endif %}
