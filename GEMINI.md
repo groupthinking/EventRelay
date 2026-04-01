@@ -99,7 +99,7 @@ turbo run test
 ## Testing
 
 - **pytest** — `pythonpath = src`, `testpaths = tests`, `asyncio_mode = auto`
-- Coverage target: 90 % minimum on `src/youtube_extension`
+- Coverage target: 90 % minimum enforced via `pytest.ini` on `backend`, `enhanced_video_processor`, and `enterprise_mcp_server`
 - Default test video ID: `auJzb1D-fag` — **never** use `dQw4w9WgXcQ` (Rick Roll; causes flaky tests due to age-gating)
 - Use real `tempfile`/`shutil` temp dirs; avoid `pyfakefs`
 
