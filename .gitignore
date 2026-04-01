@@ -162,3 +162,4 @@ notebooklm_chrome_profile/
 src/utils/notebooklm_profile/
 src/utils/notebooklm_profile_v2/
 .gstack/
+.claude/worktrees/
