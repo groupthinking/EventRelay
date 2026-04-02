@@ -71,6 +71,7 @@ export async function publishEvent(
           'Content-Type': 'application/cloudevents+json',
         },
         body: JSON.stringify(event),
+        signal: AbortSignal.timeout(5_000), // 5s max — never block the pipeline
       });
     } catch (e) {
       console.warn('[CloudEvents] Webhook publish failed:', e);
