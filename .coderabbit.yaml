@@ -21,6 +21,16 @@ reviews:
       - main
 
   path_instructions:
+    - path: "**/*"
+      instructions: >-
+        - Flag any TODO, placeholder, or stub implementations that are not production-ready
+        - Check that the unified_ai_sdk has real provider integrations (OpenAI, Anthropic, Gemini) — not placeholder code
+        - Verify the Stainless SDK (merged in PR #95) is actually wired into API calls, not just installed
+        - Flag any code generation output that goes to users without AST validation or syntax checking
+        - Check MCP integration patterns — ensure tools follow proper MCP protocol structure
+        - Flag any hardcoded credentials, API keys, or secrets in code
+        - Enforce TypeScript strict mode compliance
+        - Flag any missing error handling in async functions
     - path: "**/*.ts"
       instructions: >-
         This is a TypeScript/Next.js project. Focus on type safety, null checks,
