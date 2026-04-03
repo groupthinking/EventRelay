@@ -1,0 +1,103 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: en-US
+tone_instructions: >-
+  Be assertive and direct. Focus on real bugs, security issues, and performance
+  problems — not style nitpicks. Flag anything that could break in production.
+  When you find an issue, explain why it matters and suggest a concrete fix.
+early_access: true
+
+reviews:
+  profile: assertive
+  request_changes_workflow: true
+  high_level_summary: true
+  high_level_summary_in_walkthrough: true
+  review_details: true
+  fail_commit_status: true
+
+  auto_review:
+    enabled: true
+    drafts: false
+    base_branches:
+      - main
+
+  path_instructions:
+    - path: "**/*.ts"
+      instructions: >-
+        This is a TypeScript/Next.js project. Focus on type safety, null checks,
+        async/await error handling, and SSE stream lifecycle management. Flag any
+        fetch() calls without AbortSignal.timeout. Check for proper error boundaries.
+    - path: "**/*.tsx"
+      instructions: >-
+        React components in Next.js 16. Check for proper use of 'use client' directives,
+        hook dependency arrays, memory leaks in useEffect, and accessibility issues.
+    - path: "**/*.py"
+      instructions: >-
+        Python backend code. Check for type hints, proper exception handling,
+        async context manager usage, and potential blocking calls in async functions.
+        Flag any bare except clauses or missing timeout parameters on network calls.
+    - path: "src/uvai/ml/**"
+      instructions: >-
+        ML model code with Ray Serve. Check for tensor shape mismatches, gradient
+        accumulation bugs, checkpoint corruption risks, and thread safety issues.
+    - path: "apps/web/src/app/api/**"
+      instructions: >-
+        Next.js API routes including SSE streaming endpoints. Critical path — check for
+        stream lifecycle issues, controller.close() always being called, and fire-and-forget
+        patterns for non-blocking post-processing. This was the source of a production
+        95% hang bug (issue #139).
+    - path: ".github/workflows/**"
+      instructions: >-
+        GitHub Actions workflows. Check for missing permissions, insecure token handling,
+        proper use of continue-on-error vs actual error handling, and Node.js version
+        compatibility (Node 20 deprecation warning).
+
+  tools:
+    shellcheck:
+      enabled: true
+    ruff:
+      enabled: true
+    biome:
+      enabled: true
+    hadolint:
+      enabled: true
+    markdownlint:
+      enabled: true
+    languagetool:
+      enabled: true
+    yamllint:
+      enabled: true
+    gitleaks:
+      enabled: true
+    checkov:
+      enabled: true
+    ast-grep:
+      enabled: true
+
+  labeling_instructions:
+    - label: security
+      instructions: >-
+        Apply when the PR touches authentication, API keys, token handling,
+        or fixes a CVE/Dependabot alert.
+    - label: pipeline-critical
+      instructions: >-
+        Apply when the PR modifies the SSE streaming pipeline, CloudEvents,
+        or the agent orchestration flow.
+    - label: ml-model
+      instructions: >-
+        Apply when the PR modifies Ray Serve models, weight persistence,
+        or training data export.
+    - label: frontend
+      instructions: >-
+        Apply when the PR modifies React components, pages, or UI logic.
+    - label: ci-cd
+      instructions: >-
+        Apply when the PR modifies GitHub Actions workflows or deployment config.
+
+  auto_apply_labels: true
+
+chat:
+  auto_reply: true
+
+knowledge_base:
+  learnings:
+    scope: auto
