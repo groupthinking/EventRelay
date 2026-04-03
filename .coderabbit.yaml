@@ -5,7 +5,6 @@ tone_instructions: >-
   problems — not style nitpicks. Flag anything that could break in production.
   When you find an issue, explain why it matters and suggest a concrete fix.
 early_access: true
-
 reviews:
   profile: assertive
   request_changes_workflow: true
@@ -13,38 +12,35 @@ reviews:
   high_level_summary_in_walkthrough: true
   review_details: true
   fail_commit_status: true
-
   auto_review:
     enabled: true
     drafts: false
     base_branches:
       - main
-
   path_instructions:
-    - path: "**/*"
-      instructions: >-
-        - Flag any TODO, placeholder, or stub implementations that are not production-ready
-        - Check that the unified_ai_sdk has real provider integrations (OpenAI, Anthropic, Gemini) — not placeholder code
-        - Verify the Stainless SDK (merged in PR #95) is actually wired into API calls, not just installed
-        - Flag any code generation output that goes to users without AST validation or syntax checking
-        - Check MCP integration patterns — ensure tools follow proper MCP protocol structure
-        - Flag any hardcoded credentials, API keys, or secrets in code
-        - Enforce TypeScript strict mode compliance
-        - Flag any missing error handling in async functions
     - path: "**/*.ts"
       instructions: >-
         This is a TypeScript/Next.js project. Focus on type safety, null checks,
         async/await error handling, and SSE stream lifecycle management. Flag any
         fetch() calls without AbortSignal.timeout. Check for proper error boundaries.
+        Flag any TODO, placeholder, or stub implementations that are not production-ready.
+        Enforce TypeScript strict mode compliance — flag implicit any, missing return types,
+        and unsafe type assertions.
     - path: "**/*.tsx"
       instructions: >-
         React components in Next.js 16. Check for proper use of 'use client' directives,
         hook dependency arrays, memory leaks in useEffect, and accessibility issues.
+        Flag any TODO or placeholder UI components that are not production-ready.
     - path: "**/*.py"
       instructions: >-
         Python backend code. Check for type hints, proper exception handling,
         async context manager usage, and potential blocking calls in async functions.
         Flag any bare except clauses or missing timeout parameters on network calls.
+        CRITICAL: Flag any file that contains placeholder/stub implementations — especially
+        in unified_ai_sdk. Any class or function that says "TODO: Replace with production
+        implementation" or returns mock/fake data must be flagged as a blocking issue.
+        Flag any code generation output that reaches users without AST validation or
+        syntax checking.
     - path: "src/uvai/ml/**"
       instructions: >-
         ML model code with Ray Serve. Check for tensor shape mismatches, gradient
@@ -60,7 +56,23 @@ reviews:
         GitHub Actions workflows. Check for missing permissions, insecure token handling,
         proper use of continue-on-error vs actual error handling, and Node.js version
         compatibility (Node 20 deprecation warning).
-
+    - path: "**/unified_ai_sdk/**"
+      instructions: >-
+        CRITICAL PATH: This is the AI provider integration layer. Flag any placeholder,
+        mock, or stub implementation as a BLOCKING issue. Verify that OpenAI, Anthropic,
+        and Google Gemini integrations are real production implementations — not TODO stubs.
+        Any function that returns hardcoded/fake data instead of calling a real API must
+        be flagged immediately.
+    - path: "**/mcp*/**"
+      instructions: >-
+        MCP (Model Context Protocol) integration code. Verify tools follow proper MCP
+        protocol structure — correct tool definitions, input schemas, and response formats.
+        Flag any MCP tool that doesn't handle errors gracefully or lacks proper input validation.
+    - path: "**/stainless*/**"
+      instructions: >-
+        Stainless SDK integration. Verify the SDK is actually wired into real API calls —
+        not just installed as a dependency. Flag any ad-hoc fetch() calls that should be
+        using the type-safe Stainless-generated client instead.
   tools:
     shellcheck:
       enabled: true
@@ -82,7 +94,6 @@ reviews:
       enabled: true
     ast-grep:
       enabled: true
-
   labeling_instructions:
     - label: security
       instructions: >-
@@ -102,12 +113,17 @@ reviews:
     - label: ci-cd
       instructions: >-
         Apply when the PR modifies GitHub Actions workflows or deployment config.
-
+    - label: architecture-gap
+      instructions: >-
+        Apply when the PR touches unified_ai_sdk, Stainless SDK integration, MCP tools,
+        or any component identified as a gap in the Video-to-Anything architecture.
+    - label: placeholder-code
+      instructions: >-
+        Apply when the PR contains or modifies TODO stubs, placeholder implementations,
+        or mock data that is not production-ready.
   auto_apply_labels: true
-
 chat:
   auto_reply: true
-
 knowledge_base:
   learnings:
     scope: auto
