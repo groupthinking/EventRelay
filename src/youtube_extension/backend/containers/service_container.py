@@ -119,6 +119,9 @@ class ServiceContainer:
         # Pub/Sub Service
         self.register_singleton("pubsub_service", self._create_pubsub_service)
 
+        # MCP Orchestrator (Unified Model Context Protocol)
+        self.register_singleton("mcp_orchestrator", self._create_mcp_orchestrator)
+
         logger.info("Core services registered")
 
     def register_singleton(self, name: str, factory: Callable[[], T]) -> None:
@@ -322,6 +325,19 @@ class ServiceContainer:
         logger.info(
             "Agent orchestrator created with registered agent types including hybrid vision and chat support"
         )
+        return orchestrator
+
+    def _create_mcp_orchestrator(self):
+        """Create MCP orchestrator instance"""
+        from ...services.mcp import MCPOrchestrator, get_registry
+
+        # Get or create the global registry
+        registry = get_registry()
+
+        # Create orchestrator with the registry
+        orchestrator = MCPOrchestrator(registry=registry)
+
+        logger.info("MCP Orchestrator created for unified protocol coordination")
         return orchestrator
 
     def get_all_services(self) -> dict[str, Any]:

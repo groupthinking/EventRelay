@@ -1,16 +1,25 @@
-"""UVAI Ray Serve deployment — serves ML models via HTTP.
+"""UVAI ML Ray Serve Application — Phase 2.
 
 Architecture:
     Each model deployment handles its own route directly.
     The router extracts request bodies and passes plain dicts
     to avoid Starlette Request serialization issues.
 
+Phase 2 additions:
+    - Weight persistence: auto-checkpoint after every N outcomes
+    - Restore from checkpoint on startup (survives restarts)
+    - BigQuery export for training data pipeline
+    - EMA-smoothed gradient updates with configurable learning rate
+
 Endpoints:
     GET  /health                → service health
+    GET  /models                → model metadata
     POST /score-transcript      → predict transcript quality
-    POST /score-transcript/outcome → record actual results
+    POST /score-transcript/outcome → record actual results + checkpoint
     POST /rank-actions          → rank actions by priority
-    POST /rank-actions/feedback → record user feedback
+    POST /rank-actions/feedback → record user feedback + checkpoint
+    POST /checkpoint            → force save checkpoint
+    GET  /checkpoint            → view latest checkpoint info
 
 Usage:
     serve deploy ray-serve-config.yaml
@@ -19,6 +28,7 @@ Usage:
 from __future__ import annotations
 
 import logging
+import os
 import time
 from typing import Any
 
@@ -32,8 +42,19 @@ from uvai.ml.models.action_priority_ranker import (
 from uvai.ml.models.transcript_quality_scorer import (
     TranscriptQualityScorer,
 )
+from uvai.ml.weight_persistence import (
+    load_checkpoint,
+    restore_ranker,
+    restore_scorer,
+    save_checkpoint,
+    serialize_ranker,
+    serialize_scorer,
+)
 
 logger = logging.getLogger(__name__)
+
+# Auto-checkpoint every N training samples
+CHECKPOINT_INTERVAL = int(os.getenv("UVAI_CHECKPOINT_INTERVAL", "10"))
 
 
 @serve.deployment(
@@ -42,10 +63,17 @@ logger = logging.getLogger(__name__)
     ray_actor_options={"num_cpus": 0.5},
 )
 class TranscriptQualityScorerDeployment:
-    """Transcript quality prediction model."""
+    """Transcript quality prediction model with Phase 2 persistence."""
 
     def __init__(self) -> None:
         self.model = TranscriptQualityScorer()
+        self._samples_since_checkpoint = 0
+
+        # Restore from checkpoint if available
+        checkpoint = load_checkpoint()
+        if checkpoint:
+            restore_scorer(self.model, checkpoint)
+
         logger.info(
             "TranscriptQualityScorer initialized: %s",
             self.model.model_info,
@@ -69,7 +97,7 @@ class TranscriptQualityScorerDeployment:
     def record_outcome(
         self, body: dict[str, Any],
     ) -> dict:
-        """Record actual result for continuous learning."""
+        """Record actual result for continuous learning + auto-checkpoint."""
         features = self.model.extract_features(
             body.get("metadata", {}),
         )
@@ -81,14 +109,54 @@ class TranscriptQualityScorerDeployment:
             ),
             success=bool(body.get("success", False)),
         )
+
+        self._samples_since_checkpoint += 1
+        checkpoint_saved = False
+        if self._samples_since_checkpoint >= CHECKPOINT_INTERVAL:
+            self._save_checkpoint()
+            checkpoint_saved = True
+
+        # Export to BigQuery (best-effort)
+        self._export_outcome_to_bigquery(body)
+
         return {
             "recorded": True,
             "total_samples": self.model._training_samples,
+            "checkpoint_saved": checkpoint_saved,
         }
 
     def get_model_info(self) -> dict:
         """Return model metadata."""
         return self.model.model_info
+
+    def get_serialized_state(self) -> dict:
+        """Return serializable state for checkpointing."""
+        return serialize_scorer(self.model)
+
+    def _save_checkpoint(self) -> None:
+        """Save scorer checkpoint. Ranker state will be empty here."""
+        try:
+            save_checkpoint(
+                scorer_state=serialize_scorer(self.model),
+                ranker_state={},
+            )
+            self._samples_since_checkpoint = 0
+        except Exception as exc:
+            logger.warning("Scorer checkpoint failed: %s", exc)
+
+    def _export_outcome_to_bigquery(self, body: dict[str, Any]) -> None:
+        """Best-effort BigQuery export."""
+        try:
+            from uvai.ml.bigquery_export import export_transcript_outcome
+            export_transcript_outcome(
+                video_url=body.get("metadata", {}).get("video_url", ""),
+                metadata=body.get("metadata", {}),
+                actual_source=body.get("actual_source", "unknown"),
+                actual_quality=float(body.get("actual_quality", 0.0)),
+                success=bool(body.get("success", False)),
+            )
+        except Exception:
+            logger.debug("BigQuery export skipped", exc_info=True)
 
 
 @serve.deployment(
@@ -97,10 +165,17 @@ class TranscriptQualityScorerDeployment:
     ray_actor_options={"num_cpus": 0.5},
 )
 class ActionPriorityRankerDeployment:
-    """Action priority ranking model."""
+    """Action priority ranking model with Phase 2 persistence."""
 
     def __init__(self) -> None:
         self.model = ActionPriorityRanker()
+        self._samples_since_checkpoint = 0
+
+        # Restore from checkpoint if available
+        checkpoint = load_checkpoint()
+        if checkpoint:
+            restore_ranker(self.model, checkpoint)
+
         logger.info(
             "ActionPriorityRanker initialized: %s",
             self.model.model_info,
@@ -134,7 +209,7 @@ class ActionPriorityRankerDeployment:
         }
 
     def record_feedback(self, body: dict[str, Any]) -> dict:
-        """Record user interaction for continuous learning."""
+        """Record user interaction for continuous learning + auto-checkpoint."""
         self.model.record_feedback(
             action_text=body.get("action_text", ""),
             user_clicked=bool(body.get("clicked", False)),
@@ -145,14 +220,53 @@ class ActionPriorityRankerDeployment:
                 "time_to_complete_seconds",
             ),
         )
+
+        self._samples_since_checkpoint += 1
+        checkpoint_saved = False
+        if self._samples_since_checkpoint >= CHECKPOINT_INTERVAL:
+            self._save_checkpoint()
+            checkpoint_saved = True
+
+        # Export to BigQuery (best-effort)
+        self._export_feedback_to_bigquery(body)
+
         return {
             "recorded": True,
             "total_samples": self.model._training_samples,
+            "checkpoint_saved": checkpoint_saved,
         }
 
     def get_model_info(self) -> dict:
         """Return model metadata."""
         return self.model.model_info
+
+    def get_serialized_state(self) -> dict:
+        """Return serializable state for checkpointing."""
+        return serialize_ranker(self.model)
+
+    def _save_checkpoint(self) -> None:
+        """Save ranker checkpoint. Scorer state will be empty here."""
+        try:
+            save_checkpoint(
+                scorer_state={},
+                ranker_state=serialize_ranker(self.model),
+            )
+            self._samples_since_checkpoint = 0
+        except Exception as exc:
+            logger.warning("Ranker checkpoint failed: %s", exc)
+
+    def _export_feedback_to_bigquery(self, body: dict[str, Any]) -> None:
+        """Best-effort BigQuery export."""
+        try:
+            from uvai.ml.bigquery_export import export_action_feedback
+            export_action_feedback(
+                action_text=body.get("action_text", ""),
+                clicked=bool(body.get("clicked", False)),
+                completed=bool(body.get("completed", False)),
+                time_to_complete_seconds=body.get("time_to_complete_seconds"),
+            )
+        except Exception:
+            logger.debug("BigQuery export skipped", exc_info=True)
 
 
 @serve.deployment(
@@ -192,7 +306,8 @@ class UVAIMLRouter:
                     "transcript-quality-scorer",
                     "action-priority-ranker",
                 ],
-                "version": "1.0.0",
+                "version": "2.0.0",
+                "phase": "2",
             })
 
         # --- Models metadata ---
@@ -262,6 +377,42 @@ class UVAIMLRouter:
             )
             return JSONResponse(result)
 
+        # --- Checkpoint management (Phase 2) ---
+        if path == "/checkpoint":
+            if request.method == "POST":
+                # Force save checkpoint
+                scorer_state = await self.scorer.get_serialized_state.remote()
+                ranker_state = await self.ranker.get_serialized_state.remote()
+                try:
+                    save_checkpoint(scorer_state, ranker_state)
+
+                    # Also export to BigQuery
+                    try:
+                        from uvai.ml.bigquery_export import export_model_checkpoint
+                        export_model_checkpoint(scorer_state, ranker_state)
+                    except Exception:
+                        pass
+
+                    return JSONResponse({
+                        "saved": True,
+                        "scorer_samples": scorer_state.get("training_samples", 0),
+                        "ranker_samples": ranker_state.get("training_samples", 0),
+                    })
+                except Exception as exc:
+                    return JSONResponse(
+                        {"error": str(exc)},
+                        status_code=500,
+                    )
+            else:
+                # GET: view checkpoint info
+                checkpoint = load_checkpoint()
+                if checkpoint:
+                    return JSONResponse(checkpoint)
+                return JSONResponse(
+                    {"error": "No checkpoint found"},
+                    status_code=404,
+                )
+
         # --- 404 ---
         return JSONResponse(
             {
@@ -273,6 +424,7 @@ class UVAIMLRouter:
                     "/score-transcript/outcome",
                     "/rank-actions",
                     "/rank-actions/feedback",
+                    "/checkpoint",
                 ],
             },
             status_code=404,
@@ -280,7 +432,6 @@ class UVAIMLRouter:
 
 
 # --- Deployment graph ---
-
 scorer = TranscriptQualityScorerDeployment.bind()
 ranker = ActionPriorityRankerDeployment.bind()
 app = UVAIMLRouter.bind(scorer, ranker)

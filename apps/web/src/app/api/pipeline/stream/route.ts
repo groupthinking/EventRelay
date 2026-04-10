@@ -12,6 +12,11 @@
  *      and re-streams agent updates as SSE.
  *   2. Gemini direct — calls `analyzeVideoWithGemini()` and maps the single
  *      response into a sequence of agent trace events with realistic timing.
+ *
+ * IMPORTANT: All optional post-processing (training save, embeddings,
+ * CloudEvents, BigQuery export) is fire-and-forget. These MUST NOT block
+ * the SSE stream from closing after pipeline_status:complete is emitted.
+ * See: https://github.com/groupthinking/EventRelay/issues/139
  */
 
 import { analyzeVideoWithGemini, type VideoAnalysisResult } from '@/lib/gemini-video-analyzer';
@@ -64,6 +69,16 @@ function makeEvent(event: AgentStreamEvent): string {
 /** Small helper to sleep in a streaming context. */
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
+}
+
+/**
+ * Fire-and-forget: run an async function without awaiting it.
+ * Errors are caught and logged but never propagate.
+ */
+function fireAndForget(label: string, fn: () => Promise<void>): void {
+  fn().catch((err) => {
+    console.warn(`[${label}] Fire-and-forget failed (non-fatal):`, err);
+  });
 }
 
 function mapTaskBoardActions(taskBoard: Record<string, unknown> | undefined) {
@@ -507,9 +522,13 @@ export async function POST(request: Request) {
             ),
           );
 
-          // ── Auto-save helper: persist analysis for fine-tuning ──
-          const saveForTraining = async (videoUrl: string, analysis: VideoAnalysisResult) => {
-            try {
+          // ── Fire-and-forget helpers for optional post-processing ──
+          // These MUST NOT block the stream from closing.
+          // See: https://github.com/groupthinking/EventRelay/issues/139
+
+          const schedulePostProcessing = (videoUrl: string, analysis: VideoAnalysisResult) => {
+            // Training save — fire and forget
+            fireAndForget('Training', async () => {
               const { saved, metadata, milestone } = await saveTrainingExample(
                 videoUrl,
                 analysis as unknown as Record<string, unknown>,
@@ -525,43 +544,44 @@ export async function POST(request: Request) {
               } else {
                 console.log(`[Training] Skipped duplicate: ${videoUrl}`);
               }
-            } catch (trainErr) {
-              // Training save failure must never break the pipeline
-              console.warn('[Training] Save failed (non-fatal):', trainErr);
-            }
-          };
+            });
 
-          const processEmbeddings = async (videoUrl: string, analysis: VideoAnalysisResult) => {
-            try {
-               let segments = analysis.transcript;
-               if (!segments || segments.length === 0) {
-                 const { fetchTranscript } = await import('@/lib/transcription-service');
-                 const result = await fetchTranscript({ url: videoUrl });
-                 if (result.success && result.segments && result.segments.length > 0) {
-                   segments = result.segments.map(s => ({
-                     start: s.start,
-                     duration: s.duration,
-                     text: s.text || ''
-                   }));
-                 }
-               }
-               
-               if (segments && segments.length > 0) {
-                 const { chunkTranscript, generateEmbeddingsForChunks } = await import('@/lib/gemini-embedding');
-                 const { saveEmbeddings } = await import('@/lib/embedding-store');
-                 const chunks = chunkTranscript(segments);
-                 const embeddedChunks = await generateEmbeddingsForChunks(chunks);
-                 const videoId = videoUrl.match(/[?&]v=([^&]+)/)?.[1] || videoUrl.replace(/[^a-zA-Z0-9_-]/g, '_');
-                 await saveEmbeddings(videoId, embeddedChunks);
-               }
-            } catch (err) {
-               console.warn('[Embeddings] Failed to generate/save:', err);
-            }
+            // Embeddings — fire and forget
+            fireAndForget('Embeddings', async () => {
+              let segments = analysis.transcript;
+              if (!segments || segments.length === 0) {
+                const { fetchTranscript } = await import('@/lib/transcription-service');
+                const result = await fetchTranscript({ url: videoUrl });
+                if (result.success && result.segments && result.segments.length > 0) {
+                  segments = result.segments.map(s => ({
+                    start: s.start,
+                    duration: s.duration,
+                    text: s.text || ''
+                  }));
+                }
+              }
+
+              if (segments && segments.length > 0) {
+                const { chunkTranscript, generateEmbeddingsForChunks } = await import('@/lib/gemini-embedding');
+                const { saveEmbeddings } = await import('@/lib/embedding-store');
+                const chunks = chunkTranscript(segments);
+                const embeddedChunks = await generateEmbeddingsForChunks(chunks);
+                const videoId = videoUrl.match(/[?&]v=([^&]+)/)?.[1] || videoUrl.replace(/[^a-zA-Z0-9_-]/g, '_');
+                await saveEmbeddings(videoId, embeddedChunks);
+              }
+            });
+
+            // CloudEvent — fire and forget
+            fireAndForget('CloudEvent', async () => {
+              await publishEvent(EventTypes.PIPELINE_COMPLETED, {
+                strategy: BACKEND_URL ? 'backend-proxy' : 'gemini-stream',
+                success: true,
+              }, videoUrl);
+            });
           };
 
           if (BACKEND_URL) {
             // Strategy 1: Proxy from backend
-            // For now, call the REST endpoint and map to agent events
             try {
               const response = await fetch(`${BACKEND_URL}/api/v1/transcript-action`, {
                 method: 'POST',
@@ -572,59 +592,61 @@ export async function POST(request: Request) {
 
               if (response.ok) {
                 const result = await response.json();
-                // Map backend result to agent events
-                 const transcriptResult = result as BackendTranscriptActionResponse;
-                 if (transcriptResult.async_processing && transcriptResult.status_url) {
-                   controller.enqueue(
-                     encoder.encode(
-                       makeEvent({
-                         type: 'agent_update',
-                         agentId: 'async_queue',
-                         agentName: 'AsyncVideoQueue',
-                         status: 'running',
-                         progress: 5,
-                         data: {
-                           jobId: transcriptResult.job_id,
-                           transport: transcriptResult.processing_transport,
-                         },
-                         timestamp: new Date().toISOString(),
-                       }),
-                     ),
-                   );
+                const transcriptResult = result as BackendTranscriptActionResponse;
+                if (transcriptResult.async_processing && transcriptResult.status_url) {
+                  controller.enqueue(
+                    encoder.encode(
+                      makeEvent({
+                        type: 'agent_update',
+                        agentId: 'async_queue',
+                        agentName: 'AsyncVideoQueue',
+                        status: 'running',
+                        progress: 5,
+                        data: {
+                          jobId: transcriptResult.job_id,
+                          transport: transcriptResult.processing_transport,
+                        },
+                        timestamp: new Date().toISOString(),
+                      }),
+                    ),
+                  );
 
-                   const statusUrl = transcriptResult.status_url.startsWith('http')
-                     ? transcriptResult.status_url
-                     : `${BACKEND_URL}${transcriptResult.status_url}`;
-                   const job = await pollBackendJob(statusUrl, controller, encoder);
-                   if (job.status === 'failed') {
-                     throw new Error(job.error || 'Async transcript job failed');
-                   }
+                  const statusUrl = transcriptResult.status_url.startsWith('http')
+                    ? transcriptResult.status_url
+                    : `${BACKEND_URL}${transcriptResult.status_url}`;
+                  const job = await pollBackendJob(statusUrl, controller, encoder);
+                  if (job.status === 'failed') {
+                    throw new Error(job.error || 'Async transcript job failed');
+                  }
 
-                   const mappedAnalysis = mapBackendResultToAnalysis({
-                     metadata: job.metadata?.metadata || {},
-                     transcript: {
-                       text: job.transcript || '',
-                       segments: [],
-                     },
-                     outputs: job.metadata?.outputs || {},
-                   });
-                   for await (const event of generateAgentEvents(mappedAnalysis, startTime)) {
-                     controller.enqueue(encoder.encode(event));
-                   }
-                   const trackTask2 = processEmbeddings(url, mappedAnalysis);
-                   await saveForTraining(url, mappedAnalysis);
-                   await trackTask2;
-                   return;
-                 }
+                  const mappedAnalysis = mapBackendResultToAnalysis({
+                    metadata: job.metadata?.metadata || {},
+                    transcript: {
+                      text: job.transcript || '',
+                      segments: [],
+                    },
+                    outputs: job.metadata?.outputs || {},
+                  });
 
-                 const mappedAnalysis = mapBackendResultToAnalysis(result);
+                  // Stream all agent events including pipeline_status:complete
+                  for await (const event of generateAgentEvents(mappedAnalysis, startTime)) {
+                    controller.enqueue(encoder.encode(event));
+                  }
 
-                 for await (const event of generateAgentEvents(mappedAnalysis, startTime)) {
-                   controller.enqueue(encoder.encode(event));
-                 }
-                const trackTask2 = processEmbeddings(url, mappedAnalysis);
-                await saveForTraining(url, mappedAnalysis);
-                await trackTask2;
+                  // Schedule optional work AFTER stream events are done — fire and forget
+                  schedulePostProcessing(url, mappedAnalysis);
+                  return;
+                }
+
+                const mappedAnalysis = mapBackendResultToAnalysis(result);
+
+                // Stream all agent events including pipeline_status:complete
+                for await (const event of generateAgentEvents(mappedAnalysis, startTime)) {
+                  controller.enqueue(encoder.encode(event));
+                }
+
+                // Schedule optional work — fire and forget
+                schedulePostProcessing(url, mappedAnalysis);
               } else {
                 throw new Error(`Backend returned ${response.status}`);
               }
@@ -633,12 +655,14 @@ export async function POST(request: Request) {
               console.warn('Backend stream failed, falling through to Gemini:', backendErr);
               if (hasGeminiKey()) {
                 const analysis = await analyzeVideoWithGemini(url);
+
+                // Stream all agent events including pipeline_status:complete
                 for await (const event of generateAgentEvents(analysis, startTime)) {
                   controller.enqueue(encoder.encode(event));
                 }
-                const trackTask2 = processEmbeddings(url, analysis);
-                await saveForTraining(url, analysis);
-                await trackTask2;
+
+                // Schedule optional work — fire and forget
+                schedulePostProcessing(url, analysis);
               } else {
                 controller.enqueue(
                   encoder.encode(
@@ -653,19 +677,19 @@ export async function POST(request: Request) {
             }
           } else {
             // Strategy 2: Direct Gemini analysis
-            await publishEvent(EventTypes.TRANSCRIPT_STARTED, { url, strategy: 'gemini-stream' }, url);
-            const analysis = await analyzeVideoWithGemini(url);
-            await publishEvent(EventTypes.PIPELINE_COMPLETED, {
-              strategy: 'gemini-stream',
-              success: true,
-            }, url);
+            fireAndForget('CloudEvent:Start', async () => {
+              await publishEvent(EventTypes.TRANSCRIPT_STARTED, { url, strategy: 'gemini-stream' }, url);
+            });
 
+            const analysis = await analyzeVideoWithGemini(url);
+
+            // Stream all agent events including pipeline_status:complete
             for await (const event of generateAgentEvents(analysis, startTime)) {
               controller.enqueue(encoder.encode(event));
             }
-            const trackTask2 = processEmbeddings(url, analysis);
-            await saveForTraining(url, analysis);
-            await trackTask2;
+
+            // Schedule optional work — fire and forget
+            schedulePostProcessing(url, analysis);
           }
         } catch (err) {
           controller.enqueue(
@@ -678,6 +702,8 @@ export async function POST(request: Request) {
             ),
           );
         } finally {
+          // CRITICAL: close the stream immediately after all SSE events are
+          // enqueued. This MUST NOT wait for fire-and-forget post-processing.
           controller.close();
         }
       },
