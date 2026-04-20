@@ -575,20 +575,36 @@ result = await bridge.process(request)
 **Location:** `src/unified_ai_sdk/unified_ai_sdk.py`
 
 ```python
-from src.unified_ai_sdk import UnifiedAISDK, AIRequest, TaskType
+from src.unified_ai_sdk import UnifiedAISDK, AIRequest, TaskType, ModelProvider
 
 sdk = UnifiedAISDK(config)
 
 request = AIRequest(
     prompt="Explain this code",
+    model="gpt-4o-mini",
+    provider=ModelProvider.OPENAI,
     task_type=TaskType.CODE_GENERATION,
     temperature=0.7,
-    max_tokens=4000
+    max_tokens=4000,
 )
 
 response = await sdk.unified_request(request)
-print(response.content)
+if response.success:
+    print(response.content)
+else:
+    print("error:", response.error)
 ```
+
+**Providers:**
+- `ModelProvider.OPENAI` - OpenAI chat completions
+- `ModelProvider.CLAUDE` - Anthropic Messages API
+- `ModelProvider.GEMINI` - Google Gemini `generate_content`
+
+API keys are loaded from the `api_keys` config dict (keys: `openai`,
+`claude`, `gemini`) or from `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` /
+`GEMINI_API_KEY` (with `GOOGLE_API_KEY` as fallback) environment
+variables. `unified_request` never raises — on final failure it returns
+`AIResponse(success=False, error=..., content="")`.
 
 **Task Types:**
 - `VIDEO_ANALYSIS`

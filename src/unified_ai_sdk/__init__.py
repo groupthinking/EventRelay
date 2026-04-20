@@ -1,12 +1,9 @@
 """
-Unified AI SDK - Placeholder Module
-====================================
+Unified AI SDK
+==============
 
-This module provides placeholder implementations for the unified AI SDK classes.
-These are temporary stubs until the actual unified_ai_sdk package is implemented
-or added as a dependency.
-
-TODO: Replace with actual unified_ai_sdk implementation or add as external dependency.
+Unified async interface for OpenAI, Anthropic, and Google Gemini, with
+rate limiting, retries, structured output, and health checks.
 """
 
 from .rate_limiter import ModelProvider, RateLimiter
