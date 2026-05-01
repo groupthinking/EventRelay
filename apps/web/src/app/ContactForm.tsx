@@ -156,12 +156,19 @@ export default function ContactForm() {
           <input
             id="video_url"
             name="video_url"
-            type="url"
-            placeholder="https://youtube.com/watch?v=..."
+            type="text"
+            inputMode="url"
+            autoComplete="url"
+            spellCheck={false}
+            placeholder="youtube.com/watch?v=..."
+            aria-describedby="video_url_hint"
             value={videoUrl}
             onChange={(e) => setVideoUrl(e.target.value)}
             className="form-input"
           />
+          <span id="video_url_hint" className="text-xs" style={{ color: FAINT }}>
+            Optional. YouTube link, with or without https://.
+          </span>
         </Field>
         <Field label="What should the output be?" htmlFor="message">
           <textarea
