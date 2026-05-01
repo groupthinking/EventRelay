@@ -3,9 +3,9 @@ import { Analytics } from '@vercel/analytics/next';
 import { SpeedInsights } from '@vercel/speed-insights/next';
 import './globals.css';
 
-// Font CSS variables are defined via <link> to Google Fonts in <head> and
-// resolved in globals.css / tailwind.config. This avoids next/font/google
-// which hard-fails during build if the Google Fonts API is unreachable
+// Fonts use the system stack declared in tailwind.config (Inter / JetBrains
+// Mono with system-ui fallbacks). We intentionally avoid next/font/google
+// because it hard-fails during build when the Google Fonts API is unreachable
 // (common in sandboxed CI and offline environments).
 
 export const metadata: Metadata = {
