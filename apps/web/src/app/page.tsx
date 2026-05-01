@@ -1,636 +1,867 @@
 'use client';
 
 import Link from 'next/link';
-import { useState, useCallback, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
-import {
-  WORKFLOW_TEMPLATES,
-  CATEGORIES,
-  type WorkflowTemplate,
-  type TemplateCategory,
-} from '@/lib/workflow-templates';
+import { useCallback, useState } from 'react';
 
 /* ═══════════════════════════════════════════
-   UVAI Landing — Template Gallery + URL Input
-   Airtop-style workflow gallery with glassmorphic cards
+   UVAI — Grounded One-Page Positioning Site
+   Reflects only proven repo capabilities.
    ═══════════════════════════════════════════ */
 
-const STATS = [
-  { value: '10K+', label: 'Videos Processed' },
-  { value: '500ms', label: 'Avg Response' },
-  { value: '98%', label: 'Accuracy' },
-  { value: '9', label: 'Workflow Templates' },
+const TEAL = '#6af2de';
+const TEAL_DEEP = '#10b7a5';
+const INK = '#f8f5fd';
+const BG = '#0e0e13';
+const PANEL = '#131318';
+const BORDER = 'rgba(72, 71, 77, 0.18)';
+const MUTED = 'rgba(248,245,253,0.55)';
+const FAINT = 'rgba(248,245,253,0.35)';
+
+const TRUST_PILLS = [
+  'Open source',
+  'MIT licensed',
+  'Self-hostable',
+  'OpenAPI included',
+  'Bring Gemini + OpenAI keys',
 ];
 
-/* ─── Template Card ─── */
-function TemplateCard({
-  template,
-  index,
-}: {
-  template: WorkflowTemplate;
-  index: number;
-}) {
-  const router = useRouter();
+const PIPELINE_ROWS = [
+  {
+    n: '01',
+    title: 'Transcript',
+    body: 'YouTube captions first, speech-to-text fallback when captions are missing.',
+    tag: 'Ready',
+  },
+  {
+    n: '02',
+    title: 'Typed events',
+    body: 'Decisions, tasks, topics, and key moments returned as schema-bound JSON.',
+    tag: 'Strict',
+  },
+  {
+    n: '03',
+    title: 'Agent analysis',
+    body: 'Summary, intent, strategy, and video-aware chat inside the dashboard.',
+    tag: 'Live',
+  },
+];
 
-  return (
-    <button
-      onClick={() =>
-        router.push(
-          `/dashboard?workflow=${template.id}`
-        )
-      }
-      className="group relative text-left rounded-2xl p-6 transition-all duration-500 hover:scale-[1.02] hover:-translate-y-1"
-      style={{
-        background: 'rgba(19, 19, 24, 0.6)',
-        border: '1px solid rgba(106, 242, 222, 0.06)',
-        backdropFilter: 'blur(20px)',
-        animationDelay: `${index * 60}ms`,
-      }}
-    >
-      {/* Hover glow */}
-      <div
-        className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"
-        style={{
-          background:
-            'radial-gradient(circle at 50% 50%, rgba(106, 242, 222, 0.06) 0%, transparent 70%)',
-        }}
-      />
+const CAPABILITY_CARDS = [
+  {
+    title: 'Transcript pipeline',
+    body: 'Start with YouTube captions when available, then fall back to speech-to-text. The output is a usable transcript with timestamps.',
+  },
+  {
+    title: 'Gemini agent passes',
+    body: 'Analysis passes cover summary and tasks, intent signals, and strategic insights. The page only describes the active pipeline.',
+  },
+  {
+    title: 'Dashboard and chat',
+    body: 'The hosted app exposes workflow templates, async processing, status updates, cached results, and chat over processed video.',
+  },
+];
 
-      {/* Featured badge */}
-      {template.featured && (
-        <div
-          className="absolute top-4 right-4 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-widest"
-          style={{
-            background: 'rgba(106, 242, 222, 0.12)',
-            color: '#6af2de',
-            border: '1px solid rgba(106, 242, 222, 0.2)',
-          }}
-        >
-          Featured
-        </div>
-      )}
+const STEPS = [
+  {
+    n: '01',
+    title: 'Paste a YouTube URL',
+    body: 'Use the hosted dashboard or run the open-source project with your own Gemini and OpenAI keys.',
+  },
+  {
+    n: '02',
+    title: 'Watch the pipeline run',
+    body: 'Transcription, structured extraction, and AI analysis run as a coordinated job with SSE status updates.',
+  },
+  {
+    n: '03',
+    title: 'Use the result',
+    body: 'Read the transcript, export structured events, review action items, or ask the video follow-up questions.',
+  },
+];
 
-      {/* Icon */}
-      <div className="text-3xl mb-4">{template.icon}</div>
+const DEVELOPER_ITEMS = [
+  {
+    head: 'FastAPI backend with OpenAPI docs',
+    body: 'Use the API directly, inspect the contract, or extend the processing routes.',
+  },
+  {
+    head: 'Next.js dashboard',
+    body: 'A working hosted interface for URL input, templates, status, results, and video chat.',
+  },
+  {
+    head: 'Self-hostable deployment paths',
+    body: 'Docker, Cloud Run, Railway, and Vercel configs are present for teams that want their own stack.',
+  },
+  {
+    head: 'MIT licensed source',
+    body: 'EventRelay is the open-source repo name; UVAI is the live product brand.',
+  },
+];
 
-      {/* Title */}
-      <h3
-        className="font-heading text-lg font-bold tracking-tight mb-2 group-hover:text-[#6af2de] transition-colors duration-300"
-        style={{ color: '#f8f5fd' }}
-      >
-        {template.title}
-      </h3>
+const TEMPLATE_CARDS = [
+  {
+    title: 'YouTube tutorial → deployable project',
+    body: 'Extract the implementation path from a technical tutorial and turn it into a project plan with code-oriented outputs. Treat deployment as a next step, not a promised one-click finish.',
+    tags: ['Engineering', 'Project scaffold'],
+    featured: true,
+  },
+  {
+    title: 'Conference talk → action items',
+    body: 'Capture decisions, follow-ups, and concrete next steps from long-form business or technical talks.',
+    tags: ['Business', 'Tasks'],
+  },
+  {
+    title: 'Podcast → blog post',
+    body: 'Turn a long discussion into a structured draft with themes, quotes, and a clear content outline.',
+    tags: ['Content', 'Drafting'],
+  },
+  {
+    title: 'Lecture → study notes',
+    body: 'Compress educational videos into notes, key ideas, and review material without losing the source context.',
+    tags: ['Education', 'Notes'],
+  },
+];
 
-      {/* Description */}
-      <p
-        className="text-sm leading-relaxed mb-5 line-clamp-2"
-        style={{ color: 'rgba(248, 245, 253, 0.45)' }}
-      >
-        {template.description}
-      </p>
+const USE_CASES = [
+  'Engineering workflow',
+  'Content workflow',
+  'Research workflow',
+  'Business operations workflow',
+  'Other video-to-action workflow',
+];
 
-      {/* Pipeline stages preview */}
-      <div className="flex items-center gap-1.5 mb-5 flex-wrap">
-        {template.stages.map((stage, i) => (
-          <span key={stage} className="flex items-center gap-1.5">
-            <span
-              className="text-[10px] px-2 py-0.5 rounded-md font-medium"
-              style={{
-                background: 'rgba(25, 25, 31, 0.8)',
-                color: 'rgba(248, 245, 253, 0.5)',
-                border: '1px solid rgba(72, 71, 77, 0.15)',
-              }}
-            >
-              {stage}
-            </span>
-            {i < template.stages.length - 1 && (
-              <span style={{ color: 'rgba(106, 242, 222, 0.3)' }}>→</span>
-            )}
-          </span>
-        ))}
-      </div>
+const CONTACT_EMAIL = 'viralnowsales@gmail.com';
+const REPO_URL = 'https://github.com/groupthinking/EventRelay';
 
-      {/* Footer */}
-      <div className="flex items-center justify-between">
-        <span
-          className="text-[10px] uppercase tracking-widest font-bold"
-          style={{ color: 'rgba(248, 245, 253, 0.25)' }}
-        >
-          {template.estimatedTime}
-        </span>
-        <span
-          className="text-xs font-bold uppercase tracking-wider opacity-0 group-hover:opacity-100 transition-all duration-300 translate-x-2 group-hover:translate-x-0"
-          style={{ color: '#6af2de' }}
-        >
-          Run →
-        </span>
-      </div>
-    </button>
-  );
+function isEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
-/* ─── Main Page ─── */
+function isYouTube(value: string) {
+  if (!value) return true;
+  try {
+    const u = new URL(value);
+    return ['youtube.com', 'www.youtube.com', 'youtu.be', 'm.youtube.com'].includes(u.hostname);
+  } catch {
+    return false;
+  }
+}
+
+type FormStatus = { kind: 'idle' | 'success' | 'error'; text: string };
+
 export default function Home() {
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [useCase, setUseCase] = useState('');
   const [videoUrl, setVideoUrl] = useState('');
-  const [activeCategory, setActiveCategory] = useState<TemplateCategory>('all');
-  const [searchQuery, setSearchQuery] = useState('');
-  const router = useRouter();
-  const galleryRef = useRef<HTMLDivElement>(null);
+  const [message, setMessage] = useState('');
+  const [status, setStatus] = useState<FormStatus>({ kind: 'idle', text: '' });
 
-  const handleProcess = useCallback(() => {
-    if (!videoUrl.trim()) return;
-    router.push(`/dashboard?video=${encodeURIComponent(videoUrl)}`);
-  }, [videoUrl, router]);
+  const handleSubmit = useCallback(
+    (e: React.FormEvent) => {
+      e.preventDefault();
+      const n = name.trim();
+      const em = email.trim();
+      const uc = useCase.trim();
+      const v = videoUrl.trim();
+      const msg = message.trim();
 
-  const filteredTemplates = WORKFLOW_TEMPLATES.filter((t) => {
-    const matchesCategory =
-      activeCategory === 'all' || t.category === activeCategory;
-    const matchesSearch =
-      !searchQuery ||
-      t.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      t.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      t.tags.some((tag) =>
-        tag.toLowerCase().includes(searchQuery.toLowerCase())
+      if (!n || !em || !uc || !msg) {
+        setStatus({ kind: 'error', text: 'Please fill out name, email, use case, and the short note.' });
+        return;
+      }
+      if (n.length > 100 || msg.length > 2000) {
+        setStatus({ kind: 'error', text: 'Keep the name under 100 characters and the note under 2,000 characters.' });
+        return;
+      }
+      if (!isEmail(em)) {
+        setStatus({ kind: 'error', text: 'Please enter a valid email address.' });
+        return;
+      }
+      if (!isYouTube(v)) {
+        setStatus({ kind: 'error', text: 'If you include a sample video, use a YouTube URL.' });
+        return;
+      }
+
+      const subject = encodeURIComponent('UVAI inbound: ' + uc);
+      const body = encodeURIComponent(
+        [
+          'Name: ' + n,
+          'Email: ' + em,
+          'Use case: ' + uc,
+          v ? 'Sample video: ' + v : 'Sample video: not provided',
+          '',
+          'Note:',
+          msg,
+        ].join('\n'),
       );
-    return matchesCategory && matchesSearch;
-  });
 
-  const scrollToGallery = () => {
-    galleryRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
+      setStatus({ kind: 'success', text: 'Opening your email app with the note prefilled.' });
+      window.location.href = `mailto:${CONTACT_EMAIL}?subject=${subject}&body=${body}`;
+    },
+    [name, email, useCase, videoUrl, message],
+  );
 
   return (
-    <div className="min-h-screen text-white" style={{ background: '#0e0e13' }}>
+    <div className="min-h-screen text-white" style={{ background: BG }}>
       {/* ─── NAV ─── */}
       <nav
         className="fixed top-0 w-full z-50"
         style={{
-          background: 'rgba(14, 14, 19, 0.8)',
-          backdropFilter: 'blur(24px)',
-          WebkitBackdropFilter: 'blur(24px)',
+          background: 'rgba(14, 14, 19, 0.85)',
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
+          borderBottom: `1px solid ${BORDER}`,
         }}
       >
-        <div className="flex justify-between items-center px-6 py-4 max-w-[1440px] mx-auto">
-          <Link
-            href="/"
-            className="text-2xl font-black tracking-tighter font-heading"
-            style={{ color: '#6af2de' }}
-          >
-            UVAI
+        <div className="flex justify-between items-center px-6 py-4 max-w-[1200px] mx-auto">
+          <Link href="/" className="flex items-center gap-2">
+            <span
+              className="inline-flex items-center justify-center w-8 h-8 rounded-lg"
+              style={{ border: `2px solid ${TEAL}`, color: TEAL }}
+              aria-hidden
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M8 5v14l11-7z" />
+              </svg>
+            </span>
+            <span className="text-xl font-black tracking-tight font-heading" style={{ color: INK }}>
+              UVAI
+            </span>
           </Link>
-          <div className="hidden md:flex gap-8 items-center">
-            {['Workflows', 'Features', 'Pricing', 'Dashboard'].map((link) => (
-              <Link
-                key={link}
-                href={
-                  link === 'Workflows'
-                    ? '#gallery'
-                    : `/${link.toLowerCase()}`
-                }
-                onClick={
-                  link === 'Workflows'
-                    ? (e) => {
-                        e.preventDefault();
-                        scrollToGallery();
-                      }
-                    : undefined
-                }
-                className="text-sm tracking-wide uppercase transition-colors duration-300 hover:opacity-100"
-                style={{
-                  color: 'rgba(248,245,253,0.5)',
-                  fontFamily: 'var(--font-body)',
-                }}
+          <div className="hidden md:flex gap-7 items-center">
+            {[
+              { href: '#capabilities', label: 'Capabilities' },
+              { href: '#workflow', label: 'Workflow' },
+              { href: '#developers', label: 'Developers' },
+              { href: '#contact', label: 'Contact' },
+            ].map((l) => (
+              <a
+                key={l.href}
+                href={l.href}
+                className="text-sm transition-colors duration-300 hover:opacity-100"
+                style={{ color: 'rgba(248,245,253,0.6)' }}
               >
-                {link}
-              </Link>
+                {l.label}
+              </a>
             ))}
           </div>
-          <Link
-            href="/dashboard"
-            className="px-6 py-2 rounded-md font-bold text-sm transition-all duration-300 active:scale-95"
-            style={{
-              background: 'linear-gradient(135deg, #6af2de, #10b7a5)',
-              color: '#002b26',
-            }}
-          >
-            Launch App
-          </Link>
+          <div className="flex items-center gap-3">
+            <a
+              href={REPO_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hidden sm:inline-flex px-4 py-2 rounded-md text-sm font-bold transition-all duration-200"
+              style={{ border: `1px solid ${BORDER}`, color: INK }}
+            >
+              GitHub
+            </a>
+            <Link
+              href="/dashboard"
+              className="px-5 py-2 rounded-md font-bold text-sm transition-all duration-300 active:scale-95"
+              style={{ background: `linear-gradient(135deg, ${TEAL}, ${TEAL_DEEP})`, color: '#002b26' }}
+            >
+              Open dashboard
+            </Link>
+          </div>
         </div>
       </nav>
 
       <main className="pt-24 overflow-x-hidden">
         {/* ─── HERO ─── */}
         <section
-          className="relative min-h-[70vh] flex flex-col items-center justify-center px-6"
+          id="top"
+          className="relative px-6 py-16 md:py-24"
           style={{
             background:
-              'radial-gradient(circle at 50% 40%, rgba(106, 242, 222, 0.06) 0%, transparent 65%)',
+              'radial-gradient(circle at 30% 20%, rgba(106, 242, 222, 0.07) 0%, transparent 60%)',
           }}
         >
-          <span
-            className="text-xs tracking-[0.3em] uppercase mb-6 block"
-            style={{ color: '#6af2de' }}
-          >
-            Agentic Video Execution Platform
-          </span>
-
-          <h1
-            className="font-heading text-5xl md:text-7xl font-bold tracking-tighter mb-6 leading-[1.05] text-center"
-            style={{ color: '#f8f5fd' }}
-          >
-            Video to{' '}
-            <span
-              className="bg-clip-text"
-              style={{
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-                backgroundImage: 'linear-gradient(135deg, #6af2de, #38fbf7)',
-              }}
-            >
-              Anything
-            </span>
-            <br />
-            in one click
-          </h1>
-
-          <p
-            className="text-lg md:text-xl max-w-2xl mx-auto text-center leading-relaxed mb-10"
-            style={{ color: 'rgba(248,245,253,0.5)' }}
-          >
-            Choose a workflow template or paste any YouTube URL. Our AI agents
-            extract intelligence, generate code, and deploy — end to end.
-          </p>
-
-          {/* URL Input */}
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              handleProcess();
-            }}
-            className="w-full max-w-2xl mb-8"
-          >
-            <div
-              className="flex gap-2 p-2 rounded-xl transition-all duration-300"
-              style={{
-                background: 'rgba(25, 25, 31, 0.8)',
-                border: '1px solid rgba(106, 242, 222, 0.15)',
-                boxShadow: videoUrl
-                  ? '0 0 30px rgba(106, 242, 222, 0.1)'
-                  : 'none',
-              }}
-            >
-              <input
-                type="text"
-                value={videoUrl}
-                onChange={(e) => setVideoUrl(e.target.value)}
-                placeholder="https://youtube.com/watch?v=..."
-                className="flex-1 px-4 py-3 bg-transparent text-white placeholder:text-white/20 focus:outline-none text-sm"
-              />
-              <button
-                type="submit"
-                disabled={!videoUrl.trim()}
-                className="px-8 py-3 rounded-lg font-bold text-sm transition-all duration-300 active:scale-95 disabled:opacity-30"
-                style={{
-                  background: 'linear-gradient(135deg, #6af2de, #10b7a5)',
-                  color: '#002b26',
-                }}
+          <div className="max-w-[1200px] mx-auto grid lg:grid-cols-2 gap-12 items-start">
+            <div>
+              <p className="text-xs tracking-[0.3em] uppercase mb-5" style={{ color: TEAL }}>
+                Agentic video execution platform
+              </p>
+              <h1
+                className="font-heading text-4xl md:text-6xl font-bold tracking-tighter mb-6 leading-[1.05]"
+                style={{ color: INK }}
               >
-                Analyze
-              </button>
-            </div>
-          </form>
-
-          {/* Or divider */}
-          <div className="flex items-center gap-4 mb-6 w-full max-w-md">
-            <div
-              className="flex-1 h-px"
-              style={{ background: 'rgba(72, 71, 77, 0.3)' }}
-            />
-            <span
-              className="text-xs uppercase tracking-widest"
-              style={{ color: 'rgba(248,245,253,0.25)' }}
-            >
-              or choose a workflow
-            </span>
-            <div
-              className="flex-1 h-px"
-              style={{ background: 'rgba(72, 71, 77, 0.3)' }}
-            />
-          </div>
-
-          <button
-            onClick={scrollToGallery}
-            className="flex items-center gap-2 text-sm font-medium transition-all duration-300 hover:-translate-y-0.5"
-            style={{ color: '#6af2de' }}
-          >
-            <span>Browse Templates</span>
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <path d="M12 5v14M5 12l7 7 7-7" />
-            </svg>
-          </button>
-        </section>
-
-        {/* ─── STATS BAR ─── */}
-        <section className="py-12" style={{ background: '#131318' }}>
-          <div className="max-w-[1440px] mx-auto px-8 grid grid-cols-2 md:grid-cols-4 gap-8">
-            {STATS.map((stat) => (
-              <div key={stat.label} className="text-center">
-                <div
-                  className="font-heading text-3xl font-bold tracking-tighter mb-1"
-                  style={{ color: '#f8f5fd' }}
-                >
-                  {stat.value}
-                </div>
-                <div
-                  className="text-xs uppercase tracking-[0.2em]"
-                  style={{ color: 'rgba(248,245,253,0.35)' }}
-                >
-                  {stat.label}
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* ─── TEMPLATE GALLERY ─── */}
-        <section
-          ref={galleryRef}
-          id="gallery"
-          className="py-20 px-6 md:px-8"
-          style={{
-            background:
-              'radial-gradient(ellipse at 50% 0%, rgba(106, 242, 222, 0.03) 0%, transparent 50%)',
-          }}
-        >
-          <div className="max-w-[1440px] mx-auto">
-            {/* Gallery Header */}
-            <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
-              <div>
+                Turn video into{' '}
                 <span
-                  className="text-[10px] tracking-[0.3em] uppercase mb-3 block"
-                  style={{ color: '#6af2de' }}
-                >
-                  Workflow Templates
-                </span>
-                <h2
-                  className="font-heading text-3xl md:text-4xl font-bold tracking-tighter"
-                  style={{ color: '#f8f5fd' }}
-                >
-                  Deploy end-to-end in one click
-                </h2>
-              </div>
-
-              {/* Search */}
-              <div className="w-full md:w-72">
-                <div
-                  className="flex items-center gap-2 px-4 py-2.5 rounded-lg"
                   style={{
-                    background: 'rgba(25, 25, 31, 0.8)',
-                    border: '1px solid rgba(72, 71, 77, 0.2)',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                    backgroundImage: `linear-gradient(135deg, ${TEAL}, #38fbf7)`,
                   }}
                 >
-                  <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="rgba(248,245,253,0.3)"
-                    strokeWidth="2"
-                  >
-                    <circle cx="11" cy="11" r="8" />
-                    <path d="m21 21-4.35-4.35" />
-                  </svg>
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search workflows..."
-                    className="flex-1 bg-transparent text-sm text-white placeholder:text-white/25 focus:outline-none"
-                  />
-                </div>
+                  structured intelligence.
+                </span>
+              </h1>
+              <p className="text-lg leading-relaxed mb-8 max-w-xl" style={{ color: MUTED }}>
+                Paste a YouTube URL. UVAI returns a verbatim transcript, typed events, action items,
+                and AI-driven analysis powered by Gemini and OpenAI.
+              </p>
+
+              <div className="flex flex-wrap gap-3 mb-8">
+                <Link
+                  href="/dashboard"
+                  className="px-7 py-3 rounded-lg font-bold text-sm transition-all duration-300 active:scale-95"
+                  style={{ background: `linear-gradient(135deg, ${TEAL}, ${TEAL_DEEP})`, color: '#002b26' }}
+                >
+                  Try a YouTube URL
+                </Link>
+                <a
+                  href="#contact"
+                  className="px-7 py-3 rounded-lg font-bold text-sm transition-all duration-300"
+                  style={{ border: `1px solid ${BORDER}`, color: INK }}
+                >
+                  Talk through a workflow
+                </a>
               </div>
+
+              <ul className="flex flex-wrap gap-2" aria-label="Verified product attributes">
+                {TRUST_PILLS.map((p) => (
+                  <li
+                    key={p}
+                    className="text-[11px] uppercase tracking-widest px-3 py-1.5 rounded-full font-semibold"
+                    style={{
+                      background: 'rgba(106, 242, 222, 0.08)',
+                      color: TEAL,
+                      border: '1px solid rgba(106, 242, 222, 0.18)',
+                    }}
+                  >
+                    {p}
+                  </li>
+                ))}
+              </ul>
             </div>
 
-            {/* Category Filters */}
-            <div className="flex gap-2 mb-10 overflow-x-auto pb-2 scrollbar-hide">
-              {CATEGORIES.map((cat) => (
-                <button
-                  key={cat.id}
-                  onClick={() => setActiveCategory(cat.id)}
-                  className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-widest whitespace-nowrap transition-all duration-300"
-                  style={{
-                    background:
-                      activeCategory === cat.id
-                        ? 'rgba(106, 242, 222, 0.1)'
-                        : 'rgba(25, 25, 31, 0.6)',
-                    color:
-                      activeCategory === cat.id
-                        ? '#6af2de'
-                        : 'rgba(248,245,253,0.4)',
-                    border:
-                      activeCategory === cat.id
-                        ? '1px solid rgba(106, 242, 222, 0.2)'
-                        : '1px solid rgba(72, 71, 77, 0.15)',
-                  }}
-                >
-                  <span>{cat.icon}</span>
-                  <span>{cat.label}</span>
-                  {cat.id === 'all' && (
+            {/* Pipeline preview card */}
+            <aside
+              aria-label="UVAI processing pipeline preview"
+              className="rounded-2xl overflow-hidden"
+              style={{
+                background: 'rgba(19, 19, 24, 0.7)',
+                border: `1px solid ${BORDER}`,
+                backdropFilter: 'blur(20px)',
+              }}
+            >
+              <div
+                className="flex items-center justify-between px-5 py-3"
+                style={{ borderBottom: `1px solid ${BORDER}`, background: 'rgba(255,255,255,0.02)' }}
+              >
+                <div className="flex gap-1.5" aria-hidden>
+                  <span className="w-2.5 h-2.5 rounded-full" style={{ background: '#3a3a44' }} />
+                  <span className="w-2.5 h-2.5 rounded-full" style={{ background: '#3a3a44' }} />
+                  <span className="w-2.5 h-2.5 rounded-full" style={{ background: '#3a3a44' }} />
+                </div>
+                <span className="text-xs uppercase tracking-widest" style={{ color: FAINT }}>
+                  Pipeline run
+                </span>
+              </div>
+              <div className="divide-y" style={{ borderColor: BORDER }}>
+                {PIPELINE_ROWS.map((row) => (
+                  <article
+                    key={row.n}
+                    className="flex items-start gap-4 px-5 py-5"
+                    style={{ borderTop: `1px solid ${BORDER}` }}
+                  >
                     <span
-                      className="ml-1 px-1.5 py-0.5 rounded text-[9px]"
+                      className="font-heading text-sm font-bold"
+                      style={{ color: TEAL, minWidth: 28 }}
+                    >
+                      {row.n}
+                    </span>
+                    <div className="flex-1">
+                      <h3
+                        className="font-heading text-base font-bold mb-1"
+                        style={{ color: INK }}
+                      >
+                        {row.title}
+                      </h3>
+                      <p className="text-sm leading-relaxed" style={{ color: MUTED }}>
+                        {row.body}
+                      </p>
+                    </div>
+                    <span
+                      className="text-[10px] uppercase tracking-widest font-bold px-2 py-1 rounded-md"
                       style={{
-                        background: 'rgba(106, 242, 222, 0.15)',
-                        color: '#6af2de',
+                        background: 'rgba(106, 242, 222, 0.1)',
+                        color: TEAL,
+                        border: '1px solid rgba(106, 242, 222, 0.2)',
                       }}
                     >
-                      {WORKFLOW_TEMPLATES.length}
+                      {row.tag}
                     </span>
-                  )}
-                </button>
-              ))}
-            </div>
-
-            {/* Template Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-              {filteredTemplates.map((template, i) => (
-                <TemplateCard key={template.id} template={template} index={i} />
-              ))}
-            </div>
-
-            {filteredTemplates.length === 0 && (
-              <div className="py-20 text-center">
-                <p style={{ color: 'rgba(248,245,253,0.4)' }}>
-                  No workflows match your search. Try a different term.
-                </p>
+                  </article>
+                ))}
               </div>
-            )}
+            </aside>
           </div>
         </section>
 
-        {/* ─── HOW IT WORKS ─── */}
-        <section className="py-24 px-6 md:px-8" style={{ background: '#131318' }}>
-          <div className="max-w-[1440px] mx-auto">
-            <div className="text-center mb-16">
-              <span
-                className="text-[10px] tracking-[0.3em] uppercase mb-3 block"
-                style={{ color: '#6af2de' }}
-              >
-                How It Works
-              </span>
-              <h2
-                className="font-heading text-3xl md:text-4xl font-bold tracking-tighter"
-                style={{ color: '#f8f5fd' }}
-              >
-                Three steps. Zero config.
-              </h2>
+        {/* ─── CAPABILITIES ─── */}
+        <section id="capabilities" className="py-20 px-6" style={{ background: PANEL }}>
+          <div className="max-w-[1200px] mx-auto">
+            <div className="grid md:grid-cols-2 gap-8 mb-12">
+              <div>
+                <p className="text-[10px] tracking-[0.3em] uppercase mb-3" style={{ color: TEAL }}>
+                  What is real today
+                </p>
+                <h2
+                  className="font-heading text-3xl md:text-4xl font-bold tracking-tighter"
+                  style={{ color: INK }}
+                >
+                  A focused video intelligence stack.
+                </h2>
+              </div>
+              <p className="text-base leading-relaxed self-end" style={{ color: MUTED }}>
+                UVAI is not a generic AI wrapper. It is a working YouTube processing pipeline with
+                transcript extraction, structured event output, multi-agent analysis, async jobs,
+                cache routes, and dashboard workflows.
+              </p>
             </div>
 
-            <div className="grid md:grid-cols-3 gap-8">
-              {[
-                {
-                  step: '01',
-                  title: 'Choose or Paste',
-                  desc: 'Pick a workflow template or paste any YouTube URL. Our engine handles the rest.',
-                },
-                {
-                  step: '02',
-                  title: 'Watch Agents Work',
-                  desc: 'Real-time SSE streaming shows each agent processing your video — transcription, extraction, generation.',
-                },
-                {
-                  step: '03',
-                  title: 'Get Results',
-                  desc: 'Deployable code, structured reports, action items, or whatever your workflow produces — delivered instantly.',
-                },
-              ].map((item) => (
-                <div
-                  key={item.step}
-                  className="relative p-8 rounded-2xl"
+            <div className="grid lg:grid-cols-2 gap-6">
+              <article
+                className="rounded-2xl p-8"
+                style={{ background: 'rgba(25,25,31,0.7)', border: `1px solid ${BORDER}` }}
+              >
+                <h3 className="font-heading text-xl font-bold mb-3" style={{ color: INK }}>
+                  Structured event extraction
+                </h3>
+                <p className="text-sm leading-relaxed mb-6" style={{ color: MUTED }}>
+                  The system turns video content into typed, machine-readable output: action items,
+                  decisions, topics, timestamps, and key insights. That makes the result usable by
+                  people, APIs, and downstream automation.
+                </p>
+                <div className="rounded-xl p-5" style={{ background: 'rgba(14,14,19,0.6)', border: `1px solid ${BORDER}` }}>
+                  {[
+                    { k: 'transcript', v: 'timestamped text' },
+                    { k: 'events', v: 'typed JSON' },
+                    { k: 'actions', v: 'owner-ready tasks' },
+                    { k: 'chat', v: 'ask the video' },
+                  ].map((row, i, arr) => (
+                    <div
+                      key={row.k}
+                      className="flex justify-between items-center py-2.5"
+                      style={i < arr.length - 1 ? { borderBottom: `1px solid ${BORDER}` } : undefined}
+                    >
+                      <strong className="font-mono text-sm font-bold" style={{ color: TEAL }}>
+                        {row.k}
+                      </strong>
+                      <span className="text-xs uppercase tracking-widest" style={{ color: FAINT }}>
+                        {row.v}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </article>
+
+              <div className="grid gap-6">
+                {CAPABILITY_CARDS.map((c) => (
+                  <article
+                    key={c.title}
+                    className="rounded-2xl p-7"
+                    style={{ background: 'rgba(25,25,31,0.7)', border: `1px solid ${BORDER}` }}
+                  >
+                    <h3 className="font-heading text-lg font-bold mb-2" style={{ color: INK }}>
+                      {c.title}
+                    </h3>
+                    <p className="text-sm leading-relaxed" style={{ color: MUTED }}>
+                      {c.body}
+                    </p>
+                  </article>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ─── WORKFLOW ─── */}
+        <section id="workflow" className="py-20 px-6">
+          <div className="max-w-[1200px] mx-auto">
+            <div className="grid md:grid-cols-2 gap-8 mb-12">
+              <div>
+                <p className="text-[10px] tracking-[0.3em] uppercase mb-3" style={{ color: TEAL }}>
+                  How it works
+                </p>
+                <h2
+                  className="font-heading text-3xl md:text-4xl font-bold tracking-tighter"
+                  style={{ color: INK }}
+                >
+                  From URL to usable output.
+                </h2>
+              </div>
+              <p className="text-base leading-relaxed self-end" style={{ color: MUTED }}>
+                Keep the first run simple. Pick a template or paste a URL, let the pipeline process
+                the video, then use the output in the dashboard or through the API.
+              </p>
+            </div>
+
+            <div className="grid md:grid-cols-3 gap-6">
+              {STEPS.map((s) => (
+                <article
+                  key={s.n}
+                  className="rounded-2xl p-7"
+                  style={{ background: 'rgba(19,19,24,0.65)', border: `1px solid ${BORDER}` }}
+                >
+                  <p
+                    className="font-heading text-4xl font-black mb-4"
+                    style={{ color: 'rgba(106, 242, 222, 0.18)' }}
+                  >
+                    {s.n}
+                  </p>
+                  <h3 className="font-heading text-lg font-bold mb-2" style={{ color: INK }}>
+                    {s.title}
+                  </h3>
+                  <p className="text-sm leading-relaxed" style={{ color: MUTED }}>
+                    {s.body}
+                  </p>
+                </article>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* ─── DEVELOPERS ─── */}
+        <section id="developers" className="py-20 px-6" style={{ background: PANEL }}>
+          <div className="max-w-[1200px] mx-auto">
+            <div
+              className="rounded-2xl p-10 grid lg:grid-cols-[1fr_1.3fr] gap-10"
+              style={{ background: 'rgba(19,19,24,0.65)', border: `1px solid ${BORDER}` }}
+            >
+              <div>
+                <p className="text-[10px] tracking-[0.3em] uppercase mb-3" style={{ color: TEAL }}>
+                  Built for operators and developers
+                </p>
+                <h2
+                  className="font-heading text-3xl md:text-4xl font-bold tracking-tighter"
+                  style={{ color: INK }}
+                >
+                  Open where it matters.
+                </h2>
+              </div>
+              <ul className="grid gap-5">
+                {DEVELOPER_ITEMS.map((d) => (
+                  <li
+                    key={d.head}
+                    className="grid sm:grid-cols-[minmax(0,260px)_1fr] gap-x-6 gap-y-1 pb-5"
+                    style={{ borderBottom: `1px solid ${BORDER}` }}
+                  >
+                    <strong className="font-heading text-sm font-bold" style={{ color: INK }}>
+                      {d.head}
+                    </strong>
+                    <span className="text-sm leading-relaxed" style={{ color: MUTED }}>
+                      {d.body}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        {/* ─── TEMPLATES ─── */}
+        <section className="py-20 px-6">
+          <div className="max-w-[1200px] mx-auto">
+            <div className="grid md:grid-cols-2 gap-8 mb-12">
+              <div>
+                <p className="text-[10px] tracking-[0.3em] uppercase mb-3" style={{ color: TEAL }}>
+                  Workflow starting points
+                </p>
+                <h2
+                  className="font-heading text-3xl md:text-4xl font-bold tracking-tighter"
+                  style={{ color: INK }}
+                >
+                  Templates that match real use cases.
+                </h2>
+              </div>
+              <p className="text-base leading-relaxed self-end" style={{ color: MUTED }}>
+                UVAI ships nine workflow templates today. These four are the clearest public
+                examples; browse the rest from the dashboard.
+              </p>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-5">
+              {TEMPLATE_CARDS.map((t) => (
+                <article
+                  key={t.title}
+                  className="rounded-2xl p-7 transition-all duration-300 hover:-translate-y-0.5"
                   style={{
-                    background: 'rgba(19, 19, 24, 0.6)',
-                    border: '1px solid rgba(72, 71, 77, 0.1)',
+                    background: t.featured ? 'rgba(106, 242, 222, 0.04)' : 'rgba(19,19,24,0.65)',
+                    border: t.featured
+                      ? '1px solid rgba(106, 242, 222, 0.25)'
+                      : `1px solid ${BORDER}`,
                   }}
                 >
-                  <div
-                    className="font-heading text-5xl font-black mb-4"
-                    style={{ color: 'rgba(106, 242, 222, 0.1)' }}
-                  >
-                    {item.step}
-                  </div>
-                  <h3
-                    className="font-heading text-xl font-bold mb-3"
-                    style={{ color: '#f8f5fd' }}
-                  >
-                    {item.title}
+                  <h3 className="font-heading text-lg font-bold mb-3" style={{ color: INK }}>
+                    {t.title}
                   </h3>
-                  <p
-                    className="text-sm leading-relaxed"
-                    style={{ color: 'rgba(248,245,253,0.45)' }}
-                  >
-                    {item.desc}
+                  <p className="text-sm leading-relaxed mb-5" style={{ color: MUTED }}>
+                    {t.body}
                   </p>
-                </div>
+                  <div className="flex flex-wrap gap-2">
+                    {t.tags.map((tag) => (
+                      <span
+                        key={tag}
+                        className="text-[10px] uppercase tracking-widest font-bold px-2.5 py-1 rounded-full"
+                        style={{
+                          background: 'rgba(106, 242, 222, 0.08)',
+                          color: TEAL,
+                          border: '1px solid rgba(106, 242, 222, 0.18)',
+                        }}
+                      >
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                </article>
               ))}
+            </div>
+
+            <div className="mt-8 text-center">
+              <Link
+                href="/dashboard"
+                className="inline-flex items-center gap-2 text-sm font-bold uppercase tracking-widest"
+                style={{ color: TEAL }}
+              >
+                See all templates in the dashboard
+                <span aria-hidden>→</span>
+              </Link>
             </div>
           </div>
         </section>
 
-        {/* ─── CTA ─── */}
-        <section className="py-24 px-6">
-          <div
-            className="max-w-4xl mx-auto rounded-2xl p-12 text-center relative overflow-hidden"
-            style={{ background: 'rgba(31, 31, 38, 0.8)' }}
-          >
-            <div
-              className="absolute top-0 right-0 -translate-y-1/2 translate-x-1/2 w-64 h-64 rounded-full blur-3xl"
-              style={{ background: 'rgba(106, 242, 222, 0.08)' }}
-            />
-            <h2
-              className="font-heading text-4xl md:text-5xl font-bold mb-4 relative"
-              style={{ color: '#f8f5fd' }}
-            >
-              Ready to automate your
-              <br />
-              <span style={{ color: '#6af2de' }}>video workflows?</span>
-            </h2>
-            <p
-              className="mb-8 max-w-lg mx-auto"
-              style={{ color: 'rgba(248,245,253,0.45)' }}
-            >
-              Start with a template or bring your own video. No setup required.
-            </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center relative">
-              <Link
-                href="/dashboard"
-                className="px-10 py-4 rounded-lg font-bold hover:scale-105 transition-transform"
-                style={{
-                  background: 'linear-gradient(135deg, #6af2de, #10b7a5)',
-                  color: '#002b26',
-                }}
+        {/* ─── CONTACT ─── */}
+        <section id="contact" className="py-20 px-6" style={{ background: PANEL }}>
+          <div className="max-w-[1200px] mx-auto grid lg:grid-cols-2 gap-10">
+            <div>
+              <p className="text-[10px] tracking-[0.3em] uppercase mb-3" style={{ color: TEAL }}>
+                Inbound
+              </p>
+              <h2
+                className="font-heading text-3xl md:text-4xl font-bold tracking-tighter mb-5"
+                style={{ color: INK }}
               >
-                Get Started Free
-              </Link>
-              <button
-                onClick={scrollToGallery}
-                className="px-10 py-4 rounded-lg font-bold transition-colors"
-                style={{
-                  border: '1px solid rgba(72,71,77,0.3)',
-                  color: '#f8f5fd',
-                }}
-              >
-                Browse Templates
-              </button>
+                Send the video workflow you want automated.
+              </h2>
+              <p className="text-base leading-relaxed mb-4" style={{ color: MUTED }}>
+                Share the type of video, the output you need, and where the result should go. The
+                form opens a prefilled email so there is no hidden backend or fake submission state.
+              </p>
+              <p className="text-sm leading-relaxed mb-7" style={{ color: FAINT }}>
+                Privacy note: this page does not store form data. Submitting opens your own email
+                client and sends the note directly to the contact inbox.
+              </p>
+              <div className="flex flex-wrap gap-3">
+                <Link
+                  href="/dashboard"
+                  className="px-6 py-3 rounded-lg font-bold text-sm transition-all duration-300 active:scale-95"
+                  style={{ background: `linear-gradient(135deg, ${TEAL}, ${TEAL_DEEP})`, color: '#002b26' }}
+                >
+                  Open dashboard
+                </Link>
+                <a
+                  href={REPO_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-6 py-3 rounded-lg font-bold text-sm transition-all duration-300"
+                  style={{ border: `1px solid ${BORDER}`, color: INK }}
+                >
+                  View source
+                </a>
+              </div>
             </div>
+
+            <article
+              className="rounded-2xl p-7"
+              style={{ background: 'rgba(19,19,24,0.65)', border: `1px solid ${BORDER}` }}
+            >
+              <h3 className="font-heading text-xl font-bold mb-2" style={{ color: INK }}>
+                Workflow request
+              </h3>
+              <p className="text-sm mb-5" style={{ color: MUTED }}>
+                Four fields. Enough to start a useful conversation.
+              </p>
+              <form onSubmit={handleSubmit} className="grid gap-4" noValidate>
+                <Field label="Name" htmlFor="name">
+                  <input
+                    id="name"
+                    name="name"
+                    autoComplete="name"
+                    placeholder="Your name"
+                    maxLength={100}
+                    required
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="form-input"
+                  />
+                </Field>
+                <Field label="Email" htmlFor="email">
+                  <input
+                    id="email"
+                    name="email"
+                    type="email"
+                    autoComplete="email"
+                    placeholder="you@company.com"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="form-input"
+                  />
+                </Field>
+                <Field label="Use case" htmlFor="use_case">
+                  <select
+                    id="use_case"
+                    name="use_case"
+                    required
+                    value={useCase}
+                    onChange={(e) => setUseCase(e.target.value)}
+                    className="form-input"
+                  >
+                    <option value="">Choose one</option>
+                    {USE_CASES.map((opt) => (
+                      <option key={opt}>{opt}</option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Sample YouTube URL" htmlFor="video_url">
+                  <input
+                    id="video_url"
+                    name="video_url"
+                    type="url"
+                    placeholder="https://youtube.com/watch?v=..."
+                    value={videoUrl}
+                    onChange={(e) => setVideoUrl(e.target.value)}
+                    className="form-input"
+                  />
+                </Field>
+                <Field label="What should the output be?" htmlFor="message">
+                  <textarea
+                    id="message"
+                    name="message"
+                    placeholder="Example: turn product demo videos into API docs and tickets."
+                    maxLength={2000}
+                    required
+                    rows={4}
+                    value={message}
+                    onChange={(e) => setMessage(e.target.value)}
+                    className="form-input"
+                  />
+                </Field>
+                <p
+                  role="status"
+                  aria-live="polite"
+                  className="text-sm min-h-[1.25rem]"
+                  style={{
+                    color:
+                      status.kind === 'success'
+                        ? TEAL
+                        : status.kind === 'error'
+                          ? '#ff8a8a'
+                          : FAINT,
+                  }}
+                >
+                  {status.text}
+                </p>
+                <button
+                  type="submit"
+                  className="px-6 py-3 rounded-lg font-bold text-sm transition-all duration-300 active:scale-95"
+                  style={{ background: `linear-gradient(135deg, ${TEAL}, ${TEAL_DEEP})`, color: '#002b26' }}
+                >
+                  Send request
+                </button>
+              </form>
+            </article>
           </div>
         </section>
       </main>
 
       {/* ─── FOOTER ─── */}
       <footer
-        className="py-12 px-8"
-        style={{ borderTop: '1px solid rgba(72,71,77,0.1)' }}
+        className="py-10 px-6"
+        style={{ borderTop: `1px solid ${BORDER}`, background: BG }}
       >
-        <div className="flex flex-col md:flex-row justify-between items-center gap-8 max-w-[1440px] mx-auto">
-          <div className="flex flex-col items-center md:items-start gap-2">
-            <div
-              className="text-lg font-bold font-heading tracking-tighter"
-              style={{ color: '#f8f5fd' }}
-            >
-              UVAI
-            </div>
-            <div
+        <div className="flex flex-col md:flex-row justify-between items-center gap-6 max-w-[1200px] mx-auto">
+          <p className="text-sm" style={{ color: FAINT }}>
+            © 2026 UVAI. EventRelay open-source project, MIT licensed.
+          </p>
+          <div className="flex gap-6">
+            <Link href="/dashboard" className="text-sm" style={{ color: FAINT }}>
+              Dashboard
+            </Link>
+            <a
+              href={REPO_URL}
+              target="_blank"
+              rel="noopener noreferrer"
               className="text-sm"
-              style={{ color: 'rgba(248,245,253,0.35)' }}
+              style={{ color: FAINT }}
             >
-              © 2026 UVAI. Agentic Video Execution Platform.
-            </div>
-          </div>
-          <div className="flex gap-8">
-            {['Features', 'Pricing', 'Dashboard', 'GitHub'].map((link) => (
-              <Link
-                key={link}
-                href={
-                  link === 'GitHub'
-                    ? 'https://github.com/groupthinking/EventRelay'
-                    : `/${link.toLowerCase()}`
-                }
-                className="text-sm uppercase tracking-wide transition-all duration-300 hover:-translate-y-0.5"
-                style={{ color: 'rgba(248,245,253,0.35)' }}
-                target={link === 'GitHub' ? '_blank' : undefined}
-              >
-                {link}
-              </Link>
-            ))}
+              GitHub
+            </a>
+            <a href={`mailto:${CONTACT_EMAIL}`} className="text-sm" style={{ color: FAINT }}>
+              Contact
+            </a>
           </div>
         </div>
       </footer>
+
+      <style jsx>{`
+        .form-input {
+          width: 100%;
+          padding: 0.7rem 0.9rem;
+          border-radius: 0.55rem;
+          background: rgba(14, 14, 19, 0.7);
+          border: 1px solid ${BORDER};
+          color: ${INK};
+          font-size: 0.9rem;
+          transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .form-input::placeholder {
+          color: rgba(248, 245, 253, 0.3);
+        }
+        .form-input:focus {
+          outline: none;
+          border-color: ${TEAL};
+          box-shadow: 0 0 0 3px rgba(106, 242, 222, 0.15);
+        }
+        select.form-input {
+          appearance: none;
+          background-image: linear-gradient(45deg, transparent 50%, ${TEAL} 50%),
+            linear-gradient(135deg, ${TEAL} 50%, transparent 50%);
+          background-position: calc(100% - 18px) 50%, calc(100% - 13px) 50%;
+          background-size: 5px 5px, 5px 5px;
+          background-repeat: no-repeat;
+          padding-right: 2.2rem;
+        }
+        textarea.form-input {
+          resize: vertical;
+          min-height: 100px;
+        }
+      `}</style>
     </div>
+  );
+}
+
+function Field({
+  label,
+  htmlFor,
+  children,
+}: {
+  label: string;
+  htmlFor: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <label htmlFor={htmlFor} className="grid gap-1.5">
+      <span
+        className="text-[11px] font-bold uppercase tracking-widest"
+        style={{ color: 'rgba(248,245,253,0.65)' }}
+      >
+        {label}
+      </span>
+      {children}
+    </label>
   );
 }
