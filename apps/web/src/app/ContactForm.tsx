@@ -26,11 +26,15 @@ function isEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
+function normalizeVideoUrl(value: string) {
+  if (!value) return '';
+  return /^https?:\/\//i.test(value) ? value : `https://${value}`;
+}
+
 function isYouTube(value: string) {
   if (!value) return true;
-  const candidate = /^https?:\/\//i.test(value) ? value : `https://${value}`;
   try {
-    const u = new URL(candidate);
+    const u = new URL(value);
     return ['youtube.com', 'www.youtube.com', 'youtu.be', 'm.youtube.com'].includes(u.hostname);
   } catch {
     return false;
@@ -53,7 +57,7 @@ export default function ContactForm() {
       const n = name.trim();
       const em = email.trim();
       const uc = useCase.trim();
-      const v = videoUrl.trim();
+      const v = normalizeVideoUrl(videoUrl.trim());
       const msg = message.trim();
 
       if (!n || !em || !uc || !msg) {

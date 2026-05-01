@@ -323,7 +323,7 @@ export default function Home() {
         </section>
 
         {/* ─── CAPABILITIES ─── */}
-        <section id="capabilities" className="py-20 px-6" style={{ background: PANEL }}>
+        <section id="capabilities" className="scroll-mt-24 py-20 px-6" style={{ background: PANEL }}>
           <div className="max-w-[1200px] mx-auto">
             <div className="grid md:grid-cols-2 gap-8 mb-12">
               <div>
@@ -401,7 +401,7 @@ export default function Home() {
         </section>
 
         {/* ─── WORKFLOW ─── */}
-        <section id="workflow" className="py-20 px-6">
+        <section id="workflow" className="scroll-mt-24 py-20 px-6">
           <div className="max-w-[1200px] mx-auto">
             <div className="grid md:grid-cols-2 gap-8 mb-12">
               <div>
@@ -447,7 +447,7 @@ export default function Home() {
         </section>
 
         {/* ─── DEVELOPERS ─── */}
-        <section id="developers" className="py-20 px-6" style={{ background: PANEL }}>
+        <section id="developers" className="scroll-mt-24 py-20 px-6" style={{ background: PANEL }}>
           <div className="max-w-[1200px] mx-auto">
             <div
               className="rounded-2xl p-10 grid lg:grid-cols-[1fr_1.3fr] gap-10"
@@ -556,7 +556,7 @@ export default function Home() {
         </section>
 
         {/* ─── CONTACT ─── */}
-        <section id="contact" className="py-20 px-6" style={{ background: PANEL }}>
+        <section id="contact" className="scroll-mt-24 py-20 px-6" style={{ background: PANEL }}>
           <div className="max-w-[1200px] mx-auto grid lg:grid-cols-2 gap-10">
             <div>
               <p className="text-[10px] tracking-[0.3em] uppercase mb-3" style={{ color: TEAL }}>
