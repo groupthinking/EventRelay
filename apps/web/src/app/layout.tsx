@@ -3,18 +3,18 @@ import { Analytics } from '@vercel/analytics/next';
 import { SpeedInsights } from '@vercel/speed-insights/next';
 import './globals.css';
 
-// Font CSS variables are defined via <link> to Google Fonts in <head> and
-// resolved in globals.css / tailwind.config. This avoids next/font/google
-// which hard-fails during build if the Google Fonts API is unreachable
+// Fonts use the system stack declared in tailwind.config (Inter / JetBrains
+// Mono with system-ui fallbacks). We intentionally avoid next/font/google
+// because it hard-fails during build when the Google Fonts API is unreachable
 // (common in sandboxed CI and offline environments).
 
 export const metadata: Metadata = {
   title: {
-    default: 'UVAI — Video to Software',
+    default: 'UVAI — Video to Structured Intelligence',
     template: '%s | UVAI',
   },
-  description: 'Paste a YouTube URL. AI analyzes the video, extracts technologies and concepts, generates a project scaffold, and deploys it.',
-  keywords: ['video to software', 'AI video analysis', 'video to code', 'agentic video', 'code generation', 'video API', 'UVAI'],
+  description: 'UVAI turns YouTube videos into transcripts, typed events, action items, and AI-driven analysis using Gemini and OpenAI. Open source via the EventRelay project.',
+  keywords: ['UVAI', 'video intelligence', 'YouTube transcript', 'structured events', 'Gemini', 'OpenAI', 'EventRelay', 'agentic video'],
   authors: [{ name: 'UVAI' }],
   creator: 'UVAI',
   publisher: 'UVAI',
@@ -24,8 +24,8 @@ export const metadata: Metadata = {
     locale: 'en_US',
     url: 'https://v0-uvai.vercel.app',
     siteName: 'UVAI',
-    title: 'UVAI — Video to Software',
-    description: 'Paste a YouTube URL. AI analyzes the video, extracts technologies and concepts, generates a project scaffold, and deploys it.',
+    title: 'UVAI — Video to Structured Intelligence',
+    description: 'Paste a YouTube URL. Get transcripts, typed events, action items, and multi-agent analysis from an open-source video intelligence platform.',
     images: [
       {
         url: '/og-image.png',
@@ -37,8 +37,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'UVAI — Video to Software',
-    description: 'Paste a YouTube URL. AI analyzes the video, extracts technologies and concepts, generates a project scaffold, and deploys it.',
+    title: 'UVAI — Video to Structured Intelligence',
+    description: 'Paste a YouTube URL. Get transcripts, typed events, action items, and multi-agent analysis from an open-source video intelligence platform.',
     images: ['/og-image.png'],
     creator: '@groupthinking',
   },
@@ -80,14 +80,6 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&family=JetBrains+Mono:wght@100..800&family=Space+Grotesk:wght@300..700&display=swap"
-          rel="stylesheet"
-        />
-      </head>
       <body className="min-h-screen bg-surface-950 font-sans antialiased">
         {/* Global background effects */}
         <div className="fixed inset-0 bg-mesh pointer-events-none" />
