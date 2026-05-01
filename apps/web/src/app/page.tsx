@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import ContactForm from './ContactForm';
+import { CONTACT_EMAIL } from '@/lib/constants';
 
 /* ═══════════════════════════════════════════
    UVAI — Grounded One-Page Positioning Site
@@ -120,11 +121,6 @@ const TEMPLATE_CARDS = [
   },
 ];
 
-const DEFAULT_CONTACT_EMAIL = 'viralnowsales@gmail.com';
-const CONTACT_EMAIL =
-  process.env.NEXT_PUBLIC_CONTACT_EMAIL && process.env.NEXT_PUBLIC_CONTACT_EMAIL.trim().length > 0
-    ? process.env.NEXT_PUBLIC_CONTACT_EMAIL
-    : DEFAULT_CONTACT_EMAIL;
 const REPO_URL = 'https://github.com/groupthinking/EventRelay';
 
 export default function Home() {

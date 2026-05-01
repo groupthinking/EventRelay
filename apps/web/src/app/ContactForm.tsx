@@ -2,6 +2,8 @@
 
 import { useCallback, useState } from 'react';
 
+import { CONTACT_EMAIL } from '@/lib/constants';
+
 const TEAL = '#6af2de';
 const TEAL_DEEP = '#10b7a5';
 const INK = '#f8f5fd';
@@ -16,12 +18,6 @@ const USE_CASES = [
   'Business operations workflow',
   'Other video-to-action workflow',
 ];
-
-const DEFAULT_CONTACT_EMAIL = 'viralnowsales@gmail.com';
-const CONTACT_EMAIL =
-  process.env.NEXT_PUBLIC_CONTACT_EMAIL && process.env.NEXT_PUBLIC_CONTACT_EMAIL.trim().length > 0
-    ? process.env.NEXT_PUBLIC_CONTACT_EMAIL
-    : DEFAULT_CONTACT_EMAIL;
 
 const MESSAGE_MAX = 1000;
 const NAME_MAX = 100;
