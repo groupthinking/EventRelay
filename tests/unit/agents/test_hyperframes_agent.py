@@ -11,9 +11,10 @@ from youtube_extension.backend.api.v1.router import (
     _rendered_videos,
     get_rendered_video,
 )
-from youtube_extension.services.agents.adapters.hyperframes_agent import HyperFramesAgent
+from youtube_extension.services.agents.adapters.hyperframes_agent import (
+    HyperFramesAgent,
+)
 from youtube_extension.services.agents.dto import AgentRequest
-
 
 TEST_VIDEO_ID = "auJzb1D-fag"
 TEST_VIDEO_URL = f"https://www.youtube.com/watch?v={TEST_VIDEO_ID}"

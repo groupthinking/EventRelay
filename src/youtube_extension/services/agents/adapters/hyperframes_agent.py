@@ -11,12 +11,11 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+from youtube_extension.utils import extract_video_id
+
 from ..base_agent import BaseAgent
 from ..dto import AgentRequest, AgentResult
 from ..registry import register
-
-from youtube_extension.utils import extract_video_id
-
 
 HYPERFRAMES_VERSION = "0.5.5"
 
