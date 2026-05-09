@@ -69,6 +69,7 @@ ENV HOST=0.0.0.0
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONPATH=/app/src
+# HyperFrames rendering stays opt-in unless explicitly enabled in the runtime environment.
 ENV HYPERFRAMES_ENABLED=false
 
 EXPOSE ${PORT}

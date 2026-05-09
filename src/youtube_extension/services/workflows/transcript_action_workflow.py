@@ -564,7 +564,7 @@ class TranscriptActionWorkflow:
         # Merge results for final serialization
         merged_results = transcript_result.results.copy()
         merged_results.update(strategic_result.results)
-        if include_hyperframes and len(task_results) > 2:
+        if include_hyperframes and len(task_results) >= 3:
             merged_results.update(task_results[2].results)
 
         final_result = OrchestrationResult(

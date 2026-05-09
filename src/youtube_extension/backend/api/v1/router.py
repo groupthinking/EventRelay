@@ -12,7 +12,7 @@ import logging
 import os
 import uuid as _uuid
 from dataclasses import asdict
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
@@ -1091,7 +1091,9 @@ def _normalize_rendered_video(
         normalized.get("download_url")
         or f"{_absolute_rendered_url(base_url, video_id)}?download=1"
     )
-    normalized["updated_at"] = normalized.get("updated_at") or datetime.utcnow().isoformat()
+    normalized["updated_at"] = normalized.get("updated_at") or datetime.now(
+        timezone.utc
+    ).isoformat()
     return normalized
 
 

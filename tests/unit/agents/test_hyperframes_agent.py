@@ -52,7 +52,9 @@ async def test_hyperframes_agent_generates_expected_html(
         output_index = cmd.index("--output") + 1
         output_path = Path(str(cmd[output_index]))
         output_path.write_bytes(b"mp4")
-        captured["html"] = Path(str(cwd)).joinpath("index.html").read_text(encoding="utf-8")
+        composition_file = Path(str(cwd)).joinpath("index.html")
+        assert composition_file.exists()
+        captured["html"] = composition_file.read_text(encoding="utf-8")
         captured["command"] = " ".join(str(part) for part in cmd)
         return _FakeProcess()
 

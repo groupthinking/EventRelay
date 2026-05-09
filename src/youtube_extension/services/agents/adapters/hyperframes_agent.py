@@ -343,7 +343,7 @@ class HyperFramesAgent(BaseAgent):
         for index, sentence in enumerate(sentences[:3]):
             highlights.append(
                 {
-                    "timestamp": f"0{index}:00",
+                    "timestamp": f"{index:02d}:00",
                     "text": sentence[:110].rstrip() + ("..." if len(sentence) > 110 else ""),
                 }
             )
