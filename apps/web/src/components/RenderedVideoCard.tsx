@@ -48,6 +48,8 @@ export default function RenderedVideoCard({
         <hyperframes-player
           src={renderedVideo.download_url}
           controls
+          role="region"
+          aria-label="Rendered video player"
           style={{ width: '100%', aspectRatio: '16 / 9', display: 'block' }}
         />
       </div>

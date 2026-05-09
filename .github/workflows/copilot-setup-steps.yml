@@ -14,6 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    # Copilot setup jobs allow up to 59 minutes.
     timeout-minutes: 59
     steps:
       - name: Checkout repository

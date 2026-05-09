@@ -488,7 +488,7 @@ async def run_transcript_action(
             request.video_url,
         )
 
-    _persist_rendered_video(result, base_url=str(http_request.base_url).rstrip("/"))
+    persist_rendered_video(result, base_url=str(http_request.base_url).rstrip("/"))
     return TranscriptActionResponse(**result)
 
 
@@ -1097,7 +1097,7 @@ def _normalize_rendered_video(
     return normalized
 
 
-def _persist_rendered_video(
+def persist_rendered_video(
     result: dict[str, Any],
     *,
     base_url: str,
@@ -1123,6 +1123,14 @@ def _persist_rendered_video(
     _rendered_videos[video_id] = normalized
     hyperframes_output["data"] = normalized
     return normalized
+
+
+def _backend_base_url() -> str:
+    return (
+        os.getenv("BACKEND_URL")
+        or os.getenv("API_BASE_URL")
+        or "http://localhost:8000"
+    ).rstrip("/")
 
 
 async def _queue_transcript_action_job(
@@ -1290,7 +1298,7 @@ async def _run_video_job(
             "metadata": result.get("metadata", {}),
             "orchestration_meta": result.get("orchestration_meta", {}),
         }
-        rendered_video = _persist_rendered_video(result, base_url="http://localhost:8000")
+        rendered_video = persist_rendered_video(result, base_url=_backend_base_url())
         if rendered_video:
             job.metadata["rendered_video"] = rendered_video
         if result.get("success"):

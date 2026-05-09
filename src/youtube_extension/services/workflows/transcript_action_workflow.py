@@ -535,53 +535,57 @@ class TranscriptActionWorkflow:
             }
         }
 
-        tasks = [
-            self._orchestrator.execute_task(
+        task_calls = {
+            "transcript_action": self._orchestrator.execute_task(
                 "transcript_action",
                 agent_input,
                 agent_configs=agent_configs,
             ),
-            self._orchestrator.execute_task(
+            "strategic_analysis": self._orchestrator.execute_task(
                 "strategic_analysis",
                 agent_input,
                 agent_configs=agent_configs,
             ),
-        ]
+        }
         include_hyperframes = self._hyperframes_enabled()
         if include_hyperframes:
-            tasks.append(
-                self._orchestrator.execute_task(
-                    "video_rendering",
-                    agent_input,
-                    agent_configs=agent_configs,
-                )
+            task_calls["video_rendering"] = self._orchestrator.execute_task(
+                "video_rendering",
+                agent_input,
+                agent_configs=agent_configs,
             )
 
-        task_results = await asyncio.gather(*tasks)
-        transcript_result = task_results[0]
-        strategic_result = task_results[1]
+        task_results = dict(
+            zip(
+                task_calls.keys(),
+                await asyncio.gather(*task_calls.values()),
+            )
+        )
+        transcript_result = task_results["transcript_action"]
+        strategic_result = task_results["strategic_analysis"]
+        rendering_result = task_results.get("video_rendering")
 
         # Merge results for final serialization
         merged_results = transcript_result.results.copy()
         merged_results.update(strategic_result.results)
-        if include_hyperframes and len(task_results) >= 3:
-            merged_results.update(task_results[2].results)
+        if rendering_result is not None:
+            merged_results.update(rendering_result.results)
 
         final_result = OrchestrationResult(
-            success=all(result.success for result in task_results),
+            success=all(result.success for result in task_results.values()),
             results=merged_results,
             errors=[
                 error
-                for result in task_results
+                for result in task_results.values()
                 for error in result.errors
             ],
             total_processing_time=sum(
-                result.total_processing_time for result in task_results
+                result.total_processing_time for result in task_results.values()
             ),
             agents_used=list(
                 {
                     agent_name
-                    for result in task_results
+                    for result in task_results.values()
                     for agent_name in result.agents_used
                 }
             ),

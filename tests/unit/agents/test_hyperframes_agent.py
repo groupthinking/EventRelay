@@ -7,9 +7,8 @@ import pytest
 from starlette.requests import Request
 
 from youtube_extension.backend.api.v1.router import (
-    _persist_rendered_video,
-    _rendered_videos,
     get_rendered_video,
+    persist_rendered_video,
 )
 from youtube_extension.services.agents.adapters.hyperframes_agent import (
     HyperFramesAgent,
@@ -97,8 +96,7 @@ async def test_rendered_video_endpoint_returns_download_url(
     rendered_file = tmp_path / "rendered.mp4"
     rendered_file.write_bytes(b"video")
 
-    _rendered_videos.clear()
-    _persist_rendered_video(
+    persist_rendered_video(
         {
             "metadata": {"video_id": TEST_VIDEO_ID},
             "outputs": {
