@@ -9,6 +9,7 @@ import { create } from 'zustand';
 import type {
   ExtractedEvent,
   AgentExecution,
+  RenderedVideo,
   VideoJobStatusResponse,
 } from '@/lib/types';
 
@@ -49,6 +50,7 @@ export interface Video {
   transcript?: string;
   events?: ExtractedEvent[];
   agents?: AgentExecution[];
+  renderedVideo?: RenderedVideo;
   pipelineResult?: PipelineResult;
   insights?: {
     summary: string;
@@ -257,6 +259,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
           sentiment: result.result?.insights?.sentiment || 'Neutral',
           topics: result.result?.insights?.topics || [],
         },
+        renderedVideo: result.result?.rendered_video || undefined,
       });
 
       addActivity(`Analysis complete: ${videoTitle.substring(0, 30)}`, 'success');

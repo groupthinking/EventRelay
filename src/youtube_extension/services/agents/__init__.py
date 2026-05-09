@@ -8,6 +8,7 @@ Provides specialized AI agents for different video processing tasks.
 
 from .adapters.action_implementer_agent import ActionImplementerAgent
 from .adapters.agent_orchestrator import AgentOrchestrator
+from .adapters.hyperframes_agent import HyperFramesAgent
 from .adapters.hybrid_vision_agent import HybridVisionAgent
 from .adapters.personality_agent import PersonalityAgent
 from .adapters.strategy_agent import StrategyAgent
@@ -19,6 +20,7 @@ __all__ = [
     'AgentOrchestrator',
     'VideoMasterAgent',
     'ActionImplementerAgent',
+    'HyperFramesAgent',
     'HybridVisionAgent',
     'TranscriptActionAgent',
     'PersonalityAgent',

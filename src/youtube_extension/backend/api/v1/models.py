@@ -614,6 +614,20 @@ class TranscriptActionResponse(BaseModel):
     processing_transport: Optional[str] = None
 
 
+class RenderedVideoResponse(BaseModel):
+    """Status response for a rendered HyperFrames video."""
+
+    video_id: str
+    status: str
+    title: Optional[str] = None
+    format: Optional[str] = None
+    duration_seconds: Optional[int] = None
+    summary: Optional[str] = None
+    download_url: Optional[str] = None
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    error: Optional[str] = None
+
+
 class FeedbackRequest(BaseModel):
     """Request model for feedback submission"""
 

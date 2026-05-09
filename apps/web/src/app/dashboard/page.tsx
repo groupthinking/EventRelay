@@ -6,6 +6,7 @@ import { useSearchParams } from 'next/navigation';
 import { clsx } from 'clsx';
 import Nav from '@/components/Nav';
 import Footer from '@/components/Footer';
+import RenderedVideoCard from '@/components/RenderedVideoCard';
 import TranscriptViewer from '@/components/TranscriptViewer';
 import EventList from '@/components/EventList';
 import type { ExtractedEvent } from '@/lib/types';
@@ -230,6 +231,10 @@ function SplitView({
                   <p>{video.insights!.summary}</p>
                 </div>
               </section>
+
+              {video.renderedVideo && (
+                <RenderedVideoCard renderedVideo={video.renderedVideo} />
+              )}
 
               {/* Topics */}
               {video.insights!.topics.length > 0 && (

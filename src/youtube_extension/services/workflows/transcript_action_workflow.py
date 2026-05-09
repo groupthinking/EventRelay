@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import shutil
 import tempfile
 from dataclasses import asdict
@@ -534,33 +535,68 @@ class TranscriptActionWorkflow:
             }
         }
 
-        # Execute standard transcript action task
-        transcript_result = await self._orchestrator.execute_task(
-            "transcript_action",
-            agent_input,
-            agent_configs=agent_configs,
-        )
+        tasks = [
+            self._orchestrator.execute_task(
+                "transcript_action",
+                agent_input,
+                agent_configs=agent_configs,
+            ),
+            self._orchestrator.execute_task(
+                "strategic_analysis",
+                agent_input,
+                agent_configs=agent_configs,
+            ),
+        ]
+        include_hyperframes = self._hyperframes_enabled()
+        if include_hyperframes:
+            tasks.append(
+                self._orchestrator.execute_task(
+                    "video_rendering",
+                    agent_input,
+                    agent_configs=agent_configs,
+                )
+            )
 
-        # Execute strategic analysis task
-        strategic_result = await self._orchestrator.execute_task(
-            "strategic_analysis",
-            agent_input,
-            agent_configs=agent_configs,
-        )
+        task_results = await asyncio.gather(*tasks)
+        transcript_result = task_results[0]
+        strategic_result = task_results[1]
 
         # Merge results for final serialization
         merged_results = transcript_result.results.copy()
         merged_results.update(strategic_result.results)
+        if include_hyperframes and len(task_results) > 2:
+            merged_results.update(task_results[2].results)
 
         final_result = OrchestrationResult(
-            success=transcript_result.success and strategic_result.success,
+            success=all(result.success for result in task_results),
             results=merged_results,
-            errors=transcript_result.errors + strategic_result.errors,
-            total_processing_time=transcript_result.total_processing_time + strategic_result.total_processing_time,
-            agents_used=list(set(transcript_result.agents_used + strategic_result.agents_used))
+            errors=[
+                error
+                for result in task_results
+                for error in result.errors
+            ],
+            total_processing_time=sum(
+                result.total_processing_time for result in task_results
+            ),
+            agents_used=list(
+                {
+                    agent_name
+                    for result in task_results
+                    for agent_name in result.agents_used
+                }
+            ),
         )
 
         return self._serialize_orchestration(final_result, metadata)
+
+    @staticmethod
+    def _hyperframes_enabled() -> bool:
+        return os.getenv("HYPERFRAMES_ENABLED", "").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
 
     @staticmethod
     def _serialize_orchestration(result: OrchestrationResult, metadata: RobustYouTubeMetadata) -> dict[str, Any]:

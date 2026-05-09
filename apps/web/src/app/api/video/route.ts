@@ -134,6 +134,7 @@ export async function POST(request: Request) {
           strategy: strategyAgent.strategic_analysis || null,
           project_scaffold: transcriptAction.project_scaffold || null,
         };
+        const renderedVideo = result.outputs?.hyperframes?.data || null;
 
         await publishEvent(EventTypes.PIPELINE_COMPLETED, { strategy: 'backend', success: result.success, agents: result.orchestration_meta?.agents_used || [] }, url);
 
@@ -154,6 +155,7 @@ export async function POST(request: Request) {
             transcript_segments: (Array.isArray(result.transcript) ? result.transcript.length : result.transcript?.segments?.length) || 0,
             agents_used: result.orchestration_meta?.agents_used || [],
             errors: result.errors || [],
+            rendered_video: renderedVideo,
             raw_response: result,
           },
         });

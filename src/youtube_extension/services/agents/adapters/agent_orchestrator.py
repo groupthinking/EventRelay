@@ -73,6 +73,7 @@ class AgentOrchestrator:
             "transcript_action": ["transcript_action"],
             "strategic_analysis": ["personality_agent", "strategy_agent"],
             "chat_assistance": ["transcript_action"],
+            "video_rendering": ["hyperframes"],
         }
 
     def register_agent_type(self, name: str, agent_class: type[BaseAgent]):

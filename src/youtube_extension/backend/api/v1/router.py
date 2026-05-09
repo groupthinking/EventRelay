@@ -13,10 +13,11 @@ import os
 import uuid as _uuid
 from dataclasses import asdict
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 from src.shared.youtube import RobustYouTubeMetadata
 from uvai.ml.client import get_uvai_ml_client
@@ -81,6 +82,7 @@ from .models import (
     JobStatus,
     MarkdownRequest,
     MarkdownResponse,
+    RenderedVideoResponse,
     TranscriptActionRequest,
     TranscriptActionResponse,
     VideoJobStatusResponse,
@@ -486,6 +488,7 @@ async def run_transcript_action(
             request.video_url,
         )
 
+    _persist_rendered_video(result, base_url=str(http_request.base_url).rstrip("/"))
     return TranscriptActionResponse(**result)
 
 
@@ -1061,11 +1064,63 @@ async def ingest_performance_report_v1(report: dict[str, Any]):
 _video_jobs: dict[str, VideoJobStatusResponse] = {}
 _agent_executions: dict[str, AgentExecution] = {}
 _dispatches: dict[str, AgentDispatchResponse] = {}
+_rendered_videos: dict[str, dict[str, Any]] = {}
 
 
 def _absolute_status_url(request: Request, job_id: str) -> str:
     base_url = str(request.base_url).rstrip("/")
     return f"{base_url}/api/v1/videos/{job_id}/status"
+
+
+def _absolute_rendered_url(base_url: str, video_id: str) -> str:
+    return f"{base_url.rstrip('/')}/api/v1/videos/{video_id}/rendered"
+
+
+def _normalize_rendered_video(
+    payload: dict[str, Any],
+    *,
+    video_id: str,
+    base_url: str,
+) -> dict[str, Any]:
+    normalized = dict(payload)
+    normalized["video_id"] = video_id
+    normalized["status"] = normalized.get("status") or (
+        "complete" if normalized.get("file_path") else "pending"
+    )
+    normalized["download_url"] = (
+        normalized.get("download_url")
+        or f"{_absolute_rendered_url(base_url, video_id)}?download=1"
+    )
+    normalized["updated_at"] = normalized.get("updated_at") or datetime.utcnow().isoformat()
+    return normalized
+
+
+def _persist_rendered_video(
+    result: dict[str, Any],
+    *,
+    base_url: str,
+) -> dict[str, Any] | None:
+    outputs = result.get("outputs")
+    if not isinstance(outputs, dict):
+        return None
+    hyperframes_output = outputs.get("hyperframes")
+    if not isinstance(hyperframes_output, dict):
+        return None
+    payload = hyperframes_output.get("data")
+    if not isinstance(payload, dict):
+        return None
+    if payload.get("status") != "complete":
+        return None
+
+    metadata = result.get("metadata") or {}
+    video_id = payload.get("video_id") or metadata.get("video_id")
+    if not isinstance(video_id, str) or not video_id:
+        return None
+
+    normalized = _normalize_rendered_video(payload, video_id=video_id, base_url=base_url)
+    _rendered_videos[video_id] = normalized
+    hyperframes_output["data"] = normalized
+    return normalized
 
 
 async def _queue_transcript_action_job(
@@ -1233,6 +1288,9 @@ async def _run_video_job(
             "metadata": result.get("metadata", {}),
             "orchestration_meta": result.get("orchestration_meta", {}),
         }
+        rendered_video = _persist_rendered_video(result, base_url="http://localhost:8000")
+        if rendered_video:
+            job.metadata["rendered_video"] = rendered_video
         if result.get("success"):
             job.status = JobStatus.complete
         else:
@@ -1316,6 +1374,46 @@ async def get_video_job_status(job_id: str):
     if not job:
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
     return ApiResponse.success(job.model_dump())
+
+
+@router.get(
+    "/videos/{video_id}/rendered",
+    response_model=ApiResponse,
+    summary="Get HyperFrames rendered video status",
+    tags=["Videos"],
+)
+async def get_rendered_video(
+    video_id: str,
+    request: Request,
+    download: bool = False,
+):
+    """Return HyperFrames render metadata or stream the rendered MP4."""
+    rendered = _rendered_videos.get(video_id)
+    if not rendered:
+        return ApiResponse.success(
+            RenderedVideoResponse(video_id=video_id, status="pending").model_dump()
+        )
+
+    file_path = rendered.get("file_path")
+    if download:
+        if not isinstance(file_path, str) or not Path(file_path).exists():
+            raise HTTPException(
+                status_code=404,
+                detail=f"Rendered video for {video_id} is unavailable",
+            )
+        return FileResponse(
+            path=file_path,
+            media_type="video/mp4",
+            filename=f"{video_id}.mp4",
+        )
+
+    response_payload = _normalize_rendered_video(
+        rendered,
+        video_id=video_id,
+        base_url=str(request.base_url).rstrip("/"),
+    )
+    _rendered_videos[video_id] = response_payload
+    return ApiResponse.success(RenderedVideoResponse(**response_payload).model_dump())
 
 
 # ============================================================

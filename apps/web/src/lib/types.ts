@@ -97,6 +97,18 @@ export interface AgentDispatchResponse {
   executions: AgentExecution[];
 }
 
+export interface RenderedVideo {
+  video_id: string;
+  status: 'pending' | 'complete' | 'failed';
+  title?: string;
+  format?: string;
+  duration_seconds?: number;
+  summary?: string;
+  download_url?: string;
+  updated_at?: string;
+  error?: string;
+}
+
 export interface AgentStatusResponse {
   agent_id: string;
   agent_type: string;
