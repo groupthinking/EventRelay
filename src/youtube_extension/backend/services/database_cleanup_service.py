@@ -16,6 +16,7 @@ Features:
 
 import asyncio
 import json
+import re
 import logging
 import os
 import sqlite3
@@ -201,6 +202,22 @@ class DatabaseCleanupService:
         records_deleted = 0
         initial_size = self.get_database_size_mb(db_path)
 
+        # Validate table name to prevent SQL injection
+        if not re.match(r"^[a-zA-Z0-9_]+$", policy.table_name):
+            return CleanupResult(
+                database_path=db_path,
+                table_name=policy.table_name,
+                records_deleted=0,
+                space_freed_mb=0.0,
+                execution_time_ms=0.0,
+                timestamp=datetime.now(timezone.utc),
+                success=False,
+                error_message=f"Invalid table name format: {policy.table_name}"
+            )
+
+        # Safely quote the table name for use in queries
+        safe_table_name = f'"{policy.table_name}"'
+
         try:
             if not os.path.exists(db_path):
                 return CleanupResult(
@@ -236,7 +253,7 @@ class DatabaseCleanupService:
                 cutoff_date = datetime.now(timezone.utc) - timedelta(days=policy.retention_days)
 
                 # Determine a valid timestamp column for retention checks
-                cursor.execute(f"PRAGMA table_info({policy.table_name})")
+                cursor.execute(f"PRAGMA table_info({safe_table_name})")
                 columns = [row[1] for row in cursor.fetchall()]
                 time_col = None
                 for candidate in ("timestamp", "created_at", "createdAt", "ts"):
@@ -264,9 +281,9 @@ class DatabaseCleanupService:
                 while True:
                     cursor.execute(
                         f"""
-                        DELETE FROM {policy.table_name}
+                        DELETE FROM {safe_table_name}
                         WHERE rowid IN (
-                            SELECT rowid FROM {policy.table_name}
+                            SELECT rowid FROM {safe_table_name}
                             WHERE {time_col} < ?
                             LIMIT ?
                         )
