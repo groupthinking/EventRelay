@@ -79,8 +79,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <body className="min-h-screen bg-surface-950 font-sans antialiased">
+    <html lang="en" className="bg-void">
+      <body className="min-h-screen bg-void font-sans antialiased">
         {/* Global background effects */}
         <div className="fixed inset-0 bg-mesh pointer-events-none" />
         <div className="fixed inset-0 noise pointer-events-none" />
