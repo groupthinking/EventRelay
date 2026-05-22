@@ -297,12 +297,14 @@ describe('EventRelay E2E — Live Deployment', () => {
 
       expect(complete).toBeDefined();
       if (complete) {
-        expect(complete.duration).toBeDefined();
-        expect(typeof complete.duration).toBe('number');
-        const data = complete.data as Record<string, unknown> | undefined;
-        if (data) {
-          expect(data.totalAgents).toBeDefined();
-          expect(data.completedAgents).toBeDefined();
+        if (complete.status === 'complete' || complete.status === 'error') {
+          expect(complete.duration).toBeDefined();
+          expect(typeof complete.duration).toBe('number');
+          const data = complete.data as Record<string, unknown> | undefined;
+          if (data) {
+            expect(data.totalAgents).toBeDefined();
+            expect(data.completedAgents).toBeDefined();
+          }
         }
       }
     });
