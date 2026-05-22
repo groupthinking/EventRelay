@@ -14,6 +14,7 @@ permissions:
 env:
   BASE_URL: https://uvai.io
   TEST_YOUTUBE_URL: https://www.youtube.com/watch?v=dQw4w9WgXcQ
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   e2e:
