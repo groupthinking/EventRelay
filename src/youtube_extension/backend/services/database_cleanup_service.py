@@ -266,7 +266,7 @@ class DatabaseCleanupService:
 
                 # Delete old records in batches (SQLite-compatible; DELETE ... LIMIT is not portable)
                 while True:
-                    cursor.execute(
+                    cursor.execute(  # nosec B608
                         f"""
                         DELETE FROM {safe_table_name}
                         WHERE rowid IN (
@@ -274,7 +274,7 @@ class DatabaseCleanupService:
                             WHERE {time_col} < ?
                             LIMIT ?
                         )
-                        """,  # nosec B608
+                        """,
                         (cutoff_date.isoformat(), policy.batch_size),
                     )
 
