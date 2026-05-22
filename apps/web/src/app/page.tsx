@@ -202,7 +202,7 @@ export default function Home() {
           <div className="max-w-[1200px] mx-auto grid lg:grid-cols-2 gap-12 items-start">
             <div>
               <p className="text-xs tracking-[0.3em] uppercase mb-5" style={{ color: TEAL }}>
-                Agentic video execution platform
+                Video Intelligence Engine
               </p>
               <h1
                 className="font-heading text-4xl md:text-6xl font-bold tracking-tighter mb-6 leading-[1.05]"
