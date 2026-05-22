@@ -27,6 +27,13 @@
     "vitest": "^4.1.2"
   },
   "overrides": {
+    "next": "^16.2.6",
+    "building-production-ai-infrastructure-platform": {
+      "next": "^16.2.6"
+    },
+    "@repo/eslint-config": {
+      "next": "^16.2.6"
+    },
     "nth-check": "^2.0.1",
     "postcss": "^8.4.31",
     "undici": "^6.22.0",
