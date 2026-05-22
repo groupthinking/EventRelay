@@ -38,6 +38,14 @@ API_COST_DB_NAME = API_COST_DB_PATH.name
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+ALLOWED_TABLE_NAMES = {
+    'performance_metrics',
+    'performance_alerts',
+    'benchmark_results',
+    'api_usage',
+    'daily_budgets'
+}
+
 @dataclass
 class RetentionPolicy:
     """Retention policy for a specific table/data type"""
@@ -202,6 +210,18 @@ class DatabaseCleanupService:
         initial_size = self.get_database_size_mb(db_path)
 
         try:
+            if policy.table_name not in ALLOWED_TABLE_NAMES:
+                return CleanupResult(
+                    database_path=db_path,
+                    table_name=policy.table_name,
+                    records_deleted=0,
+                    space_freed_mb=0.0,
+                    execution_time_ms=0.0,
+                    timestamp=datetime.now(timezone.utc),
+                    success=False,
+                    error_message=f"Table {policy.table_name} is not in the allowlist"
+                )
+
             if not os.path.exists(db_path):
                 return CleanupResult(
                     database_path=db_path,
@@ -236,7 +256,7 @@ class DatabaseCleanupService:
                 cutoff_date = datetime.now(timezone.utc) - timedelta(days=policy.retention_days)
 
                 # Determine a valid timestamp column for retention checks
-                cursor.execute(f"PRAGMA table_info({policy.table_name})")
+                cursor.execute("PRAGMA table_info('%s')" % policy.table_name.replace("'", "''"))
                 columns = [row[1] for row in cursor.fetchall()]
                 time_col = None
                 for candidate in ("timestamp", "created_at", "createdAt", "ts"):
