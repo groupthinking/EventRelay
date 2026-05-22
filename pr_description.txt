@@ -1,0 +1,5 @@
+🎯 What: Removed the hardcoded `SECRET_KEY` from the code generator template in `src/youtube_extension/backend/code_generator.py:1014`.
+
+⚠️ Risk: Leaving the hardcoded `SECRET_KEY` exposes any generated code directly to potential attackers, as the identical key would be generated for every output.
+
+🛡️ Solution: Updated the code generator to inject the `os` and `secrets` module and use `SECRET_KEY = os.getenv("SECRET_KEY", secrets.token_urlsafe(32))` instead of a static string. This ensures the generated code behaves securely by default.

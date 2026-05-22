@@ -1006,12 +1006,14 @@ body {{
 
         if "authentication" in features:
             auth_imports = '''
+import os
+import secrets
 from datetime import datetime, timedelta
 from jose import JWTError, jwt
 from passlib.context import CryptContext'''
             auth_code = '''
 # Authentication setup
-SECRET_KEY = "your-secret-key-here"
+SECRET_KEY = os.getenv("SECRET_KEY", secrets.token_urlsafe(32))
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
