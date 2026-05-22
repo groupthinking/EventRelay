@@ -3,8 +3,9 @@ import ContactForm from './ContactForm';
 import { CONTACT_EMAIL } from '@/lib/constants';
 
 /* ═══════════════════════════════════════════
-   UVAI — Grounded One-Page Positioning Site
-   Reflects only proven repo capabilities.
+   UVAI — Video to Action Landing Page
+   Producer.ai-style centered hero with URL
+   input box. Reflects "action layer" positioning.
    ═══════════════════════════════════════════ */
 
 const TEAL = '#6af2de';
@@ -21,7 +22,40 @@ const TRUST_PILLS = [
   'MIT licensed',
   'Self-hostable',
   'OpenAPI included',
-  'Bring Gemini + OpenAI keys',
+  'Bring your own keys',
+];
+
+const STARTER_TEMPLATES = [
+  {
+    icon: '▶',
+    title: 'Tutorial → deployable project',
+    prompt: 'Turn this tutorial into a project plan with code steps and deployment path',
+    tags: ['Engineering'],
+  },
+  {
+    icon: '◉',
+    title: 'Conference talk → action items',
+    prompt: 'Extract decisions, follow-ups, and next steps from this talk',
+    tags: ['Business'],
+  },
+  {
+    icon: '◈',
+    title: 'Podcast → blog post',
+    prompt: 'Turn this conversation into a structured draft with themes and quotes',
+    tags: ['Content'],
+  },
+  {
+    icon: '◎',
+    title: 'Product demo → feature tickets',
+    prompt: 'Extract the features shown and generate implementation tickets',
+    tags: ['Product'],
+  },
+  {
+    icon: '◇',
+    title: 'Lecture → study notes',
+    prompt: 'Compress this lecture into notes, key ideas, and review questions',
+    tags: ['Education'],
+  },
 ];
 
 const PIPELINE_ROWS = [
@@ -39,8 +73,8 @@ const PIPELINE_ROWS = [
   },
   {
     n: '03',
-    title: 'Agent analysis',
-    body: 'Summary, intent, strategy, and video-aware chat inside the dashboard.',
+    title: 'Agent execution',
+    body: 'Summary, intent, strategy, and video-aware chat that takes action on the output.',
     tag: 'Live',
   },
 ];
@@ -48,15 +82,15 @@ const PIPELINE_ROWS = [
 const CAPABILITY_CARDS = [
   {
     title: 'Transcript pipeline',
-    body: 'Start with YouTube captions when available, then fall back to speech-to-text. The output is a usable transcript with timestamps.',
+    body: 'Start with YouTube captions when available, then fall back to speech-to-text. The output is a timestamped transcript ready for downstream processing.',
   },
   {
     title: 'Gemini agent passes',
-    body: 'Analysis passes cover summary and tasks, intent signals, and strategic insights. The page only describes the active pipeline.',
+    body: 'Analysis passes cover summary and tasks, intent signals, and strategic insights. Agents act on what they find, not just report it.',
   },
   {
-    title: 'Dashboard and chat',
-    body: 'The hosted app exposes workflow templates, async processing, status updates, cached results, and chat over processed video.',
+    title: 'Dashboard and execution',
+    body: 'Workflow templates, async processing, status updates, cached results, and video-aware chat — all wired to take the next step, not just display the output.',
   },
 ];
 
@@ -69,12 +103,12 @@ const STEPS = [
   {
     n: '02',
     title: 'Watch the pipeline run',
-    body: 'Transcription, structured extraction, and AI analysis run as a coordinated job with SSE status updates.',
+    body: 'Transcription, structured extraction, and AI analysis run as a coordinated job with real-time status updates.',
   },
   {
     n: '03',
-    title: 'Use the result',
-    body: 'Read the transcript, export structured events, review action items, or ask the video follow-up questions.',
+    title: 'Take action on the result',
+    body: 'Read the transcript, export structured events, review action items, or ask the video follow-up questions — then execute.',
   },
 ];
 
@@ -94,30 +128,6 @@ const DEVELOPER_ITEMS = [
   {
     head: 'MIT licensed source',
     body: 'EventRelay is the open-source repo name; UVAI is the live product brand.',
-  },
-];
-
-const TEMPLATE_CARDS = [
-  {
-    title: 'YouTube tutorial → deployable project',
-    body: 'Extract the implementation path from a technical tutorial and turn it into a project plan with code-oriented outputs. Treat deployment as a next step, not a promised one-click finish.',
-    tags: ['Engineering', 'Project scaffold'],
-    featured: true,
-  },
-  {
-    title: 'Conference talk → action items',
-    body: 'Capture decisions, follow-ups, and concrete next steps from long-form business or technical talks.',
-    tags: ['Business', 'Tasks'],
-  },
-  {
-    title: 'Podcast → blog post',
-    body: 'Turn a long discussion into a structured draft with themes, quotes, and a clear content outline.',
-    tags: ['Content', 'Drafting'],
-  },
-  {
-    title: 'Lecture → study notes',
-    body: 'Compress educational videos into notes, key ideas, and review material without losing the source context.',
-    tags: ['Education', 'Notes'],
   },
 ];
 
@@ -153,8 +163,8 @@ export default function Home() {
           </Link>
           <div className="hidden md:flex gap-7 items-center">
             {[
+              { href: '#how-it-works', label: 'How it works' },
               { href: '#capabilities', label: 'Capabilities' },
-              { href: '#workflow', label: 'Workflow' },
               { href: '#developers', label: 'Developers' },
               { href: '#contact', label: 'Contact' },
             ].map((l) => (
@@ -193,72 +203,235 @@ export default function Home() {
         {/* ─── HERO ─── */}
         <section
           id="top"
-          className="relative px-6 py-16 md:py-24"
+          className="relative px-6 pt-16 pb-10 md:pt-24 md:pb-14"
           style={{
             background:
-              'radial-gradient(circle at 30% 20%, rgba(106, 242, 222, 0.07) 0%, transparent 60%)',
+              'radial-gradient(circle at 50% 10%, rgba(106, 242, 222, 0.07) 0%, transparent 65%)',
           }}
         >
-          <div className="max-w-[1200px] mx-auto grid lg:grid-cols-2 gap-12 items-start">
-            <div>
-              <p className="text-xs tracking-[0.3em] uppercase mb-5" style={{ color: TEAL }}>
-                Agentic video execution platform
-              </p>
-              <h1
-                className="font-heading text-4xl md:text-6xl font-bold tracking-tighter mb-6 leading-[1.05]"
-                style={{ color: INK }}
-              >
-                Turn video into{' '}
-                <span
-                  style={{
-                    WebkitBackgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent',
-                    backgroundImage: `linear-gradient(135deg, ${TEAL}, #38fbf7)`,
-                  }}
-                >
-                  structured intelligence.
-                </span>
-              </h1>
-              <p className="text-lg leading-relaxed mb-8 max-w-xl" style={{ color: MUTED }}>
-                Paste a YouTube URL. UVAI returns a verbatim transcript, typed events, action items,
-                and AI-driven analysis powered by Gemini and OpenAI.
-              </p>
+          <div className="max-w-[860px] mx-auto flex flex-col items-center text-center">
+            {/* Eyebrow */}
+            <p
+              className="text-xs tracking-[0.3em] uppercase mb-5 px-4 py-2 rounded-full"
+              style={{
+                color: TEAL,
+                background: 'rgba(106, 242, 222, 0.08)',
+                border: '1px solid rgba(106, 242, 222, 0.18)',
+              }}
+            >
+              The action layer for video
+            </p>
 
-              <div className="flex flex-wrap gap-3 mb-8">
+            {/* Headline */}
+            <h1
+              className="font-heading text-4xl md:text-6xl lg:text-7xl font-bold tracking-tighter mb-5 leading-[1.05] text-balance"
+              style={{ color: INK }}
+            >
+              Paste a video.{' '}
+              <span
+                style={{
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  backgroundImage: `linear-gradient(135deg, ${TEAL}, #38fbf7)`,
+                }}
+              >
+                Build from it.
+              </span>
+            </h1>
+
+            {/* Sub-headline */}
+            <p className="text-lg leading-relaxed mb-10 max-w-[600px] text-pretty" style={{ color: MUTED }}>
+              YouTube native search only shows you what exists. UVAI takes what is{' '}
+              <em>inside</em> a video — the tools, concepts, workflows — and{' '}
+              <strong style={{ color: INK }}>executes on them</strong>. Transcripts, typed events,
+              action items, and agentic builds powered by Gemini and OpenAI.
+            </p>
+
+            {/* ── URL Input Box (producer.ai-style) ── */}
+            <div
+              className="w-full max-w-[680px] rounded-2xl p-4 mb-4"
+              style={{
+                background: 'rgba(19, 19, 24, 0.8)',
+                border: `1px solid rgba(106, 242, 222, 0.25)`,
+                backdropFilter: 'blur(20px)',
+                boxShadow: '0 0 60px -20px rgba(106, 242, 222, 0.15)',
+              }}
+            >
+              <div className="flex items-center gap-3 mb-3">
+                <div
+                  className="flex-1 flex items-center gap-2 px-4 py-3 rounded-xl"
+                  style={{ background: 'rgba(14,14,19,0.8)', border: `1px solid ${BORDER}` }}
+                >
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                    style={{ color: TEAL, flexShrink: 0 }}
+                  >
+                    <path d="M8 5v14l11-7z" />
+                  </svg>
+                  <span className="text-sm flex-1" style={{ color: FAINT }}>
+                    Paste a YouTube URL to build from…
+                  </span>
+                </div>
                 <Link
                   href="/dashboard"
-                  className="px-7 py-3 rounded-lg font-bold text-sm transition-all duration-300 active:scale-95"
+                  className="px-5 py-3 rounded-xl font-bold text-sm transition-all duration-300 active:scale-95 whitespace-nowrap"
                   style={{ background: `linear-gradient(135deg, ${TEAL}, ${TEAL_DEEP})`, color: '#002b26' }}
                 >
-                  Try a YouTube URL
+                  Run pipeline
                 </Link>
-                <a
-                  href="#contact"
-                  className="px-7 py-3 rounded-lg font-bold text-sm transition-all duration-300"
-                  style={{ border: `1px solid ${BORDER}`, color: INK }}
-                >
-                  Talk through a workflow
-                </a>
               </div>
-
-              <ul className="flex flex-wrap gap-2" aria-label="Verified product attributes">
-                {TRUST_PILLS.map((p) => (
-                  <li
-                    key={p}
-                    className="text-[11px] uppercase tracking-widest px-3 py-1.5 rounded-full font-semibold"
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs" style={{ color: FAINT }}>
+                  Try a starter:
+                </span>
+                {['Tutorial → project', 'Talk → action items', 'Demo → tickets'].map((s) => (
+                  <Link
+                    key={s}
+                    href="/dashboard"
+                    className="text-xs px-3 py-1.5 rounded-full transition-colors duration-200 hover:opacity-80"
                     style={{
-                      background: 'rgba(106, 242, 222, 0.08)',
+                      background: 'rgba(106, 242, 222, 0.07)',
                       color: TEAL,
-                      border: '1px solid rgba(106, 242, 222, 0.18)',
+                      border: '1px solid rgba(106, 242, 222, 0.15)',
                     }}
                   >
-                    {p}
-                  </li>
+                    {s}
+                  </Link>
                 ))}
-              </ul>
+              </div>
             </div>
 
-            {/* Pipeline preview card */}
+            {/* Trust pills */}
+            <ul className="flex flex-wrap gap-2 justify-center" aria-label="Verified product attributes">
+              {TRUST_PILLS.map((p) => (
+                <li
+                  key={p}
+                  className="text-[11px] uppercase tracking-widest px-3 py-1.5 rounded-full font-semibold"
+                  style={{
+                    background: 'rgba(106, 242, 222, 0.06)',
+                    color: FAINT,
+                    border: `1px solid ${BORDER}`,
+                  }}
+                >
+                  {p}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </section>
+
+        {/* ─── STARTERS ─── */}
+        <section className="px-6 pb-20" style={{ background: BG }}>
+          <div className="max-w-[1100px] mx-auto">
+            <p
+              className="text-[10px] tracking-[0.3em] uppercase mb-6 text-center"
+              style={{ color: FAINT }}
+            >
+              Workflow starters
+            </p>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {STARTER_TEMPLATES.map((t) => (
+                <Link
+                  key={t.title}
+                  href="/dashboard"
+                  className="group rounded-xl p-5 flex flex-col gap-3 transition-all duration-300 hover:-translate-y-0.5"
+                  style={{
+                    background: 'rgba(19,19,24,0.65)',
+                    border: `1px solid ${BORDER}`,
+                  }}
+                >
+                  <div className="flex items-center justify-between">
+                    <span
+                      className="text-lg font-bold leading-none"
+                      style={{ color: TEAL, fontFamily: 'monospace' }}
+                    >
+                      {t.icon}
+                    </span>
+                    <div className="flex gap-1.5">
+                      {t.tags.map((tag) => (
+                        <span
+                          key={tag}
+                          className="text-[9px] uppercase tracking-widest font-bold px-2 py-0.5 rounded-full"
+                          style={{
+                            background: 'rgba(106, 242, 222, 0.08)',
+                            color: TEAL,
+                            border: '1px solid rgba(106, 242, 222, 0.15)',
+                          }}
+                        >
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  <h3 className="font-heading text-sm font-bold leading-snug" style={{ color: INK }}>
+                    {t.title}
+                  </h3>
+                  <p className="text-xs leading-relaxed" style={{ color: FAINT }}>
+                    {t.prompt}
+                  </p>
+                  <div className="mt-auto flex items-center gap-1.5 text-xs font-semibold" style={{ color: TEAL }}>
+                    <span>Use template</span>
+                    <span className="transition-transform duration-200 group-hover:translate-x-0.5" aria-hidden>→</span>
+                  </div>
+                </Link>
+              ))}
+              {/* Browse all */}
+              <Link
+                href="/dashboard"
+                className="group rounded-xl p-5 flex flex-col items-center justify-center gap-2 transition-all duration-300 hover:-translate-y-0.5"
+                style={{
+                  background: 'rgba(106, 242, 222, 0.03)',
+                  border: `1px dashed rgba(106, 242, 222, 0.2)`,
+                }}
+              >
+                <span className="text-2xl font-bold" style={{ color: TEAL, opacity: 0.6 }}>+</span>
+                <span className="text-xs font-semibold text-center" style={{ color: TEAL }}>
+                  Browse all 9 templates
+                </span>
+                <span className="text-xs text-center" style={{ color: FAINT }}>
+                  in the dashboard
+                </span>
+              </Link>
+            </div>
+          </div>
+        </section>
+
+        {/* ─── WHAT UVAI DOES ─── */}
+        <section
+          className="py-20 px-6"
+          style={{
+            background: PANEL,
+            borderTop: `1px solid ${BORDER}`,
+            borderBottom: `1px solid ${BORDER}`,
+          }}
+        >
+          <div className="max-w-[1100px] mx-auto grid md:grid-cols-2 gap-12 items-center">
+            <div>
+              <p className="text-[10px] tracking-[0.3em] uppercase mb-3" style={{ color: TEAL }}>
+                The gap we fill
+              </p>
+              <h2
+                className="font-heading text-3xl md:text-4xl font-bold tracking-tighter mb-5 text-balance"
+                style={{ color: INK }}
+              >
+                YouTube shows you what exists. We build from what&apos;s inside.
+              </h2>
+              <p className="text-base leading-relaxed mb-6" style={{ color: MUTED }}>
+                The native YouTube experience gives you search, recommendations, and a chat
+                assistant that can summarize. It does not let you take action on the content —
+                no connection made, no output generated, no next step executed.
+              </p>
+              <p className="text-base leading-relaxed" style={{ color: MUTED }}>
+                UVAI is the action layer. It takes the tools, concepts, workflows, and insights
+                inside a video and <strong style={{ color: INK }}>builds from them</strong>:
+                structured events, implementation plans, agent-driven tasks, and
+                code-ready output — all from a single URL paste.
+              </p>
+            </div>
+            {/* Pipeline preview */}
             <aside
               aria-label="UVAI processing pipeline preview"
               className="rounded-2xl overflow-hidden"
@@ -323,24 +496,24 @@ export default function Home() {
         </section>
 
         {/* ─── CAPABILITIES ─── */}
-        <section id="capabilities" className="scroll-mt-24 py-20 px-6" style={{ background: PANEL }}>
-          <div className="max-w-[1200px] mx-auto">
+        <section id="capabilities" className="scroll-mt-24 py-20 px-6">
+          <div className="max-w-[1100px] mx-auto">
             <div className="grid md:grid-cols-2 gap-8 mb-12">
               <div>
                 <p className="text-[10px] tracking-[0.3em] uppercase mb-3" style={{ color: TEAL }}>
                   What is real today
                 </p>
                 <h2
-                  className="font-heading text-3xl md:text-4xl font-bold tracking-tighter"
+                  className="font-heading text-3xl md:text-4xl font-bold tracking-tighter text-balance"
                   style={{ color: INK }}
                 >
-                  A focused video intelligence stack.
+                  A focused video action stack.
                 </h2>
               </div>
               <p className="text-base leading-relaxed self-end" style={{ color: MUTED }}>
                 UVAI is not a generic AI wrapper. It is a working YouTube processing pipeline with
                 transcript extraction, structured event output, multi-agent analysis, async jobs,
-                cache routes, and dashboard workflows.
+                and execution hooks that turn results into deliverables.
               </p>
             </div>
 
@@ -400,23 +573,23 @@ export default function Home() {
           </div>
         </section>
 
-        {/* ─── WORKFLOW ─── */}
-        <section id="workflow" className="scroll-mt-24 py-20 px-6">
-          <div className="max-w-[1200px] mx-auto">
+        {/* ─── HOW IT WORKS ─── */}
+        <section id="how-it-works" className="scroll-mt-24 py-20 px-6" style={{ background: PANEL }}>
+          <div className="max-w-[1100px] mx-auto">
             <div className="grid md:grid-cols-2 gap-8 mb-12">
               <div>
                 <p className="text-[10px] tracking-[0.3em] uppercase mb-3" style={{ color: TEAL }}>
                   How it works
                 </p>
                 <h2
-                  className="font-heading text-3xl md:text-4xl font-bold tracking-tighter"
+                  className="font-heading text-3xl md:text-4xl font-bold tracking-tighter text-balance"
                   style={{ color: INK }}
                 >
                   From URL to usable output.
                 </h2>
               </div>
               <p className="text-base leading-relaxed self-end" style={{ color: MUTED }}>
-                Keep the first run simple. Pick a template or paste a URL, let the pipeline process
+                Keep the first run simple. Pick a starter or paste a URL, let the pipeline process
                 the video, then use the output in the dashboard or through the API.
               </p>
             </div>
@@ -447,8 +620,8 @@ export default function Home() {
         </section>
 
         {/* ─── DEVELOPERS ─── */}
-        <section id="developers" className="scroll-mt-24 py-20 px-6" style={{ background: PANEL }}>
-          <div className="max-w-[1200px] mx-auto">
+        <section id="developers" className="scroll-mt-24 py-20 px-6">
+          <div className="max-w-[1100px] mx-auto">
             <div
               className="rounded-2xl p-10 grid lg:grid-cols-[1fr_1.3fr] gap-10"
               style={{ background: 'rgba(19,19,24,0.65)', border: `1px solid ${BORDER}` }}
@@ -458,7 +631,7 @@ export default function Home() {
                   Built for operators and developers
                 </p>
                 <h2
-                  className="font-heading text-3xl md:text-4xl font-bold tracking-tighter"
+                  className="font-heading text-3xl md:text-4xl font-bold tracking-tighter text-balance"
                   style={{ color: INK }}
                 >
                   Open where it matters.
@@ -484,89 +657,18 @@ export default function Home() {
           </div>
         </section>
 
-        {/* ─── TEMPLATES ─── */}
-        <section className="py-20 px-6">
-          <div className="max-w-[1200px] mx-auto">
-            <div className="grid md:grid-cols-2 gap-8 mb-12">
-              <div>
-                <p className="text-[10px] tracking-[0.3em] uppercase mb-3" style={{ color: TEAL }}>
-                  Workflow starting points
-                </p>
-                <h2
-                  className="font-heading text-3xl md:text-4xl font-bold tracking-tighter"
-                  style={{ color: INK }}
-                >
-                  Templates that match real use cases.
-                </h2>
-              </div>
-              <p className="text-base leading-relaxed self-end" style={{ color: MUTED }}>
-                UVAI ships nine workflow templates today. These four are the clearest public
-                examples; browse the rest from the dashboard.
-              </p>
-            </div>
-
-            <div className="grid md:grid-cols-2 gap-5">
-              {TEMPLATE_CARDS.map((t) => (
-                <article
-                  key={t.title}
-                  className="rounded-2xl p-7 transition-all duration-300 hover:-translate-y-0.5"
-                  style={{
-                    background: t.featured ? 'rgba(106, 242, 222, 0.04)' : 'rgba(19,19,24,0.65)',
-                    border: t.featured
-                      ? '1px solid rgba(106, 242, 222, 0.25)'
-                      : `1px solid ${BORDER}`,
-                  }}
-                >
-                  <h3 className="font-heading text-lg font-bold mb-3" style={{ color: INK }}>
-                    {t.title}
-                  </h3>
-                  <p className="text-sm leading-relaxed mb-5" style={{ color: MUTED }}>
-                    {t.body}
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {t.tags.map((tag) => (
-                      <span
-                        key={tag}
-                        className="text-[10px] uppercase tracking-widest font-bold px-2.5 py-1 rounded-full"
-                        style={{
-                          background: 'rgba(106, 242, 222, 0.08)',
-                          color: TEAL,
-                          border: '1px solid rgba(106, 242, 222, 0.18)',
-                        }}
-                      >
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-                </article>
-              ))}
-            </div>
-
-            <div className="mt-8 text-center">
-              <Link
-                href="/dashboard"
-                className="inline-flex items-center gap-2 text-sm font-bold uppercase tracking-widest"
-                style={{ color: TEAL }}
-              >
-                See all templates in the dashboard
-                <span aria-hidden>→</span>
-              </Link>
-            </div>
-          </div>
-        </section>
-
         {/* ─── CONTACT ─── */}
         <section id="contact" className="scroll-mt-24 py-20 px-6" style={{ background: PANEL }}>
-          <div className="max-w-[1200px] mx-auto grid lg:grid-cols-2 gap-10">
+          <div className="max-w-[1100px] mx-auto grid lg:grid-cols-2 gap-10">
             <div>
               <p className="text-[10px] tracking-[0.3em] uppercase mb-3" style={{ color: TEAL }}>
                 Inbound
               </p>
               <h2
-                className="font-heading text-3xl md:text-4xl font-bold tracking-tighter mb-5"
+                className="font-heading text-3xl md:text-4xl font-bold tracking-tighter mb-5 text-balance"
                 style={{ color: INK }}
               >
-                Send the video workflow you want automated.
+                Tell us the video workflow you want executed.
               </h2>
               <p className="text-base leading-relaxed mb-4" style={{ color: MUTED }}>
                 Share the type of video, the output you need, and where the result should go.
@@ -575,8 +677,7 @@ export default function Home() {
               </p>
               <p className="text-sm leading-relaxed mb-7" style={{ color: FAINT }}>
                 Privacy note: this page does not submit to our backend. The draft contents are
-                handed to your browser or local email app, which formats them as a new message for
-                you to review and send.
+                handed to your browser or local email app.
               </p>
               <div className="flex flex-wrap gap-3">
                 <Link
@@ -608,7 +709,7 @@ export default function Home() {
         className="py-10 px-6"
         style={{ borderTop: `1px solid ${BORDER}`, background: BG }}
       >
-        <div className="flex flex-col md:flex-row justify-between items-center gap-6 max-w-[1200px] mx-auto">
+        <div className="flex flex-col md:flex-row justify-between items-center gap-6 max-w-[1100px] mx-auto">
           <p className="text-sm" style={{ color: FAINT }}>
             © 2026 UVAI. EventRelay open-source project, MIT licensed.
           </p>
