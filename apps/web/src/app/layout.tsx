@@ -10,11 +10,11 @@ import './globals.css';
 
 export const metadata: Metadata = {
   title: {
-    default: 'UVAI — Video to Structured Intelligence',
+    default: 'UVAI — The Action Layer for Video',
     template: '%s | UVAI',
   },
-  description: 'UVAI turns YouTube videos into transcripts, typed events, action items, and AI-driven analysis using Gemini and OpenAI. Open source via the EventRelay project.',
-  keywords: ['UVAI', 'video intelligence', 'YouTube transcript', 'structured events', 'Gemini', 'OpenAI', 'EventRelay', 'agentic video'],
+  description: 'UVAI takes what is inside a YouTube video and builds from it — transcripts, typed events, action items, and agentic execution powered by Gemini and OpenAI. Open source via EventRelay.',
+  keywords: ['UVAI', 'video to action', 'YouTube build', 'video intelligence', 'structured events', 'Gemini', 'OpenAI', 'EventRelay', 'agentic video execution'],
   authors: [{ name: 'UVAI' }],
   creator: 'UVAI',
   publisher: 'UVAI',
@@ -24,21 +24,21 @@ export const metadata: Metadata = {
     locale: 'en_US',
     url: 'https://v0-uvai.vercel.app',
     siteName: 'UVAI',
-    title: 'UVAI — Video to Structured Intelligence',
-    description: 'Paste a YouTube URL. Get transcripts, typed events, action items, and multi-agent analysis from an open-source video intelligence platform.',
+    title: 'UVAI — The Action Layer for Video',
+    description: 'Paste a YouTube URL. UVAI takes what is inside the video and builds from it — transcripts, typed events, action items, and agentic execution.',
     images: [
       {
         url: '/og-image.png',
         width: 1200,
         height: 630,
-        alt: 'UVAI — Agentic Video Execution Platform',
+        alt: 'UVAI — The Action Layer for Video',
       },
     ],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'UVAI — Video to Structured Intelligence',
-    description: 'Paste a YouTube URL. Get transcripts, typed events, action items, and multi-agent analysis from an open-source video intelligence platform.',
+    title: 'UVAI — The Action Layer for Video',
+    description: 'Paste a YouTube URL. UVAI takes what is inside the video and builds from it — transcripts, typed events, action items, and agentic execution.',
     images: ['/og-image.png'],
     creator: '@groupthinking',
   },

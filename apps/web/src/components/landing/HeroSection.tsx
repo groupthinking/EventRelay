@@ -85,13 +85,13 @@ export default function HeroSection() {
               style={{ background: '#6af2de' }}
               aria-hidden
             />
-            Agentic video execution platform
+            The action layer for video
           </span>
         </div>
 
         {/* Hero headline — display scale */}
         <h1 className="font-heading text-center text-[clamp(3rem,8vw,8rem)] font-black leading-[0.9] tracking-tighter mb-8 text-ink">
-          Turn video into{' '}
+          Paste a video.{' '}
           <span
             style={{
               WebkitBackgroundClip: 'text',
@@ -99,14 +99,14 @@ export default function HeroSection() {
               backgroundImage: 'linear-gradient(135deg, #6af2de 0%, #38fbf7 50%, #14b8a6 100%)',
             }}
           >
-            intelligence.
+            Build from it.
           </span>
         </h1>
 
         {/* Sub-headline */}
         <p className="text-center text-[clamp(1rem,2vw,1.25rem)] leading-relaxed max-w-2xl mx-auto mb-12 text-ink/55">
-          Paste a YouTube URL. UVAI returns a verbatim transcript, typed events, action items,
-          and multi-agent analysis — powered by Gemini and OpenAI.
+          Paste a YouTube URL. UVAI takes what is inside the video — transcript, typed events, action items,
+          and AI-driven execution — and builds from it. YouTube tells you what&apos;s there. UVAI acts on it.
         </p>
 
         {/* CTAs */}
