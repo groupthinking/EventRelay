@@ -12,6 +12,7 @@ Baseline pulse identified the following gaps between repo `main` and the live
 `uvai.io` deployment (live was stale; assets referenced by `layout.tsx` 404'd):
 
 #### Added
+
 - `apps/web/public/` directory with previously-missing static assets referenced
   by `apps/web/src/app/layout.tsx`:
   - `favicon.ico` (multi-resolution: 16/32/48/64)
@@ -27,6 +28,7 @@ Baseline pulse identified the following gaps between repo `main` and the live
 - Skip-to-main-content link in `layout.tsx` for keyboard / screen-reader users.
 
 ### Changed
+
 - `apps/web/src/app/layout.tsx`: `metadataBase` and `openGraph.url` corrected
   from `https://v0-uvai.vercel.app` to canonical `https://uvai.io`. Added
   `alternates.canonical`.
@@ -41,6 +43,7 @@ Baseline pulse identified the following gaps between repo `main` and the live
   animation.
 
 ### Notes / known follow-ups (not in this change)
+
 - `apps/web/next.config.js` contains duplicate `redirects()` / `headers()`
   function declarations — only the last in source order is used at runtime.
   Consolidation is a separate refactor and was intentionally left out of
@@ -48,3 +51,25 @@ Baseline pulse identified the following gaps between repo `main` and the live
 - Live `uvai.io` title `UVAI — Video to Software` is stale vs `main`
   (`UVAI — The Action Layer for Video`). Resolving requires redeploy and is
   out of scope for this PR (no production / Vercel access used).
+
+### 2026-05-22 — Review fixes for PR #202
+
+#### Changed
+
+- `apps/web/src/app/layout.tsx`: replaced `dangerouslySetInnerHTML` JSON-LD
+  injection with React `<script>{jsonLdString}</script>` children, escaping
+  `<` as `<` to prevent any nested `</script>` breakout. Complies with
+  the repo's no-`dangerouslySetInnerHTML` policy.
+- `apps/web/src/app/layout.tsx`: moved `id="main"` onto the root layout's
+  content wrapper so the skip-to-main link works on every route, not only
+  the homepage.
+- `apps/web/src/app/page.tsx`: removed the now-duplicate `id="main"` from
+  the homepage `<main>` element.
+- `apps/web/src/lib/site.ts` (new): single `SITE_URL` constant. Adopted by
+  `layout.tsx` and `sitemap.ts` so canonical URL changes happen in one place.
+
+#### Fixed
+
+- `CHANGELOG.md`: markdownlint MD022 — added blank lines after `#### Added`,
+  `### Changed`, and `### Notes / known follow-ups (not in this change)`
+  headings.

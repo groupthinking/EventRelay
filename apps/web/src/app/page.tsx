@@ -11,7 +11,7 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-void text-ink overflow-x-hidden">
       <LandingNav />
-      <main id="main">
+      <main>
         <HeroSection />
         <BentoFeatures />
         <WorkflowSection />
