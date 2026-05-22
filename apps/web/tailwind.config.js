@@ -8,6 +8,10 @@ module.exports = {
   theme: {
     extend: {
       colors: {
+        // Semantic page tokens
+        void: 'rgb(var(--color-void))',
+        ink: 'rgb(var(--color-ink))',
+
         // Brand colors
         primary: {
           50: '#f0fdfa',

@@ -15,6 +15,10 @@
   --color-accent: 34 211 238; /* cyan-400 */
   --color-accent-dark: 6 182 212; /* cyan-500 */
 
+  /* Semantic Landing Tokens */
+  --color-void: 5 5 8; /* near-black page bg */
+  --color-ink: 248 245 253; /* near-white text */
+
   /* Surface Colors */
   --color-surface-50: 248 250 252; /* slate-50 */
   --color-surface-100: 241 245 249; /* slate-100 */
