@@ -18,11 +18,14 @@ export const metadata: Metadata = {
   authors: [{ name: 'UVAI' }],
   creator: 'UVAI',
   publisher: 'UVAI',
-  metadataBase: new URL('https://v0-uvai.vercel.app'),
+  metadataBase: new URL('https://uvai.io'),
+  alternates: {
+    canonical: 'https://uvai.io',
+  },
   openGraph: {
     type: 'website',
     locale: 'en_US',
-    url: 'https://v0-uvai.vercel.app',
+    url: 'https://uvai.io',
     siteName: 'UVAI',
     title: 'UVAI — The Action Layer for Video',
     description: 'Paste a YouTube URL. UVAI takes what is inside the video and builds from it — transcripts, typed events, action items, and agentic execution.',
@@ -73,6 +76,39 @@ export const viewport: Viewport = {
   maximumScale: 5,
 };
 
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@graph': [
+    {
+      '@type': 'Organization',
+      '@id': 'https://uvai.io/#organization',
+      name: 'UVAI',
+      url: 'https://uvai.io',
+      logo: 'https://uvai.io/icon.svg',
+      sameAs: ['https://github.com/groupthinking/EventRelay'],
+    },
+    {
+      '@type': 'WebSite',
+      '@id': 'https://uvai.io/#website',
+      url: 'https://uvai.io',
+      name: 'UVAI — The Action Layer for Video',
+      description:
+        'Paste a YouTube URL. UVAI extracts transcripts, typed events, and action items, then builds from them.',
+      publisher: { '@id': 'https://uvai.io/#organization' },
+    },
+    {
+      '@type': 'SoftwareApplication',
+      name: 'UVAI',
+      applicationCategory: 'DeveloperApplication',
+      operatingSystem: 'Web',
+      description:
+        'AI-powered video automation: transcripts, typed events, action items, and agentic execution. Open source via EventRelay.',
+      offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+      url: 'https://uvai.io',
+    },
+  ],
+};
+
 export default function RootLayout({
   children,
 }: {
@@ -81,9 +117,20 @@ export default function RootLayout({
   return (
     <html lang="en" className="bg-void">
       <body className="min-h-screen bg-void font-sans antialiased">
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        />
+        {/* Skip to main content for keyboard/screen reader users */}
+        <a
+          href="#main"
+          className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:px-4 focus:py-2 focus:rounded-lg focus:bg-[#6af2de] focus:text-[#021a18] focus:font-bold"
+        >
+          Skip to main content
+        </a>
         {/* Global background effects */}
-        <div className="fixed inset-0 bg-mesh pointer-events-none" />
-        <div className="fixed inset-0 noise pointer-events-none" />
+        <div className="fixed inset-0 bg-mesh pointer-events-none" aria-hidden="true" />
+        <div className="fixed inset-0 noise pointer-events-none" aria-hidden="true" />
 
         {/* Main content */}
         <div className="relative z-10">
