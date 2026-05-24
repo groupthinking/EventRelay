@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { clsx } from 'clsx';
-import Nav from '@/components/Nav';
+import LandingNav from '@/components/landing/LandingNav';
 import Footer from '@/components/Footer';
 
 // ─── Visual Mockup Components ──────────────────────────────────────────────────
@@ -593,7 +593,7 @@ export default function FeaturesPage() {
   return (
     <div className="min-h-screen text-white overflow-x-hidden">
 
-      <Nav fixed />
+      <LandingNav />
 
       {/* ── Hero ────────────────────────────────────────────────────────────── */}
       <section className="relative pt-32 pb-16 px-6 text-center max-w-4xl mx-auto">

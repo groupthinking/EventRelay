@@ -34,8 +34,14 @@ export default function Nav({ rightSlot, subtitle, fixed = false }: NavProps) {
     >
       <div className="flex items-center gap-4">
         <Link href="/" className="flex items-center gap-3 group">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center font-black text-base shadow-lg shadow-primary-500/25 transition-transform group-hover:scale-105">
-            U
+          <div
+            className="w-8 h-8 rounded-lg flex items-center justify-center transition-transform duration-200 group-hover:scale-105"
+            style={{ border: '2px solid #6af2de', color: '#6af2de' }}
+            aria-hidden
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M8 5v14l11-7z" />
+            </svg>
           </div>
           <span className="font-bold text-lg tracking-tight font-heading">UVAI</span>
         </Link>
