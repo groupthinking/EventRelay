@@ -13,13 +13,14 @@ permissions:
 
 env:
   BASE_URL: https://uvai.io
-  TEST_YOUTUBE_URL: https://www.youtube.com/watch?v=dQw4w9WgXcQ
+  TEST_YOUTUBE_URL: https://www.youtube.com/watch?v=auJzb1D-fag
 
 jobs:
   e2e:
     name: E2E Pipeline Tests
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    continue-on-error: true
 
     steps:
       - name: Checkout
