@@ -5,11 +5,9 @@ Unit tests for FastAPI middleware: rate limiting, API key auth, and security hea
 from __future__ import annotations
 
 import sys
-import time
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -17,7 +15,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
 from youtube_extension.backend.middleware.api_key_auth import (
     APIKeyAuthMiddleware,
-    EXEMPT_METHODS,
     PROTECTED_PREFIXES,
 )
 from youtube_extension.backend.middleware.rate_limiting import (
@@ -285,7 +282,7 @@ class TestAPIKeyAuthMiddleware:
 
         response = client.post(
             "/api/v1/video-to-software",
-            json={"url": "https://youtube.com/watch?v=dQw4w9WgXcQ"},
+            json={"url": "https://youtube.com/watch?v=auJzb1D-fag"},
         )
         assert response.status_code != 401
 
@@ -348,7 +345,7 @@ class TestAPIKeyAuthMiddleware:
     def test_401_response_contains_hint(self):
         client = _make_app_with_middleware(APIKeyAuthMiddleware, api_key="secret")
         response = client.post("/api/v1/video-to-software", json={})
-        body = response.json()
+        response.json()
         assert "X-API-Key" in response.text or "API key" in response.text.lower()
 
 

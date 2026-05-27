@@ -8,11 +8,9 @@ from __future__ import annotations
 import sys
 import time
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
-import pytest
 from fastapi import HTTPException
-from fastapi.exceptions import RequestValidationError
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
@@ -294,7 +292,7 @@ class TestRequestTracker:
         tracker.start_request("req_002", req)
         assert "req_002" in tracker.active_requests
 
-        metrics = tracker.end_request("req_002", 200)
+        tracker.end_request("req_002", 200)
         assert "req_002" not in tracker.active_requests
 
     def test_end_request_computes_duration(self):

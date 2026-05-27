@@ -88,19 +88,19 @@ class TestEnums:
 
 
 class TestVideoProcessingRequest:
-    _VALID_URL = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+    _VALID_URL = "https://www.youtube.com/watch?v=auJzb1D-fag"
 
     def test_valid_youtube_url_accepted(self):
         req = VideoProcessingRequest(video_url=self._VALID_URL)
         assert req.video_url == self._VALID_URL
 
     def test_youtu_be_short_url_accepted(self):
-        req = VideoProcessingRequest(video_url="https://youtu.be/dQw4w9WgXcQ")
-        assert "dQw4w9WgXcQ" in req.video_url
+        req = VideoProcessingRequest(video_url="https://youtu.be/auJzb1D-fag")
+        assert "auJzb1D-fag" in req.video_url
 
     def test_embed_url_accepted(self):
         req = VideoProcessingRequest(
-            video_url="https://www.youtube.com/embed/dQw4w9WgXcQ"
+            video_url="https://www.youtube.com/embed/auJzb1D-fag"
         )
         assert req.video_url is not None
 
@@ -266,7 +266,7 @@ class TestVideoClipOptions:
 
 
 class TestTranscriptActionRequest:
-    _VALID_URL = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+    _VALID_URL = "https://www.youtube.com/watch?v=auJzb1D-fag"
 
     def test_minimal_request_accepted(self):
         req = TranscriptActionRequest(video_url=self._VALID_URL)
