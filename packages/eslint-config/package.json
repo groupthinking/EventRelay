@@ -13,6 +13,6 @@
     "@ai-sdk/openai": "2.0.76",
     "@dataconnect/generated": "file:src/dataconnect-generated",
     "ai": "6.0.5",
-    "next": "16.2.6"
+    "next": "^16.2.0"
   }
 }
