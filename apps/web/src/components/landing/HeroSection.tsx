@@ -113,7 +113,7 @@ export default function HeroSection() {
         <div className="flex flex-wrap items-center justify-center gap-4 mb-16">
           <Link
             href="/dashboard"
-            className="group inline-flex items-center gap-2 px-8 py-4 rounded-xl font-bold text-base transition-all duration-200 active:scale-95"
+            className="group inline-flex items-center gap-2 px-8 py-4 rounded-xl font-bold text-base transition-all duration-200 active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#6af2de]"
             style={{ background: '#6af2de', color: '#021a18' }}
           >
             Try a YouTube URL
@@ -131,7 +131,7 @@ export default function HeroSection() {
           </Link>
           <a
             href="#features"
-            className="inline-flex items-center gap-2 px-8 py-4 rounded-xl font-bold text-base transition-all duration-200 text-ink/70 hover:text-ink"
+            className="inline-flex items-center gap-2 px-8 py-4 rounded-xl font-bold text-base transition-all duration-200 text-ink/70 hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#6af2de]"
             style={{ border: '1px solid rgba(255,255,255,0.1)' }}
           >
             See how it works
@@ -316,6 +316,11 @@ export default function HeroSection() {
         }
         .animate-marquee {
           animation: marquee 22s linear infinite;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .animate-marquee {
+            animation: none;
+          }
         }
       `}</style>
     </section>
