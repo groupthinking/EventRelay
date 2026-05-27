@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { clsx } from 'clsx';
-import Nav from '@/components/Nav';
+import LandingNav from '@/components/landing/LandingNav';
 import Footer from '@/components/Footer';
 
 // ─── Data ──────────────────────────────────────────────────────────────────────
@@ -58,7 +58,7 @@ const FAQS = [
   },
   {
     q: 'How does annual billing work?',
-    a: 'Annual billing charges you once per year at a 20% discount compared to monthly billing. For Pro, that&apos;s $15/mo (billed as $180/yr) instead of $19/mo.',
+    a: "Annual billing charges you once per year at a 20% discount compared to monthly billing. For Pro, that's $15/mo (billed as $180/yr) instead of $19/mo.",
   },
   {
     q: 'What payment methods do you accept?',
@@ -67,6 +67,22 @@ const FAQS = [
 ];
 
 // ─── Components ────────────────────────────────────────────────────────────────
+
+function TableCheck({ color = 'text-white/60' }: { color?: string }) {
+  return (
+    <svg className={clsx('mx-auto', color)} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-label="Included">
+      <polyline points="20 6 9 17 4 12" />
+    </svg>
+  );
+}
+
+function TableDash() {
+  return (
+    <svg className="mx-auto text-white/15" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-label="Not included">
+      <line x1="5" y1="12" x2="19" y2="12" />
+    </svg>
+  );
+}
 
 function FaqItem({ q, a }: { q: string; a: string }) {
   const [open, setOpen] = useState(false);
@@ -101,7 +117,20 @@ function FaqItem({ q, a }: { q: string; a: string }) {
 function CheckItem({ text, color = 'text-green-400' }: { text: string; color?: string }) {
   return (
     <li className="flex items-start gap-2.5 text-sm text-white/65">
-      <span className={clsx('mt-0.5 flex-shrink-0 font-bold', color)}>✓</span>
+      <svg
+        className={clsx('mt-0.5 flex-shrink-0', color)}
+        width="14"
+        height="14"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden
+      >
+        <polyline points="20 6 9 17 4 12" />
+      </svg>
       <span>{text}</span>
     </li>
   );
@@ -116,7 +145,7 @@ export default function PricingPage() {
   return (
     <div className="min-h-screen text-white overflow-x-hidden">
 
-      <Nav fixed />
+      <LandingNav />
 
       {/* ── Hero ────────────────────────────────────────────────────────────── */}
       <section className="relative pt-32 pb-16 px-6 text-center max-w-4xl mx-auto">
@@ -137,7 +166,13 @@ export default function PricingPage() {
           style={{ animationDelay: '80ms', animationFillMode: 'forwards' }}
         >
           Simple,{' '}
-          <span className="gradient-text">transparent</span>
+          <span
+            style={{
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              backgroundImage: 'linear-gradient(135deg, #6af2de 0%, #14b8a6 100%)',
+            }}
+          >transparent</span>
           {' '}pricing
         </h1>
 
@@ -222,7 +257,7 @@ export default function PricingPage() {
             style={{
               animationDelay: '200ms',
               animationFillMode: 'forwards',
-              background: 'linear-gradient(160deg, rgba(139,92,246,0.12) 0%, rgba(139,92,246,0.04) 60%, rgba(34,211,238,0.04) 100%)',
+              background: 'rgba(20,184,166,0.06)',
             }}
           >
             {/* Popular badge */}
@@ -299,7 +334,12 @@ export default function PricingPage() {
       {/* ── Money-back guarantee ─────────────────────────────────────────────── */}
       <section className="max-w-3xl mx-auto px-6 mb-20">
         <div className="flex flex-col md:flex-row items-center gap-6 p-7 rounded-2xl bg-green-500/5 border border-green-500/15">
-          <div className="text-5xl">🛡️</div>
+          <div className="flex-shrink-0 w-14 h-14 rounded-2xl bg-green-500/10 border border-green-500/20 flex items-center justify-center">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+              <polyline points="9 12 11 14 15 10" />
+            </svg>
+          </div>
           <div>
             <h3 className="font-bold text-white mb-1 text-lg">30-day money-back guarantee</h3>
             <p className="text-sm text-white/50 leading-relaxed">
@@ -328,34 +368,41 @@ export default function PricingPage() {
 
           {[
             { label: 'Video analysis', free: '∞', pro: '∞', ent: '∞' },
-            { label: 'Transcript extraction', free: '✓', pro: '✓', ent: '✓' },
-            { label: 'Event extraction', free: '✓', pro: '✓', ent: '✓' },
+            { label: 'Transcript extraction', free: true, pro: true, ent: true },
+            { label: 'Event extraction', free: true, pro: true, ent: true },
             { label: 'AI chat messages', free: '5/day', pro: '∞', ent: '∞' },
-            { label: 'JSON / CSV export', free: '✓', pro: '✓', ent: '✓' },
-            { label: 'Notion + Slack export', free: '—', pro: '✓', ent: '✓' },
-            { label: 'REST API access', free: '—', pro: '✓', ent: '✓' },
-            { label: 'Agent dispatch', free: '—', pro: '✓', ent: '✓' },
+            { label: 'JSON / CSV export', free: true, pro: true, ent: true },
+            { label: 'Notion + Slack export', free: false, pro: true, ent: true },
+            { label: 'REST API access', free: false, pro: true, ent: true },
+            { label: 'Agent dispatch', free: false, pro: true, ent: true },
             { label: 'Storage', free: '1 GB', pro: '10 GB', ent: 'Unlimited' },
-            { label: 'Priority processing', free: '—', pro: '✓', ent: '✓' },
-            { label: 'SSO / SAML', free: '—', pro: '—', ent: '✓' },
-            { label: 'Self-hosted deployment', free: '—', pro: '—', ent: '✓' },
-            { label: 'Custom MCP integrations', free: '—', pro: '—', ent: '✓' },
-            { label: 'SLA guarantee', free: '—', pro: '—', ent: '✓' },
+            { label: 'Priority processing', free: false, pro: true, ent: true },
+            { label: 'SSO / SAML', free: false, pro: false, ent: true },
+            { label: 'Self-hosted deployment', free: false, pro: false, ent: true },
+            { label: 'Custom MCP integrations', free: false, pro: false, ent: true },
+            { label: 'SLA guarantee', free: false, pro: false, ent: true },
             { label: 'Support', free: 'Community', pro: 'Email', ent: 'Dedicated' },
-          ].map((row, i) => (
-            <div
-              key={row.label}
-              className={clsx(
-                'grid grid-cols-4 border-b border-white/[0.04] last:border-0',
-                i % 2 === 0 ? 'bg-transparent' : 'bg-white/[0.01]'
-              )}
-            >
-              <div className="p-4 text-sm text-white/60">{row.label}</div>
-              <div className={clsx('p-4 text-sm text-center', row.free === '—' ? 'text-white/20' : 'text-white/60')}>{row.free}</div>
-              <div className={clsx('p-4 text-sm text-center font-medium', row.pro === '—' ? 'text-white/20' : 'text-primary-400')}>{row.pro}</div>
-              <div className={clsx('p-4 text-sm text-center font-medium', row.ent === '—' ? 'text-white/20' : 'text-cyan-400')}>{row.ent}</div>
-            </div>
-          ))}
+          ].map((row, i) => {
+            const renderCell = (val: boolean | string, colorClass?: string) => {
+              if (val === true) return <TableCheck color={colorClass} />;
+              if (val === false) return <TableDash />;
+              return <span className={clsx('font-medium', colorClass ?? 'text-white/60')}>{val}</span>;
+            };
+            return (
+              <div
+                key={row.label}
+                className={clsx(
+                  'grid grid-cols-4 border-b border-white/[0.04] last:border-0',
+                  i % 2 === 0 ? 'bg-transparent' : 'bg-white/[0.01]'
+                )}
+              >
+                <div className="p-4 text-sm text-white/60">{row.label}</div>
+                <div className="p-4 text-sm text-center">{renderCell(row.free)}</div>
+                <div className="p-4 text-sm text-center">{renderCell(row.pro, 'text-primary-400')}</div>
+                <div className="p-4 text-sm text-center">{renderCell(row.ent, 'text-cyan-400')}</div>
+              </div>
+            );
+          })}
         </div>
       </section>
 
@@ -379,7 +426,11 @@ export default function PricingPage() {
       {/* ── Still have questions ─────────────────────────────────────────────── */}
       <section className="max-w-3xl mx-auto px-6 mb-24">
         <div className="p-10 rounded-3xl bg-white/[0.02] border border-white/[0.08] text-center">
-          <div className="text-4xl mb-4">💬</div>
+          <div className="w-14 h-14 rounded-2xl mx-auto mb-5 bg-white/[0.04] border border-white/[0.1] flex items-center justify-center">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="rgba(248,245,253,0.6)" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+            </svg>
+          </div>
           <h3 className="text-2xl font-black mb-3">Still have questions?</h3>
           <p className="text-white/50 text-sm leading-relaxed mb-6 max-w-md mx-auto">
             We&apos;re a small team and we read every email. Reach out and we&apos;ll get back to you within a few hours.
