@@ -90,7 +90,7 @@ interface DashboardState {
   setLoading: (loading: boolean) => void;
 
   // Workflow actions
-  processVideo: (url: string) => Promise<void>;
+  processVideo: (url: string) => Promise<string>;
   deployPipeline: (url: string) => Promise<void>;
   extractEvents: (videoId: string) => void;
   dispatchAgents: (videoId: string) => void;
@@ -107,7 +107,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   videos: [],
   activities: [],
   selectedVideoId: null,
-  loading: true,
+  loading: false,
 
   searchQuery: '',
   searchResults: [],
@@ -314,6 +314,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         'error',
       );
     }
+    return id;
   },
 
   // ── Full end-to-end pipeline: YouTube URL → deployed software ──

@@ -537,16 +537,20 @@ function DashboardContent() {
     const video = searchParams.get('video');
     if (video) {
       setVideoUrl(video);
-      processVideo(video);
+      processVideo(video).then((id) => {
+        selectVideo(id);
+      });
     }
-  }, [searchParams, processVideo]);
+  }, [searchParams, processVideo, selectVideo]);
 
   const handleAddVideo = useCallback(() => {
     if (!videoUrl.trim()) return;
     const url = videoUrl;
     setVideoUrl('');
-    processVideo(url);
-  }, [videoUrl, processVideo]);
+    processVideo(url).then((id) => {
+      selectVideo(id);
+    });
+  }, [videoUrl, processVideo, selectVideo]);
 
   const filteredVideos = filter === 'all' ? videos : videos.filter((v) => v.status === filter);
   const processingCount = videos.filter((v) => v.status === 'processing').length;
