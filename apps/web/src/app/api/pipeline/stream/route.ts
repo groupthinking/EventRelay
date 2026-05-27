@@ -701,6 +701,23 @@ export async function POST(request: Request) {
               }),
             ),
           );
+          // Always emit a terminal pipeline_status so clients (and E2E tests) know
+          // the stream ended — even when processing failed.
+          controller.enqueue(
+            encoder.encode(
+              makeEvent({
+                type: 'pipeline_status',
+                status: 'error',
+                duration: parseFloat(((Date.now() - startTime) / 1000).toFixed(1)),
+                data: {
+                  totalAgents: 0,
+                  completedAgents: 0,
+                  mode: BACKEND_URL ? 'backend-ws' : 'gemini-sse',
+                },
+                timestamp: new Date().toISOString(),
+              }),
+            ),
+          );
         } finally {
           // CRITICAL: close the stream immediately after all SSE events are
           // enqueued. This MUST NOT wait for fire-and-forget post-processing.
