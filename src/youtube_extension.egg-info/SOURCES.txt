@@ -264,5 +264,8 @@ src/youtube_extension/videopack/provenance.py
 src/youtube_extension/videopack/schema.py
 src/youtube_extension/videopack/validate.py
 src/youtube_extension/videopack/versioning.py
+tests/test_async_endpoints.py
 tests/test_code_generator.py
+tests/test_endpoints.py
 tests/test_ml_models.py
+tests/test_openapi.py
