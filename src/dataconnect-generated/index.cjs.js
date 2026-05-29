@@ -1,4 +1,4 @@
-const { queryRef, executeQuery, mutationRef, executeMutation, validateArgs } = require('firebase/data-connect');
+const { queryRef, executeQuery, validateArgsWithOptions, mutationRef, executeMutation, validateArgs } = require('firebase/data-connect');
 
 const connectorConfig = {
   connector: 'jobs',
@@ -16,8 +16,10 @@ createVideoJobRef.operationName = 'createVideoJob';
 exports.createVideoJobRef = createVideoJobRef;
 
 exports.createVideoJob = function createVideoJob(dcOrVars, vars) {
-  return executeMutation(createVideoJobRef(dcOrVars, vars));
-};
+  const { dc: dcInstance, vars: inputVars } = validateArgs(connectorConfig, dcOrVars, vars, true);
+  return executeMutation(createVideoJobRef(dcInstance, inputVars));
+}
+;
 
 const updateJobStatusRef = (dcOrVars, vars) => {
   const { dc: dcInstance, vars: inputVars} = validateArgs(connectorConfig, dcOrVars, vars, true);
@@ -28,8 +30,10 @@ updateJobStatusRef.operationName = 'updateJobStatus';
 exports.updateJobStatusRef = updateJobStatusRef;
 
 exports.updateJobStatus = function updateJobStatus(dcOrVars, vars) {
-  return executeMutation(updateJobStatusRef(dcOrVars, vars));
-};
+  const { dc: dcInstance, vars: inputVars } = validateArgs(connectorConfig, dcOrVars, vars, true);
+  return executeMutation(updateJobStatusRef(dcInstance, inputVars));
+}
+;
 
 const completeJobRef = (dcOrVars, vars) => {
   const { dc: dcInstance, vars: inputVars} = validateArgs(connectorConfig, dcOrVars, vars, true);
@@ -40,8 +44,10 @@ completeJobRef.operationName = 'completeJob';
 exports.completeJobRef = completeJobRef;
 
 exports.completeJob = function completeJob(dcOrVars, vars) {
-  return executeMutation(completeJobRef(dcOrVars, vars));
-};
+  const { dc: dcInstance, vars: inputVars } = validateArgs(connectorConfig, dcOrVars, vars, true);
+  return executeMutation(completeJobRef(dcInstance, inputVars));
+}
+;
 
 const failJobRef = (dcOrVars, vars) => {
   const { dc: dcInstance, vars: inputVars} = validateArgs(connectorConfig, dcOrVars, vars, true);
@@ -52,8 +58,10 @@ failJobRef.operationName = 'failJob';
 exports.failJobRef = failJobRef;
 
 exports.failJob = function failJob(dcOrVars, vars) {
-  return executeMutation(failJobRef(dcOrVars, vars));
-};
+  const { dc: dcInstance, vars: inputVars } = validateArgs(connectorConfig, dcOrVars, vars, true);
+  return executeMutation(failJobRef(dcInstance, inputVars));
+}
+;
 
 const recordJobEventRef = (dcOrVars, vars) => {
   const { dc: dcInstance, vars: inputVars} = validateArgs(connectorConfig, dcOrVars, vars, true);
@@ -64,8 +72,10 @@ recordJobEventRef.operationName = 'recordJobEvent';
 exports.recordJobEventRef = recordJobEventRef;
 
 exports.recordJobEvent = function recordJobEvent(dcOrVars, vars) {
-  return executeMutation(recordJobEventRef(dcOrVars, vars));
-};
+  const { dc: dcInstance, vars: inputVars } = validateArgs(connectorConfig, dcOrVars, vars, true);
+  return executeMutation(recordJobEventRef(dcInstance, inputVars));
+}
+;
 
 const getJobRef = (dcOrVars, vars) => {
   const { dc: dcInstance, vars: inputVars} = validateArgs(connectorConfig, dcOrVars, vars, true);
@@ -75,9 +85,12 @@ const getJobRef = (dcOrVars, vars) => {
 getJobRef.operationName = 'getJob';
 exports.getJobRef = getJobRef;
 
-exports.getJob = function getJob(dcOrVars, vars) {
-  return executeQuery(getJobRef(dcOrVars, vars));
-};
+exports.getJob = function getJob(dcOrVars, varsOrOptions, options) {
+  
+  const { dc: dcInstance, vars: inputVars, options: inputOpts } = validateArgsWithOptions(connectorConfig, dcOrVars, varsOrOptions, options, true, true);
+  return executeQuery(getJobRef(dcInstance, inputVars), inputOpts && inputOpts.fetchPolicy);
+}
+;
 
 const listJobsRef = (dcOrVars, vars) => {
   const { dc: dcInstance, vars: inputVars} = validateArgs(connectorConfig, dcOrVars, vars);
@@ -87,9 +100,12 @@ const listJobsRef = (dcOrVars, vars) => {
 listJobsRef.operationName = 'listJobs';
 exports.listJobsRef = listJobsRef;
 
-exports.listJobs = function listJobs(dcOrVars, vars) {
-  return executeQuery(listJobsRef(dcOrVars, vars));
-};
+exports.listJobs = function listJobs(dcOrVars, varsOrOptions, options) {
+  
+  const { dc: dcInstance, vars: inputVars, options: inputOpts } = validateArgsWithOptions(connectorConfig, dcOrVars, varsOrOptions, options, true, false);
+  return executeQuery(listJobsRef(dcInstance, inputVars), inputOpts && inputOpts.fetchPolicy);
+}
+;
 
 const getJobEventsRef = (dcOrVars, vars) => {
   const { dc: dcInstance, vars: inputVars} = validateArgs(connectorConfig, dcOrVars, vars, true);
@@ -99,9 +115,12 @@ const getJobEventsRef = (dcOrVars, vars) => {
 getJobEventsRef.operationName = 'getJobEvents';
 exports.getJobEventsRef = getJobEventsRef;
 
-exports.getJobEvents = function getJobEvents(dcOrVars, vars) {
-  return executeQuery(getJobEventsRef(dcOrVars, vars));
-};
+exports.getJobEvents = function getJobEvents(dcOrVars, varsOrOptions, options) {
+  
+  const { dc: dcInstance, vars: inputVars, options: inputOpts } = validateArgsWithOptions(connectorConfig, dcOrVars, varsOrOptions, options, true, true);
+  return executeQuery(getJobEventsRef(dcInstance, inputVars), inputOpts && inputOpts.fetchPolicy);
+}
+;
 
 const listEmbeddingsRef = (dcOrVars, vars) => {
   const { dc: dcInstance, vars: inputVars} = validateArgs(connectorConfig, dcOrVars, vars);
@@ -111,9 +130,12 @@ const listEmbeddingsRef = (dcOrVars, vars) => {
 listEmbeddingsRef.operationName = 'listEmbeddings';
 exports.listEmbeddingsRef = listEmbeddingsRef;
 
-exports.listEmbeddings = function listEmbeddings(dcOrVars, vars) {
-  return executeQuery(listEmbeddingsRef(dcOrVars, vars));
-};
+exports.listEmbeddings = function listEmbeddings(dcOrVars, varsOrOptions, options) {
+  
+  const { dc: dcInstance, vars: inputVars, options: inputOpts } = validateArgsWithOptions(connectorConfig, dcOrVars, varsOrOptions, options, true, false);
+  return executeQuery(listEmbeddingsRef(dcInstance, inputVars), inputOpts && inputOpts.fetchPolicy);
+}
+;
 
 const getJobEmbeddingsRef = (dcOrVars, vars) => {
   const { dc: dcInstance, vars: inputVars} = validateArgs(connectorConfig, dcOrVars, vars, true);
@@ -123,9 +145,12 @@ const getJobEmbeddingsRef = (dcOrVars, vars) => {
 getJobEmbeddingsRef.operationName = 'getJobEmbeddings';
 exports.getJobEmbeddingsRef = getJobEmbeddingsRef;
 
-exports.getJobEmbeddings = function getJobEmbeddings(dcOrVars, vars) {
-  return executeQuery(getJobEmbeddingsRef(dcOrVars, vars));
-};
+exports.getJobEmbeddings = function getJobEmbeddings(dcOrVars, varsOrOptions, options) {
+  
+  const { dc: dcInstance, vars: inputVars, options: inputOpts } = validateArgsWithOptions(connectorConfig, dcOrVars, varsOrOptions, options, true, true);
+  return executeQuery(getJobEmbeddingsRef(dcInstance, inputVars), inputOpts && inputOpts.fetchPolicy);
+}
+;
 
 const deleteJobEmbeddingsRef = (dcOrVars, vars) => {
   const { dc: dcInstance, vars: inputVars} = validateArgs(connectorConfig, dcOrVars, vars, true);
@@ -136,5 +161,7 @@ deleteJobEmbeddingsRef.operationName = 'deleteJobEmbeddings';
 exports.deleteJobEmbeddingsRef = deleteJobEmbeddingsRef;
 
 exports.deleteJobEmbeddings = function deleteJobEmbeddings(dcOrVars, vars) {
-  return executeMutation(deleteJobEmbeddingsRef(dcOrVars, vars));
-};
+  const { dc: dcInstance, vars: inputVars } = validateArgs(connectorConfig, dcOrVars, vars, true);
+  return executeMutation(deleteJobEmbeddingsRef(dcInstance, inputVars));
+}
+;

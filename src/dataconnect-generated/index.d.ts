@@ -1,4 +1,4 @@
-import { ConnectorConfig, DataConnect, QueryRef, QueryPromise, MutationRef, MutationPromise } from 'firebase/data-connect';
+import { ConnectorConfig, DataConnect, QueryRef, QueryPromise, ExecuteQueryOptions, MutationRef, MutationPromise } from 'firebase/data-connect';
 
 export const connectorConfig: ConnectorConfig;
 
@@ -235,8 +235,8 @@ interface GetJobRef {
 }
 export const getJobRef: GetJobRef;
 
-export function getJob(vars: GetJobVariables): QueryPromise<GetJobData, GetJobVariables>;
-export function getJob(dc: DataConnect, vars: GetJobVariables): QueryPromise<GetJobData, GetJobVariables>;
+export function getJob(vars: GetJobVariables, options?: ExecuteQueryOptions): QueryPromise<GetJobData, GetJobVariables>;
+export function getJob(dc: DataConnect, vars: GetJobVariables, options?: ExecuteQueryOptions): QueryPromise<GetJobData, GetJobVariables>;
 
 interface ListJobsRef {
   /* Allow users to create refs without passing in DataConnect */
@@ -247,8 +247,8 @@ interface ListJobsRef {
 }
 export const listJobsRef: ListJobsRef;
 
-export function listJobs(vars?: ListJobsVariables): QueryPromise<ListJobsData, ListJobsVariables>;
-export function listJobs(dc: DataConnect, vars?: ListJobsVariables): QueryPromise<ListJobsData, ListJobsVariables>;
+export function listJobs(vars?: ListJobsVariables, options?: ExecuteQueryOptions): QueryPromise<ListJobsData, ListJobsVariables>;
+export function listJobs(dc: DataConnect, vars?: ListJobsVariables, options?: ExecuteQueryOptions): QueryPromise<ListJobsData, ListJobsVariables>;
 
 interface GetJobEventsRef {
   /* Allow users to create refs without passing in DataConnect */
@@ -259,8 +259,8 @@ interface GetJobEventsRef {
 }
 export const getJobEventsRef: GetJobEventsRef;
 
-export function getJobEvents(vars: GetJobEventsVariables): QueryPromise<GetJobEventsData, GetJobEventsVariables>;
-export function getJobEvents(dc: DataConnect, vars: GetJobEventsVariables): QueryPromise<GetJobEventsData, GetJobEventsVariables>;
+export function getJobEvents(vars: GetJobEventsVariables, options?: ExecuteQueryOptions): QueryPromise<GetJobEventsData, GetJobEventsVariables>;
+export function getJobEvents(dc: DataConnect, vars: GetJobEventsVariables, options?: ExecuteQueryOptions): QueryPromise<GetJobEventsData, GetJobEventsVariables>;
 
 interface ListEmbeddingsRef {
   /* Allow users to create refs without passing in DataConnect */
@@ -271,8 +271,8 @@ interface ListEmbeddingsRef {
 }
 export const listEmbeddingsRef: ListEmbeddingsRef;
 
-export function listEmbeddings(vars?: ListEmbeddingsVariables): QueryPromise<ListEmbeddingsData, ListEmbeddingsVariables>;
-export function listEmbeddings(dc: DataConnect, vars?: ListEmbeddingsVariables): QueryPromise<ListEmbeddingsData, ListEmbeddingsVariables>;
+export function listEmbeddings(vars?: ListEmbeddingsVariables, options?: ExecuteQueryOptions): QueryPromise<ListEmbeddingsData, ListEmbeddingsVariables>;
+export function listEmbeddings(dc: DataConnect, vars?: ListEmbeddingsVariables, options?: ExecuteQueryOptions): QueryPromise<ListEmbeddingsData, ListEmbeddingsVariables>;
 
 interface GetJobEmbeddingsRef {
   /* Allow users to create refs without passing in DataConnect */
@@ -283,8 +283,8 @@ interface GetJobEmbeddingsRef {
 }
 export const getJobEmbeddingsRef: GetJobEmbeddingsRef;
 
-export function getJobEmbeddings(vars: GetJobEmbeddingsVariables): QueryPromise<GetJobEmbeddingsData, GetJobEmbeddingsVariables>;
-export function getJobEmbeddings(dc: DataConnect, vars: GetJobEmbeddingsVariables): QueryPromise<GetJobEmbeddingsData, GetJobEmbeddingsVariables>;
+export function getJobEmbeddings(vars: GetJobEmbeddingsVariables, options?: ExecuteQueryOptions): QueryPromise<GetJobEmbeddingsData, GetJobEmbeddingsVariables>;
+export function getJobEmbeddings(dc: DataConnect, vars: GetJobEmbeddingsVariables, options?: ExecuteQueryOptions): QueryPromise<GetJobEmbeddingsData, GetJobEmbeddingsVariables>;
 
 interface DeleteJobEmbeddingsRef {
   /* Allow users to create refs without passing in DataConnect */
