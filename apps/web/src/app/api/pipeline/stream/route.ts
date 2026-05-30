@@ -462,6 +462,7 @@ async function* generateAgentEvents(
       actions: analysis.actions,
       topics: analysis.topics,
       events: analysis.events,
+      transcript: analysis.transcript,
       architectureCode: analysis.architectureCode,
       workflow,
     },

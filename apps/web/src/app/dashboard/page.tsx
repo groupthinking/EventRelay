@@ -9,6 +9,7 @@ import Nav from '@/components/Nav';
 import Footer from '@/components/Footer';
 import TranscriptViewer from '@/components/TranscriptViewer';
 import EventList from '@/components/EventList';
+import AgentDashboard from '@/components/AgentDashboard';
 import type { ExtractedEvent } from '@/lib/types';
 import { useDashboardStore } from '@/store/dashboard-store';
 import type { PipelineResult, Video } from '@/store/dashboard-store';
@@ -71,7 +72,7 @@ function SplitView({
   onClose: () => void;
   onExtractEvents?: (videoId: string) => void;
 }) {
-  const [activeTab, setActiveTab] = useState<'analysis' | 'transcript' | 'actions' | 'search'>('analysis');
+  const [activeTab, setActiveTab] = useState<'analysis' | 'transcript' | 'actions' | 'agents' | 'search'>('analysis');
   const searchQuery = useDashboardStore((s) => s.searchQuery);
   const setSearchQuery = useDashboardStore((s) => s.setSearchQuery);
   const performSearch = useDashboardStore((s) => s.performSearch);
@@ -193,7 +194,7 @@ function SplitView({
       <div className="flex-1 flex flex-col" style={{ background: '#131318', borderLeft: '1px solid rgba(255,255,255,0.05)' }}>
         {/* Tabs */}
         <div className="flex" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', background: 'rgba(25, 25, 31, 0.9)' }}>
-          {(['analysis', 'transcript', 'actions', 'search'] as const).map((tab) => (
+          {(['analysis', 'transcript', 'actions', 'agents', 'search'] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -211,6 +212,13 @@ function SplitView({
                   style={{ background: 'rgba(106,242,222,0.15)', color: '#6af2de' }}
                 >
                   {video.events!.length}
+                </span>
+              )}
+              {tab === 'agents' && video.agents && video.agents.length > 0 && (
+                <span className="absolute -top-1 -right-1 text-[9px] font-bold px-1.5 py-0.5 rounded-sm"
+                  style={{ background: 'rgba(129,140,248,0.15)', color: '#818cf8' }}
+                >
+                  {video.agents.length}
                 </span>
               )}
             </button>
@@ -348,6 +356,23 @@ function SplitView({
                 events={video.events || []}
                 onExtract={onExtractEvents ? () => onExtractEvents(video.id) : undefined}
               />
+            </div>
+          )}
+
+          {activeTab === 'agents' && (
+            <div className="max-w-3xl mx-auto animate-fade-in-up">
+              <AgentDashboard
+                executions={video.agents || []}
+                loading={video.status === 'processing' && !(video.agents && video.agents.length > 0)}
+              />
+              {video.status !== 'processing' && !(video.agents && video.agents.length > 0) && (
+                <div className="flex flex-col items-center justify-center text-center py-20">
+                  <div className="text-6xl mb-6 opacity-20">🤖</div>
+                  <p className="text-white/40">
+                    No agent executions — this video used the direct analysis fallback.
+                  </p>
+                </div>
+              )}
             </div>
           )}
 
