@@ -240,33 +240,31 @@ class TriModelConsensusTool:
             )
 
     async def _query_claude(self, prompt: str, task_type: str) -> ModelResponse:
-        """Query Claude Opus 4.5 (latest flagship model with effort control)"""
+        """Query Claude Opus 4.8 (latest flagship model with effort control)"""
         import time
         start_time = time.time()
 
         try:
-            # Claude Opus 4.5 - November 2024 release
-            model = "claude-opus-4-5-20251101"
+            # Claude Opus 4.8 - latest flagship. effort is GA (no beta header),
+            # and temperature is not accepted on Opus 4.7+.
+            model = "claude-opus-4-8"
 
-            # Try with effort parameter (beta feature)
+            # effort ships via output_config; fall back if the installed SDK
+            # predates that parameter.
             try:
-                response = self.claude_client.beta.messages.create(
+                response = self.claude_client.messages.create(
                     model=model,
                     max_tokens=4096,
-                    temperature=0.7,
-                    betas=["effort-2025-11-24"],
-                    effort="medium",  # Balanced approach for consensus decisions
+                    output_config={"effort": "medium"},  # balanced for consensus
                     messages=[
                         {"role": "user", "content": prompt}
                     ]
                 )
             except TypeError:
-                # Fallback if effort parameter not supported in SDK version
-                logger.warning("Effort parameter not supported, using default")
+                logger.warning("output_config not supported in this SDK version, using default")
                 response = self.claude_client.messages.create(
                     model=model,
                     max_tokens=4096,
-                    temperature=0.7,
                     messages=[
                         {"role": "user", "content": prompt}
                     ]
@@ -276,16 +274,16 @@ class TriModelConsensusTool:
             latency = int((time.time() - start_time) * 1000)
 
             return ModelResponse(
-                model_name="Claude-Opus-4.5",
+                model_name="Claude-Opus-4.8",
                 response=response_text,
-                confidence=0.95,  # Opus 4.5 highest quality
+                confidence=0.95,  # Opus 4.8 highest quality
                 latency_ms=latency
             )
 
         except Exception as e:
-            logger.error(f"Claude Opus 4.5 query failed: {e}")
+            logger.error(f"Claude Opus 4.8 query failed: {e}")
             return ModelResponse(
-                model_name="Claude-Opus-4.5",
+                model_name="Claude-Opus-4.8",
                 response="",
                 confidence=0.0,
                 latency_ms=0,
