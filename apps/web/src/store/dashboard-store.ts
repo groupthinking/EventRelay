@@ -99,6 +99,8 @@ interface DashboardState {
   processVideo: (url: string) => Promise<string>;
   deployPipeline: (url: string) => Promise<void>;
   extractEvents: (videoId: string) => void;
+  dispatchToAgents: (videoId: string) => Promise<void>;
+  refreshAgentStatus: (videoId: string) => Promise<void>;
 
   // Search actions
   searchQuery: string;
@@ -634,5 +636,83 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
 
     updateVideo(videoId, { events });
     addActivity(`Extracted ${events.length} events`, 'success');
+  },
+
+  // ── Dispatch the video's events to the real backend agent + MCP layer ──
+  dispatchToAgents: async (videoId) => {
+    const { videos, updateVideo, addActivity } = get();
+    const video = videos.find((v) => v.id === videoId);
+    if (!video?.events?.length) {
+      addActivity('No events to dispatch — extract events first', 'info');
+      return;
+    }
+
+    addActivity(`Dispatching agents to act on ${video.events.length} events…`, 'info');
+    try {
+      const res = await fetch('/api/agents/dispatch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          events: video.events.map((e) => ({
+            id: e.id,
+            type: e.type,
+            title: e.title,
+            description: e.description,
+          })),
+          transcript: video.transcript,
+        }),
+      });
+
+      if (res.status === 503) {
+        addActivity('Agent backend offline — deploy FastAPI and set BACKEND_URL', 'info');
+        return;
+      }
+      if (!res.ok) throw new Error(`Dispatch failed: ${res.status}`);
+
+      const data = await res.json();
+      const executions: AgentExecution[] = Array.isArray(data.executions) ? data.executions : [];
+      updateVideo(videoId, { agents: executions });
+      addActivity(`Dispatched ${executions.length} agents`, 'success');
+    } catch (error) {
+      addActivity(
+        `Agent dispatch failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        'error',
+      );
+    }
+  },
+
+  // ── Poll status for any running/queued dispatched agents ──
+  refreshAgentStatus: async (videoId) => {
+    const { videos, updateVideo } = get();
+    const video = videos.find((v) => v.id === videoId);
+    const pending = (video?.agents || []).filter(
+      (a) => a.status === 'running' || a.status === 'queued',
+    );
+    if (pending.length === 0) return;
+
+    const refreshed = await Promise.all(
+      pending.map(async (agent) => {
+        try {
+          const res = await fetch(`/api/agents/status?agentId=${encodeURIComponent(agent.agent_id)}`);
+          if (!res.ok) return agent;
+          const data = await res.json();
+          return {
+            ...agent,
+            status: (data.status as AgentStatus) || agent.status,
+            progress: typeof data.progress === 'number' ? data.progress : agent.progress,
+            result: data.result ?? agent.result,
+            error: data.error ?? agent.error,
+          } satisfies AgentExecution;
+        } catch {
+          return agent;
+        }
+      }),
+    );
+
+    const byId = new Map(refreshed.map((a) => [a.agent_id, a]));
+    const merged = (get().videos.find((v) => v.id === videoId)?.agents || []).map(
+      (a) => byId.get(a.agent_id) ?? a,
+    );
+    updateVideo(videoId, { agents: merged });
   },
 }));

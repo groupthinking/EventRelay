@@ -78,6 +78,20 @@ function SplitView({
   const performSearch = useDashboardStore((s) => s.performSearch);
   const searchResults = useDashboardStore((s) => s.searchResults);
   const searchLoading = useDashboardStore((s) => s.searchLoading);
+  const dispatchToAgents = useDashboardStore((s) => s.dispatchToAgents);
+  const refreshAgentStatus = useDashboardStore((s) => s.refreshAgentStatus);
+
+  // Probe whether the backend agent + MCP layer is reachable so we only offer
+  // the dispatch action when it can actually do something.
+  const [agentBackend, setAgentBackend] = useState(false);
+  useEffect(() => {
+    let active = true;
+    fetch('/api/agents/dispatch')
+      .then((r) => r.json())
+      .then((d) => { if (active) setAgentBackend(!!d.available); })
+      .catch(() => {});
+    return () => { active = false; };
+  }, []);
 
   const embedUrl = getYouTubeEmbedUrl(video.url);
 
@@ -361,16 +375,41 @@ function SplitView({
 
           {activeTab === 'agents' && (
             <div className="max-w-3xl mx-auto animate-fade-in-up">
+              {(hasEvents || (video.agents && video.agents.length > 0)) && (
+                <div className="flex items-center justify-end gap-2 mb-4 flex-wrap">
+                  {hasEvents && agentBackend && (
+                    <button
+                      onClick={() => dispatchToAgents(video.id)}
+                      className="px-4 py-2 text-xs font-bold uppercase tracking-wider transition-all active:scale-95"
+                      style={{ background: 'rgba(129,140,248,0.15)', color: '#818cf8', border: '1px solid rgba(129,140,248,0.3)' }}
+                    >
+                      ⚡ Dispatch {video.events!.length} events
+                    </button>
+                  )}
+                  {(video.agents || []).some((a) => a.status === 'running' || a.status === 'queued') && (
+                    <button
+                      onClick={() => refreshAgentStatus(video.id)}
+                      className="px-4 py-2 text-xs font-bold uppercase tracking-wider transition-all active:scale-95"
+                      style={{ background: 'rgba(255,255,255,0.05)', color: 'rgba(248,245,253,0.7)', border: '1px solid rgba(255,255,255,0.1)' }}
+                    >
+                      ↻ Refresh
+                    </button>
+                  )}
+                </div>
+              )}
+              {hasEvents && !agentBackend && (
+                <p className="text-xs mb-4 text-right" style={{ color: 'rgba(248,245,253,0.35)' }}>
+                  Backend agents offline — deploy FastAPI + set BACKEND_URL to dispatch real MCP agents.
+                </p>
+              )}
               <AgentDashboard
                 executions={video.agents || []}
                 loading={video.status === 'processing' && !(video.agents && video.agents.length > 0)}
               />
               {video.status !== 'processing' && !(video.agents && video.agents.length > 0) && (
-                <div className="flex flex-col items-center justify-center text-center py-20">
+                <div className="flex flex-col items-center justify-center text-center py-16">
                   <div className="text-6xl mb-6 opacity-20">🤖</div>
-                  <p className="text-white/40">
-                    No agent executions — this video used the direct analysis fallback.
-                  </p>
+                  <p className="text-white/40">No agent executions yet.</p>
                 </div>
               )}
             </div>

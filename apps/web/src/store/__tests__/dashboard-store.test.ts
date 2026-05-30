@@ -313,6 +313,81 @@ describe('dashboard-store · processVideo (real SSE pipeline)', () => {
   });
 });
 
+describe('dashboard-store · dispatchToAgents / refreshAgentStatus', () => {
+  it('dispatches the video events and stores returned executions', async () => {
+    store().addVideo(
+      makeVideo({ id: 'v1', events: [{ id: 'e1', type: 'action', title: 'Do X', confidence: 0.9 }] }),
+    );
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      jsonResponse({
+        dispatch_id: 'dsp_1',
+        executions: [{ agent_id: 'a1', agent_type: 'analyzer', status: 'running', progress: 0 }],
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await store().dispatchToAgents('v1');
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/agents/dispatch', expect.objectContaining({ method: 'POST' }));
+    expect(store().videos[0].agents).toHaveLength(1);
+    expect(store().videos[0].agents![0].agent_id).toBe('a1');
+    expect(store().activities.some((a) => a.event.includes('Dispatched 1 agents'))).toBe(true);
+  });
+
+  it('reports honestly when the agent backend is offline (503)', async () => {
+    store().addVideo(
+      makeVideo({ id: 'v1', events: [{ id: 'e1', type: 'action', title: 'Do X', confidence: 0.9 }] }),
+    );
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(jsonResponse({ error: 'nope' }, false, 503)));
+
+    await store().dispatchToAgents('v1');
+
+    expect(store().videos[0].agents).toBeUndefined();
+    expect(store().activities.some((a) => a.event.includes('Agent backend offline'))).toBe(true);
+  });
+
+  it('skips dispatch when the video has no events', async () => {
+    store().addVideo(makeVideo({ id: 'v1' }));
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    await store().dispatchToAgents('v1');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('refreshAgentStatus polls only running agents and merges updates', async () => {
+    store().addVideo(
+      makeVideo({
+        id: 'v1',
+        agents: [
+          { agent_id: 'a1', agent_type: 'analyzer', status: 'running', progress: 30 },
+          { agent_id: 'a2', agent_type: 'content_creator', status: 'complete', progress: 100 },
+        ],
+      }),
+    );
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      jsonResponse({ agent_id: 'a1', status: 'complete', progress: 100, result: { output: 'done' } }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await store().refreshAgentStatus('v1');
+
+    expect(fetchMock).toHaveBeenCalledTimes(1); // only the running agent is polled
+    const a1 = store().videos[0].agents!.find((a) => a.agent_id === 'a1')!;
+    expect(a1.status).toBe('complete');
+    expect(a1.progress).toBe(100);
+  });
+
+  it('refreshAgentStatus is a no-op when nothing is running', async () => {
+    store().addVideo(
+      makeVideo({ id: 'v1', agents: [{ agent_id: 'a1', agent_type: 'x', status: 'complete', progress: 100 }] }),
+    );
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    await store().refreshAgentStatus('v1');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
 describe('dashboard-store · deployPipeline (mocked fetch)', () => {
   it('records the deployment result on success', async () => {
     vi.stubGlobal(
