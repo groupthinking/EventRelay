@@ -362,7 +362,7 @@ class AnthropicAdapter(ProtocolAdapter):
     async def initialize(self, config: dict[str, Any]) -> bool:
         """Initialize Anthropic adapter"""
         self.api_key = config.get("api_key")
-        self.model = config.get("model", "claude-3-sonnet-20240229")
+        self.model = config.get("model", "claude-opus-4-8")
 
         if not self.api_key:
             logger.error("Anthropic API key not provided")

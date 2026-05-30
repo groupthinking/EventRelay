@@ -161,9 +161,9 @@ class RealAIProcessorService:
                 },
             },
             AIProvider.ANTHROPIC: {
-                "default": "claude-3-5-sonnet-20241022",
+                "default": "claude-opus-4-8",
                 "models": {
-                    "claude-3-5-sonnet-20241022": {
+                    "claude-opus-4-8": {
                         "max_tokens": 8192,
                         "cost_tier": "high",
                     },
@@ -541,7 +541,7 @@ Focus on accurate classification for content discovery.
 
             return AIProcessingResult(
                 provider="anthropic",
-                model=request.model or "claude-3-5-sonnet-20241022",
+                model=request.model or "claude-opus-4-8",
                 processing_type=request.processing_type.value,
                 result={},
                 tokens_used=0,

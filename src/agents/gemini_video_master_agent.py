@@ -87,7 +87,7 @@ class AIProvider(Enum):
     GEMINI_2_0_FLASH = "models/gemini-2.0-flash-exp"
     # External providers
     GROK_4 = "grok-4-0709"
-    CLAUDE_3_5_SONNET = "claude-3-5-sonnet-20241022"
+    CLAUDE_OPUS_4_8 = "claude-opus-4-8"
     GPT_4O = "gpt-4o"
     # NVIDIA Cosmos/VLM (New - Cognitive Video)
     NVIDIA_VILA = "nvidia/vila-1.5-40b"
@@ -336,7 +336,7 @@ class GeminiVideoMasterAgent:
                 content = await self._execute_with_gemini(prompt, provider, video_url)
             elif provider == AIProvider.GROK_4:
                 content = await self._execute_with_grok4(prompt)
-            elif provider == AIProvider.CLAUDE_3_5_SONNET:
+            elif provider == AIProvider.CLAUDE_OPUS_4_8:
                 content = await self._execute_with_claude(prompt)
             elif provider == AIProvider.GPT_4O:
                 content = await self._execute_with_gpt4o(prompt)
@@ -497,7 +497,7 @@ class GeminiVideoMasterAgent:
             }
 
             payload = {
-                "model": "claude-3-5-sonnet-20241022",
+                "model": "claude-opus-4-8",
                 "max_tokens": 4096,
                 "messages": [{"role": "user", "content": prompt}],
                 "temperature": 0.3,
@@ -619,7 +619,7 @@ class GeminiVideoMasterAgent:
             AIProvider.GEMINI_2_5_FLASH: 0.00015,
             AIProvider.GEMINI_2_0_FLASH: 0.00010,
             AIProvider.GROK_4: 0.00025,
-            AIProvider.CLAUDE_3_5_SONNET: 0.00030,
+            AIProvider.CLAUDE_OPUS_4_8: 0.00030,
             AIProvider.GPT_4O: 0.00040,
         }
 

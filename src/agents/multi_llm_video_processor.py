@@ -56,7 +56,7 @@ class LLMProvider(Enum):
 
     OPENAI_GPT4O = "gpt-4o"
     OPENAI_GPT4O_MINI = "gpt-4o-mini"
-    CLAUDE_3_5_SONNET = "claude-3-5-sonnet-20241022"
+    CLAUDE_OPUS_4_8 = "claude-opus-4-8"
     CLAUDE_3_HAIKU = "claude-3-haiku-20240307"
     GROK_4 = "grok-4-0709"
     GEMINI_2_5_FLASH = "gemini-2.5-flash"
@@ -104,7 +104,7 @@ class MultiLLMVideoProcessor:
         # Provider priority order (most reliable first)
         self.provider_priority = [
             LLMProvider.OPENAI_GPT4O,
-            LLMProvider.CLAUDE_3_5_SONNET,
+            LLMProvider.CLAUDE_OPUS_4_8,
             LLMProvider.GEMINI_2_5_FLASH,
             LLMProvider.OPENAI_GPT4O_MINI,
             LLMProvider.CLAUDE_3_HAIKU,
@@ -224,7 +224,7 @@ class MultiLLMVideoProcessor:
             if provider in [LLMProvider.OPENAI_GPT4O, LLMProvider.OPENAI_GPT4O_MINI]:
                 content = await self._execute_with_openai(provider, prompt, video_url)
             elif provider in [
-                LLMProvider.CLAUDE_3_5_SONNET,
+                LLMProvider.CLAUDE_OPUS_4_8,
                 LLMProvider.CLAUDE_3_HAIKU,
             ]:
                 content = await self._execute_with_claude(provider, prompt, video_url)
@@ -461,7 +461,7 @@ class MultiLLMVideoProcessor:
             recommendations.append(
                 "OpenAI GPT-4o performing well - good for complex analysis"
             )
-        if LLMProvider.CLAUDE_3_5_SONNET in successful_providers:
+        if LLMProvider.CLAUDE_OPUS_4_8 in successful_providers:
             recommendations.append(
                 "Claude 3.5 Sonnet performing well - good for detailed insights"
             )

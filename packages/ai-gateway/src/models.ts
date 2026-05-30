@@ -26,7 +26,7 @@ export class ModelRegistry {
         break;
 
       case 'claude':
-        model = anthropic(config.model || 'claude-3-5-sonnet-20241022', {
+        model = anthropic(config.model || 'claude-opus-4-8', {
           apiKey: config.apiKey,
         });
         break;
@@ -66,7 +66,7 @@ export class ModelRegistry {
 // Default model configurations
 export const DEFAULT_MODELS: Record<AIProvider, string> = {
   grok: 'grok-beta',
-  claude: 'claude-3-5-sonnet-20241022',
+  claude: 'claude-opus-4-8',
   gemini: 'gemini-2.0-flash-exp',
   openai: 'gpt-4o',
 };
