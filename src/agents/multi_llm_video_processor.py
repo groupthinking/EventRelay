@@ -463,7 +463,7 @@ class MultiLLMVideoProcessor:
             )
         if LLMProvider.CLAUDE_OPUS_4_8 in successful_providers:
             recommendations.append(
-                "Claude 3.5 Sonnet performing well - good for detailed insights"
+                "Claude Opus 4.8 performing well - good for detailed insights"
             )
         if LLMProvider.GEMINI_2_5_FLASH in successful_providers:
             recommendations.append(

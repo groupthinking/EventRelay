@@ -253,8 +253,8 @@ class TriModelConsensusTool:
                 messages=[{"role": "user", "content": prompt}]
             )
 
-            response_text = next(
-                (b.text for b in response.content if b.type == "text"), ""
+            response_text = "".join(
+                b.text for b in response.content if b.type == "text"
             )
             latency = int((time.time() - start_time) * 1000)
 
