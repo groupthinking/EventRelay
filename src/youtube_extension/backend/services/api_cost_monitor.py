@@ -90,7 +90,6 @@ class APICostMonitor:
             'claude-opus-4-7': {'input': 0.005, 'output': 0.025},
             'claude-sonnet-4-6': {'input': 0.003, 'output': 0.015},
             'claude-haiku-4-5': {'input': 0.001, 'output': 0.005},
-            'claude-3-5-sonnet-20241022': {'input': 0.003, 'output': 0.015},
             'claude-3-haiku-20240307': {'input': 0.00025, 'output': 0.00125}
         },
         'google': {

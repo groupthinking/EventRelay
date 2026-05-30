@@ -245,13 +245,20 @@ class TriModelConsensusTool:
         start_time = time.time()
 
         try:
-            response = self.claude_client.messages.create(
-                model="claude-opus-4-8",
-                max_tokens=4096,
-                thinking={"type": "adaptive"},
-                output_config={"effort": "medium"},
-                messages=[{"role": "user", "content": prompt}]
-            )
+            try:
+                response = self.claude_client.messages.create(
+                    model="claude-opus-4-8",
+                    max_tokens=4096,
+                    thinking={"type": "adaptive"},
+                    output_config={"effort": "medium"},
+                    messages=[{"role": "user", "content": prompt}]
+                )
+            except TypeError:
+                response = self.claude_client.messages.create(
+                    model="claude-opus-4-8",
+                    max_tokens=4096,
+                    messages=[{"role": "user", "content": prompt}]
+                )
 
             response_text = "".join(
                 b.text for b in response.content if b.type == "text"
