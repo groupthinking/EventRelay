@@ -472,3 +472,493 @@ class TestGetSystemHealthStructure:
         health = await monitor._get_system_health()
         assert health["video_processing"]["meeting_target"] is False
         assert health["database_queries"]["meeting_target"] is False
+
+
+# ===========================================================================
+# PerformanceMonitor — stop_monitoring / start_monitoring lifecycle
+# ===========================================================================
+
+
+class TestMonitoringLifecycle:
+    @pytest.fixture
+    def monitor(self, tmp_path):
+        return PerformanceMonitor(db_path=str(tmp_path / "perf.db"))
+
+    async def test_stop_monitoring_when_task_is_none(self, monitor):
+        monitor.monitoring_task = None
+        await monitor.stop_monitoring()  # should not raise
+        assert monitor.monitoring_task is None
+
+    async def test_stop_monitoring_cancels_task(self, monitor):
+        import asyncio
+        called = []
+
+        async def fake_task():
+            try:
+                await asyncio.sleep(100)
+            except asyncio.CancelledError:
+                called.append(True)
+                raise
+
+        monitor.monitoring_task = asyncio.create_task(fake_task())
+        await asyncio.sleep(0)  # let task start
+        await monitor.stop_monitoring()
+        assert monitor.monitoring_task is None
+        assert called
+
+    def test_start_monitoring_no_loop(self, monitor):
+        monitor.monitoring_task = None
+        monitor.start_monitoring()
+        # No running event loop outside async context — should not raise
+
+    async def test_start_monitoring_creates_task(self, monitor):
+        import asyncio
+        monitor.monitoring_task = None
+        monitor.start_monitoring()
+        assert monitor.monitoring_task is not None
+        monitor.monitoring_task.cancel()
+        try:
+            await monitor.monitoring_task
+        except asyncio.CancelledError:
+            pass
+
+
+# ===========================================================================
+# PerformanceMonitor — _store_metric database writes
+# ===========================================================================
+
+
+class TestStoreMetric:
+    @pytest.fixture
+    def monitor(self, tmp_path):
+        return PerformanceMonitor(db_path=str(tmp_path / "perf.db"))
+
+    async def test_store_metric_does_not_raise(self, monitor):
+        from datetime import datetime, timezone
+        from youtube_extension.backend.services.performance_monitor import PerformanceMetric
+        metric = PerformanceMetric(
+            component="test", metric_name="latency", value=42.0,
+            timestamp=datetime.now(timezone.utc)
+        )
+        await monitor._store_metric(metric)
+
+    async def test_store_metric_persists_to_db(self, monitor):
+        import sqlite3
+        from datetime import datetime, timezone
+        from youtube_extension.backend.services.performance_monitor import PerformanceMetric
+        metric = PerformanceMetric(
+            component="video", metric_name="process_time", value=1500.0,
+            timestamp=datetime.now(timezone.utc)
+        )
+        await monitor._store_metric(metric)
+        conn = sqlite3.connect(monitor.db_path)
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM performance_metrics WHERE component = 'video'")
+        count = cursor.fetchone()[0]
+        conn.close()
+        assert count >= 1
+
+
+# ===========================================================================
+# PerformanceMonitor — _check_alert_thresholds (warning and critical paths)
+# ===========================================================================
+
+
+class TestCheckAlertThresholds:
+    @pytest.fixture
+    def monitor(self, tmp_path):
+        return PerformanceMonitor(db_path=str(tmp_path / "perf.db"))
+
+    async def test_no_threshold_key_does_not_raise(self, monitor):
+        from datetime import datetime, timezone
+        from youtube_extension.backend.services.performance_monitor import PerformanceMetric
+        metric = PerformanceMetric(
+            component="test", metric_name="unknown_metric", value=999.0,
+            timestamp=datetime.now(timezone.utc)
+        )
+        await monitor._check_alert_thresholds(metric)
+
+    async def test_below_warning_no_alert(self, monitor):
+        from datetime import datetime, timezone
+        from youtube_extension.backend.services.performance_monitor import PerformanceMetric
+        metric = PerformanceMetric(
+            component="db", metric_name="database_query_time", value=50.0,
+            timestamp=datetime.now(timezone.utc)
+        )
+        await monitor._check_alert_thresholds(metric)
+        assert len(monitor.active_alerts) == 0
+
+    async def test_above_warning_creates_alert(self, monitor):
+        from datetime import datetime, timezone
+        from youtube_extension.backend.services.performance_monitor import PerformanceMetric
+        metric = PerformanceMetric(
+            component="db", metric_name="database_query_time", value=150.0,
+            timestamp=datetime.now(timezone.utc)
+        )
+        await monitor._check_alert_thresholds(metric)
+        assert len(monitor.active_alerts) >= 1
+
+    async def test_above_critical_severity_is_critical(self, monitor):
+        from datetime import datetime, timezone
+        from youtube_extension.backend.services.performance_monitor import PerformanceMetric
+        metric = PerformanceMetric(
+            component="db", metric_name="database_query_time", value=2000.0,
+            timestamp=datetime.now(timezone.utc)
+        )
+        await monitor._check_alert_thresholds(metric)
+        alerts = list(monitor.active_alerts.values())
+        assert any(a.severity == "critical" for a in alerts)
+
+
+# ===========================================================================
+# PerformanceMonitor — _store_alert
+# ===========================================================================
+
+
+class TestStoreAlert:
+    @pytest.fixture
+    def monitor(self, tmp_path):
+        return PerformanceMonitor(db_path=str(tmp_path / "perf.db"))
+
+    async def test_store_alert_does_not_raise(self, monitor):
+        from datetime import datetime, timezone
+        from youtube_extension.backend.services.performance_monitor import PerformanceAlert
+        alert = PerformanceAlert(
+            alert_id="test_001",
+            component="db",
+            metric_name="query_time",
+            threshold=100.0,
+            current_value=250.0,
+            severity="warning",
+            message="Test alert",
+            timestamp=datetime.now(timezone.utc),
+        )
+        await monitor._store_alert(alert)
+
+    async def test_store_alert_persists(self, monitor):
+        import sqlite3
+        from datetime import datetime, timezone
+        from youtube_extension.backend.services.performance_monitor import PerformanceAlert
+        alert = PerformanceAlert(
+            alert_id="test_002",
+            component="api",
+            metric_name="response_time",
+            threshold=2000.0,
+            current_value=5000.0,
+            severity="critical",
+            message="API slow",
+            timestamp=datetime.now(timezone.utc),
+        )
+        await monitor._store_alert(alert)
+        conn = sqlite3.connect(monitor.db_path)
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM performance_alerts WHERE alert_id = 'test_002'")
+        count = cursor.fetchone()[0]
+        conn.close()
+        assert count == 1
+
+    async def test_send_alert_notification_does_not_raise(self, monitor):
+        from datetime import datetime, timezone
+        from youtube_extension.backend.services.performance_monitor import PerformanceAlert
+        alert = PerformanceAlert(
+            alert_id="notif_001",
+            component="test",
+            metric_name="test_metric",
+            threshold=100.0,
+            current_value=200.0,
+            severity="warning",
+            message="Test notification",
+            timestamp=datetime.now(timezone.utc),
+        )
+        await monitor._send_alert_notification(alert)
+
+
+# ===========================================================================
+# PerformanceMonitor — _monitor_system_resources with mocked psutil
+# ===========================================================================
+
+
+class TestMonitorSystemResources:
+    @pytest.fixture
+    def monitor(self, tmp_path):
+        return PerformanceMonitor(db_path=str(tmp_path / "perf.db"))
+
+    async def test_monitor_system_resources_does_not_raise(self, monitor, monkeypatch):
+        import types
+        import youtube_extension.backend.services.performance_monitor as _mod
+        fake_psutil = types.SimpleNamespace(
+            cpu_percent=lambda interval=None: 30.0,
+            virtual_memory=lambda: types.SimpleNamespace(percent=50.0, available=4*1024**3),
+            disk_usage=lambda path: types.SimpleNamespace(used=40*1024**3, total=100*1024**3),
+            Process=lambda: types.SimpleNamespace(
+                memory_info=lambda: types.SimpleNamespace(rss=100*1024**2),
+                cpu_percent=lambda: 5.0,
+                num_threads=lambda: 4,
+            ),
+        )
+        monkeypatch.setattr(_mod, 'psutil', fake_psutil)
+        await monitor._monitor_system_resources()
+
+    async def test_monitor_system_resources_adds_metrics(self, monitor, monkeypatch):
+        import types
+        import youtube_extension.backend.services.performance_monitor as _mod
+        fake_psutil = types.SimpleNamespace(
+            cpu_percent=lambda interval=None: 45.0,
+            virtual_memory=lambda: types.SimpleNamespace(percent=60.0, available=3*1024**3),
+            disk_usage=lambda path: types.SimpleNamespace(used=60*1024**3, total=100*1024**3),
+            Process=lambda: types.SimpleNamespace(
+                memory_info=lambda: types.SimpleNamespace(rss=200*1024**2),
+                cpu_percent=lambda: 10.0,
+                num_threads=lambda: 8,
+            ),
+        )
+        monkeypatch.setattr(_mod, 'psutil', fake_psutil)
+        before = len(monitor.metrics_buffer)
+        await monitor._monitor_system_resources()
+        assert len(monitor.metrics_buffer) > before
+
+
+# ===========================================================================
+# PerformanceMonitor — _check_performance_regressions
+# ===========================================================================
+
+
+class TestCheckPerformanceRegressions:
+    @pytest.fixture
+    def monitor(self, tmp_path):
+        return PerformanceMonitor(db_path=str(tmp_path / "perf.db"))
+
+    async def test_no_baselines_no_alerts(self, monitor):
+        await monitor.record_metric("db", "database_query_time", 50.0)
+        monitor.performance_baselines = {}
+        await monitor._check_performance_regressions()
+        assert len(monitor.active_alerts) == 0
+
+    async def test_regression_triggers_alert(self, monitor):
+        monitor.performance_baselines["db_database_query_time"] = 50.0
+        await monitor.record_metric("db", "database_query_time", 100.0)
+        await monitor._check_performance_regressions()
+
+    async def test_no_regression_no_new_alert(self, monitor):
+        monitor.performance_baselines["db_database_query_time"] = 200.0
+        await monitor.record_metric("db", "database_query_time", 50.0)
+        initial_count = len(monitor.active_alerts)
+        await monitor._check_performance_regressions()
+        assert len(monitor.active_alerts) == initial_count
+
+
+# ===========================================================================
+# PerformanceMonitor — _basic_cleanup
+# ===========================================================================
+
+
+class TestBasicCleanup:
+    @pytest.fixture
+    def monitor(self, tmp_path):
+        return PerformanceMonitor(db_path=str(tmp_path / "perf.db"))
+
+    async def test_basic_cleanup_does_not_raise(self, monitor):
+        await monitor._basic_cleanup()
+
+    async def test_basic_cleanup_with_old_records(self, monitor):
+        import sqlite3
+        from datetime import datetime, timezone, timedelta
+        old_time = (datetime.now(timezone.utc) - timedelta(days=60)).isoformat()
+        conn = sqlite3.connect(monitor.db_path)
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO performance_metrics (component, metric_name, value, unit, tags, timestamp) VALUES (?, ?, ?, ?, ?, ?)",
+            ("old", "old_metric", 1.0, "ms", "{}", old_time)
+        )
+        conn.commit()
+        conn.close()
+        await monitor._basic_cleanup()
+        conn = sqlite3.connect(monitor.db_path)
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM performance_metrics WHERE component = 'old'")
+        count = cursor.fetchone()[0]
+        conn.close()
+        assert count == 0
+
+
+# ===========================================================================
+# PerformanceMonitor — get_performance_dashboard
+# ===========================================================================
+
+
+class TestGetPerformanceDashboard:
+    @pytest.fixture
+    def monitor(self, tmp_path):
+        return PerformanceMonitor(db_path=str(tmp_path / "perf.db"))
+
+    async def test_returns_dict(self, monitor):
+        result = await monitor.get_performance_dashboard()
+        assert isinstance(result, dict)
+
+    async def test_has_timestamp(self, monitor):
+        result = await monitor.get_performance_dashboard()
+        assert "timestamp" in result
+
+    async def test_has_system_health(self, monitor):
+        result = await monitor.get_performance_dashboard()
+        assert "system_health" in result
+
+    async def test_has_performance_targets(self, monitor):
+        result = await monitor.get_performance_dashboard()
+        assert "performance_targets" in result
+
+    async def test_has_active_alerts_count(self, monitor):
+        result = await monitor.get_performance_dashboard()
+        assert "active_alerts" in result
+        assert isinstance(result["active_alerts"], int)
+
+    async def test_has_optimization_recommendations(self, monitor):
+        result = await monitor.get_performance_dashboard()
+        assert "optimization_recommendations" in result
+
+
+# ===========================================================================
+# PerformanceMonitor — _get_target_progress
+# ===========================================================================
+
+
+class TestGetTargetProgress:
+    @pytest.fixture
+    def monitor(self, tmp_path):
+        return PerformanceMonitor(db_path=str(tmp_path / "perf.db"))
+
+    async def test_returns_dict(self, monitor):
+        result = await monitor._get_target_progress()
+        assert isinstance(result, dict)
+
+    async def test_has_overall_improvement_target(self, monitor):
+        result = await monitor._get_target_progress()
+        assert "overall_improvement_target" in result
+        assert result["overall_improvement_target"] == 60
+
+    async def test_has_targets_met_dict(self, monitor):
+        result = await monitor._get_target_progress()
+        assert "targets_met" in result
+        assert "video_processing_sub_30s" in result["targets_met"]
+
+    async def test_no_data_improvements_are_zero(self, monitor):
+        result = await monitor._get_target_progress()
+        assert result["video_processing_improvement"] == 0
+        assert result["database_improvement"] == 0
+        assert result["api_improvement"] == 0
+
+
+# ===========================================================================
+# PerformanceMonitor — run_performance_benchmark
+# ===========================================================================
+
+
+class TestRunPerformanceBenchmark:
+    @pytest.fixture
+    def monitor(self, tmp_path):
+        return PerformanceMonitor(db_path=str(tmp_path / "perf.db"))
+
+    async def test_returns_dict(self, monitor):
+        async def noop():
+            pass
+        result = await monitor.run_performance_benchmark("test", "bench1", noop, iterations=3)
+        assert isinstance(result, dict)
+
+    async def test_has_avg_time(self, monitor):
+        async def noop():
+            pass
+        result = await monitor.run_performance_benchmark("test", "bench1", noop, iterations=3)
+        assert "avg_time_ms" in result
+
+    async def test_has_benchmark_name(self, monitor):
+        async def noop():
+            pass
+        result = await monitor.run_performance_benchmark("test", "my_bench", noop, iterations=3)
+        assert result.get("benchmark_name") == "my_bench"
+
+    async def test_sets_baseline_on_first_run(self, monitor):
+        async def noop():
+            pass
+        await monitor.run_performance_benchmark("comp", "b1", noop, iterations=2)
+        assert "comp_b1" in monitor.performance_baselines
+
+    async def test_calculates_improvement_vs_baseline(self, monitor):
+        import time
+        monitor.performance_baselines["comp_b1"] = 10000.0  # slow baseline
+
+        async def fast_func():
+            pass
+
+        result = await monitor.run_performance_benchmark("comp", "b1", fast_func, iterations=3)
+        assert result.get("improvement_percent", 0) > 0
+
+    async def test_sync_function_also_works(self, monitor):
+        def sync_noop():
+            pass
+        result = await monitor.run_performance_benchmark("test", "sync_bench", sync_noop, iterations=2)
+        assert "avg_time_ms" in result
+
+
+# ===========================================================================
+# Convenience functions (module-level)
+# ===========================================================================
+
+
+class TestConvenienceFunctions:
+    @pytest.fixture(autouse=True)
+    def reset_singleton(self, tmp_path):
+        import youtube_extension.backend.services.performance_monitor as _mod
+        original = _mod._performance_monitor_instance
+        _mod._performance_monitor_instance = PerformanceMonitor(db_path=str(tmp_path / "perf.db"))
+        yield
+        _mod._performance_monitor_instance = original
+
+    async def test_track_video_processing_time(self):
+        from youtube_extension.backend.services.performance_monitor import track_video_processing_time
+        await track_video_processing_time(1500.0)
+
+    async def test_track_database_query_time(self):
+        from youtube_extension.backend.services.performance_monitor import track_database_query_time
+        await track_database_query_time(50.0, query_type="SELECT")
+
+    async def test_track_api_response_time(self):
+        from youtube_extension.backend.services.performance_monitor import track_api_response_time
+        await track_api_response_time(200.0, endpoint="/api/v1/videos")
+
+    async def test_track_frontend_load_time(self):
+        from youtube_extension.backend.services.performance_monitor import track_frontend_load_time
+        await track_frontend_load_time(800.0, page="dashboard")
+
+
+# ===========================================================================
+# performance_timer decorator
+# ===========================================================================
+
+
+class TestPerformanceTimerDecorator:
+    @pytest.fixture
+    def monitor(self, tmp_path):
+        import youtube_extension.backend.services.performance_monitor as _mod
+        m = PerformanceMonitor(db_path=str(tmp_path / "perf.db"))
+        _mod._performance_monitor_instance = m
+        return m
+
+    async def test_decorator_on_async_function(self, monitor):
+        from youtube_extension.backend.services.performance_monitor import performance_timer
+
+        @performance_timer("test_comp", "async_op")
+        async def my_async_func():
+            return 42
+
+        result = await my_async_func()
+        assert result == 42
+
+    def test_decorator_on_sync_function(self, monitor):
+        from youtube_extension.backend.services.performance_monitor import performance_timer
+
+        @performance_timer("test_comp", "sync_op")
+        def my_sync_func():
+            return "hello"
+
+        result = my_sync_func()
+        assert result == "hello"
