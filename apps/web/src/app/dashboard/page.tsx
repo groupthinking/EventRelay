@@ -602,16 +602,18 @@ function DashboardContent() {
     const video = searchParams.get('video');
     if (video) {
       setVideoUrl(video);
-      const existingVideo = useDashboardStore.getState().videos.find((v) => v.url === video);
+      const existingVideo = videos.find((v) => v.url === video);
       if (existingVideo) {
-        selectVideo(existingVideo.id);
+        if (selectedVideoId !== existingVideo.id) {
+          selectVideo(existingVideo.id);
+        }
       } else {
         processVideo(video).then((id) => {
           selectVideo(id);
         });
       }
     }
-  }, [searchParams, processVideo, selectVideo]);
+  }, [searchParams, processVideo, selectVideo, videos, selectedVideoId]);
 
   const handleAddVideo = useCallback(() => {
     if (!videoUrl.trim()) return;
