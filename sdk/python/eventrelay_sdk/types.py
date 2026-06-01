@@ -176,14 +176,18 @@ class TranscriptActionRequest(BaseModel):
 class TranscriptActionResponse(BaseModel):
     """Response body from the /api/v1/transcript-action endpoint."""
 
-    status: str
-    video_url: Optional[str] = None
-    transcript: Optional[dict[str, Any]] = None
-    actions: Optional[list[Any]] = None
-    outputs: Optional[list[dict[str, Any]]] = None
-    metadata: Optional[dict[str, Any]] = None
-    errors: Optional[list[str]] = None
-    orchestration_meta: Optional[dict[str, Any]] = None
+    success: bool
+    video_url: str
+    metadata: dict[str, Any]
+    transcript: dict[str, Any]
+    outputs: dict[str, Any]
+    errors: list[str] = Field(default_factory=list)
+    orchestration_meta: dict[str, Any]
+    async_processing: bool = False
+    job_id: Optional[str] = None
+    job_status: Optional[str] = None
+    status_url: Optional[str] = None
+    processing_transport: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
@@ -220,7 +224,7 @@ class HealthResponse(BaseModel):
     """Health check response."""
 
     status: str
-    timestamp: Optional[datetime] = None
+    timestamp: datetime
     version: Optional[str] = None
     components: Optional[dict[str, Any]] = None
 

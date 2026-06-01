@@ -192,13 +192,15 @@ class TestTranscriptModels:
 
     def test_transcript_action_response_parse(self) -> None:
         data = {
+            "success": True,
             "video_url": TEST_VIDEO_URL,
+            "metadata": {},
             "transcript": {"text": "Hello world"},
-            "actions": [],
-            "status": "success",
+            "outputs": {},
+            "orchestration_meta": {},
         }
         resp = TranscriptActionResponse.model_validate(data)
-        assert resp.status == "success"
+        assert resp.success is True
 
 
 # ---------------------------------------------------------------------------
@@ -336,7 +338,7 @@ class TestEventRelayClient:
         assert result.components is not None
 
     def test_client_context_manager(self) -> None:
-        routes = {("GET", "/api/v1/health"): {"status": "healthy"}}
+        routes = {("GET", "/api/v1/health"): {"status": "healthy", "timestamp": "2024-01-01T00:00:00"}}
         with self._make_client(routes) as client:
             result = client.health.check()
         assert result.status == "healthy"
@@ -350,7 +352,7 @@ class TestEventRelayClient:
             call_count += 1
             if call_count < 2:
                 return httpx.Response(500)
-            return httpx.Response(200, json={"status": "healthy"})
+            return httpx.Response(200, json={"status": "healthy", "timestamp": "2024-01-01T00:00:00"})
 
         transport = httpx.MockTransport(handler)
         http = httpx.Client(transport=transport)
@@ -394,7 +396,7 @@ class TestAsyncEventRelayClient:
 
     @pytest.mark.asyncio
     async def test_async_health_check(self) -> None:
-        routes = {("GET", "/api/v1/health"): {"status": "healthy"}}
+        routes = {("GET", "/api/v1/health"): {"status": "healthy", "timestamp": "2024-01-01T00:00:00"}}
         client = self._make_client(routes)
         result = await client.health.check()
         assert result.status == "healthy"
@@ -414,7 +416,7 @@ class TestAsyncEventRelayClient:
 
     @pytest.mark.asyncio
     async def test_async_context_manager(self) -> None:
-        routes = {("GET", "/api/v1/health"): {"status": "healthy"}}
+        routes = {("GET", "/api/v1/health"): {"status": "healthy", "timestamp": "2024-01-01T00:00:00"}}
         async with self._make_client(routes) as client:
             result = await client.health.check()
         assert result.status == "healthy"
