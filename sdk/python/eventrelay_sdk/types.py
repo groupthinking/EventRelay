@@ -158,6 +158,7 @@ class AgentStatusResponse(BaseModel):
 class TranscriptActionRequest(BaseModel):
     """Request body for the /api/v1/transcript-action endpoint."""
 
+    video_url: str = Field(..., description="YouTube video URL to process")
     language: Optional[str] = Field(
         None,
         description="Optional language code for transcript processing",
@@ -175,10 +176,12 @@ class TranscriptActionRequest(BaseModel):
 class TranscriptActionResponse(BaseModel):
     """Response body from the /api/v1/transcript-action endpoint."""
 
-    success: bool
-    metadata: Optional[dict[str, Any]] = None
+    status: str
+    video_url: Optional[str] = None
     transcript: Optional[dict[str, Any]] = None
+    actions: Optional[list[Any]] = None
     outputs: Optional[list[dict[str, Any]]] = None
+    metadata: Optional[dict[str, Any]] = None
     errors: Optional[list[str]] = None
     orchestration_meta: Optional[dict[str, Any]] = None
 
@@ -217,7 +220,7 @@ class HealthResponse(BaseModel):
     """Health check response."""
 
     status: str
-    timestamp: datetime
+    timestamp: Optional[datetime] = None
     version: Optional[str] = None
     components: Optional[dict[str, Any]] = None
 
