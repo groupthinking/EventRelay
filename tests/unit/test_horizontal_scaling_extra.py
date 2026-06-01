@@ -652,3 +652,815 @@ class TestPerformHealthChecks:
             await lb._perform_health_checks()
 
         assert len(call_count) == 3
+
+
+# ===========================================================================
+# TestLoadBalancerHealthCheckTaskLifecycle — lines 272-299
+# ===========================================================================
+
+
+class TestLoadBalancerHealthCheckTaskLifecycle:
+    async def test_start_creates_task(self):
+        """start_health_checks() creates a background task."""
+        lb = LoadBalancer()
+        assert lb.health_check_task is None
+        await lb.start_health_checks()
+        assert lb.health_check_task is not None
+        # Clean up
+        await lb.stop_health_checks()
+
+    async def test_stop_cancels_task(self):
+        """stop_health_checks() cancels the task and sets it to None."""
+        lb = LoadBalancer()
+        await lb.start_health_checks()
+        assert lb.health_check_task is not None
+        await lb.stop_health_checks()
+        assert lb.health_check_task is None
+
+    async def test_start_idempotent(self):
+        """Calling start_health_checks() twice does not create a second task."""
+        lb = LoadBalancer()
+        await lb.start_health_checks()
+        task_first = lb.health_check_task
+        await lb.start_health_checks()
+        assert lb.health_check_task is task_first  # same task object
+        await lb.stop_health_checks()
+
+    async def test_stop_when_not_started_no_error(self):
+        """stop_health_checks() when task is None should not raise."""
+        lb = LoadBalancer()
+        assert lb.health_check_task is None
+        await lb.stop_health_checks()  # must not raise
+
+    async def test_stop_sets_task_to_none(self):
+        """After stop, health_check_task is reset to None."""
+        lb = LoadBalancer()
+        await lb.start_health_checks()
+        await lb.stop_health_checks()
+        assert lb.health_check_task is None
+
+    async def test_health_check_loop_runs_perform_health_checks(self):
+        """The loop calls _perform_health_checks at least once before cancellation."""
+        import unittest.mock as mock
+
+        lb = LoadBalancer()
+        lb.health_check_interval = 0  # no delay between iterations
+
+        called = []
+
+        async def fake_check():
+            called.append(1)
+
+        with mock.patch.object(lb, "_perform_health_checks", side_effect=fake_check):
+            await lb.start_health_checks()
+            import asyncio
+            await asyncio.sleep(0.05)
+            await lb.stop_health_checks()
+
+        assert len(called) >= 1
+
+
+# ===========================================================================
+# TestAutoScalerTaskLifecycle — lines 397-424
+# ===========================================================================
+
+
+class TestAutoScalerTaskLifecycle:
+    async def test_start_creates_scaling_task(self):
+        """start_auto_scaling() creates a background task."""
+        lb = LoadBalancer()
+        scaler = AutoScaler(lb)
+        assert scaler.scaling_task is None
+        await scaler.start_auto_scaling()
+        assert scaler.scaling_task is not None
+        await scaler.stop_auto_scaling()
+
+    async def test_stop_cancels_task(self):
+        """stop_auto_scaling() cancels the task and sets it to None."""
+        lb = LoadBalancer()
+        scaler = AutoScaler(lb)
+        await scaler.start_auto_scaling()
+        await scaler.stop_auto_scaling()
+        assert scaler.scaling_task is None
+
+    async def test_start_idempotent(self):
+        """Calling start_auto_scaling() twice does not replace the existing task."""
+        lb = LoadBalancer()
+        scaler = AutoScaler(lb)
+        await scaler.start_auto_scaling()
+        first_task = scaler.scaling_task
+        await scaler.start_auto_scaling()
+        assert scaler.scaling_task is first_task
+        await scaler.stop_auto_scaling()
+
+    async def test_stop_when_no_task_no_error(self):
+        """stop_auto_scaling() when task is None should not raise."""
+        lb = LoadBalancer()
+        scaler = AutoScaler(lb)
+        await scaler.stop_auto_scaling()  # must not raise
+
+    async def test_scaling_loop_calls_evaluate(self):
+        """The scaling loop calls _evaluate_scaling_rules at least once."""
+        import unittest.mock as mock
+
+        lb = LoadBalancer()
+        scaler = AutoScaler(lb)
+        scaler.check_interval = 0  # no delay
+
+        called = []
+
+        async def fake_evaluate():
+            called.append(1)
+
+        with mock.patch.object(scaler, "_evaluate_scaling_rules", side_effect=fake_evaluate):
+            await scaler.start_auto_scaling()
+            import asyncio
+            await asyncio.sleep(0.05)
+            await scaler.stop_auto_scaling()
+
+        assert len(called) >= 1
+
+    async def test_scaling_loop_handles_exception_without_crash(self):
+        """Exceptions inside _evaluate_scaling_rules are caught; loop continues."""
+        import unittest.mock as mock
+
+        lb = LoadBalancer()
+        scaler = AutoScaler(lb)
+        scaler.check_interval = 0
+
+        call_count = [0]
+
+        async def flaky_evaluate():
+            call_count[0] += 1
+            if call_count[0] == 1:
+                raise RuntimeError("transient error")
+
+        with mock.patch.object(scaler, "_evaluate_scaling_rules", side_effect=flaky_evaluate):
+            await scaler.start_auto_scaling()
+            import asyncio
+            await asyncio.sleep(0.05)
+            await scaler.stop_auto_scaling()
+
+        assert call_count[0] >= 2  # recovered and ran again
+
+
+# ===========================================================================
+# TestAutoScalerIsInCooldown — lines 475-478
+# ===========================================================================
+
+
+class TestAutoScalerIsInCooldown:
+    def test_in_cooldown_returns_true_when_recent(self):
+        """Rule scaled just now → still in cooldown."""
+        from datetime import datetime, timezone
+
+        lb = LoadBalancer()
+        scaler = AutoScaler(lb)
+        rule = ScalingRule(metric="cpu", threshold_up=80, threshold_down=20, cooldown_seconds=300)
+        rule.last_scaled = datetime.now(timezone.utc)
+        assert scaler._is_in_cooldown(rule) is True
+
+    def test_not_in_cooldown_when_old(self):
+        """Rule scaled a long time ago → not in cooldown."""
+        from datetime import datetime, timezone, timedelta
+
+        lb = LoadBalancer()
+        scaler = AutoScaler(lb)
+        rule = ScalingRule(metric="cpu", threshold_up=80, threshold_down=20, cooldown_seconds=10)
+        rule.last_scaled = datetime.now(timezone.utc) - timedelta(seconds=60)
+        assert scaler._is_in_cooldown(rule) is False
+
+    def test_cooldown_boundary_exactly_met(self):
+        """When elapsed == cooldown_seconds the rule is NOT in cooldown."""
+        from datetime import datetime, timezone, timedelta
+
+        lb = LoadBalancer()
+        scaler = AutoScaler(lb)
+        rule = ScalingRule(metric="cpu", threshold_up=80, threshold_down=20, cooldown_seconds=30)
+        rule.last_scaled = datetime.now(timezone.utc) - timedelta(seconds=31)
+        assert scaler._is_in_cooldown(rule) is False
+
+
+# ===========================================================================
+# TestAutoScalerCalculateServiceMetrics — lines 462-473
+# ===========================================================================
+
+
+class TestAutoScalerCalculateServiceMetrics:
+    def _inject_statistics(self):
+        import statistics as _stat_mod
+        import youtube_extension.backend.services.horizontal_scaling_system as _hss_mod
+        _hss_mod.statistics = _stat_mod
+
+    def test_empty_instances_returns_empty_dict(self):
+        lb = LoadBalancer()
+        scaler = AutoScaler(lb)
+        self._inject_statistics()
+        result = scaler._calculate_service_metrics([])
+        assert result == {}
+
+    def test_single_instance_metrics(self):
+        self._inject_statistics()
+        lb = LoadBalancer()
+        scaler = AutoScaler(lb)
+        inst = _make_instance()
+        inst.cpu_usage = 50.0
+        inst.memory_usage_mb = 400.0
+        inst.current_connections = 10
+        inst.response_time_ms = 200.0
+        metrics = scaler._calculate_service_metrics([inst])
+        assert metrics["cpu"] == pytest.approx(50.0)
+        assert metrics["memory"] == pytest.approx(400.0)
+        assert metrics["connections"] == pytest.approx(10.0)
+        assert metrics["response_time"] == pytest.approx(200.0)
+
+    def test_multiple_instance_cpu_average(self):
+        self._inject_statistics()
+        lb = LoadBalancer()
+        scaler = AutoScaler(lb)
+        i1 = _make_instance("i1")
+        i2 = _make_instance("i2")
+        i1.cpu_usage = 40.0
+        i2.cpu_usage = 60.0
+        metrics = scaler._calculate_service_metrics([i1, i2])
+        assert metrics["cpu"] == pytest.approx(50.0)
+
+    def test_multiple_instance_connection_average(self):
+        self._inject_statistics()
+        lb = LoadBalancer()
+        scaler = AutoScaler(lb)
+        i1 = _make_instance("i1")
+        i2 = _make_instance("i2")
+        i1.current_connections = 10
+        i2.current_connections = 30
+        metrics = scaler._calculate_service_metrics([i1, i2])
+        # sum/len = (10+30)/2
+        assert metrics["connections"] == pytest.approx(20.0)
+
+    def test_load_factor_key_present(self):
+        self._inject_statistics()
+        lb = LoadBalancer()
+        scaler = AutoScaler(lb)
+        inst = _make_instance()
+        metrics = scaler._calculate_service_metrics([inst])
+        assert "load_factor" in metrics
+
+
+# ===========================================================================
+# TestAutoScalerScaleUp — lines 480-514
+# ===========================================================================
+
+
+class TestAutoScalerScaleUp:
+    def _inject_statistics(self):
+        import statistics as _stat_mod
+        import youtube_extension.backend.services.horizontal_scaling_system as _hss_mod
+        _hss_mod.statistics = _stat_mod
+
+    async def test_scale_up_registers_new_instance(self):
+        """_scale_up adds a new instance to the load balancer registry."""
+        self._inject_statistics()
+        lb = LoadBalancer()
+        scaler = AutoScaler(lb)
+        rule = ScalingRule(metric="cpu", threshold_up=70, threshold_down=20, scale_up_count=1)
+
+        # Pre-register one instance
+        lb.register_service("svc", _make_instance("base"))
+        initial_count = len(lb.service_registry["svc"])
+
+        await scaler._scale_up("svc", rule, metric_value=80.0)
+
+        assert len(lb.service_registry["svc"]) > initial_count
+
+    async def test_scale_up_appends_to_scaling_history(self):
+        """_scale_up records an entry in scaling_history."""
+        self._inject_statistics()
+        lb = LoadBalancer()
+        scaler = AutoScaler(lb)
+        rule = ScalingRule(metric="cpu", threshold_up=70, threshold_down=20, scale_up_count=1)
+
+        await scaler._scale_up("svc", rule, metric_value=80.0)
+
+        assert len(scaler.scaling_history) == 1
+        assert scaler.scaling_history[0]["action"] == "scale_up"
+
+    async def test_scale_up_updates_rule_last_scaled(self):
+        """_scale_up updates rule.last_scaled to now."""
+        from datetime import datetime, timezone, timedelta
+        self._inject_statistics()
+        lb = LoadBalancer()
+        scaler = AutoScaler(lb)
+        rule = ScalingRule(metric="cpu", threshold_up=70, threshold_down=20, scale_up_count=1)
+        old_ts = rule.last_scaled - timedelta(seconds=600)
+        rule.last_scaled = old_ts
+
+        await scaler._scale_up("svc", rule, metric_value=80.0)
+
+        assert rule.last_scaled > old_ts
+
+    async def test_scale_up_multiple_count(self):
+        """scale_up_count=2 adds two new instances."""
+        self._inject_statistics()
+        lb = LoadBalancer()
+        scaler = AutoScaler(lb)
+        rule = ScalingRule(metric="cpu", threshold_up=70, threshold_down=20, scale_up_count=2)
+
+        await scaler._scale_up("svc", rule, metric_value=80.0)
+
+        # 2 new instances registered
+        assert len(lb.service_registry["svc"]) == 2
+
+    async def test_scale_up_history_contains_metric_value(self):
+        """Scaling history entry records the triggering metric value."""
+        self._inject_statistics()
+        lb = LoadBalancer()
+        scaler = AutoScaler(lb)
+        rule = ScalingRule(metric="cpu", threshold_up=70, threshold_down=20, scale_up_count=1)
+
+        await scaler._scale_up("svc", rule, metric_value=85.5)
+
+        entry = scaler.scaling_history[0]
+        assert entry["metric_value"] == pytest.approx(85.5)
+        assert entry["service_name"] == "svc"
+
+
+# ===========================================================================
+# TestAutoScalerScaleDown — lines 516-545
+# ===========================================================================
+
+
+class TestAutoScalerScaleDown:
+    def _inject_statistics(self):
+        import statistics as _stat_mod
+        import youtube_extension.backend.services.horizontal_scaling_system as _hss_mod
+        _hss_mod.statistics = _stat_mod
+
+    async def test_scale_down_removes_instance(self):
+        """_scale_down removes an instance from the load balancer."""
+        self._inject_statistics()
+        lb = LoadBalancer()
+        scaler = AutoScaler(lb)
+
+        # Register two healthy instances
+        lb.register_service("svc", _make_instance("i1"))
+        lb.register_service("svc", _make_instance("i2"))
+
+        rule = ScalingRule(metric="cpu", threshold_up=80, threshold_down=20, scale_down_count=1)
+        await scaler._scale_down("svc", rule, metric_value=10.0)
+
+        assert len(lb.service_registry["svc"]) == 1
+
+    async def test_scale_down_appends_to_history(self):
+        """_scale_down records a scale_down entry in scaling_history."""
+        self._inject_statistics()
+        lb = LoadBalancer()
+        scaler = AutoScaler(lb)
+        lb.register_service("svc", _make_instance("i1"))
+        lb.register_service("svc", _make_instance("i2"))
+
+        rule = ScalingRule(metric="cpu", threshold_up=80, threshold_down=20, scale_down_count=1)
+        await scaler._scale_down("svc", rule, metric_value=10.0)
+
+        assert len(scaler.scaling_history) == 1
+        assert scaler.scaling_history[0]["action"] == "scale_down"
+
+    async def test_scale_down_updates_rule_last_scaled(self):
+        """_scale_down updates rule.last_scaled."""
+        from datetime import datetime, timezone, timedelta
+        self._inject_statistics()
+        lb = LoadBalancer()
+        scaler = AutoScaler(lb)
+        lb.register_service("svc", _make_instance("i1"))
+        lb.register_service("svc", _make_instance("i2"))
+
+        rule = ScalingRule(metric="cpu", threshold_up=80, threshold_down=20, scale_down_count=1)
+        old_ts = rule.last_scaled - timedelta(seconds=600)
+        rule.last_scaled = old_ts
+
+        await scaler._scale_down("svc", rule, metric_value=10.0)
+
+        assert rule.last_scaled > old_ts
+
+    async def test_scale_down_removes_least_loaded_first(self):
+        """Scale-down removes the instance with the lowest load factor."""
+        self._inject_statistics()
+        lb = LoadBalancer()
+        scaler = AutoScaler(lb)
+
+        light = _make_instance("light")
+        light.cpu_usage = 5.0
+        light.current_connections = 1
+
+        heavy = _make_instance("heavy")
+        heavy.cpu_usage = 80.0
+        heavy.current_connections = 50
+
+        lb.register_service("svc", light)
+        lb.register_service("svc", heavy)
+
+        rule = ScalingRule(metric="cpu", threshold_up=80, threshold_down=20, scale_down_count=1)
+        await scaler._scale_down("svc", rule, metric_value=10.0)
+
+        # light has lower load_factor → removed first
+        remaining = lb.service_registry["svc"]
+        assert "heavy" in remaining
+        assert "light" not in remaining
+
+
+# ===========================================================================
+# TestAutoScalerGetScalingStats — lines 547-581
+# ===========================================================================
+
+
+class TestAutoScalerGetScalingStats:
+    def _inject_statistics(self):
+        import statistics as _stat_mod
+        import youtube_extension.backend.services.horizontal_scaling_system as _hss_mod
+        _hss_mod.statistics = _stat_mod
+
+    def test_returns_dict(self):
+        lb = LoadBalancer()
+        scaler = AutoScaler(lb)
+        stats = scaler.get_scaling_stats()
+        assert isinstance(stats, dict)
+
+    def test_has_required_keys(self):
+        lb = LoadBalancer()
+        scaler = AutoScaler(lb)
+        stats = scaler.get_scaling_stats()
+        for key in ("monitoring_enabled", "check_interval_seconds", "total_scaling_rules",
+                    "services_with_scaling", "recent_scale_ups", "recent_scale_downs",
+                    "total_scaling_actions"):
+            assert key in stats, f"missing key: {key}"
+
+    def test_empty_history_zero_actions(self):
+        lb = LoadBalancer()
+        scaler = AutoScaler(lb)
+        stats = scaler.get_scaling_stats()
+        assert stats["recent_scale_ups"] == 0
+        assert stats["recent_scale_downs"] == 0
+        assert stats["total_scaling_actions"] == 0
+
+    async def test_counts_scale_up_actions(self):
+        """After a scale_up, recent_scale_ups reflects it."""
+        self._inject_statistics()
+        lb = LoadBalancer()
+        scaler = AutoScaler(lb)
+        rule = ScalingRule(metric="cpu", threshold_up=70, threshold_down=20, scale_up_count=1)
+
+        await scaler._scale_up("svc", rule, metric_value=80.0)
+
+        stats = scaler.get_scaling_stats()
+        assert stats["recent_scale_ups"] == 1
+        assert stats["total_scaling_actions"] == 1
+
+    async def test_counts_scale_down_actions(self):
+        """After a scale_down, recent_scale_downs reflects it."""
+        self._inject_statistics()
+        lb = LoadBalancer()
+        scaler = AutoScaler(lb)
+        lb.register_service("svc", _make_instance("i1"))
+        lb.register_service("svc", _make_instance("i2"))
+        rule = ScalingRule(metric="cpu", threshold_up=80, threshold_down=20, scale_down_count=1)
+
+        await scaler._scale_down("svc", rule, metric_value=10.0)
+
+        stats = scaler.get_scaling_stats()
+        assert stats["recent_scale_downs"] == 1
+
+    def test_total_scaling_rules_counts_all_rules(self):
+        lb = LoadBalancer()
+        scaler = AutoScaler(lb)
+        scaler.add_scaling_rule("svc1", ScalingRule(metric="cpu", threshold_up=80, threshold_down=20))
+        scaler.add_scaling_rule("svc1", ScalingRule(metric="memory", threshold_up=85, threshold_down=30))
+        scaler.add_scaling_rule("svc2", ScalingRule(metric="connections", threshold_up=90, threshold_down=10))
+        stats = scaler.get_scaling_stats()
+        assert stats["total_scaling_rules"] == 3
+        assert stats["services_with_scaling"] == 2
+
+    def test_scaling_rules_key_contains_service_info(self):
+        lb = LoadBalancer()
+        scaler = AutoScaler(lb)
+        rule = ScalingRule(metric="cpu", threshold_up=70, threshold_down=20, min_instances=2, max_instances=8)
+        scaler.add_scaling_rule("my_svc", rule)
+        stats = scaler.get_scaling_stats()
+        assert "my_svc" in stats["scaling_rules"]
+        rule_info = stats["scaling_rules"]["my_svc"][0]
+        assert rule_info["metric"] == "cpu"
+        assert rule_info["threshold_up"] == 70
+        assert rule_info["min_instances"] == 2
+        assert rule_info["max_instances"] == 8
+
+
+# ===========================================================================
+# TestAutoScalerEvaluateScalingRules — lines 426-460
+# ===========================================================================
+
+
+class TestAutoScalerEvaluateScalingRules:
+    def _inject_statistics(self):
+        import statistics as _stat_mod
+        import youtube_extension.backend.services.horizontal_scaling_system as _hss_mod
+        _hss_mod.statistics = _stat_mod
+
+    async def test_no_rules_does_not_raise(self):
+        """With no rules, _evaluate_scaling_rules completes without error."""
+        self._inject_statistics()
+        lb = LoadBalancer()
+        scaler = AutoScaler(lb)
+        await scaler._evaluate_scaling_rules()  # should not raise
+
+    async def test_no_healthy_instances_skips_rule(self):
+        """If no healthy instances exist the rule is skipped."""
+        self._inject_statistics()
+        lb = LoadBalancer()
+        scaler = AutoScaler(lb)
+        rule = ScalingRule(metric="cpu", threshold_up=70, threshold_down=20)
+        scaler.add_scaling_rule("svc", rule)
+        # No instances registered
+        await scaler._evaluate_scaling_rules()
+        # No scaling should have happened
+        assert len(scaler.scaling_history) == 0
+
+    async def test_scale_up_triggered_when_metric_above_threshold(self):
+        """High CPU triggers a scale-up."""
+        self._inject_statistics()
+        lb = LoadBalancer()
+        scaler = AutoScaler(lb)
+
+        inst = _make_instance("base")
+        inst.cpu_usage = 85.0  # Above threshold_up=70 but still healthy (< 90)
+        lb.register_service("svc", inst)
+
+        rule = ScalingRule(
+            metric="cpu",
+            threshold_up=70.0,
+            threshold_down=20.0,
+            scale_up_count=1,
+            max_instances=5,
+            min_instances=1,
+            cooldown_seconds=0,
+        )
+        # Override last_scaled to be old enough
+        from datetime import datetime, timezone, timedelta
+        rule.last_scaled = datetime.now(timezone.utc) - timedelta(seconds=1000)
+        scaler.add_scaling_rule("svc", rule)
+
+        await scaler._evaluate_scaling_rules()
+
+        scale_ups = [e for e in scaler.scaling_history if e["action"] == "scale_up"]
+        assert len(scale_ups) >= 1
+
+    async def test_scale_down_triggered_when_metric_below_threshold(self):
+        """Low CPU with multiple instances triggers a scale-down."""
+        self._inject_statistics()
+        lb = LoadBalancer()
+        scaler = AutoScaler(lb)
+
+        for idx in range(3):
+            inst = _make_instance(f"inst{idx}")
+            inst.cpu_usage = 5.0  # Below threshold_down=20
+            lb.register_service("svc", inst)
+
+        rule = ScalingRule(
+            metric="cpu",
+            threshold_up=70.0,
+            threshold_down=20.0,
+            scale_down_count=1,
+            max_instances=10,
+            min_instances=1,
+            cooldown_seconds=0,
+        )
+        from datetime import datetime, timezone, timedelta
+        rule.last_scaled = datetime.now(timezone.utc) - timedelta(seconds=1000)
+        scaler.add_scaling_rule("svc", rule)
+
+        await scaler._evaluate_scaling_rules()
+
+        scale_downs = [e for e in scaler.scaling_history if e["action"] == "scale_down"]
+        assert len(scale_downs) >= 1
+
+    async def test_cooldown_prevents_scaling(self):
+        """A rule in cooldown does not trigger scaling."""
+        self._inject_statistics()
+        lb = LoadBalancer()
+        scaler = AutoScaler(lb)
+
+        inst = _make_instance("base")
+        inst.cpu_usage = 95.0
+        lb.register_service("svc", inst)
+
+        rule = ScalingRule(
+            metric="cpu",
+            threshold_up=70.0,
+            threshold_down=20.0,
+            scale_up_count=1,
+            max_instances=5,
+            min_instances=1,
+            cooldown_seconds=9999,  # effectively infinite cooldown
+        )
+        scaler.add_scaling_rule("svc", rule)
+
+        await scaler._evaluate_scaling_rules()
+
+        assert len(scaler.scaling_history) == 0
+
+
+# ===========================================================================
+# TestHorizontalScalingSystemStartStop — lines 609-649
+# ===========================================================================
+
+
+class TestHorizontalScalingSystemStartStop:
+    async def test_start_sets_is_running(self):
+        """start_system() sets is_running = True."""
+        hss = HorizontalScalingSystem()
+        assert hss.is_running is False
+        await hss.start_system()
+        assert hss.is_running is True
+        await hss.stop_system()
+
+    async def test_start_idempotent(self):
+        """Calling start_system() twice doesn't crash."""
+        hss = HorizontalScalingSystem()
+        await hss.start_system()
+        await hss.start_system()  # second call should be a no-op
+        assert hss.is_running is True
+        await hss.stop_system()
+
+    async def test_stop_sets_is_running_false(self):
+        """stop_system() sets is_running = False."""
+        hss = HorizontalScalingSystem()
+        await hss.start_system()
+        await hss.stop_system()
+        assert hss.is_running is False
+
+    async def test_stop_when_not_running_no_error(self):
+        """stop_system() when not running should not raise."""
+        hss = HorizontalScalingSystem()
+        await hss.stop_system()  # should not raise
+
+    async def test_start_creates_lb_health_check_task(self):
+        """start_system() starts health check task on load balancer."""
+        hss = HorizontalScalingSystem()
+        await hss.start_system()
+        assert hss.load_balancer.health_check_task is not None
+        await hss.stop_system()
+
+    async def test_start_creates_auto_scaler_task(self):
+        """start_system() starts the auto-scaler task."""
+        hss = HorizontalScalingSystem()
+        await hss.start_system()
+        assert hss.auto_scaler.scaling_task is not None
+        await hss.stop_system()
+
+    async def test_stop_clears_lb_health_check_task(self):
+        """stop_system() cancels the load balancer health check task."""
+        hss = HorizontalScalingSystem()
+        await hss.start_system()
+        await hss.stop_system()
+        assert hss.load_balancer.health_check_task is None
+
+    async def test_stop_clears_auto_scaler_task(self):
+        """stop_system() cancels the auto-scaler task."""
+        hss = HorizontalScalingSystem()
+        await hss.start_system()
+        await hss.stop_system()
+        assert hss.auto_scaler.scaling_task is None
+
+    async def test_default_scaling_rules_added_on_start(self):
+        """start_system() calls _setup_default_scaling_rules, populating auto_scaler.scaling_rules."""
+        hss = HorizontalScalingSystem()
+        await hss.start_system()
+        assert len(hss.auto_scaler.scaling_rules) > 0
+        await hss.stop_system()
+
+
+# ===========================================================================
+# TestHorizontalScalingSystemGetStatus — lines 788-806
+# ===========================================================================
+
+
+class TestHorizontalScalingSystemGetStatus:
+    def _inject_statistics(self):
+        import statistics as _stat_mod
+        import youtube_extension.backend.services.horizontal_scaling_system as _hss_mod
+        _hss_mod.statistics = _stat_mod
+
+    def test_returns_dict(self):
+        self._inject_statistics()
+        hss = HorizontalScalingSystem()
+        status = hss.get_system_status()
+        assert isinstance(status, dict)
+
+    def test_has_required_keys(self):
+        self._inject_statistics()
+        hss = HorizontalScalingSystem()
+        status = hss.get_system_status()
+        for key in ("system_running", "uptime_seconds", "load_balancer",
+                    "auto_scaler", "system_metrics", "performance_summary"):
+            assert key in status, f"missing key: {key}"
+
+    def test_system_not_running_by_default(self):
+        self._inject_statistics()
+        hss = HorizontalScalingSystem()
+        status = hss.get_system_status()
+        assert status["system_running"] is False
+
+    def test_performance_summary_has_success_rate(self):
+        self._inject_statistics()
+        hss = HorizontalScalingSystem()
+        status = hss.get_system_status()
+        assert "success_rate_percent" in status["performance_summary"]
+
+    def test_uptime_is_non_negative(self):
+        self._inject_statistics()
+        hss = HorizontalScalingSystem()
+        status = hss.get_system_status()
+        assert status["uptime_seconds"] >= 0
+
+
+# ===========================================================================
+# TestHorizontalScalingSystemRegisterServices
+# ===========================================================================
+
+
+class TestHorizontalScalingSystemRegisterServices:
+    async def test_register_video_processing_service(self):
+        """register_video_processing_service puts instance in 'video_processing' registry."""
+        hss = HorizontalScalingSystem()
+        inst = _make_instance("vp1")
+        await hss.register_video_processing_service(inst)
+        assert "vp1" in hss.load_balancer.service_registry["video_processing"]
+
+    async def test_register_database_service(self):
+        """register_database_service puts instance in 'database' registry."""
+        hss = HorizontalScalingSystem()
+        inst = _make_instance("db1")
+        await hss.register_database_service(inst)
+        assert "db1" in hss.load_balancer.service_registry["database"]
+
+    async def test_register_cache_service(self):
+        """register_cache_service puts instance in 'cache' registry."""
+        hss = HorizontalScalingSystem()
+        inst = _make_instance("c1")
+        await hss.register_cache_service(inst)
+        assert "c1" in hss.load_balancer.service_registry["cache"]
+
+
+# ===========================================================================
+# TestServiceInstanceProperties — lines 69-87
+# ===========================================================================
+
+
+class TestServiceInstanceProperties:
+    def test_load_factor_zero_when_idle(self):
+        """Idle instance with zero connections and cpu → load_factor near 0."""
+        inst = ServiceInstance(service_id="x", host="h", port=80)
+        inst.current_connections = 0
+        inst.cpu_usage = 0.0
+        inst.response_time_ms = 0.0
+        assert inst.load_factor == pytest.approx(0.0)
+
+    def test_load_factor_capped_at_response_1s(self):
+        """response_time >= 1000ms contributes 0.3 to load_factor (capped at 1.0)."""
+        inst = ServiceInstance(service_id="x", host="h", port=80)
+        inst.current_connections = 0
+        inst.cpu_usage = 0.0
+        inst.response_time_ms = 2000.0  # > 1000ms → capped at 1.0 → 0.3 * 1.0
+        assert inst.load_factor == pytest.approx(0.3)
+
+    def test_is_healthy_true_when_all_ok(self):
+        inst = _make_instance()
+        assert inst.is_healthy is True
+
+    def test_is_healthy_false_when_unhealthy_status(self):
+        inst = _make_instance()
+        inst.status = ServiceStatus.UNHEALTHY
+        assert inst.is_healthy is False
+
+    def test_is_healthy_false_when_connections_maxed(self):
+        inst = _make_instance()
+        inst.current_connections = inst.max_connections
+        assert inst.is_healthy is False
+
+    def test_is_healthy_false_when_cpu_too_high(self):
+        inst = _make_instance()
+        inst.cpu_usage = 95.0  # >= 90
+        assert inst.is_healthy is False
+
+    def test_is_healthy_false_when_response_too_slow(self):
+        inst = _make_instance()
+        inst.response_time_ms = 6000.0  # >= 5000
+        assert inst.is_healthy is False
+
+    def test_max_connections_zero_no_division_error(self):
+        """load_factor handles max_connections=0 gracefully."""
+        inst = ServiceInstance(service_id="x", host="h", port=80)
+        inst.max_connections = 0
+        inst.current_connections = 0
+        inst.cpu_usage = 0.0
+        inst.response_time_ms = 0.0
+        # Should not raise ZeroDivisionError
+        factor = inst.load_factor
+        assert factor == pytest.approx(0.0)
