@@ -316,6 +316,7 @@ class MultiLLMVideoProcessor:
 
         headers = {
             "x-api-key": self.anthropic_api_key,
+            "anthropic-version": "2023-06-01",
             "Content-Type": "application/json",
         }
 
