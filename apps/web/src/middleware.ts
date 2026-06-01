@@ -76,7 +76,10 @@ export async function middleware(req: NextRequest) {
     const needsAuth =
       (isApi && !isPublicApi) || path === '/dashboard' || path.startsWith('/dashboard/');
     if (needsAuth) {
-      const token = await getToken({ req, secret: AUTH_SECRET });
+      // next-auth resolves `NextRequest` from a second hoisted copy of `next`
+      // in this monorepo; the types are structurally identical, so bridge them.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const token = await getToken({ req: req as any, secret: AUTH_SECRET });
       if (!token) {
         if (isApi) {
           return new NextResponse(JSON.stringify({ error: 'Authentication required' }), {
