@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import sys
+import types as _types
 from datetime import datetime
 from pathlib import Path
 
@@ -13,15 +14,30 @@ _SRC = Path(__file__).resolve().parents[2] / "src"
 sys.path.insert(0, str(_SRC))
 
 
-def _load(rel_path):
+def _inject_stub(name: str, path: str) -> None:
+    if name not in sys.modules:
+        stub = _types.ModuleType(name)
+        stub.__path__ = [path]
+        stub.__package__ = name
+        sys.modules[name] = stub
+
+
+def _load(rel_path: str, canonical: str):
+    """Load a module via importlib and register it in sys.modules for coverage tracking."""
     full = _SRC / rel_path
-    spec = importlib.util.spec_from_file_location(rel_path.replace("/", "."), full)
+    spec = importlib.util.spec_from_file_location(canonical, full)
     mod = importlib.util.module_from_spec(spec)
+    sys.modules[canonical] = mod
     spec.loader.exec_module(mod)
     return mod
 
 
-_types_mod = _load("youtube_extension/services/mcp/types.py")
+# Stub parent packages to prevent broken __init__.py from loading
+_inject_stub("youtube_extension.services", str(_SRC / "youtube_extension/services"))
+_inject_stub("youtube_extension.services.mcp", str(_SRC / "youtube_extension/services/mcp"))
+_inject_stub("youtube_extension.services.agents", str(_SRC / "youtube_extension/services/agents"))
+
+_types_mod = _load("youtube_extension/services/mcp/types.py", "youtube_extension.services.mcp.types")
 MCPCapability = _types_mod.MCPCapability
 MCPServerConfig = _types_mod.MCPServerConfig
 MCPServerState = _types_mod.MCPServerState
@@ -298,7 +314,7 @@ class TestMCPServerState:
 # ===========================================================================
 
 
-_dto_mod = _load("youtube_extension/services/agents/dto.py")
+_dto_mod = _load("youtube_extension/services/agents/dto.py", "youtube_extension.services.agents.dto")
 AgentRequest = _dto_mod.AgentRequest
 AgentResult = _dto_mod.AgentResult
 

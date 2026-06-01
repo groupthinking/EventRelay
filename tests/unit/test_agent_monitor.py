@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import importlib.util
 import sys
 import types as _types
 from pathlib import Path
@@ -14,7 +13,6 @@ sys.path.insert(0, str(_SRC))
 
 
 def _inject_stub(package_name: str, path: Path) -> None:
-    """Inject a stub module into sys.modules to prevent broken __init__ from loading."""
     if package_name not in sys.modules:
         stub = _types.ModuleType(package_name)
         stub.__path__ = [str(path)]
@@ -22,23 +20,20 @@ def _inject_stub(package_name: str, path: Path) -> None:
         sys.modules[package_name] = stub
 
 
-def _load(rel_path: str):
-    full = _SRC / rel_path
-    spec = importlib.util.spec_from_file_location(rel_path.replace("/", "."), full)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
-
-
-# Prevent the broken services/__init__.py from loading
+# Prevent the broken services/__init__.py from loading then use normal import
+# so that pytest-cov can instrument the module.
 _inject_stub("youtube_extension.services", _SRC / "youtube_extension/services")
 _inject_stub("youtube_extension.services.agents", _SRC / "youtube_extension/services/agents")
 
-_monitor_mod = _load("youtube_extension/services/agents/monitor.py")
-monitor_file_access = _monitor_mod.monitor_file_access
-monitor_error = _monitor_mod.monitor_error
-monitor_agent_usage = _monitor_mod.monitor_agent_usage
-MonitoredTask = _monitor_mod.MonitoredTask
+# Force-reload if a previous test already cached the module without our stubs
+sys.modules.pop("youtube_extension.services.agents.monitor", None)
+
+from youtube_extension.services.agents.monitor import (  # noqa: E402
+    MonitoredTask,
+    monitor_agent_usage,
+    monitor_error,
+    monitor_file_access,
+)
 
 
 # ===========================================================================

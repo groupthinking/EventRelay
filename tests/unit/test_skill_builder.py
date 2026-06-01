@@ -19,6 +19,10 @@ if "youtube_extension.services" not in sys.modules:
     _stub.__package__ = "youtube_extension.services"
     sys.modules["youtube_extension.services"] = _stub
 
+# Force reimport so pytest-cov can instrument the module even if it was
+# previously cached in sys.modules from a broken import attempt.
+sys.modules.pop("youtube_extension.services.skill_builder", None)
+
 from youtube_extension.services.skill_builder import (  # noqa: E402
     SkillBuilder,
     _skill_id,

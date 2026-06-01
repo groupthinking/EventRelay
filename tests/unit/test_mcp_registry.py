@@ -18,6 +18,11 @@ if "youtube_extension.services" not in sys.modules:
     _stub.__package__ = "youtube_extension.services"
     sys.modules["youtube_extension.services"] = _stub
 
+# Force reimport so pytest-cov can instrument the modules even if previously cached.
+sys.modules.pop("youtube_extension.services.mcp.registry", None)
+sys.modules.pop("youtube_extension.services.mcp.types", None)
+sys.modules.pop("youtube_extension.services.mcp", None)
+
 from youtube_extension.services.mcp.registry import MCPServerRegistry
 from youtube_extension.services.mcp.types import (
     MCPCapability,
