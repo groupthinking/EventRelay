@@ -1,0 +1,17 @@
+{
+  "id": "5b21d74e-9fd4-49d1-8f25-384c3f578b83",
+  "user": "system",
+  "task": "protocol_bridge_request",
+  "intent": "Send mcp protocol request",
+  "env": "development",
+  "code_state": {},
+  "subtask": null,
+  "history": [],
+  "metadata": {},
+  "status": "ContextStatus.ACTIVE",
+  "priority": "ContextPriority.NORMAL",
+  "created_at": "2026-06-01 21:53:53.852897",
+  "updated_at": "2026-06-01 21:53:53.852898",
+  "expires_at": "2026-06-02 21:53:53.852903",
+  "checksum": "ac7a3dfd6381beff83e583cf81f17ea2f7fc9f45f0c64a1e1384bc55255bf5ab"
+}

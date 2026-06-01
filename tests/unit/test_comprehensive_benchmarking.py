@@ -1681,3 +1681,149 @@ class TestBenchmarkMethodsComponentUnavailable:
             _mod.database_optimizer = orig_db
             _mod.intelligent_cache = orig_cache
             _mod.memory_manager = orig_mem
+
+
+# ===========================================================================
+# Additional tests for missing coverage lines
+# ===========================================================================
+
+class TestCalculatePerformanceGradeMissingBranches:
+    """Cover B, C+, C, D+, D, F grade branches in _calculate_performance_grade"""
+
+    def _make_results(self, targets_failed=0, critical_failed=0, improvement_met=False):
+        improvement_analysis = {}
+        if improvement_met:
+            improvement_analysis = {
+                "suite1": {"bench1": {"meets_60_percent_target": True}}
+            }
+        return {
+            "target_validation": {
+                "targets_failed": targets_failed,
+                "critical_targets_failed": critical_failed,
+            },
+            "improvement_analysis": improvement_analysis,
+        }
+
+    def test_grade_b_score_80(self):
+        # score = 100 - 0 - 0 = 100, no improvement → 85; need 80-84
+        # 1 normal failure: score = 100 - 10 - 15 = 75 → C+
+        # Let me compute: B needs 80-84
+        # 0 critical, 1 normal, no improvement: 100 - 0 - (1-0)*10 - 15 = 75 → C+
+        # 0 critical, 0 normal, no improvement: 100 - 0 - 0 - 15 = 85 → B+
+        # 0 critical, 0 normal, improvement_met: 100 → A+
+        # need 80-84: 0 critical, 2 normal, improvement_met: 100 - 20 = 80 → B
+        cb = ComprehensiveBenchmark()
+        results = self._make_results(targets_failed=2, critical_failed=0, improvement_met=True)
+        grade = cb._calculate_performance_grade(results)
+        assert grade == "B"
+
+    def test_grade_c_plus_score_75(self):
+        # 0 critical, 2 normal, no improvement: 100 - 20 - 15 = 65 → D+
+        # 0 critical, 1 normal, improvement_met: 100 - 10 = 90 → A
+        # need 75-79: 0 critical, 1 normal, no improvement: 100 - 10 - 15 = 75 → C+
+        cb = ComprehensiveBenchmark()
+        results = self._make_results(targets_failed=1, critical_failed=0, improvement_met=False)
+        grade = cb._calculate_performance_grade(results)
+        assert grade == "C+"
+
+    def test_grade_c_score_70(self):
+        # need 70-74: 0 critical, 3 normal, improvement_met: 100 - 30 = 70 → C
+        cb = ComprehensiveBenchmark()
+        results = self._make_results(targets_failed=3, critical_failed=0, improvement_met=True)
+        grade = cb._calculate_performance_grade(results)
+        assert grade == "C"
+
+    def test_grade_d_plus_score_65(self):
+        # need 65-69: 0 critical, 2 normal, no improvement: 100 - 20 - 15 = 65 → D+
+        cb = ComprehensiveBenchmark()
+        results = self._make_results(targets_failed=2, critical_failed=0, improvement_met=False)
+        grade = cb._calculate_performance_grade(results)
+        assert grade == "D+"
+
+    def test_grade_d_score_60(self):
+        # need 60-64: 0 critical, 3 normal, no improvement: 100 - 30 - 15 = 55 → F
+        # 0 critical, 4 normal, improvement: 100 - 40 = 60 → D
+        cb = ComprehensiveBenchmark()
+        results = self._make_results(targets_failed=4, critical_failed=0, improvement_met=True)
+        grade = cb._calculate_performance_grade(results)
+        assert grade == "D"
+
+    def test_grade_f_score_below_60(self):
+        # 1 critical, 3 normal, no improvement: 100 - 20 - 20 - 15 = 45 → F
+        cb = ComprehensiveBenchmark()
+        results = self._make_results(targets_failed=3, critical_failed=1, improvement_met=False)
+        grade = cb._calculate_performance_grade(results)
+        assert grade == "F"
+
+
+class TestConvenienceFunctions:
+    """run_phase3_validation, establish_performance_baseline, get_benchmark_status"""
+
+    async def test_run_phase3_validation_calls_comprehensive_methods(self, monkeypatch):
+        from youtube_extension.backend.services import comprehensive_benchmarking as _mod
+        mock_bench = MagicMock()
+        mock_bench.baseline_established = True
+        mock_bench.run_comprehensive_benchmark = AsyncMock(return_value={
+            "performance_grade": "A+",
+            "target_validation": {
+                "overall_success_rate": 100.0,
+                "targets_met": 5,
+                "targets_failed": 0,
+            }
+        })
+        monkeypatch.setattr(_mod, "comprehensive_benchmark", mock_bench)
+        result = await _mod.run_phase3_validation()
+        assert result["performance_grade"] == "A+"
+        mock_bench.run_comprehensive_benchmark.assert_called_once()
+
+    async def test_run_phase3_validation_establishes_baseline_when_needed(self, monkeypatch):
+        from youtube_extension.backend.services import comprehensive_benchmarking as _mod
+        mock_bench = MagicMock()
+        mock_bench.baseline_established = False
+        mock_bench.establish_baseline = AsyncMock(return_value={})
+        mock_bench.run_comprehensive_benchmark = AsyncMock(return_value={
+            "performance_grade": "B",
+            "target_validation": {
+                "overall_success_rate": 80.0,
+                "targets_met": 4,
+                "targets_failed": 1,
+            }
+        })
+        monkeypatch.setattr(_mod, "comprehensive_benchmark", mock_bench)
+        await _mod.run_phase3_validation()
+        mock_bench.establish_baseline.assert_called_once()
+
+    async def test_establish_performance_baseline_calls_benchmark(self, monkeypatch):
+        from youtube_extension.backend.services import comprehensive_benchmarking as _mod
+        mock_bench = MagicMock()
+        mock_bench.establish_baseline = AsyncMock(return_value={"ok": True})
+        monkeypatch.setattr(_mod, "comprehensive_benchmark", mock_bench)
+        result = await _mod.establish_performance_baseline()
+        assert result == {"ok": True}
+
+    def test_get_benchmark_status_returns_summary(self, monkeypatch):
+        from youtube_extension.backend.services import comprehensive_benchmarking as _mod
+        mock_bench = MagicMock()
+        mock_bench.get_benchmark_summary.return_value = {"registered_suites": []}
+        monkeypatch.setattr(_mod, "comprehensive_benchmark", mock_bench)
+        result = _mod.get_benchmark_status()
+        assert "registered_suites" in result
+
+
+class TestSaveBenchmarkReportExceptionPath:
+    """_save_benchmark_report: exception path logs error without raising"""
+
+    async def test_exception_does_not_propagate(self, monkeypatch, tmp_path):
+        import aiofiles
+        cb = ComprehensiveBenchmark()
+        cb.results_directory = str(tmp_path / "results")
+
+        # Monkeypatch aiofiles.open to raise PermissionError
+        import youtube_extension.backend.services.comprehensive_benchmarking as _mod
+
+        async def fake_open(*args, **kwargs):
+            raise PermissionError("no write")
+
+        monkeypatch.setattr(_mod.aiofiles, "open", fake_open)
+        # Should not raise
+        await cb._save_benchmark_report({}, "test")

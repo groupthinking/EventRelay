@@ -375,3 +375,36 @@ class TestAddLesson:
         skill_file = list(tmp_path.glob("*.skill.json"))[0]
         data = json.loads(skill_file.read_text())
         assert len(data["lessons"]) <= _MAX_LESSONS_PER_SKILL
+
+
+class TestListSkillsCorruptFile:
+    """list_skills silently ignores corrupt skill files (lines 208-209)"""
+
+    def test_corrupt_json_is_skipped(self, tmp_path):
+        from youtube_extension.services.skill_builder import SkillBuilder, _SKILL_FILE_SUFFIX
+        sb = SkillBuilder(skills_dir=tmp_path)
+        # Write one valid skill
+        sb.record_deployment("react", "netlify", success=True)
+        # Write a corrupt file that matches the glob pattern
+        corrupt = tmp_path / f"corrupt_skill{_SKILL_FILE_SUFFIX}"
+        corrupt.write_text("{invalid json}")
+        # list_skills should still return the valid entry without raising
+        summaries = sb.list_skills()
+        assert isinstance(summaries, list)
+        # Should contain the valid react/netlify entry
+        assert any(s.get("framework") == "react" for s in summaries)
+
+
+class TestLoadSkillCorruptFile:
+    """_load_skill silently returns default for corrupt file (lines 229-230)"""
+
+    def test_corrupt_json_returns_default(self, tmp_path):
+        from youtube_extension.services.skill_builder import SkillBuilder, _SKILL_FILE_SUFFIX, _skill_id
+        sb = SkillBuilder(skills_dir=tmp_path)
+        sid = _skill_id("django", "fly")
+        # Write a corrupt skill file directly
+        skill_path = tmp_path / f"{sid}{_SKILL_FILE_SUFFIX}"
+        skill_path.write_text("{not valid json")
+        # _load_skill should return the default structure
+        result = sb._load_skill(sid)
+        assert result == {"events": [], "lessons": {}, "success_rate": 0.5}

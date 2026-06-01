@@ -1,0 +1,17 @@
+{
+  "id": "1671e02b-3b55-4c01-9b01-dcb0ef042da3",
+  "user": "system",
+  "task": "protocol_bridge_request",
+  "intent": "Send openai protocol request",
+  "env": "development",
+  "code_state": {},
+  "subtask": null,
+  "history": [],
+  "metadata": {},
+  "status": "ContextStatus.ACTIVE",
+  "priority": "ContextPriority.NORMAL",
+  "created_at": "2026-06-01 22:03:19.886717",
+  "updated_at": "2026-06-01 22:03:19.886718",
+  "expires_at": "2026-06-02 22:03:19.886721",
+  "checksum": "298618816d648f0f6b19ef73912222ba6cd67a593647f1290605695437763dee"
+}

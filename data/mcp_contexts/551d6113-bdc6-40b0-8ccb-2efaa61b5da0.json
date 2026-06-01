@@ -1,0 +1,17 @@
+{
+  "id": "551d6113-bdc6-40b0-8ccb-2efaa61b5da0",
+  "user": "testuser",
+  "task": "test_task",
+  "intent": "testing",
+  "env": "development",
+  "code_state": {},
+  "subtask": null,
+  "history": [],
+  "metadata": {},
+  "status": "ContextStatus.ACTIVE",
+  "priority": "ContextPriority.NORMAL",
+  "created_at": "2026-06-01 21:53:41.305007",
+  "updated_at": "2026-06-01 21:53:41.305008",
+  "expires_at": "2026-06-02 21:53:41.305011",
+  "checksum": "7ad7e8c9e82e1cfc71f74b2152ca56c79aa02ec1b3eae7985a6928036fe18f53"
+}

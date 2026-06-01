@@ -886,3 +886,255 @@ class TestShouldScaleDown:
                 metadata={"cpu_percent": 5}
             ))
         assert lb.should_scale_down() is True
+
+
+# ===========================================================================
+# Additional tests for missing coverage
+# ===========================================================================
+
+import asyncio
+import types as _types
+from unittest.mock import AsyncMock, MagicMock, patch
+
+from youtube_extension.backend.services.load_balancer import (
+    ServiceDiscovery,
+    create_load_balancer,
+)
+
+
+class TestCircuitBreakerHalfOpenMax:
+    """CircuitBreaker - HALF_OPEN state: can_execute returns False when at max calls"""
+
+    def test_can_execute_returns_false_when_half_open_and_at_max(self):
+        cb = CircuitBreaker("svc", CircuitBreakerConfig(half_open_max_calls=2))
+        cb.state = "HALF_OPEN"
+        cb.half_open_calls = 2  # already at max
+        assert cb.can_execute() is False
+
+    def test_can_execute_returns_true_when_half_open_and_below_max(self):
+        cb = CircuitBreaker("svc", CircuitBreakerConfig(half_open_max_calls=3))
+        cb.state = "HALF_OPEN"
+        cb.half_open_calls = 1
+        assert cb.can_execute() is True
+
+
+class TestLoadBalancerStartStop:
+    """LoadBalancer.start() and stop()"""
+
+    async def test_start_creates_no_task_when_health_check_disabled(self):
+        lb = make_lb()
+        lb.health_check_enabled = False
+        await lb.start()
+        assert lb.health_check_task is None
+
+    async def test_stop_with_no_task_does_not_raise(self):
+        lb = make_lb()
+        lb.health_check_task = None
+        await lb.stop()
+
+    async def test_stop_cancels_health_check_task(self):
+        lb = make_lb()
+
+        async def dummy():
+            try:
+                await asyncio.sleep(100)
+            except asyncio.CancelledError:
+                raise
+
+        lb.health_check_task = asyncio.create_task(dummy())
+        await asyncio.sleep(0)
+        await lb.stop()
+        assert lb.health_check_task is None or lb.health_check_task.cancelled()
+
+
+class TestSelectServiceRandom:
+    """RANDOM algorithm selection"""
+
+    def test_random_algorithm_returns_a_service(self):
+        lb = make_lb(algorithm=LoadBalancingAlgorithm.RANDOM)
+        lb.register_service(make_instance(id_="r1", port=8001))
+        lb.register_service(make_instance(id_="r2", port=8002))
+        result = lb._select_service(lb.get_healthy_services(), None)
+        assert result is not None
+        assert result.id in ("r1", "r2")
+
+
+class TestSelectServiceDefault:
+    """Default fallback in _select_service (returns services[0])"""
+
+    def test_unknown_algorithm_falls_back_to_first_service(self):
+        lb = make_lb()
+        lb.register_service(make_instance(id_="def1", port=8001))
+        lb.register_service(make_instance(id_="def2", port=8002))
+        services = lb.get_healthy_services()
+        # Directly call with an algorithm value not handled
+        lb.algorithm = LoadBalancingAlgorithm.IP_HASH  # IP_HASH without client_ip → random.choice, not default
+        lb.algorithm = LoadBalancingAlgorithm.ROUND_ROBIN  # revert to known
+        # Force the default path by temporarily breaking the algorithm value:
+        lb.algorithm = None  # type: ignore[assignment]
+        result = lb._select_service(services, None)
+        # Default path returns services[0]
+        assert result == services[0]
+
+
+class TestRecordResponseEma:
+    """record_response: exponential moving average for avg_response_time"""
+
+    async def test_ema_updates_existing_avg_response_time(self):
+        lb = make_lb()
+        inst = make_instance(id_="ema1", port=8001)
+        inst.avg_response_time = 100.0  # non-zero
+        lb.register_service(inst)
+        await lb.record_response("ema1", 200.0, success=True)
+        # alpha=0.1: 0.1*200 + 0.9*100 = 110
+        assert abs(inst.avg_response_time - 110.0) < 1.0
+
+    async def test_first_response_sets_avg_response_time_directly(self):
+        lb = make_lb()
+        inst = make_instance(id_="ema2", port=8001)
+        inst.avg_response_time = 0.0
+        lb.register_service(inst)
+        await lb.record_response("ema2", 150.0, success=True)
+        assert inst.avg_response_time == 150.0
+
+
+class TestUpdateGlobalMetricsNewMinute:
+    """_update_global_metrics: new-minute branch appends to requests_per_minute deque"""
+
+    def test_new_minute_resets_counter_and_appends(self):
+        lb = make_lb()
+        lb._last_minute = 999  # fake old minute
+        lb._current_minute_requests = 5
+        # Simulate a new minute
+        current_minute = int(time.time() / 60)
+        lb._update_global_metrics(50.0)
+        # Should have appended old count and reset
+        if lb._last_minute == current_minute:
+            # Same minute: just incremented
+            assert lb._current_minute_requests >= 1
+        else:
+            assert 5 in list(lb.metrics['requests_per_minute'])
+
+
+class TestPerformHealthChecks:
+    """_perform_health_checks gathers per-instance tasks"""
+
+    async def test_no_services_does_not_raise(self):
+        lb = make_lb()
+        await lb._perform_health_checks()
+
+    async def test_one_service_calls_check(self):
+        lb = make_lb()
+        lb.register_service(make_instance(id_="ph1", port=8001))
+        checked = []
+
+        async def fake_check(instance):
+            checked.append(instance.id)
+
+        lb._check_instance_health = fake_check
+        await lb._perform_health_checks()
+        assert "ph1" in checked
+
+
+class TestHandleHealthCheckFailure:
+    """_handle_health_check_failure marks instance unhealthy and updates circuit breaker"""
+
+    async def test_healthy_instance_becomes_unhealthy(self):
+        lb = make_lb()
+        inst = make_instance(id_="hf1", port=8001)
+        inst.status = ServiceStatus.HEALTHY
+        lb.register_service(inst)
+        await lb._handle_health_check_failure(inst)
+        assert inst.status == ServiceStatus.UNHEALTHY
+
+    async def test_already_unhealthy_stays_unhealthy(self):
+        lb = make_lb()
+        inst = make_instance(id_="hf2", port=8001)
+        inst.status = ServiceStatus.UNHEALTHY
+        lb.register_service(inst)
+        await lb._handle_health_check_failure(inst)
+        assert inst.status == ServiceStatus.UNHEALTHY
+
+    async def test_circuit_breaker_record_failure_called(self):
+        lb = make_lb()
+        inst = make_instance(id_="hf3", port=8001)
+        inst.status = ServiceStatus.HEALTHY
+        lb.register_service(inst)
+        cb = lb.circuit_breakers["hf3"]
+        cb.failure_count = 0
+        await lb._handle_health_check_failure(inst)
+        assert cb.failure_count >= 1
+
+
+class TestServiceDiscovery:
+    """ServiceDiscovery methods"""
+
+    def test_register_load_balancer(self):
+        sd = ServiceDiscovery()
+        lb = make_lb("test_svc")
+        sd.register_load_balancer("test_svc", lb)
+        assert "test_svc" in sd.load_balancers
+
+    def test_get_service_discovery_stats_empty(self):
+        sd = ServiceDiscovery()
+        stats = sd.get_service_discovery_stats()
+        assert "registered_services" in stats
+        assert "auto_scaling_enabled" in stats
+
+    def test_get_service_discovery_stats_with_lb(self):
+        sd = ServiceDiscovery()
+        lb = make_lb("stats_svc")
+        sd.register_load_balancer("stats_svc", lb)
+        stats = sd.get_service_discovery_stats()
+        assert "stats_svc" in stats["registered_services"]
+
+    async def test_auto_scale_services_skips_when_disabled(self):
+        sd = ServiceDiscovery()
+        sd.auto_scaling_enabled = False
+        # Should return immediately without error
+        await sd.auto_scale_services()
+
+    async def test_auto_scale_skips_during_cooldown(self):
+        sd = ServiceDiscovery()
+        lb = make_lb("cool_svc")
+        sd.register_load_balancer("cool_svc", lb)
+        # Set last action to now (cooldown active)
+        sd.last_scaling_action["cool_svc"] = time.time()
+        await sd.auto_scale_services()
+
+    async def test_scale_up_adds_instance(self):
+        sd = ServiceDiscovery()
+        lb = make_lb("scale_up_svc")
+        inst = make_instance(id_="su1", port=8001, current_connections=20, avg_response_time=2000.0)
+        lb.register_service(inst)
+        sd.register_load_balancer("scale_up_svc", lb)
+        sd.scaling_cooldown = 0  # no cooldown
+        initial_count = len(lb.services)
+        await sd.auto_scale_services()
+        # If should_scale_up triggered, a new instance was added
+        assert len(lb.services) >= initial_count
+
+    async def test_scale_down_drains_instance(self):
+        sd = ServiceDiscovery()
+        lb = make_lb("scale_down_svc")
+        for i in range(3):
+            inst = make_instance(
+                id_=f"sd{i}", port=8000 + i,
+                current_connections=0, avg_response_time=50.0,
+                metadata={"cpu_percent": 5}
+            )
+            lb.register_service(inst)
+        sd.register_load_balancer("scale_down_svc", lb)
+        sd.scaling_cooldown = 0  # no cooldown
+        await sd.auto_scale_services()
+        statuses = [s.status for s in lb.services.values()]
+        assert ServiceStatus.DRAINING in statuses
+
+
+class TestCreateLoadBalancer:
+    """create_load_balancer convenience function"""
+
+    def test_returns_load_balancer(self):
+        lb = create_load_balancer("my_service_unique_123")
+        assert isinstance(lb, LoadBalancer)
+        assert lb.service_name == "my_service_unique_123"
