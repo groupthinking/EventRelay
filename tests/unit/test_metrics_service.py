@@ -4,12 +4,36 @@ from __future__ import annotations
 
 import sys
 import time
+import types
+from collections import deque
 from datetime import datetime, timedelta
 from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
+
+# Stub psutil so the import succeeds without the native library
+_psutil_stub = types.ModuleType("psutil")
+_psutil_stub.cpu_percent = MagicMock(return_value=10.0)
+_psutil_stub.cpu_count = MagicMock(return_value=4)
+_psutil_stub.cpu_freq = MagicMock(return_value=MagicMock(current=2400.0))
+_mem = MagicMock()
+_mem.percent = 50.0
+_mem.used = 4 * 1024 ** 3
+_mem.total = 8 * 1024 ** 3
+_psutil_stub.virtual_memory = MagicMock(return_value=_mem)
+_disk = MagicMock()
+_disk.percent = 30.0
+_disk.used = 50 * 1024 ** 3
+_disk.total = 200 * 1024 ** 3
+_psutil_stub.disk_usage = MagicMock(return_value=_disk)
+_net = MagicMock()
+_net.bytes_sent = 1000
+_net.bytes_recv = 2000
+_psutil_stub.net_io_counters = MagicMock(return_value=_net)
+sys.modules.setdefault("psutil", _psutil_stub)
 
 from youtube_extension.backend.services.metrics_service import MetricPoint, MetricSeries
 
@@ -198,3 +222,364 @@ class TestMetricsServiceInit:
         monkeypatch.chdir(tmp_path)
         svc = MetricsService(config={"retention_period": 7200})
         assert svc.retention_period == 7200
+
+
+# ===========================================================================
+# MetricsService.record_metric
+# ===========================================================================
+
+
+@pytest.mark.asyncio
+class TestRecordMetric:
+    async def test_creates_new_series_on_first_record(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        svc = MetricsService()
+        await svc.record_metric("my.metric", 42.0)
+        assert "my.metric" in svc.metrics
+        assert len(svc.metrics["my.metric"].points) == 1
+
+    async def test_appends_to_existing_series(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        svc = MetricsService()
+        await svc.record_metric("my.metric", 1.0)
+        await svc.record_metric("my.metric", 2.0)
+        assert len(svc.metrics["my.metric"].points) == 2
+
+    async def test_tags_are_stored(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        svc = MetricsService()
+        await svc.record_metric("req.count", 10, tags={"env": "prod"})
+        assert svc.metrics["req.count"].points[-1].tags == {"env": "prod"}
+
+    async def test_multiple_different_metrics(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        svc = MetricsService()
+        await svc.record_metric("cpu", 50.0)
+        await svc.record_metric("mem", 80.0)
+        assert "cpu" in svc.metrics
+        assert "mem" in svc.metrics
+
+    async def test_persist_called_on_tenth_point(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        svc = MetricsService()
+        # Force maxlen large enough not to lose points
+        svc.metrics["x"] = MetricSeries(name="x")
+        persist_calls = []
+        svc._persist_metrics = AsyncMock(side_effect=lambda: persist_calls.append(1))
+        for i in range(10):
+            await svc.record_metric("x", float(i))
+        assert len(persist_calls) == 1
+
+
+# ===========================================================================
+# MetricsService.get_metric_stats
+# ===========================================================================
+
+
+@pytest.mark.asyncio
+class TestGetMetricStats:
+    async def test_unknown_metric_returns_error(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        svc = MetricsService()
+        result = await svc.get_metric_stats("nonexistent")
+        assert "error" in result
+        assert "nonexistent" in result["error"]
+
+    async def test_returns_stats_for_known_metric(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        svc = MetricsService()
+        await svc.record_metric("latency", 100.0)
+        await svc.record_metric("latency", 200.0)
+        result = await svc.get_metric_stats("latency")
+        assert result["metric_name"] == "latency"
+        assert result["stats"]["count"] == 2
+        assert result["point_count"] == 2
+
+    async def test_custom_time_window_respected(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        svc = MetricsService()
+        old_ts = datetime.utcnow() - timedelta(seconds=400)
+        svc.metrics["x"] = MetricSeries(name="x")
+        svc.metrics["x"].add_point(99, timestamp=old_ts)
+        svc.metrics["x"].add_point(1)
+        result = await svc.get_metric_stats("x", time_window=300)
+        # Only the recent point should be counted
+        assert result["stats"]["count"] == 1
+
+
+# ===========================================================================
+# MetricsService.get_all_metrics
+# ===========================================================================
+
+
+@pytest.mark.asyncio
+class TestGetAllMetrics:
+    async def test_empty_metrics_returns_zero_total(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        svc = MetricsService()
+        overview = await svc.get_all_metrics()
+        assert overview["total_metrics"] == 0
+        assert overview["metrics"] == {}
+
+    async def test_collection_status_stopped_initially(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        svc = MetricsService()
+        overview = await svc.get_all_metrics()
+        assert overview["collection_status"] == "stopped"
+
+    async def test_collection_status_running_when_started(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        svc = MetricsService()
+        svc._running = True
+        overview = await svc.get_all_metrics()
+        assert overview["collection_status"] == "running"
+
+    async def test_metrics_summary_included(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        svc = MetricsService()
+        await svc.record_metric("cpu", 50.0)
+        overview = await svc.get_all_metrics()
+        assert "cpu" in overview["metrics"]
+        assert overview["metrics"]["cpu"]["point_count"] == 1
+
+    async def test_latest_timestamp_present(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        svc = MetricsService()
+        await svc.record_metric("cpu", 50.0)
+        overview = await svc.get_all_metrics()
+        assert overview["metrics"]["cpu"]["latest_timestamp"] is not None
+
+
+# ===========================================================================
+# MetricsService.get_system_metrics
+# ===========================================================================
+
+
+@pytest.mark.asyncio
+class TestGetSystemMetrics:
+    async def test_returns_cpu_key(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        svc = MetricsService()
+        result = await svc.get_system_metrics()
+        assert "cpu" in result
+
+    async def test_returns_memory_key(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        svc = MetricsService()
+        result = await svc.get_system_metrics()
+        assert "memory" in result
+
+    async def test_returns_disk_key(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        svc = MetricsService()
+        result = await svc.get_system_metrics()
+        assert "disk" in result
+
+    async def test_returns_network_key(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        svc = MetricsService()
+        result = await svc.get_system_metrics()
+        assert "network" in result
+
+    async def test_records_cpu_metric(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        svc = MetricsService()
+        await svc.get_system_metrics()
+        assert "system.cpu_percent" in svc.metrics
+
+    async def test_psutil_error_returns_error_dict(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        import psutil as ps
+        original_cpu = ps.cpu_percent
+        ps.cpu_percent = MagicMock(side_effect=RuntimeError("psutil failed"))
+        try:
+            svc = MetricsService()
+            result = await svc.get_system_metrics()
+            assert "error" in result
+        finally:
+            ps.cpu_percent = original_cpu
+
+
+# ===========================================================================
+# MetricsService.export_metrics
+# ===========================================================================
+
+
+@pytest.mark.asyncio
+class TestExportMetrics:
+    async def test_json_export_parses_correctly(self, tmp_path, monkeypatch):
+        import json
+        monkeypatch.chdir(tmp_path)
+        svc = MetricsService()
+        await svc.record_metric("cpu", 50.0)
+        exported = await svc.export_metrics("json")
+        data = json.loads(exported)
+        assert "export_timestamp" in data
+        assert "cpu" in data["metrics"]
+
+    async def test_json_export_includes_all_points(self, tmp_path, monkeypatch):
+        import json
+        monkeypatch.chdir(tmp_path)
+        svc = MetricsService()
+        for v in [10, 20, 30]:
+            await svc.record_metric("cpu", float(v))
+        exported = await svc.export_metrics("json")
+        data = json.loads(exported)
+        assert len(data["metrics"]["cpu"]["points"]) == 3
+
+    async def test_prometheus_export_format(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        svc = MetricsService()
+        await svc.record_metric("cpu", 75.0)
+        exported = await svc.export_metrics("prometheus")
+        assert "cpu" in exported
+        assert "75.0" in exported
+
+    async def test_unsupported_format_raises(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        svc = MetricsService()
+        with pytest.raises(ValueError, match="Unsupported export format"):
+            await svc.export_metrics("xml")
+
+    async def test_empty_metrics_prometheus_export(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        svc = MetricsService()
+        exported = await svc.export_metrics("prometheus")
+        assert exported == ""
+
+
+# ===========================================================================
+# MetricsService.clear_old_metrics
+# ===========================================================================
+
+
+@pytest.mark.asyncio
+class TestClearOldMetrics:
+    async def test_clears_old_points(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        svc = MetricsService()
+        old_ts = datetime.utcnow() - timedelta(seconds=7200)
+        svc.metrics["x"] = MetricSeries(name="x")
+        svc.metrics["x"].add_point(1, timestamp=old_ts)
+        svc.metrics["x"].add_point(2)  # recent
+        cleared = await svc.clear_old_metrics(retention_seconds=3600)
+        assert cleared == 1
+        assert len(svc.metrics["x"].points) == 1
+
+    async def test_uses_default_retention_when_none_given(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        svc = MetricsService()
+        svc.retention_period = 3600
+        old_ts = datetime.utcnow() - timedelta(seconds=7200)
+        svc.metrics["y"] = MetricSeries(name="y")
+        svc.metrics["y"].add_point(5, timestamp=old_ts)
+        cleared = await svc.clear_old_metrics()
+        assert cleared == 1
+
+    async def test_no_old_points_returns_zero(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        svc = MetricsService()
+        await svc.record_metric("fresh", 1.0)
+        cleared = await svc.clear_old_metrics(retention_seconds=300)
+        assert cleared == 0
+
+
+# ===========================================================================
+# MetricsService.load_persisted_metrics
+# ===========================================================================
+
+
+@pytest.mark.asyncio
+class TestLoadPersistedMetrics:
+    async def test_returns_false_when_file_missing(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        svc = MetricsService()
+        # Ensure the file doesn't exist
+        svc.metrics_file = tmp_path / "nonexistent.json"
+        result = await svc.load_persisted_metrics()
+        assert result is False
+
+    async def test_returns_true_when_file_exists(self, tmp_path, monkeypatch):
+        import json
+        monkeypatch.chdir(tmp_path)
+        svc = MetricsService()
+        svc.metrics_file = tmp_path / "metrics.json"
+        svc.metrics_file.write_text(json.dumps({"export_timestamp": "now", "metrics": {}}))
+        result = await svc.load_persisted_metrics()
+        assert result is True
+
+    async def test_returns_false_on_invalid_json(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        svc = MetricsService()
+        svc.metrics_file = tmp_path / "metrics.json"
+        svc.metrics_file.write_text("NOT JSON {{{")
+        result = await svc.load_persisted_metrics()
+        assert result is False
+
+
+# ===========================================================================
+# MetricsService.health_check
+# ===========================================================================
+
+
+@pytest.mark.asyncio
+class TestHealthCheck:
+    async def test_returns_healthy_status(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        svc = MetricsService()
+        health = await svc.health_check()
+        assert health["service"] == "metrics_service"
+        assert health["status"] in ("healthy", "degraded")
+
+    async def test_health_check_reports_collection_running_false(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        svc = MetricsService()
+        health = await svc.health_check()
+        assert health["metrics"]["collection_running"] is False
+
+    async def test_recording_works_true_when_no_error(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        svc = MetricsService()
+        health = await svc.health_check()
+        assert health["metrics"]["recording_works"] is True
+
+    async def test_system_collection_works_true_by_default(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        svc = MetricsService()
+        health = await svc.health_check()
+        assert health["metrics"]["system_collection_works"] is True
+
+
+# ===========================================================================
+# MetricsService.start_collection / stop_collection
+# ===========================================================================
+
+
+@pytest.mark.asyncio
+class TestStartStopCollection:
+    async def test_start_sets_running_true(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        svc = MetricsService()
+        # Patch background task to avoid real collection loop
+        with patch.object(svc, "_background_collection", new_callable=AsyncMock):
+            await svc.start_collection()
+            assert svc._running is True
+            await svc.stop_collection()
+
+    async def test_start_is_idempotent(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        svc = MetricsService()
+        with patch.object(svc, "_background_collection", new_callable=AsyncMock):
+            await svc.start_collection()
+            task1 = svc._collection_task
+            await svc.start_collection()  # second call should be a no-op
+            assert svc._collection_task is task1
+            await svc.stop_collection()
+
+    async def test_stop_sets_running_false(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        svc = MetricsService()
+        with patch.object(svc, "_background_collection", new_callable=AsyncMock):
+            await svc.start_collection()
+            await svc.stop_collection()
+            assert svc._running is False
