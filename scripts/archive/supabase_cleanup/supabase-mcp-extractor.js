@@ -10,7 +10,7 @@ const { default: fetch } = require('node-fetch');
 
 // Supabase MCP endpoint
 const MCP_ENDPOINT = 'https://nsfrhirwsjqwhagtuaxx.supabase.co/functions/v1/connect-to-cursor-mcp';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5zZnJoaXJ3c2pxd2hhZ3R1YXh4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDYyMTcwMTMsImV4cCI6MjA2MTc5MzAxM30.mvPT1ha9keOLFCxVPoUoAwWt2uKb-m_ii2bu2I-ziyk';
+const SUPABASE_ANON_KEY = 'REDACTED_JWT_ROTATE';
 
 // Anthropic API key
 const ANTHROPIC_API_KEY = 'REDACTED_ANTHROPIC_KEY_ROTATE';

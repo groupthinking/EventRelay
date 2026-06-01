@@ -131,7 +131,7 @@ def try_endpoints(api_key, mcp_context, endpoints):
     return None, None
 
 SUPABASE_URL = os.getenv('SUPABASE_URL', 'https://nsfrhirwsjqwhagtuaxx.supabase.co')
-SUPABASE_KEY = os.getenv('SUPABASE_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5zZnJoaXJ3c2pxd2hhZ3R1YXh4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDYyMTcwMTMsImV4cCI6MjA2MTc5MzAxM30.mvPT1ha9keOLFCxVPoUoAwWt2uKb-m_ii2bu2I-ziyk')
+SUPABASE_KEY = os.getenv('SUPABASE_KEY', 'REDACTED_JWT_ROTATE')
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
