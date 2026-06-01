@@ -30,6 +30,7 @@ dashboard_test.html
 *.cert
 *.code-workspace
 *.coverage
+coverage.xml
 *.crt
 *.egg-info/
 *.db
