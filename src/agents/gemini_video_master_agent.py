@@ -87,7 +87,7 @@ class AIProvider(Enum):
     GEMINI_2_0_FLASH = "models/gemini-2.0-flash-exp"
     # External providers
     GROK_4 = "grok-4-0709"
-    CLAUDE_3_5_SONNET = "claude-3-5-sonnet-20241022"
+    CLAUDE_3_5_SONNET = "claude-opus-4-8"  # value migrated from claude-3-5-sonnet (retired)
     GPT_4O = "gpt-4o"
     # NVIDIA Cosmos/VLM (New - Cognitive Video)
     NVIDIA_VILA = "nvidia/vila-1.5-40b"
@@ -497,10 +497,9 @@ class GeminiVideoMasterAgent:
             }
 
             payload = {
-                "model": "claude-3-5-sonnet-20241022",
+                "model": "claude-opus-4-8",
                 "max_tokens": 4096,
                 "messages": [{"role": "user", "content": prompt}],
-                "temperature": 0.3,
             }
 
             async with aiohttp.ClientSession() as session:

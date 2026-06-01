@@ -9,6 +9,7 @@ import Nav from '@/components/Nav';
 import Footer from '@/components/Footer';
 import TranscriptViewer from '@/components/TranscriptViewer';
 import EventList from '@/components/EventList';
+import AgentDashboard from '@/components/AgentDashboard';
 import type { ExtractedEvent } from '@/lib/types';
 import { useDashboardStore } from '@/store/dashboard-store';
 import type { PipelineResult, Video } from '@/store/dashboard-store';
@@ -71,12 +72,26 @@ function SplitView({
   onClose: () => void;
   onExtractEvents?: (videoId: string) => void;
 }) {
-  const [activeTab, setActiveTab] = useState<'analysis' | 'transcript' | 'actions' | 'search'>('analysis');
+  const [activeTab, setActiveTab] = useState<'analysis' | 'transcript' | 'actions' | 'agents' | 'search'>('analysis');
   const searchQuery = useDashboardStore((s) => s.searchQuery);
   const setSearchQuery = useDashboardStore((s) => s.setSearchQuery);
   const performSearch = useDashboardStore((s) => s.performSearch);
   const searchResults = useDashboardStore((s) => s.searchResults);
   const searchLoading = useDashboardStore((s) => s.searchLoading);
+  const dispatchToAgents = useDashboardStore((s) => s.dispatchToAgents);
+  const refreshAgentStatus = useDashboardStore((s) => s.refreshAgentStatus);
+
+  // Probe whether the backend agent + MCP layer is reachable so we only offer
+  // the dispatch action when it can actually do something.
+  const [agentBackend, setAgentBackend] = useState(false);
+  useEffect(() => {
+    let active = true;
+    fetch('/api/agents/dispatch')
+      .then((r) => r.json())
+      .then((d) => { if (active) setAgentBackend(!!d.available); })
+      .catch(() => {});
+    return () => { active = false; };
+  }, []);
 
   const embedUrl = getYouTubeEmbedUrl(video.url);
 
@@ -193,7 +208,7 @@ function SplitView({
       <div className="flex-1 flex flex-col" style={{ background: '#131318', borderLeft: '1px solid rgba(255,255,255,0.05)' }}>
         {/* Tabs */}
         <div className="flex" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', background: 'rgba(25, 25, 31, 0.9)' }}>
-          {(['analysis', 'transcript', 'actions', 'search'] as const).map((tab) => (
+          {(['analysis', 'transcript', 'actions', 'agents', 'search'] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -211,6 +226,13 @@ function SplitView({
                   style={{ background: 'rgba(106,242,222,0.15)', color: '#6af2de' }}
                 >
                   {video.events!.length}
+                </span>
+              )}
+              {tab === 'agents' && video.agents && video.agents.length > 0 && (
+                <span className="absolute -top-1 -right-1 text-[9px] font-bold px-1.5 py-0.5 rounded-sm"
+                  style={{ background: 'rgba(129,140,248,0.15)', color: '#818cf8' }}
+                >
+                  {video.agents.length}
                 </span>
               )}
             </button>
@@ -348,6 +370,48 @@ function SplitView({
                 events={video.events || []}
                 onExtract={onExtractEvents ? () => onExtractEvents(video.id) : undefined}
               />
+            </div>
+          )}
+
+          {activeTab === 'agents' && (
+            <div className="max-w-3xl mx-auto animate-fade-in-up">
+              {(hasEvents || (video.agents && video.agents.length > 0)) && (
+                <div className="flex items-center justify-end gap-2 mb-4 flex-wrap">
+                  {hasEvents && agentBackend && (
+                    <button
+                      onClick={() => dispatchToAgents(video.id)}
+                      className="px-4 py-2 text-xs font-bold uppercase tracking-wider transition-all active:scale-95"
+                      style={{ background: 'rgba(129,140,248,0.15)', color: '#818cf8', border: '1px solid rgba(129,140,248,0.3)' }}
+                    >
+                      ⚡ Dispatch {video.events!.length} events
+                    </button>
+                  )}
+                  {(video.agents || []).some((a) => a.status === 'running' || a.status === 'queued') && (
+                    <button
+                      onClick={() => refreshAgentStatus(video.id)}
+                      className="px-4 py-2 text-xs font-bold uppercase tracking-wider transition-all active:scale-95"
+                      style={{ background: 'rgba(255,255,255,0.05)', color: 'rgba(248,245,253,0.7)', border: '1px solid rgba(255,255,255,0.1)' }}
+                    >
+                      ↻ Refresh
+                    </button>
+                  )}
+                </div>
+              )}
+              {hasEvents && !agentBackend && (
+                <p className="text-xs mb-4 text-right" style={{ color: 'rgba(248,245,253,0.35)' }}>
+                  Backend agents offline — deploy FastAPI + set BACKEND_URL to dispatch real MCP agents.
+                </p>
+              )}
+              <AgentDashboard
+                executions={video.agents || []}
+                loading={video.status === 'processing' && !(video.agents && video.agents.length > 0)}
+              />
+              {video.status !== 'processing' && !(video.agents && video.agents.length > 0) && (
+                <div className="flex flex-col items-center justify-center text-center py-16">
+                  <div className="text-6xl mb-6 opacity-20">🤖</div>
+                  <p className="text-white/40">No agent executions yet.</p>
+                </div>
+              )}
             </div>
           )}
 

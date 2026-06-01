@@ -10,7 +10,7 @@
     },
     "claude": {
       "enabled": true,
-      "model": "claude-sonnet-4-20250514",
+      "model": "claude-opus-4-8",
       "priority": 2,
       "use_case": "deep_analysis"
     },

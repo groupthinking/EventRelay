@@ -56,8 +56,8 @@ class LLMProvider(Enum):
 
     OPENAI_GPT4O = "gpt-4o"
     OPENAI_GPT4O_MINI = "gpt-4o-mini"
-    CLAUDE_3_5_SONNET = "claude-3-5-sonnet-20241022"
-    CLAUDE_3_HAIKU = "claude-3-haiku-20240307"
+    CLAUDE_3_5_SONNET = "claude-opus-4-8"  # value migrated from claude-3-5-sonnet (retired)
+    CLAUDE_3_HAIKU = "claude-haiku-4-5"  # value migrated from claude-3-haiku (retired); kept on the Haiku tier
     GROK_4 = "grok-4-0709"
     GEMINI_2_5_FLASH = "gemini-2.5-flash"
     GEMINI_1_5_PRO = "gemini-1.5-pro"
