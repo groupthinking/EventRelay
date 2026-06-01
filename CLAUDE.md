@@ -114,3 +114,9 @@ turbo run test
 - **No secrets in code**: All keys/credentials go in `.env` (gitignored)
 - **Security**: Validate inputs via Pydantic; no `dangerouslySetInnerHTML` in React; sanitize subprocess args
 - **Type safety enforced**: mypy strict (Python), TypeScript strict (frontend)
+
+## Repo Hygiene
+
+- **History was rewritten**: `main` has been force-pushed (a secret-purge of committed credentials). Older branches are therefore *orphaned* — they share little real ancestry with current `main`. Consequence: `git diff main...branch` (three-dot) and `git merge-tree` are **unreliable** for those branches (a three-dot diff can read "0 files" for a branch that diverges by thousands; merge-tree reports "clean" because unrelated trees don't textually conflict). When auditing branches, trust **PR state + staleness** (age, commits-behind), not raw diffs.
+- **Branch audits**: use the `branch-cleanup` skill (`.claude/skills/branch-cleanup/`) — it runs the 6-gate fail-test harness (`scripts/maintenance/branch-fail-test.sh`) and emits a decision matrix. Never delete branches without archive-tagging first (`git tag archive/<branch>`).
+
