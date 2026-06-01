@@ -1,0 +1,30 @@
+# SAFE-batch recovery refs (2026-06-01T18:55Z)
+# Restore: git push origin <sha>:refs/heads/<branch>
+b4227d8b39c5ae2811c0228ea729a293655eac77  claude/fix-action-step-error
+f5e474f46dbdffc727b6daa1b301d77fc6605813  claude/fix-code-generator-output-again
+2d3f717d33bbaa42f866fd09886932c25ac7bb30  claude/fix-code-generator-unique-output
+cd4da2852f6a6dfa748244d0bbf682bfadc6e17d  claude/model-enum-sdk-followups
+f8ee35609194b24463fcbcc2654c30bf8ddcf2d9  codex/phase-3-async-video-routing
+396733aeca4156f091e1ce65818c5c4c4a8b10dc  copilot/delete-unnecessary-action
+ab4151fd67aee654b732d608f0c8670c7403fddf  copilot/fix-agent-pipeline-issues
+7d93aae20da79ae4c734b2d11c1547e3f213e3e3  copilot/fix-dependency-review-action-inputs
+8f13bd378fb3a5055e69f8a25a82cd6fcb709099  copilot/fix-nextjs-dos-vulnerability
+900e1172fa02ef2938ce723dd5687e529d69f025  copilot/ghsa-8h8q-6873-q5fj-patch-nextjs
+1f61ab325d193d2f7f7cebef7143fa1391c4a86a  copilot/security-bump-next-patched-version
+31988752d475ec617cebef0d42133c08f8a0a6cd  fix/database-cleanup-sqli-8169832145558809896
+6ee3e18124c7ebfceda3605c72635b0e566e7d24  fix/secure-cors-code-gen-250672599973076040
+db20073427c95795644842545f18a8f88b78ef09  fix/sql-injection-database-cleanup-18129828169216058434
+bdaa856655a56eb14c85df70863fa92c92acd4fb  jules-13171754861581372920-22d7900e
+d46575fb2ecc077b7aa239d5cc5e2dd7ee6e5b50  jules-14956868518633406482-f4fcdef0
+2ade3f8b8e152a296cfc72ca6a9fd38406693aca  jules-security-cors-fix-10738780459144826270
+c8a75889ebfbb3738afbd498b46f19226de60198  optimize-github-deployment-5034492779168511499
+e0d79f5d4f1b226ec328ad50137bda70121a58c4  v0/groupthinking-c47a0d1f
+4b0aaca5b8afb7f4a0b331bad2bc13ffe997ab44  v0/page-changes-dc7539d3
+106bba8b1963cdcb95c1a5ff4058604f4c5a3925  v0/producer-ai-clone-5c5cde0f
+d910cc54cc67b82b34e81147ab9ef7173afbbba5  v0/ultrathinking-16d686fb
+fc44f4ae5ac187392d557c625d16a702d9de20ee  v0/ultrathinking-2f38fe5f
+2e07ebbfc5b79344dfe2909642c429fd0a00c5bd  v0/ultrathinking-88584400
+fc44f4ae5ac187392d557c625d16a702d9de20ee  v0/ultrathinking-b4b57996
+b7986634f97019fdd1057f0db306e6cb8749e033  v0/ultrathinking-df8a2787
+e0d79f5d4f1b226ec328ad50137bda70121a58c4  v0/ultrathinking-e1f6bbf3
+fc44f4ae5ac187392d557c625d16a702d9de20ee  v0/ultrathinking-f5c094d0

@@ -89,14 +89,19 @@ case "${1:-}" in
 esac
 
 echo "Batch '$1': ${#sel[@]} branches"
+RECOVERY="docs/branch-cleanup-recovery-refs.txt"
+echo "# recovery refs for '$1' batch ($(date -u +%Y-%m-%dT%H:%MZ)) — restore: git push origin <sha>:refs/heads/<branch>" >> "$RECOVERY"
 for b in "${sel[@]}"; do
+  sha=$(git rev-parse "origin/$b" 2>/dev/null) || { echo "  skip (no origin/$b)"; continue; }
+  echo "$sha  $b" >> "$RECOVERY"          # SHA-based recovery works even where tag pushes are blocked
   if [ "${DRY_RUN:-0}" = "1" ]; then
-    echo "  [dry-run] git tag archive/$b origin/$b && git push origin refs/tags/archive/$b && git push origin --delete $b"
+    echo "  [dry-run] record $sha; tag archive/$b (best-effort); git push origin --delete $b"
     continue
   fi
-  echo "==> $b"
-  git tag -f "archive/$b" "origin/$b" 2>/dev/null
-  git push origin "refs/tags/archive/$b" 2>/dev/null
-  git push origin --delete "$b"
+  echo "==> $b ($sha)"
+  git tag -f "archive/$b" "$sha" 2>/dev/null
+  git push origin "refs/tags/archive/$b" 2>/dev/null || echo "    (tag push blocked — SHA recorded in $RECOVERY instead)"
+  git push origin --delete "$b" || echo "    (delete FAILED — branch retained; this env may forbid ref deletion)"
 done
-echo "Done. Recover any branch with:  git push origin archive/<branch>:refs/heads/<branch>"
+echo "Done. Recovery SHAs appended to $RECOVERY."
+echo "Restore any branch with:  git push origin <sha>:refs/heads/<branch>"

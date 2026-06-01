@@ -22,11 +22,20 @@ A secret-purge force-push orphaned older branches and breaks naive git diff/merg
 
 ## Pending execution
 
+> ⚠️ **Deletion cannot run from the Claude Code web sandbox.** The git proxy here
+> returns HTTP 403 on *all* ref deletions and tag pushes, and the GitHub MCP
+> server exposes no branch-deletion tool. The 28-branch SAFE batch was attempted
+> and **failed closed — every branch is intact** (verified via `git ls-remote`).
+> The batches below must be run from an environment with real push rights (a
+> local clone, or CI with `contents: write`). The recovery SHAs are pre-recorded
+> in [`branch-cleanup-recovery-refs.txt`](./branch-cleanup-recovery-refs.txt) so
+> the operation is reversible regardless of whether archive-tag pushes succeed.
+
 | Item | State | Plan |
 |---|---|---|
-| Delete **28 CLOSE-SAFE** branches | ready | `branch-cleanup-delete.sh safe` — archive-tag then delete; zero risk |
-| Delete **30 CLOSE-STALE** branches | ready | `branch-cleanup-delete.sh stale` — pre-rewrite orphans / superseded |
+| Delete **28 CLOSE-SAFE** branches | ⏸ blocked in sandbox | run `scripts/maintenance/branch-cleanup-delete.sh safe` locally — zero risk |
+| Delete **30 CLOSE-STALE** branches | ⏸ blocked in sandbox | `…delete.sh stale` — pre-rewrite orphans / superseded |
 | Triage **3 REVIEW** branches | needs glance | `v0/ai-system-architecture-ac4e7c39` (5d, recent — likely keep/PR), `fix/unified-ai-sdk-real-providers-154` (superseded by model-migration PRs → close), `copilot/improve-documentation` (docs, won't merge clean → close) |
 | Merge PR #222 | open (draft) | review + un-draft |
 
-All deletions are reversible: `git push origin archive/<branch>:refs/heads/<branch>`.
+All deletions are reversible: `git push origin <sha>:refs/heads/<branch>` (SHAs in the recovery file), or `git push origin archive/<branch>:refs/heads/<branch>` where tags were pushed.
