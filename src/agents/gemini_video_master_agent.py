@@ -618,7 +618,7 @@ class GeminiVideoMasterAgent:
             AIProvider.GEMINI_2_5_FLASH: 0.00015,
             AIProvider.GEMINI_2_0_FLASH: 0.00010,
             AIProvider.GROK_4: 0.00025,
-            AIProvider.CLAUDE_OPUS_4_8: 0.00030,
+            AIProvider.CLAUDE_OPUS_4_8: 0.00150,
             AIProvider.GPT_4O: 0.00040,
         }
 
