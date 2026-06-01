@@ -850,3 +850,834 @@ class TestCreateDefaultBenchmarkSuites:
     def test_get_benchmark_status_has_baseline_key(self):
         status = get_benchmark_status()
         assert "baseline_established" in status
+
+
+# ---------------------------------------------------------------------------
+# establish_baseline tests
+# ---------------------------------------------------------------------------
+
+class TestEstablishBaseline:
+    """Tests for ComprehensiveBenchmark.establish_baseline."""
+
+    async def test_sets_baseline_established_true(self):
+        cb = ComprehensiveBenchmark()
+        cb._run_benchmark_suite = AsyncMock(return_value={})
+        cb._save_benchmark_report = AsyncMock()
+        cb._get_system_info = AsyncMock(return_value={"cpu": 4})
+        await cb.establish_baseline()
+        assert cb.baseline_established is True
+
+    async def test_returns_dict(self):
+        cb = ComprehensiveBenchmark()
+        cb._run_benchmark_suite = AsyncMock(return_value={})
+        cb._save_benchmark_report = AsyncMock()
+        cb._get_system_info = AsyncMock(return_value={})
+        result = await cb.establish_baseline()
+        assert isinstance(result, dict)
+
+    async def test_runs_suite_for_each_registered_suite(self):
+        cb = ComprehensiveBenchmark()
+        for i in range(3):
+            cb.register_benchmark_suite(
+                BenchmarkSuite(name=f"suite_{i}", description="d", benchmarks=[])
+            )
+        cb._run_benchmark_suite = AsyncMock(return_value={})
+        cb._save_benchmark_report = AsyncMock()
+        cb._get_system_info = AsyncMock(return_value={})
+        await cb.establish_baseline()
+        assert cb._run_benchmark_suite.call_count == 3
+
+    async def test_stores_suite_results_in_baseline_results(self):
+        cb = ComprehensiveBenchmark()
+        fake_result = {"bench_a": BenchmarkResult(
+            name="bench_a", component="cache",
+            execution_time_ms=10.0, memory_usage_mb=5.0,
+            cpu_usage_percent=2.0, success=True,
+        )}
+        suite = BenchmarkSuite(name="s1", description="d", benchmarks=[])
+        cb.register_benchmark_suite(suite)
+        cb._run_benchmark_suite = AsyncMock(return_value=fake_result)
+        cb._save_benchmark_report = AsyncMock()
+        cb._get_system_info = AsyncMock(return_value={})
+        await cb.establish_baseline()
+        assert cb.benchmark_suites["s1"].baseline_results == fake_result
+
+    async def test_saves_baseline_report(self):
+        cb = ComprehensiveBenchmark()
+        cb._run_benchmark_suite = AsyncMock(return_value={})
+        cb._save_benchmark_report = AsyncMock()
+        cb._get_system_info = AsyncMock(return_value={})
+        await cb.establish_baseline()
+        cb._save_benchmark_report.assert_called_once()
+        call_args = cb._save_benchmark_report.call_args
+        assert call_args[0][1] == "baseline"
+
+    async def test_baseline_report_has_type_baseline(self):
+        cb = ComprehensiveBenchmark()
+        cb._run_benchmark_suite = AsyncMock(return_value={})
+        saved_reports = []
+        async def capture_report(report, report_type):
+            saved_reports.append((report, report_type))
+        cb._save_benchmark_report = capture_report
+        cb._get_system_info = AsyncMock(return_value={"cpu": 2})
+        await cb.establish_baseline()
+        assert len(saved_reports) == 1
+        report, rtype = saved_reports[0]
+        assert rtype == "baseline"
+        assert report["type"] == "baseline"
+        assert "timestamp" in report
+        assert "results" in report
+        assert "system_info" in report
+
+    async def test_baseline_result_keyed_by_suite_name(self):
+        cb = ComprehensiveBenchmark()
+        cb.register_benchmark_suite(BenchmarkSuite(name="my_suite", description="d", benchmarks=[]))
+        suite_data = {"b": BenchmarkResult(
+            name="b", component="cache", execution_time_ms=5.0,
+            memory_usage_mb=1.0, cpu_usage_percent=0.0, success=True,
+        )}
+        cb._run_benchmark_suite = AsyncMock(return_value=suite_data)
+        cb._save_benchmark_report = AsyncMock()
+        cb._get_system_info = AsyncMock(return_value={})
+        result = await cb.establish_baseline()
+        assert "my_suite" in result
+
+    async def test_no_suites_returns_empty_dict(self):
+        cb = ComprehensiveBenchmark()
+        # no suites registered
+        cb._save_benchmark_report = AsyncMock()
+        cb._get_system_info = AsyncMock(return_value={})
+        result = await cb.establish_baseline()
+        assert result == {}
+        assert cb.baseline_established is True
+
+
+# ---------------------------------------------------------------------------
+# run_comprehensive_benchmark tests
+# ---------------------------------------------------------------------------
+
+class TestRunComprehensiveBenchmark:
+    """Tests for ComprehensiveBenchmark.run_comprehensive_benchmark."""
+
+    async def test_returns_dict_with_required_keys(self):
+        cb = ComprehensiveBenchmark()
+        cb._run_benchmark_suite = AsyncMock(return_value={})
+        cb._save_benchmark_report = AsyncMock()
+        cb._get_system_info = AsyncMock(return_value={})
+        result = await cb.run_comprehensive_benchmark()
+        for key in ("timestamp", "type", "suite_results", "target_validation",
+                    "improvement_analysis", "system_info", "performance_grade",
+                    "total_execution_time_ms"):
+            assert key in result, f"Missing key: {key}"
+
+    async def test_type_is_comprehensive(self):
+        cb = ComprehensiveBenchmark()
+        cb._run_benchmark_suite = AsyncMock(return_value={})
+        cb._save_benchmark_report = AsyncMock()
+        cb._get_system_info = AsyncMock(return_value={})
+        result = await cb.run_comprehensive_benchmark()
+        assert result["type"] == "comprehensive"
+
+    async def test_appends_to_benchmark_history(self):
+        cb = ComprehensiveBenchmark()
+        cb._run_benchmark_suite = AsyncMock(return_value={})
+        cb._save_benchmark_report = AsyncMock()
+        cb._get_system_info = AsyncMock(return_value={})
+        await cb.run_comprehensive_benchmark()
+        assert len(cb.benchmark_history) == 1
+
+    async def test_history_capped_at_50(self):
+        cb = ComprehensiveBenchmark()
+        cb._run_benchmark_suite = AsyncMock(return_value={})
+        cb._save_benchmark_report = AsyncMock()
+        cb._get_system_info = AsyncMock(return_value={})
+        # Pre-fill history with 50 items
+        cb.benchmark_history = [{"run": i} for i in range(50)]
+        await cb.run_comprehensive_benchmark()
+        assert len(cb.benchmark_history) == 50
+
+    async def test_saves_comprehensive_report(self):
+        cb = ComprehensiveBenchmark()
+        cb._run_benchmark_suite = AsyncMock(return_value={})
+        cb._save_benchmark_report = AsyncMock()
+        cb._get_system_info = AsyncMock(return_value={})
+        await cb.run_comprehensive_benchmark()
+        cb._save_benchmark_report.assert_called_once()
+        assert cb._save_benchmark_report.call_args[0][1] == "comprehensive"
+
+    async def test_calculates_improvement_when_baseline_exists(self):
+        cb = ComprehensiveBenchmark()
+        baseline_result = BenchmarkResult(
+            name="b", component="cache", execution_time_ms=1000.0,
+            memory_usage_mb=100.0, cpu_usage_percent=10.0, success=True,
+        )
+        current_result = BenchmarkResult(
+            name="b", component="cache", execution_time_ms=400.0,
+            memory_usage_mb=80.0, cpu_usage_percent=5.0, success=True,
+        )
+        suite = BenchmarkSuite(name="s", description="d", benchmarks=[])
+        suite.baseline_results = {"b": baseline_result}
+        cb.register_benchmark_suite(suite)
+        cb._run_benchmark_suite = AsyncMock(return_value={"b": current_result})
+        cb._save_benchmark_report = AsyncMock()
+        cb._get_system_info = AsyncMock(return_value={})
+        result = await cb.run_comprehensive_benchmark()
+        assert "s" in result["improvement_analysis"]
+        assert "b" in result["improvement_analysis"]["s"]
+
+    async def test_no_improvement_analysis_without_baseline(self):
+        cb = ComprehensiveBenchmark()
+        suite = BenchmarkSuite(name="s", description="d", benchmarks=[])
+        # baseline_results is None by default
+        cb.register_benchmark_suite(suite)
+        cb._run_benchmark_suite = AsyncMock(return_value={})
+        cb._save_benchmark_report = AsyncMock()
+        cb._get_system_info = AsyncMock(return_value={})
+        result = await cb.run_comprehensive_benchmark()
+        assert "s" not in result["improvement_analysis"]
+
+    async def test_warns_when_no_baseline(self, caplog):
+        import logging
+        cb = ComprehensiveBenchmark()
+        cb._run_benchmark_suite = AsyncMock(return_value={})
+        cb._save_benchmark_report = AsyncMock()
+        cb._get_system_info = AsyncMock(return_value={})
+        with caplog.at_level(logging.WARNING):
+            await cb.run_comprehensive_benchmark()
+        assert any("baseline" in rec.message.lower() for rec in caplog.records)
+
+    async def test_total_execution_time_is_positive(self):
+        cb = ComprehensiveBenchmark()
+        cb._run_benchmark_suite = AsyncMock(return_value={})
+        cb._save_benchmark_report = AsyncMock()
+        cb._get_system_info = AsyncMock(return_value={})
+        result = await cb.run_comprehensive_benchmark()
+        assert result["total_execution_time_ms"] >= 0
+
+    async def test_performance_grade_is_string(self):
+        cb = ComprehensiveBenchmark()
+        cb._run_benchmark_suite = AsyncMock(return_value={})
+        cb._save_benchmark_report = AsyncMock()
+        cb._get_system_info = AsyncMock(return_value={})
+        result = await cb.run_comprehensive_benchmark()
+        assert isinstance(result["performance_grade"], str)
+        assert result["performance_grade"] in {"A+", "A", "B+", "B", "C+", "C", "D+", "D", "F"}
+
+
+# ---------------------------------------------------------------------------
+# _run_benchmark_suite tests
+# ---------------------------------------------------------------------------
+
+class TestRunBenchmarkSuite:
+    """Tests for ComprehensiveBenchmark._run_benchmark_suite."""
+
+    async def test_returns_empty_dict_for_empty_benchmarks(self):
+        cb = ComprehensiveBenchmark()
+        suite = BenchmarkSuite(name="empty", description="d", benchmarks=[])
+        result = await cb._run_benchmark_suite(suite)
+        assert result == {}
+
+    async def test_calls_run_single_benchmark_per_config(self):
+        cb = ComprehensiveBenchmark()
+        fake_result = BenchmarkResult(
+            name="b1", component="cache", execution_time_ms=5.0,
+            memory_usage_mb=1.0, cpu_usage_percent=0.0, success=True,
+        )
+        cb._run_single_benchmark = AsyncMock(return_value=fake_result)
+        suite = BenchmarkSuite(
+            name="s", description="d",
+            benchmarks=[
+                {"name": "b1", "component": "cache", "type": "cache_operation"},
+                {"name": "b2", "component": "database", "type": "database_query"},
+            ]
+        )
+        result = await cb._run_benchmark_suite(suite)
+        assert cb._run_single_benchmark.call_count == 2
+
+    async def test_result_keyed_by_benchmark_name(self):
+        cb = ComprehensiveBenchmark()
+        fake_result = BenchmarkResult(
+            name="my_bench", component="cache", execution_time_ms=5.0,
+            memory_usage_mb=1.0, cpu_usage_percent=0.0, success=True,
+        )
+        cb._run_single_benchmark = AsyncMock(return_value=fake_result)
+        suite = BenchmarkSuite(
+            name="s", description="d",
+            benchmarks=[{"name": "my_bench", "component": "cache", "type": "cache_operation"}]
+        )
+        result = await cb._run_benchmark_suite(suite)
+        assert "my_bench" in result
+        assert result["my_bench"] is fake_result
+
+    async def test_failed_single_benchmark_stored_as_failed_result(self):
+        cb = ComprehensiveBenchmark()
+        cb._run_single_benchmark = AsyncMock(side_effect=RuntimeError("boom"))
+        suite = BenchmarkSuite(
+            name="s", description="d",
+            benchmarks=[{"name": "failing", "component": "video_processing", "type": "video_processing"}]
+        )
+        result = await cb._run_benchmark_suite(suite)
+        assert "failing" in result
+        r = result["failing"]
+        assert isinstance(r, BenchmarkResult)
+        assert r.success is False
+        assert "boom" in r.error_message
+
+    async def test_failed_benchmark_has_correct_component(self):
+        cb = ComprehensiveBenchmark()
+        cb._run_single_benchmark = AsyncMock(side_effect=Exception("err"))
+        suite = BenchmarkSuite(
+            name="s", description="d",
+            benchmarks=[{"name": "b", "component": "database", "type": "database_query"}]
+        )
+        result = await cb._run_benchmark_suite(suite)
+        assert result["b"].component == "database"
+
+    async def test_one_failure_does_not_stop_others(self):
+        cb = ComprehensiveBenchmark()
+        ok_result = BenchmarkResult(
+            name="b2", component="cache", execution_time_ms=5.0,
+            memory_usage_mb=1.0, cpu_usage_percent=0.0, success=True,
+        )
+
+        async def side_effect(config):
+            if config["name"] == "b1":
+                raise RuntimeError("fail b1")
+            return ok_result
+
+        cb._run_single_benchmark = side_effect
+        suite = BenchmarkSuite(
+            name="s", description="d",
+            benchmarks=[
+                {"name": "b1", "component": "video_processing", "type": "video_processing"},
+                {"name": "b2", "component": "cache", "type": "cache_operation"},
+            ]
+        )
+        result = await cb._run_benchmark_suite(suite)
+        assert result["b1"].success is False
+        assert result["b2"].success is True
+
+
+# ---------------------------------------------------------------------------
+# _run_single_benchmark tests
+# ---------------------------------------------------------------------------
+
+class TestRunSingleBenchmark:
+    """Tests for ComprehensiveBenchmark._run_single_benchmark."""
+
+    async def test_unknown_type_returns_failed_result(self):
+        cb = ComprehensiveBenchmark()
+        cb._get_memory_usage = AsyncMock(return_value=100.0)
+        cb._get_cpu_usage = AsyncMock(return_value=10.0)
+        config = {
+            "name": "bad_bench",
+            "component": "system",
+            "type": "unknown_type",
+            "params": {},
+        }
+        result = await cb._run_single_benchmark(config)
+        assert isinstance(result, BenchmarkResult)
+        assert result.success is False
+        assert "unknown_type" in result.error_message.lower()
+
+    async def test_video_processing_type_calls_benchmark_method(self):
+        cb = ComprehensiveBenchmark()
+        cb._get_memory_usage = AsyncMock(return_value=50.0)
+        cb._get_cpu_usage = AsyncMock(return_value=5.0)
+        cb._benchmark_video_processing = AsyncMock(return_value={"avg_processing_time_ms": 1000.0})
+        config = {
+            "name": "vp_bench",
+            "component": "video_processing",
+            "type": "video_processing",
+            "params": {},
+        }
+        result = await cb._run_single_benchmark(config)
+        assert result.success is True
+        cb._benchmark_video_processing.assert_called_once_with({})
+
+    async def test_database_query_type_calls_benchmark_method(self):
+        cb = ComprehensiveBenchmark()
+        cb._get_memory_usage = AsyncMock(return_value=50.0)
+        cb._get_cpu_usage = AsyncMock(return_value=5.0)
+        cb._benchmark_database_query = AsyncMock(return_value={"avg_query_time_ms": 50.0})
+        config = {
+            "name": "db_bench",
+            "component": "database",
+            "type": "database_query",
+            "params": {"iterations": 10},
+        }
+        result = await cb._run_single_benchmark(config)
+        assert result.success is True
+        cb._benchmark_database_query.assert_called_once_with({"iterations": 10})
+
+    async def test_cache_operation_type_calls_benchmark_method(self):
+        cb = ComprehensiveBenchmark()
+        cb._get_memory_usage = AsyncMock(return_value=50.0)
+        cb._get_cpu_usage = AsyncMock(return_value=5.0)
+        cb._benchmark_cache_operation = AsyncMock(return_value={"hit_ratio_percent": 92.0})
+        config = {
+            "name": "cache_bench",
+            "component": "cache",
+            "type": "cache_operation",
+            "params": {},
+        }
+        result = await cb._run_single_benchmark(config)
+        assert result.success is True
+
+    async def test_memory_management_type_calls_benchmark_method(self):
+        cb = ComprehensiveBenchmark()
+        cb._get_memory_usage = AsyncMock(return_value=100.0)
+        cb._get_cpu_usage = AsyncMock(return_value=20.0)
+        cb._benchmark_memory_management = AsyncMock(return_value={"memory_growth_mb": 10.0})
+        config = {
+            "name": "mem_bench",
+            "component": "memory",
+            "type": "memory_management",
+            "params": {},
+        }
+        result = await cb._run_single_benchmark(config)
+        assert result.success is True
+
+    async def test_load_balancing_type_calls_benchmark_method(self):
+        cb = ComprehensiveBenchmark()
+        cb._get_memory_usage = AsyncMock(return_value=50.0)
+        cb._get_cpu_usage = AsyncMock(return_value=5.0)
+        cb._benchmark_load_balancing = AsyncMock(return_value={"avg_response_time_ms": 1.5})
+        config = {
+            "name": "lb_bench",
+            "component": "load_balancer",
+            "type": "load_balancing",
+            "params": {},
+        }
+        result = await cb._run_single_benchmark(config)
+        assert result.success is True
+
+    async def test_system_integration_type_calls_benchmark_method(self):
+        cb = ComprehensiveBenchmark()
+        cb._get_memory_usage = AsyncMock(return_value=80.0)
+        cb._get_cpu_usage = AsyncMock(return_value=15.0)
+        cb._benchmark_system_integration = AsyncMock(
+            return_value={"total_integration_time_ms": 500.0}
+        )
+        config = {
+            "name": "si_bench",
+            "component": "system",
+            "type": "system_integration",
+            "params": {},
+        }
+        result = await cb._run_single_benchmark(config)
+        assert result.success is True
+
+    async def test_result_contains_component_name(self):
+        cb = ComprehensiveBenchmark()
+        cb._get_memory_usage = AsyncMock(return_value=50.0)
+        cb._get_cpu_usage = AsyncMock(return_value=5.0)
+        cb._benchmark_cache_operation = AsyncMock(return_value={})
+        config = {
+            "name": "c_bench",
+            "component": "cache",
+            "type": "cache_operation",
+            "params": {},
+        }
+        result = await cb._run_single_benchmark(config)
+        assert result.component == "cache"
+        assert result.name == "c_bench"
+
+    async def test_result_metadata_holds_benchmark_output(self):
+        cb = ComprehensiveBenchmark()
+        cb._get_memory_usage = AsyncMock(return_value=50.0)
+        cb._get_cpu_usage = AsyncMock(return_value=5.0)
+        bench_output = {"avg_query_time_ms": 42.0}
+        cb._benchmark_database_query = AsyncMock(return_value=bench_output)
+        config = {
+            "name": "d_bench",
+            "component": "database",
+            "type": "database_query",
+            "params": {},
+        }
+        result = await cb._run_single_benchmark(config)
+        assert result.metadata == bench_output
+
+    async def test_exception_in_benchmark_method_returns_failed_result(self):
+        cb = ComprehensiveBenchmark()
+        cb._get_memory_usage = AsyncMock(return_value=50.0)
+        cb._get_cpu_usage = AsyncMock(return_value=5.0)
+        cb._benchmark_video_processing = AsyncMock(
+            side_effect=RuntimeError("processing failed")
+        )
+        config = {
+            "name": "vp_fail",
+            "component": "video_processing",
+            "type": "video_processing",
+            "params": {},
+        }
+        result = await cb._run_single_benchmark(config)
+        assert result.success is False
+        assert "processing failed" in result.error_message
+
+    async def test_params_defaults_to_empty_dict_when_missing(self):
+        cb = ComprehensiveBenchmark()
+        cb._get_memory_usage = AsyncMock(return_value=50.0)
+        cb._get_cpu_usage = AsyncMock(return_value=5.0)
+        cb._benchmark_cache_operation = AsyncMock(return_value={})
+        config = {
+            "name": "no_params",
+            "component": "cache",
+            "type": "cache_operation",
+            # no "params" key
+        }
+        result = await cb._run_single_benchmark(config)
+        assert result.success is True
+        cb._benchmark_cache_operation.assert_called_once_with({})
+
+
+# ---------------------------------------------------------------------------
+# _validate_performance_targets tests
+# ---------------------------------------------------------------------------
+
+class TestValidatePerformanceTargets:
+    """Tests for ComprehensiveBenchmark._validate_performance_targets."""
+
+    async def test_returns_dict_with_required_keys(self):
+        cb = ComprehensiveBenchmark()
+        result = await cb._validate_performance_targets({"suite_results": {}})
+        for key in ("targets_met", "targets_failed", "critical_targets_met",
+                    "critical_targets_failed", "target_details", "overall_success_rate"):
+            assert key in result
+
+    async def test_no_suite_results_all_targets_have_none_actual_value(self):
+        cb = ComprehensiveBenchmark()
+        result = await cb._validate_performance_targets({"suite_results": {}})
+        for detail in result["target_details"]:
+            assert detail["actual_value"] is None
+
+    async def test_overall_success_rate_is_zero_when_no_data(self):
+        cb = ComprehensiveBenchmark()
+        result = await cb._validate_performance_targets({"suite_results": {}})
+        assert result["overall_success_rate"] == 0.0
+
+    async def test_less_than_comparison_met(self):
+        cb = ComprehensiveBenchmark()
+        # Override targets to just one for clarity
+        cb.performance_targets = [
+            PerformanceTarget(
+                component="cache", metric="access_time_ms",
+                target_value=10, unit="ms",
+                comparison="less_than", priority="medium",
+            )
+        ]
+        bench_result = BenchmarkResult(
+            name="b", component="cache", execution_time_ms=5.0,
+            memory_usage_mb=1.0, cpu_usage_percent=0.0, success=True,
+            metadata={"access_time_ms": 5.0},
+        )
+        benchmark_results = {"suite_results": {"s": {"b": bench_result}}}
+        result = await cb._validate_performance_targets(benchmark_results)
+        assert result["targets_met"] == 1
+        assert result["targets_failed"] == 0
+        assert result["target_details"][0]["met"] is True
+
+    async def test_less_than_comparison_missed(self):
+        cb = ComprehensiveBenchmark()
+        cb.performance_targets = [
+            PerformanceTarget(
+                component="cache", metric="access_time_ms",
+                target_value=10, unit="ms",
+                comparison="less_than", priority="medium",
+            )
+        ]
+        bench_result = BenchmarkResult(
+            name="b", component="cache", execution_time_ms=20.0,
+            memory_usage_mb=1.0, cpu_usage_percent=0.0, success=True,
+            metadata={"access_time_ms": 20.0},
+        )
+        benchmark_results = {"suite_results": {"s": {"b": bench_result}}}
+        result = await cb._validate_performance_targets(benchmark_results)
+        assert result["targets_failed"] == 1
+        assert result["target_details"][0]["met"] is False
+
+    async def test_greater_than_comparison_met(self):
+        cb = ComprehensiveBenchmark()
+        cb.performance_targets = [
+            PerformanceTarget(
+                component="cache", metric="hit_ratio_percent",
+                target_value=90.0, unit="%",
+                comparison="greater_than", priority="high",
+            )
+        ]
+        bench_result = BenchmarkResult(
+            name="b", component="cache", execution_time_ms=5.0,
+            memory_usage_mb=1.0, cpu_usage_percent=0.0, success=True,
+            metadata={"hit_ratio_percent": 95.0},
+        )
+        benchmark_results = {"suite_results": {"s": {"b": bench_result}}}
+        result = await cb._validate_performance_targets(benchmark_results)
+        assert result["targets_met"] == 1
+        assert result["target_details"][0]["met"] is True
+
+    async def test_equals_comparison_met_within_tolerance(self):
+        cb = ComprehensiveBenchmark()
+        cb.performance_targets = [
+            PerformanceTarget(
+                component="system", metric="cpu_usage_percent",
+                target_value=80.0, unit="%",
+                comparison="equals", priority="medium",
+            )
+        ]
+        bench_result = BenchmarkResult(
+            name="b", component="system", execution_time_ms=5.0,
+            memory_usage_mb=1.0, cpu_usage_percent=80.0, success=True,
+        )
+        benchmark_results = {"suite_results": {"s": {"b": bench_result}}}
+        result = await cb._validate_performance_targets(benchmark_results)
+        assert result["targets_met"] == 1
+
+    async def test_critical_target_failure_increments_critical_counter(self):
+        cb = ComprehensiveBenchmark()
+        cb.performance_targets = [
+            PerformanceTarget(
+                component="database", metric="query_time_ms",
+                target_value=100, unit="ms",
+                comparison="less_than", priority="critical",
+            )
+        ]
+        bench_result = BenchmarkResult(
+            name="b", component="database", execution_time_ms=200.0,
+            memory_usage_mb=1.0, cpu_usage_percent=0.0, success=True,
+            metadata={"query_time_ms": 200.0},
+        )
+        benchmark_results = {"suite_results": {"s": {"b": bench_result}}}
+        result = await cb._validate_performance_targets(benchmark_results)
+        assert result["critical_targets_failed"] == 1
+
+    async def test_non_benchmark_result_skipped(self):
+        cb = ComprehensiveBenchmark()
+        cb.performance_targets = [
+            PerformanceTarget(
+                component="cache", metric="hit_ratio_percent",
+                target_value=90, unit="%",
+                comparison="greater_than", priority="high",
+            )
+        ]
+        # Value is a plain dict, not a BenchmarkResult
+        benchmark_results = {"suite_results": {"s": {"b": {"hit_ratio_percent": 95.0}}}}
+        result = await cb._validate_performance_targets(benchmark_results)
+        # Can't extract — actual_value should be None
+        assert result["target_details"][0]["actual_value"] is None
+
+
+# ---------------------------------------------------------------------------
+# _save_benchmark_report tests
+# ---------------------------------------------------------------------------
+
+class TestSaveBenchmarkReport:
+    """Tests for ComprehensiveBenchmark._save_benchmark_report."""
+
+    async def test_saves_file_with_correct_type_in_name(self, tmp_path):
+        cb = ComprehensiveBenchmark()
+        cb.results_directory = str(tmp_path / "bench_results")
+        report = {"type": "baseline", "timestamp": "2026-01-01T00:00:00Z"}
+        await cb._save_benchmark_report(report, "baseline")
+        files = list((tmp_path / "bench_results").iterdir())
+        assert len(files) == 1
+        assert "baseline" in files[0].name
+
+    async def test_saved_file_is_valid_json(self, tmp_path):
+        import json as _json
+        cb = ComprehensiveBenchmark()
+        cb.results_directory = str(tmp_path / "bench_results")
+        report = {"foo": "bar", "count": 42}
+        await cb._save_benchmark_report(report, "test")
+        files = list((tmp_path / "bench_results").iterdir())
+        with open(files[0]) as fh:
+            loaded = _json.load(fh)
+        assert loaded["foo"] == "bar"
+
+    async def test_creates_results_directory_if_missing(self, tmp_path):
+        import os
+        cb = ComprehensiveBenchmark()
+        new_dir = str(tmp_path / "new_dir" / "nested")
+        cb.results_directory = new_dir
+        await cb._save_benchmark_report({"x": 1}, "test")
+        assert os.path.isdir(new_dir)
+
+    async def test_does_not_raise_on_permission_error(self):
+        """Should silently catch errors and log them."""
+        cb = ComprehensiveBenchmark()
+        cb.results_directory = "/root/no_permission_dir"
+        # Should not raise
+        await cb._save_benchmark_report({"x": 1}, "test")
+
+
+# ---------------------------------------------------------------------------
+# _get_system_info with psutil mock via monkeypatch on the module attribute
+# ---------------------------------------------------------------------------
+
+class TestGetSystemInfoWithMockedPsutil:
+    """Tests _get_system_info using sys.modules psutil monkeypatch pattern."""
+
+    async def test_returns_expected_keys_with_fake_psutil(self, monkeypatch):
+        import sys
+        import types
+        fake = types.SimpleNamespace(
+            cpu_count=lambda logical=True: 4,
+            virtual_memory=lambda: types.SimpleNamespace(
+                total=8 * 1024 ** 3, available=4 * 1024 ** 3, percent=50.0
+            ),
+            disk_usage=lambda path: types.SimpleNamespace(total=256 * 1024 ** 3),
+        )
+        monkeypatch.setitem(sys.modules, "psutil", fake)
+        cb = ComprehensiveBenchmark()
+        info = await cb._get_system_info()
+        assert isinstance(info, dict)
+
+    async def test_returns_error_key_when_psutil_raises(self, monkeypatch):
+        import sys
+        import types
+
+        def raise_on_cpu(**kwargs):
+            raise RuntimeError("no cpu info")
+
+        fake = types.SimpleNamespace(cpu_count=raise_on_cpu)
+        monkeypatch.setitem(sys.modules, "psutil", fake)
+        cb = ComprehensiveBenchmark()
+        info = await cb._get_system_info()
+        # Should be a dict (error dict or normal)
+        assert isinstance(info, dict)
+
+
+# ---------------------------------------------------------------------------
+# _get_memory_usage and _get_cpu_usage with module-level monkeypatch
+# ---------------------------------------------------------------------------
+
+class TestMemoryCpuWithModuleMonkeypatch:
+    """Test _get_memory_usage and _get_cpu_usage with sys.modules psutil patch."""
+
+    async def test_get_memory_usage_calculates_mb(self, monkeypatch):
+        import sys
+        import types
+        fake = types.SimpleNamespace(
+            Process=lambda: types.SimpleNamespace(
+                memory_info=lambda: types.SimpleNamespace(rss=256 * 1024 * 1024)
+            ),
+            cpu_percent=lambda interval=None: 25.0,
+            cpu_count=lambda logical=True: 4,
+            virtual_memory=lambda: types.SimpleNamespace(
+                total=8 * 1024 ** 3, available=4 * 1024 ** 3, percent=50.0
+            ),
+        )
+        monkeypatch.setitem(sys.modules, "psutil", fake)
+        cb = ComprehensiveBenchmark()
+        usage = await cb._get_memory_usage()
+        assert usage == pytest.approx(256.0)
+
+    async def test_get_cpu_usage_returns_value_from_psutil(self, monkeypatch):
+        import sys
+        import types
+        fake = types.SimpleNamespace(
+            Process=lambda: types.SimpleNamespace(
+                memory_info=lambda: types.SimpleNamespace(rss=128 * 1024 * 1024)
+            ),
+            cpu_percent=lambda interval=None: 42.5,
+            cpu_count=lambda logical=True: 4,
+            virtual_memory=lambda: types.SimpleNamespace(
+                total=8 * 1024 ** 3, available=4 * 1024 ** 3, percent=50.0
+            ),
+        )
+        monkeypatch.setitem(sys.modules, "psutil", fake)
+        cb = ComprehensiveBenchmark()
+        cpu = await cb._get_cpu_usage()
+        assert cpu == pytest.approx(42.5)
+
+    async def test_get_memory_usage_returns_zero_on_exception(self, monkeypatch):
+        import sys
+        import types
+
+        def bad_process():
+            raise RuntimeError("unavailable")
+
+        fake = types.SimpleNamespace(Process=bad_process)
+        monkeypatch.setitem(sys.modules, "psutil", fake)
+        cb = ComprehensiveBenchmark()
+        usage = await cb._get_memory_usage()
+        assert usage == 0.0
+
+
+# ---------------------------------------------------------------------------
+# _benchmark_video_processing raises when components unavailable
+# ---------------------------------------------------------------------------
+
+class TestBenchmarkMethodsComponentUnavailable:
+    """Tests that benchmark methods raise when required components are missing."""
+
+    async def test_benchmark_video_processing_raises_when_components_unavailable(self):
+        import youtube_extension.backend.services.comprehensive_benchmarking as _mod
+        original = _mod.PERFORMANCE_COMPONENTS_AVAILABLE
+        try:
+            _mod.PERFORMANCE_COMPONENTS_AVAILABLE = False
+            cb = ComprehensiveBenchmark()
+            with pytest.raises(RuntimeError, match="not available"):
+                await cb._benchmark_video_processing({})
+        finally:
+            _mod.PERFORMANCE_COMPONENTS_AVAILABLE = original
+
+    async def test_benchmark_database_query_raises_when_components_unavailable(self):
+        import youtube_extension.backend.services.comprehensive_benchmarking as _mod
+        original = _mod.PERFORMANCE_COMPONENTS_AVAILABLE
+        try:
+            _mod.PERFORMANCE_COMPONENTS_AVAILABLE = False
+            cb = ComprehensiveBenchmark()
+            with pytest.raises(RuntimeError, match="not available"):
+                await cb._benchmark_database_query({})
+        finally:
+            _mod.PERFORMANCE_COMPONENTS_AVAILABLE = original
+
+    async def test_benchmark_cache_operation_raises_when_cache_unavailable(self):
+        import youtube_extension.backend.services.comprehensive_benchmarking as _mod
+        original = _mod.intelligent_cache
+        try:
+            _mod.intelligent_cache = None
+            cb = ComprehensiveBenchmark()
+            with pytest.raises(RuntimeError, match="not available"):
+                await cb._benchmark_cache_operation({})
+        finally:
+            _mod.intelligent_cache = original
+
+    async def test_benchmark_memory_management_raises_when_manager_unavailable(self):
+        import youtube_extension.backend.services.comprehensive_benchmarking as _mod
+        original = _mod.memory_manager
+        try:
+            _mod.memory_manager = None
+            cb = ComprehensiveBenchmark()
+            with pytest.raises(RuntimeError, match="not available"):
+                await cb._benchmark_memory_management({})
+        finally:
+            _mod.memory_manager = original
+
+    async def test_benchmark_load_balancing_raises_when_service_discovery_unavailable(self):
+        import youtube_extension.backend.services.comprehensive_benchmarking as _mod
+        original = _mod.service_discovery
+        try:
+            _mod.service_discovery = None
+            cb = ComprehensiveBenchmark()
+            with pytest.raises(RuntimeError, match="not available"):
+                await cb._benchmark_load_balancing({})
+        finally:
+            _mod.service_discovery = original
+
+    async def test_benchmark_system_integration_raises_when_db_unavailable(self):
+        import youtube_extension.backend.services.comprehensive_benchmarking as _mod
+        orig_db = _mod.database_optimizer
+        orig_cache = _mod.intelligent_cache
+        orig_mem = _mod.memory_manager
+        try:
+            _mod.database_optimizer = None
+            _mod.intelligent_cache = MagicMock()
+            _mod.memory_manager = MagicMock()
+            cb = ComprehensiveBenchmark()
+            with pytest.raises(RuntimeError, match="prerequisites missing"):
+                await cb._benchmark_system_integration({})
+        finally:
+            _mod.database_optimizer = orig_db
+            _mod.intelligent_cache = orig_cache
+            _mod.memory_manager = orig_mem
