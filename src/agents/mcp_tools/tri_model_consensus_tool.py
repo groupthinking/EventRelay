@@ -245,23 +245,13 @@ class TriModelConsensusTool:
         start_time = time.time()
 
         try:
-            # effort and thinking are GA on Opus 4.8 (no beta header);
-            # fall back gracefully if the installed SDK predates these params.
-            try:
-                response = self.claude_client.messages.create(
-                    model="claude-opus-4-8",
-                    max_tokens=4096,
-                    thinking={"type": "adaptive"},
-                    output_config={"effort": "medium"},
-                    messages=[{"role": "user", "content": prompt}]
-                )
-            except TypeError:
-                logger.warning("thinking/output_config not supported in this SDK version, using default")
-                response = self.claude_client.messages.create(
-                    model="claude-opus-4-8",
-                    max_tokens=4096,
-                    messages=[{"role": "user", "content": prompt}]
-                )
+            response = self.claude_client.messages.create(
+                model="claude-opus-4-8",
+                max_tokens=4096,
+                thinking={"type": "adaptive"},
+                output_config={"effort": "medium"},
+                messages=[{"role": "user", "content": prompt}]
+            )
 
             response_text = "".join(
                 b.text for b in response.content if b.type == "text"

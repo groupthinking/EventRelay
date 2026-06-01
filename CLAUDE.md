@@ -114,3 +114,30 @@ turbo run test
 - **No secrets in code**: All keys/credentials go in `.env` (gitignored)
 - **Security**: Validate inputs via Pydantic; no `dangerouslySetInnerHTML` in React; sanitize subprocess args
 - **Type safety enforced**: mypy strict (Python), TypeScript strict (frontend)
+
+## SDK ↔ Backend Contract Alignment
+
+`sdk/python/eventrelay_sdk/types.py` must stay in sync with `src/youtube_extension/backend/api/v1/models.py`.
+
+**Rules:**
+- The backend `models.py` is the source of truth — never infer SDK types from test behaviour or API docs alone.
+- When a test fails with `ValidationError`, fix the test mock to match the real response shape; do not weaken the SDK type (e.g., making required fields `Optional`).
+- Enum fields (e.g., `job_status: Optional[JobStatus]`) must use the SDK enum type, not `str`.
+- After any change to backend response models, audit the corresponding SDK model for drift.
+
+**Verify alignment with:**
+```bash
+# Backend source of truth
+grep -A 30 "class TranscriptActionResponse" src/youtube_extension/backend/api/v1/models.py
+# SDK model
+grep -A 30 "class TranscriptActionResponse" sdk/python/eventrelay_sdk/types.py
+```
+
+## Anthropic SDK Version
+
+The project requires `anthropic>=0.40.0`. This floor guarantees:
+- `thinking={"type": "adaptive"}` (adaptive thinking, no `budget_tokens`)
+- `output_config={"effort": "..."}` (GA effort control, no beta header)
+- Current model string: `claude-opus-4-8` (no date suffix)
+
+Do not add `try/except TypeError` fallbacks around these parameters — if the SDK is too old the install constraint is wrong, not the call site.
