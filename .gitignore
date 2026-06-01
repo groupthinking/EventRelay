@@ -162,3 +162,11 @@ notebooklm_chrome_profile/
 src/utils/notebooklm_profile/
 src/utils/notebooklm_profile_v2/
 .gstack/
+
+# --- Security audit artifacts (keep local; never publish a vuln map to a public repo) ---
+docs/security/eventrelay-audit-*
+
+# --- Extra secret hardening (defense-in-depth; gitleaks is the enforcing gate) ---
+ob.txt
+*private*.txt
+*secret*.txt

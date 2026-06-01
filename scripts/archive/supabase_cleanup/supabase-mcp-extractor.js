@@ -13,7 +13,7 @@ const MCP_ENDPOINT = 'https://nsfrhirwsjqwhagtuaxx.supabase.co/functions/v1/conn
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5zZnJoaXJ3c2pxd2hhZ3R1YXh4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDYyMTcwMTMsImV4cCI6MjA2MTc5MzAxM30.mvPT1ha9keOLFCxVPoUoAwWt2uKb-m_ii2bu2I-ziyk';
 
 // Anthropic API key
-const ANTHROPIC_API_KEY = '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';
+const ANTHROPIC_API_KEY = 'REDACTED_ANTHROPIC_KEY_ROTATE';
 
 /**
  * Anthropic API client

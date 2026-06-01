@@ -226,7 +226,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Set Gemini API key if provided
-    gemini_key = args.gemini_key or "AIzaSyDu5GN_IxRFg3Ue8SYXSNWkZi-50pwDgS0"
+    gemini_key = args.gemini_key or "REDACTED_GOOGLE_API_KEY_ROTATE"
 
     coordinator = UniversalAutomationCoordinator(
         processing_mode=args.mode,

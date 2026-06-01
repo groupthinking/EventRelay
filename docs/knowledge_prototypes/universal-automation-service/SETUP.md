@@ -24,7 +24,7 @@ python3 -c "from google import genai; print('✅ Gemini SDK installed')"
 
 ```bash
 # Gemini API (for enhanced video understanding)
-export GEMINI_API_KEY="AIzaSyDu5GN_IxRFg3Ue8SYXSNWkZi-50pwDgS0"
+export GEMINI_API_KEY="REDACTED_GOOGLE_API_KEY_ROTATE"
 
 # GitHub (for auto-deployment)
 export GITHUB_TOKEN="your-github-token-here"
@@ -35,7 +35,7 @@ export YOUTUBE_API_KEY="your-youtube-api-key"
 
 **Permanent setup (add to ~/.zshrc):**
 ```bash
-echo 'export GEMINI_API_KEY="AIzaSyDu5GN_IxRFg3Ue8SYXSNWkZi-50pwDgS0"' >> ~/.zshrc
+echo 'export GEMINI_API_KEY="REDACTED_GOOGLE_API_KEY_ROTATE"' >> ~/.zshrc
 echo 'export GITHUB_TOKEN="your-github-token-here"' >> ~/.zshrc
 source ~/.zshrc
 ```
