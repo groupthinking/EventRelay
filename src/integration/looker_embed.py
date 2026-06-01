@@ -18,7 +18,11 @@ class LookerEmbedService:
         # Looker instance host (e.g., 'looker.yourdomain.com')
         self.host = host or os.getenv("LOOKER_HOST", "looker.example.com")
         # Embed secret from Looker Admin panel
-        self.secret = secret or os.getenv("LOOKER_EMBED_SECRET", "dummy_secret_for_dev")
+        self.secret = secret or os.getenv("LOOKER_EMBED_SECRET")
+        if not self.secret:
+            raise RuntimeError(
+                "LOOKER_EMBED_SECRET is not set; refusing to use an insecure default."
+            )
 
     def generate_sso_url(self, target_url: str, user_id: str,
                          first_name: str, last_name: str,
@@ -41,8 +45,7 @@ class LookerEmbedService:
         json_user_attributes = json.dumps(user_attributes)
 
         # Looker Signature Generation
-        string_to_sign = "
-".join([
+        string_to_sign = "\n".join([
             self.host,
             path,
             nonce,
