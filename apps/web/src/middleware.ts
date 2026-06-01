@@ -1,29 +1,32 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { getToken } from 'next-auth/jwt';
 
 /**
- * Best-effort rate limiting for the frontend BFF API routes (`/api/*`).
+ * Frontend edge middleware: rate limiting (always) + login gating (when configured).
  *
- * IMPORTANT — what this is and is not:
- * - It caps request bursts per client IP against a single warm serverless
- *   instance. Instances are ephemeral and distributed, so a determined or
- *   distributed attacker is NOT fully stopped by this alone.
- * - It is NOT authentication. `next-auth` is a dependency but is currently
- *   unconfigured (no provider, no session), so these routes have no user auth.
+ * Rate limiting is best-effort/per-instance on serverless — it caps bursts per IP
+ * against a warm instance but does not defeat distributed attackers. For production
+ * use Vercel Firewall/BotID and/or a KV-backed limiter.
  *
- * For production-grade protection, layer on:
- *   - Vercel Firewall / BotID (dashboard config), and/or
- *   - a KV-backed limiter (e.g. @upstash/ratelimit) for distributed counting, and
- *   - real auth (wire next-auth) once the access model is decided.
+ * Login gating is enforced ONLY when NEXTAUTH_SECRET is set, so the app keeps
+ * working until OAuth is configured (safe rollout). When enabled, /dashboard and
+ * /api/* require a valid NextAuth session, except the public API prefixes below.
  *
  * Tunables (env): API_RATE_LIMIT_PER_MIN (default 60; <=0 disables),
- *   INTERNAL_REQUEST_TOKEN (server-to-server calls that send a matching
- *   `x-eventrelay-internal` header bypass the limit).
+ *   INTERNAL_REQUEST_TOKEN (server-to-server calls sending a matching
+ *   `x-eventrelay-internal` header bypass both rate limiting and auth),
+ *   NEXTAUTH_SECRET (presence activates gating).
  */
 
 const WINDOW_MS = 60_000;
 const MAX_REQ = Number(process.env.API_RATE_LIMIT_PER_MIN ?? '60');
 const INTERNAL_TOKEN = process.env.INTERNAL_REQUEST_TOKEN;
+const AUTH_SECRET = process.env.NEXTAUTH_SECRET;
+const AUTH_ENABLED = !!AUTH_SECRET;
+
+// API paths that stay public even when auth is enabled (auth flow + health).
+const PUBLIC_API_PREFIXES = ['/api/auth', '/api/health', '/api/dashboard'];
 
 const hits = new Map<string, { count: number; reset: number }>();
 
@@ -33,45 +36,64 @@ function clientIp(req: NextRequest): string {
   return req.headers.get('x-real-ip') ?? 'unknown';
 }
 
-export function middleware(req: NextRequest) {
-  // Server-to-server loopback calls (e.g. /api/video → /api/transcribe) bypass.
-  if (INTERNAL_TOKEN && req.headers.get('x-eventrelay-internal') === INTERNAL_TOKEN) {
-    return NextResponse.next();
-  }
-  if (!Number.isFinite(MAX_REQ) || MAX_REQ <= 0) {
-    return NextResponse.next(); // limiter disabled
-  }
-
+function rateLimited(req: NextRequest): NextResponse | null {
+  if (!Number.isFinite(MAX_REQ) || MAX_REQ <= 0) return null;
   const ip = clientIp(req);
   const now = Date.now();
   const rec = hits.get(ip);
-
   if (!rec || now > rec.reset) {
     hits.set(ip, { count: 1, reset: now + WINDOW_MS });
-    // Opportunistic cleanup so the Map cannot grow unbounded on a warm instance.
     if (hits.size > 10_000) {
       for (const [k, v] of hits) if (now > v.reset) hits.delete(k);
     }
-    return NextResponse.next();
+    return null;
   }
-
   rec.count += 1;
   if (rec.count > MAX_REQ) {
     const retryAfter = Math.ceil((rec.reset - now) / 1000);
-    return new NextResponse(
-      JSON.stringify({ error: 'Too many requests', retryAfter }),
-      {
-        status: 429,
-        headers: {
-          'content-type': 'application/json',
-          'retry-after': String(retryAfter),
-        },
-      },
-    );
+    return new NextResponse(JSON.stringify({ error: 'Too many requests', retryAfter }), {
+      status: 429,
+      headers: { 'content-type': 'application/json', 'retry-after': String(retryAfter) },
+    });
   }
+  return null;
+}
+
+export async function middleware(req: NextRequest) {
+  const path = req.nextUrl.pathname;
+
+  // Server-to-server loopback calls bypass both rate limiting and auth.
+  if (INTERNAL_TOKEN && req.headers.get('x-eventrelay-internal') === INTERNAL_TOKEN) {
+    return NextResponse.next();
+  }
+
+  const limited = rateLimited(req);
+  if (limited) return limited;
+
+  if (AUTH_ENABLED) {
+    const isApi = path.startsWith('/api/');
+    const isPublicApi = PUBLIC_API_PREFIXES.some((p) => path === p || path.startsWith(p + '/'));
+    const needsAuth =
+      (isApi && !isPublicApi) || path === '/dashboard' || path.startsWith('/dashboard/');
+    if (needsAuth) {
+      const token = await getToken({ req, secret: AUTH_SECRET });
+      if (!token) {
+        if (isApi) {
+          return new NextResponse(JSON.stringify({ error: 'Authentication required' }), {
+            status: 401,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        const signin = new URL('/api/auth/signin', req.url);
+        signin.searchParams.set('callbackUrl', req.url);
+        return NextResponse.redirect(signin);
+      }
+    }
+  }
+
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: '/api/:path*',
+  matcher: ['/api/:path*', '/dashboard', '/dashboard/:path*'],
 };
