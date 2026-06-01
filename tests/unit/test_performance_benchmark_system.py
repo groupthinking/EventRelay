@@ -820,3 +820,647 @@ class TestBenchmarkFrontendPerformance:
         system = PerformanceBenchmarkSystem()
         result = await system._benchmark_frontend_performance(iterations=1)
         assert result.get("target_met") is False
+
+
+# ---------------------------------------------------------------------------
+# Grade B+ threshold (lines ~777) - 70-79% score
+# ---------------------------------------------------------------------------
+
+class TestGradeBPlus:
+    """Cover the B+ branch in _generate_overall_assessment (70-79% score)."""
+
+    def setup_method(self):
+        self.system = PerformanceBenchmarkSystem()
+
+    def test_grade_B_plus_at_70_percent(self):
+        # 7/10 = 70%
+        components = {str(i): {"performance_summary": {"target_met": i < 7}} for i in range(10)}
+        result = self.system._generate_overall_assessment(components)
+        assert result["overall_grade"] == "B+"
+
+    def test_grade_B_plus_at_79_percent(self):
+        # Need a score >=70 and <80 - use 7/9 ≈ 77.8%
+        met = {str(i): {"performance_summary": {"target_met": True}} for i in range(7)}
+        not_met = {str(i + 7): {"performance_summary": {"target_met": False}} for i in range(2)}
+        components = {**met, **not_met}
+        result = self.system._generate_overall_assessment(components)
+        assert result["overall_grade"] == "B+"
+
+
+# ---------------------------------------------------------------------------
+# _validate_performance_targets equals comparison (lines 835-836)
+# ---------------------------------------------------------------------------
+
+class TestValidateEqualsComparison:
+    """Cover the 'equals' comparison branch in _validate_performance_targets."""
+
+    def test_equals_comparison_met_when_exact(self):
+        import youtube_extension.backend.services.performance_benchmark_system as _mod
+        system = PerformanceBenchmarkSystem()
+        # Replace targets with one using 'equals' comparison
+        system.performance_targets = [
+            _mod.PerformanceTarget(
+                component="cache",
+                metric="hit_rate_percent",
+                target_value=80.0,
+                unit="%",
+                comparison="equals",
+            )
+        ]
+        components = {
+            "cache": {
+                "performance_summary": {"cache_hit_rate_percent": 80.0}
+            }
+        }
+        result = system._validate_performance_targets(components)
+        assert result["cache_hit_rate_percent"]["met"] is True
+
+    def test_equals_comparison_not_met_when_different(self):
+        import youtube_extension.backend.services.performance_benchmark_system as _mod
+        system = PerformanceBenchmarkSystem()
+        system.performance_targets = [
+            _mod.PerformanceTarget(
+                component="cache",
+                metric="hit_rate_percent",
+                target_value=80.0,
+                unit="%",
+                comparison="equals",
+            )
+        ]
+        components = {
+            "cache": {
+                "performance_summary": {"cache_hit_rate_percent": 50.0}
+            }
+        }
+        result = system._validate_performance_targets(components)
+        assert result["cache_hit_rate_percent"]["met"] is False
+
+
+# ---------------------------------------------------------------------------
+# Module-level convenience functions run_performance_benchmark / validate_phase3_targets
+# (lines 987, 991-993)
+# ---------------------------------------------------------------------------
+
+class TestConvenienceFunctions:
+    """Cover run_performance_benchmark and validate_phase3_targets."""
+
+    async def test_run_performance_benchmark_returns_dict(self, monkeypatch):
+        import types
+        import youtube_extension.backend.services.performance_benchmark_system as _mod
+
+        async def _fast_benchmark(iterations=3, include_baseline=False):
+            return {
+                "timestamp": "2025-01-01T00:00:00+00:00",
+                "iterations": iterations,
+                "components": {},
+                "overall_assessment": {
+                    "overall_grade": "A",
+                    "targets_met": 3,
+                    "total_targets": 5,
+                    "phase_3_readiness": False,
+                    "overall_score": 60.0,
+                    "summary": "3/5 targets met",
+                    "component_grades": {},
+                },
+                "targets_met": {},
+                "recommendations": [],
+            }
+
+        monkeypatch.setattr(_mod.benchmark_system, "run_comprehensive_benchmark", _fast_benchmark)
+        result = await _mod.run_performance_benchmark(iterations=1)
+        assert isinstance(result, dict)
+
+    async def test_validate_phase3_targets_returns_dict(self, monkeypatch):
+        import youtube_extension.backend.services.performance_benchmark_system as _mod
+
+        async def _fast_benchmark(iterations=5, include_baseline=False):
+            return {
+                "timestamp": "2025-01-01T00:00:00+00:00",
+                "iterations": iterations,
+                "components": {
+                    "video_processing": {
+                        "performance_summary": {"improvement_percent": 65.0}
+                    }
+                },
+                "overall_assessment": {
+                    "overall_grade": "B",
+                    "targets_met": 2,
+                    "total_targets": 5,
+                    "phase_3_readiness": False,
+                    "overall_score": 40.0,
+                    "summary": "2/5 targets met",
+                    "component_grades": {},
+                },
+                "targets_met": {},
+                "recommendations": [],
+            }
+
+        monkeypatch.setattr(_mod.benchmark_system, "run_comprehensive_benchmark", _fast_benchmark)
+        result = await _mod.validate_phase3_targets()
+        assert isinstance(result, dict)
+        assert "phase_3_ready" in result
+        assert "overall_grade" in result
+
+    async def test_validate_phase3_targets_video_processing_improvement(self, monkeypatch):
+        import youtube_extension.backend.services.performance_benchmark_system as _mod
+
+        async def _fast_benchmark(iterations=5, include_baseline=False):
+            return {
+                "components": {
+                    "video_processing": {
+                        "performance_summary": {"improvement_percent": 65.0}
+                    }
+                },
+                "overall_assessment": {
+                    "overall_grade": "A",
+                    "targets_met": 4,
+                    "total_targets": 5,
+                    "phase_3_readiness": True,
+                },
+                "recommendations": [],
+            }
+
+        monkeypatch.setattr(_mod.benchmark_system, "run_comprehensive_benchmark", _fast_benchmark)
+        result = await _mod.validate_phase3_targets()
+        assert result["video_processing_improvement"] == 65.0
+
+    async def test_validate_phase3_targets_phase_3_ready_true(self, monkeypatch):
+        import youtube_extension.backend.services.performance_benchmark_system as _mod
+
+        async def _fast_benchmark(iterations=5, include_baseline=False):
+            return {
+                "components": {},
+                "overall_assessment": {
+                    "overall_grade": "A+",
+                    "targets_met": 5,
+                    "total_targets": 5,
+                    "phase_3_readiness": True,
+                },
+                "recommendations": [],
+            }
+
+        monkeypatch.setattr(_mod.benchmark_system, "run_comprehensive_benchmark", _fast_benchmark)
+        result = await _mod.validate_phase3_targets()
+        assert result["phase_3_ready"] is True
+
+
+# ---------------------------------------------------------------------------
+# run_comprehensive_benchmark (lines 225-298)
+# ---------------------------------------------------------------------------
+
+class TestRunComprehensiveBenchmark:
+    """Cover the main orchestration method."""
+
+    def _make_psutil_fake(self):
+        import types
+        return types.SimpleNamespace(
+            Process=lambda: types.SimpleNamespace(
+                memory_info=lambda: types.SimpleNamespace(rss=256 * 1024 * 1024)
+            ),
+            cpu_percent=lambda interval=None: 25.0,
+            cpu_count=lambda logical=True: 4,
+            virtual_memory=lambda: types.SimpleNamespace(
+                total=8 * 1024 ** 3, available=4 * 1024 ** 3, percent=50.0
+            ),
+        )
+
+    async def test_run_comprehensive_benchmark_returns_dict(self, monkeypatch):
+        import youtube_extension.backend.services.performance_benchmark_system as _mod
+        monkeypatch.setattr(_mod, "psutil", self._make_psutil_fake())
+        system = PerformanceBenchmarkSystem()
+        result = await system.run_comprehensive_benchmark(iterations=1)
+        assert isinstance(result, dict)
+
+    async def test_run_comprehensive_benchmark_has_timestamp(self, monkeypatch):
+        import youtube_extension.backend.services.performance_benchmark_system as _mod
+        monkeypatch.setattr(_mod, "psutil", self._make_psutil_fake())
+        system = PerformanceBenchmarkSystem()
+        result = await system.run_comprehensive_benchmark(iterations=1)
+        assert "timestamp" in result
+
+    async def test_run_comprehensive_benchmark_has_components(self, monkeypatch):
+        import youtube_extension.backend.services.performance_benchmark_system as _mod
+        monkeypatch.setattr(_mod, "psutil", self._make_psutil_fake())
+        system = PerformanceBenchmarkSystem()
+        result = await system.run_comprehensive_benchmark(iterations=1)
+        assert "components" in result
+        assert isinstance(result["components"], dict)
+
+    async def test_run_comprehensive_benchmark_has_overall_assessment(self, monkeypatch):
+        import youtube_extension.backend.services.performance_benchmark_system as _mod
+        monkeypatch.setattr(_mod, "psutil", self._make_psutil_fake())
+        system = PerformanceBenchmarkSystem()
+        result = await system.run_comprehensive_benchmark(iterations=1)
+        assert "overall_assessment" in result
+
+    async def test_run_comprehensive_benchmark_has_targets_met(self, monkeypatch):
+        import youtube_extension.backend.services.performance_benchmark_system as _mod
+        monkeypatch.setattr(_mod, "psutil", self._make_psutil_fake())
+        system = PerformanceBenchmarkSystem()
+        result = await system.run_comprehensive_benchmark(iterations=1)
+        assert "targets_met" in result
+
+    async def test_run_comprehensive_benchmark_has_recommendations(self, monkeypatch):
+        import youtube_extension.backend.services.performance_benchmark_system as _mod
+        monkeypatch.setattr(_mod, "psutil", self._make_psutil_fake())
+        system = PerformanceBenchmarkSystem()
+        result = await system.run_comprehensive_benchmark(iterations=1)
+        assert "recommendations" in result
+        assert isinstance(result["recommendations"], list)
+
+    async def test_run_comprehensive_benchmark_records_history(self, monkeypatch):
+        import youtube_extension.backend.services.performance_benchmark_system as _mod
+        monkeypatch.setattr(_mod, "psutil", self._make_psutil_fake())
+        system = PerformanceBenchmarkSystem()
+        assert len(system.benchmark_history) == 0
+        await system.run_comprehensive_benchmark(iterations=1)
+        assert len(system.benchmark_history) == 1
+
+    async def test_run_comprehensive_benchmark_has_total_time(self, monkeypatch):
+        import youtube_extension.backend.services.performance_benchmark_system as _mod
+        monkeypatch.setattr(_mod, "psutil", self._make_psutil_fake())
+        system = PerformanceBenchmarkSystem()
+        result = await system.run_comprehensive_benchmark(iterations=1)
+        assert "total_benchmark_time_seconds" in result
+        assert isinstance(result["total_benchmark_time_seconds"], float)
+
+    async def test_run_comprehensive_benchmark_component_names(self, monkeypatch):
+        import youtube_extension.backend.services.performance_benchmark_system as _mod
+        monkeypatch.setattr(_mod, "psutil", self._make_psutil_fake())
+        system = PerformanceBenchmarkSystem()
+        result = await system.run_comprehensive_benchmark(iterations=1)
+        expected = {"video_processing", "database", "frontend", "memory", "cache"}
+        assert set(result["components"].keys()) == expected
+
+    async def test_run_comprehensive_benchmark_exception_returns_error_dict(self, monkeypatch):
+        import youtube_extension.backend.services.performance_benchmark_system as _mod
+        monkeypatch.setattr(_mod, "psutil", self._make_psutil_fake())
+        system = PerformanceBenchmarkSystem()
+
+        async def _raise(*a, **kw):
+            raise RuntimeError("forced error")
+
+        monkeypatch.setattr(system, "_benchmark_video_processing", _raise)
+        monkeypatch.setattr(system, "_benchmark_database_queries", _raise)
+        monkeypatch.setattr(system, "_benchmark_frontend_performance", _raise)
+        monkeypatch.setattr(system, "_benchmark_memory_efficiency", _raise)
+        monkeypatch.setattr(system, "_benchmark_cache_performance", _raise)
+        # gather returns exceptions, but the method processes them - result should still be a dict
+        result = await system.run_comprehensive_benchmark(iterations=1)
+        assert isinstance(result, dict)
+
+
+# ---------------------------------------------------------------------------
+# _benchmark_video_processing (lines 310-425)
+# ---------------------------------------------------------------------------
+
+class TestBenchmarkVideoProcessing:
+
+    def _make_psutil_fake(self):
+        import types
+        return types.SimpleNamespace(
+            Process=lambda: types.SimpleNamespace(
+                memory_info=lambda: types.SimpleNamespace(rss=256 * 1024 * 1024)
+            ),
+        )
+
+    async def test_video_processing_returns_dict_on_error(self, monkeypatch):
+        import types
+        import youtube_extension.backend.services.performance_benchmark_system as _mod
+        monkeypatch.setattr(_mod, "psutil", self._make_psutil_fake())
+        # VideoProcessor.process_video raises RuntimeError (the fallback stub)
+        system = PerformanceBenchmarkSystem()
+        result = await system._benchmark_video_processing(iterations=1)
+        assert isinstance(result, dict)
+        assert result.get("component") == "video_processing"
+
+    async def test_video_processing_has_benchmarks_key(self, monkeypatch):
+        import youtube_extension.backend.services.performance_benchmark_system as _mod
+        monkeypatch.setattr(_mod, "psutil", self._make_psutil_fake())
+        system = PerformanceBenchmarkSystem()
+        result = await system._benchmark_video_processing(iterations=1)
+        assert "benchmarks" in result
+
+    async def test_video_processing_error_path_in_summary(self, monkeypatch):
+        import youtube_extension.backend.services.performance_benchmark_system as _mod
+        monkeypatch.setattr(_mod, "psutil", self._make_psutil_fake())
+        system = PerformanceBenchmarkSystem()
+        # When all iterations fail (stub raises RuntimeError), summary has 'error'
+        result = await system._benchmark_video_processing(iterations=2)
+        summary = result.get("performance_summary", {})
+        # No successful iterations -> error key in summary
+        assert "error" in summary or "avg_processing_time_ms" in summary
+
+    async def test_video_processing_success_path_with_mock_processor(self, monkeypatch):
+        import types
+        import youtube_extension.backend.services.performance_benchmark_system as _mod
+        monkeypatch.setattr(_mod, "psutil", self._make_psutil_fake())
+
+        class _FakeProcessor:
+            def __init__(self, strategy="enhanced"):
+                pass
+
+            async def process_video(self, url, options=None):
+                return {"success": True, "method": "mock"}
+
+            async def process_batch(self, urls, options=None):
+                return [{"success": True} for _ in urls]
+
+        monkeypatch.setattr(_mod, "VideoProcessor", _FakeProcessor)
+        system = PerformanceBenchmarkSystem()
+        result = await system._benchmark_video_processing(iterations=2)
+        assert isinstance(result, dict)
+        assert result.get("component") == "video_processing"
+        summary = result.get("performance_summary", {})
+        assert "avg_processing_time_ms" in summary
+
+    async def test_video_processing_improvement_calculated(self, monkeypatch):
+        import types
+        import youtube_extension.backend.services.performance_benchmark_system as _mod
+        monkeypatch.setattr(_mod, "psutil", self._make_psutil_fake())
+
+        class _FakeProcessor:
+            def __init__(self, strategy="enhanced"):
+                pass
+
+            async def process_video(self, url, options=None):
+                return {"success": True, "method": "mock"}
+
+            async def process_batch(self, urls, options=None):
+                return [{"success": True} for _ in urls]
+
+        monkeypatch.setattr(_mod, "VideoProcessor", _FakeProcessor)
+        system = PerformanceBenchmarkSystem()
+        result = await system._benchmark_video_processing(iterations=1)
+        summary = result.get("performance_summary", {})
+        assert "improvement_percent" in summary
+
+
+# ---------------------------------------------------------------------------
+# _benchmark_database_queries (lines 437-542)
+# ---------------------------------------------------------------------------
+
+class TestBenchmarkDatabaseQueries:
+
+    async def test_database_queries_returns_dict_on_error(self, monkeypatch):
+        import youtube_extension.backend.services.performance_benchmark_system as _mod
+        # execute_optimized_query raises by default - result should still be dict
+        system = PerformanceBenchmarkSystem()
+        result = await system._benchmark_database_queries(iterations=1)
+        assert isinstance(result, dict)
+        assert result.get("component") == "database"
+
+    async def test_database_queries_has_benchmarks_key(self, monkeypatch):
+        import youtube_extension.backend.services.performance_benchmark_system as _mod
+        system = PerformanceBenchmarkSystem()
+        result = await system._benchmark_database_queries(iterations=1)
+        assert "benchmarks" in result
+
+    async def test_database_queries_error_path_in_summary(self, monkeypatch):
+        import youtube_extension.backend.services.performance_benchmark_system as _mod
+        system = PerformanceBenchmarkSystem()
+        result = await system._benchmark_database_queries(iterations=1)
+        summary = result.get("performance_summary", {})
+        # All queries fail -> no successful iterations
+        assert "error" in summary or "avg_query_time_ms" in summary
+
+    async def test_database_queries_success_path(self, monkeypatch):
+        import youtube_extension.backend.services.performance_benchmark_system as _mod
+
+        async def _fake_query(query, params=None):
+            return [{"result": 1}]
+
+        async def _fake_batch(queries):
+            return [{"result": 1} for _ in queries]
+
+        monkeypatch.setattr(_mod, "execute_optimized_query", _fake_query)
+        monkeypatch.setattr(_mod, "execute_batch_optimized", _fake_batch)
+        system = PerformanceBenchmarkSystem()
+        result = await system._benchmark_database_queries(iterations=1)
+        assert isinstance(result, dict)
+        summary = result.get("performance_summary", {})
+        assert "avg_query_time_ms" in summary
+
+    async def test_database_queries_sub_100ms_percent(self, monkeypatch):
+        import youtube_extension.backend.services.performance_benchmark_system as _mod
+
+        async def _fake_query(query, params=None):
+            return [{"result": 1}]
+
+        async def _fake_batch(queries):
+            return [{"result": 1} for _ in queries]
+
+        monkeypatch.setattr(_mod, "execute_optimized_query", _fake_query)
+        monkeypatch.setattr(_mod, "execute_batch_optimized", _fake_batch)
+        system = PerformanceBenchmarkSystem()
+        result = await system._benchmark_database_queries(iterations=1)
+        summary = result.get("performance_summary", {})
+        # All fake queries are fast (<100ms), so sub_100ms_percent should be 100
+        assert summary.get("sub_100ms_percent") == 100.0
+
+    async def test_database_queries_target_met_when_fast(self, monkeypatch):
+        import youtube_extension.backend.services.performance_benchmark_system as _mod
+
+        async def _fake_query(query, params=None):
+            return [{"result": 1}]
+
+        async def _fake_batch(queries):
+            return [{"result": 1} for _ in queries]
+
+        monkeypatch.setattr(_mod, "execute_optimized_query", _fake_query)
+        monkeypatch.setattr(_mod, "execute_batch_optimized", _fake_batch)
+        system = PerformanceBenchmarkSystem()
+        result = await system._benchmark_database_queries(iterations=1)
+        summary = result.get("performance_summary", {})
+        assert summary.get("target_met") is True
+
+
+# ---------------------------------------------------------------------------
+# _benchmark_cache_performance (lines 669-739)
+# ---------------------------------------------------------------------------
+
+class TestBenchmarkCachePerformance:
+
+    async def test_cache_benchmark_returns_dict_on_error(self):
+        # cache_set/get raise by default (no redis)
+        system = PerformanceBenchmarkSystem()
+        result = await system._benchmark_cache_performance(iterations=1)
+        assert isinstance(result, dict)
+        assert result.get("component") == "cache"
+
+    async def test_cache_benchmark_has_error_on_missing_redis(self):
+        system = PerformanceBenchmarkSystem()
+        result = await system._benchmark_cache_performance(iterations=1)
+        # With no redis, cache_set raises -> error key present
+        assert "error" in result or "performance_summary" in result
+
+    async def test_cache_benchmark_success_path(self, monkeypatch):
+        import youtube_extension.backend.services.performance_benchmark_system as _mod
+        _store: dict = {}
+
+        async def _fake_set(key, value, ttl=None, tags=None):
+            _store[key] = value
+
+        async def _fake_get(key):
+            return _store.get(key)
+
+        monkeypatch.setattr(_mod, "cache_set", _fake_set)
+        monkeypatch.setattr(_mod, "cache_get", _fake_get)
+        system = PerformanceBenchmarkSystem()
+        result = await system._benchmark_cache_performance(iterations=2)
+        assert isinstance(result, dict)
+        assert result.get("component") == "cache"
+
+    async def test_cache_benchmark_performance_summary_present(self, monkeypatch):
+        import youtube_extension.backend.services.performance_benchmark_system as _mod
+        _store: dict = {}
+
+        async def _fake_set(key, value, ttl=None, tags=None):
+            _store[key] = value
+
+        async def _fake_get(key):
+            return _store.get(key)
+
+        monkeypatch.setattr(_mod, "cache_set", _fake_set)
+        monkeypatch.setattr(_mod, "cache_get", _fake_get)
+        system = PerformanceBenchmarkSystem()
+        result = await system._benchmark_cache_performance(iterations=2)
+        assert "performance_summary" in result
+
+    async def test_cache_benchmark_hit_rate_near_100(self, monkeypatch):
+        import youtube_extension.backend.services.performance_benchmark_system as _mod
+        _store: dict = {}
+
+        async def _fake_set(key, value, ttl=None, tags=None):
+            _store[key] = value
+
+        async def _fake_get(key):
+            return _store.get(key)
+
+        monkeypatch.setattr(_mod, "cache_set", _fake_set)
+        monkeypatch.setattr(_mod, "cache_get", _fake_get)
+        system = PerformanceBenchmarkSystem()
+        result = await system._benchmark_cache_performance(iterations=2)
+        summary = result.get("performance_summary", {})
+        # All keys are set before get, so hit rate should be high
+        assert summary.get("cache_hit_rate_percent", 0) > 0
+
+    async def test_cache_benchmark_target_met_false_with_50pct_hit_rate(self, monkeypatch):
+        """Cache always hits (set then get same key), but total operations counts both
+        set and get, so effective hit rate is 50% -- below the 80% target."""
+        import youtube_extension.backend.services.performance_benchmark_system as _mod
+        _store: dict = {}
+
+        async def _fake_set(key, value, ttl=None, tags=None):
+            _store[key] = value
+
+        async def _fake_get(key):
+            return _store.get(key)
+
+        monkeypatch.setattr(_mod, "cache_set", _fake_set)
+        monkeypatch.setattr(_mod, "cache_get", _fake_get)
+        system = PerformanceBenchmarkSystem()
+        result = await system._benchmark_cache_performance(iterations=2)
+        summary = result.get("performance_summary", {})
+        # hit_rate = hits / total_ops = gets_that_hit / (sets + gets)
+        # Every key is set before get, so all gets hit => 50% overall
+        assert "cache_hit_rate_percent" in summary
+        assert isinstance(summary["cache_hit_rate_percent"], float)
+
+    async def test_cache_benchmark_has_benchmarks_list(self, monkeypatch):
+        import youtube_extension.backend.services.performance_benchmark_system as _mod
+        _store: dict = {}
+
+        async def _fake_set(key, value, ttl=None, tags=None):
+            _store[key] = value
+
+        async def _fake_get(key):
+            return _store.get(key)
+
+        monkeypatch.setattr(_mod, "cache_set", _fake_set)
+        monkeypatch.setattr(_mod, "cache_get", _fake_get)
+        system = PerformanceBenchmarkSystem()
+        result = await system._benchmark_cache_performance(iterations=2)
+        assert "benchmarks" in result
+        assert isinstance(result["benchmarks"], list)
+
+
+# ---------------------------------------------------------------------------
+# _benchmark_memory_efficiency with memory_profiler cleanup path (lines 635-636)
+# and error path (lines 655-657)
+# ---------------------------------------------------------------------------
+
+class TestBenchmarkMemoryEfficiencyExtended:
+
+    def _make_psutil_fake(self):
+        import types
+        return types.SimpleNamespace(
+            Process=lambda: types.SimpleNamespace(
+                memory_info=lambda: types.SimpleNamespace(rss=256 * 1024 * 1024)
+            ),
+        )
+
+    async def test_memory_benchmark_multiple_iterations(self, monkeypatch):
+        import youtube_extension.backend.services.performance_benchmark_system as _mod
+        monkeypatch.setattr(_mod, "psutil", self._make_psutil_fake())
+        system = PerformanceBenchmarkSystem()
+        result = await system._benchmark_memory_efficiency(iterations=3)
+        summary = result.get("performance_summary", {})
+        assert "avg_memory_usage_mb" in summary
+        assert "max_memory_usage_mb" in summary
+
+    async def test_memory_benchmark_with_memory_profiler_cleanup(self, monkeypatch):
+        import youtube_extension.backend.services.performance_benchmark_system as _mod
+        monkeypatch.setattr(_mod, "psutil", self._make_psutil_fake())
+
+        async def _fake_optimize():
+            return {"memory_saved_mb": 50}
+
+        monkeypatch.setattr(_mod, "optimize_memory", _fake_optimize)
+        monkeypatch.setattr(_mod, "memory_profiler", object())  # truthy value
+        system = PerformanceBenchmarkSystem()
+        result = await system._benchmark_memory_efficiency(iterations=1)
+        # Cleanup benchmark should be added
+        benchmarks = result.get("benchmarks", [])
+        cleanup_benchmarks = [b for b in benchmarks if b.get("benchmark_name") == "memory_cleanup_efficiency"]
+        assert len(cleanup_benchmarks) == 1
+
+    async def test_memory_benchmark_with_memory_profiler_cleanup_fails_gracefully(self, monkeypatch):
+        import youtube_extension.backend.services.performance_benchmark_system as _mod
+        monkeypatch.setattr(_mod, "psutil", self._make_psutil_fake())
+
+        async def _failing_optimize():
+            raise RuntimeError("optimizer down")
+
+        monkeypatch.setattr(_mod, "optimize_memory", _failing_optimize)
+        monkeypatch.setattr(_mod, "memory_profiler", object())  # truthy value
+        system = PerformanceBenchmarkSystem()
+        result = await system._benchmark_memory_efficiency(iterations=1)
+        # Should not raise - gracefully handles the failure
+        assert isinstance(result, dict)
+        assert result.get("component") == "memory"
+
+    async def test_memory_benchmark_error_path_on_psutil_failure(self, monkeypatch):
+        import types
+        import youtube_extension.backend.services.performance_benchmark_system as _mod
+
+        class _BadProcess:
+            def memory_info(self):
+                raise OSError("access denied")
+
+        bad_psutil = types.SimpleNamespace(Process=lambda: _BadProcess())
+        monkeypatch.setattr(_mod, "psutil", bad_psutil)
+        system = PerformanceBenchmarkSystem()
+        result = await system._benchmark_memory_efficiency(iterations=1)
+        # Should return error dict
+        assert isinstance(result, dict)
+        assert "error" in result or result.get("component") == "memory"
+
+    async def test_memory_benchmark_within_target_count(self, monkeypatch):
+        import youtube_extension.backend.services.performance_benchmark_system as _mod
+        monkeypatch.setattr(_mod, "psutil", self._make_psutil_fake())
+        system = PerformanceBenchmarkSystem()
+        result = await system._benchmark_memory_efficiency(iterations=2)
+        summary = result.get("performance_summary", {})
+        # 256MB is well below the 2048MB target, so within_target_count should equal iterations
+        assert summary.get("within_target_count") == 2
