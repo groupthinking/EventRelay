@@ -1417,7 +1417,36 @@ async def extract_events(request: EventExtractRequest):
                     )
                 )
     except Exception as exc:
-        logger.warning(f"AI event extraction failed, using heuristic extraction: {exc}")
+        logger.warning(f"Direct Gemini extraction unavailable: {exc}")
+
+    # Real-AI fallback: if no events yet, try the Vercel AI Gateway (uses
+    # VERCEL_API_KEY, routes to Gemini/GPT/Claude). This keeps the AI path
+    # working when no direct provider key is configured. REAL_MODE_ONLY: this
+    # is a real billed call; on any failure we fall through to the heuristic.
+    if not events:
+        try:
+            from youtube_extension.services.ai import vercel_gateway_provider as _gw
+
+            if _gw.gateway_available():
+                gw_events = await asyncio.to_thread(_gw.extract_events, transcript_text)
+                for ev in gw_events:
+                    events.append(
+                        ExtractedEvent(
+                            type=ev["type"],
+                            title=ev["title"][:120],
+                            description=ev.get("description"),
+                            timestamp=ev.get("timestamp"),
+                        )
+                    )
+                if gw_events:
+                    logger.info(
+                        "Extracted %d events via Vercel AI Gateway", len(gw_events)
+                    )
+        except Exception as gw_exc:  # noqa: BLE001
+            logger.warning(f"Vercel AI Gateway extraction failed: {gw_exc}")
+
+    if not events:
+        logger.warning("Falling back to heuristic extraction")
         import re
 
         sentences = re.split(r"(?<=[.!?])\s+", transcript_text.replace("\n", " "))

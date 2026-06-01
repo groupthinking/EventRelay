@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-06-01T18:59:46",
+  "generated_at": "2026-06-01T19:20:09",
   "environment": {
     "python": "3.11.15",
     "youtube_reachable": true,
@@ -9,7 +9,14 @@
       "ANTHROPIC_API_KEY": false
     },
     "hybrid_processor_ok": true,
-    "ai_probe_error": null
+    "ai_probe_error": null,
+    "vercel_gateway": {
+      "available": true,
+      "ok": true,
+      "model": "google/gemini-2.0-flash",
+      "sample_events": 3,
+      "error": null
+    }
   },
   "totals": {
     "videos": 10,
@@ -26,25 +33,27 @@
         "ok": false,
         "chars": 0,
         "segments": 0,
-        "text": "",
-        "error": "RequestBlocked: ",
-        "seconds": 1.04
+        "error": "IpBlocked: ",
+        "seconds": 0.38,
+        "text_preview": ""
       },
       "downstream_input_source": "title_only",
       "stage3_extract_events": {
         "http_status": 200,
-        "event_count": 1,
+        "event_count": 5,
         "types": [
           "topic"
         ],
         "sample": [
-          "ChatGPT Agent Builder Full Tutorial: Building AI Agents in 2025 for Beginners"
+          "AI Agents",
+          "ChatGPT Agent Builder",
+          "2025 AI Landscape"
         ]
       },
       "stage4_dispatch": {
         "http_status": 200,
-        "dispatch_id": "dsp_d35640f9",
-        "executions": 2
+        "dispatch_id": "dsp_787f7d0e",
+        "executions": 10
       }
     },
     {
@@ -55,25 +64,29 @@
         "ok": false,
         "chars": 0,
         "segments": 0,
-        "text": "",
-        "error": "RequestBlocked: ",
-        "seconds": 0.83
+        "error": "IpBlocked: ",
+        "seconds": 0.52,
+        "text_preview": ""
       },
       "downstream_input_source": "title_only",
       "stage3_extract_events": {
         "http_status": 200,
-        "event_count": 1,
+        "event_count": 4,
         "types": [
-          "action"
+          "action",
+          "mention",
+          "topic"
         ],
         "sample": [
-          "How to Build AI Agents Using Make.com (FREE COURSE 2025)"
+          "AI Agents",
+          "Make.com",
+          "Free Course"
         ]
       },
       "stage4_dispatch": {
         "http_status": 200,
-        "dispatch_id": "dsp_099309ac",
-        "executions": 2
+        "dispatch_id": "dsp_0c3d826f",
+        "executions": 8
       }
     },
     {
@@ -84,25 +97,28 @@
         "ok": false,
         "chars": 0,
         "segments": 0,
-        "text": "",
-        "error": "RequestBlocked: ",
-        "seconds": 1.41
+        "error": "IpBlocked: ",
+        "seconds": 0.46,
+        "text_preview": ""
       },
       "downstream_input_source": "title_only",
       "stage3_extract_events": {
         "http_status": 200,
-        "event_count": 1,
+        "event_count": 3,
         "types": [
+          "mention",
           "topic"
         ],
         "sample": [
-          "AI Agents Full Course 2025 | AI Agents Tutorial for Beginners (Simplilearn)"
+          "AI Agents Full Course",
+          "AI Agents Tutorial",
+          "Simplilearn"
         ]
       },
       "stage4_dispatch": {
         "http_status": 200,
-        "dispatch_id": "dsp_0e1f01ae",
-        "executions": 2
+        "dispatch_id": "dsp_85b629de",
+        "executions": 6
       }
     },
     {
@@ -113,27 +129,27 @@
         "ok": false,
         "chars": 0,
         "segments": 0,
-        "text": "",
-        "error": "RequestBlocked: ",
-        "seconds": 0.97
+        "error": "IpBlocked: ",
+        "seconds": 0.34,
+        "text_preview": ""
       },
       "downstream_input_source": "title_only",
       "stage3_extract_events": {
         "http_status": 200,
-        "event_count": 2,
+        "event_count": 3,
         "types": [
-          "action",
           "topic"
         ],
         "sample": [
-          "How to Build AI Agents with n8n in 2025!",
-          "(Full Course)"
+          "AI Agents",
+          "n8n",
+          "Full Course"
         ]
       },
       "stage4_dispatch": {
         "http_status": 200,
-        "dispatch_id": "dsp_860f4e34",
-        "executions": 4
+        "dispatch_id": "dsp_c2d5144e",
+        "executions": 6
       }
     },
     {
@@ -144,25 +160,27 @@
         "ok": false,
         "chars": 0,
         "segments": 0,
-        "text": "",
-        "error": "RequestBlocked: ",
-        "seconds": 2.75
+        "error": "IpBlocked: ",
+        "seconds": 0.47,
+        "text_preview": ""
       },
       "downstream_input_source": "title_only",
       "stage3_extract_events": {
         "http_status": 200,
-        "event_count": 1,
+        "event_count": 3,
         "types": [
           "topic"
         ],
         "sample": [
-          "Agentic AI Full Course 2025 | AI Agents Tutorial For Beginners (Edureka)"
+          "Agentic AI",
+          "AI Agents Tutorial",
+          "Full Course 2025"
         ]
       },
       "stage4_dispatch": {
         "http_status": 200,
-        "dispatch_id": "dsp_21a92382",
-        "executions": 2
+        "dispatch_id": "dsp_3a44a547",
+        "executions": 6
       }
     },
     {
@@ -173,25 +191,28 @@
         "ok": false,
         "chars": 0,
         "segments": 0,
-        "text": "",
-        "error": "RequestBlocked: ",
-        "seconds": 1.03
+        "error": "IpBlocked: ",
+        "seconds": 0.52,
+        "text_preview": ""
       },
       "downstream_input_source": "title_only",
       "stage3_extract_events": {
         "http_status": 200,
-        "event_count": 1,
+        "event_count": 3,
         "types": [
+          "insight",
           "topic"
         ],
         "sample": [
-          "8 Hour AI Agents Course in 30 Minutes (DeepLearning.AI)"
+          "AI Agents Course Overview",
+          "Course condensed",
+          "DeepLearning.AI"
         ]
       },
       "stage4_dispatch": {
         "http_status": 200,
-        "dispatch_id": "dsp_57828c4c",
-        "executions": 2
+        "dispatch_id": "dsp_7010f9e8",
+        "executions": 6
       }
     },
     {
@@ -202,25 +223,27 @@
         "ok": false,
         "chars": 0,
         "segments": 0,
-        "text": "",
-        "error": "RequestBlocked: ",
-        "seconds": 0.94
+        "error": "IpBlocked: ",
+        "seconds": 0.54,
+        "text_preview": ""
       },
       "downstream_input_source": "title_only",
       "stage3_extract_events": {
         "http_status": 200,
-        "event_count": 1,
+        "event_count": 4,
         "types": [
           "topic"
         ],
         "sample": [
-          "N8N Full Tutorial: Building AI Agents in 2025 for Beginners"
+          "N8N Tutorial",
+          "AI Agents",
+          "2025 Technology"
         ]
       },
       "stage4_dispatch": {
         "http_status": 200,
-        "dispatch_id": "dsp_e378896f",
-        "executions": 2
+        "dispatch_id": "dsp_43ec36d1",
+        "executions": 8
       }
     },
     {
@@ -231,25 +254,27 @@
         "ok": false,
         "chars": 0,
         "segments": 0,
-        "text": "",
-        "error": "RequestBlocked: ",
-        "seconds": 0.83
+        "error": "IpBlocked: ",
+        "seconds": 0.45,
+        "text_preview": ""
       },
       "downstream_input_source": "title_only",
       "stage3_extract_events": {
         "http_status": 200,
-        "event_count": 1,
+        "event_count": 11,
         "types": [
           "topic"
         ],
         "sample": [
-          "Full Course (Lessons 1-10) AI Agents for Beginners"
+          "AI Agents Full Course",
+          "Lesson 1: Introduction to AI Agents",
+          "Lesson 2: Agent Architectures"
         ]
       },
       "stage4_dispatch": {
         "http_status": 200,
-        "dispatch_id": "dsp_c1a60d93",
-        "executions": 2
+        "dispatch_id": "dsp_eee65097",
+        "executions": 20
       }
     },
     {
@@ -260,25 +285,29 @@
         "ok": false,
         "chars": 0,
         "segments": 0,
-        "text": "",
-        "error": "RequestBlocked: ",
-        "seconds": 0.6
+        "error": "IpBlocked: ",
+        "seconds": 0.42,
+        "text_preview": ""
       },
       "downstream_input_source": "title_only",
       "stage3_extract_events": {
         "http_status": 200,
-        "event_count": 1,
+        "event_count": 3,
         "types": [
-          "action"
+          "action",
+          "mention",
+          "topic"
         ],
         "sample": [
-          "How To Build AI Agents [Full Course 2025]"
+          "AI Agents",
+          "Full Course",
+          "2025"
         ]
       },
       "stage4_dispatch": {
         "http_status": 200,
-        "dispatch_id": "dsp_f370625b",
-        "executions": 2
+        "dispatch_id": "dsp_707e3547",
+        "executions": 6
       }
     },
     {
@@ -289,25 +318,28 @@
         "ok": false,
         "chars": 0,
         "segments": 0,
-        "text": "",
-        "error": "RequestBlocked: ",
-        "seconds": 0.89
+        "error": "IpBlocked: ",
+        "seconds": 0.59,
+        "text_preview": ""
       },
       "downstream_input_source": "title_only",
       "stage3_extract_events": {
         "http_status": 200,
-        "event_count": 1,
+        "event_count": 5,
         "types": [
+          "action",
           "topic"
         ],
         "sample": [
-          "N8N FULL COURSE 6 HOURS (Build & Sell AI Automations + Agents)"
+          "N8N Full Course",
+          "AI Automations",
+          "AI Agents"
         ]
       },
       "stage4_dispatch": {
         "http_status": 200,
-        "dispatch_id": "dsp_a21127f2",
-        "executions": 2
+        "dispatch_id": "dsp_f530d726",
+        "executions": 10
       }
     }
   ]

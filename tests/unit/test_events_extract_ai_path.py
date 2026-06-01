@@ -46,8 +46,16 @@ def _patch_process(monkeypatch, *, response: str, backend: str, success: bool = 
     return calls
 
 
+def _disable_gateway(monkeypatch):
+    """Force the Vercel AI Gateway off so a test exercises only the local path."""
+    from youtube_extension.services.ai import vercel_gateway_provider as gw
+
+    monkeypatch.setattr(gw, "gateway_available", lambda: False)
+
+
 def test_ai_path_passes_input_data_and_parses_response(monkeypatch):
     """A real (non-mock) Gemini response must be parsed from `.response`."""
+    _disable_gateway(monkeypatch)
     calls = _patch_process(
         monkeypatch,
         response="- Build the agent\n- Deploy to the cloud",
@@ -72,6 +80,7 @@ def test_ai_path_passes_input_data_and_parses_response(monkeypatch):
 
 def test_mock_backend_falls_back_to_heuristic(monkeypatch):
     """REAL_MODE_ONLY: a mocked AI response must NOT become extracted events."""
+    _disable_gateway(monkeypatch)
     _patch_process(
         monkeypatch,
         response="- This should be ignored because it is mock output",
@@ -87,6 +96,50 @@ def test_mock_backend_falls_back_to_heuristic(monkeypatch):
     # deterministic heuristic splitting the real transcript instead.
     assert not any("mock output" in t for t in titles)
     assert any("Build the workflow" in t for t in titles)
+
+
+def test_vercel_gateway_events_flow_through(monkeypatch):
+    """When direct Gemini is unavailable, gateway-extracted events are used."""
+    # Direct Gemini returns mock -> rejected, so the gateway path engages.
+    _patch_process(
+        monkeypatch,
+        response="ignored mock",
+        backend="mock",
+    )
+    from youtube_extension.services.ai import vercel_gateway_provider as gw
+
+    monkeypatch.setattr(gw, "gateway_available", lambda: True)
+    monkeypatch.setattr(
+        gw,
+        "extract_events",
+        lambda transcript, *a, **k: [
+            {
+                "type": "action",
+                "title": "Install n8n",
+                "description": None,
+                "timestamp": "00:10",
+            },
+            {
+                "type": "insight",
+                "title": "Agents need tools",
+                "description": "d",
+                "timestamp": None,
+            },
+        ],
+    )
+
+    resp = client.post(
+        "/api/v1/events/extract",
+        json={"transcript": "Some real transcript about building agents."},
+    )
+    assert resp.status_code == 200
+    events = resp.json()["data"]["events"]
+    titles = [e["title"] for e in events]
+    assert "Install n8n" in titles and "Agents need tools" in titles
+    # Gateway-provided type and timestamp are preserved.
+    install = next(e for e in events if e["title"] == "Install n8n")
+    assert install["type"] == "action"
+    assert install["timestamp"] == "00:10"
 
 
 def test_empty_transcript_rejected():

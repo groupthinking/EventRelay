@@ -108,6 +108,31 @@ def probe_ai() -> dict:
     return probe
 
 
+def probe_gateway() -> dict:
+    """Confirm the Vercel AI Gateway is usable (real billed call)."""
+    out = {
+        "available": False,
+        "ok": False,
+        "model": None,
+        "sample_events": 0,
+        "error": None,
+    }
+    try:
+        from youtube_extension.services.ai import vercel_gateway_provider as gw
+
+        out["available"] = gw.gateway_available()
+        out["model"] = gw.DEFAULT_MODEL
+        if out["available"]:
+            evs = gw.extract_events(
+                "We build an AI agent, configure a tool, and deploy the workflow."
+            )
+            out["ok"] = len(evs) > 0
+            out["sample_events"] = len(evs)
+    except Exception as exc:  # noqa: BLE001
+        out["error"] = f"{type(exc).__name__}: {str(exc).splitlines()[0][:200]}"
+    return out
+
+
 def main() -> int:
     corpus = load_corpus()
     print(f"Loaded {len(corpus)} real video URLs from {URLS_FILE.name}\n")
@@ -128,6 +153,14 @@ def main() -> int:
     )
     if ai["error"]:
         print("  AI probe error:", ai["error"])
+
+    gw = probe_gateway()
+    print(
+        f"Vercel AI Gateway: available={gw['available']} ok={gw['ok']} "
+        f"model={gw['model']} sample_events={gw['sample_events']}"
+    )
+    if gw["error"]:
+        print("  Gateway probe error:", gw["error"])
     print()
 
     results = []
@@ -150,6 +183,9 @@ def main() -> int:
         # on genuine (non-fabricated) text.
         feed_text = s1["text"] if s1["ok"] else item["title"]
         rec["downstream_input_source"] = "transcript" if s1["ok"] else "title_only"
+        # Keep the committed JSON lean: store only a preview, not the full
+        # transcript (length is preserved in `chars`).
+        s1["text_preview"] = s1.pop("text")[:300]
 
         # Stage 3 (code): real event extraction endpoint
         r = client.post("/api/v1/events/extract", json={"transcript": feed_text})
@@ -204,6 +240,7 @@ def main() -> int:
             "ai_keys_present": ai["keys_present"],
             "hybrid_processor_ok": ai["hybrid_processor_ok"],
             "ai_probe_error": ai["error"],
+            "vercel_gateway": gw,
         },
         "totals": {
             "videos": len(results),
