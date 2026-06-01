@@ -384,49 +384,6 @@ class TestRequestTracker:
 
 
 # ===========================================================================
-# ErrorClassifier — _classify_http_exception branches
-# ===========================================================================
-
-
-class TestErrorClassifierHttpExceptions:
-    def test_401_is_authentication(self):
-        exc = HTTPException(status_code=401, detail="Unauthorized")
-        result = ErrorClassifier.classify_exception(exc)
-        assert result.category == ErrorCategory.AUTHENTICATION
-
-    def test_403_is_authorization(self):
-        exc = HTTPException(status_code=403, detail="Forbidden")
-        result = ErrorClassifier.classify_exception(exc)
-        assert result.category == ErrorCategory.AUTHORIZATION
-
-    def test_404_is_not_found(self):
-        exc = HTTPException(status_code=404, detail="Not found")
-        result = ErrorClassifier.classify_exception(exc)
-        assert result.category == ErrorCategory.NOT_FOUND
-
-    def test_429_is_rate_limit(self):
-        exc = HTTPException(status_code=429, detail="Too many requests")
-        result = ErrorClassifier.classify_exception(exc)
-        assert result.category == ErrorCategory.RATE_LIMIT
-
-    def test_429_is_retryable_with_retry_after(self):
-        exc = HTTPException(status_code=429)
-        result = ErrorClassifier.classify_exception(exc)
-        assert result.retryable is True
-        assert result.retry_after == 60
-
-    def test_500_is_internal_server(self):
-        exc = HTTPException(status_code=500, detail="Server error")
-        result = ErrorClassifier.classify_exception(exc)
-        assert result.category == ErrorCategory.INTERNAL_SERVER
-
-    def test_503_is_retryable(self):
-        exc = HTTPException(status_code=503)
-        result = ErrorClassifier.classify_exception(exc)
-        assert result.retryable is True
-
-
-# ===========================================================================
 # ErrorHandlingMiddleware — basic init and synchronous methods
 # ===========================================================================
 

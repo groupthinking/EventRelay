@@ -18,9 +18,12 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 
-from src.shared.youtube import RobustYouTubeMetadata
+from shared.youtube import RobustYouTubeMetadata
 from uvai.ml.client import get_uvai_ml_client
-from youtube_extension.services.agents import AgentOrchestrator
+try:
+    from youtube_extension.services.agents import AgentOrchestrator
+except ImportError:
+    AgentOrchestrator = None
 from youtube_extension.services.ai import HybridProcessorService
 from youtube_extension.services.cloud.cloud_tasks_queue import (
     CloudTasksQueueService,

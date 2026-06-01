@@ -354,7 +354,9 @@ class MCPContextManager:
             file_path = os.path.join(self.storage_path, f"{context.id}.json")
 
             with open(file_path, "w") as f:
-                json.dump(context.dict(), f, indent=2, default=str)
+                data = context.dict()
+                # Serialize enum values, not their repr strings
+                json.dump(data, f, indent=2, default=lambda o: o.value if hasattr(o, "value") else str(o))
 
         except Exception as e:
             logger.error(f"Failed to persist context {context.id}: {e}")

@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 import youtube_extension.services.cloud.cloud_tasks_queue as cloud_tasks_queue
-from src.shared.youtube import RobustYouTubeMetadata
+from shared.youtube import RobustYouTubeMetadata
 from youtube_extension.backend.api.v1.models import TranscriptActionRequest
 from youtube_extension.backend.api.v1.router import _queue_transcript_action_job
 from youtube_extension.services.cloud.cloud_tasks_queue import CloudTasksQueueService

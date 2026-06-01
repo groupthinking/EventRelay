@@ -87,7 +87,7 @@ class TriModelConsensusTool:
             logger.info("✅ Gemini client initialized")
 
         if CLAUDE_AVAILABLE and self.claude_api_key:
-            self.claude_client = anthropic.Anthropic(api_key=self.claude_api_key)
+            self.claude_client = anthropic.AsyncAnthropic(api_key=self.claude_api_key)
             logger.info("✅ Claude client initialized")
 
         if GROK_AVAILABLE and self.grok_api_key:
@@ -245,12 +245,13 @@ class TriModelConsensusTool:
         start_time = time.time()
 
         try:
-            response = self.claude_client.messages.create(
+            response = await self.claude_client.messages.create(
                 model="claude-opus-4-8",
                 max_tokens=4096,
                 thinking={"type": "adaptive"},
                 output_config={"effort": "medium"},
-                messages=[{"role": "user", "content": prompt}]
+                messages=[{"role": "user", "content": prompt}],
+                timeout=60,
             )
 
             response_text = "".join(

@@ -49,8 +49,8 @@ from youtube_extension.backend.api.v1.models import (
     VideoToSoftwareResponse,
 )
 
-_VALID_URL = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
-_VALID_SHORT = "https://youtu.be/dQw4w9WgXcQ"
+_VALID_URL = "https://www.youtube.com/watch?v=auJzb1D-fag"
+_VALID_SHORT = "https://youtu.be/auJzb1D-fag"
 
 
 # ===========================================================================
@@ -314,7 +314,7 @@ class TestVideoProcessingRequest:
 
     def test_embed_url_accepted(self):
         r = VideoProcessingRequest(
-            video_url="https://www.youtube.com/embed/dQw4w9WgXcQ"
+            video_url="https://www.youtube.com/embed/auJzb1D-fag"
         )
         assert "embed" in r.video_url
 

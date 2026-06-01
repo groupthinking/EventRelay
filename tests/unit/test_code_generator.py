@@ -183,13 +183,13 @@ def test_same_build_plan_video_produces_deterministic_vanilla_files(monkeypatch,
 
 class TestExtractVideoId:
     def test_standard_youtube_url(self):
-        assert _extract_video_id("https://www.youtube.com/watch?v=dQw4w9WgXcQ") == "dQw4w9WgXcQ"
+        assert _extract_video_id("https://www.youtube.com/watch?v=auJzb1D-fag") == "auJzb1D-fag"
 
     def test_youtube_com_without_www(self):
         assert _extract_video_id("https://youtube.com/watch?v=abc12345678") == "abc12345678"
 
     def test_youtu_be_short_url(self):
-        assert _extract_video_id("https://youtu.be/dQw4w9WgXcQ") == "dQw4w9WgXcQ"
+        assert _extract_video_id("https://youtu.be/auJzb1D-fag") == "auJzb1D-fag"
 
     def test_youtu_be_with_trailing_slash(self):
         assert _extract_video_id("https://youtu.be/") is None
