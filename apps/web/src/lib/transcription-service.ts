@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import { fetchYouTubeMetadata, formatMetadataAsContext } from '@/lib/youtube-metadata';
 import { getGeminiClient, hasGeminiKey } from '@/lib/gemini-client';
+import { assertPublicHttpUrl } from '@/lib/ssrf-guard';
 
 let _openai: OpenAI | null = null;
 function getOpenAI() {
@@ -203,6 +204,17 @@ ${metadataContext ? `\nKNOWN METADATA:\n${metadataContext}` : ''}`,
   // Strategy 4: Direct audio file transcription via OpenAI Whisper
   if (audioUrl && process.env.OPENAI_API_KEY) {
     try {
+      // SSRF guard: reject non-public/internal URLs before any server-side fetch.
+      try {
+        await assertPublicHttpUrl(audioUrl);
+      } catch (guardErr) {
+        return {
+          success: false,
+          error: `Rejected audioUrl: ${guardErr instanceof Error ? guardErr.message : 'blocked'}`,
+          transcript: '',
+        };
+      }
+
       const audioResponse = await fetch(audioUrl);
       if (!audioResponse.ok) {
         return {
@@ -212,7 +224,17 @@ ${metadataContext ? `\nKNOWN METADATA:\n${metadataContext}` : ''}`,
         };
       }
 
+      // Denial-of-wallet guard: cap audio size (OpenAI STT limit is 25 MB).
+      const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
+      const declaredLen = Number(audioResponse.headers.get('content-length') ?? '0');
+      if (declaredLen > MAX_AUDIO_BYTES) {
+        return { success: false, error: 'Audio file exceeds 25 MB limit', transcript: '' };
+      }
+
       const audioBlob = await audioResponse.blob();
+      if (audioBlob.size > MAX_AUDIO_BYTES) {
+        return { success: false, error: 'Audio file exceeds 25 MB limit', transcript: '' };
+      }
       const audioFile = new File([audioBlob], 'audio.mp3', { type: 'audio/mpeg' });
 
       const transcription = await getOpenAI().audio.transcriptions.create({
