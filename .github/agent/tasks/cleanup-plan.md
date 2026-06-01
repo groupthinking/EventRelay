@@ -24,7 +24,7 @@
 
 1. Keep `README.md` as the main entry point
 2. Move agent-specific docs to `docs/agents/`
-3. Move AI assistant rules to `.agent/rules/`
+3. Move AI assistant rules to `.github/agent/rules/`
 4. Create clear cross-references
 
 ## Phase 3: Clean Up Root Files

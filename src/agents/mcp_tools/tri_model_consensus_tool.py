@@ -76,7 +76,7 @@ class TriModelConsensusTool:
         # Load API keys
         self.gemini_api_key = os.environ.get("GEMINI_API_KEY")
         self.claude_api_key = os.environ.get("ANTHROPIC_API_KEY")
-        self.grok_api_key = os.environ.get("GROK_API_KEY", "xai-dgK2bIGv5h99A8vBrlkBMgFuF8BHt1mZsbKQxASot5Oq5p3x0lj5zCjwPtHZzxAxPrKWa4YBzu55VNQ7")
+        self.grok_api_key = os.environ.get("GROK_API_KEY")
 
         # Initialize clients
         self.gemini_client = None
@@ -245,6 +245,8 @@ class TriModelConsensusTool:
         start_time = time.time()
 
         try:
+            # effort and thinking are GA on Opus 4.8 (no beta header);
+            # fall back gracefully if the installed SDK predates these params.
             try:
                 response = self.claude_client.messages.create(
                     model="claude-opus-4-8",
@@ -254,6 +256,7 @@ class TriModelConsensusTool:
                     messages=[{"role": "user", "content": prompt}]
                 )
             except TypeError:
+                logger.warning("thinking/output_config not supported in this SDK version, using default")
                 response = self.claude_client.messages.create(
                     model="claude-opus-4-8",
                     max_tokens=4096,
@@ -268,7 +271,7 @@ class TriModelConsensusTool:
             return ModelResponse(
                 model_name="Claude-Opus-4.8",
                 response=response_text,
-                confidence=0.95,
+                confidence=0.95,  # Opus 4.8 highest quality
                 latency_ms=latency
             )
 

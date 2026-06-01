@@ -167,7 +167,7 @@ class RealAIProcessorService:
                         "max_tokens": 8192,
                         "cost_tier": "high",
                     },
-                    "claude-3-haiku-20240307": {"max_tokens": 4096, "cost_tier": "low"},
+                    "claude-haiku-4-5": {"max_tokens": 4096, "cost_tier": "low"},
                 },
             },
             AIProvider.GEMINI: {
@@ -484,7 +484,6 @@ Focus on accurate classification for content discovery.
             response = await self.anthropic_client.messages.create(
                 model=model,
                 max_tokens=request.max_tokens or 2048,
-                temperature=request.temperature,
                 messages=[{"role": "user", "content": prompt}],
             )
 

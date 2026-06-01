@@ -1,6 +1,6 @@
 #!/bin/bash
 # Pre-Session Script for EventRelay
-# Location: .agent/pre-session.sh
+# Location: .github/agent/pre-session.sh
 # Purpose: Enforce Daily Commit Protocol from .memory-rules v2.0.0
 
 set -e

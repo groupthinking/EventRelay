@@ -52,6 +52,12 @@ export default function LandingFooter() {
           >
             Contact
           </a>
+          <Link href="/privacy" className="text-sm text-ink/35 hover:text-ink/70 transition-colors">
+            Privacy
+          </Link>
+          <Link href="/terms" className="text-sm text-ink/35 hover:text-ink/70 transition-colors">
+            Terms
+          </Link>
         </nav>
 
         <p className="text-xs text-ink/20">© 2026 UVAI. MIT licensed.</p>

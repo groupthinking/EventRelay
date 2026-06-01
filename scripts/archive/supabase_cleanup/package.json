@@ -17,19 +17,19 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.40.1",
     "@octokit/rest": "^21.1.1",
-    "@supabase/supabase-js": "^2.38.0",
+    "@supabase/supabase-js": "^2.106.2",
     "@types/express": "^5.0.1",
     "better-sqlite3": "^11.9.1",
     "dotenv": "^16.5.0",
     "express": "^5.1.0",
-    "next": "16.2.2",
+    "next": "16.2.6",
     "node-fetch": "^3.3.2",
     "pg": "^8.11.3",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "sqlite3": "^6.0.1",
     "ts-node": "^10.9.2",
-    "uuid": "^9.0.0"
+    "uuid": "^14.0.0"
   },
   "devDependencies": {
     "@types/node": "^20",

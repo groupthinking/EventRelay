@@ -500,7 +500,6 @@ class GeminiVideoMasterAgent:
                 "model": "claude-opus-4-8",
                 "max_tokens": 4096,
                 "messages": [{"role": "user", "content": prompt}],
-                "temperature": 0.3,
             }
 
             async with aiohttp.ClientSession() as session:

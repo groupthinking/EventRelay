@@ -284,7 +284,11 @@ filterwarnings = [
 ]
 
 [tool.coverage.run]
-source = ["src/youtube_extension"]
+# Measure by import-package name (resolved via pythonpath=src) so it matches
+# how tests actually import the code. A path here is overridden by the
+# --cov=youtube_extension in pytest.ini anyway; keeping them in sync avoids
+# the "coverage reads 0%" trap caused by naming modules that never import.
+source = ["youtube_extension"]
 omit = [
     "*/tests/*",
     "*/migrations/*",
