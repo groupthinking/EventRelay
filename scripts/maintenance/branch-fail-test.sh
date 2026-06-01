@@ -56,8 +56,8 @@ git fetch --all --prune --quiet 2>/dev/null || echo "warn: fetch failed, using l
 now=$(date +%s)
 
 pr_state() { # $1 = branch ; echoes "state #num" or "none"
-  [ -z "$PR_JSON" ] && { echo "none"; return; }
-  local hit; hit=$(grep -F "$1|" "$PR_JSON" | head -1)
+  [ ! -f "$PR_JSON" ] && { echo "none"; return; }
+  local hit; hit=$(grep -F "$1|" "$PR_JSON" | head -1 || true)
   [ -z "$hit" ] && { echo "none"; return; }
   echo "$hit" | awk -F'|' '{print $2" #"$3}'
 }
