@@ -1034,3 +1034,432 @@ class TestGlobalCacheDeleteAndInvalidateTags:
 
 # make IntelligentCacheSystem importable in tests defined above
 from youtube_extension.backend.services.intelligent_cache import IntelligentCacheSystem  # noqa: E402
+
+
+# ---------------------------------------------------------------------------
+# RedisCacheLayer (L2 Cache) — covers lines 254-450
+# ---------------------------------------------------------------------------
+
+import unittest.mock as _mock
+from unittest.mock import AsyncMock, MagicMock, patch
+
+from youtube_extension.backend.services.intelligent_cache import RedisCacheLayer
+
+
+def _make_redis_conn(
+    *,
+    ping_ok: bool = True,
+    get_value=None,
+    set_ok: bool = True,
+    delete_count: int = 1,
+    smembers_value=None,
+    keys_value=None,
+):
+    """Build a mock async Redis connection usable as an async context manager."""
+    conn = MagicMock()
+
+    # All Redis commands are coroutines
+    conn.ping = AsyncMock(return_value=True if ping_ok else MagicMock(side_effect=Exception("no ping")))
+    conn.get = AsyncMock(return_value=get_value)
+    conn.hincrby = AsyncMock(return_value=1)
+    conn.hset = AsyncMock(return_value=1)
+    conn.setex = AsyncMock(return_value=True)
+    conn.set = AsyncMock(return_value=True)
+    conn.hgetall = AsyncMock(return_value={})
+    conn.delete = AsyncMock(return_value=delete_count)
+    conn.sadd = AsyncMock(return_value=1)
+    conn.smembers = AsyncMock(return_value=smembers_value or set())
+    conn.keys = AsyncMock(return_value=keys_value or [])
+
+    # Async context manager protocol
+    conn.__aenter__ = AsyncMock(return_value=conn)
+    conn.__aexit__ = AsyncMock(return_value=False)
+    return conn
+
+
+def _make_pool():
+    """Stub for redis.ConnectionPool.from_url."""
+    return MagicMock()
+
+
+def _patch_redis(conn, pool=None):
+    """Return a context manager that patches redis.asyncio in the intelligent_cache module."""
+    import types as _types
+
+    if pool is None:
+        pool = _make_pool()
+
+    mock_redis_mod = _types.ModuleType("redis.asyncio")
+
+    # ConnectionPool stub
+    mock_pool_cls = MagicMock()
+    mock_pool_cls.from_url = MagicMock(return_value=pool)
+    mock_redis_mod.ConnectionPool = mock_pool_cls
+
+    # Redis class stub: returns conn when instantiated (as async ctx manager)
+    mock_redis_cls = MagicMock(return_value=conn)
+    mock_redis_mod.Redis = mock_redis_cls
+
+    return patch("youtube_extension.backend.services.intelligent_cache.redis", mock_redis_mod)
+
+
+def _patch_redis_pool_error(exc):
+    """Patch redis so ConnectionPool.from_url raises exc."""
+    import types as _types
+
+    mock_redis_mod = _types.ModuleType("redis.asyncio")
+    mock_pool_cls = MagicMock()
+    mock_pool_cls.from_url = MagicMock(side_effect=exc)
+    mock_redis_mod.ConnectionPool = mock_pool_cls
+    mock_redis_mod.Redis = MagicMock()
+    return patch("youtube_extension.backend.services.intelligent_cache.redis", mock_redis_mod)
+
+
+class TestRedisCacheLayerConnect:
+    """Tests for RedisCacheLayer.connect() — lines 264-282"""
+
+    async def test_connect_sets_connected_true_on_success(self):
+        layer = RedisCacheLayer("L2", redis_url="redis://localhost:6379")
+        conn = _make_redis_conn()
+
+        with _patch_redis(conn):
+            await layer.connect()
+
+        assert layer._connected is True
+
+    async def test_connect_calls_ping(self):
+        layer = RedisCacheLayer("L2", redis_url="redis://localhost:6379")
+        conn = _make_redis_conn()
+
+        with _patch_redis(conn):
+            await layer.connect()
+
+        conn.ping.assert_called_once()
+
+    async def test_connect_failure_sets_connected_false(self):
+        layer = RedisCacheLayer("L2", redis_url="redis://localhost:6379")
+
+        with _patch_redis_pool_error(Exception("refused")):
+            await layer.connect()
+
+        assert layer._connected is False
+
+    async def test_connect_ping_failure_sets_connected_false(self):
+        layer = RedisCacheLayer("L2", redis_url="redis://localhost:6379")
+        conn = _make_redis_conn()
+        conn.ping = AsyncMock(side_effect=Exception("ping failed"))
+
+        with _patch_redis(conn):
+            await layer.connect()
+
+        assert layer._connected is False
+
+
+class TestRedisCacheLayerGet:
+    """Tests for RedisCacheLayer.get() — lines 284-323"""
+
+    def _connected_layer(self):
+        layer = RedisCacheLayer("L2", redis_url="redis://localhost:6379")
+        layer._connected = True
+        layer.redis_pool = _make_pool()
+        return layer
+
+    async def test_get_returns_none_when_not_connected(self):
+        layer = RedisCacheLayer("L2")
+        result = await layer.get("key")
+        assert result is None
+
+    async def test_get_miss_returns_none(self):
+        layer = self._connected_layer()
+        conn = _make_redis_conn(get_value=None)
+
+        with _patch_redis(conn):
+            result = await layer.get("missing_key")
+
+        assert result is None
+        assert layer.stats.miss_count == 1
+
+    async def test_get_hit_returns_value(self):
+        layer = self._connected_layer()
+        import json as _json
+        data = _json.dumps({"value": "hello", "created_at": 0.0, "tags": []})
+        conn = _make_redis_conn(get_value=data.encode())
+
+        with _patch_redis(conn):
+            result = await layer.get("my_key")
+
+        assert result == "hello"
+        assert layer.stats.hit_count == 1
+
+    async def test_get_invalid_json_returns_none(self):
+        layer = self._connected_layer()
+        conn = _make_redis_conn(get_value=b"not-valid-json")
+
+        with _patch_redis(conn):
+            result = await layer.get("bad_json_key")
+
+        assert result is None
+
+    async def test_get_redis_exception_returns_none(self):
+        layer = self._connected_layer()
+        conn = _make_redis_conn()
+        conn.get = AsyncMock(side_effect=Exception("redis down"))
+
+        with _patch_redis(conn):
+            result = await layer.get("any_key")
+
+        assert result is None
+        assert layer.stats.miss_count == 1
+
+    async def test_get_hit_increments_access_count_in_redis(self):
+        layer = self._connected_layer()
+        import json as _json
+        data = _json.dumps({"value": 42, "created_at": 0.0, "tags": []})
+        conn = _make_redis_conn(get_value=data.encode())
+
+        with _patch_redis(conn):
+            await layer.get("my_key")
+
+        conn.hincrby.assert_called_once()
+
+
+class TestRedisCacheLayerSet:
+    """Tests for RedisCacheLayer.set() — lines 325-364"""
+
+    def _connected_layer(self):
+        layer = RedisCacheLayer("L2", redis_url="redis://localhost:6379")
+        layer._connected = True
+        layer.redis_pool = _make_pool()
+        return layer
+
+    async def test_set_returns_false_when_not_connected(self):
+        layer = RedisCacheLayer("L2")
+        result = await layer.set("k", "v")
+        assert result is False
+
+    async def test_set_with_ttl_calls_setex(self):
+        layer = self._connected_layer()
+        conn = _make_redis_conn()
+
+        with _patch_redis(conn):
+            result = await layer.set("k", "v", ttl=60)
+
+        assert result is True
+        conn.setex.assert_called_once()
+
+    async def test_set_without_ttl_calls_set(self):
+        layer = self._connected_layer()
+        conn = _make_redis_conn()
+
+        with _patch_redis(conn):
+            result = await layer.set("k", "v")
+
+        assert result is True
+        conn.set.assert_called_once()
+
+    async def test_set_with_tags_calls_sadd(self):
+        layer = self._connected_layer()
+        conn = _make_redis_conn()
+
+        with _patch_redis(conn):
+            await layer.set("k", "v", tags=["tag1", "tag2"])
+
+        assert conn.sadd.call_count == 2
+
+    async def test_set_stores_metadata(self):
+        layer = self._connected_layer()
+        conn = _make_redis_conn()
+
+        with _patch_redis(conn):
+            await layer.set("k", "v")
+
+        conn.hset.assert_called_once()
+
+    async def test_set_exception_returns_false(self):
+        layer = self._connected_layer()
+        conn = _make_redis_conn()
+        conn.set = AsyncMock(side_effect=Exception("redis error"))
+
+        with _patch_redis(conn):
+            result = await layer.set("k", "v")
+
+        assert result is False
+
+
+class TestRedisCacheLayerDelete:
+    """Tests for RedisCacheLayer.delete() — lines 366-387"""
+
+    def _connected_layer(self):
+        layer = RedisCacheLayer("L2", redis_url="redis://localhost:6379")
+        layer._connected = True
+        layer.redis_pool = _make_pool()
+        return layer
+
+    async def test_delete_returns_false_when_not_connected(self):
+        layer = RedisCacheLayer("L2")
+        result = await layer.delete("k")
+        assert result is False
+
+    async def test_delete_returns_true_when_key_exists(self):
+        layer = self._connected_layer()
+        conn = _make_redis_conn(delete_count=1)
+
+        with _patch_redis(conn):
+            result = await layer.delete("k")
+
+        assert result is True
+
+    async def test_delete_returns_false_when_key_missing(self):
+        layer = self._connected_layer()
+        conn = _make_redis_conn(delete_count=0)
+
+        with _patch_redis(conn):
+            result = await layer.delete("k")
+
+        assert result is False
+
+    async def test_delete_calls_delete_on_conn(self):
+        layer = self._connected_layer()
+        conn = _make_redis_conn(delete_count=1)
+
+        with _patch_redis(conn):
+            await layer.delete("my_key")
+
+        conn.delete.assert_called_once()
+
+    async def test_delete_exception_returns_false(self):
+        layer = self._connected_layer()
+        conn = _make_redis_conn()
+        conn.delete = AsyncMock(side_effect=Exception("del error"))
+
+        with _patch_redis(conn):
+            result = await layer.delete("k")
+
+        assert result is False
+
+
+class TestRedisCacheLayerClear:
+    """Tests for RedisCacheLayer.clear() — lines 389-412"""
+
+    def _connected_layer(self):
+        layer = RedisCacheLayer("L2", redis_url="redis://localhost:6379")
+        layer._connected = True
+        layer.redis_pool = _make_pool()
+        return layer
+
+    async def test_clear_returns_zero_when_not_connected(self):
+        layer = RedisCacheLayer("L2")
+        result = await layer.clear()
+        assert result == 0
+
+    async def test_clear_with_no_keys_returns_zero(self):
+        layer = self._connected_layer()
+        conn = _make_redis_conn(keys_value=[])
+
+        with _patch_redis(conn):
+            result = await layer.clear()
+
+        assert result == 0
+
+    async def test_clear_deletes_all_keys(self):
+        layer = self._connected_layer()
+        conn = _make_redis_conn(keys_value=[b"uvai:cache:k1"])
+        conn.delete = AsyncMock(return_value=3)
+
+        with _patch_redis(conn):
+            result = await layer.clear()
+
+        assert result == 3
+
+    async def test_clear_exception_returns_zero(self):
+        layer = self._connected_layer()
+        conn = _make_redis_conn()
+        conn.keys = AsyncMock(side_effect=Exception("clear error"))
+
+        with _patch_redis(conn):
+            result = await layer.clear()
+
+        assert result == 0
+
+
+class TestRedisCacheLayerInvalidateByTags:
+    """Tests for RedisCacheLayer.invalidate_by_tags() — lines 414-440"""
+
+    def _connected_layer(self):
+        layer = RedisCacheLayer("L2", redis_url="redis://localhost:6379")
+        layer._connected = True
+        layer.redis_pool = _make_pool()
+        return layer
+
+    async def test_invalidate_returns_zero_when_not_connected(self):
+        layer = RedisCacheLayer("L2")
+        result = await layer.invalidate_by_tags(["tag1"])
+        assert result == 0
+
+    async def test_invalidate_empty_tags_returns_zero(self):
+        layer = self._connected_layer()
+        conn = _make_redis_conn(smembers_value=set())
+
+        with _patch_redis(conn):
+            result = await layer.invalidate_by_tags(["nonexistent_tag"])
+
+        assert result == 0
+
+    async def test_invalidate_deletes_tagged_keys(self):
+        layer = self._connected_layer()
+        # smembers returns bytes keys for tag1
+        conn = _make_redis_conn(smembers_value={b"key1", b"key2"})
+        conn.delete = AsyncMock(return_value=5)
+
+        with _patch_redis(conn):
+            result = await layer.invalidate_by_tags(["tag1"])
+
+        assert result == 5
+
+    async def test_invalidate_handles_string_keys(self):
+        layer = self._connected_layer()
+        # smembers returns string keys (non-bytes)
+        conn = _make_redis_conn(smembers_value={"key1"})
+        conn.delete = AsyncMock(return_value=3)
+
+        with _patch_redis(conn):
+            result = await layer.invalidate_by_tags(["tag1"])
+
+        assert result == 3
+
+    async def test_invalidate_multiple_tags(self):
+        layer = self._connected_layer()
+        conn = _make_redis_conn(smembers_value={b"key1"})
+        conn.delete = AsyncMock(return_value=2)
+
+        with _patch_redis(conn):
+            result = await layer.invalidate_by_tags(["tag1", "tag2"])
+
+        # Called once per tag
+        assert result == 4  # 2 deletes × 2 tags
+
+    async def test_invalidate_exception_returns_zero(self):
+        layer = self._connected_layer()
+        conn = _make_redis_conn()
+        conn.smembers = AsyncMock(side_effect=Exception("smembers error"))
+
+        with _patch_redis(conn):
+            result = await layer.invalidate_by_tags(["tag1"])
+
+        assert result == 0
+
+
+class TestRedisCacheLayerUpdateAvgAccessTime:
+    """Tests for RedisCacheLayer._update_avg_access_time() — lines 442-450"""
+
+    def test_first_call_sets_directly(self):
+        layer = RedisCacheLayer("L2")
+        layer._update_avg_access_time(5.0)
+        assert layer.stats.avg_access_time_ms == 5.0
+
+    def test_subsequent_call_uses_ema(self):
+        layer = RedisCacheLayer("L2")
+        layer._update_avg_access_time(10.0)
+        layer._update_avg_access_time(20.0)
+        # EMA: 0.1 * 20 + 0.9 * 10 = 11.0
+        assert layer.stats.avg_access_time_ms == pytest.approx(11.0, rel=0.01)

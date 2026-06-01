@@ -1082,3 +1082,138 @@ class TestDatabaseHealthMonitorRunHealthCheck:
         optimizer.connection_pool.get_pool_stats.side_effect = RuntimeError("db down")
         result = await monitor.run_health_check()
         assert "error" in result
+
+
+# ===========================================================================
+# Additional tests for missing coverage
+# ===========================================================================
+
+from unittest.mock import AsyncMock, patch
+
+
+class TestConvenienceFunctions:
+    """Tests for module-level convenience functions"""
+
+    async def test_execute_optimized_query_delegates(self, tmp_path):
+        from youtube_extension.backend.services import database_optimizer as _mod
+        orig = _mod.query_optimizer.execute_query
+        _mod.query_optimizer.execute_query = AsyncMock(return_value=[{"id": 1}])
+        try:
+            result = await _mod.execute_optimized_query("SELECT 1", ())
+            assert result == [{"id": 1}]
+        finally:
+            _mod.query_optimizer.execute_query = orig
+
+    async def test_execute_batch_delegates(self):
+        from youtube_extension.backend.services import database_optimizer as _mod
+        orig = _mod.query_optimizer.execute_batch_queries
+        _mod.query_optimizer.execute_batch_queries = AsyncMock(return_value=[[1], [2]])
+        try:
+            result = await _mod.execute_batch_optimized([("SELECT 1", ()), ("SELECT 2", ())])
+            assert result == [[1], [2]]
+        finally:
+            _mod.query_optimizer.execute_batch_queries = orig
+
+    async def test_get_database_performance_report_delegates(self):
+        from youtube_extension.backend.services import database_optimizer as _mod
+        orig = _mod.query_optimizer.get_performance_report
+        _mod.query_optimizer.get_performance_report = AsyncMock(return_value={"ok": True})
+        try:
+            result = await _mod.get_database_performance_report()
+            assert result == {"ok": True}
+        finally:
+            _mod.query_optimizer.get_performance_report = orig
+
+    async def test_get_database_health_status_delegates(self):
+        from youtube_extension.backend.services import database_optimizer as _mod
+        orig = _mod.health_monitor.run_health_check
+        _mod.health_monitor.run_health_check = AsyncMock(return_value={"overall_health": "healthy"})
+        try:
+            result = await _mod.get_database_health_status()
+            assert result["overall_health"] == "healthy"
+        finally:
+            _mod.health_monitor.run_health_check = orig
+
+    async def test_initialize_database_optimization_calls_initialize(self, tmp_path):
+        from youtube_extension.backend.services import database_optimizer as _mod
+        orig_init = _mod.connection_pool.initialize
+        orig_get = _mod.connection_pool.get_connection
+        orig_rel = _mod.connection_pool.release_connection
+        _mod.connection_pool.initialize = AsyncMock()
+        mock_conn = MagicMock()
+        mock_conn.cursor.return_value = MagicMock()
+        mock_conn.commit = MagicMock()
+        _mod.connection_pool.get_connection = AsyncMock(return_value=mock_conn)
+        _mod.connection_pool.release_connection = AsyncMock()
+        try:
+            await _mod.initialize_database_optimization()
+            _mod.connection_pool.initialize.assert_called_once()
+        finally:
+            _mod.connection_pool.initialize = orig_init
+            _mod.connection_pool.get_connection = orig_get
+            _mod.connection_pool.release_connection = orig_rel
+
+    async def test_shutdown_database_optimization_calls_close(self):
+        from youtube_extension.backend.services import database_optimizer as _mod
+        orig = _mod.connection_pool.close
+        _mod.connection_pool.close = AsyncMock()
+        try:
+            await _mod.shutdown_database_optimization()
+            _mod.connection_pool.close.assert_called_once()
+        finally:
+            _mod.connection_pool.close = orig
+
+
+class TestExecuteBatchQueries:
+    """execute_batch_queries with multi-query grouping"""
+
+    def _make_pool(self):
+        pool = MagicMock()
+        pool.get_pool_stats.return_value = {"connections_in_use": 0, "max_connections": 10}
+        pool.get_connection = AsyncMock()
+        pool.release_connection = AsyncMock()
+        return pool
+
+    async def test_batch_executes_all_queries(self, tmp_path):
+        import sqlite3
+        pool = DatabaseConnectionPool(f"sqlite:///{tmp_path}/test.db")
+        await pool.initialize()
+        optimizer = QueryOptimizer(pool)
+        queries = [
+            ("SELECT 1", ()),
+            ("SELECT 2", ()),
+        ]
+        results = await optimizer.execute_batch_queries(queries)
+        assert len(results) == 2
+
+    async def test_batch_exception_propagated(self):
+        pool = self._make_pool()
+        pool.get_connection.side_effect = RuntimeError("No DB")
+        optimizer = QueryOptimizer(pool)
+        with pytest.raises(RuntimeError, match="No DB"):
+            await optimizer.execute_batch_queries([("SELECT 1", ())])
+
+
+class TestConnectionPoolInitialize:
+    """DatabaseConnectionPool.initialize with different URL types"""
+
+    async def test_sqlite_file_creates_dir(self, tmp_path):
+        db_path = tmp_path / "subdir" / "test.db"
+        pool = DatabaseConnectionPool(f"sqlite:///{db_path}")
+        await pool.initialize()
+        # No error should occur
+
+    async def test_sqlite_memory_initializes(self):
+        pool = DatabaseConnectionPool("sqlite:///:memory:")
+        await pool.initialize()
+
+    async def test_haspg_false_uses_sqlite_path(self, tmp_path):
+        from youtube_extension.backend.services import database_optimizer as _mod
+        orig = _mod.HAS_POSTGRESQL
+        _mod.HAS_POSTGRESQL = False
+        db_path = tmp_path / "no_pg.db"
+        pool = DatabaseConnectionPool(f"sqlite:///{db_path}", min_connections=1, max_connections=5)
+        try:
+            await pool.initialize()
+        finally:
+            _mod.HAS_POSTGRESQL = orig

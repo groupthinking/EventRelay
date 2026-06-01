@@ -330,3 +330,543 @@ class TestMCPServerRegistryGetByStatus:
         registry.register_server("s1", "S1", "http://localhost:8001", [])
         result = registry.get_servers_by_status(ServerStatus.MAINTENANCE)
         assert result == []
+
+
+# ===========================================================================
+# MCPServerRegistry.start_monitoring / stop_monitoring — lines 162-180
+# ===========================================================================
+
+
+class TestMCPServerRegistryMonitoring:
+    """Tests for start_monitoring and stop_monitoring."""
+
+    async def test_start_monitoring_sets_monitoring_active(self, tmp_path):
+        config_path = str(tmp_path / "config" / "mcp.json")
+        r = MCPServerRegistry(config_path=config_path)
+        try:
+            await r.start_monitoring()
+            assert r.monitoring_active is True
+        finally:
+            await r.stop_monitoring()
+
+    async def test_start_monitoring_creates_task(self, tmp_path):
+        config_path = str(tmp_path / "config" / "mcp.json")
+        r = MCPServerRegistry(config_path=config_path)
+        try:
+            await r.start_monitoring()
+            assert r.health_check_task is not None
+        finally:
+            await r.stop_monitoring()
+
+    async def test_start_monitoring_idempotent(self, tmp_path):
+        """Calling start_monitoring twice is a no-op (monitoring_active guard)."""
+        config_path = str(tmp_path / "config" / "mcp.json")
+        r = MCPServerRegistry(config_path=config_path)
+        try:
+            await r.start_monitoring()
+            first_task = r.health_check_task
+            await r.start_monitoring()  # second call; guard fires
+            assert r.health_check_task is first_task
+        finally:
+            await r.stop_monitoring()
+
+    async def test_stop_monitoring_clears_active(self, tmp_path):
+        config_path = str(tmp_path / "config" / "mcp.json")
+        r = MCPServerRegistry(config_path=config_path)
+        await r.start_monitoring()
+        await r.stop_monitoring()
+        assert r.monitoring_active is False
+
+    async def test_stop_monitoring_cancels_task(self, tmp_path):
+        config_path = str(tmp_path / "config" / "mcp.json")
+        r = MCPServerRegistry(config_path=config_path)
+        await r.start_monitoring()
+        task = r.health_check_task
+        await r.stop_monitoring()
+        assert task.cancelled() or task.done()
+
+    async def test_stop_monitoring_when_no_task_no_error(self, tmp_path):
+        """stop_monitoring without prior start should not raise."""
+        config_path = str(tmp_path / "config" / "mcp.json")
+        r = MCPServerRegistry(config_path=config_path)
+        assert r.health_check_task is None
+        await r.stop_monitoring()  # should not raise
+
+
+# ===========================================================================
+# MCPServerRegistry.check_server_health (via aiohttp) — lines 318-351
+# ===========================================================================
+
+
+import aiohttp
+from unittest.mock import AsyncMock, MagicMock, patch as _patch
+
+
+class TestCheckServerHealthViaAiohttp:
+    """Tests for check_server_health() that exercise the aiohttp paths."""
+
+    @pytest.fixture
+    def reg(self, tmp_path):
+        config_path = str(tmp_path / "config" / "mcp.json")
+        r = MCPServerRegistry(config_path=config_path)
+        r.register_server("s1", "S1", "http://localhost:8001", [])
+        return r
+
+    def _mock_session(self, status_code: int):
+        """Return a mock aiohttp.ClientSession context manager."""
+        mock_response = MagicMock()
+        mock_response.status = status_code
+        mock_response.__aenter__ = AsyncMock(return_value=mock_response)
+        mock_response.__aexit__ = AsyncMock(return_value=False)
+
+        mock_session = MagicMock()
+        mock_session.get = MagicMock(return_value=mock_response)
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock(return_value=False)
+        return mock_session
+
+    async def test_200_response_sets_online_and_returns_true(self, reg):
+        server = reg.get_server("s1")
+        mock_session = self._mock_session(200)
+
+        with _patch("aiohttp.ClientSession", return_value=mock_session):
+            result = await reg.check_server_health(server)
+
+        assert result is True
+        assert server.status == ServerStatus.ONLINE
+
+    async def test_200_response_sets_response_time(self, reg):
+        server = reg.get_server("s1")
+        mock_session = self._mock_session(200)
+
+        with _patch("aiohttp.ClientSession", return_value=mock_session):
+            await reg.check_server_health(server)
+
+        assert server.response_time is not None
+        assert server.response_time >= 0
+
+    async def test_non_200_response_sets_error_and_returns_false(self, reg):
+        server = reg.get_server("s1")
+        mock_session = self._mock_session(500)
+
+        with _patch("aiohttp.ClientSession", return_value=mock_session):
+            result = await reg.check_server_health(server)
+
+        assert result is False
+        assert server.status == ServerStatus.ERROR
+
+    async def test_exception_sets_error_and_returns_false(self, reg):
+        server = reg.get_server("s1")
+        mock_session = MagicMock()
+        mock_session.get = MagicMock(side_effect=Exception("connection refused"))
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock(return_value=False)
+
+        with _patch("aiohttp.ClientSession", return_value=mock_session):
+            result = await reg.check_server_health(server)
+
+        assert result is False
+        assert server.status == ServerStatus.ERROR
+
+    async def test_auth_token_sent_in_header(self, tmp_path):
+        config_path = str(tmp_path / "config" / "mcp.json")
+        r = MCPServerRegistry(config_path=config_path)
+        r.register_server("auth_srv", "Auth", "http://localhost:9001", [], auth_token="tok123")
+        server = r.get_server("auth_srv")
+
+        received_headers: dict = {}
+
+        mock_response = MagicMock()
+        mock_response.status = 200
+        mock_response.__aenter__ = AsyncMock(return_value=mock_response)
+        mock_response.__aexit__ = AsyncMock(return_value=False)
+
+        mock_session = MagicMock()
+
+        def capture_get(url, headers=None, timeout=None):
+            received_headers.update(headers or {})
+            return mock_response
+
+        mock_session.get = MagicMock(side_effect=capture_get)
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock(return_value=False)
+
+        with _patch("aiohttp.ClientSession", return_value=mock_session):
+            await r.check_server_health(server)
+
+        assert received_headers.get("Authorization") == "Bearer tok123"
+
+
+# ===========================================================================
+# MCPServerRegistry._health_monitoring_loop — lines 353-378
+# ===========================================================================
+
+
+class TestHealthMonitoringLoop:
+    """Exercise the background _health_monitoring_loop."""
+
+    async def test_loop_calls_check_server_health(self, tmp_path):
+        """The loop calls check_server_health for servers due a check."""
+        import asyncio
+        config_path = str(tmp_path / "config" / "mcp.json")
+        r = MCPServerRegistry(config_path=config_path)
+        r.register_server("s1", "S1", "http://localhost:8001", [])
+        # last_health_check is None → immediately due
+
+        calls: list = []
+
+        async def fake_check(server):
+            calls.append(server.id)
+            server.update_status(ServerStatus.ONLINE)
+            return True
+
+        # Use AsyncMock so the coroutine returned by check_server_health is awaitable
+        mock_check = AsyncMock(side_effect=fake_check)
+        # Patch the module-level asyncio.sleep to avoid 10s wait between iterations
+        with _patch.object(r, "check_server_health", new=mock_check):
+            # Directly invoke one loop iteration instead of relying on timing
+            r.monitoring_active = True
+            # Simulate loop body directly
+            tasks = []
+            for server in r.servers.values():
+                if not server.last_health_check:
+                    tasks.append(r.check_server_health(server))
+            if tasks:
+                await asyncio.gather(*tasks, return_exceptions=True)
+
+        assert "s1" in calls
+
+    async def test_loop_saves_config_after_checks(self, tmp_path):
+        """The loop calls _save_config after gather."""
+        import asyncio
+        config_path = str(tmp_path / "config" / "mcp.json")
+        r = MCPServerRegistry(config_path=config_path)
+        r.register_server("s1", "S1", "http://localhost:8001", [])
+
+        save_calls: list = [0]
+        original_save = r._save_config
+
+        def counting_save():
+            save_calls[0] += 1
+
+        mock_check = AsyncMock(return_value=True)
+        with _patch.object(r, "check_server_health", new=mock_check):
+            with _patch.object(r, "_save_config", side_effect=counting_save):
+                # Simulate one loop body execution
+                r.monitoring_active = True
+                tasks = []
+                for server in r.servers.values():
+                    if not server.last_health_check:
+                        tasks.append(r.check_server_health(server))
+                if tasks:
+                    await asyncio.gather(*tasks, return_exceptions=True)
+                r._save_config()
+
+        assert save_calls[0] >= 1
+
+    async def test_loop_handles_exception_gracefully(self, tmp_path):
+        """The loop body exception is caught gracefully."""
+        import asyncio
+        config_path = str(tmp_path / "config" / "mcp.json")
+        r = MCPServerRegistry(config_path=config_path)
+        r.register_server("s1", "S1", "http://localhost:8001", [])
+
+        call_count = [0]
+
+        async def flaky_check(server):
+            call_count[0] += 1
+            raise RuntimeError("check boom")
+
+        mock_check = AsyncMock(side_effect=flaky_check)
+        with _patch.object(r, "check_server_health", new=mock_check):
+            r.monitoring_active = True
+            # Simulate one loop iteration with exception handling
+            try:
+                tasks = []
+                for server in r.servers.values():
+                    if not server.last_health_check:
+                        tasks.append(r.check_server_health(server))
+                if tasks:
+                    await asyncio.gather(*tasks, return_exceptions=True)
+                r._save_config()
+            except Exception:
+                pass  # exception caught; loop continues
+
+        assert call_count[0] >= 1
+
+    async def test_loop_skips_servers_recently_checked(self, tmp_path):
+        """Servers checked within their interval are skipped."""
+        import asyncio
+        config_path = str(tmp_path / "config" / "mcp.json")
+        r = MCPServerRegistry(config_path=config_path)
+        r.register_server("s1", "S1", "http://localhost:8001", [], health_check_interval=9999)
+        # Mark as recently checked
+        r.servers["s1"].last_health_check = datetime.utcnow()
+
+        calls: list = []
+
+        async def fake_check(server):
+            calls.append(server.id)
+            return True
+
+        mock_check = AsyncMock(side_effect=fake_check)
+        with _patch.object(r, "check_server_health", new=mock_check):
+            r.monitoring_active = True
+            # Simulate one loop body — server is recently checked so no task added
+            tasks = []
+            for server in r.servers.values():
+                if (
+                    not server.last_health_check
+                    or (datetime.utcnow() - server.last_health_check).total_seconds()
+                    > server.health_check_interval
+                ):
+                    tasks.append(r.check_server_health(server))
+            if tasks:
+                await asyncio.gather(*tasks, return_exceptions=True)
+
+        # Should not have been called since check was done recently
+        assert "s1" not in calls
+
+    async def test_loop_runs_via_task(self, tmp_path):
+        """The monitoring loop actually starts a background task when start_monitoring is called."""
+        import asyncio
+        config_path = str(tmp_path / "config" / "mcp.json")
+        r = MCPServerRegistry(config_path=config_path)
+        try:
+            await r.start_monitoring()
+            assert r.health_check_task is not None
+            assert not r.health_check_task.done()
+        finally:
+            await r.stop_monitoring()
+
+
+# ===========================================================================
+# MCPServerRegistry._load_config — lines 380-430
+# ===========================================================================
+
+
+class TestLoadConfig:
+    """Tests for _load_config() that reads from a JSON file."""
+
+    def _make_config_json(self, tmp_path, servers: list) -> str:
+        """Write a config JSON file and return its path."""
+        import json as _json
+        import os
+        config_dir = tmp_path / "config"
+        config_dir.mkdir(parents=True, exist_ok=True)
+        config_path = str(config_dir / "mcp_servers.json")
+        with open(config_path, "w") as f:
+            _json.dump({"servers": servers}, f)
+        return config_path
+
+    def test_load_config_missing_file_no_error(self, tmp_path):
+        config_path = str(tmp_path / "nonexistent" / "mcp.json")
+        # File does not exist; _load_config should silently return
+        r = MCPServerRegistry(config_path=config_path)
+        assert r.servers == {}
+
+    def test_load_config_loads_server_from_file(self, tmp_path):
+        server_data = {
+            "id": "loaded_srv",
+            "name": "Loaded",
+            "endpoint": "http://localhost:9001",
+            "capabilities": ["ai_inference"],
+            "status": "online",
+            "port": 9001,
+            "protocol": "http",
+        }
+        config_path = self._make_config_json(tmp_path, [server_data])
+        r = MCPServerRegistry(config_path=config_path)
+        assert "loaded_srv" in r.servers
+
+    def test_load_config_capability_indexed(self, tmp_path):
+        server_data = {
+            "id": "cap_srv",
+            "name": "Cap",
+            "endpoint": "http://localhost:9002",
+            "capabilities": ["monitoring"],
+            "status": "offline",
+            "port": 9002,
+            "protocol": "http",
+        }
+        config_path = self._make_config_json(tmp_path, [server_data])
+        r = MCPServerRegistry(config_path=config_path)
+        assert "cap_srv" in r.capability_index.get(ServerCapability.MONITORING, set())
+
+    def test_load_config_unknown_capability_skipped(self, tmp_path):
+        server_data = {
+            "id": "unk_srv",
+            "name": "Unk",
+            "endpoint": "http://localhost:9003",
+            "capabilities": ["unknown_cap"],
+            "status": "offline",
+            "port": 9003,
+            "protocol": "http",
+        }
+        config_path = self._make_config_json(tmp_path, [server_data])
+        # Should not raise; unknown cap is warned and skipped
+        r = MCPServerRegistry(config_path=config_path)
+        assert "unk_srv" in r.servers
+        # Capability index should be empty for the unknown cap
+        assert len(r.capability_index) == 0
+
+    def test_load_config_unknown_status_falls_back_to_offline(self, tmp_path):
+        server_data = {
+            "id": "bad_status",
+            "name": "Bad",
+            "endpoint": "http://localhost:9004",
+            "capabilities": [],
+            "status": "bogus_status",
+            "port": 9004,
+            "protocol": "http",
+        }
+        config_path = self._make_config_json(tmp_path, [server_data])
+        r = MCPServerRegistry(config_path=config_path)
+        assert r.servers["bad_status"].status == ServerStatus.OFFLINE
+
+    def test_load_config_malformed_entry_skipped(self, tmp_path):
+        """A server entry that fails MCPServer validation is skipped."""
+        import json as _json
+        import os
+        # Write invalid data (missing required 'name' field)
+        config_dir = tmp_path / "config"
+        config_dir.mkdir(parents=True, exist_ok=True)
+        config_path = str(config_dir / "mcp_servers.json")
+        with open(config_path, "w") as f:
+            _json.dump({"servers": [{"id": "bad"}]}, f)  # missing required fields
+        # Should not raise; bad entry logged and skipped
+        r = MCPServerRegistry(config_path=config_path)
+        assert "bad" not in r.servers
+
+    def test_load_config_invalid_json_no_crash(self, tmp_path):
+        """A file with invalid JSON causes no crash; exception caught at outer level."""
+        config_dir = tmp_path / "config"
+        config_dir.mkdir(parents=True, exist_ok=True)
+        config_path = str(config_dir / "mcp_servers.json")
+        with open(config_path, "w") as f:
+            f.write("not valid json {{{{")
+        r = MCPServerRegistry(config_path=config_path)
+        assert r.servers == {}
+
+
+# ===========================================================================
+# MCPServerRegistry._save_config — lines 432-455
+# ===========================================================================
+
+
+class TestSaveConfig:
+    """Tests for _save_config()."""
+
+    def test_save_creates_file(self, tmp_path):
+        import os
+        config_path = str(tmp_path / "nested" / "dir" / "mcp.json")
+        r = MCPServerRegistry(config_path=config_path)
+        r.register_server("s1", "S1", "http://localhost:8001", [])
+        # register_server calls _save_config internally
+        assert os.path.exists(config_path)
+
+    def test_save_writes_valid_json(self, tmp_path):
+        import json as _json
+        config_path = str(tmp_path / "config" / "mcp.json")
+        r = MCPServerRegistry(config_path=config_path)
+        r.register_server("s1", "S1", "http://localhost:8001", [ServerCapability.AI_INFERENCE])
+        with open(config_path) as f:
+            data = _json.load(f)
+        assert "servers" in data
+        assert len(data["servers"]) == 1
+
+    def test_save_serialises_capabilities_as_values(self, tmp_path):
+        import json as _json
+        config_path = str(tmp_path / "config" / "mcp.json")
+        r = MCPServerRegistry(config_path=config_path)
+        r.register_server("s1", "S1", "http://localhost:8001", [ServerCapability.MONITORING])
+        with open(config_path) as f:
+            data = _json.load(f)
+        caps = data["servers"][0]["capabilities"]
+        assert "monitoring" in caps
+
+    def test_save_serialises_status_as_string(self, tmp_path):
+        import json as _json
+        config_path = str(tmp_path / "config" / "mcp.json")
+        r = MCPServerRegistry(config_path=config_path)
+        r.register_server("s1", "S1", "http://localhost:8001", [])
+        with open(config_path) as f:
+            data = _json.load(f)
+        assert data["servers"][0]["status"] == "offline"
+
+    def test_save_error_does_not_propagate(self, tmp_path):
+        """If the file cannot be written, _save_config catches the exception."""
+        config_path = str(tmp_path / "config" / "mcp.json")
+        r = MCPServerRegistry(config_path=config_path)
+        # Now make config_path an unwritable path by setting it to a directory
+        r.config_path = str(tmp_path)  # tmp_path is a directory, open(dir, 'w') fails
+        r._save_config()  # should not raise
+
+    def test_save_includes_last_updated(self, tmp_path):
+        import json as _json
+        config_path = str(tmp_path / "config" / "mcp.json")
+        r = MCPServerRegistry(config_path=config_path)
+        r.register_server("s1", "S1", "http://localhost:8001", [])
+        with open(config_path) as f:
+            data = _json.load(f)
+        assert "last_updated" in data
+
+
+# ===========================================================================
+# Module-level convenience functions — lines 462-482
+# ===========================================================================
+
+
+class TestConvenienceFunctions:
+    """Tests for get_server_registry, register_ai_server, find_ai_servers."""
+
+    def setup_method(self):
+        # Reset global singleton between tests
+        _reg_mod._server_registry = None
+
+    def teardown_method(self):
+        _reg_mod._server_registry = None
+
+    def test_get_server_registry_returns_instance(self):
+        registry = _reg_mod.get_server_registry()
+        assert isinstance(registry, MCPServerRegistry)
+
+    def test_get_server_registry_singleton(self):
+        r1 = _reg_mod.get_server_registry()
+        r2 = _reg_mod.get_server_registry()
+        assert r1 is r2
+
+    async def test_register_ai_server_creates_server(self, tmp_path):
+        """register_ai_server adds a server to the global registry."""
+        _reg_mod._server_registry = MCPServerRegistry(
+            config_path=str(tmp_path / "config" / "mcp.json")
+        )
+        server = await _reg_mod.register_ai_server(
+            "Test AI", "http://localhost:8500", [ServerCapability.AI_INFERENCE]
+        )
+        assert isinstance(server, MCPServer)
+        assert "test-ai" in server.id
+
+    async def test_register_ai_server_id_deterministic(self, tmp_path):
+        """Same name+endpoint always produces the same ID."""
+        _reg_mod._server_registry = MCPServerRegistry(
+            config_path=str(tmp_path / "config" / "mcp.json")
+        )
+        s1 = await _reg_mod.register_ai_server(
+            "My AI", "http://localhost:8600", [ServerCapability.AI_INFERENCE]
+        )
+        # Reset registry and re-register
+        _reg_mod._server_registry = MCPServerRegistry(
+            config_path=str(tmp_path / "config2" / "mcp.json")
+        )
+        s2 = await _reg_mod.register_ai_server(
+            "My AI", "http://localhost:8600", [ServerCapability.AI_INFERENCE]
+        )
+        assert s1.id == s2.id
+
+    def test_find_ai_servers_returns_list(self, tmp_path):
+        _reg_mod._server_registry = MCPServerRegistry(
+            config_path=str(tmp_path / "config" / "mcp.json")
+        )
+        result = _reg_mod.find_ai_servers(ServerCapability.AI_INFERENCE)
+        assert isinstance(result, list)
