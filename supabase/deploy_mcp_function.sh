@@ -27,7 +27,10 @@ echo "Step 2: Deploying MCP-compatible edge function"
 # Navigate to project root first
 cd /Users/garvey/Desktop/\ Framework-Guide-for-Cursor/
 
-# Deploy function from the project root
+# Deploy function from the project root.
+# IMPORTANT: do NOT pass --no-verify-jwt. JWT verification must stay enabled so
+# the function rejects anonymous requests (verify_jwt = true is also pinned in
+# supabase/config.toml, and the function re-validates the token in code).
 echo "Deploying from: $(pwd)"
 supabase functions deploy connect-to-cursor-mcp
 
@@ -42,9 +45,10 @@ echo "=== Deployment Successful! ==="
 echo "Your MCP-compatible function is now live at:"
 echo "https://nsfrhirwsjqwhagtuaxx.supabase.co/functions/v1/connect-to-cursor-mcp"
 echo ""
-echo "Test your function with:"
+echo "Test your function with (a valid Supabase user JWT is required):"
 echo 'curl -X POST \'
 echo '  -H "Content-Type: application/json" \'
+echo '  -H "Authorization: Bearer $SUPABASE_USER_JWT" \'
 echo '  -d '"'"'{"modelId": "gpt-4", "context": {"operation": "connect", "parameters": {"foo": "bar"}}}'"'"' \'
 echo '  https://nsfrhirwsjqwhagtuaxx.supabase.co/functions/v1/connect-to-cursor-mcp'
 echo ""

@@ -168,3 +168,9 @@ src/utils/notebooklm_profile_v2/
 
 # Claude agent worktrees (auto-generated, never commit)
 .claude/worktrees/
+
+# Compiled output for Supabase edge functions. Deno runs the .ts source
+# directly; these are stale tsc artifacts that must not be committed or deployed.
+supabase/functions/**/index.js
+supabase/functions/**/index.js.map
+supabase/functions/**/index.d.ts
