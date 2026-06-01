@@ -17,6 +17,7 @@ from youtube_extension.backend.services.health_monitoring_service import (
     DatabaseChecker,
     ExternalServiceChecker,
     HealthMetric,
+    HealthMonitoringService,
     HealthStatus,
     SystemHealth,
     SystemResourceChecker,
@@ -270,3 +271,273 @@ class TestApplicationCheckerThresholds:
 
     def test_response_at_critical(self, checker):
         assert checker._determine_response_time_status(2000.0) == HealthStatus.CRITICAL
+
+
+def _make_component(name="svc", component_type=ComponentType.APPLICATION,
+                    status=HealthStatus.HEALTHY, recovery_actions=None) -> ComponentHealth:
+    return ComponentHealth(
+        name=name, component_type=component_type, status=status,
+        uptime_seconds=100.0, last_check=time.time(), metrics=[],
+        recovery_actions=recovery_actions or [],
+    )
+
+
+def _minimal_svc() -> HealthMonitoringService:
+    return HealthMonitoringService({
+        "enable_system_resources": False, "enable_database": False,
+        "enable_external_services": False, "enable_application": False,
+    })
+
+
+# ===========================================================================
+# ApplicationChecker counters
+# ===========================================================================
+
+
+class TestApplicationCheckerCounters:
+    def test_record_request_increments(self):
+        checker = ApplicationChecker()
+        checker.record_request()
+        assert checker.request_count == 1
+
+    def test_record_multiple_requests(self):
+        checker = ApplicationChecker()
+        for _ in range(3):
+            checker.record_request()
+        assert checker.request_count == 3
+
+    def test_record_error_increments_count(self):
+        checker = ApplicationChecker()
+        checker.record_error()
+        assert checker.error_count == 1
+
+    def test_record_error_adds_to_window(self):
+        checker = ApplicationChecker()
+        checker.record_error()
+        assert len(checker.error_count_window) == 1
+
+
+# ===========================================================================
+# HealthMonitoringService._load_config
+# ===========================================================================
+
+
+class TestHealthMonitoringServiceLoadConfig:
+    def test_default_check_interval(self):
+        assert _minimal_svc().config["check_interval"] == 30
+
+    def test_default_history_limit(self):
+        assert _minimal_svc().config["history_limit"] == 1000
+
+    def test_custom_config_overrides_default(self):
+        svc = HealthMonitoringService({"check_interval": 60,
+            "enable_system_resources": False, "enable_database": False,
+            "enable_external_services": False, "enable_application": False})
+        assert svc.config["check_interval"] == 60
+
+    def test_custom_preserves_other_defaults(self):
+        svc = HealthMonitoringService({"check_interval": 60,
+            "enable_system_resources": False, "enable_database": False,
+            "enable_external_services": False, "enable_application": False})
+        assert svc.config["history_limit"] == 1000
+
+
+# ===========================================================================
+# HealthMonitoringService.rate_limit_check
+# ===========================================================================
+
+
+class TestRateLimitCheck:
+    def test_first_request_allowed(self):
+        assert _minimal_svc().rate_limit_check() is True
+
+    def test_over_limit_denied(self, monkeypatch):
+        monkeypatch.setenv("RATE_LIMIT_RPS", "2")
+        svc = _minimal_svc()
+        svc.rate_limit_check()
+        svc.rate_limit_check()
+        assert svc.rate_limit_check() is False
+
+
+# ===========================================================================
+# HealthMonitoringService.increment_metric / get_metrics_prometheus_format
+# ===========================================================================
+
+
+class TestIncrementMetric:
+    def test_stores_value(self):
+        svc = _minimal_svc()
+        svc.increment_metric("requests", 1.0)
+        assert svc._metrics["requests"] == 1.0
+
+    def test_accumulates(self):
+        svc = _minimal_svc()
+        svc.increment_metric("requests", 1.0)
+        svc.increment_metric("requests", 2.0)
+        assert svc._metrics["requests"] == 3.0
+
+    def test_default_amount_is_one(self):
+        svc = _minimal_svc()
+        svc.increment_metric("hits")
+        assert svc._metrics["hits"] == 1.0
+
+
+class TestGetMetricsPrometheusFormat:
+    def test_returns_list(self):
+        assert isinstance(_minimal_svc().get_metrics_prometheus_format(), list)
+
+    def test_includes_header(self):
+        lines = _minimal_svc().get_metrics_prometheus_format()
+        assert any("HELP" in line for line in lines)
+
+    def test_includes_metric_line(self):
+        svc = _minimal_svc()
+        svc.increment_metric("requests", 5.0)
+        lines = svc.get_metrics_prometheus_format()
+        assert any("requests" in line for line in lines)
+
+
+# ===========================================================================
+# HealthMonitoringService._calculate_overall_health
+# ===========================================================================
+
+
+class TestCalculateOverallHealth:
+    def test_empty_components_fails(self):
+        status, score = _minimal_svc()._calculate_overall_health([])
+        assert status == HealthStatus.FAILED
+        assert score == 0.0
+
+    def test_healthy_component_gives_positive_score(self):
+        comps = [_make_component(status=HealthStatus.HEALTHY,
+                                  component_type=ComponentType.SYSTEM_RESOURCE)]
+        _, score = _minimal_svc()._calculate_overall_health(comps)
+        assert score > 0
+
+    def test_critical_component_reduces_score(self):
+        comps = [_make_component(status=HealthStatus.CRITICAL,
+                                  component_type=ComponentType.DATABASE)]
+        _, score = _minimal_svc()._calculate_overall_health(comps)
+        assert score < 50
+
+
+# ===========================================================================
+# HealthMonitoringService._get_active_alerts
+# ===========================================================================
+
+
+class TestGetActiveAlerts:
+    def test_no_alerts_when_all_healthy(self):
+        comps = [_make_component(status=HealthStatus.HEALTHY)]
+        assert _minimal_svc()._get_active_alerts(comps) == []
+
+    def test_alert_for_warning(self):
+        comps = [_make_component(name="db", status=HealthStatus.WARNING)]
+        alerts = _minimal_svc()._get_active_alerts(comps)
+        assert len(alerts) == 1 and "db" in alerts[0]
+
+    def test_alert_for_critical(self):
+        comps = [_make_component(name="api", status=HealthStatus.CRITICAL)]
+        assert len(_minimal_svc()._get_active_alerts(comps)) == 1
+
+    def test_alert_for_failed(self):
+        comps = [_make_component(name="app", status=HealthStatus.FAILED)]
+        assert len(_minimal_svc()._get_active_alerts(comps)) == 1
+
+
+# ===========================================================================
+# HealthMonitoringService._generate_recommendations
+# ===========================================================================
+
+
+class TestGenerateRecommendations:
+    def test_no_recs_when_healthy(self):
+        comps = [_make_component(status=HealthStatus.HEALTHY)]
+        assert _minimal_svc()._generate_recommendations(comps) == []
+
+    def test_urgent_for_critical(self):
+        comps = [_make_component(status=HealthStatus.CRITICAL,
+                                  recovery_actions=["restart service"])]
+        recs = _minimal_svc()._generate_recommendations(comps)
+        assert any("URGENT" in r for r in recs)
+
+    def test_limited_to_ten(self):
+        comps = [_make_component(status=HealthStatus.CRITICAL,
+                                  recovery_actions=[f"action {i}" for i in range(20)])]
+        assert len(_minimal_svc()._generate_recommendations(comps)) <= 10
+
+
+# ===========================================================================
+# HealthMonitoringService.get_basic_health_status
+# ===========================================================================
+
+
+class TestGetBasicHealthStatus:
+    def test_returns_dict(self):
+        assert isinstance(_minimal_svc().get_basic_health_status(None, None), dict)
+
+    def test_has_status_key(self):
+        assert "status" in _minimal_svc().get_basic_health_status(None, None)
+
+    def test_degraded_when_inputs_none(self):
+        assert _minimal_svc().get_basic_health_status(None, None)["status"] == "degraded"
+
+    def test_version_is_set(self):
+        assert _minimal_svc().get_basic_health_status(None, None)["version"] == "2.0.0"
+
+    def test_gemini_key_present_true(self, monkeypatch):
+        monkeypatch.setenv("GEMINI_API_KEY", "key123")
+        result = _minimal_svc().get_basic_health_status(None, None)
+        assert result["components"]["gemini_key_present"] is True
+
+    def test_gemini_key_present_false(self, monkeypatch):
+        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+        monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+        result = _minimal_svc().get_basic_health_status(None, None)
+        assert result["components"]["gemini_key_present"] is False
+
+
+# ===========================================================================
+# HealthMonitoringService utility methods
+# ===========================================================================
+
+
+class TestHealthMonitoringUtilityMethods:
+    def test_external_connectors_returns_dict(self):
+        assert isinstance(_minimal_svc().check_external_connectors_health(), dict)
+
+    def test_pipeline_health_returns_dict(self):
+        result = _minimal_svc().check_video_to_software_pipeline_health()
+        assert "status" in result
+
+    def test_get_current_health_none_initially(self):
+        assert _minimal_svc().get_current_health() is None
+
+    def test_get_health_history_empty_initially(self):
+        assert _minimal_svc().get_health_history() == []
+
+    def test_get_recent_incidents_empty_no_history(self):
+        assert _minimal_svc()._get_recent_incidents() == []
+
+    def test_get_component_metrics_empty_no_history(self):
+        assert _minimal_svc().get_component_metrics("cpu") == []
+
+    def test_record_request_with_app_checker(self):
+        svc = HealthMonitoringService({
+            "enable_system_resources": False, "enable_database": False,
+            "enable_external_services": False, "enable_application": True,
+        })
+        svc.record_request()
+        assert svc.application_checker.request_count == 1
+
+    def test_record_request_no_op_without_app_checker(self):
+        svc = _minimal_svc()
+        svc.record_request()  # should not raise
+
+    def test_record_error_with_app_checker(self):
+        svc = HealthMonitoringService({
+            "enable_system_resources": False, "enable_database": False,
+            "enable_external_services": False, "enable_application": True,
+        })
+        svc.record_error()
+        assert svc.application_checker.error_count == 1
