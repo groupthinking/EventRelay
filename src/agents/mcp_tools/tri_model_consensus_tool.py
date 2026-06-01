@@ -240,37 +240,32 @@ class TriModelConsensusTool:
             )
 
     async def _query_claude(self, prompt: str, task_type: str) -> ModelResponse:
-        """Query Claude Opus 4.8 (latest flagship model with effort control)"""
+        """Query Claude Opus 4.8 with adaptive thinking and effort control"""
         import time
         start_time = time.time()
 
         try:
-            # Claude Opus 4.8 - latest flagship. effort is GA (no beta header),
-            # and temperature is not accepted on Opus 4.7+.
-            model = "claude-opus-4-8"
-
-            # effort ships via output_config; fall back if the installed SDK
-            # predates that parameter.
+            # effort and thinking are GA on Opus 4.8 (no beta header);
+            # fall back gracefully if the installed SDK predates these params.
             try:
                 response = self.claude_client.messages.create(
-                    model=model,
+                    model="claude-opus-4-8",
                     max_tokens=4096,
-                    output_config={"effort": "medium"},  # balanced for consensus
-                    messages=[
-                        {"role": "user", "content": prompt}
-                    ]
+                    thinking={"type": "adaptive"},
+                    output_config={"effort": "medium"},
+                    messages=[{"role": "user", "content": prompt}]
                 )
             except TypeError:
-                logger.warning("output_config not supported in this SDK version, using default")
+                logger.warning("thinking/output_config not supported in this SDK version, using default")
                 response = self.claude_client.messages.create(
-                    model=model,
+                    model="claude-opus-4-8",
                     max_tokens=4096,
-                    messages=[
-                        {"role": "user", "content": prompt}
-                    ]
+                    messages=[{"role": "user", "content": prompt}]
                 )
 
-            response_text = response.content[0].text if response.content else ""
+            response_text = "".join(
+                b.text for b in response.content if b.type == "text"
+            )
             latency = int((time.time() - start_time) * 1000)
 
             return ModelResponse(
