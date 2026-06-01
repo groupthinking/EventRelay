@@ -608,9 +608,15 @@ function DashboardContent() {
           selectVideo(existingVideo.id);
         }
       } else {
+        let cancelled = false;
         processVideo(video).then((id) => {
-          selectVideo(id);
+          if (!cancelled) {
+            selectVideo(id);
+          }
         });
+        return () => {
+          cancelled = true;
+        };
       }
     }
   }, [searchParams, processVideo, selectVideo, videos, selectedVideoId]);
