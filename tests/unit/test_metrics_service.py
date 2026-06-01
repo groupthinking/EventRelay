@@ -153,3 +153,48 @@ class TestMetricSeriesGetAggregatedStats:
             s.add_point(v)
         stats = s.get_aggregated_stats()
         assert stats["median"] == 3
+
+
+# ===========================================================================
+# MetricsService init
+# ===========================================================================
+
+
+from youtube_extension.backend.services.metrics_service import MetricsService  # noqa: E402
+
+
+class TestMetricsServiceInit:
+    def test_metrics_dict_empty(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        svc = MetricsService()
+        assert svc.metrics == {}
+
+    def test_collection_interval_default(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        svc = MetricsService()
+        assert svc.collection_interval == 60
+
+    def test_retention_period_default(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        svc = MetricsService()
+        assert svc.retention_period == 3600
+
+    def test_not_running_initially(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        svc = MetricsService()
+        assert svc._running is False
+
+    def test_collection_task_initially_none(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        svc = MetricsService()
+        assert svc._collection_task is None
+
+    def test_custom_collection_interval(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        svc = MetricsService(config={"collection_interval": 30})
+        assert svc.collection_interval == 30
+
+    def test_custom_retention_period(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        svc = MetricsService(config={"retention_period": 7200})
+        assert svc.retention_period == 7200
