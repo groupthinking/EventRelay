@@ -7,7 +7,7 @@ import sys
 from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -1087,8 +1087,6 @@ class TestDatabaseHealthMonitorRunHealthCheck:
 # ===========================================================================
 # Additional tests for missing coverage
 # ===========================================================================
-
-from unittest.mock import AsyncMock, patch
 
 
 class TestConvenienceFunctions:

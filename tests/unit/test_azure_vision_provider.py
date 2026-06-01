@@ -1078,18 +1078,19 @@ class TestAzureVisionDetectFaces:
         assert "faces_result" in result
         assert result["faces_result"] is mock_faces_result
 
-    async def test_detect_faces_stream_path_raises_unbound_local(self):
-        # The production code has a bug: VisualFeatureTypes is only imported in
-        # the `else` branch but used in the `if image_stream` branch.
-        # This test documents that known behavior (UnboundLocalError for streams).
+    async def test_detect_faces_stream_path_succeeds(self):
         provider = _make_provider()
         mock_client = MagicMock()
+        mock_faces_result = MagicMock()
+        mock_client.analyze_image_in_stream.return_value = mock_faces_result
         provider._vision_client = mock_client
 
         mocks = _azure_sdk_mocks()
         with patch.dict("sys.modules", mocks):
-            with pytest.raises((UnboundLocalError, NameError)):
-                await provider._detect_faces("local_file.jpg", b"\xff\xd8\xff")
+            result = await provider._detect_faces("local_file.jpg", b"\xff\xd8\xff")
+
+        assert "faces_result" in result
+        assert result["faces_result"] is mock_faces_result
 
 
 # ===========================================================================

@@ -354,7 +354,7 @@ class MCPContextManager:
             file_path = os.path.join(self.storage_path, f"{context.id}.json")
 
             with open(file_path, "w") as f:
-                data = context.dict()
+                data = context.model_dump()
                 # Serialize enum values, not their repr strings
                 json.dump(data, f, indent=2, default=lambda o: o.value if hasattr(o, "value") else str(o))
 

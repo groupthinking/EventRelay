@@ -57,7 +57,7 @@ def _make_vertex_service(response_text="AI summary"):
     return svc
 
 
-def _make_completed_state(video_id="dQw4w9WgXcQ", video_url="https://youtube.com/watch?v=dQw4w9WgXcQ"):
+def _make_completed_state(video_id="auJzb1D-fag", video_url="https://youtube.com/watch?v=auJzb1D-fag"):
     """Return a VideoProcessingState that looks 'completed'."""
     from youtube_extension.services.cloud.firestore_state import VideoProcessingState
 
@@ -206,19 +206,19 @@ class TestCloudNativeVideoProcessorInit:
 
 class TestExtractVideoId:
     def test_full_youtube_url(self, processor):
-        assert processor._extract_video_id("https://www.youtube.com/watch?v=dQw4w9WgXcQ") == "dQw4w9WgXcQ"
+        assert processor._extract_video_id("https://www.youtube.com/watch?v=auJzb1D-fag") == "auJzb1D-fag"
 
     def test_youtube_url_with_extra_params(self, processor):
-        assert processor._extract_video_id("https://youtube.com/watch?v=dQw4w9WgXcQ&t=42") == "dQw4w9WgXcQ"
+        assert processor._extract_video_id("https://youtube.com/watch?v=auJzb1D-fag&t=42") == "auJzb1D-fag"
 
     def test_short_url(self, processor):
-        assert processor._extract_video_id("https://youtu.be/dQw4w9WgXcQ") == "dQw4w9WgXcQ"
+        assert processor._extract_video_id("https://youtu.be/auJzb1D-fag") == "auJzb1D-fag"
 
     def test_short_url_with_params(self, processor):
-        assert processor._extract_video_id("https://youtu.be/dQw4w9WgXcQ?t=10") == "dQw4w9WgXcQ"
+        assert processor._extract_video_id("https://youtu.be/auJzb1D-fag?t=10") == "auJzb1D-fag"
 
     def test_bare_id_passthrough(self, processor):
-        assert processor._extract_video_id("dQw4w9WgXcQ") == "dQw4w9WgXcQ"
+        assert processor._extract_video_id("auJzb1D-fag") == "auJzb1D-fag"
 
 
 # ---------------------------------------------------------------------------
@@ -275,7 +275,7 @@ class TestProcessVideoSyncCacheHit:
         mock_services["firestore"].create_state = AsyncMock(return_value=None)
 
         p = CloudNativeVideoProcessor(enable_state=True)
-        result = await p.process_video_sync("https://youtube.com/watch?v=dQw4w9WgXcQ")
+        result = await p.process_video_sync("https://youtube.com/watch?v=auJzb1D-fag")
 
         assert result.from_cache is True
         assert result.success is True
@@ -291,7 +291,7 @@ class TestProcessVideoSyncCacheHit:
 
         p = CloudNativeVideoProcessor(enable_state=True, enable_vertex_ai=False)
         result = await p.process_video_sync(
-            "https://youtube.com/watch?v=dQw4w9WgXcQ",
+            "https://youtube.com/watch?v=auJzb1D-fag",
             force_refresh=True,
         )
         # Should NOT use cache
@@ -486,7 +486,7 @@ class TestFetchMetadata:
 
 class TestExtractTranscript:
     async def test_returns_dict_with_text(self, processor):
-        transcript = await processor._extract_transcript("dQw4w9WgXcQ")
+        transcript = await processor._extract_transcript("auJzb1D-fag")
         assert isinstance(transcript, dict)
         assert "text" in transcript
         assert "language" in transcript

@@ -165,6 +165,8 @@ def get_hybrid_processor_service() -> HybridProcessorService:
 
 def get_agent_orchestrator_service() -> AgentOrchestrator:
     """Dependency injection for agent orchestrator"""
+    if AgentOrchestrator is None:
+        raise HTTPException(status_code=503, detail="Agent orchestration service not available")
     return get_service("agent_orchestrator")
 
 

@@ -12,10 +12,8 @@ object so we can exercise that code without the real SDK.
 
 from __future__ import annotations
 
-import importlib
 import json
 import sys
-import types as _types
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch

@@ -32,8 +32,8 @@ from youtube_extension.integrations.cloud_ai.providers.aws_rekognition import AW
 # ---------------------------------------------------------------------------
 
 VALID_CONFIG = {
-    "aws_access_key_id": "AKIAIOSFODNN7EXAMPLE",
-    "aws_secret_access_key": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+    "aws_access_key_id": "test-access-key-id",
+    "aws_secret_access_key": "test-secret-access-key",
     "region": "us-east-1",
 }
 
