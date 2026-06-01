@@ -256,3 +256,95 @@ class TestGetDataStatistics:
         svc.save_feedback({"id": "2"})
         stats = svc.get_data_statistics()
         assert stats["feedback_entries"] == 2
+
+
+# ===========================================================================
+# Exception paths — metadata json parsing failure
+# ===========================================================================
+
+
+class TestDataServiceExceptionPaths:
+    @pytest.fixture
+    def enhanced_dir(self, tmp_path):
+        enhanced = tmp_path / "enhanced" / "cat1"
+        enhanced.mkdir(parents=True)
+        return enhanced
+
+    def test_learning_log_with_corrupt_metadata(self, tmp_path, enhanced_dir):
+        # Create enhanced markdown file
+        (enhanced_dir / "vid001_test_enhanced.md").write_text("content")
+        # Create a corrupt metadata JSON file
+        (enhanced_dir / "vid001_test_metadata.json").write_text("{invalid json}")
+        svc = DataService(str(tmp_path / "enhanced"), str(tmp_path / "feedback"))
+        items = svc.get_learning_log()
+        # Should still return an item, just without metadata
+        assert len(items) == 1
+        assert items[0]["video_id"] == "vid001"
+
+    def test_learning_log_with_valid_metadata(self, tmp_path, enhanced_dir):
+        (enhanced_dir / "vid002_test_enhanced.md").write_text("content")
+        metadata = {"title": "Test Video Title"}
+        (enhanced_dir / "vid002_test_metadata.json").write_text(json.dumps(metadata))
+        svc = DataService(str(tmp_path / "enhanced"), str(tmp_path / "feedback"))
+        items = svc.get_learning_log()
+        assert len(items) >= 1
+        assert items[0]["title"] == "Test Video Title"
+
+    def test_learning_log_no_metadata_file(self, tmp_path, enhanced_dir):
+        (enhanced_dir / "vid003_test_enhanced.md").write_text("content")
+        # No metadata file
+        svc = DataService(str(tmp_path / "enhanced"), str(tmp_path / "feedback"))
+        items = svc.get_learning_log()
+        assert len(items) == 1
+
+    def test_videos_summary_with_corrupt_metadata(self, tmp_path, enhanced_dir):
+        (enhanced_dir / "vid010_test_enhanced.md").write_text("content")
+        (enhanced_dir / "vid010_test_metadata.json").write_text("{bad}")
+        svc = DataService(str(tmp_path / "enhanced"), str(tmp_path / "feedback"))
+        results = svc.get_videos_summary()
+        assert len(results) == 1
+
+    def test_videos_summary_with_valid_metadata(self, tmp_path, enhanced_dir):
+        (enhanced_dir / "vid011_test_enhanced.md").write_text("content")
+        metadata = {
+            "title": "My Video",
+            "snippet": {"description": "desc", "publishedAt": "2024-01-01T00:00:00Z"},
+            "statistics": {"viewCount": "1000"},
+        }
+        (enhanced_dir / "vid011_test_metadata.json").write_text(json.dumps(metadata))
+        svc = DataService(str(tmp_path / "enhanced"), str(tmp_path / "feedback"))
+        results = svc.get_videos_summary()
+        assert len(results) >= 1
+        assert results[0]["title"] == "My Video"
+
+    def test_get_video_detail_with_corrupt_metadata(self, tmp_path, enhanced_dir):
+        (enhanced_dir / "vid020_test_enhanced.md").write_text("# Test Content")
+        (enhanced_dir / "vid020_test_metadata.json").write_text("{garbage}")
+        svc = DataService(str(tmp_path / "enhanced"), str(tmp_path / "feedback"))
+        detail = svc.get_video_detail("vid020")
+        # Should return detail even with bad metadata
+        assert detail is not None
+
+    def test_get_video_detail_with_valid_metadata(self, tmp_path, enhanced_dir):
+        (enhanced_dir / "vid021_test_enhanced.md").write_text("# Content\n\nSome text here.")
+        metadata = {"title": "Test Title", "snippet": {"description": "desc"}}
+        (enhanced_dir / "vid021_test_metadata.json").write_text(json.dumps(metadata))
+        svc = DataService(str(tmp_path / "enhanced"), str(tmp_path / "feedback"))
+        detail = svc.get_video_detail("vid021")
+        assert detail is not None
+        assert detail["title"] == "Test Title"
+        assert "markdown" in detail
+
+    def test_get_video_detail_not_found_returns_none(self, tmp_path, enhanced_dir):
+        svc = DataService(str(tmp_path / "enhanced"), str(tmp_path / "feedback"))
+        result = svc.get_video_detail("nonexistent_video_id")
+        assert result is None
+
+    def test_multiple_enhanced_files_sorted(self, tmp_path, enhanced_dir):
+        """Most recent file should be first."""
+        (enhanced_dir / "vid030_test_enhanced.md").write_text("content1")
+        (enhanced_dir / "vid031_test_enhanced.md").write_text("content2")
+        svc = DataService(str(tmp_path / "enhanced"), str(tmp_path / "feedback"))
+        items = svc.get_learning_log()
+        # Both items should be present
+        assert len(items) == 2

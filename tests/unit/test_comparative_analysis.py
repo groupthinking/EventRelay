@@ -27,11 +27,9 @@ _anthropic_stub = types.ModuleType("anthropic")
 _anthropic_stub.Anthropic = MagicMock()
 sys.modules.setdefault("anthropic", _anthropic_stub)
 
-# Provide a minimal httpx stub with AsyncClient and Timeout so patching works
-_httpx_stub = types.ModuleType("httpx")
-_httpx_stub.AsyncClient = MagicMock()
-_httpx_stub.Timeout = MagicMock(return_value=MagicMock())
-sys.modules.setdefault("httpx", _httpx_stub)
+# httpx is a real installed dependency — import it so sys.modules contains the real module
+# before any test file with a heavier httpx stub is loaded
+import httpx as _httpx_real  # noqa: F401
 
 from youtube_extension.backend.services.comparative_analysis import (  # noqa: E402
     AnalysisTask,

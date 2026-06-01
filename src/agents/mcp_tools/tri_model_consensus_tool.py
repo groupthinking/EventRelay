@@ -254,7 +254,8 @@ class TriModelConsensusTool:
             )
 
             response_text = "".join(
-                b.text for b in response.content if b.type == "text"
+                b.text for b in response.content
+                if b.type == "text" and hasattr(b, "text")
             )
             latency = int((time.time() - start_time) * 1000)
 

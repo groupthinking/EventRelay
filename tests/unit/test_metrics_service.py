@@ -389,15 +389,15 @@ class TestGetSystemMetrics:
 
     async def test_psutil_error_returns_error_dict(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
-        import psutil as ps
-        original_cpu = ps.cpu_percent
-        ps.cpu_percent = MagicMock(side_effect=RuntimeError("psutil failed"))
-        try:
-            svc = MetricsService()
-            result = await svc.get_system_metrics()
-            assert "error" in result
-        finally:
-            ps.cpu_percent = original_cpu
+        import types
+        import youtube_extension.backend.services.metrics_service as _mod
+        fake_psutil = types.SimpleNamespace(
+            cpu_percent=MagicMock(side_effect=RuntimeError("psutil failed")),
+        )
+        monkeypatch.setattr(_mod, 'psutil', fake_psutil)
+        svc = MetricsService()
+        result = await svc.get_system_metrics()
+        assert "error" in result
 
 
 # ===========================================================================
