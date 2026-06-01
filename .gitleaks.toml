@@ -12,4 +12,6 @@ paths = [
   '''docs/gemini_reference/.*''',
   # Local-only security audit artifacts (gitignored; never committed).
   '''docs/security/.*''',
+  # Test fixtures use obvious dummy keys (e.g. "xai-secret-123"), not real secrets.
+  '''tests/.*''',
 ]

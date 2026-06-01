@@ -3413,7 +3413,7 @@ export class ModelRegistry {
         break;
 
       case 'claude':
-        model = anthropic(config.model || 'claude-3-5-sonnet-20241022', {
+        model = anthropic(config.model || 'claude-opus-4-8', {
           apiKey: config.apiKey,
         });
         break;
@@ -3453,7 +3453,7 @@ export class ModelRegistry {
 // Default model configurations
 export const DEFAULT_MODELS: Record<AIProvider, string> = {
   grok: 'grok-beta',
-  claude: 'claude-3-5-sonnet-20241022',
+  claude: 'claude-opus-4-8',
   gemini: 'gemini-2.0-flash-exp',
   openai: 'gpt-4o',
 };
@@ -3678,7 +3678,7 @@ const gateway = new AIGateway([
   },
   {
     provider: 'claude',
-    model: 'claude-3-5-sonnet-20241022',
+    model: 'claude-opus-4-8',
     apiKey: process.env.ANTHROPIC_API_KEY!,
   },
   {
@@ -3716,7 +3716,7 @@ for await (const chunk of stream.textStream) {
 ```typescript
 const gateway = new AIGateway(
   [
-    { provider: 'claude', model: 'claude-3-5-sonnet-20241022', apiKey: '...' },
+    { provider: 'claude', model: 'claude-opus-4-8', apiKey: '...' },
     { provider: 'gemini', model: 'gemini-2.0-flash-exp', apiKey: '...' },
     { provider: 'grok', model: 'grok-beta', apiKey: '...' },
   ],
@@ -3748,7 +3748,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const gateway = new AIGateway([
   { provider: 'grok', model: 'grok-beta', apiKey: process.env.XAI_API_KEY! },
-  { provider: 'claude', model: 'claude-3-5-sonnet-20241022', apiKey: process.env.ANTHROPIC_API_KEY! },
+  { provider: 'claude', model: 'claude-opus-4-8', apiKey: process.env.ANTHROPIC_API_KEY! },
 ]);
 
 export async function POST(request: NextRequest) {
@@ -3868,7 +3868,7 @@ OPENAI_API_KEY=your_openai_api_key
 ## Model Defaults
 
 - **Grok**: `grok-beta`
-- **Claude**: `claude-3-5-sonnet-20241022`
+- **Claude**: `claude-opus-4-8`
 - **Gemini**: `gemini-2.0-flash-exp`
 - **OpenAI**: `gpt-4o`
 

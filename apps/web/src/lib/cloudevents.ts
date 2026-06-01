@@ -43,6 +43,7 @@ export const EventTypes = {
   TRANSCRIPT_COMPLETED: 'com.eventrelay.transcript.completed',
   EXTRACTION_STARTED: 'com.eventrelay.extraction.started',
   EXTRACTION_COMPLETED: 'com.eventrelay.extraction.completed',
+  PIPELINE_QUEUED: 'com.eventrelay.pipeline.queued',
   PIPELINE_COMPLETED: 'com.eventrelay.pipeline.completed',
   PIPELINE_FAILED: 'com.eventrelay.pipeline.failed',
 } as const;
@@ -70,6 +71,7 @@ export async function publishEvent(
           'Content-Type': 'application/cloudevents+json',
         },
         body: JSON.stringify(event),
+        signal: AbortSignal.timeout(5_000), // 5s max — never block the pipeline
       });
     } catch (e) {
       console.warn('[CloudEvents] Webhook publish failed:', e);

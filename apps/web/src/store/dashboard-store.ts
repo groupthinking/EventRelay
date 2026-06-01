@@ -3,13 +3,19 @@
  *
  * Combines video processing, event extraction, and agent dispatch
  * into a single store so every component shares the same state.
+ *
+ * `processVideo` drives the dashboard from the REAL agent pipeline: it
+ * consumes the `/api/pipeline/stream` SSE endpoint and maps each agent's
+ * execution into live progress, agent cards, insights, and transcript. If the
+ * stream is unavailable it falls back to the non-streaming `/api/video` path,
+ * so behaviour degrades gracefully without simulated progress.
  */
 
 import { create } from 'zustand';
 import type {
   ExtractedEvent,
   AgentExecution,
-  VideoJobStatusResponse,
+  AgentStatus,
 } from '@/lib/types';
 
 // ── Types ──
@@ -90,10 +96,11 @@ interface DashboardState {
   setLoading: (loading: boolean) => void;
 
   // Workflow actions
-  processVideo: (url: string) => Promise<void>;
+  processVideo: (url: string) => Promise<string>;
   deployPipeline: (url: string) => Promise<void>;
   extractEvents: (videoId: string) => void;
-  dispatchAgents: (videoId: string) => void;
+  dispatchToAgents: (videoId: string) => Promise<void>;
+  refreshAgentStatus: (videoId: string) => Promise<void>;
 
   // Search actions
   searchQuery: string;
@@ -103,11 +110,321 @@ interface DashboardState {
   performSearch: (videoId: string, query: string) => Promise<void>;
 }
 
+// ── Streaming pipeline helpers ──
+
+/** Trim a URL for display in titles/activity. */
+function truncate(value: string, max: number): string {
+  return value.length > max ? value.substring(0, max - 3) + '…' : value;
+}
+
+/** Map an SSE agent status onto our AgentExecution status. */
+function mapAgentStatus(status: string): AgentStatus {
+  if (status === 'complete') return 'complete';
+  if (status === 'error') return 'failed';
+  return 'running';
+}
+
+/** Flatten a transcript (segment array or string) into plain text. */
+function flattenTranscript(raw: unknown): string | undefined {
+  if (typeof raw === 'string') return raw.length > 0 ? raw : undefined;
+  if (Array.isArray(raw)) {
+    const text = raw
+      .map((seg) => (seg && typeof seg === 'object' ? String((seg as { text?: string }).text ?? '') : ''))
+      .join(' ')
+      .trim();
+    return text.length > 0 ? text : undefined;
+  }
+  return undefined;
+}
+
+/** Map streamed workflow events into the dashboard's ExtractedEvent shape. */
+function mapStreamEvents(raw: unknown, videoId: string): ExtractedEvent[] {
+  if (!Array.isArray(raw)) return [];
+  const allowed: ExtractedEvent['type'][] = ['action', 'mention', 'topic', 'insight'];
+  return raw.map((item, i) => {
+    const e = (item ?? {}) as Record<string, unknown>;
+    const type = allowed.includes(e.type as ExtractedEvent['type'])
+      ? (e.type as ExtractedEvent['type'])
+      : 'topic';
+    const confidence =
+      e.priority === 'high' ? 0.95 : e.priority === 'medium' ? 0.75 : 0.8;
+    return {
+      id: `evt_${videoId}_${i}`,
+      type,
+      title: String(e.title ?? e.name ?? 'Event'),
+      description: e.description ? String(e.description) : undefined,
+      timestamp: e.timestamp ? String(e.timestamp) : undefined,
+      confidence,
+    };
+  });
+}
+
+interface StreamCtx {
+  updateVideo: (id: string, patch: Partial<Video>) => void;
+  addActivity: (event: string, type: Activity['type']) => void;
+}
+
+/**
+ * Apply one SSE event to the video. Returns true once a terminal
+ * `pipeline_status: complete` is seen. Throws on a pipeline error so the
+ * caller can fall back to the non-streaming path.
+ */
+function applyStreamEvent(
+  event: Record<string, unknown>,
+  id: string,
+  agents: Map<string, AgentExecution>,
+  ctx: StreamCtx,
+): boolean {
+  switch (event.type) {
+    case 'agent_update': {
+      const agentId = String(event.agentId ?? `agent_${agents.size}`);
+      const status = mapAgentStatus(String(event.status ?? 'running'));
+      const data = (event.data as Record<string, unknown>) || {};
+      agents.set(agentId, {
+        agent_id: agentId,
+        agent_type: String(event.agentName ?? agentId),
+        status,
+        progress:
+          typeof event.progress === 'number'
+            ? event.progress
+            : status === 'complete'
+              ? 100
+              : status === 'running'
+                ? 30
+                : 0,
+        result: status === 'complete' && Object.keys(data).length > 0 ? data : undefined,
+      });
+
+      const list = [...agents.values()];
+      const completed = list.filter((a) => a.status === 'complete').length;
+      // Real progress: 5% baseline + up to 90% across completed agents.
+      const progress = Math.min(95, 5 + Math.round((completed / Math.max(list.length, 1)) * 90));
+      ctx.updateVideo(id, { agents: list, progress });
+      if (status === 'complete') {
+        ctx.addActivity(`✓ ${event.agentName ?? agentId}`, 'success');
+      }
+      return false;
+    }
+
+    case 'consensus': {
+      const data = event.data as { finalClassification?: string; agreementRatio?: number } | undefined;
+      if (data?.finalClassification) {
+        const pct = Math.round((data.agreementRatio ?? 0) * 100);
+        ctx.addActivity(`Consensus: ${data.finalClassification} (${pct}% agreement)`, 'info');
+      }
+      return false;
+    }
+
+    case 'workflow': {
+      const data = (event.data as Record<string, unknown>) || {};
+      const summary =
+        typeof data.summary === 'string'
+          ? data.summary
+          : typeof data.title === 'string'
+            ? data.title
+            : 'Analysis complete';
+      const events = mapStreamEvents(data.events, id);
+      const transcript = flattenTranscript(data.transcript);
+      ctx.updateVideo(id, {
+        insights: {
+          summary,
+          actions: Array.isArray(data.actions) ? (data.actions as Action[]) : [],
+          sentiment: 'Neutral',
+          topics: Array.isArray(data.topics) ? (data.topics as string[]) : [],
+        },
+        ...(events.length > 0 ? { events } : {}),
+        ...(transcript ? { transcript } : {}),
+        ...(typeof data.title === 'string' && data.title ? { title: truncate(data.title, 60) } : {}),
+      });
+      return false;
+    }
+
+    case 'pipeline_status': {
+      if (event.status === 'complete') {
+        ctx.updateVideo(id, { status: 'complete', progress: 100, processedAt: 'Just now' });
+        return true;
+      }
+      if (event.status === 'error') {
+        throw new Error('Pipeline reported an error');
+      }
+      ctx.updateVideo(id, { status: 'processing' });
+      return false;
+    }
+
+    case 'error':
+      throw new Error(String((event.data as { message?: string })?.message ?? 'Pipeline stream error'));
+
+    default:
+      return false;
+  }
+}
+
+/**
+ * Consume the `/api/pipeline/stream` SSE endpoint and project each event onto
+ * the video. Throws if the stream fails or never reaches a terminal state, so
+ * the caller can fall back to the non-streaming path.
+ */
+async function streamPipeline(url: string, id: string, ctx: StreamCtx): Promise<void> {
+  const res = await fetch('/api/pipeline/stream', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url }),
+  });
+
+  if (!res.ok || !res.body) {
+    throw new Error(`Pipeline stream failed: ${res.status}`);
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  const agents = new Map<string, AgentExecution>();
+  let buffer = '';
+  let completed = false;
+
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() || '';
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith('data: ')) continue;
+      let event: Record<string, unknown>;
+      try {
+        event = JSON.parse(trimmed.slice(6));
+      } catch {
+        continue;
+      }
+      if (applyStreamEvent(event, id, agents, ctx)) completed = true;
+    }
+  }
+
+  if (!completed) {
+    throw new Error('Pipeline stream ended without completing');
+  }
+}
+
+/**
+ * Non-streaming fallback: POST to `/api/video` for a single analysis pass,
+ * with the OpenAI STT + event-extraction chain. Never throws — marks the
+ * video failed on error.
+ */
+async function legacyAnalyze(url: string, id: string, ctx: StreamCtx & { getVideo: (id: string) => Video | undefined }): Promise<void> {
+  const { updateVideo, addActivity } = ctx;
+  updateVideo(id, { progress: 40 });
+
+  try {
+    const res = await fetch('/api/video', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url }),
+    });
+
+    if (!res.ok) throw new Error(`API error: ${res.status}`);
+
+    const result = await res.json();
+    const rawTitle = result.result?.insights?.summary;
+    const videoTitle = (typeof rawTitle === 'string' ? rawTitle : 'Video').substring(0, 50);
+
+    let transcript =
+      result.result?.raw_response?.transcript?.text ||
+      result.result?.raw_response?.transcript ||
+      undefined;
+    if (Array.isArray(transcript)) {
+      transcript = transcript.map((s: { text?: string }) => s.text || '').join(' ').trim();
+    }
+
+    // STT fallback: if YouTube API returned no/empty transcript, try OpenAI.
+    if (!transcript || (typeof transcript === 'string' && transcript.length < 50)) {
+      addActivity('YouTube transcript unavailable — trying OpenAI fallback…', 'info');
+      try {
+        const sttRes = await fetch('/api/transcribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url }),
+        });
+        const sttResult = await sttRes.json();
+        if (sttResult.success && sttResult.transcript) {
+          transcript = sttResult.transcript;
+          addActivity(`Transcript retrieved via ${sttResult.source} (${sttResult.wordCount} words)`, 'success');
+        }
+      } catch {
+        addActivity('STT fallback unavailable', 'info');
+      }
+    }
+
+    updateVideo(id, {
+      status: result.status === 'complete' ? 'complete' : 'failed',
+      progress: 100,
+      title: videoTitle + (videoTitle.length >= 50 ? '…' : ''),
+      processedAt: 'Just now',
+      duration: `${result.result?.transcript_segments || 0} segments`,
+      transcript,
+      insights: {
+        summary: typeof result.result?.insights?.summary === 'string'
+          ? result.result.insights.summary
+          : 'Analysis complete',
+        actions: result.result?.insights?.actions || [],
+        sentiment: result.result?.insights?.sentiment || 'Neutral',
+        topics: result.result?.insights?.topics || [],
+      },
+    });
+    addActivity(`Analysis complete: ${videoTitle.substring(0, 30)}`, 'success');
+
+    // Auto-extract events + actions via AI SDK if we have a transcript.
+    if (transcript && typeof transcript === 'string') {
+      addActivity('Extracting events & actions with AI…', 'info');
+      try {
+        const extractRes = await fetch('/api/extract-events', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ transcript, videoTitle, videoUrl: url }),
+        });
+        const extraction = await extractRes.json();
+        if (extraction.success && extraction.data) {
+          const { events: extractedEvents, actions, summary, topics } = extraction.data;
+          updateVideo(id, {
+            events: extractedEvents?.map((e: { type: string; title: string; description?: string; timestamp?: string; priority?: string }) => ({
+              id: `evt_${Math.random().toString(36).slice(2, 10)}`,
+              type: e.type,
+              title: e.title,
+              description: e.description,
+              timestamp: e.timestamp,
+              confidence: e.priority === 'high' ? 0.95 : e.priority === 'medium' ? 0.75 : 0.5,
+            })),
+            insights: {
+              summary: summary || videoTitle,
+              actions: actions || [],
+              sentiment: ctx.getVideo(id)?.insights?.sentiment || 'Neutral',
+              topics: topics || [],
+            },
+          });
+          addActivity(`Extracted ${extractedEvents?.length || 0} events, ${actions?.length || 0} actions`, 'success');
+        } else if (extraction.error) {
+          addActivity(`Event extraction: ${extraction.error}`, 'info');
+        }
+      } catch {
+        addActivity('Event extraction unavailable — set OPENAI_API_KEY', 'info');
+      }
+    }
+  } catch (error) {
+    updateVideo(id, { status: 'failed', progress: 0 });
+    addActivity(
+      `Analysis failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      'error',
+    );
+  }
+}
+
 export const useDashboardStore = create<DashboardState>((set, get) => ({
   videos: [],
   activities: [],
   selectedVideoId: null,
-  loading: true,
+  loading: false,
 
   searchQuery: '',
   searchResults: [],
@@ -132,7 +449,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       selectedVideoId: s.selectedVideoId === id ? null : s.selectedVideoId,
     })),
 
-  selectVideo: (id) => set({ 
+  selectVideo: (id) => set({
     selectedVideoId: id,
     searchQuery: '',
     searchResults: [],
@@ -155,7 +472,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       set({ searchResults: [] });
       return;
     }
-    
+
     set({ searchLoading: true });
     get().addActivity(`Searching for: "${query}"`, 'info');
 
@@ -176,144 +493,36 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     }
   },
 
-  // ── Process a video URL via the Next.js API route ──
+  // ── Process a video URL via the real agent pipeline (SSE), with fallback ──
   processVideo: async (url) => {
     const { addVideo, updateVideo, addActivity } = get();
     const id = Date.now().toString();
 
-    const video: Video = {
+    addVideo({
       id,
-      title: `Analyzing: ${url.length > 50 ? url.substring(0, 47) + '…' : url}`,
+      title: `Analyzing: ${truncate(url, 50)}`,
       url,
       status: 'processing',
-      progress: 10,
-    };
-    addVideo(video);
-    addActivity(`Processing started: ${url.length > 40 ? url.substring(0, 37) + '…' : url}`, 'info');
+      progress: 5,
+    });
+    addActivity(`Processing started: ${truncate(url, 40)}`, 'info');
 
-    // Simulate incremental progress
-    const interval = setInterval(() => {
-      const current = get().videos.find((v) => v.id === id);
-      if (current && current.status === 'processing') {
-        updateVideo(id, { progress: Math.min(current.progress + 5, 95) });
-      }
-    }, 1000);
+    const ctx = {
+      updateVideo,
+      addActivity,
+      getVideo: (vid: string) => get().videos.find((v) => v.id === vid),
+    };
 
     try {
-      const res = await fetch('/api/video', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url }),
-      });
-      clearInterval(interval);
-
-      if (!res.ok) throw new Error(`API error: ${res.status}`);
-
-      const result = await res.json();
-      const rawTitle = result.result?.insights?.summary;
-      const videoTitle = (typeof rawTitle === 'string' ? rawTitle : 'Video').substring(0, 50);
-
-      let transcript =
-        result.result?.raw_response?.transcript?.text ||
-        result.result?.raw_response?.transcript ||
-        undefined;
-
-      // Flatten transcript array to string if needed
-      if (Array.isArray(transcript)) {
-        transcript = transcript.map((s: { text?: string }) => s.text || '').join(' ').trim();
-      }
-
-      // STT fallback: if YouTube API returned no/empty transcript, try OpenAI
-      if (!transcript || (typeof transcript === 'string' && transcript.length < 50)) {
-        addActivity('YouTube transcript unavailable — trying OpenAI fallback…', 'info');
-        try {
-          const sttRes = await fetch('/api/transcribe', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ url }),
-          });
-          const sttResult = await sttRes.json();
-          if (sttResult.success && sttResult.transcript) {
-            transcript = sttResult.transcript;
-            addActivity(`Transcript retrieved via ${sttResult.source} (${sttResult.wordCount} words)`, 'success');
-          }
-        } catch {
-          addActivity('STT fallback unavailable', 'info');
-        }
-      }
-
-      updateVideo(id, {
-        status: result.status === 'complete' ? 'complete' : 'failed',
-        progress: 100,
-        title: videoTitle + (videoTitle.length >= 50 ? '…' : ''),
-        processedAt: 'Just now',
-        duration: `${result.result?.transcript_segments || 0} segments`,
-        transcript,
-        insights: {
-          summary: typeof result.result?.insights?.summary === 'string'
-            ? result.result.insights.summary
-            : 'Analysis complete',
-          actions: result.result?.insights?.actions || [],
-          sentiment: result.result?.insights?.sentiment || 'Neutral',
-          topics: result.result?.insights?.topics || [],
-        },
-      });
-
-      addActivity(`Analysis complete: ${videoTitle.substring(0, 30)}`, 'success');
-
-      // Auto-extract events + actions via AI SDK if we have a transcript
-      if (transcript && typeof transcript === 'string') {
-        addActivity('Extracting events & actions with AI…', 'info');
-        try {
-          const extractRes = await fetch('/api/extract-events', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              transcript,
-              videoTitle,
-              videoUrl: url,
-            }),
-          });
-          const extraction = await extractRes.json();
-          if (extraction.success && extraction.data) {
-            const { events: extractedEvents, actions, summary, topics } = extraction.data;
-            updateVideo(id, {
-              events: extractedEvents?.map((e: { type: string; title: string; description?: string; timestamp?: string; priority?: string }) => ({
-                id: `evt_${Math.random().toString(36).slice(2, 10)}`,
-                type: e.type,
-                title: e.title,
-                description: e.description,
-                timestamp: e.timestamp,
-                confidence: e.priority === 'high' ? 0.95 : e.priority === 'medium' ? 0.75 : 0.5,
-              })),
-              insights: {
-                summary: summary || videoTitle,
-                actions: actions || [],
-                sentiment: get().videos.find(v => v.id === id)?.insights?.sentiment || 'Neutral',
-                topics: topics || [],
-              },
-            });
-            addActivity(`Extracted ${extractedEvents?.length || 0} events, ${actions?.length || 0} actions`, 'success');
-          } else if (extraction.error) {
-            addActivity(`Event extraction: ${extraction.error}`, 'info');
-          }
-        } catch (extractError) {
-          addActivity('Event extraction unavailable — set OPENAI_API_KEY', 'info');
-        }
-      }
-
-      const actionCount = get().videos.find(v => v.id === id)?.insights?.actions?.length || 0;
-      if (actionCount > 0) {
-        addActivity(`Generated ${actionCount} action item${actionCount > 1 ? 's' : ''}`, 'success');
-      }
-    } catch (error) {
-      clearInterval(interval);
-      updateVideo(id, { status: 'failed', progress: 0 });
-      addActivity(
-        `Analysis failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        'error',
-      );
+      await streamPipeline(url, id, ctx);
+      addActivity('Pipeline complete', 'success');
+    } catch (streamErr) {
+      console.warn('[Dashboard] Live pipeline unavailable, using direct analysis:', streamErr);
+      addActivity('Live pipeline unavailable — using direct analysis…', 'info');
+      await legacyAnalyze(url, id, ctx);
     }
+
+    return id;
   },
 
   // ── Full end-to-end pipeline: YouTube URL → deployed software ──
@@ -396,7 +605,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     }
   },
 
-  // ── Extract events from a completed video ──
+  // ── Re-derive events from a completed video's insights ──
   extractEvents: (videoId) => {
     const { videos, updateVideo, addActivity } = get();
     const video = videos.find((v) => v.id === videoId);
@@ -429,51 +638,81 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     addActivity(`Extracted ${events.length} events`, 'success');
   },
 
-  // ── Dispatch agents for extracted events ──
-  dispatchAgents: (videoId) => {
+  // ── Dispatch the video's events to the real backend agent + MCP layer ──
+  dispatchToAgents: async (videoId) => {
     const { videos, updateVideo, addActivity } = get();
     const video = videos.find((v) => v.id === videoId);
-    if (!video?.events?.length) return;
+    if (!video?.events?.length) {
+      addActivity('No events to dispatch — extract events first', 'info');
+      return;
+    }
 
-    addActivity('Dispatching agents…', 'info');
+    addActivity(`Dispatching agents to act on ${video.events.length} events…`, 'info');
+    try {
+      const res = await fetch('/api/agents/dispatch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          events: video.events.map((e) => ({
+            id: e.id,
+            type: e.type,
+            title: e.title,
+            description: e.description,
+          })),
+          transcript: video.transcript,
+        }),
+      });
 
-    const agentTypes = ['analyzer', 'content_creator'];
-    const executions: AgentExecution[] = video.events.slice(0, 5).flatMap((event) =>
-      agentTypes.map((agentType) => ({
-        agent_id: `agent_${videoId}_${event.id}_${agentType}`,
-        agent_type: agentType,
-        status: 'running' as const,
-        progress: 0,
-        event_id: event.id,
-      })),
+      if (res.status === 503) {
+        addActivity('Agent backend offline — deploy FastAPI and set BACKEND_URL', 'info');
+        return;
+      }
+      if (!res.ok) throw new Error(`Dispatch failed: ${res.status}`);
+
+      const data = await res.json();
+      const executions: AgentExecution[] = Array.isArray(data.executions) ? data.executions : [];
+      updateVideo(videoId, { agents: executions });
+      addActivity(`Dispatched ${executions.length} agents`, 'success');
+    } catch (error) {
+      addActivity(
+        `Agent dispatch failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        'error',
+      );
+    }
+  },
+
+  // ── Poll status for any running/queued dispatched agents ──
+  refreshAgentStatus: async (videoId) => {
+    const { videos, updateVideo } = get();
+    const video = videos.find((v) => v.id === videoId);
+    const pending = (video?.agents || []).filter(
+      (a) => a.status === 'running' || a.status === 'queued',
+    );
+    if (pending.length === 0) return;
+
+    const refreshed = await Promise.all(
+      pending.map(async (agent) => {
+        try {
+          const res = await fetch(`/api/agents/status?agentId=${encodeURIComponent(agent.agent_id)}`);
+          if (!res.ok) return agent;
+          const data = await res.json();
+          return {
+            ...agent,
+            status: (data.status as AgentStatus) || agent.status,
+            progress: typeof data.progress === 'number' ? data.progress : agent.progress,
+            result: data.result ?? agent.result,
+            error: data.error ?? agent.error,
+          } satisfies AgentExecution;
+        } catch {
+          return agent;
+        }
+      }),
     );
 
-    updateVideo(videoId, { agents: executions });
-
-    // Simulate agent completion
-    executions.forEach((exec) => {
-      setTimeout(() => {
-        const currentVideo = get().videos.find((v) => v.id === videoId);
-        if (!currentVideo) return;
-
-        const completed: AgentExecution = {
-          ...exec,
-          status: 'complete',
-          progress: 100,
-          result: {
-            summary: `Processed by ${exec.agent_type}`,
-            output: `Analysis complete for event ${exec.event_id}`,
-          },
-        };
-
-        updateVideo(videoId, {
-          agents: (currentVideo.agents || []).map((a) =>
-            a.agent_id === exec.agent_id ? completed : a,
-          ),
-        });
-      }, 1500 + Math.random() * 3000);
-    });
-
-    addActivity(`Dispatched ${executions.length} agents`, 'success');
+    const byId = new Map(refreshed.map((a) => [a.agent_id, a]));
+    const merged = (get().videos.find((v) => v.id === videoId)?.agents || []).map(
+      (a) => byId.get(a.agent_id) ?? a,
+    );
+    updateVideo(videoId, { agents: merged });
   },
 }));

@@ -263,7 +263,7 @@ class MCPBridge:
 
             Return JSON format with your reasoning.
             """,
-            model="claude-3-5-sonnet-20241022",
+            model="claude-opus-4-8",
             provider=ModelProvider.CLAUDE,
             task_type=TaskType.STRATEGIC_PLANNING,
             structured_output=True,
@@ -562,7 +562,7 @@ class MCPBridge:
     ) -> str:
         """Select optimal model for provider and task"""
         if provider == ModelProvider.CLAUDE:
-            return "claude-3-5-sonnet-20241022"
+            return "claude-opus-4-8"
         elif provider == ModelProvider.GROK:
             return "grok-beta"
         else:

@@ -84,6 +84,7 @@ class CloudTasksQueueService:
         location: str = "us-central1",
         queue_name: str = "video-processing-queue",
         service_url: Optional[str] = None,
+        task_path: str = "/api/v3/process-video-task",
     ):
         """
         Initialize Cloud Tasks queue service.
@@ -103,6 +104,7 @@ class CloudTasksQueueService:
         self.location = location
         self.queue_name = queue_name
         self.service_url = service_url or os.getenv('CLOUD_RUN_SERVICE_URL')
+        self.task_path = task_path
 
         if not self.service_url:
             logger.warning(
@@ -168,7 +170,7 @@ class CloudTasksQueueService:
         task = tasks_v2.Task(
             http_request=tasks_v2.HttpRequest(
                 http_method=tasks_v2.HttpMethod.POST,
-                url=f"{self.service_url}/api/v3/process-video-task",
+                url=f"{self.service_url}{self.task_path}",
                 headers={
                     "Content-Type": "application/json",
                 },

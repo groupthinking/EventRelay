@@ -108,7 +108,18 @@ class DeploymentManager:
         }
 
         project_dir = Path(project_path)
-        package_json = project_dir / "package.json"
+
+        # Security: validate and resolve path to prevent traversal
+        try:
+            resolved_path = project_dir.resolve()
+            if not resolved_path.is_dir():
+                result["summary"] = "Invalid project path: not a directory"
+                return result
+        except Exception as e:
+            result["summary"] = f"Invalid project path: {e}"
+            return result
+
+        package_json = resolved_path / "package.json"
 
         # Check if package.json exists
         if not package_json.exists():
@@ -122,8 +133,8 @@ class DeploymentManager:
             logger.info("📦 Running npm install...")
             npm_path = "/usr/local/bin/npm" if os.path.exists("/usr/local/bin/npm") else "npm"
             install_result = subprocess.run(
-                [npm_path, "install", "--legacy-peer-deps"],
-                cwd=project_path,
+                [npm_path, "install", "--legacy-peer-deps", "--ignore-scripts"],
+                cwd=str(resolved_path),
                 capture_output=True,
                 text=True,
                 timeout=180  # 3 minutes for npm install
@@ -145,7 +156,7 @@ class DeploymentManager:
             logger.info("🔨 Running npm run build...")
             build_result = subprocess.run(
                 [npm_path, "run", "build"],
-                cwd=project_path,
+                cwd=str(resolved_path),
                 capture_output=True,
                 text=True,
                 timeout=180
@@ -200,7 +211,7 @@ class DeploymentManager:
                 npx_path = "/usr/local/bin/npx" if os.path.exists("/usr/local/bin/npx") else "npx"
                 tsc_result = subprocess.run(
                     [npx_path, "tsc", "--noEmit"],
-                    cwd=project_path,
+                    cwd=str(resolved_path),
                     capture_output=True,
                     text=True,
                     timeout=60

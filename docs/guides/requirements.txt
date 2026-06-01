@@ -78,7 +78,7 @@ pydantic
 pydantic_core
 pydantic-settings
 pyflakes
-Pygments
+Pygments>=2.20.0
 pyparsing
 python-dateutil
 python-dotenv

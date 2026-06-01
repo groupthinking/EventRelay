@@ -2,7 +2,7 @@
  * SSRF guard for server-side fetches of user-supplied URLs.
  *
  * Rejects non-http(s) schemes and any host that resolves to a private,
- * loopback, link-local, or cloud-metadata address (e.g. 169.254.169.254).
+ * loopback, link-local, CGNAT, or cloud-metadata address (e.g. 169.254.169.254).
  *
  * Note: this resolves DNS and checks the result, which closes the common SSRF
  * cases. It does not fully defeat DNS-rebinding (a TOCTOU gap between this check
@@ -14,6 +14,14 @@ import * as net from 'node:net';
 
 const BLOCKED_HOSTNAMES = new Set(['localhost', 'metadata.google.internal']);
 
+/**
+ * True for non-public IP ranges:
+ * IPv4 — 10/8, 172.16/12, 192.168/16 (RFC1918), 127/8 (loopback),
+ *        169.254/16 (link-local), 100.64/10 (CGNAT, RFC6598),
+ *        0/8 (unspecified), >=224 (multicast/reserved).
+ * IPv6 — ::1, :: , fe80::/10 (link-local), fc00::/7 (unique-local),
+ *        and IPv4-mapped (::ffff:a.b.c.d).
+ */
 function ipIsPrivate(ip: string): boolean {
   if (net.isIPv4(ip)) {
     const p = ip.split('.').map(Number);
@@ -21,18 +29,18 @@ function ipIsPrivate(ip: string): boolean {
       p[0] === 10 ||
       (p[0] === 172 && p[1] >= 16 && p[1] <= 31) ||
       (p[0] === 192 && p[1] === 168) ||
-      p[0] === 127 || // loopback
-      (p[0] === 169 && p[1] === 254) || // link-local incl. cloud metadata
+      (p[0] === 100 && p[1] >= 64 && p[1] <= 127) || // CGNAT 100.64.0.0/10
+      p[0] === 127 ||
+      (p[0] === 169 && p[1] === 254) ||
       p[0] === 0 ||
-      p[0] >= 224 // multicast / reserved
+      p[0] >= 224
     );
   }
   if (net.isIPv6(ip)) {
     const lc = ip.toLowerCase();
-    if (lc === '::1' || lc === '::') return true; // loopback / unspecified
-    if (lc.startsWith('fe80') || lc.startsWith('fc') || lc.startsWith('fd')) {
-      return true; // link-local / unique-local
-    }
+    if (lc === '::1' || lc === '::') return true;
+    if (/^fe[89ab]/.test(lc)) return true; // fe80::/10 link-local
+    if (/^f[cd]/.test(lc)) return true; // fc00::/7 unique-local
     const mapped = lc.match(/::ffff:(\d+\.\d+\.\d+\.\d+)/); // IPv4-mapped
     if (mapped) return ipIsPrivate(mapped[1]);
     return false;

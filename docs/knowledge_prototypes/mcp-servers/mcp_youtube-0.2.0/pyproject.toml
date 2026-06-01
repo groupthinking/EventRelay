@@ -9,7 +9,7 @@ description = "MCP server wrapping yt-dlp for video/audio/subtitle download via 
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "fastmcp>=2.2.1",
+    "fastmcp>=3.2.0",
     "yt-dlp>=2025.3.31",
 ]
 license = "MIT"
