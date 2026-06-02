@@ -25,6 +25,9 @@ paths-ignore:
   - '**/*.tmp'
   - '**/*.temp'
 
-# Query configuration
+# Query configuration — security-extended focuses on actual security vulnerabilities;
+# security-and-quality also includes code quality checks that produce many alerts
+# against pre-existing code patterns, causing GitHub Advanced Security to flag them
+# as "new" on every PR (since main has no prior baseline from earlier failed runs).
 queries:
-  - uses: security-and-quality
+  - uses: security-extended
