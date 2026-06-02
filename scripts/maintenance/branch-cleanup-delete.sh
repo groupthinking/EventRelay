@@ -78,7 +78,9 @@ STALE_BRANCHES=(
 REVIEW_BRANCHES=(
   "copilot/improve-documentation"
   "fix/unified-ai-sdk-real-providers-154"
-  "v0/ai-system-architecture-ac4e7c39"
+  # NOTE: v0/ai-system-architecture-ac4e7c39 intentionally removed — it gained
+  # open PR #226 after the assessment snapshot. The live open-PR guard below is
+  # the real safety net; this is belt-and-suspenders.
 )
 
 case "${1:-}" in
@@ -91,8 +93,24 @@ esac
 echo "Batch '$1': ${#sel[@]} branches"
 RECOVERY="docs/branch-cleanup-recovery-refs.txt"
 echo "# recovery refs for '$1' batch ($(date -u +%Y-%m-%dT%H:%MZ)) — restore: git push origin <sha>:refs/heads/<branch>" >> "$RECOVERY"
+REPO="${GITHUB_REPOSITORY:-groupthinking/EventRelay}"
+has_open_pr() {  # $1=branch -> 0 if an OPEN PR targets this head, else 1
+  [ -z "${GITHUB_TOKEN:-}" ] && return 1            # no token -> can't check, don't block
+  command -v curl >/dev/null || return 1
+  local owner="${REPO%%/*}" b="$1"
+  local n
+  n=$(curl -fsSL -H "Authorization: Bearer $GITHUB_TOKEN" \
+        "https://api.github.com/repos/$REPO/pulls?state=open&head=$owner:$b&per_page=1" 2>/dev/null \
+        | grep -c '"number"')
+  [ "${n:-0}" -gt 0 ]
+}
+
 for b in "${sel[@]}"; do
   sha=$(git rev-parse "origin/$b" 2>/dev/null) || { echo "  skip (no origin/$b)"; continue; }
+  if has_open_pr "$b"; then
+    echo "  SKIP $b — has an OPEN PR (live check); refusing to delete an active branch"
+    continue
+  fi
   echo "$sha  $b" >> "$RECOVERY"          # SHA-based recovery works even where tag pushes are blocked
   if [ "${DRY_RUN:-0}" = "1" ]; then
     echo "  [dry-run] record $sha; tag archive/$b (best-effort); git push origin --delete $b"
