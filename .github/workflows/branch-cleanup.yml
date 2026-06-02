@@ -1,0 +1,52 @@
+name: Branch Cleanup
+
+# Manual, gated branch pruning driven by the branch-cleanup assessment.
+# Runs the archive-then-delete harness server-side, where the GITHUB_TOKEN has
+# the `contents: write` rights needed to delete refs (the web sandbox cannot).
+#
+# Safety: dry_run defaults to TRUE — you must explicitly set it to false to
+# actually delete. Every branch's SHA is recorded and uploaded as an artifact,
+# so deletions are reversible: git push origin <sha>:refs/heads/<branch>.
+
+on:
+  workflow_dispatch:
+    inputs:
+      batch:
+        description: "Which verdict batch to delete"
+        required: true
+        default: safe
+        type: choice
+        options: [safe, stale, review]
+      dry_run:
+        description: "Preview only (no deletion). Set to false to actually delete."
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0          # need all remote refs to tag/delete them
+
+      - name: Run branch-cleanup delete (batch=${{ inputs.batch }}, dry_run=${{ inputs.dry_run }})
+        env:
+          DRY_RUN: ${{ inputs.dry_run == true && '1' || '0' }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          chmod +x scripts/maintenance/branch-cleanup-delete.sh
+          scripts/maintenance/branch-cleanup-delete.sh "${{ inputs.batch }}"
+
+      - name: Upload recovery refs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: branch-cleanup-recovery-refs
+          path: docs/branch-cleanup-recovery-refs.txt
+          if-no-files-found: warn
