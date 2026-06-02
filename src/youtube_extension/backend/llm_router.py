@@ -10,6 +10,7 @@ Priority: Gemini → Anthropic (Claude) → OpenAI → Grok (xAI) → Perplexity
 Each provider is skipped if its API key is absent or if the call fails.
 """
 
+import asyncio
 import logging
 import os
 from typing import Optional
@@ -99,7 +100,7 @@ class LLMRouter:
         """Return True if at least one provider is configured."""
         return bool(self._available_providers())
 
-    def generate(
+    async def generate(
         self,
         prompt: str,
         max_tokens: int = 8192,
@@ -108,8 +109,20 @@ class LLMRouter:
         """
         Generate text using the first available provider.
 
+        Runs the blocking SDK calls in a thread pool so the event loop is
+        not stalled when called from an async context.
+
         Returns the generated text, or ``None`` if all providers fail.
         """
+        return await asyncio.to_thread(self._dispatch_sync, prompt, max_tokens, temperature)
+
+    def _dispatch_sync(
+        self,
+        prompt: str,
+        max_tokens: int,
+        temperature: float,
+    ) -> Optional[str]:
+        """Synchronous dispatch loop — runs in a thread via :meth:`generate`."""
         providers = [
             ("Gemini", self._generate_gemini),
             ("Anthropic", self._generate_anthropic),

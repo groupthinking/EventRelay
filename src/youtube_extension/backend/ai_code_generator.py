@@ -224,7 +224,7 @@ CRITICAL: Prioritize functional MVP over polished product. Generated code must:
 Choose "fullstack_app" for most cases, "agent" for MCP/workflow systems, "infrastructure_platform" for Turborepo monorepo with multiple apps."""
 
         try:
-            text = self.router.generate(prompt, max_tokens=4096) if self.router else None
+            text = await self.router.generate(prompt, max_tokens=4096) if self.router else None
 
             if not text:
                 raise ValueError("No response from LLM router")
@@ -571,7 +571,7 @@ TASK: Generate {description}
 {specific_prompt}"""
 
         try:
-            code = self.router.generate(prompt, max_tokens=8192) if self.router else None
+            code = await self.router.generate(prompt, max_tokens=8192) if self.router else None
 
             if not code:
                 return f"// Error: LLM router returned no code for {description}\n// Please implement manually"
@@ -1184,7 +1184,7 @@ Return ONLY the fixed code, no explanations. Ensure:
 5. Code compiles without errors"""
 
             try:
-                response_text = self.router.generate(fix_prompt, max_tokens=4096) if self.router else None
+                response_text = await self.router.generate(fix_prompt, max_tokens=4096) if self.router else None
 
                 if not response_text:
                     logger.warning(f"⚠️ LLM router returned no text for {rel_path}, skipping")

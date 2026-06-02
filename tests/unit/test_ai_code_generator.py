@@ -319,7 +319,7 @@ def _make_gen_with_mock_client(tmp_path):
     gen = AICodeGenerator(output_dir=str(tmp_path))
     mock_router = MagicMock()
     mock_router.has_provider.return_value = True
-    mock_router.generate.return_value = "// generated code"
+    mock_router.generate = AsyncMock(return_value="// generated code")
     gen.router = mock_router
     return gen
 

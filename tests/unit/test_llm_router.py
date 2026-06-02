@@ -86,38 +86,38 @@ class TestLLMRouterInit:
 
 
 class TestLLMRouterGenerate:
-    def test_returns_none_when_no_providers(self, monkeypatch):
+    async def test_returns_none_when_no_providers(self, monkeypatch):
         r = _make_router_no_keys(monkeypatch)
-        result = r.generate("hello")
+        result = await r.generate("hello")
         assert result is None
 
-    def test_returns_gemini_response_when_available(self, monkeypatch):
+    async def test_returns_gemini_response_when_available(self, monkeypatch):
         r = _make_router_no_keys(monkeypatch)
         r._gemini_client = MagicMock()
         with patch.object(r, "_generate_gemini", return_value="gemini result"):
-            result = r.generate("prompt")
+            result = await r.generate("prompt")
         assert result == "gemini result"
 
-    def test_skips_to_anthropic_when_gemini_fails(self, monkeypatch):
+    async def test_skips_to_anthropic_when_gemini_fails(self, monkeypatch):
         r = _make_router_no_keys(monkeypatch)
         r._gemini_client = MagicMock()
         r._anthropic_client = MagicMock()
         with patch.object(r, "_generate_gemini", side_effect=RuntimeError("boom")), \
              patch.object(r, "_generate_anthropic", return_value="claude result"):
-            result = r.generate("prompt")
+            result = await r.generate("prompt")
         assert result == "claude result"
 
-    def test_skips_to_openai_when_anthropic_fails(self, monkeypatch):
+    async def test_skips_to_openai_when_anthropic_fails(self, monkeypatch):
         r = _make_router_no_keys(monkeypatch)
         r._anthropic_client = MagicMock()
         r._openai_client = MagicMock()
         with patch.object(r, "_generate_gemini", return_value=None), \
              patch.object(r, "_generate_anthropic", side_effect=RuntimeError("no")), \
              patch.object(r, "_generate_openai", return_value="openai result"):
-            result = r.generate("prompt")
+            result = await r.generate("prompt")
         assert result == "openai result"
 
-    def test_returns_none_when_all_providers_fail(self, monkeypatch):
+    async def test_returns_none_when_all_providers_fail(self, monkeypatch):
         r = _make_router_no_keys(monkeypatch)
         r._gemini_client = MagicMock()
         r._anthropic_client = MagicMock()
@@ -126,20 +126,20 @@ class TestLLMRouterGenerate:
              patch.object(r, "_generate_openai", side_effect=RuntimeError("o")), \
              patch.object(r, "_generate_grok", side_effect=RuntimeError("gr")), \
              patch.object(r, "_generate_perplexity", side_effect=RuntimeError("p")):
-            result = r.generate("prompt")
+            result = await r.generate("prompt")
         assert result is None
 
-    def test_skips_provider_returning_none(self, monkeypatch):
+    async def test_skips_provider_returning_none(self, monkeypatch):
         r = _make_router_no_keys(monkeypatch)
         r._gemini_client = MagicMock()
         r._openai_client = MagicMock()
         with patch.object(r, "_generate_gemini", return_value=None), \
              patch.object(r, "_generate_anthropic", return_value=None), \
              patch.object(r, "_generate_openai", return_value="openai wins"):
-            result = r.generate("prompt")
+            result = await r.generate("prompt")
         assert result == "openai wins"
 
-    def test_passes_max_tokens_to_provider(self, monkeypatch):
+    async def test_passes_max_tokens_to_provider(self, monkeypatch):
         r = _make_router_no_keys(monkeypatch)
         r._anthropic_client = MagicMock()
         calls = []
@@ -148,20 +148,20 @@ class TestLLMRouterGenerate:
             return "ok"
         with patch.object(r, "_generate_gemini", return_value=None), \
              patch.object(r, "_generate_anthropic", side_effect=capture):
-            r.generate("prompt", max_tokens=4096)
+            await r.generate("prompt", max_tokens=4096)
         assert 4096 in calls
 
-    def test_uses_grok_as_fallback(self, monkeypatch):
+    async def test_uses_grok_as_fallback(self, monkeypatch):
         r = _make_router_no_keys(monkeypatch)
         r._grok_client = MagicMock()
         with patch.object(r, "_generate_gemini", return_value=None), \
              patch.object(r, "_generate_anthropic", return_value=None), \
              patch.object(r, "_generate_openai", return_value=None), \
              patch.object(r, "_generate_grok", return_value="grok response"):
-            result = r.generate("prompt")
+            result = await r.generate("prompt")
         assert result == "grok response"
 
-    def test_uses_perplexity_as_last_fallback(self, monkeypatch):
+    async def test_uses_perplexity_as_last_fallback(self, monkeypatch):
         r = _make_router_no_keys(monkeypatch)
         r._perplexity_client = MagicMock()
         with patch.object(r, "_generate_gemini", return_value=None), \
@@ -169,7 +169,7 @@ class TestLLMRouterGenerate:
              patch.object(r, "_generate_openai", return_value=None), \
              patch.object(r, "_generate_grok", return_value=None), \
              patch.object(r, "_generate_perplexity", return_value="perplexity answer"):
-            result = r.generate("prompt")
+            result = await r.generate("prompt")
         assert result == "perplexity answer"
 
 
