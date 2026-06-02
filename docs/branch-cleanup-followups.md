@@ -36,12 +36,25 @@ A secret-purge force-push orphaned older branches and breaks naive git diff/merg
 | Item | State | Plan |
 |---|---|---|
 | Delete **28 CLOSE-SAFE** branches | ✅ done (2026-06-02) | executed via Actions workflow; reversible |
-| Delete **30 CLOSE-STALE** branches | ✅ done (2026-06-02) | executed via Actions workflow; 58 archive tags total; reversible |
-| Triage **3 REVIEW** branches | needs glance | `v0/ai-system-architecture-ac4e7c39` (5d, recent — likely keep/PR), `fix/unified-ai-sdk-real-providers-154` (superseded by model-migration PRs → close), `copilot/improve-documentation` (docs, won't merge clean → close) |
+| Delete **30 CLOSE-STALE** branches | ✅ done (2026-06-02) | executed via Actions workflow; reversible |
+| Triage **3 REVIEW** branches | ✅ done (2026-06-02) | closed the 2 superseded (`copilot/improve-documentation`, `fix/unified-ai-sdk-real-providers-154`); **kept** `v0/ai-system-architecture-ac4e7c39` (gained open PR #226) |
 | Merge PR #222 | open (draft) | review + un-draft |
 
-Remote went **67 → 10 branches**. Survivors: `main`, this PR branch, 4 open-PR branches
-(#216/#217/#220/#221), the 3 REVIEW branches, and `v0/fix-router-on-vercel-19e0b4de`
-(created mid-session, outside the assessment).
+Remote went **67 → 8 branches**. Survivors: `main`, this PR branch, and 6 open-PR
+branches (#216/#217/#220/#221/#225/#226). **60 archive tags** preserve every deleted ref.
 
-All deletions are reversible: `git push origin <sha>:refs/heads/<branch>` (SHAs in the recovery file), or `git push origin archive/<branch>:refs/heads/<branch>` (58 tags on remote).
+### ⚠️ Incident — PR #227 collateral (contained, no data loss)
+`v0/groupthinking-86bedbf8` was STALE at the session-start snapshot, but **open PR #227
+was opened against it at 09:19** (after the snapshot, before the STALE delete at 09:24),
+so the hardcoded list deleted a now-active branch. **PR #227 is still open, head SHA
+`99df2ac` intact** (preserved by the PR + the `archive/v0/groupthinking-86bedbf8` tag).
+
+- **Restore (user action required):** the Actions token cannot recreate this ref because
+  the commit contains `.github/workflows/*` files (GitHub blocks workflow-bearing pushes
+  without the `workflows` scope). Restore via **PR #227 → "Restore branch"**, or locally:
+  `git push origin archive/v0/groupthinking-86bedbf8:refs/heads/v0/groupthinking-86bedbf8`.
+- **Root-cause fix (shipped):** `branch-cleanup-delete.sh` now does a **live open-PR check**
+  per branch and refuses to delete any branch that heads an open PR — so a snapshot that
+  goes stale can no longer cause this.
+
+All deletions are reversible: `git push origin <sha>:refs/heads/<branch>` (SHAs in the recovery file), or `git push origin archive/<branch>:refs/heads/<branch>` (60 tags on remote).

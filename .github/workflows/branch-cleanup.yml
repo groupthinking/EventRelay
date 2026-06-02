@@ -4,20 +4,18 @@ name: Branch Cleanup
 # Runs the archive-then-delete harness server-side, where the GITHUB_TOKEN has
 # the `contents: write` rights needed to delete refs.
 #
-# Triggers:
-#   1. workflow_dispatch (from default branch): Actions UI, pick batch + dry_run.
-#   2. push sentinel (from this feature branch): commit message containing
-#      [run-cleanup:safe|stale|review] executes that batch (DRY_RUN=0).
-#      Normal pushes are a no-op.
+# Usage: Actions tab -> Branch Cleanup -> Run workflow -> pick batch + dry_run.
+# Safety:
+#   - dry_run defaults to TRUE; you must set it false to actually delete.
+#   - the delete harness does a LIVE open-PR check per branch (via GITHUB_TOKEN)
+#     and refuses to delete any branch that is the head of an open PR, so a branch
+#     that became active after the assessment snapshot is never deleted.
+#   - every branch SHA is recorded + uploaded as an artifact, and an archive/<branch>
+#     tag is pushed.  Restore:  git push origin <sha>:refs/heads/<branch>
 #
-# Safety: the delete harness does a LIVE open-PR check per branch (via
-# GITHUB_TOKEN) and refuses to delete any branch that is the head of an open PR —
-# so a branch that became active after the assessment snapshot is never deleted.
-# Reversible: archive/<branch> tags + recovery SHAs.
-#
-# NOTE: restoring a deleted branch that contains .github/workflows/* files CANNOT
-# be done by this token (GitHub blocks it without the `workflows` scope). Restore
-# such a branch via the PR's "Restore branch" button or a local push with a PAT.
+# NOTE: restoring a deleted branch that contains .github/workflows/* CANNOT be done
+# by this token (GitHub blocks it without the `workflows` scope) — use the PR's
+# "Restore branch" button or a local push with a PAT.
 
 on:
   workflow_dispatch:
@@ -33,8 +31,6 @@ on:
         required: true
         default: true
         type: boolean
-  push:
-    branches: ["claude/branch-cleanup-assessment-ctDVh"]
 
 permissions:
   contents: write
@@ -48,38 +44,16 @@ jobs:
         with:
           fetch-depth: 0          # need all remote refs to tag/delete them
 
-      - id: decide
-        name: Decide batch / dry-run from trigger
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "batch=${{ inputs.batch }}" >> "$GITHUB_OUTPUT"
-            echo "dry=${{ inputs.dry_run == true && '1' || '0' }}" >> "$GITHUB_OUTPUT"
-            echo "go=yes" >> "$GITHUB_OUTPUT"
-          else
-            msg=$(git log -1 --pretty=%B)
-            if echo "$msg" | grep -qE '\[run-cleanup:(safe|stale|review)\]'; then
-              b=$(echo "$msg" | sed -nE 's/.*\[run-cleanup:(safe|stale|review)\].*/\1/p' | head -1)
-              echo "batch=$b" >> "$GITHUB_OUTPUT"
-              echo "dry=0" >> "$GITHUB_OUTPUT"
-              echo "go=yes" >> "$GITHUB_OUTPUT"
-              echo "::notice::sentinel detected — executing '$b' batch (real delete)"
-            else
-              echo "go=no" >> "$GITHUB_OUTPUT"
-              echo "::notice::no [run-cleanup:*] sentinel in commit message — no-op"
-            fi
-          fi
-
-      - name: Run branch-cleanup delete
-        if: steps.decide.outputs.go == 'yes'
+      - name: Run branch-cleanup delete (batch=${{ inputs.batch }}, dry_run=${{ inputs.dry_run }})
         env:
-          DRY_RUN: ${{ steps.decide.outputs.dry }}
+          DRY_RUN: ${{ inputs.dry_run == true && '1' || '0' }}
           GITHUB_TOKEN: ${{ github.token }}     # used for the live open-PR guard
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
           chmod +x scripts/maintenance/branch-cleanup-delete.sh
-          scripts/maintenance/branch-cleanup-delete.sh "${{ steps.decide.outputs.batch }}"
+          scripts/maintenance/branch-cleanup-delete.sh "${{ inputs.batch }}"
 
       - name: Upload recovery refs
         if: always()
