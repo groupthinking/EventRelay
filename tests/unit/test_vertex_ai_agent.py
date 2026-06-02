@@ -116,10 +116,32 @@ class TestVertexAIAvailableFlag:
         assert isinstance(mod.VERTEX_AI_AVAILABLE, bool)
 
     def test_flag_is_false_when_unavailable(self):
-        """The real environment has no google-cloud-aiplatform installed."""
-        from youtube_extension.services.cloud import vertex_ai_agent as mod
-        # In the test environment the SDK is absent; the flag should be False.
-        assert mod.VERTEX_AI_AVAILABLE is False
+        """When the Vertex AI SDK cannot be imported, the flag is False.
+
+        ``google-cloud-aiplatform`` (which provides ``vertexai``) is a declared
+        base dependency, so it may or may not be importable depending on the
+        environment. Rather than rely on the ambient absence of the SDK, force
+        the import to fail and reload the module so we deterministically
+        exercise the ``except ImportError`` branch that sets the flag False.
+        """
+        import builtins
+        import importlib
+
+        real_import = builtins.__import__
+
+        def _blocked_import(name, *args, **kwargs):
+            if name == "vertexai" or name.startswith("vertexai.") or name == "google.cloud.aiplatform":
+                raise ImportError(f"forced unavailable: {name}")
+            return real_import(name, *args, **kwargs)
+
+        import youtube_extension.services.cloud.vertex_ai_agent as mod
+        try:
+            with patch("builtins.__import__", side_effect=_blocked_import):
+                importlib.reload(mod)
+            assert mod.VERTEX_AI_AVAILABLE is False
+        finally:
+            # Restore the module to its real state for subsequent tests.
+            importlib.reload(mod)
 
 
 # ---------------------------------------------------------------------------
