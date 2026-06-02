@@ -36,8 +36,12 @@ A secret-purge force-push orphaned older branches and breaks naive git diff/merg
 | Item | State | Plan |
 |---|---|---|
 | Delete **28 CLOSE-SAFE** branches | ✅ done (2026-06-02) | executed via Actions workflow; reversible |
-| Delete **30 CLOSE-STALE** branches | ⏸ not authorized | Actions → Branch Cleanup → `batch: stale, dry_run: false` |
+| Delete **30 CLOSE-STALE** branches | ✅ done (2026-06-02) | executed via Actions workflow; 58 archive tags total; reversible |
 | Triage **3 REVIEW** branches | needs glance | `v0/ai-system-architecture-ac4e7c39` (5d, recent — likely keep/PR), `fix/unified-ai-sdk-real-providers-154` (superseded by model-migration PRs → close), `copilot/improve-documentation` (docs, won't merge clean → close) |
 | Merge PR #222 | open (draft) | review + un-draft |
 
-All deletions are reversible: `git push origin <sha>:refs/heads/<branch>` (SHAs in the recovery file), or `git push origin archive/<branch>:refs/heads/<branch>` (tags on remote).
+Remote went **67 → 10 branches**. Survivors: `main`, this PR branch, 4 open-PR branches
+(#216/#217/#220/#221), the 3 REVIEW branches, and `v0/fix-router-on-vercel-19e0b4de`
+(created mid-session, outside the assessment).
+
+All deletions are reversible: `git push origin <sha>:refs/heads/<branch>` (SHAs in the recovery file), or `git push origin archive/<branch>:refs/heads/<branch>` (58 tags on remote).
