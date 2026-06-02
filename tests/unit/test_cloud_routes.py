@@ -432,7 +432,7 @@ class TestCloudAIRoutes:
         response = client.post("/api/v1/cloud-ai/analyze/batch", json={
             "video_urls": [
                 "https://www.youtube.com/watch?v=auJzb1D-fag",
-                "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+                "https://www.youtube.com/watch?v=auJzb1D-fag",
             ],
             "analysis_types": ["label_detection"],
             "batch_size": 5,

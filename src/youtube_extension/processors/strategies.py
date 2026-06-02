@@ -389,6 +389,7 @@ class EnhancedStrategy(ProcessorStrategy):
     ) -> dict[str, Any]:
         """Complete video processing pipeline"""
         start_time = time.time()
+        video_id = None
 
         try:
             # Extract video ID

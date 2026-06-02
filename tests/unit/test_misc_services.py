@@ -1201,13 +1201,13 @@ class TestEnhancedStrategyAnalyzeContent:
             strategies.HAS_AI_DEPS = original
 
     async def test_process_video_with_invalid_url(self):
-        """URL that yields no video ID raises an exception (source bug: UnboundLocalError)."""
+        """URL that yields no video ID returns an error payload (not an exception)."""
         enh = EnhancedStrategy()
-        # The source code has a bug where video_id is referenced before assignment
-        # in the except block when extract_video_id raises; we test that it at least
-        # propagates an exception
-        with pytest.raises((UnboundLocalError, ValueError, Exception)):
-            await enh.process_video("not-a-youtube-url-at-all")
+        result = await enh.process_video("not-a-youtube-url-at-all")
+        assert isinstance(result, dict)
+        metadata = result.get("metadata", {})
+        assert metadata.get("video_id") == "unknown"
+        assert result.get("error_log") is not None
 
     async def test_optimized_strategy_exception_path(self):
         """When enhanced strategy raises, optimized returns error dict."""
