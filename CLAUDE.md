@@ -126,6 +126,7 @@ turbo run test
 - After any change to backend response models, audit the corresponding SDK model for drift.
 
 **Verify alignment with:**
+
 ```bash
 # Backend source of truth
 grep -A 30 "class TranscriptActionResponse" src/youtube_extension/backend/api/v1/models.py
