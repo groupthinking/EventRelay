@@ -22,20 +22,22 @@ A secret-purge force-push orphaned older branches and breaks naive git diff/merg
 
 ## Pending execution
 
-> ⚠️ **Deletion cannot run from the Claude Code web sandbox.** The git proxy here
-> returns HTTP 403 on *all* ref deletions and tag pushes, and the GitHub MCP
-> server exposes no branch-deletion tool. The 28-branch SAFE batch was attempted
-> and **failed closed — every branch is intact** (verified via `git ls-remote`).
-> The batches below must be run from an environment with real push rights (a
-> local clone, or CI with `contents: write`). The recovery SHAs are pre-recorded
-> in [`branch-cleanup-recovery-refs.txt`](./branch-cleanup-recovery-refs.txt) so
-> the operation is reversible regardless of whether archive-tag pushes succeed.
+> ✅ **SAFE batch executed (2026-06-02).** The 28 CLOSE-SAFE branches were deleted
+> via the `Branch Cleanup` GitHub Actions workflow (server-side, where the token
+> has `contents: write` — the web sandbox itself cannot delete refs). Verified:
+> `deleted=28, still_present=0`; 28 `archive/*` tags pushed + SHAs in
+> [`branch-cleanup-recovery-refs.txt`](./branch-cleanup-recovery-refs.txt) for
+> reversibility. Remote went 67 → 40 branches.
+>
+> Note: `claude/modernize-stale-model-ids` (PR #215) also disappeared, but that
+> was an independent **merge** (merged 2026-06-01 19:00, branch auto-deleted) —
+> not part of this batch.
 
 | Item | State | Plan |
 |---|---|---|
-| Delete **28 CLOSE-SAFE** branches | ⏸ blocked in sandbox | run `scripts/maintenance/branch-cleanup-delete.sh safe` locally — zero risk |
-| Delete **30 CLOSE-STALE** branches | ⏸ blocked in sandbox | `…delete.sh stale` — pre-rewrite orphans / superseded |
+| Delete **28 CLOSE-SAFE** branches | ✅ done (2026-06-02) | executed via Actions workflow; reversible |
+| Delete **30 CLOSE-STALE** branches | ⏸ not authorized | Actions → Branch Cleanup → `batch: stale, dry_run: false` |
 | Triage **3 REVIEW** branches | needs glance | `v0/ai-system-architecture-ac4e7c39` (5d, recent — likely keep/PR), `fix/unified-ai-sdk-real-providers-154` (superseded by model-migration PRs → close), `copilot/improve-documentation` (docs, won't merge clean → close) |
 | Merge PR #222 | open (draft) | review + un-draft |
 
-All deletions are reversible: `git push origin <sha>:refs/heads/<branch>` (SHAs in the recovery file), or `git push origin archive/<branch>:refs/heads/<branch>` where tags were pushed.
+All deletions are reversible: `git push origin <sha>:refs/heads/<branch>` (SHAs in the recovery file), or `git push origin archive/<branch>:refs/heads/<branch>` (tags on remote).
