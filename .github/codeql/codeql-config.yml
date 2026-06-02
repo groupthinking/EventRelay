@@ -20,8 +20,8 @@ paths-ignore:
   - '**/dist/**'
   - '**/.next/**'
   
-  # Test fixtures and temporary files
-  - 'tests/fixtures/temp/**'
+  # Test files — assertions like `"url" in list` are not URL sanitization
+  - 'tests/**'
   - '**/*.tmp'
   - '**/*.temp'
 
