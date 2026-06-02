@@ -432,7 +432,13 @@ class TestHealthCommand:
                 real_import = builtins.__import__
 
                 def broken_import(name, *args, **kwargs):
-                    if name == "youtube_extension" and not args:
+                    # Block every youtube_extension import so the health command
+                    # hits its failure branch immediately. Guarding only the bare
+                    # "youtube_extension" name (with `not args`) never triggered for
+                    # a real `import youtube_extension`, so health re-imported
+                    # youtube_extension.main, whose module-level logging setup
+                    # reconfigured stdout and broke CliRunner's output capture.
+                    if name == "youtube_extension" or name.startswith("youtube_extension."):
                         raise ImportError("forced")
                     return real_import(name, *args, **kwargs)
 
