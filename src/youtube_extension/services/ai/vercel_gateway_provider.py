@@ -43,7 +43,9 @@ def chat(
 
     Raises on transport/auth errors so callers can fall back deterministically.
     """
-    key = os.environ["VERCEL_API_KEY"]
+    key = os.getenv("VERCEL_API_KEY")
+    if not key:
+        raise RuntimeError("VERCEL_API_KEY environment variable is not set")
     payload = {
         "model": model or DEFAULT_MODEL,
         "messages": messages,

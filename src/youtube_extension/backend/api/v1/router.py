@@ -1392,11 +1392,9 @@ async def extract_events(request: EventExtractRequest):
         # process() returns a HybridResult dataclass whose payload is `.response`.
         # REAL_MODE_ONLY: never synthesize events from a mocked or empty AI
         # response -- fall through to the deterministic heuristic instead.
-        cloud_result = getattr(ai_result, "cloud_result", None)
-        backend = getattr(cloud_result, "backend", None)
-        raw_text = (
-            (ai_result.response or "") if getattr(ai_result, "success", False) else ""
-        )
+        cloud_result = ai_result.cloud_result
+        backend = cloud_result.backend if cloud_result else None
+        raw_text = (ai_result.response or "") if ai_result.success else ""
         if not raw_text.strip() or backend == "mock":
             raise RuntimeError("AI extraction unavailable (no real Gemini response)")
         for line in raw_text.strip().split("\n"):
