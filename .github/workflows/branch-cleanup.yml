@@ -2,12 +2,16 @@ name: Branch Cleanup
 
 # Manual, gated branch pruning driven by the branch-cleanup assessment.
 # Runs the archive-then-delete harness server-side, where the GITHUB_TOKEN has
-# the `contents: write` rights needed to delete refs.
+# the `contents: write` rights needed to delete refs (the web sandbox cannot).
 #
-# Usage: Actions tab -> Branch Cleanup -> Run workflow -> pick batch + dry_run.
-# Safety: dry_run defaults to TRUE; you must set it false to actually delete.
-# Every branch SHA is recorded + uploaded as an artifact, so deletions are
-# reversible:  git push origin <sha>:refs/heads/<branch>   (or via archive/* tags).
+# Two ways to trigger:
+#   1. workflow_dispatch (from the default branch): Actions UI, pick batch + dry_run.
+#   2. push sentinel (works from this feature branch): push a commit whose message
+#      contains [run-cleanup:safe] (or :stale/:review) to execute that batch for
+#      real (DRY_RUN=0). Normal pushes are a no-op.
+#
+# Reversible: every branch SHA is recorded + uploaded as an artifact, and an
+# archive/<branch> tag is pushed.  Restore: git push origin <sha>:refs/heads/<branch>
 
 on:
   workflow_dispatch:
@@ -23,6 +27,8 @@ on:
         required: true
         default: true
         type: boolean
+  push:
+    branches: ["claude/branch-cleanup-assessment-ctDVh"]
 
 permissions:
   contents: write
@@ -35,14 +41,36 @@ jobs:
         with:
           fetch-depth: 0          # need all remote refs to tag/delete them
 
-      - name: Run branch-cleanup delete (batch=${{ inputs.batch }}, dry_run=${{ inputs.dry_run }})
+      - id: decide
+        name: Decide batch / dry-run from trigger
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "batch=${{ inputs.batch }}" >> "$GITHUB_OUTPUT"
+            echo "dry=${{ inputs.dry_run == true && '1' || '0' }}" >> "$GITHUB_OUTPUT"
+            echo "go=yes" >> "$GITHUB_OUTPUT"
+          else
+            msg=$(git log -1 --pretty=%B)
+            if echo "$msg" | grep -qE '\[run-cleanup:(safe|stale|review)\]'; then
+              b=$(echo "$msg" | sed -nE 's/.*\[run-cleanup:(safe|stale|review)\].*/\1/p' | head -1)
+              echo "batch=$b" >> "$GITHUB_OUTPUT"
+              echo "dry=0" >> "$GITHUB_OUTPUT"
+              echo "go=yes" >> "$GITHUB_OUTPUT"
+              echo "::notice::sentinel detected — executing '$b' batch (real delete)"
+            else
+              echo "go=no" >> "$GITHUB_OUTPUT"
+              echo "::notice::no [run-cleanup:*] sentinel in commit message — no-op"
+            fi
+          fi
+
+      - name: Run branch-cleanup delete
+        if: steps.decide.outputs.go == 'yes'
         env:
-          DRY_RUN: ${{ inputs.dry_run == true && '1' || '0' }}
+          DRY_RUN: ${{ steps.decide.outputs.dry }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           chmod +x scripts/maintenance/branch-cleanup-delete.sh
-          scripts/maintenance/branch-cleanup-delete.sh "${{ inputs.batch }}"
+          scripts/maintenance/branch-cleanup-delete.sh "${{ steps.decide.outputs.batch }}"
 
       - name: Upload recovery refs
         if: always()
