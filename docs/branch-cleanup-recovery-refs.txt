@@ -28,3 +28,6 @@ fc44f4ae5ac187392d557c625d16a702d9de20ee  v0/ultrathinking-b4b57996
 b7986634f97019fdd1057f0db306e6cb8749e033  v0/ultrathinking-df8a2787
 e0d79f5d4f1b226ec328ad50137bda70121a58c4  v0/ultrathinking-e1f6bbf3
 fc44f4ae5ac187392d557c625d16a702d9de20ee  v0/ultrathinking-f5c094d0
+# recovery refs for 'review' batch (2026-06-02T09:52Z) — restore: git push origin <sha>:refs/heads/<branch>
+12c5599f83c073e8231ca0ad28793e98de905d4c  copilot/improve-documentation
+65719b96d36935b36715030b9637caa6526c0977  fix/unified-ai-sdk-real-providers-154
