@@ -109,6 +109,8 @@ workflow_results/
 .spyproject
 .turbo/
 .venv/
+.poc-venv/
+.poc-runtime.db
 .venv_prod_verify/
 .vscode/
 .webassets-cache
