@@ -32,11 +32,11 @@ _ARCH = {
 
 
 class TestAICodeGeneratorInit:
-    def test_init_without_api_key(self, monkeypatch, tmp_path):
-        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    def test_init_without_any_api_keys(self, monkeypatch, tmp_path):
+        for key in ("GEMINI_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "XAI_API_KEY", "PERPLEXITY_API_KEY"):
+            monkeypatch.delenv(key, raising=False)
         gen = AICodeGenerator(output_dir=str(tmp_path))
-        assert gen.gemini_api_key is None
-        assert gen.client is None
+        assert gen.router is None
 
     def test_init_with_custom_output_dir(self, tmp_path):
         custom = tmp_path / "custom_out"
@@ -45,14 +45,16 @@ class TestAICodeGeneratorInit:
         assert custom.exists()
 
     def test_default_output_dir_created(self, monkeypatch, tmp_path):
-        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+        for key in ("GEMINI_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY"):
+            monkeypatch.delenv(key, raising=False)
         gen = AICodeGenerator(output_dir=str(tmp_path / "out"))
         assert gen.output_dir.exists()
 
-    def test_client_none_without_genai(self, monkeypatch, tmp_path):
-        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    def test_router_none_when_no_provider_keys(self, monkeypatch, tmp_path):
+        for key in ("GEMINI_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "XAI_API_KEY", "PERPLEXITY_API_KEY"):
+            monkeypatch.delenv(key, raising=False)
         gen = AICodeGenerator(output_dir=str(tmp_path))
-        assert gen.client is None
+        assert gen.router is None
 
 
 # ===========================================================================
@@ -61,10 +63,11 @@ class TestAICodeGeneratorInit:
 
 
 class TestGenerateFullstackProject:
-    async def test_raises_when_no_client(self, monkeypatch, tmp_path):
-        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    async def test_raises_when_no_provider(self, monkeypatch, tmp_path):
+        for key in ("GEMINI_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "XAI_API_KEY", "PERPLEXITY_API_KEY"):
+            monkeypatch.delenv(key, raising=False)
         gen = AICodeGenerator(output_dir=str(tmp_path))
-        with pytest.raises(RuntimeError, match="Gemini API key"):
+        with pytest.raises(RuntimeError, match="LLM provider"):
             await gen.generate_fullstack_project({}, {})
 
 
@@ -312,20 +315,18 @@ class TestGetAICodeGenerator:
 # ===========================================================================
 
 def _make_gen_with_mock_client(tmp_path):
-    """Return an AICodeGenerator whose .client is a MagicMock."""
+    """Return an AICodeGenerator whose .router is a MagicMock."""
     gen = AICodeGenerator(output_dir=str(tmp_path))
-    gen.client = MagicMock()
-    gen.gemini_api_key = "fake-key"
-    # Patch genai_types into the module so _ai_generate_file can use it
-    if not hasattr(_mod, "genai_types"):
-        _mod.genai_types = MagicMock()
+    mock_router = MagicMock()
+    mock_router.has_provider.return_value = True
+    mock_router.generate.return_value = "// generated code"
+    gen.router = mock_router
     return gen
 
 
-def _mock_response(text: str) -> MagicMock:
-    r = MagicMock()
-    r.text = text
-    return r
+def _mock_router_response(text: str) -> str:
+    """Return the text directly — router.generate returns a plain string."""
+    return text
 
 
 _VIDEO_ANALYSIS = {
@@ -378,10 +379,6 @@ _AGENT_ARCH = {
 class TestGenerateFullstackProjectWithClient:
     async def test_returns_dict_with_project_path(self, tmp_path):
         gen = _make_gen_with_mock_client(tmp_path)
-        arch_json = json.dumps(_ARCH)
-        gen.client.models.generate_content.return_value = _mock_response(arch_json)
-        gen.client.aio = MagicMock()
-        # Patch async calls
         gen._determine_architecture = AsyncMock(return_value=_ARCH)
         gen._generate_project_files = AsyncMock(return_value=["package.json"])
         result = await gen.generate_fullstack_project(_VIDEO_ANALYSIS, {"type": "web_app"})
@@ -446,14 +443,14 @@ class TestDetermineArchitecture:
     async def test_returns_architecture_dict(self, tmp_path):
         gen = _make_gen_with_mock_client(tmp_path)
         arch = {"type": "fullstack_app", "framework": "nextjs"}
-        gen.client.models.generate_content.return_value = _mock_response(json.dumps(arch))
+        gen.router.generate.return_value = json.dumps(arch)
         result = await gen._determine_architecture(_VIDEO_ANALYSIS, {})
         assert result["type"] == "fullstack_app"
 
     async def test_parses_json_response(self, tmp_path):
         gen = _make_gen_with_mock_client(tmp_path)
         arch = {"type": "saas", "framework": "nextjs", "features": ["auth"]}
-        gen.client.models.generate_content.return_value = _mock_response(json.dumps(arch))
+        gen.router.generate.return_value = json.dumps(arch)
         result = await gen._determine_architecture(_VIDEO_ANALYSIS, {})
         assert result["features"] == ["auth"]
 
@@ -461,7 +458,7 @@ class TestDetermineArchitecture:
         gen = _make_gen_with_mock_client(tmp_path)
         arch = {"type": "agent", "framework": "nextjs"}
         text = f"```json\n{json.dumps(arch)}\n```"
-        gen.client.models.generate_content.return_value = _mock_response(text)
+        gen.router.generate.return_value = text
         result = await gen._determine_architecture(_VIDEO_ANALYSIS, {})
         assert result["type"] == "agent"
 
@@ -469,26 +466,32 @@ class TestDetermineArchitecture:
         gen = _make_gen_with_mock_client(tmp_path)
         arch = {"type": "api", "framework": "nextjs"}
         text = f"```\n{json.dumps(arch)}\n```"
-        gen.client.models.generate_content.return_value = _mock_response(text)
+        gen.router.generate.return_value = text
         result = await gen._determine_architecture(_VIDEO_ANALYSIS, {})
         assert result["type"] == "api"
 
     async def test_falls_back_to_default_on_invalid_json(self, tmp_path):
         gen = _make_gen_with_mock_client(tmp_path)
-        gen.client.models.generate_content.return_value = _mock_response("not json at all")
+        gen.router.generate.return_value = "not json at all"
         result = await gen._determine_architecture(_VIDEO_ANALYSIS, {})
         assert "type" in result  # default architecture returned
 
-    async def test_falls_back_to_default_on_api_exception(self, tmp_path):
+    async def test_falls_back_to_default_on_none_response(self, tmp_path):
         gen = _make_gen_with_mock_client(tmp_path)
-        gen.client.models.generate_content.side_effect = RuntimeError("API error")
+        gen.router.generate.return_value = None
+        result = await gen._determine_architecture(_VIDEO_ANALYSIS, {})
+        assert result["framework"] == "nextjs"  # default
+
+    async def test_falls_back_to_default_on_router_exception(self, tmp_path):
+        gen = _make_gen_with_mock_client(tmp_path)
+        gen.router.generate.side_effect = RuntimeError("API error")
         result = await gen._determine_architecture(_VIDEO_ANALYSIS, {})
         assert result["framework"] == "nextjs"  # default
 
     async def test_uses_knowledge_base_when_available(self, tmp_path):
         gen = _make_gen_with_mock_client(tmp_path)
         arch = {"type": "saas", "framework": "nextjs"}
-        gen.client.models.generate_content.return_value = _mock_response(json.dumps(arch))
+        gen.router.generate.return_value = json.dumps(arch)
         mock_kb = MagicMock()
         mock_kb.get_technology_context.return_value = "some context"
         mock_get_kb = MagicMock(return_value=mock_kb)
@@ -500,7 +503,7 @@ class TestDetermineArchitecture:
     async def test_knowledge_base_failure_does_not_raise(self, tmp_path):
         gen = _make_gen_with_mock_client(tmp_path)
         arch = {"type": "saas", "framework": "nextjs"}
-        gen.client.models.generate_content.return_value = _mock_response(json.dumps(arch))
+        gen.router.generate.return_value = json.dumps(arch)
         mock_get_kb = MagicMock(side_effect=Exception("kb error"))
         with patch.object(_mod, "KNOWLEDGE_BASE_AVAILABLE", True), \
              patch.object(_mod, "get_knowledge_base", mock_get_kb, create=True):
@@ -627,61 +630,52 @@ class TestGenerateNextjsProject:
 class TestAiGenerateFile:
     async def test_returns_string(self, tmp_path):
         gen = _make_gen_with_mock_client(tmp_path)
-        gen.client.models.generate_content.return_value = _mock_response("const x = 1;")
+        gen.router.generate.return_value = "const x = 1;"
         result = await gen._ai_generate_file("test file", _ARCH, _VIDEO_ANALYSIS, "prompt")
         assert isinstance(result, str)
 
     async def test_strips_typescript_fences(self, tmp_path):
         gen = _make_gen_with_mock_client(tmp_path)
-        gen.client.models.generate_content.return_value = _mock_response("```typescript\nconst x = 1;\n```")
+        gen.router.generate.return_value = "```typescript\nconst x = 1;\n```"
         result = await gen._ai_generate_file("file", _ARCH, _VIDEO_ANALYSIS, "prompt")
         assert "const x = 1;" in result
         assert "```" not in result
 
     async def test_strips_tsx_fences(self, tmp_path):
         gen = _make_gen_with_mock_client(tmp_path)
-        gen.client.models.generate_content.return_value = _mock_response("```tsx\nreturn <div/>\n```")
+        gen.router.generate.return_value = "```tsx\nreturn <div/>\n```"
         result = await gen._ai_generate_file("file", _ARCH, _VIDEO_ANALYSIS, "prompt")
         assert "return <div/>" in result
 
     async def test_strips_javascript_fences(self, tmp_path):
         gen = _make_gen_with_mock_client(tmp_path)
-        gen.client.models.generate_content.return_value = _mock_response("```javascript\nvar x=1;\n```")
+        gen.router.generate.return_value = "```javascript\nvar x=1;\n```"
         result = await gen._ai_generate_file("file", _ARCH, _VIDEO_ANALYSIS, "prompt")
         assert "var x=1;" in result
 
     async def test_strips_generic_fences(self, tmp_path):
         gen = _make_gen_with_mock_client(tmp_path)
-        gen.client.models.generate_content.return_value = _mock_response("```\ncode here\n```")
+        gen.router.generate.return_value = "```\ncode here\n```"
         result = await gen._ai_generate_file("file", _ARCH, _VIDEO_ANALYSIS, "prompt")
         assert "code here" in result
 
     async def test_returns_error_comment_on_none_response(self, tmp_path):
         gen = _make_gen_with_mock_client(tmp_path)
-        resp = MagicMock()
-        resp.text = None
-        resp.candidates = []
-        gen.client.models.generate_content.return_value = resp
+        gen.router.generate.return_value = None
         result = await gen._ai_generate_file("test file", _ARCH, _VIDEO_ANALYSIS, "prompt")
         assert "Error" in result
 
     async def test_returns_error_comment_on_exception(self, tmp_path):
         gen = _make_gen_with_mock_client(tmp_path)
-        gen.client.models.generate_content.side_effect = RuntimeError("boom")
+        gen.router.generate.side_effect = RuntimeError("boom")
         result = await gen._ai_generate_file("test file", _ARCH, _VIDEO_ANALYSIS, "prompt")
         assert "Error" in result
 
-    async def test_extracts_from_parts_when_text_is_none(self, tmp_path):
+    async def test_returns_error_comment_on_empty_response(self, tmp_path):
         gen = _make_gen_with_mock_client(tmp_path)
-        resp = MagicMock()
-        resp.text = None
-        part = MagicMock()
-        part.text = "export default function Page() {}"
-        resp.candidates = [MagicMock()]
-        resp.candidates[0].content.parts = [part]
-        gen.client.models.generate_content.return_value = resp
-        result = await gen._ai_generate_file("page", _ARCH, _VIDEO_ANALYSIS, "prompt")
-        assert "export default function Page()" in result
+        gen.router.generate.return_value = ""
+        result = await gen._ai_generate_file("test file", _ARCH, _VIDEO_ANALYSIS, "prompt")
+        assert "Error" in result or result == ""
 
 
 # ===========================================================================
@@ -869,18 +863,19 @@ class TestGenerateEnvLocalVariations:
 
 
 class TestFixBuildErrors:
-    async def test_returns_false_when_no_client(self, tmp_path):
+    async def test_returns_false_when_no_router(self, monkeypatch, tmp_path):
+        for key in ("GEMINI_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "XAI_API_KEY", "PERPLEXITY_API_KEY"):
+            monkeypatch.delenv(key, raising=False)
         gen = AICodeGenerator(output_dir=str(tmp_path))
         result = await gen.fix_build_errors(tmp_path, ["error"], [])
         assert result["success"] is False
 
     async def test_returns_success_true_when_files_fixed(self, tmp_path):
         gen = _make_gen_with_mock_client(tmp_path)
-        # Create a file for the fixer to fix
         tsx_file = tmp_path / "src" / "app" / "page.tsx"
         tsx_file.parent.mkdir(parents=True)
         tsx_file.write_text("const x = 1;")
-        gen.client.models.generate_content.return_value = _mock_response("const fixed = true;")
+        gen.router.generate.return_value = "const fixed = true;"
         errors = ["error in src/app/page.tsx:1:5 - Type error"]
         result = await gen.fix_build_errors(tmp_path, errors, [])
         assert result["success"] is True
@@ -890,38 +885,34 @@ class TestFixBuildErrors:
         tsx_file = tmp_path / "src" / "app" / "page.tsx"
         tsx_file.parent.mkdir(parents=True)
         tsx_file.write_text("const x = 1;")
-        gen.client.models.generate_content.return_value = _mock_response("const fixed = true;")
+        gen.router.generate.return_value = "const fixed = true;"
         errors = ["error in src/app/page.tsx:1"]
         result = await gen.fix_build_errors(tmp_path, errors, [])
         assert isinstance(result["fixed_files"], list)
 
     async def test_total_errors_returned(self, tmp_path):
         gen = _make_gen_with_mock_client(tmp_path)
-        gen.client.models.generate_content.return_value = _mock_response("code")
         errors = ["err1", "err2", "err3"]
         result = await gen.fix_build_errors(tmp_path, errors, [])
         assert result["total_errors"] == 3
 
     async def test_falls_back_to_common_files_when_no_paths_in_errors(self, tmp_path):
         gen = _make_gen_with_mock_client(tmp_path)
-        # no .tsx paths in errors - should try default files
-        gen.client.models.generate_content.return_value = _mock_response("fixed")
         result = await gen.fix_build_errors(tmp_path, ["generic error"], [])
         assert "total_errors" in result
 
     async def test_skips_nonexistent_files(self, tmp_path):
         gen = _make_gen_with_mock_client(tmp_path)
-        # error references a nonexistent file
         errors = ["error in src/missing.tsx:10"]
         result = await gen.fix_build_errors(tmp_path, errors, [])
         assert result["fixed_files"] == [] or result["success"] is False
 
-    async def test_handles_api_exception_gracefully(self, tmp_path):
+    async def test_handles_router_exception_gracefully(self, tmp_path):
         gen = _make_gen_with_mock_client(tmp_path)
         tsx_file = tmp_path / "src" / "app" / "page.tsx"
         tsx_file.parent.mkdir(parents=True)
         tsx_file.write_text("const x = 1;")
-        gen.client.models.generate_content.side_effect = RuntimeError("API down")
+        gen.router.generate.side_effect = RuntimeError("API down")
         errors = ["error in src/app/page.tsx:1"]
         result = await gen.fix_build_errors(tmp_path, errors, [])
         assert result["success"] is False
@@ -931,54 +922,21 @@ class TestFixBuildErrors:
         tsx_file = tmp_path / "src" / "app" / "page.tsx"
         tsx_file.parent.mkdir(parents=True)
         tsx_file.write_text("const old = 1;")
-        fixed_code = "```typescript\nconst fixed = true;\n```"
-        gen.client.models.generate_content.return_value = _mock_response(fixed_code)
+        gen.router.generate.return_value = "```typescript\nconst fixed = true;\n```"
         errors = ["error in src/app/page.tsx:1"]
         await gen.fix_build_errors(tmp_path, errors, [])
         content = tsx_file.read_text()
         assert "```" not in content
 
-    async def test_none_response_text_skips_file(self, tmp_path):
+    async def test_none_response_skips_file(self, tmp_path):
         gen = _make_gen_with_mock_client(tmp_path)
         tsx_file = tmp_path / "src" / "app" / "page.tsx"
         tsx_file.parent.mkdir(parents=True)
         tsx_file.write_text("const old = 1;")
-        resp = MagicMock()
-        resp.text = None
-        resp.candidates = []
-        gen.client.models.generate_content.return_value = resp
+        gen.router.generate.return_value = None
         errors = ["error in src/app/page.tsx:1"]
         result = await gen.fix_build_errors(tmp_path, errors, [])
         assert result["success"] is False
-
-    async def test_extracts_from_parts_when_text_is_none(self, tmp_path):
-        gen = _make_gen_with_mock_client(tmp_path)
-        tsx_file = tmp_path / "src" / "app" / "page.tsx"
-        tsx_file.parent.mkdir(parents=True)
-        tsx_file.write_text("const old = 1;")
-        resp = MagicMock()
-        resp.text = None
-        part = MagicMock()
-        part.text = "const fixed = true;"
-        resp.candidates = [MagicMock()]
-        resp.candidates[0].content.parts = [part]
-        gen.client.models.generate_content.return_value = resp
-        errors = ["error in src/app/page.tsx:1"]
-        result = await gen.fix_build_errors(tmp_path, errors, [])
-        assert result["success"] is True
-
-    async def test_strips_markdown_fences_unknown_lang(self, tmp_path):
-        """Test the else branch in code_blocks where lang is not known (line 1234)."""
-        gen = _make_gen_with_mock_client(tmp_path)
-        tsx_file = tmp_path / "src" / "app" / "page.tsx"
-        tsx_file.parent.mkdir(parents=True)
-        tsx_file.write_text("const old = 1;")
-        # Use a language not in ["typescript", "tsx", "javascript", "js"]
-        fixed_code = "```python\nconst fixed = true;\n```"
-        gen.client.models.generate_content.return_value = _mock_response(fixed_code)
-        errors = ["error in src/app/page.tsx:1"]
-        result = await gen.fix_build_errors(tmp_path, errors, [])
-        assert result["success"] is True
 
 
 # ===========================================================================
@@ -1689,33 +1647,33 @@ class TestGenerateFastapiProject:
 
 
 class TestInitWithApiKey:
-    def test_client_created_when_genai_available_and_key_set(self, tmp_path, monkeypatch):
-        # Verify that when GENAI_AVAILABLE=True and API key is set, client gets created.
-        # We test this by simulating the behavior: create gen, manually set client,
-        # then verify the gen has a non-None client.
-        monkeypatch.setenv("GEMINI_API_KEY", "fake-key-123")
+    def test_router_set_when_provider_key_available(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-fake-key")
         gen = AICodeGenerator(output_dir=str(tmp_path))
-        # client is None because GENAI_AVAILABLE=False in test env;
-        # manually set to simulate genai being available
-        mock_client = MagicMock()
-        gen.client = mock_client
-        assert gen.client is mock_client
+        # router may or may not have a provider depending on SDK availability;
+        # manually verify we can set it
+        mock_router = MagicMock()
+        gen.router = mock_router
+        assert gen.router is mock_router
 
-    def test_client_none_when_genai_unavailable(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("GEMINI_API_KEY", "fake-key-123")
-        with patch.object(_mod, "GENAI_AVAILABLE", False):
+    def test_router_none_when_llm_router_unavailable(self, tmp_path, monkeypatch):
+        for key in ("GEMINI_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "XAI_API_KEY", "PERPLEXITY_API_KEY"):
+            monkeypatch.delenv(key, raising=False)
+        with patch.object(_mod, "_LLM_ROUTER_AVAILABLE", False):
             gen = AICodeGenerator(output_dir=str(tmp_path))
-        assert gen.client is None
+        assert gen.router is None
 
     def test_output_dir_defaults_to_generated_projects(self, tmp_path, monkeypatch):
-        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+        for key in ("GEMINI_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY"):
+            monkeypatch.delenv(key, raising=False)
         gen = AICodeGenerator()
         assert gen.output_dir.name == "generated_projects"
 
-    def test_gemini_api_key_set_from_env(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("GEMINI_API_KEY", "my-secret-key")
-        gen = AICodeGenerator(output_dir=str(tmp_path))
-        assert gen.gemini_api_key == "my-secret-key"
+    def test_router_init_exception_sets_router_to_none(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("GEMINI_API_KEY", "fake-key")
+        with patch.object(_mod, "LLMRouter", side_effect=RuntimeError("init failed")):
+            gen = AICodeGenerator(output_dir=str(tmp_path))
+        assert gen.router is None
 
 
 # ===========================================================================
@@ -1767,33 +1725,21 @@ class TestGenerateFullstackKnowledgeBase:
 class TestAiGenerateFileEdgeCases:
     async def test_empty_string_response_returns_error(self, tmp_path):
         gen = _make_gen_with_mock_client(tmp_path)
-        resp = MagicMock()
-        resp.text = ""
-        gen.client.models.generate_content.return_value = resp
+        gen.router.generate.return_value = ""
         result = await gen._ai_generate_file("file", _ARCH, _VIDEO_ANALYSIS, "prompt")
-        # empty code treated as falsy -> error comment
         assert "Error" in result or result == ""
 
     async def test_with_empty_video_analysis(self, tmp_path):
         gen = _make_gen_with_mock_client(tmp_path)
-        gen.client.models.generate_content.return_value = _mock_response("const x = 1;")
+        gen.router.generate.return_value = "const x = 1;"
         result = await gen._ai_generate_file("file", _ARCH, {}, "prompt")
         assert "const x = 1;" in result
 
-    async def test_multiple_parts_joined(self, tmp_path):
+    async def test_plain_code_returned_unchanged(self, tmp_path):
         gen = _make_gen_with_mock_client(tmp_path)
-        resp = MagicMock()
-        resp.text = None
-        part1 = MagicMock()
-        part1.text = "line1"
-        part2 = MagicMock()
-        part2.text = "line2"
-        resp.candidates = [MagicMock()]
-        resp.candidates[0].content.parts = [part1, part2]
-        gen.client.models.generate_content.return_value = resp
+        gen.router.generate.return_value = "const a = 1;\nconst b = 2;"
         result = await gen._ai_generate_file("file", _ARCH, _VIDEO_ANALYSIS, "prompt")
-        assert "line1" in result
-        assert "line2" in result
+        assert "const a = 1;" in result
 
 
 # ===========================================================================
