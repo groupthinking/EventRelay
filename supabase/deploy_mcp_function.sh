@@ -3,6 +3,11 @@
 # MCP Function Deployment Script
 # This script helps deploy the MCP-compatible edge function to Supabase
 
+# Resolve the repository root dynamically so this works on any machine / CI.
+# Override by exporting DEPLOY_ROOT before running the script.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+DEPLOY_ROOT="${DEPLOY_ROOT:-$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel 2>/dev/null || (cd "$SCRIPT_DIR/.." && pwd))}"
+
 echo "=== MCP Function Deployment Script ==="
 echo "This script will help you deploy the connect-to-cursor-mcp function to Supabase"
 echo ""
@@ -24,8 +29,8 @@ echo ""
 # Step 2: Deploy the function
 echo "Step 2: Deploying MCP-compatible edge function"
 
-# Navigate to project root first
-cd /Users/garvey/Desktop/\ Framework-Guide-for-Cursor/
+# Navigate to the repository root (resolved above).
+cd "$DEPLOY_ROOT" || { echo "Could not cd to project root: $DEPLOY_ROOT"; exit 1; }
 
 # Deploy function from the project root.
 # IMPORTANT: do NOT pass --no-verify-jwt. JWT verification must stay enabled so
@@ -53,5 +58,5 @@ echo '  -d '"'"'{"modelId": "gpt-4", "context": {"operation": "connect", "parame
 echo '  https://nsfrhirwsjqwhagtuaxx.supabase.co/functions/v1/connect-to-cursor-mcp'
 echo ""
 
-# Remain in project root
-cd /Users/garvey/Desktop/\ Framework-Guide-for-Cursor/ 
+# Remain in the repository root
+cd "$DEPLOY_ROOT" || exit 1 

@@ -16,6 +16,9 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
  * 401. This in-function check is defense-in-depth on top of the platform-level
  * `verify_jwt = true` setting pinned in supabase/config.toml — never deploy
  * this function with `--no-verify-jwt`.
+ *
+ * The endpoint is POST-only and server-to-server (no browser/CORS client), so
+ * no CORS preflight handling is provided; any non-POST method returns 405.
  */
 
 // Types for MCP context
@@ -33,10 +36,14 @@ interface MCPContext {
 
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
-function jsonError(message: string, status: number): Response {
+function jsonError(
+  message: string,
+  status: number,
+  extraHeaders: Record<string, string> = {},
+): Response {
   return new Response(
     JSON.stringify({ status: "error", error: message }),
-    { status, headers: JSON_HEADERS },
+    { status, headers: { ...JSON_HEADERS, ...extraHeaders } },
   );
 }
 
@@ -63,13 +70,26 @@ serve(async (req) => {
     global: { headers: { Authorization: `Bearer ${token}` } },
   });
 
-  const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+  const { data, error: authError } = await supabase.auth.getUser(token);
+  const user = data?.user;
 
   if (authError || !user) {
     return jsonError("Invalid or expired token", 401);
   }
 
-  // --- Authenticated request handling ---------------------------------------
+  // --- Method gate: this endpoint only accepts POST -------------------------
+  if (req.method !== "POST") {
+    return jsonError("Method not allowed", 405, { "Allow": "POST" });
+  }
+
+  // --- Parse and validate the request body ----------------------------------
+  let body: Record<string, unknown>;
+  try {
+    body = await req.json();
+  } catch (_e) {
+    return jsonError("Invalid JSON body", 400);
+  }
+
   const response: MCPContext = {
     context_id: crypto.randomUUID(),
     operation: "connect",
@@ -81,29 +101,20 @@ serve(async (req) => {
     },
   };
 
-  // If this is a POST request, process the body
-  if (req.method === "POST") {
-    try {
-      const body = await req.json();
+  // Only reflect well-typed, expected fields back to the caller.
+  if (typeof body.modelId === "string") {
+    response.model_id = body.modelId;
+    response.result = { message: `Connected to model: ${body.modelId}` };
+  }
 
-      // Only reflect well-typed, expected fields back to the caller.
-      if (typeof body?.modelId === "string") {
-        response.model_id = body.modelId;
-        response.result = { message: `Connected to model: ${body.modelId}` };
-      }
-
-      if (body?.context && typeof body.context === "object") {
-        // Merge known string fields if provided
-        if (typeof body.context.context_id === "string") {
-          response.context_id = body.context.context_id;
-        }
-        if (typeof body.context.operation === "string") {
-          response.operation = body.context.operation;
-        }
-      }
-    } catch (_e) {
-      response.status = "error";
-      response.result = { message: "Error processing request" };
+  const context = body.context;
+  if (context && typeof context === "object") {
+    const ctx = context as Record<string, unknown>;
+    if (typeof ctx.context_id === "string") {
+      response.context_id = ctx.context_id;
+    }
+    if (typeof ctx.operation === "string") {
+      response.operation = ctx.operation;
     }
   }
 

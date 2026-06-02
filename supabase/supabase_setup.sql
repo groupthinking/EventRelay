@@ -61,7 +61,7 @@ CREATE TABLE IF NOT EXISTS public.mcp_logs (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     context_id TEXT NOT NULL,
     operation TEXT,
-    user_id TEXT,
+    user_id TEXT DEFAULT (auth.uid())::text,
     timestamp BIGINT,
     parameters JSONB DEFAULT '{}'::jsonb,
     result JSONB DEFAULT '{}'::jsonb,
@@ -113,15 +113,9 @@ BEGIN
 END;
 $$;
 
--- Create sample data for testing.
--- NOTE: these rows are inserted with no authenticated user, so user_id defaults
--- to NULL. Once RLS is enabled below they are visible only to the service role
--- (which bypasses RLS); no authenticated user can read them.
-INSERT INTO public.projects (name, description, content, ref_source)
-VALUES
-('Abacus.AI Integration', 'MCP framework integration with Abacus.AI', 'This project demonstrates how to use Model Context Protocol (MCP) with Abacus.AI services.', 'abacus.ai'),
-('MCP Framework', 'Core implementation of Model Context Protocol', 'The Model Context Protocol provides structured context sharing for AI/LLM systems with full traceability.', 'framework'),
-('Supabase Connector', 'Supabase database connector for MCP', 'This connector enables persistent storage of MCP context data in Supabase tables.', 'supabase');
+-- (No seed data: under the owner-scoped RLS below, rows inserted at setup time
+-- have a NULL owner and would be invisible to every authenticated user, so
+-- seeding here serves no purpose. Seed real, user-owned data through the app.)
 
 -- ---------------------------------------------------------------------------
 -- Row-level security (least privilege)
@@ -141,12 +135,24 @@ VALUES
 
 -- Ensure the ownership column exists on pre-existing deployments. This is a
 -- no-op on a fresh install where the column is already declared above, but it
--- backfills databases created before ownership was introduced so the policies
--- below can reference user_id.
+-- adds user_id to databases created before ownership was introduced so the
+-- policies below can reference it.
+--
+-- NOTE for existing deployments: rows that predate this column get user_id =
+-- NULL and therefore become invisible under the owner-scoped policies. Before
+-- relying on RLS, backfill user_id for legacy rows according to your own
+-- ownership mapping, e.g.:
+--     UPDATE public.projects SET user_id = '<owner-uuid>' WHERE user_id IS NULL;
+-- We intentionally do NOT force NOT NULL here: there is no creator column to
+-- backfill from generically, and a fresh install seeds no rows.
 ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS user_id UUID DEFAULT auth.uid() REFERENCES auth.users(id) ON DELETE CASCADE;
 ALTER TABLE public.chats    ADD COLUMN IF NOT EXISTS user_id UUID DEFAULT auth.uid() REFERENCES auth.users(id) ON DELETE CASCADE;
 ALTER TABLE public.files    ADD COLUMN IF NOT EXISTS user_id UUID DEFAULT auth.uid() REFERENCES auth.users(id) ON DELETE CASCADE;
 ALTER TABLE public.media    ADD COLUMN IF NOT EXISTS user_id UUID DEFAULT auth.uid() REFERENCES auth.users(id) ON DELETE CASCADE;
+
+-- mcp_logs.user_id predates this change; ensure it defaults to the caller so
+-- authenticated INSERTs satisfy the WITH CHECK (user_id = auth.uid()::text).
+ALTER TABLE public.mcp_logs ALTER COLUMN user_id SET DEFAULT (auth.uid())::text;
 
 -- Indexes to keep the ownership predicate fast.
 CREATE INDEX IF NOT EXISTS idx_projects_user_id ON public.projects (user_id);
