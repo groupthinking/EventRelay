@@ -5,7 +5,6 @@ from __future__ import annotations
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
@@ -17,10 +16,6 @@ from youtube_extension.backend.models.cache import (
     CacheStatus,
     CacheType,
 )
-
-
-def _ns(**attrs) -> SimpleNamespace:
-    return SimpleNamespace(**attrs)
 
 
 # ===========================================================================
@@ -88,12 +83,12 @@ class TestCacheStatusEnum:
 
 
 class TestCacheEntryIsExpired:
-    def test_past_expires_at_is_expired(self):
-        entry = _ns(expires_at=datetime.utcnow() - timedelta(hours=1))
+    def test_past_expires_at_is_expired(self) -> None:
+        entry = CacheEntry(expires_at=datetime.utcnow() - timedelta(hours=1))
         assert CacheEntry.is_expired(entry) is True
 
-    def test_future_expires_at_is_not_expired(self):
-        entry = _ns(expires_at=datetime.utcnow() + timedelta(hours=1))
+    def test_future_expires_at_is_not_expired(self) -> None:
+        entry = CacheEntry(expires_at=datetime.utcnow() + timedelta(hours=1))
         assert CacheEntry.is_expired(entry) is False
 
 
@@ -103,16 +98,16 @@ class TestCacheEntryIsExpired:
 
 
 class TestCacheEntryIsNearExpiry:
-    def test_entry_expiring_in_15_minutes_is_near_with_30min_window(self):
-        entry = _ns(expires_at=datetime.utcnow() + timedelta(minutes=15))
+    def test_entry_expiring_in_15_minutes_is_near_with_30min_window(self) -> None:
+        entry = CacheEntry(expires_at=datetime.utcnow() + timedelta(minutes=15))
         assert CacheEntry.is_near_expiry(entry, minutes=30) is True
 
-    def test_entry_expiring_in_2_hours_is_not_near_with_30min_window(self):
-        entry = _ns(expires_at=datetime.utcnow() + timedelta(hours=2))
+    def test_entry_expiring_in_2_hours_is_not_near_with_30min_window(self) -> None:
+        entry = CacheEntry(expires_at=datetime.utcnow() + timedelta(hours=2))
         assert CacheEntry.is_near_expiry(entry, minutes=30) is False
 
-    def test_already_expired_is_near_expiry(self):
-        entry = _ns(expires_at=datetime.utcnow() - timedelta(hours=1))
+    def test_already_expired_is_near_expiry(self) -> None:
+        entry = CacheEntry(expires_at=datetime.utcnow() - timedelta(hours=1))
         assert CacheEntry.is_near_expiry(entry, minutes=30) is True
 
 
@@ -122,16 +117,18 @@ class TestCacheEntryIsNearExpiry:
 
 
 class TestCacheEntryRecordHit:
-    def test_increments_hit_count(self):
-        entry = _ns(hit_count=5, last_accessed_at=None, created_at=datetime.utcnow(), access_frequency=0.0)
-        entry._update_access_frequency = lambda: None  # stub side-effect
+    def test_increments_hit_count(self) -> None:
+        entry = CacheEntry(hit_count=5, last_accessed_at=None, access_frequency=0.0)
+        calls: list[bool] = []
+        entry._update_access_frequency = lambda: calls.append(True)  # type: ignore[method-assign]
         CacheEntry.record_hit(entry)
         assert entry.hit_count == 6
+        assert len(calls) == 1
 
-    def test_sets_last_accessed_at(self):
+    def test_sets_last_accessed_at(self) -> None:
         before = datetime.utcnow()
-        entry = _ns(hit_count=0, last_accessed_at=None, created_at=datetime.utcnow(), access_frequency=0.0)
-        entry._update_access_frequency = lambda: None
+        entry = CacheEntry(hit_count=0, last_accessed_at=None, access_frequency=0.0)
+        entry._update_access_frequency = lambda: None  # type: ignore[method-assign]
         CacheEntry.record_hit(entry)
         assert entry.last_accessed_at >= before
 
@@ -142,8 +139,8 @@ class TestCacheEntryRecordHit:
 
 
 class TestCacheEntryInvalidate:
-    def test_sets_status_to_invalidated(self):
-        entry = _ns(status=CacheStatus.ACTIVE)
+    def test_sets_status_to_invalidated(self) -> None:
+        entry = CacheEntry(status=CacheStatus.ACTIVE)
         CacheEntry.invalidate(entry)
         assert entry.status == CacheStatus.INVALIDATED
 
@@ -154,27 +151,27 @@ class TestCacheEntryInvalidate:
 
 
 class TestCacheEntryGetEfficiencyScore:
-    def test_returns_zero_when_no_generation_time(self):
-        entry = _ns(generation_time_ms=None, hit_count=10)
+    def test_returns_zero_when_no_generation_time(self) -> None:
+        entry = CacheEntry(generation_time_ms=None, hit_count=10)
         assert CacheEntry.get_efficiency_score(entry) == 0.0
 
-    def test_returns_zero_when_no_hits(self):
-        entry = _ns(generation_time_ms=500, hit_count=0)
+    def test_returns_zero_when_no_hits(self) -> None:
+        entry = CacheEntry(generation_time_ms=500, hit_count=0)
         assert CacheEntry.get_efficiency_score(entry) == 0.0
 
-    def test_calculates_efficiency(self):
+    def test_calculates_efficiency(self) -> None:
         # (10-1) * 500ms / 1000 = 4.5
-        entry = _ns(generation_time_ms=500, hit_count=10)
+        entry = CacheEntry(generation_time_ms=500, hit_count=10)
         assert abs(CacheEntry.get_efficiency_score(entry) - 4.5) < 1e-9
 
-    def test_caps_at_100(self):
+    def test_caps_at_100(self) -> None:
         # (1000-1) * 500ms / 1000 = ~499.5 → capped at 100
-        entry = _ns(generation_time_ms=500, hit_count=1000)
+        entry = CacheEntry(generation_time_ms=500, hit_count=1000)
         assert CacheEntry.get_efficiency_score(entry) == 100.0
 
-    def test_single_hit_gives_zero_efficiency(self):
+    def test_single_hit_gives_zero_efficiency(self) -> None:
         # (1-1) * anything = 0
-        entry = _ns(generation_time_ms=200, hit_count=1)
+        entry = CacheEntry(generation_time_ms=200, hit_count=1)
         assert CacheEntry.get_efficiency_score(entry) == 0.0
 
 
@@ -184,15 +181,15 @@ class TestCacheEntryGetEfficiencyScore:
 
 
 class TestCacheEntryExtendExpiry:
-    def test_sets_expires_at_in_future(self):
+    def test_sets_expires_at_in_future(self) -> None:
         before = datetime.utcnow()
-        entry = _ns(expires_at=datetime.utcnow())
+        entry = CacheEntry(expires_at=datetime.utcnow())
         CacheEntry.extend_expiry(entry, hours=24)
         assert entry.expires_at > before + timedelta(hours=23)
 
-    def test_custom_hours(self):
+    def test_custom_hours(self) -> None:
         before = datetime.utcnow()
-        entry = _ns(expires_at=datetime.utcnow())
+        entry = CacheEntry(expires_at=datetime.utcnow())
         CacheEntry.extend_expiry(entry, hours=1)
         assert entry.expires_at > before + timedelta(minutes=59)
 
@@ -203,20 +200,20 @@ class TestCacheEntryExtendExpiry:
 
 
 class TestCacheStatsCalculateEfficiency:
-    def test_zero_when_no_hits_or_misses(self):
-        s = _ns(total_hits=0, total_misses=0)
+    def test_zero_when_no_hits_or_misses(self) -> None:
+        s = CacheStats(total_hits=0, total_misses=0)
         assert CacheStats.calculate_efficiency(s) == 0.0
 
-    def test_100_percent_when_all_hits(self):
-        s = _ns(total_hits=100, total_misses=0)
+    def test_100_percent_when_all_hits(self) -> None:
+        s = CacheStats(total_hits=100, total_misses=0)
         assert abs(CacheStats.calculate_efficiency(s) - 100.0) < 1e-9
 
-    def test_50_percent_efficiency(self):
-        s = _ns(total_hits=50, total_misses=50)
+    def test_50_percent_efficiency(self) -> None:
+        s = CacheStats(total_hits=50, total_misses=50)
         assert abs(CacheStats.calculate_efficiency(s) - 50.0) < 1e-9
 
-    def test_partial_hit_rate(self):
-        s = _ns(total_hits=80, total_misses=20)
+    def test_partial_hit_rate(self) -> None:
+        s = CacheStats(total_hits=80, total_misses=20)
         assert abs(CacheStats.calculate_efficiency(s) - 80.0) < 1e-9
 
 
@@ -226,16 +223,16 @@ class TestCacheStatsCalculateEfficiency:
 
 
 class TestCacheStatsGetStorageEfficiency:
-    def test_zero_when_no_storage_cost(self):
-        s = _ns(storage_cost=0, generation_cost_saved=10.0)
+    def test_zero_when_no_storage_cost(self) -> None:
+        s = CacheStats(storage_cost=0, generation_cost_saved=10.0)
         assert CacheStats.get_storage_efficiency(s) == 0.0
 
-    def test_ratio_calculated(self):
-        s = _ns(storage_cost=2.0, generation_cost_saved=10.0)
+    def test_ratio_calculated(self) -> None:
+        s = CacheStats(storage_cost=2.0, generation_cost_saved=10.0)
         assert abs(CacheStats.get_storage_efficiency(s) - 5.0) < 1e-9
 
-    def test_less_than_one_when_inefficient(self):
-        s = _ns(storage_cost=10.0, generation_cost_saved=5.0)
+    def test_less_than_one_when_inefficient(self) -> None:
+        s = CacheStats(storage_cost=10.0, generation_cost_saved=5.0)
         assert abs(CacheStats.get_storage_efficiency(s) - 0.5) < 1e-9
 
 
@@ -245,24 +242,24 @@ class TestCacheStatsGetStorageEfficiency:
 
 
 class TestCacheStatsGetSizeSummary:
-    def test_returns_dict_with_expected_keys(self):
-        s = _ns(total_size_bytes=1024, average_entry_size=512.0, largest_entry_size=2048)
+    def test_returns_dict_with_expected_keys(self) -> None:
+        s = CacheStats(total_size_bytes=1024, average_entry_size=512.0, largest_entry_size=2048)
         summary = CacheStats.get_size_summary(s)
         assert "total_size" in summary
         assert "average_entry" in summary
         assert "largest_entry" in summary
 
-    def test_bytes_unit_for_small_size(self):
-        s = _ns(total_size_bytes=500, average_entry_size=100.0, largest_entry_size=200)
+    def test_bytes_unit_for_small_size(self) -> None:
+        s = CacheStats(total_size_bytes=500, average_entry_size=100.0, largest_entry_size=200)
         summary = CacheStats.get_size_summary(s)
         assert "B" in summary["total_size"]
 
-    def test_kb_unit_for_medium_size(self):
-        s = _ns(total_size_bytes=2048, average_entry_size=1024.0, largest_entry_size=4096)
+    def test_kb_unit_for_medium_size(self) -> None:
+        s = CacheStats(total_size_bytes=2048, average_entry_size=1024.0, largest_entry_size=4096)
         summary = CacheStats.get_size_summary(s)
         assert "KB" in summary["total_size"]
 
-    def test_mb_unit_for_large_size(self):
-        s = _ns(total_size_bytes=2 * 1024 * 1024, average_entry_size=1024.0, largest_entry_size=4096)
+    def test_mb_unit_for_large_size(self) -> None:
+        s = CacheStats(total_size_bytes=2 * 1024 * 1024, average_entry_size=1024.0, largest_entry_size=4096)
         summary = CacheStats.get_size_summary(s)
         assert "MB" in summary["total_size"]

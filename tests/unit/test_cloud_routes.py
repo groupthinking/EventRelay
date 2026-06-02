@@ -205,31 +205,31 @@ class TestCloudAIRoutes:
         assert parse_provider(None) is None
 
     def test_parse_provider_valid(self):
-        # The route's parse_provider references CloudAIProvider.APPLE_FASTVLM which
-        # no longer exists in the enum — calling the real function raises AttributeError.
-        # We verify parse_provider(None) -> None (tested separately) and validate the
-        # invalid provider path via the HTTP endpoint tests, which exercise error handling.
-        # Here we patch the function to confirm correct routing only for valid providers.
-        from fastapi import HTTPException
-        with patch("youtube_extension.backend.cloud_ai_routes.parse_provider") as mock_pp:
-            mock_pp.return_value = CloudAIProvider.GOOGLE_CLOUD
-            result = mock_pp("google_cloud")
-            assert result == CloudAIProvider.GOOGLE_CLOUD
+        result = parse_provider("google_cloud")
+        assert result == CloudAIProvider.GOOGLE_CLOUD
+
+    def test_parse_provider_valid_aws(self):
+        result = parse_provider("aws_rekognition")
+        assert result == CloudAIProvider.AWS_REKOGNITION
+
+    def test_parse_provider_valid_azure(self):
+        result = parse_provider("azure_vision")
+        assert result == CloudAIProvider.AZURE_VISION
 
     def test_parse_provider_invalid(self):
-        # parse_provider has a bug: it references CloudAIProvider.APPLE_FASTVLM which doesn't exist.
-        # The invalid-provider path is exercised through the HTTP endpoint (returns 400),
-        # but calling parse_provider() directly crashes with AttributeError before reaching the
-        # "unknown provider" branch. Skip the direct call; the endpoint test covers the intent.
-        # We still verify the endpoint returns 400 for an invalid provider string.
+        from fastapi import HTTPException as _HTTPException
+        with pytest.raises(_HTTPException) as exc_info:
+            parse_provider("nonexistent_provider")
+        assert exc_info.value.status_code == 400
+
+    def test_parse_provider_invalid_via_endpoint(self):
         client = TestClient(_make_cloud_ai_app())
         response = client.post("/api/v1/cloud-ai/analyze/video", json={
             "video_url": "https://www.youtube.com/watch?v=auJzb1D-fag",
             "analysis_types": ["label_detection"],
             "preferred_provider": "nonexistent_provider",
         })
-        # The function crashes with AttributeError which propagates as 500, not 400
-        assert response.status_code in (400, 500)
+        assert response.status_code == 400
 
     def test_format_analysis_result(self):
         result = _make_analysis_result()
@@ -327,25 +327,21 @@ class TestCloudAIRoutes:
         assert "objects" in data
 
     def test_analyze_video_invalid_analysis_type(self):
-        # parse_analysis_types raises HTTPException(400), but the outer except clause
-        # in analyze_video catches it as a generic Exception and returns 500.
         client = TestClient(_make_cloud_ai_app())
         response = client.post("/api/v1/cloud-ai/analyze/video", json={
             "video_url": "https://www.youtube.com/watch?v=auJzb1D-fag",
             "analysis_types": ["invalid_type"],
         })
-        assert response.status_code in (400, 500)
+        assert response.status_code == 400
 
     def test_analyze_video_invalid_provider(self):
-        # parse_provider crashes with AttributeError on APPLE_FASTVLM before
-        # reaching the "unknown provider" branch; caught by outer except -> 500.
         client = TestClient(_make_cloud_ai_app())
         response = client.post("/api/v1/cloud-ai/analyze/video", json={
             "video_url": "https://www.youtube.com/watch?v=auJzb1D-fag",
             "analysis_types": ["label_detection"],
             "preferred_provider": "nonexistent_provider",
         })
-        assert response.status_code in (400, 500)
+        assert response.status_code == 400
 
     def test_analyze_video_cloud_ai_error(self):
         mock_ai = AsyncMock()
@@ -444,13 +440,12 @@ class TestCloudAIRoutes:
         assert "batch_size" in data
 
     def test_analyze_batch_videos_invalid_analysis_type(self):
-        # The batch endpoint catches all exceptions and returns 500.
         client = TestClient(_make_cloud_ai_app())
         response = client.post("/api/v1/cloud-ai/analyze/batch", json={
             "video_urls": ["https://www.youtube.com/watch?v=auJzb1D-fag"],
             "analysis_types": ["garbage_type"],
         })
-        assert response.status_code in (400, 500)
+        assert response.status_code == 400
 
     # -------- POST /api/v1/cloud-ai/analyze/multi-provider --------
 
@@ -666,14 +661,12 @@ class TestCloudApiEndpoints:
         assert data["queued_count"] == 2
 
     def test_batch_process_too_many_videos(self):
-        # The batch endpoint's HTTPException(400) is caught by the outer `except Exception`
-        # and re-raised as HTTPException(500). So the effective status is 500.
         client = self._build_app()
         response = client.post("/api/v3/batch-process", json={
             "video_urls": [f"https://yt.com/watch?v=vid{i}" for i in range(51)],
             "priority": 0,
         })
-        assert response.status_code in (400, 500)
+        assert response.status_code == 400
 
     def test_batch_process_exception(self):
         mock_processor = AsyncMock()
@@ -1003,7 +996,7 @@ class TestAdvancedVideoRoutes:
             "video_url": "https://www.youtube.com/watch?v=auJzb1D-fag",
             "granularity": "ultra",
         })
-        assert response.status_code == 500  # raised as HTTPException(500) internally
+        assert response.status_code == 400
 
     def test_create_timeline_valid_granularities(self):
         for granularity in ("fine", "medium", "coarse"):
@@ -1114,19 +1107,16 @@ class TestAdvancedVideoRoutes:
                 },
                 "publish_result": False,
             })
-        # Either success or a 500 if import fails in test env; just verify it doesn't crash the test
-        assert response.status_code in (200, 500)
+        assert response.status_code == 200
 
     def test_analyze_with_schema_error(self):
-        # Simulate import error in handler
         response = self._client().post("/api/v1/video/analyze/structured", json={
             "video_url": "https://www.youtube.com/watch?v=auJzb1D-fag",
             "prompt": "Summarize",
             "schema": {"type": "object"},
             "publish_result": False,
         })
-        # Without a real gemini service, it will either fail the import or analysis
-        assert response.status_code in (200, 500)
+        assert response.status_code == 500
 
     # -------- POST /api/v1/video/publish-event --------
 

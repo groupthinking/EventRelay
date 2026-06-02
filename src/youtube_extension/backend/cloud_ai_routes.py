@@ -264,6 +264,8 @@ async def analyze_video(request: VideoAnalysisRequest):
     except ConfigurationError as e:
         logger.error(f"Configuration error: {e}")
         raise HTTPException(status_code=500, detail=f"Configuration error: {str(e)}")
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Unexpected error during video analysis: {e}")
         raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
@@ -295,6 +297,8 @@ async def analyze_batch_videos(request: BatchAnalysisRequest, background_tasks: 
             "batch_size": request.batch_size
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to start batch analysis: {e}")
         raise HTTPException(status_code=500, detail=f"Batch analysis failed: {str(e)}")

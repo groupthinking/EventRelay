@@ -6,7 +6,6 @@ import sys
 from pathlib import Path
 
 import pytest
-from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
@@ -18,10 +17,6 @@ from youtube_extension.backend.models.audit import (
     SecurityEventType,
     SeverityLevel,
 )
-
-
-def _ns(**attrs) -> SimpleNamespace:
-    return SimpleNamespace(**attrs)
 
 
 # ===========================================================================
@@ -160,8 +155,9 @@ class TestSeverityLevelEnum:
 
 
 class TestAuditLogIsSensitiveAction:
-    def _isa(self, action):
-        return AuditLog.is_sensitive_action(_ns(action=action))
+    def _isa(self, action: AuditAction) -> bool:
+        log = AuditLog(action=action, resource_type="test", description="test", tenant_id="test")
+        return log.is_sensitive_action()
 
     def test_delete_is_sensitive(self):
         assert self._isa(AuditAction.DELETE) is True
@@ -191,8 +187,16 @@ class TestAuditLogIsSensitiveAction:
 
 
 class TestAuditLogGetChangeSummary:
-    def _gcs(self, old, new):
-        return AuditLog.get_change_summary(_ns(old_values=old, new_values=new))
+    def _gcs(self, old: dict | None, new: dict | None) -> str | None:
+        log = AuditLog(
+            action=AuditAction.UPDATE,
+            resource_type="test",
+            description="test",
+            tenant_id="test",
+            old_values=old,
+            new_values=new,
+        )
+        return log.get_change_summary()
 
     def test_returns_none_when_no_old_values(self):
         assert self._gcs(None, {"name": "new"}) is None
@@ -223,8 +227,15 @@ class TestAuditLogGetChangeSummary:
 
 
 class TestSecurityEventIsCritical:
-    def _ic(self, severity):
-        return SecurityEvent.is_critical(_ns(severity=severity))
+    def _ic(self, severity: SeverityLevel) -> bool:
+        event = SecurityEvent(
+            event_type=SecurityEventType.SQL_INJECTION_ATTEMPT,
+            severity=severity,
+            title="test",
+            description="test",
+            tenant_id="test",
+        )
+        return event.is_critical()
 
     def test_critical_severity_is_critical(self):
         assert self._ic(SeverityLevel.CRITICAL) is True
@@ -245,10 +256,17 @@ class TestSecurityEventIsCritical:
 
 
 class TestSecurityEventNeedsImmediateAttention:
-    def _nia(self, severity, investigated=False, false_positive=False):
-        return SecurityEvent.needs_immediate_attention(
-            _ns(severity=severity, investigated=investigated, false_positive=false_positive)
+    def _nia(self, severity: SeverityLevel, investigated: bool = False, false_positive: bool = False) -> bool:
+        event = SecurityEvent(
+            event_type=SecurityEventType.SQL_INJECTION_ATTEMPT,
+            severity=severity,
+            title="test",
+            description="test",
+            tenant_id="test",
+            investigated=investigated,
+            false_positive=false_positive,
         )
+        return event.needs_immediate_attention()
 
     def test_high_uninvestigated_non_false_positive_needs_attention(self):
         assert self._nia(SeverityLevel.HIGH) is True
@@ -273,10 +291,13 @@ class TestSecurityEventNeedsImmediateAttention:
 
 class TestSecurityEventGetThreatSummary:
     @pytest.fixture
-    def event(self):
-        return _ns(
+    def event(self) -> SecurityEvent:
+        return SecurityEvent(
             event_type=SecurityEventType.SQL_INJECTION_ATTEMPT,
             severity=SeverityLevel.HIGH,
+            title="test",
+            description="test",
+            tenant_id="test",
             blocked=True,
             source_ip=None,
             country="US",

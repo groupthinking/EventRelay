@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -165,6 +166,24 @@ class TestVercelAdapterDeploy:
         result = await adapter.deploy("/path", {}, {})
         assert result.platform == "vercel"
 
+    async def test_success_when_deploy_impl_returns_success(self, monkeypatch):
+        monkeypatch.setenv("VERCEL_TOKEN", "fake-token")
+        adapter = VercelAdapter()
+        expected = DeploymentResult(status="success", platform="vercel", url="https://example.vercel.app")
+        with patch.object(VercelAdapter, "_deploy_impl", AsyncMock(return_value=expected)):
+            result = await adapter.deploy("/path", {}, {})
+        assert result.status == "success"
+        assert result.platform == "vercel"
+
+    async def test_failed_when_deploy_impl_raises_deployment_error(self, monkeypatch):
+        monkeypatch.setenv("VERCEL_TOKEN", "fake-token")
+        adapter = VercelAdapter()
+        err = DeploymentError(platform="vercel", operation="deploy", message="API error")
+        with patch.object(VercelAdapter, "_deploy_impl", AsyncMock(side_effect=err)):
+            result = await adapter.deploy("/path", {}, {})
+        assert result.status == "failed"
+        assert result.platform == "vercel"
+
 
 # ===========================================================================
 # NetlifyAdapter.__init__
@@ -245,6 +264,24 @@ class TestNetlifyAdapterDeploy:
         monkeypatch.delenv("NETLIFY_AUTH_TOKEN", raising=False)
         adapter = NetlifyAdapter()
         result = await adapter.deploy("/path", {}, {})
+        assert result.platform == "netlify"
+
+    async def test_success_when_deploy_impl_returns_success(self, monkeypatch):
+        monkeypatch.setenv("NETLIFY_AUTH_TOKEN", "fake-token")
+        adapter = NetlifyAdapter()
+        expected = DeploymentResult(status="success", platform="netlify", url="https://example.netlify.app")
+        with patch.object(NetlifyAdapter, "_deploy_impl", AsyncMock(return_value=expected)):
+            result = await adapter.deploy("/path", {}, {})
+        assert result.status == "success"
+        assert result.platform == "netlify"
+
+    async def test_failed_when_deploy_impl_raises_deployment_error(self, monkeypatch):
+        monkeypatch.setenv("NETLIFY_AUTH_TOKEN", "fake-token")
+        adapter = NetlifyAdapter()
+        err = DeploymentError(platform="netlify", operation="deploy", message="Build failed")
+        with patch.object(NetlifyAdapter, "_deploy_impl", AsyncMock(side_effect=err)):
+            result = await adapter.deploy("/path", {}, {})
+        assert result.status == "failed"
         assert result.platform == "netlify"
 
 
@@ -333,4 +370,22 @@ class TestFlyAdapterDeploy:
         monkeypatch.delenv("FLY_API_TOKEN", raising=False)
         adapter = FlyAdapter()
         result = await adapter.deploy("/path", {}, {})
+        assert result.platform == "fly"
+
+    async def test_success_when_deploy_impl_returns_success(self, monkeypatch):
+        monkeypatch.setenv("FLY_API_TOKEN", "fake-token")
+        adapter = FlyAdapter()
+        expected = DeploymentResult(status="success", platform="fly", url="https://myapp.fly.dev")
+        with patch.object(FlyAdapter, "_deploy_impl", AsyncMock(return_value=expected)):
+            result = await adapter.deploy("/path", {}, {})
+        assert result.status == "success"
+        assert result.platform == "fly"
+
+    async def test_failed_when_deploy_impl_raises_deployment_error(self, monkeypatch):
+        monkeypatch.setenv("FLY_API_TOKEN", "fake-token")
+        adapter = FlyAdapter()
+        err = DeploymentError(platform="fly", operation="deploy", message="Deployment timed out")
+        with patch.object(FlyAdapter, "_deploy_impl", AsyncMock(side_effect=err)):
+            result = await adapter.deploy("/path", {}, {})
+        assert result.status == "failed"
         assert result.platform == "fly"
