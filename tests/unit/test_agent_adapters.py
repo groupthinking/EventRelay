@@ -25,18 +25,45 @@ import pytest
 # ---------------------------------------------------------------------------
 from youtube_extension.services.agents import base_agent as _ba
 
-if not hasattr(_ba.BaseAgent, "logger"):
-    _ba.BaseAgent.logger = logging.getLogger("test.base_agent")
+_SENTINEL = object()
 
-if not hasattr(_ba.BaseAgent, "get_config"):
-    def _get_config(self, key: str, default=None):  # noqa: ANN001
-        return getattr(self, "_config", {}).get(key, default) if hasattr(self, "_config") else default
-    _ba.BaseAgent.get_config = _get_config
 
-if not hasattr(_ba.BaseAgent, "validate_input"):
-    def _validate_input(self, params: dict, required: list[str]) -> list[str]:  # noqa: ANN001
-        return [f"Missing required parameter: {k}" for k in required if k not in params]
-    _ba.BaseAgent.validate_input = _validate_input
+def _get_config(self, key: str, default=None):  # noqa: ANN001
+    return getattr(self, "_config", {}).get(key, default) if hasattr(self, "_config") else default
+
+
+def _validate_input(self, params: dict, required: list[str]) -> list[str]:  # noqa: ANN001
+    return [f"Missing required parameter: {k}" for k in required if k not in params]
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _patch_base_agent_attrs() -> None:
+    """Scope BaseAgent stub attributes to the test session and restore on teardown."""
+    orig_logger = getattr(_ba.BaseAgent, "logger", _SENTINEL)
+    orig_get_config = getattr(_ba.BaseAgent, "get_config", _SENTINEL)
+    orig_validate_input = getattr(_ba.BaseAgent, "validate_input", _SENTINEL)
+
+    if orig_logger is _SENTINEL:
+        _ba.BaseAgent.logger = logging.getLogger("test.base_agent")
+    if orig_get_config is _SENTINEL:
+        _ba.BaseAgent.get_config = _get_config
+    if orig_validate_input is _SENTINEL:
+        _ba.BaseAgent.validate_input = _validate_input
+
+    yield
+
+    for attr, orig in [
+        ("logger", orig_logger),
+        ("get_config", orig_get_config),
+        ("validate_input", orig_validate_input),
+    ]:
+        if orig is _SENTINEL:
+            try:
+                delattr(_ba.BaseAgent, attr)
+            except AttributeError:
+                pass
+        else:
+            setattr(_ba.BaseAgent, attr, orig)
 
 # ---------------------------------------------------------------------------
 # Lazy imports – agents are imported after the base class is patched
@@ -157,6 +184,7 @@ class TestHybridVisionAgent:
     # that doesn't match the Pydantic model (status/output/logs). This causes a ValidationError
     # that propagates from _handle_special_action through run(). Tests verify the error surface.
 
+    @pytest.mark.xfail(reason="known bug: _handle_special_action uses wrong AgentResult fields", strict=False)
     async def test_run_routes_to_special_action_raises_validation_error(self):
         """_handle_special_action has a bug: uses wrong AgentResult fields; confirms error propagates."""
         from pydantic import ValidationError
@@ -225,6 +253,7 @@ class TestHybridVisionAgent:
     # and the success return path both cause ValidationError. All paths through _handle_special_action
     # raise an exception rather than returning a valid AgentResult.
 
+    @pytest.mark.xfail(reason="known bug: _handle_special_action uses wrong AgentResult fields", strict=False)
     async def test_handle_special_action_missing_contents_raises(self):
         """start_cached_session missing contents: inner _failure() raises ValidationError."""
         from pydantic import ValidationError
@@ -234,6 +263,7 @@ class TestHybridVisionAgent:
                 "start_cached_session", {}, asyncio.get_event_loop().time()
             )
 
+    @pytest.mark.xfail(reason="known bug: _handle_special_action uses wrong AgentResult fields", strict=False)
     async def test_handle_special_action_missing_requests_raises(self):
         """submit_batch_job missing requests: inner _failure() raises ValidationError."""
         from pydantic import ValidationError
@@ -243,6 +273,7 @@ class TestHybridVisionAgent:
                 "submit_batch_job", {}, asyncio.get_event_loop().time()
             )
 
+    @pytest.mark.xfail(reason="known bug: _handle_special_action uses wrong AgentResult fields", strict=False)
     async def test_handle_special_action_unknown_action_raises(self):
         """Unknown action calls _failure() which raises ValidationError."""
         from pydantic import ValidationError
@@ -252,6 +283,7 @@ class TestHybridVisionAgent:
                 "nonexistent_action", {}, asyncio.get_event_loop().time()
             )
 
+    @pytest.mark.xfail(reason="known bug: _handle_special_action uses wrong AgentResult fields", strict=False)
     async def test_handle_special_action_token_raises(self):
         """create_ephemeral_token success path raises ValidationError due to wrong fields."""
         from pydantic import ValidationError

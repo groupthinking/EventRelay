@@ -208,7 +208,8 @@ class TestBuildPlanGeminiSchema:
     def test_schema_has_title_or_type(self):
         plan = BuildPlan(video_id="x", video_title="T")
         schema = plan.gemini_schema()
-        assert "title" in schema or "type" in schema
+        assert "type" in schema
+        assert schema["type"] == "object"
 
     def test_schema_is_reproducible(self):
         plan = BuildPlan(video_id="x", video_title="T")

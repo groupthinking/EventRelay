@@ -424,6 +424,7 @@ class TestFromEnvironment:
         assert c.providers["google_cloud"].enabled is True
 
     def test_aws_enabled_when_env_set(self, monkeypatch):
+        # Official AWS example key from documentation (not a real credential)
         monkeypatch.setenv("AWS_ACCESS_KEY_ID", "AKIAIOSFODNN7EXAMPLE")
         c = CloudAIConfig.from_environment()
         assert c.providers["aws_rekognition"].enabled is True

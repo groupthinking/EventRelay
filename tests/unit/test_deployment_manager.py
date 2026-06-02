@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import re
+import subprocess
 import sys
 import types
 from pathlib import Path
@@ -64,31 +66,31 @@ def _make_manager(**kwargs) -> DeploymentManager:
 
 
 class TestDeploymentManagerInit:
-    def test_no_token_env_fallback(self, monkeypatch):
+    def test_no_token_env_fallback(self, monkeypatch) -> None:
         monkeypatch.delenv("GITHUB_TOKEN", raising=False)
         mgr = _make_manager()
         assert mgr.github_token is None
 
-    def test_explicit_token_stored(self):
+    def test_explicit_token_stored(self) -> None:
         mgr = _make_manager(github_token="mytoken")
         assert mgr.github_token == "mytoken"
 
-    def test_env_token_used_when_no_explicit(self, monkeypatch):
+    def test_env_token_used_when_no_explicit(self, monkeypatch) -> None:
         monkeypatch.setenv("GITHUB_TOKEN", "envtoken")
         mgr = _make_manager()
         assert mgr.github_token == "envtoken"
 
-    def test_explicit_token_overrides_env(self, monkeypatch):
+    def test_explicit_token_overrides_env(self, monkeypatch) -> None:
         monkeypatch.setenv("GITHUB_TOKEN", "envtoken")
         mgr = _make_manager(github_token="explicit")
         assert mgr.github_token == "explicit"
 
-    def test_github_agent_none_without_agent_class(self, monkeypatch):
+    def test_github_agent_none_without_agent_class(self, monkeypatch) -> None:
         monkeypatch.delenv("GITHUB_TOKEN", raising=False)
         mgr = _make_manager()
         assert mgr.github_agent is None
 
-    def test_github_agent_initialized_when_token_and_class_available(self):
+    def test_github_agent_initialized_when_token_and_class_available(self) -> None:
         mock_agent_cls = MagicMock(return_value=MagicMock())
         with patch("youtube_extension.backend.deployment_manager.GitHubDeploymentAgent", mock_agent_cls), \
              patch("youtube_extension.backend.deployment_manager.SKILL_LEARNING_ENABLED", False), \
@@ -97,7 +99,7 @@ class TestDeploymentManagerInit:
         mock_agent_cls.assert_called_once_with("tok")
         assert mgr.github_agent is not None
 
-    def test_github_agent_gracefully_handles_init_error(self):
+    def test_github_agent_gracefully_handles_init_error(self) -> None:
         mock_agent_cls = MagicMock(side_effect=RuntimeError("bad"))
         with patch("youtube_extension.backend.deployment_manager.GitHubDeploymentAgent", mock_agent_cls), \
              patch("youtube_extension.backend.deployment_manager.SKILL_LEARNING_ENABLED", False), \
@@ -105,7 +107,7 @@ class TestDeploymentManagerInit:
             mgr = DeploymentManager(github_token="tok")
         assert mgr.github_agent is None
 
-    def test_skill_builder_initialized_when_enabled(self):
+    def test_skill_builder_initialized_when_enabled(self) -> None:
         mock_sb_cls = MagicMock()
         mock_sb_instance = MagicMock()
         mock_sb_instance.get_stats.return_value = {"total_errors_handled": 5}
@@ -117,7 +119,7 @@ class TestDeploymentManagerInit:
             mgr = DeploymentManager()
         assert mgr.skill_builder is mock_sb_instance
 
-    def test_skill_builder_handles_init_error(self):
+    def test_skill_builder_handles_init_error(self) -> None:
         mock_sb_cls = MagicMock(side_effect=RuntimeError("fail"))
         with patch("youtube_extension.backend.deployment_manager.SKILL_LEARNING_ENABLED", True), \
              patch("youtube_extension.backend.deployment_manager.SkillBuilder", mock_sb_cls), \
@@ -126,7 +128,7 @@ class TestDeploymentManagerInit:
             mgr = DeploymentManager()
         assert mgr.skill_builder is None
 
-    def test_ai_code_generator_initialized_when_available(self):
+    def test_ai_code_generator_initialized_when_available(self) -> None:
         mock_ai_cls = MagicMock(return_value=MagicMock())
         with patch("youtube_extension.backend.deployment_manager.AI_CODE_GENERATOR_AVAILABLE", True), \
              patch("youtube_extension.backend.deployment_manager.AICodeGenerator", mock_ai_cls), \
@@ -135,7 +137,7 @@ class TestDeploymentManagerInit:
             mgr = DeploymentManager()
         assert mgr.ai_code_generator is not None
 
-    def test_ai_code_generator_handles_init_error(self):
+    def test_ai_code_generator_handles_init_error(self) -> None:
         mock_ai_cls = MagicMock(side_effect=RuntimeError("err"))
         with patch("youtube_extension.backend.deployment_manager.AI_CODE_GENERATOR_AVAILABLE", True), \
              patch("youtube_extension.backend.deployment_manager.AICodeGenerator", mock_ai_cls), \
@@ -151,22 +153,22 @@ class TestDeploymentManagerInit:
 
 
 class TestGenerateRandomId:
-    def test_returns_string(self):
+    def test_returns_string(self) -> None:
         mgr = _make_manager()
         rid = mgr._generate_random_id()
         assert isinstance(rid, str)
 
-    def test_length_is_8(self):
+    def test_length_is_8(self) -> None:
         mgr = _make_manager()
         assert len(mgr._generate_random_id()) == 8
 
-    def test_only_lowercase_alphanumeric(self):
+    def test_only_lowercase_alphanumeric(self) -> None:
         mgr = _make_manager()
         rid = mgr._generate_random_id()
         assert rid.isalnum()
         assert rid == rid.lower()
 
-    def test_different_each_call(self):
+    def test_different_each_call(self) -> None:
         mgr = _make_manager()
         ids = {mgr._generate_random_id() for _ in range(20)}
         # With 36^8 combinations, we expect near-zero collision in 20 draws.
@@ -180,43 +182,40 @@ class TestGenerateRandomId:
 
 class TestGenerateRepoName:
     def _call(self, config):
-        import asyncio
-        from unittest.mock import MagicMock
         mgr = _make_manager()
         mock_loop = MagicMock()
         mock_loop.time.return_value = 12345.0
         with patch("asyncio.get_event_loop", return_value=mock_loop):
             return mgr._generate_repo_name(config)
 
-    def test_sanitizes_special_chars(self):
+    def test_sanitizes_special_chars(self) -> None:
         name = self._call({"title": "Hello! World#2"})
         # Only alphanumeric and hyphens (plus trailing timestamp)
         base = name.rsplit("-", 1)[0]
-        import re
         assert re.match(r'^[a-z0-9\-]+$', base)
 
-    def test_spaces_become_hyphens(self):
+    def test_spaces_become_hyphens(self) -> None:
         name = self._call({"title": "My Cool App"})
         base = name.rsplit("-", 1)[0]
         assert " " not in base
         assert "my-cool-app" == base
 
-    def test_max_30_chars_base(self):
+    def test_max_30_chars_base(self) -> None:
         long_title = "a" * 100
         name = self._call({"title": long_title})
         base = name.rsplit("-", 1)[0]
         assert len(base) <= 30
 
-    def test_missing_title_uses_fallback(self):
+    def test_missing_title_uses_fallback(self) -> None:
         name = self._call({})
         assert name.startswith("uvai-project-")
 
-    def test_ends_with_numeric_timestamp(self):
+    def test_ends_with_numeric_timestamp(self) -> None:
         name = self._call({"title": "test"})
         suffix = name.rsplit("-", 1)[-1]
         assert suffix.isdigit()
 
-    def test_empty_title_uses_fallback(self):
+    def test_empty_title_uses_fallback(self) -> None:
         name = self._call({"title": "!!!"})
         assert name.startswith("uvai-project-")
 
@@ -230,7 +229,7 @@ class TestGenerateDeploymentSummary:
     def setup_method(self):
         self.mgr = _make_manager()
 
-    def test_empty_deployments(self):
+    def test_empty_deployments(self) -> None:
         result = self.mgr._generate_deployment_summary({})
         assert result["total_deployments"] == 0
         assert result["successful_deployments"] == 0
@@ -238,7 +237,7 @@ class TestGenerateDeploymentSummary:
         assert result["skipped_deployments"] == 0
         assert result["primary_url"] is None
 
-    def test_counts_success_correctly(self):
+    def test_counts_success_correctly(self) -> None:
         deployments = {
             "vercel": {"status": "success", "url": "https://vercel.app"},
             "github": {"status": "success", "url": "https://github.com/u/r"},
@@ -248,21 +247,21 @@ class TestGenerateDeploymentSummary:
         assert result["successful_deployments"] == 2
         assert result["failed_deployments"] == 0
 
-    def test_counts_failed_correctly(self):
+    def test_counts_failed_correctly(self) -> None:
         deployments = {
             "vercel": {"status": "failed"},
         }
         result = self.mgr._generate_deployment_summary(deployments)
         assert result["failed_deployments"] == 1
 
-    def test_counts_skipped_correctly(self):
+    def test_counts_skipped_correctly(self) -> None:
         deployments = {
             "netlify": {"status": "skipped"},
         }
         result = self.mgr._generate_deployment_summary(deployments)
         assert result["skipped_deployments"] == 1
 
-    def test_primary_url_is_first_success(self):
+    def test_primary_url_is_first_success(self) -> None:
         deployments = {
             "vercel": {"status": "success", "url": "https://first.vercel.app"},
             "netlify": {"status": "success", "url": "https://second.netlify.app"},
@@ -270,7 +269,7 @@ class TestGenerateDeploymentSummary:
         result = self.mgr._generate_deployment_summary(deployments)
         assert result["primary_url"] in ("https://first.vercel.app", "https://second.netlify.app")
 
-    def test_no_url_in_success_not_added(self):
+    def test_no_url_in_success_not_added(self) -> None:
         deployments = {
             "github": {"status": "success"},  # No URL
         }
@@ -278,14 +277,14 @@ class TestGenerateDeploymentSummary:
         assert result["deployment_urls"] == {}
         assert result["primary_url"] is None
 
-    def test_deployment_urls_collected(self):
+    def test_deployment_urls_collected(self) -> None:
         deployments = {
             "vercel": {"status": "success", "url": "https://v.app"},
         }
         result = self.mgr._generate_deployment_summary(deployments)
         assert result["deployment_urls"]["vercel"] == "https://v.app"
 
-    def test_mixed_statuses(self):
+    def test_mixed_statuses(self) -> None:
         deployments = {
             "vercel": {"status": "success", "url": "https://v.app"},
             "netlify": {"status": "failed"},
@@ -307,7 +306,7 @@ class TestGenerateDeploymentUrls:
     def setup_method(self):
         self.mgr = _make_manager()
 
-    def test_collects_urls_from_deployments(self):
+    def test_collects_urls_from_deployments(self) -> None:
         deployments = {
             "vercel": {"status": "success", "url": "https://v.app"},
             "github": {"status": "success", "url": "https://github.com/u/r"},
@@ -316,7 +315,7 @@ class TestGenerateDeploymentUrls:
         assert urls["vercel"] == "https://v.app"
         assert urls["github"] == "https://github.com/u/r"
 
-    def test_skips_entries_without_url(self):
+    def test_skips_entries_without_url(self) -> None:
         deployments = {
             "vercel": {"status": "failed"},
             "netlify": {"status": "success", "url": "https://n.app"},
@@ -325,11 +324,11 @@ class TestGenerateDeploymentUrls:
         assert "vercel" not in urls
         assert urls["netlify"] == "https://n.app"
 
-    def test_empty_deployments_returns_empty_dict(self):
+    def test_empty_deployments_returns_empty_dict(self) -> None:
         urls = self.mgr._generate_deployment_urls({}, {})
         assert urls == {}
 
-    def test_project_config_not_required(self):
+    def test_project_config_not_required(self) -> None:
         urls = self.mgr._generate_deployment_urls({"p": {"url": "https://x.com"}}, {})
         assert urls["p"] == "https://x.com"
 
@@ -340,17 +339,17 @@ class TestGenerateDeploymentUrls:
 
 
 class TestGetDeploymentStatus:
-    async def test_returns_dict_with_deployment_id(self):
+    async def test_returns_dict_with_deployment_id(self) -> None:
         mgr = _make_manager()
         result = await mgr.get_deployment_status("deploy-123")
         assert result["deployment_id"] == "deploy-123"
 
-    async def test_status_is_completed(self):
+    async def test_status_is_completed(self) -> None:
         mgr = _make_manager()
         result = await mgr.get_deployment_status("any-id")
         assert result["status"] == "completed"
 
-    async def test_has_message(self):
+    async def test_has_message(self) -> None:
         mgr = _make_manager()
         result = await mgr.get_deployment_status("x")
         assert "message" in result
@@ -362,21 +361,21 @@ class TestGetDeploymentStatus:
 
 
 class TestVerifyProject:
-    async def test_invalid_path_not_directory(self, tmp_path):
+    async def test_invalid_path_not_directory(self, tmp_path) -> None:
         mgr = _make_manager()
         not_a_dir = str(tmp_path / "no_such_dir")
         result = await mgr.verify_project(not_a_dir)
         assert result["passed"] is False
         assert "Invalid project path" in result["summary"]
 
-    async def test_no_package_json_passes(self, tmp_path):
+    async def test_no_package_json_passes(self, tmp_path) -> None:
         """Projects without package.json are allowed through."""
         mgr = _make_manager()
         result = await mgr.verify_project(str(tmp_path))
         assert result["passed"] is True
         assert "skipping" in result["summary"].lower()
 
-    async def test_npm_install_failure(self, tmp_path):
+    async def test_npm_install_failure(self, tmp_path) -> None:
         (tmp_path / "package.json").write_text('{"name": "test"}')
         mgr = _make_manager()
 
@@ -392,7 +391,7 @@ class TestVerifyProject:
         assert "npm install failed" in result["summary"]
         assert result["npm_install"]["success"] is False
 
-    async def test_npm_build_failure(self, tmp_path):
+    async def test_npm_build_failure(self, tmp_path) -> None:
         (tmp_path / "package.json").write_text('{"name": "test"}')
         mgr = _make_manager()
 
@@ -414,7 +413,7 @@ class TestVerifyProject:
         assert "Build failed" in result["summary"]
         assert result["npm_build"]["success"] is False
 
-    async def test_full_success_no_tsconfig(self, tmp_path):
+    async def test_full_success_no_tsconfig(self, tmp_path) -> None:
         (tmp_path / "package.json").write_text('{"name": "test"}')
         mgr = _make_manager()
 
@@ -429,7 +428,7 @@ class TestVerifyProject:
         assert result["passed"] is True
         assert result["summary"] == "All verification checks passed"
 
-    async def test_full_success_with_tsconfig(self, tmp_path):
+    async def test_full_success_with_tsconfig(self, tmp_path) -> None:
         (tmp_path / "package.json").write_text('{"name": "test"}')
         (tmp_path / "tsconfig.json").write_text("{}")
         mgr = _make_manager()
@@ -445,7 +444,7 @@ class TestVerifyProject:
         assert result["passed"] is True
         assert result["typescript"]["success"] is True
 
-    async def test_ts_check_failure_does_not_fail_build(self, tmp_path):
+    async def test_ts_check_failure_does_not_fail_build(self, tmp_path) -> None:
         """TypeScript errors after a successful build should not fail the overall check."""
         (tmp_path / "package.json").write_text('{"name": "test"}')
         (tmp_path / "tsconfig.json").write_text("{}")
@@ -461,19 +460,18 @@ class TestVerifyProject:
         assert result["passed"] is True
         assert result["typescript"]["success"] is False
 
-    async def test_timeout_returns_failure(self, tmp_path):
+    async def test_timeout_returns_failure(self, tmp_path) -> None:
         (tmp_path / "package.json").write_text('{"name": "test"}')
         mgr = _make_manager()
 
-        import subprocess as _sp
         with patch("youtube_extension.backend.deployment_manager.subprocess.run",
-                   side_effect=_sp.TimeoutExpired(["npm"], 180)):
+                   side_effect=subprocess.TimeoutExpired(["npm"], 180)):
             result = await mgr.verify_project(str(tmp_path))
 
         assert result["passed"] is False
         assert "timeout" in result["summary"].lower()
 
-    async def test_npm_not_found_returns_failure(self, tmp_path):
+    async def test_npm_not_found_returns_failure(self, tmp_path) -> None:
         (tmp_path / "package.json").write_text('{"name": "test"}')
         mgr = _make_manager()
 
@@ -484,7 +482,7 @@ class TestVerifyProject:
         assert result["passed"] is False
         assert "npm not found" in result["summary"]
 
-    async def test_generic_exception_returns_failure(self, tmp_path):
+    async def test_generic_exception_returns_failure(self, tmp_path) -> None:
         (tmp_path / "package.json").write_text('{"name": "test"}')
         mgr = _make_manager()
 
@@ -495,7 +493,7 @@ class TestVerifyProject:
         assert result["passed"] is False
         assert "disk error" in result["summary"]
 
-    async def test_skill_builder_used_on_build_errors(self, tmp_path):
+    async def test_skill_builder_used_on_build_errors(self, tmp_path) -> None:
         """When skill_builder is present and build fails, it queries for known patterns."""
         (tmp_path / "package.json").write_text('{"name": "test"}')
 
@@ -524,7 +522,7 @@ class TestVerifyProject:
 
 
 class TestVerifyAndFixProject:
-    async def test_passes_on_first_attempt(self, tmp_path):
+    async def test_passes_on_first_attempt(self, tmp_path) -> None:
         mgr = _make_manager()
 
         passing_verification = {
@@ -538,7 +536,7 @@ class TestVerifyAndFixProject:
         assert result["passed"] is True
         assert len(result["attempts"]) == 1
 
-    async def test_retries_on_failure_then_passes(self, tmp_path):
+    async def test_retries_on_failure_then_passes(self, tmp_path) -> None:
         mgr = _make_manager()
 
         fail_v = {"passed": False, "npm_build": {"errors": ["err1"]}}
@@ -554,7 +552,7 @@ class TestVerifyAndFixProject:
         assert result["passed"] is True
         assert len(result["attempts"]) == 2
 
-    async def test_exhausts_retries_and_fails(self, tmp_path):
+    async def test_exhausts_retries_and_fails(self, tmp_path) -> None:
         mgr = _make_manager()
 
         fail_v = {"passed": False, "npm_build": {"errors": ["err1"]}, "summary": "failed"}
@@ -564,7 +562,7 @@ class TestVerifyAndFixProject:
         assert result["passed"] is False
         assert len(result["attempts"]) == 2  # initial + 1 retry
 
-    async def test_no_ai_generator_stops_after_first_fail(self, tmp_path):
+    async def test_no_ai_generator_stops_after_first_fail(self, tmp_path) -> None:
         mgr = _make_manager()
         mgr.ai_code_generator = None
 
@@ -574,7 +572,7 @@ class TestVerifyAndFixProject:
         result = await mgr.verify_and_fix_project(str(tmp_path), max_retries=2)
         assert result["passed"] is False
 
-    async def test_ai_fix_exception_handled(self, tmp_path):
+    async def test_ai_fix_exception_handled(self, tmp_path) -> None:
         mgr = _make_manager()
 
         mock_ai = AsyncMock()
@@ -589,7 +587,7 @@ class TestVerifyAndFixProject:
         assert len(result["fixes_applied"]) == 1
         assert result["fixes_applied"][0]["success"] is False
 
-    async def test_skill_success_tracked_after_fix(self, tmp_path):
+    async def test_skill_success_tracked_after_fix(self, tmp_path) -> None:
         mock_sb = MagicMock()
         mock_sb.find_matching_skill.return_value = {"resolution": "fix X", "id": "skill-42"}
 
@@ -618,7 +616,7 @@ class TestDeployProject:
     def _patched_manager(self, github_token=None):
         return _make_manager(github_token=github_token)
 
-    async def test_verification_failure_returns_failed_status(self, tmp_path):
+    async def test_verification_failure_returns_failed_status(self, tmp_path) -> None:
         mgr = self._patched_manager()
         mgr.verify_and_fix_project = AsyncMock(return_value={
             "passed": False,
@@ -635,7 +633,7 @@ class TestDeployProject:
         assert result["status"] == "failed"
         assert "Build verification failed" in result["errors"][0]
 
-    async def test_no_github_token_adds_error(self, tmp_path):
+    async def test_no_github_token_adds_error(self, tmp_path) -> None:
         mgr = self._patched_manager()
         mgr.verify_and_fix_project = AsyncMock(return_value={
             "passed": True,
@@ -655,7 +653,7 @@ class TestDeployProject:
 
         assert "GitHub token not configured" in result["errors"]
 
-    async def test_github_deployment_called_when_token_set(self, tmp_path):
+    async def test_github_deployment_called_when_token_set(self, tmp_path) -> None:
         mgr = self._patched_manager(github_token="tok")
         mgr.verify_and_fix_project = AsyncMock(return_value={
             "passed": True,
@@ -677,7 +675,7 @@ class TestDeployProject:
 
         mock_github.assert_awaited_once()
 
-    async def test_vercel_target_uses_adapter(self, tmp_path):
+    async def test_vercel_target_uses_adapter(self, tmp_path) -> None:
         mgr = self._patched_manager()
         mgr.verify_and_fix_project = AsyncMock(return_value={
             "passed": True,
@@ -693,7 +691,7 @@ class TestDeployProject:
         mock_adapter.assert_awaited_once()
         assert "vercel" in result["deployments"]
 
-    async def test_netlify_target_uses_adapter(self, tmp_path):
+    async def test_netlify_target_uses_adapter(self, tmp_path) -> None:
         mgr = self._patched_manager()
         mgr.verify_and_fix_project = AsyncMock(return_value={
             "passed": True,
@@ -708,7 +706,7 @@ class TestDeployProject:
 
         assert "netlify" in result["deployments"]
 
-    async def test_fly_target_uses_adapter(self, tmp_path):
+    async def test_fly_target_uses_adapter(self, tmp_path) -> None:
         mgr = self._patched_manager()
         mgr.verify_and_fix_project = AsyncMock(return_value={
             "passed": True,
@@ -723,7 +721,7 @@ class TestDeployProject:
 
         assert "fly" in result["deployments"]
 
-    async def test_github_target_no_extra_hosting(self, tmp_path):
+    async def test_github_target_no_extra_hosting(self, tmp_path) -> None:
         mgr = self._patched_manager(github_token="tok")
         mgr.verify_and_fix_project = AsyncMock(return_value={
             "passed": True,
@@ -743,7 +741,7 @@ class TestDeployProject:
         assert "vercel" not in result["deployments"]
         assert "netlify" not in result["deployments"]
 
-    async def test_github_pages_target(self, tmp_path):
+    async def test_github_pages_target(self, tmp_path) -> None:
         mgr = self._patched_manager(github_token="tok")
         mgr.verify_and_fix_project = AsyncMock(return_value={
             "passed": True,
@@ -764,7 +762,7 @@ class TestDeployProject:
         result = await mgr.deploy_project(str(tmp_path), {}, {"target": "github_pages"})
         assert "github_pages" in result["deployments"]
 
-    async def test_unknown_target_adds_error(self, tmp_path):
+    async def test_unknown_target_adds_error(self, tmp_path) -> None:
         mgr = self._patched_manager()
         mgr.verify_and_fix_project = AsyncMock(return_value={
             "passed": True,
@@ -776,7 +774,7 @@ class TestDeployProject:
         result = await mgr.deploy_project(str(tmp_path), {}, {"target": "unknown_platform"})
         assert any("Unknown deployment target" in e for e in result["errors"])
 
-    async def test_success_status_when_no_errors(self, tmp_path):
+    async def test_success_status_when_no_errors(self, tmp_path) -> None:
         # Use a token so the "GitHub token not configured" error is NOT added.
         mgr = self._patched_manager(github_token="tok")
         mgr.verify_and_fix_project = AsyncMock(return_value={
@@ -794,7 +792,7 @@ class TestDeployProject:
 
         assert result["status"] == "success"
 
-    async def test_partial_success_when_deployments_fail(self, tmp_path):
+    async def test_partial_success_when_deployments_fail(self, tmp_path) -> None:
         # Use a token so the only "error" source is the failed deployment, not missing token.
         mgr = self._patched_manager(github_token="tok")
         mgr.verify_and_fix_project = AsyncMock(return_value={
@@ -813,7 +811,7 @@ class TestDeployProject:
         # has_errors=False (no errors list entries), has_failed_deployments=True → partial_success
         assert result["status"] == "partial_success"
 
-    async def test_adapter_exception_results_in_failed_status(self, tmp_path):
+    async def test_adapter_exception_results_in_failed_status(self, tmp_path) -> None:
         mgr = self._patched_manager()
         mgr.verify_and_fix_project = AsyncMock(return_value={
             "passed": True,
@@ -828,14 +826,14 @@ class TestDeployProject:
 
         assert result["deployments"]["vercel"]["status"] == "failed"
 
-    async def test_result_has_deployment_id(self, tmp_path):
+    async def test_result_has_deployment_id(self, tmp_path) -> None:
         mgr = self._patched_manager()
         mgr.verify_and_fix_project = AsyncMock(return_value={"passed": False, "attempts": [], "fixes_applied": [], "final_verification": {"npm_build": {"errors": []}}})
 
         result = await mgr.deploy_project(str(tmp_path), {}, {"target": "vercel"})
         assert result["deployment_id"].startswith("uvai_")
 
-    async def test_exception_in_deploy_returns_failed(self, tmp_path):
+    async def test_exception_in_deploy_returns_failed(self, tmp_path) -> None:
         mgr = self._patched_manager()
         mgr.verify_and_fix_project = AsyncMock(side_effect=RuntimeError("unexpected"))
 
@@ -843,7 +841,7 @@ class TestDeployProject:
         assert result["status"] == "failed"
         assert "unexpected" in result["errors"][0]
 
-    async def test_environment_from_deployment_config_passed_to_adapter(self, tmp_path):
+    async def test_environment_from_deployment_config_passed_to_adapter(self, tmp_path) -> None:
         mgr = self._patched_manager()
         mgr.verify_and_fix_project = AsyncMock(return_value={
             "passed": True,
@@ -872,13 +870,13 @@ class TestDeployProject:
 
 
 class TestDeployToGithub:
-    async def test_no_token_returns_failed(self):
+    async def test_no_token_returns_failed(self) -> None:
         mgr = _make_manager()
         result = await mgr._deploy_to_github("/some/path", {})
         assert result["status"] == "failed"
         assert "token" in result["error"].lower()
 
-    async def test_success_structure(self):
+    async def test_success_structure(self) -> None:
         mgr = _make_manager(github_token="tok")
         repo_result = {
             "repo_name": "my-repo",
@@ -897,7 +895,7 @@ class TestDeployToGithub:
         assert result["url"] == "https://github.com/user/my-repo"
         assert result["repository"] == repo_result
 
-    async def test_exception_returns_failed(self):
+    async def test_exception_returns_failed(self) -> None:
         mgr = _make_manager(github_token="tok")
         mgr._create_github_repository = AsyncMock(side_effect=RuntimeError("API error"))
 
@@ -912,12 +910,12 @@ class TestDeployToGithub:
 
 
 class TestDeployToGithubPages:
-    async def test_no_github_result_fails(self):
+    async def test_no_github_result_fails(self) -> None:
         mgr = _make_manager()
         result = await mgr._deploy_to_github_pages("/path", {}, {"status": "failed"})
         assert result["status"] == "failed"
 
-    async def test_missing_owner_fails(self):
+    async def test_missing_owner_fails(self) -> None:
         mgr = _make_manager()
         result = await mgr._deploy_to_github_pages(
             "/path", {},
@@ -925,7 +923,7 @@ class TestDeployToGithubPages:
         )
         assert result["status"] == "failed"
 
-    async def test_missing_repo_name_fails(self):
+    async def test_missing_repo_name_fails(self) -> None:
         mgr = _make_manager()
         result = await mgr._deploy_to_github_pages(
             "/path", {},
@@ -933,7 +931,7 @@ class TestDeployToGithubPages:
         )
         assert result["status"] == "failed"
 
-    async def test_success_returns_simulated(self):
+    async def test_success_returns_simulated(self) -> None:
         mgr = _make_manager()
         result = await mgr._deploy_to_github_pages(
             "/path", {},
@@ -945,7 +943,7 @@ class TestDeployToGithubPages:
         assert result["status"] == "simulated"
         assert "myuser.github.io/myrepo" in result["url"]
 
-    async def test_returns_instructions(self):
+    async def test_returns_instructions(self) -> None:
         mgr = _make_manager()
         result = await mgr._deploy_to_github_pages(
             "/path", {},
@@ -964,12 +962,12 @@ class TestDeployToGithubPages:
 
 
 class TestDeprecatedStubs:
-    async def test_deploy_to_vercel_raises_not_implemented(self):
+    async def test_deploy_to_vercel_raises_not_implemented(self) -> None:
         mgr = _make_manager()
         with pytest.raises(NotImplementedError):
             await mgr._deploy_to_vercel()
 
-    async def test_deploy_to_netlify_raises_not_implemented(self):
+    async def test_deploy_to_netlify_raises_not_implemented(self) -> None:
         mgr = _make_manager()
         with pytest.raises(NotImplementedError):
             await mgr._deploy_to_netlify()
@@ -981,18 +979,18 @@ class TestDeprecatedStubs:
 
 
 class TestGetDeploymentManager:
-    def test_returns_deployment_manager_instance(self):
+    def test_returns_deployment_manager_instance(self) -> None:
         mgr = get_deployment_manager()
         assert isinstance(mgr, DeploymentManager)
 
-    def test_passes_token(self):
+    def test_passes_token(self) -> None:
         with patch("youtube_extension.backend.deployment_manager.SKILL_LEARNING_ENABLED", False), \
              patch("youtube_extension.backend.deployment_manager.AI_CODE_GENERATOR_AVAILABLE", False), \
              patch("youtube_extension.backend.deployment_manager.GitHubDeploymentAgent", None):
             mgr = get_deployment_manager(github_token="mytoken")
         assert mgr.github_token == "mytoken"
 
-    def test_no_token_gives_none(self, monkeypatch):
+    def test_no_token_gives_none(self, monkeypatch) -> None:
         monkeypatch.delenv("GITHUB_TOKEN", raising=False)
         with patch("youtube_extension.backend.deployment_manager.SKILL_LEARNING_ENABLED", False), \
              patch("youtube_extension.backend.deployment_manager.AI_CODE_GENERATOR_AVAILABLE", False), \
@@ -1002,7 +1000,7 @@ class TestGetDeploymentManager:
 
 
 class TestValidateDeploymentEnvironment:
-    def test_returns_dict_with_expected_keys(self, monkeypatch):
+    def test_returns_dict_with_expected_keys(self, monkeypatch) -> None:
         for var in ["VERCEL_TOKEN", "NETLIFY_AUTH_TOKEN", "FLY_API_TOKEN", "GITHUB_TOKEN"]:
             monkeypatch.delenv(var, raising=False)
         result = validate_deployment_environment()
@@ -1010,7 +1008,7 @@ class TestValidateDeploymentEnvironment:
         assert "platform_validations" in result
         assert "missing_tokens" in result
 
-    def test_all_platforms_present(self, monkeypatch):
+    def test_all_platforms_present(self, monkeypatch) -> None:
         for var in ["VERCEL_TOKEN", "NETLIFY_AUTH_TOKEN", "FLY_API_TOKEN", "GITHUB_TOKEN"]:
             monkeypatch.delenv(var, raising=False)
         result = validate_deployment_environment()
@@ -1019,13 +1017,13 @@ class TestValidateDeploymentEnvironment:
             assert platform in validations
         assert "github" in validations
 
-    def test_missing_tokens_listed(self, monkeypatch):
+    def test_missing_tokens_listed(self, monkeypatch) -> None:
         for var in ["VERCEL_TOKEN", "NETLIFY_AUTH_TOKEN", "FLY_API_TOKEN", "GITHUB_TOKEN"]:
             monkeypatch.delenv(var, raising=False)
         result = validate_deployment_environment()
         assert len(result["missing_tokens"]) > 0
 
-    def test_overall_valid_true_when_all_tokens_present(self, monkeypatch):
+    def test_overall_valid_true_when_all_tokens_present(self, monkeypatch) -> None:
         monkeypatch.setenv("VERCEL_TOKEN", "vt")
         monkeypatch.setenv("NETLIFY_AUTH_TOKEN", "nt")
         monkeypatch.setenv("FLY_API_TOKEN", "ft")
@@ -1033,7 +1031,7 @@ class TestValidateDeploymentEnvironment:
         result = validate_deployment_environment()
         assert result["overall_valid"] is True
 
-    def test_overall_valid_false_when_tokens_missing(self, monkeypatch):
+    def test_overall_valid_false_when_tokens_missing(self, monkeypatch) -> None:
         for var in ["VERCEL_TOKEN", "NETLIFY_AUTH_TOKEN", "FLY_API_TOKEN", "GITHUB_TOKEN"]:
             monkeypatch.delenv(var, raising=False)
         result = validate_deployment_environment()
@@ -1045,7 +1043,7 @@ class TestValidateDeploymentEnvironment:
 # ===========================================================================
 
 
-def _make_aiohttp_ctx(response_mock):
+def _make_aiohttp_ctx(response_mock: MagicMock) -> MagicMock:
     """Wrap a response mock in an async context manager."""
     cm = MagicMock()
     cm.__aenter__ = AsyncMock(return_value=response_mock)
@@ -1053,7 +1051,10 @@ def _make_aiohttp_ctx(response_mock):
     return cm
 
 
-def _make_aiohttp_session(get_responses=None, post_responses=None):
+def _make_aiohttp_session(
+    get_responses: list | None = None,
+    post_responses: list | None = None,
+) -> tuple[MagicMock, MagicMock]:
     """Build a mock aiohttp.ClientSession context manager.
 
     get_responses / post_responses are lists of response mocks returned in
@@ -1073,12 +1074,12 @@ def _make_aiohttp_session(get_responses=None, post_responses=None):
 
 
 class TestCreateGithubRepository:
-    async def test_no_token_raises(self):
+    async def test_no_token_raises(self) -> None:
         mgr = _make_manager()
         with pytest.raises(Exception, match="token"):
             await mgr._create_github_repository("repo", {})
 
-    async def test_user_info_failure_raises(self):
+    async def test_user_info_failure_raises(self) -> None:
         mgr = _make_manager(github_token="tok")
 
         user_resp = MagicMock()
@@ -1090,7 +1091,7 @@ class TestCreateGithubRepository:
             with pytest.raises(Exception, match="Failed to get GitHub user info"):
                 await mgr._create_github_repository("repo", {})
 
-    async def test_successful_creation(self):
+    async def test_successful_creation(self) -> None:
         mgr = _make_manager(github_token="tok")
 
         user_resp = MagicMock()
@@ -1116,7 +1117,7 @@ class TestCreateGithubRepository:
         assert result["owner"] == "testuser"
         assert result["clone_url"] == "https://github.com/testuser/my-repo.git"
 
-    async def test_repo_already_exists_422_fetches_existing(self):
+    async def test_repo_already_exists_422_fetches_existing(self) -> None:
         mgr = _make_manager(github_token="tok")
 
         user_resp = MagicMock()
@@ -1144,7 +1145,7 @@ class TestCreateGithubRepository:
 
         assert result["owner"] == "testuser"
 
-    async def test_creation_error_status_raises(self):
+    async def test_creation_error_status_raises(self) -> None:
         mgr = _make_manager(github_token="tok")
 
         user_resp = MagicMock()
@@ -1170,12 +1171,12 @@ class TestCreateGithubRepository:
 
 
 class TestUploadToGithub:
-    async def test_no_token_raises(self):
+    async def test_no_token_raises(self) -> None:
         mgr = _make_manager()
         with pytest.raises(Exception, match="token"):
             await mgr._upload_to_github("/path", "repo")
 
-    async def test_uploads_files(self, tmp_path):
+    async def test_uploads_files(self, tmp_path) -> None:
         mgr = _make_manager(github_token="tok")
 
         (tmp_path / "index.ts").write_text("const x = 1;")
@@ -1207,7 +1208,7 @@ class TestUploadToGithub:
         assert result["files_uploaded"] == 2
         assert len(result["file_list"]) == 2
 
-    async def test_skips_excluded_dirs(self, tmp_path):
+    async def test_skips_excluded_dirs(self, tmp_path) -> None:
         mgr = _make_manager(github_token="tok")
 
         node_modules = tmp_path / "node_modules"
@@ -1241,7 +1242,7 @@ class TestUploadToGithub:
         assert result["files_uploaded"] == 1
         assert "app.ts" in result["file_list"][0]
 
-    async def test_skips_dotfiles(self, tmp_path):
+    async def test_skips_dotfiles(self, tmp_path) -> None:
         mgr = _make_manager(github_token="tok")
 
         (tmp_path / ".env").write_text("SECRET=abc")
@@ -1272,7 +1273,7 @@ class TestUploadToGithub:
         assert result["files_uploaded"] == 1
         assert all(not Path(f).name.startswith(".") for f in result["file_list"])
 
-    async def test_upload_failure_warned_but_not_raised(self, tmp_path):
+    async def test_upload_failure_warned_but_not_raised(self, tmp_path) -> None:
         mgr = _make_manager(github_token="tok")
         (tmp_path / "app.ts").write_text("export const z = 3;")
 
@@ -1308,11 +1309,11 @@ class TestUploadToGithub:
 
 
 class TestSupportedPlatforms:
-    def test_includes_vercel(self):
+    def test_includes_vercel(self) -> None:
         assert "vercel" in DeploymentManager.SUPPORTED_PLATFORMS
 
-    def test_includes_netlify(self):
+    def test_includes_netlify(self) -> None:
         assert "netlify" in DeploymentManager.SUPPORTED_PLATFORMS
 
-    def test_includes_fly(self):
+    def test_includes_fly(self) -> None:
         assert "fly" in DeploymentManager.SUPPORTED_PLATFORMS
