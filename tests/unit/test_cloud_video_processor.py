@@ -16,6 +16,16 @@ if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
 # ---------------------------------------------------------------------------
+# Evict any MagicMock stub that test_cloud_routes.py may have registered via
+# sys.modules.setdefault() during pytest collection (which runs before tests
+# execute). The parent package youtube_extension.services.cloud is a real
+# module (imported by router.py), so Python can still locate the real file.
+# ---------------------------------------------------------------------------
+_cvp_key = "youtube_extension.services.cloud.cloud_video_processor"
+if isinstance(sys.modules.get(_cvp_key), MagicMock):
+    del sys.modules[_cvp_key]
+
+# ---------------------------------------------------------------------------
 # Module-level import alias (resolved once; importable in all tests)
 # ---------------------------------------------------------------------------
 import youtube_extension.services.cloud.cloud_video_processor as _mod

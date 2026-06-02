@@ -1459,6 +1459,8 @@ async def _run_agent(execution: AgentExecution, events: list[dict[str, Any]]):
         execution.progress = 10.0
 
         try:
+            if AgentOrchestrator is None:
+                raise RuntimeError("AgentOrchestrator not available")
             orchestrator = AgentOrchestrator()
             event_data = next(
                 (e for e in events if e.get("id") == execution.event_id),
@@ -1530,6 +1532,8 @@ async def send_a2a_message(
     if not recipient:
         raise HTTPException(status_code=400, detail="recipient is required")
 
+    if AgentOrchestrator is None:
+        raise HTTPException(status_code=503, detail="AgentOrchestrator not available")
     orch = AgentOrchestrator()
     msg = await orch.send_a2a_message(
         sender=sender,
@@ -1554,6 +1558,8 @@ async def get_a2a_log(
     limit: int = 50,
 ):
     """Return recent A2A inter-agent messages."""
+    if AgentOrchestrator is None:
+        raise HTTPException(status_code=503, detail="AgentOrchestrator not available")
     orch = AgentOrchestrator()
     log = orch.get_a2a_log(conversation_id=conversation_id, limit=limit)
     return ApiResponse.success({"messages": log, "count": len(log)})

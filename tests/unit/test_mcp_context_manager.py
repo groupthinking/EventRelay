@@ -333,3 +333,147 @@ class TestMCPContextManager:
     def test_delete_unknown_context_returns_false(self, tmp_path):
         mgr = MCPContextManager(storage_path=str(tmp_path / "ctx"))
         assert mgr.delete_context("nonexistent") is False
+
+    # ----- cache-hit path (line 222) ----------------------------------------
+
+    def test_get_context_returns_cache_hit(self, tmp_path):
+        mgr = MCPContextManager(storage_path=str(tmp_path / "ctx"))
+        ctx = mgr.create_context("u", "t", "i")
+        del mgr.active_contexts[ctx.id]
+        mgr.context_cache[ctx.id] = ctx
+        result = mgr.get_context(ctx.id)
+        assert result is ctx
+
+    # ----- load-from-storage path (lines 227-228, 374-378) ------------------
+
+    def test_get_context_loads_from_storage(self, tmp_path):
+        mgr = MCPContextManager(storage_path=str(tmp_path / "ctx"))
+        ctx = mgr.create_context("u", "t", "i")
+        ctx_id = ctx.id
+        mgr.active_contexts.clear()
+        mgr.context_cache.clear()
+        result = mgr.get_context(ctx_id)
+        assert result is not None
+        assert result.id == ctx_id
+
+    def test_load_context_direct_success(self, tmp_path):
+        mgr = MCPContextManager(storage_path=str(tmp_path / "ctx"))
+        ctx = mgr.create_context("u", "t", "i")
+        loaded = mgr._load_context(ctx.id)
+        assert loaded is not None
+        assert loaded.user == "u"
+
+    def test_load_context_missing_file_returns_none(self, tmp_path):
+        mgr = MCPContextManager(storage_path=str(tmp_path / "ctx"))
+        assert mgr._load_context("no-such-id") is None
+
+    def test_load_context_bad_json_returns_none(self, tmp_path):
+        storage = tmp_path / "ctx"
+        storage.mkdir()
+        (storage / "bad-id.json").write_text("not json {{{")
+        mgr = MCPContextManager(storage_path=str(storage))
+        result = mgr._load_context("bad-id")
+        assert result is None
+
+    # ----- delete cache path (line 289) -------------------------------------
+
+    def test_delete_context_removes_from_cache(self, tmp_path):
+        mgr = MCPContextManager(storage_path=str(tmp_path / "ctx"))
+        ctx = mgr.create_context("u", "t", "i")
+        mgr.context_cache[ctx.id] = ctx
+        mgr.delete_context(ctx.id)
+        assert ctx.id not in mgr.context_cache
+
+    # ----- list_contexts (lines 315-326) ------------------------------------
+
+    def test_list_contexts_returns_all(self, tmp_path):
+        mgr = MCPContextManager(storage_path=str(tmp_path / "ctx"))
+        mgr.create_context("a", "t", "i")
+        mgr.create_context("b", "t", "i")
+        assert len(mgr.list_contexts()) == 2
+
+    def test_list_contexts_user_filter(self, tmp_path):
+        mgr = MCPContextManager(storage_path=str(tmp_path / "ctx"))
+        mgr.create_context("alice", "t", "i")
+        mgr.create_context("bob", "t", "i")
+        result = mgr.list_contexts(user="alice")
+        assert len(result) == 1
+        assert result[0].user == "alice"
+
+    def test_list_contexts_status_filter(self, tmp_path):
+        mgr = MCPContextManager(storage_path=str(tmp_path / "ctx"))
+        ctx = mgr.create_context("u", "t", "i")
+        ctx.status = ContextStatus.COMPLETED
+        result = mgr.list_contexts(status=ContextStatus.COMPLETED)
+        assert len(result) == 1
+
+    def test_list_contexts_limit(self, tmp_path):
+        mgr = MCPContextManager(storage_path=str(tmp_path / "ctx"))
+        for _ in range(5):
+            mgr.create_context("u", "t", "i")
+        assert len(mgr.list_contexts(limit=2)) == 2
+
+    # ----- cleanup_expired_contexts (lines 335-347) -------------------------
+
+    def test_cleanup_expired_removes_expired(self, tmp_path):
+        mgr = MCPContextManager(storage_path=str(tmp_path / "ctx"))
+        ctx = mgr.create_context("u", "t", "i")
+        ctx.expires_at = datetime.utcnow() - timedelta(seconds=1)
+        count = mgr.cleanup_expired_contexts()
+        assert count == 1
+        assert ctx.id not in mgr.active_contexts
+
+    def test_cleanup_expired_ignores_active(self, tmp_path):
+        mgr = MCPContextManager(storage_path=str(tmp_path / "ctx"))
+        mgr.create_context("u", "t", "i")
+        count = mgr.cleanup_expired_contexts()
+        assert count == 0
+
+    # ----- _persist_context exception path (lines 361-362) ------------------
+
+    def test_persist_context_exception_does_not_raise(self, tmp_path, monkeypatch):
+        import builtins
+        mgr = MCPContextManager(storage_path=str(tmp_path / "ctx"))
+        ctx = mgr.create_context("u", "t", "i")
+        real_open = builtins.open
+
+        def fail_open(path, *args, **kwargs):
+            if str(tmp_path) in str(path) and "ctx" in str(path):
+                raise OSError("disk full")
+            return real_open(path, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, "open", fail_open)
+        mgr._persist_context(ctx)  # must not raise
+
+    # ----- _delete_persisted_context exception path (lines 394-395) ---------
+
+    def test_delete_persisted_context_exception_does_not_raise(self, tmp_path, monkeypatch):
+        import os as _os
+        mgr = MCPContextManager(storage_path=str(tmp_path / "ctx"))
+        ctx = mgr.create_context("u", "t", "i")
+        monkeypatch.setattr(_os, "remove", lambda p: (_ for _ in ()).throw(OSError("perm")))
+        mgr._delete_persisted_context(ctx.id)  # must not raise
+
+    # ----- module-level convenience functions (lines 412, 417) --------------
+
+    def test_get_context_manager_singleton(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(_ctx_mod, "_context_manager", None)
+        monkeypatch.chdir(tmp_path)
+        mgr1 = _ctx_mod.get_context_manager()
+        mgr2 = _ctx_mod.get_context_manager()
+        assert mgr1 is mgr2
+
+    def test_create_context_convenience(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(_ctx_mod, "_context_manager", None)
+        monkeypatch.chdir(tmp_path)
+        ctx = _ctx_mod.create_context("u2", "t2", "i2")
+        assert isinstance(ctx, MCPContext)
+        assert ctx.user == "u2"
+
+    def test_get_context_convenience(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(_ctx_mod, "_context_manager", None)
+        monkeypatch.chdir(tmp_path)
+        ctx = _ctx_mod.create_context("u3", "t3", "i3")
+        retrieved = _ctx_mod.get_context(ctx.id)
+        assert retrieved is not None
+        assert retrieved.id == ctx.id

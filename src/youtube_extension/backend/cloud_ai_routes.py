@@ -140,7 +140,6 @@ def parse_provider(provider_str: Optional[str]) -> Optional[CloudAIProvider]:
         "google_cloud": CloudAIProvider.GOOGLE_CLOUD,
         "aws_rekognition": CloudAIProvider.AWS_REKOGNITION,
         "azure_vision": CloudAIProvider.AZURE_VISION,
-        "apple_fastvlm": CloudAIProvider.APPLE_FASTVLM
     }
 
     if provider_str in provider_mapping:
@@ -419,6 +418,5 @@ def _get_provider_description(provider: CloudAIProvider) -> str:
         CloudAIProvider.GOOGLE_CLOUD: "Google Cloud Video Intelligence & Vision API",
         CloudAIProvider.AWS_REKOGNITION: "Amazon Rekognition video and image analysis",
         CloudAIProvider.AZURE_VISION: "Microsoft Azure AI Vision services",
-        CloudAIProvider.APPLE_FASTVLM: "Apple FastVLM vision language model"
     }
     return descriptions.get(provider, "Unknown provider")

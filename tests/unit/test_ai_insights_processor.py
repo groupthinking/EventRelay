@@ -164,9 +164,8 @@ class TestGetAIInsights:
         monkeypatch.delenv("GEMINI_API_KEY", raising=False)
         monkeypatch.delenv("OPENAI_API_KEY", raising=False)
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-        # Reset global instance
         import youtube_extension.backend.ai_insights_processor as _mod
-        _mod._ai_insights_processor = None
+        monkeypatch.setattr(_mod, "_ai_insights_processor", None)
         result = await get_ai_insights("http://example.com/v")
         assert isinstance(result, dict)
 
@@ -176,7 +175,7 @@ class TestGetAIInsights:
         monkeypatch.delenv("OPENAI_API_KEY", raising=False)
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
         import youtube_extension.backend.ai_insights_processor as _mod
-        _mod._ai_insights_processor = None
+        monkeypatch.setattr(_mod, "_ai_insights_processor", None)
         await get_ai_insights("http://example.com/v1")
         instance_after_first = _mod._ai_insights_processor
         await get_ai_insights("http://example.com/v2")

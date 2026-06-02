@@ -82,7 +82,7 @@ class MCPContext(BaseModel):
 
     def update_checksum(self) -> None:
         """Update context checksum for integrity validation"""
-        context_dict = self.dict(exclude={"checksum", "updated_at"})
+        context_dict = self.model_dump(exclude={"checksum", "updated_at"})
         context_str = json.dumps(context_dict, sort_keys=True, default=str)
         self.checksum = hashlib.sha256(context_str.encode()).hexdigest()
 
@@ -91,7 +91,7 @@ class MCPContext(BaseModel):
         if not self.checksum:
             return False
 
-        current_dict = self.dict(exclude={"checksum", "updated_at"})
+        current_dict = self.model_dump(exclude={"checksum", "updated_at"})
         current_str = json.dumps(current_dict, sort_keys=True, default=str)
         current_checksum = hashlib.sha256(current_str.encode()).hexdigest()
 
