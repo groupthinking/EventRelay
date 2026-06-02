@@ -73,7 +73,7 @@ def test_generate_project_includes_video_specific_content(monkeypatch, tmp_path)
     project_dir.mkdir()
     monkeypatch.setattr(tempfile, "mkdtemp", lambda prefix: str(project_dir))
 
-    generator = ProjectCodeGenerator()
+    generator = ProjectCodeGenerator(use_ai_generation=False)
     video_analysis = {
         "metadata": {"title": "Build a React Weather App", "keywords": ["react", "api"]},
         "ai_analysis": {
@@ -108,7 +108,7 @@ def test_build_plan_videos_generate_unique_vanilla_assets(monkeypatch, tmp_path)
     project_two = tmp_path / "project_two"
     monkeypatch.setattr(tempfile, "mkdtemp", _tempdir_factory(project_one, project_two))
 
-    generator = ProjectCodeGenerator()
+    generator = ProjectCodeGenerator(use_ai_generation=False)
     project_config = {"type": "web", "features": ["responsive_design"]}
 
     first = asyncio.run(
@@ -157,7 +157,7 @@ def test_same_build_plan_video_produces_deterministic_vanilla_files(monkeypatch,
         _tempdir_factory(first_project, second_project),
     )
 
-    generator = ProjectCodeGenerator()
+    generator = ProjectCodeGenerator(use_ai_generation=False)
     video_analysis = _build_video_analysis(
         "Build a Recipe Finder",
         "recipe789",

@@ -977,9 +977,9 @@ class TestModuleLevelAvailabilityFlag:
     def test_cloud_tasks_available_is_bool(self):
         assert isinstance(m.CLOUD_TASKS_AVAILABLE, bool)
 
-    def test_cloud_tasks_available_is_false_when_library_missing(self):
-        # In this test environment the library is not installed
-        assert m.CLOUD_TASKS_AVAILABLE is False
-
-    def test_tasks_v2_is_none_when_library_missing(self):
-        assert m.tasks_v2 is None
+    def test_cloud_tasks_available_reflects_import(self):
+        # The flag must match whether tasks_v2 was successfully imported
+        if m.tasks_v2 is None:
+            assert m.CLOUD_TASKS_AVAILABLE is False
+        else:
+            assert m.CLOUD_TASKS_AVAILABLE is True

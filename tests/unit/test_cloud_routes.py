@@ -67,20 +67,6 @@ sys.modules.setdefault("src.integration.cloudevents_publisher", _ce_publisher_mo
 sys.modules.setdefault("src.integration.temporal_video_analysis", _temporal_mod)
 sys.modules.setdefault("src.integration.looker_embedded", _looker_embedded_mod)
 
-# youtube_extension.services.cloud stubs (needed by cloud_api_endpoints)
-_yt_svc = _make_pkg("youtube_extension.services")
-_yt_svc_cloud = _make_pkg("youtube_extension.services.cloud")
-_yt_svc_cloud_vp = MagicMock()
-
-# Attach top-level names the module imports via `from ..services.cloud import ...`
-_yt_svc_cloud.get_firestore_service = AsyncMock()
-_yt_svc_cloud.get_cloud_tasks_service = MagicMock()
-_yt_svc_cloud.get_vertex_ai_service = MagicMock()
-_yt_svc_cloud.VideoProcessingTask = MagicMock()
-
-sys.modules.setdefault("youtube_extension.services", _yt_svc)
-sys.modules.setdefault("youtube_extension.services.cloud", _yt_svc_cloud)
-sys.modules.setdefault("youtube_extension.services.cloud.cloud_video_processor", _yt_svc_cloud_vp)
 
 # ---------------------------------------------------------------------------
 # Now import the modules under test
@@ -624,9 +610,10 @@ class TestCloudApiEndpoints:
 
         mock_firestore = AsyncMock()
         mock_firestore.update_state = AsyncMock()
-        _yt_svc_cloud.get_firestore_service = AsyncMock(return_value=mock_firestore)
 
-        with patch("youtube_extension.backend.cloud_api_endpoints.get_cloud_video_processor",
+        with patch("youtube_extension.backend.cloud_api_endpoints.get_firestore_service",
+                   AsyncMock(return_value=mock_firestore)), \
+             patch("youtube_extension.backend.cloud_api_endpoints.get_cloud_video_processor",
                    return_value=mock_processor):
             client = self._build_app()
             response = client.post(
