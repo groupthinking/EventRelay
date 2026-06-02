@@ -1092,7 +1092,7 @@ class TestDatabaseHealthMonitorRunHealthCheck:
 class TestConvenienceFunctions:
     """Tests for module-level convenience functions"""
 
-    async def test_execute_optimized_query_delegates(self, tmp_path):
+    async def test_execute_optimized_query_delegates(self, tmp_path) -> None:
         from youtube_extension.backend.services import database_optimizer as _mod
         orig = _mod.query_optimizer.execute_query
         _mod.query_optimizer.execute_query = AsyncMock(return_value=[{"id": 1}])
@@ -1102,7 +1102,7 @@ class TestConvenienceFunctions:
         finally:
             _mod.query_optimizer.execute_query = orig
 
-    async def test_execute_batch_delegates(self):
+    async def test_execute_batch_delegates(self) -> None:
         from youtube_extension.backend.services import database_optimizer as _mod
         orig = _mod.query_optimizer.execute_batch_queries
         _mod.query_optimizer.execute_batch_queries = AsyncMock(return_value=[[1], [2]])
@@ -1112,7 +1112,7 @@ class TestConvenienceFunctions:
         finally:
             _mod.query_optimizer.execute_batch_queries = orig
 
-    async def test_get_database_performance_report_delegates(self):
+    async def test_get_database_performance_report_delegates(self) -> None:
         from youtube_extension.backend.services import database_optimizer as _mod
         orig = _mod.query_optimizer.get_performance_report
         _mod.query_optimizer.get_performance_report = AsyncMock(return_value={"ok": True})
@@ -1122,7 +1122,7 @@ class TestConvenienceFunctions:
         finally:
             _mod.query_optimizer.get_performance_report = orig
 
-    async def test_get_database_health_status_delegates(self):
+    async def test_get_database_health_status_delegates(self) -> None:
         from youtube_extension.backend.services import database_optimizer as _mod
         orig = _mod.health_monitor.run_health_check
         _mod.health_monitor.run_health_check = AsyncMock(return_value={"overall_health": "healthy"})
@@ -1132,7 +1132,7 @@ class TestConvenienceFunctions:
         finally:
             _mod.health_monitor.run_health_check = orig
 
-    async def test_initialize_database_optimization_calls_initialize(self, tmp_path):
+    async def test_initialize_database_optimization_calls_initialize(self, tmp_path) -> None:
         from youtube_extension.backend.services import database_optimizer as _mod
         orig_init = _mod.connection_pool.initialize
         orig_get = _mod.connection_pool.get_connection
@@ -1151,7 +1151,7 @@ class TestConvenienceFunctions:
             _mod.connection_pool.get_connection = orig_get
             _mod.connection_pool.release_connection = orig_rel
 
-    async def test_shutdown_database_optimization_calls_close(self):
+    async def test_shutdown_database_optimization_calls_close(self) -> None:
         from youtube_extension.backend.services import database_optimizer as _mod
         orig = _mod.connection_pool.close
         _mod.connection_pool.close = AsyncMock()
@@ -1165,14 +1165,14 @@ class TestConvenienceFunctions:
 class TestExecuteBatchQueries:
     """execute_batch_queries with multi-query grouping"""
 
-    def _make_pool(self):
+    def _make_pool(self) -> MagicMock:
         pool = MagicMock()
         pool.get_pool_stats.return_value = {"connections_in_use": 0, "max_connections": 10}
         pool.get_connection = AsyncMock()
         pool.release_connection = AsyncMock()
         return pool
 
-    async def test_batch_executes_all_queries(self, tmp_path):
+    async def test_batch_executes_all_queries(self, tmp_path) -> None:
         import sqlite3
         pool = DatabaseConnectionPool(f"sqlite:///{tmp_path}/test.db")
         await pool.initialize()
@@ -1184,7 +1184,7 @@ class TestExecuteBatchQueries:
         results = await optimizer.execute_batch_queries(queries)
         assert len(results) == 2
 
-    async def test_batch_exception_propagated(self):
+    async def test_batch_exception_propagated(self) -> None:
         pool = self._make_pool()
         pool.get_connection.side_effect = RuntimeError("No DB")
         optimizer = QueryOptimizer(pool)
@@ -1195,17 +1195,17 @@ class TestExecuteBatchQueries:
 class TestConnectionPoolInitialize:
     """DatabaseConnectionPool.initialize with different URL types"""
 
-    async def test_sqlite_file_creates_dir(self, tmp_path):
+    async def test_sqlite_file_creates_dir(self, tmp_path) -> None:
         db_path = tmp_path / "subdir" / "test.db"
         pool = DatabaseConnectionPool(f"sqlite:///{db_path}")
         await pool.initialize()
         # No error should occur
 
-    async def test_sqlite_memory_initializes(self):
+    async def test_sqlite_memory_initializes(self) -> None:
         pool = DatabaseConnectionPool("sqlite:///:memory:")
         await pool.initialize()
 
-    async def test_haspg_false_uses_sqlite_path(self, tmp_path):
+    async def test_haspg_false_uses_sqlite_path(self, tmp_path) -> None:
         from youtube_extension.backend.services import database_optimizer as _mod
         orig = _mod.HAS_POSTGRESQL
         _mod.HAS_POSTGRESQL = False
