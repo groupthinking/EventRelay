@@ -17,7 +17,7 @@ export async function POST(request: Request) {
 
     const response = await fetch(`${BACKEND_URL}/api/v1/chat`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...(process.env.EVENTRELAY_API_KEY ? { 'X-API-Key': process.env.EVENTRELAY_API_KEY } : {}) },
       body: JSON.stringify({
         message: body.query,
         video_url: body.video_url || '',
