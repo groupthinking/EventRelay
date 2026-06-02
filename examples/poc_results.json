@@ -1,0 +1,346 @@
+{
+  "generated_at": "2026-06-01T19:20:09",
+  "environment": {
+    "python": "3.11.15",
+    "youtube_reachable": true,
+    "ai_keys_present": {
+      "GEMINI_API_KEY": false,
+      "OPENAI_API_KEY": false,
+      "ANTHROPIC_API_KEY": false
+    },
+    "hybrid_processor_ok": true,
+    "ai_probe_error": null,
+    "vercel_gateway": {
+      "available": true,
+      "ok": true,
+      "model": "google/gemini-2.0-flash",
+      "sample_events": 3,
+      "error": null
+    }
+  },
+  "totals": {
+    "videos": 10,
+    "transcript_ok": 0,
+    "extract_http_200": 10,
+    "dispatch_http_200": 10
+  },
+  "results": [
+    {
+      "video_id": "mjkecNwp1X0",
+      "title": "ChatGPT Agent Builder Full Tutorial: Building AI Agents in 2025 for Beginners",
+      "url": "https://www.youtube.com/watch?v=mjkecNwp1X0",
+      "stage1_transcript": {
+        "ok": false,
+        "chars": 0,
+        "segments": 0,
+        "error": "IpBlocked: ",
+        "seconds": 0.38,
+        "text_preview": ""
+      },
+      "downstream_input_source": "title_only",
+      "stage3_extract_events": {
+        "http_status": 200,
+        "event_count": 5,
+        "types": [
+          "topic"
+        ],
+        "sample": [
+          "AI Agents",
+          "ChatGPT Agent Builder",
+          "2025 AI Landscape"
+        ]
+      },
+      "stage4_dispatch": {
+        "http_status": 200,
+        "dispatch_id": "dsp_787f7d0e",
+        "executions": 10
+      }
+    },
+    {
+      "video_id": "rfonp8KiIso",
+      "title": "How to Build AI Agents Using Make.com (FREE COURSE 2025)",
+      "url": "https://www.youtube.com/watch?v=rfonp8KiIso",
+      "stage1_transcript": {
+        "ok": false,
+        "chars": 0,
+        "segments": 0,
+        "error": "IpBlocked: ",
+        "seconds": 0.52,
+        "text_preview": ""
+      },
+      "downstream_input_source": "title_only",
+      "stage3_extract_events": {
+        "http_status": 200,
+        "event_count": 4,
+        "types": [
+          "action",
+          "mention",
+          "topic"
+        ],
+        "sample": [
+          "AI Agents",
+          "Make.com",
+          "Free Course"
+        ]
+      },
+      "stage4_dispatch": {
+        "http_status": 200,
+        "dispatch_id": "dsp_0c3d826f",
+        "executions": 8
+      }
+    },
+    {
+      "video_id": "ZiBLRw-_d7I",
+      "title": "AI Agents Full Course 2025 | AI Agents Tutorial for Beginners (Simplilearn)",
+      "url": "https://www.youtube.com/watch?v=ZiBLRw-_d7I",
+      "stage1_transcript": {
+        "ok": false,
+        "chars": 0,
+        "segments": 0,
+        "error": "IpBlocked: ",
+        "seconds": 0.46,
+        "text_preview": ""
+      },
+      "downstream_input_source": "title_only",
+      "stage3_extract_events": {
+        "http_status": 200,
+        "event_count": 3,
+        "types": [
+          "mention",
+          "topic"
+        ],
+        "sample": [
+          "AI Agents Full Course",
+          "AI Agents Tutorial",
+          "Simplilearn"
+        ]
+      },
+      "stage4_dispatch": {
+        "http_status": 200,
+        "dispatch_id": "dsp_85b629de",
+        "executions": 6
+      }
+    },
+    {
+      "video_id": "geR9PeCuHK4",
+      "title": "How to Build AI Agents with n8n in 2025! (Full Course)",
+      "url": "https://www.youtube.com/watch?v=geR9PeCuHK4",
+      "stage1_transcript": {
+        "ok": false,
+        "chars": 0,
+        "segments": 0,
+        "error": "IpBlocked: ",
+        "seconds": 0.34,
+        "text_preview": ""
+      },
+      "downstream_input_source": "title_only",
+      "stage3_extract_events": {
+        "http_status": 200,
+        "event_count": 3,
+        "types": [
+          "topic"
+        ],
+        "sample": [
+          "AI Agents",
+          "n8n",
+          "Full Course"
+        ]
+      },
+      "stage4_dispatch": {
+        "http_status": 200,
+        "dispatch_id": "dsp_c2d5144e",
+        "executions": 6
+      }
+    },
+    {
+      "video_id": "upblQZigz0U",
+      "title": "Agentic AI Full Course 2025 | AI Agents Tutorial For Beginners (Edureka)",
+      "url": "https://www.youtube.com/watch?v=upblQZigz0U",
+      "stage1_transcript": {
+        "ok": false,
+        "chars": 0,
+        "segments": 0,
+        "error": "IpBlocked: ",
+        "seconds": 0.47,
+        "text_preview": ""
+      },
+      "downstream_input_source": "title_only",
+      "stage3_extract_events": {
+        "http_status": 200,
+        "event_count": 3,
+        "types": [
+          "topic"
+        ],
+        "sample": [
+          "Agentic AI",
+          "AI Agents Tutorial",
+          "Full Course 2025"
+        ]
+      },
+      "stage4_dispatch": {
+        "http_status": 200,
+        "dispatch_id": "dsp_3a44a547",
+        "executions": 6
+      }
+    },
+    {
+      "video_id": "ftBWgcwvEk4",
+      "title": "8 Hour AI Agents Course in 30 Minutes (DeepLearning.AI)",
+      "url": "https://www.youtube.com/watch?v=ftBWgcwvEk4",
+      "stage1_transcript": {
+        "ok": false,
+        "chars": 0,
+        "segments": 0,
+        "error": "IpBlocked: ",
+        "seconds": 0.52,
+        "text_preview": ""
+      },
+      "downstream_input_source": "title_only",
+      "stage3_extract_events": {
+        "http_status": 200,
+        "event_count": 3,
+        "types": [
+          "insight",
+          "topic"
+        ],
+        "sample": [
+          "AI Agents Course Overview",
+          "Course condensed",
+          "DeepLearning.AI"
+        ]
+      },
+      "stage4_dispatch": {
+        "http_status": 200,
+        "dispatch_id": "dsp_7010f9e8",
+        "executions": 6
+      }
+    },
+    {
+      "video_id": "ZbIVOy_GPyQ",
+      "title": "N8N Full Tutorial: Building AI Agents in 2025 for Beginners",
+      "url": "https://www.youtube.com/watch?v=ZbIVOy_GPyQ",
+      "stage1_transcript": {
+        "ok": false,
+        "chars": 0,
+        "segments": 0,
+        "error": "IpBlocked: ",
+        "seconds": 0.54,
+        "text_preview": ""
+      },
+      "downstream_input_source": "title_only",
+      "stage3_extract_events": {
+        "http_status": 200,
+        "event_count": 4,
+        "types": [
+          "topic"
+        ],
+        "sample": [
+          "N8N Tutorial",
+          "AI Agents",
+          "2025 Technology"
+        ]
+      },
+      "stage4_dispatch": {
+        "http_status": 200,
+        "dispatch_id": "dsp_43ec36d1",
+        "executions": 8
+      }
+    },
+    {
+      "video_id": "OhI005_aJkA",
+      "title": "Full Course (Lessons 1-10) AI Agents for Beginners",
+      "url": "https://www.youtube.com/watch?v=OhI005_aJkA",
+      "stage1_transcript": {
+        "ok": false,
+        "chars": 0,
+        "segments": 0,
+        "error": "IpBlocked: ",
+        "seconds": 0.45,
+        "text_preview": ""
+      },
+      "downstream_input_source": "title_only",
+      "stage3_extract_events": {
+        "http_status": 200,
+        "event_count": 11,
+        "types": [
+          "topic"
+        ],
+        "sample": [
+          "AI Agents Full Course",
+          "Lesson 1: Introduction to AI Agents",
+          "Lesson 2: Agent Architectures"
+        ]
+      },
+      "stage4_dispatch": {
+        "http_status": 200,
+        "dispatch_id": "dsp_eee65097",
+        "executions": 20
+      }
+    },
+    {
+      "video_id": "HMcBIA835ok",
+      "title": "How To Build AI Agents [Full Course 2025]",
+      "url": "https://www.youtube.com/watch?v=HMcBIA835ok",
+      "stage1_transcript": {
+        "ok": false,
+        "chars": 0,
+        "segments": 0,
+        "error": "IpBlocked: ",
+        "seconds": 0.42,
+        "text_preview": ""
+      },
+      "downstream_input_source": "title_only",
+      "stage3_extract_events": {
+        "http_status": 200,
+        "event_count": 3,
+        "types": [
+          "action",
+          "mention",
+          "topic"
+        ],
+        "sample": [
+          "AI Agents",
+          "Full Course",
+          "2025"
+        ]
+      },
+      "stage4_dispatch": {
+        "http_status": 200,
+        "dispatch_id": "dsp_707e3547",
+        "executions": 6
+      }
+    },
+    {
+      "video_id": "2GZ2SNXWK-c",
+      "title": "N8N FULL COURSE 6 HOURS (Build & Sell AI Automations + Agents)",
+      "url": "https://www.youtube.com/watch?v=2GZ2SNXWK-c",
+      "stage1_transcript": {
+        "ok": false,
+        "chars": 0,
+        "segments": 0,
+        "error": "IpBlocked: ",
+        "seconds": 0.59,
+        "text_preview": ""
+      },
+      "downstream_input_source": "title_only",
+      "stage3_extract_events": {
+        "http_status": 200,
+        "event_count": 5,
+        "types": [
+          "action",
+          "topic"
+        ],
+        "sample": [
+          "N8N Full Course",
+          "AI Automations",
+          "AI Agents"
+        ]
+      },
+      "stage4_dispatch": {
+        "http_status": 200,
+        "dispatch_id": "dsp_f530d726",
+        "executions": 10
+      }
+    }
+  ]
+}
