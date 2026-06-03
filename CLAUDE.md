@@ -142,3 +142,8 @@ The project requires `anthropic>=0.78.0`. This floor guarantees:
 - Current model string: `claude-opus-4-8` (no date suffix)
 
 Do not add `try/except TypeError` fallbacks around these parameters — if the SDK is too old the install constraint is wrong, not the call site.
+
+## Repo Hygiene
+
+- **History was rewritten**: `main` has been force-pushed (a secret-purge of committed credentials). Older branches are therefore *orphaned* — they share little real ancestry with current `main`. Consequence: `git diff main...branch` (three-dot) and `git merge-tree` are **unreliable** for those branches (a three-dot diff can read "0 files" for a branch that diverges by thousands; merge-tree reports "clean" because unrelated trees don't textually conflict). When auditing branches, trust **PR state + staleness** (age, commits-behind), not raw diffs.
+- **Branch audits**: use the `branch-cleanup` skill (`.claude/skills/branch-cleanup/`) — it runs the 6-gate fail-test harness (`scripts/maintenance/branch-fail-test.sh`) and emits a decision matrix. Never delete branches without archive-tagging first (`git tag archive/<branch>`).
