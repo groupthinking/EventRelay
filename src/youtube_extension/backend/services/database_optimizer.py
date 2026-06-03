@@ -22,6 +22,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import sqlite3
 import statistics
 import threading
@@ -284,7 +285,6 @@ class QueryOptimizer:
         # Normalize query for pattern matching
         normalized = query.lower().strip()
         # Remove parameter values for pattern matching
-        import re
 
         normalized = re.sub(r"\b\d+\b", "?", normalized)  # Replace numbers with ?
         normalized = re.sub(r"'[^']*'", "'?'", normalized)  # Replace string literals
@@ -293,13 +293,12 @@ class QueryOptimizer:
 
     def _get_query_pattern(self, query: str) -> str:
         """Extract query pattern for analysis"""
+
         # Extract the main operation and table(s)
         query_lower = query.lower().strip()
 
         if query_lower.startswith("select"):
             # Extract table names from FROM clause
-            import re
-
             from_match = re.search(r"from\s+(\w+)", query_lower)
             table = from_match.group(1) if from_match else "unknown"
             return f"SELECT from {table}"

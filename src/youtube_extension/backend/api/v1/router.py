@@ -18,9 +18,12 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 
-from src.shared.youtube import RobustYouTubeMetadata
+from shared.youtube import RobustYouTubeMetadata
 from uvai.ml.client import get_uvai_ml_client
-from youtube_extension.services.agents import AgentOrchestrator
+try:
+    from youtube_extension.services.agents import AgentOrchestrator
+except ImportError:
+    AgentOrchestrator = None
 from youtube_extension.services.ai import HybridProcessorService
 from youtube_extension.services.cloud.cloud_tasks_queue import (
     CloudTasksQueueService,
@@ -162,6 +165,8 @@ def get_hybrid_processor_service() -> HybridProcessorService:
 
 def get_agent_orchestrator_service() -> AgentOrchestrator:
     """Dependency injection for agent orchestrator"""
+    if AgentOrchestrator is None:
+        raise HTTPException(status_code=503, detail="Agent orchestration service not available")
     return get_service("agent_orchestrator")
 
 
@@ -1625,6 +1630,8 @@ async def send_a2a_message(
     if not recipient:
         raise HTTPException(status_code=400, detail="recipient is required")
 
+    if AgentOrchestrator is None:
+        raise HTTPException(status_code=503, detail="AgentOrchestrator not available")
     orch = AgentOrchestrator()
     msg = await orch.send_a2a_message(
         sender=sender,
@@ -1651,6 +1658,8 @@ async def get_a2a_log(
     limit: int = 50,
 ):
     """Return recent A2A inter-agent messages."""
+    if AgentOrchestrator is None:
+        raise HTTPException(status_code=503, detail="AgentOrchestrator not available")
     orch = AgentOrchestrator()
     log = orch.get_a2a_log(conversation_id=conversation_id, limit=limit)
     return ApiResponse.success({"messages": log, "count": len(log)})
