@@ -57,7 +57,7 @@ class LLMProvider(Enum):
     OPENAI_GPT4O = "gpt-4o"
     OPENAI_GPT4O_MINI = "gpt-4o-mini"
     CLAUDE_OPUS_4_8 = "claude-opus-4-8"
-    CLAUDE_3_HAIKU = "claude-haiku-4-5"
+    CLAUDE_HAIKU_4_5 = "claude-haiku-4-5"
     GROK_4 = "grok-4-0709"
     GEMINI_2_5_FLASH = "gemini-2.5-flash"
     GEMINI_1_5_PRO = "gemini-1.5-pro"
@@ -107,7 +107,7 @@ class MultiLLMVideoProcessor:
             LLMProvider.CLAUDE_OPUS_4_8,
             LLMProvider.GEMINI_2_5_FLASH,
             LLMProvider.OPENAI_GPT4O_MINI,
-            LLMProvider.CLAUDE_3_HAIKU,
+            LLMProvider.CLAUDE_HAIKU_4_5,
             LLMProvider.GROK_4,
             LLMProvider.GEMINI_1_5_PRO,
         ]
@@ -225,7 +225,7 @@ class MultiLLMVideoProcessor:
                 content = await self._execute_with_openai(provider, prompt, video_url)
             elif provider in [
                 LLMProvider.CLAUDE_OPUS_4_8,
-                LLMProvider.CLAUDE_3_HAIKU,
+                LLMProvider.CLAUDE_HAIKU_4_5,
             ]:
                 content = await self._execute_with_claude(provider, prompt, video_url)
             elif provider == LLMProvider.GROK_4:
@@ -316,6 +316,7 @@ class MultiLLMVideoProcessor:
 
         headers = {
             "x-api-key": self.anthropic_api_key,
+            "anthropic-version": "2023-06-01",
             "Content-Type": "application/json",
         }
 

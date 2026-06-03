@@ -115,8 +115,35 @@ turbo run test
 - **Security**: Validate inputs via Pydantic; no `dangerouslySetInnerHTML` in React; sanitize subprocess args
 - **Type safety enforced**: mypy strict (Python), TypeScript strict (frontend)
 
+## SDK ↔ Backend Contract Alignment
+
+`sdk/python/eventrelay_sdk/types.py` must stay in sync with `src/youtube_extension/backend/api/v1/models.py`.
+
+**Rules:**
+- The backend `models.py` is the source of truth — never infer SDK types from test behaviour or API docs alone.
+- When a test fails with `ValidationError`, fix the test mock to match the real response shape; do not weaken the SDK type (e.g., making required fields `Optional`).
+- Enum fields (e.g., `job_status: Optional[JobStatus]`) must use the SDK enum type, not `str`.
+- After any change to backend response models, audit the corresponding SDK model for drift.
+
+**Verify alignment with:**
+
+```bash
+# Backend source of truth
+grep -A 30 "class TranscriptActionResponse" src/youtube_extension/backend/api/v1/models.py
+# SDK model
+grep -A 30 "class TranscriptActionResponse" sdk/python/eventrelay_sdk/types.py
+```
+
+## Anthropic SDK Version
+
+The project requires `anthropic>=0.78.0`. This floor guarantees:
+- `thinking={"type": "adaptive"}` (adaptive thinking, no `budget_tokens`) — introduced in 0.78.0
+- `output_config={"effort": "..."}` (GA effort control, no beta header) — introduced in 0.75.0
+- Current model string: `claude-opus-4-8` (no date suffix)
+
+Do not add `try/except TypeError` fallbacks around these parameters — if the SDK is too old the install constraint is wrong, not the call site.
+
 ## Repo Hygiene
 
 - **History was rewritten**: `main` has been force-pushed (a secret-purge of committed credentials). Older branches are therefore *orphaned* — they share little real ancestry with current `main`. Consequence: `git diff main...branch` (three-dot) and `git merge-tree` are **unreliable** for those branches (a three-dot diff can read "0 files" for a branch that diverges by thousands; merge-tree reports "clean" because unrelated trees don't textually conflict). When auditing branches, trust **PR state + staleness** (age, commits-behind), not raw diffs.
 - **Branch audits**: use the `branch-cleanup` skill (`.claude/skills/branch-cleanup/`) — it runs the 6-gate fail-test harness (`scripts/maintenance/branch-fail-test.sh`) and emits a decision matrix. Never delete branches without archive-tagging first (`git tag archive/<branch>`).
-

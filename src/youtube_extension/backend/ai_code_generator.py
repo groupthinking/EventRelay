@@ -33,27 +33,23 @@ except ImportError:
     KNOWLEDGE_BASE_AVAILABLE = False
     logger.warning("Knowledge base not available - video technologies won't be persisted")
 
-# Import Gemini SDK
 try:
-    from google import genai
-    from google.genai import types as genai_types
-    GENAI_AVAILABLE = True
+    from youtube_extension.backend.llm_router import LLMRouter
+    _LLM_ROUTER_AVAILABLE = True
 except ImportError:
-    GENAI_AVAILABLE = False
-    logger.warning("google-genai SDK not available - AI code generation disabled")
+    LLMRouter = None  # type: ignore[assignment,misc]
+    _LLM_ROUTER_AVAILABLE = False
+    logger.warning("LLMRouter not available - AI code generation disabled")
 
 
 class AICodeGenerator:
     """
-    AI-powered code generator using Gemini for intelligent full-stack generation.
+    AI-powered code generator using a multi-provider LLM router.
+    Tries Gemini → Anthropic → OpenAI → Grok → Perplexity in order.
     Produces complete, deployable applications from video analysis.
     """
 
     def __init__(self, output_dir: Optional[str] = None):
-        self.gemini_api_key = os.environ.get("GEMINI_API_KEY")
-        if not self.gemini_api_key:
-            logger.warning("GEMINI_API_KEY not set - AI code generation disabled")
-
         # Configure output directory (cross-platform)
         if output_dir:
             self.output_dir = Path(output_dir)
@@ -65,10 +61,18 @@ class AICodeGenerator:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         logger.info(f"📁 Output directory: {self.output_dir}")
 
-        self.client = None
-        if GENAI_AVAILABLE and self.gemini_api_key:
-            self.client = genai.Client(api_key=self.gemini_api_key)
-            logger.info("✅ AI Code Generator initialized with Gemini")
+        self.router: Optional[Any] = None
+        if _LLM_ROUTER_AVAILABLE:
+            try:
+                self.router = LLMRouter()
+                if self.router.has_provider():
+                    logger.info("✅ AI Code Generator initialised with LLM router")
+                else:
+                    logger.warning("LLMRouter: no API keys found — AI generation disabled")
+                    self.router = None
+            except Exception as exc:
+                logger.warning("Failed to initialise LLMRouter: %s", exc)
+                self.router = None
 
     async def generate_fullstack_project(
         self,
@@ -85,9 +89,9 @@ class AICodeGenerator:
         Returns:
             Project generation results with path and metadata
         """
-        if not self.client:
-            logger.error("Gemini client not available")
-            raise RuntimeError("AI code generation requires Gemini API key")
+        if not self.router:
+            logger.error("No AI provider available")
+            raise RuntimeError("AI code generation requires at least one LLM provider API key")
 
         logger.info("🤖 Starting AI-powered full-stack generation")
 
@@ -220,13 +224,11 @@ CRITICAL: Prioritize functional MVP over polished product. Generated code must:
 Choose "fullstack_app" for most cases, "agent" for MCP/workflow systems, "infrastructure_platform" for Turborepo monorepo with multiple apps."""
 
         try:
-            response = self.client.models.generate_content(
-                model='gemini-3-pro-preview',
-                contents=prompt
-            )
+            text = await self.router.generate(prompt, max_tokens=4096) if self.router else None
 
-            # Parse response
-            text = response.text
+            if not text:
+                raise ValueError("No response from LLM router")
+
             # Extract JSON from potential markdown fences
             if '```json' in text:
                 text = text.split('```json')[1].split('```')[0]
@@ -569,26 +571,11 @@ TASK: Generate {description}
 {specific_prompt}"""
 
         try:
-            response = self.client.models.generate_content(
-                model='gemini-3-pro-preview',
-                contents=prompt,
-                config=genai_types.GenerateContentConfig(
-                    temperature=1.0,  # Gemini 3 requires temp=1.0
-                    max_output_tokens=8192
-                    # Gemini 3 Pro uses HIGH thinking by default - cannot be disabled
-                )
-            )
-
-            # Handle Gemini 3 responses with thought_signature
-            code = response.text
-            if code is None:
-                # Try extracting from parts
-                if response.candidates and response.candidates[0].content.parts:
-                    text_parts = [p.text for p in response.candidates[0].content.parts if hasattr(p, 'text') and p.text]
-                    code = "\n".join(text_parts) if text_parts else None
+            code = await self.router.generate(prompt, max_tokens=8192) if self.router else None
 
             if not code:
-                return f"// Error: Gemini returned no code for {description}\n// Please implement manually"
+                return f"// Error: LLM router returned no code for {description}\n// Please implement manually"
+
             # Clean up code fences
             if '```typescript' in code:
                 code = code.split('```typescript')[1].split('```')[0]
@@ -1146,8 +1133,8 @@ jobs:
         Returns:
             Dict with fixed files and status
         """
-        if not self.client:
-            return {"success": False, "reason": "Gemini client not available"}
+        if not self.router:
+            return {"success": False, "reason": "No AI provider available"}
 
         logger.info(f"🔧 AI auto-fix: Attempting to fix {len(errors)} build errors")
 
@@ -1197,26 +1184,10 @@ Return ONLY the fixed code, no explanations. Ensure:
 5. Code compiles without errors"""
 
             try:
-                response = self.client.models.generate_content(
-                    model="gemini-3-pro-preview",
-                    contents=fix_prompt,
-                    config=genai_types.GenerateContentConfig(
-                        temperature=1.0,  # Gemini 3 requires temp=1.0
-                        max_output_tokens=4096
-                        # Gemini 3 Pro uses HIGH thinking by default - cannot be disabled
-                    )
-                )
-
-                # Handle Gemini 3's thought_signature responses - extract text from parts if needed
-                response_text = response.text
-                if response_text is None:
-                    # Try extracting from parts directly
-                    if response.candidates and response.candidates[0].content.parts:
-                        text_parts = [p.text for p in response.candidates[0].content.parts if hasattr(p, 'text') and p.text]
-                        response_text = "\n".join(text_parts) if text_parts else None
+                response_text = await self.router.generate(fix_prompt, max_tokens=4096) if self.router else None
 
                 if not response_text:
-                    logger.warning(f"⚠️ Gemini returned no text for {rel_path}, skipping")
+                    logger.warning(f"⚠️ LLM router returned no text for {rel_path}, skipping")
                     continue
 
                 fixed_code = response_text.strip()
