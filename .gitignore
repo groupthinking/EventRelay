@@ -4,6 +4,7 @@
 # --- Build Artifacts ---
 # --- Data & Models ---
 data/knowledge_base.json
+data/mcp_contexts/
 # --- Dependencies ---
 # --- Editors & IDEs ---
 # --- Frameworks ---

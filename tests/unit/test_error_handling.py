@@ -341,3 +341,161 @@ class TestRequestTracker:
         usage = tracker.get_memory_usage()
         assert isinstance(usage, float)
         assert usage >= 0.0
+
+    def test_start_request_stores_in_active(self):
+        tracker = RequestTracker()
+        req = MagicMock()
+        req.method = "GET"
+        req.url = MagicMock(__str__=lambda self: "http://test.com/api/v1")
+        req.headers = {"user-agent": "testclient"}
+        req.client = MagicMock(host="127.0.0.1")
+        ctx = tracker.start_request("req-1", req)
+        assert "req-1" in tracker.active_requests
+        assert ctx["method"] == "GET"
+
+    def test_end_request_removes_from_active(self):
+        tracker = RequestTracker()
+        req = MagicMock()
+        req.method = "POST"
+        req.url = MagicMock(__str__=lambda self: "http://test.com/api/v1")
+        req.headers = {}
+        req.client = None
+        tracker.start_request("req-2", req)
+        result = tracker.end_request("req-2", 200)
+        assert "req-2" not in tracker.active_requests
+        assert result["status_code"] == 200
+
+    def test_end_request_unknown_id_returns_empty(self):
+        tracker = RequestTracker()
+        result = tracker.end_request("nonexistent", 200)
+        assert result == {}
+
+    def test_end_request_has_duration_ms(self):
+        tracker = RequestTracker()
+        req = MagicMock()
+        req.method = "GET"
+        req.url = MagicMock(__str__=lambda self: "http://test.com/")
+        req.headers = {}
+        req.client = None
+        tracker.start_request("req-3", req)
+        result = tracker.end_request("req-3", 200)
+        assert "duration_ms" in result
+        assert result["duration_ms"] >= 0
+
+
+# ===========================================================================
+# ErrorHandlingMiddleware — basic init and synchronous methods
+# ===========================================================================
+
+import pytest
+from unittest.mock import AsyncMock
+from fastapi import FastAPI
+
+
+class TestErrorHandlingMiddlewareInit:
+    def test_init_stores_debug_flag(self):
+        from youtube_extension.backend.middleware.error_handling_middleware import ErrorHandlingMiddleware
+        app = FastAPI()
+        middleware = ErrorHandlingMiddleware(app, debug=True)
+        assert middleware.debug is True
+
+    def test_init_default_not_debug(self):
+        from youtube_extension.backend.middleware.error_handling_middleware import ErrorHandlingMiddleware
+        app = FastAPI()
+        middleware = ErrorHandlingMiddleware(app)
+        assert middleware.debug is False
+
+    def test_request_tracker_created_when_enabled(self):
+        from youtube_extension.backend.middleware.error_handling_middleware import ErrorHandlingMiddleware
+        app = FastAPI()
+        middleware = ErrorHandlingMiddleware(app, enable_request_tracking=True)
+        assert middleware.request_tracker is not None
+
+    def test_request_tracker_none_when_disabled(self):
+        from youtube_extension.backend.middleware.error_handling_middleware import ErrorHandlingMiddleware
+        app = FastAPI()
+        middleware = ErrorHandlingMiddleware(app, enable_request_tracking=False)
+        assert middleware.request_tracker is None
+
+    def test_error_counts_starts_empty(self):
+        from youtube_extension.backend.middleware.error_handling_middleware import ErrorHandlingMiddleware
+        app = FastAPI()
+        middleware = ErrorHandlingMiddleware(app)
+        assert middleware.error_counts == {}
+
+
+class TestErrorHandlingMiddlewareUpdateTracking:
+    @pytest.fixture
+    def middleware(self):
+        from youtube_extension.backend.middleware.error_handling_middleware import ErrorHandlingMiddleware
+        app = FastAPI()
+        return ErrorHandlingMiddleware(app)
+
+    def test_update_tracking_increments_count(self, middleware):
+        middleware.update_error_tracking("validation")
+        assert middleware.error_counts.get("validation") == 1
+
+    def test_update_tracking_multiple_same_category(self, middleware):
+        for _ in range(3):
+            middleware.update_error_tracking("internal_server")
+        assert middleware.error_counts.get("internal_server") == 3
+
+    def test_update_tracking_different_categories(self, middleware):
+        middleware.update_error_tracking("validation")
+        middleware.update_error_tracking("authentication")
+        assert middleware.error_counts.get("validation") == 1
+        assert middleware.error_counts.get("authentication") == 1
+
+    def test_get_error_stats_returns_dict(self, middleware):
+        middleware.update_error_tracking("validation")
+        stats = middleware.get_error_stats()
+        assert isinstance(stats, dict)
+
+    def test_get_error_stats_has_total_errors(self, middleware):
+        middleware.update_error_tracking("validation")
+        middleware.update_error_tracking("validation")
+        stats = middleware.get_error_stats()
+        assert stats["total_errors"] == 2
+
+    def test_get_error_stats_active_requests_zero_when_no_tracker(self):
+        from youtube_extension.backend.middleware.error_handling_middleware import ErrorHandlingMiddleware
+        app = FastAPI()
+        middleware = ErrorHandlingMiddleware(app, enable_request_tracking=False)
+        stats = middleware.get_error_stats()
+        assert stats["active_requests"] == 0
+
+
+class TestErrorHandlingMiddlewareHandleException:
+    @pytest.fixture
+    def middleware(self):
+        from youtube_extension.backend.middleware.error_handling_middleware import ErrorHandlingMiddleware
+        app = FastAPI()
+        return ErrorHandlingMiddleware(app, debug=True)
+
+    async def test_handle_exception_returns_json_response(self, middleware):
+        from fastapi.responses import JSONResponse
+        req = MagicMock()
+        req.state = MagicMock()
+        context = {"request_id": "test-123", "method": "GET", "url": "http://test/api"}
+        response = await middleware.handle_exception(req, ValueError("test error"), context)
+        assert isinstance(response, JSONResponse)
+
+    async def test_handle_exception_status_500_for_generic(self, middleware):
+        req = MagicMock()
+        context = {"request_id": "test-456"}
+        response = await middleware.handle_exception(req, RuntimeError("runtime error"), context)
+        assert response.status_code == 500
+
+    async def test_handle_exception_with_http_exception_404(self, middleware):
+        from fastapi import HTTPException
+        req = MagicMock()
+        context = {"request_id": "test-789"}
+        response = await middleware.handle_exception(req, HTTPException(status_code=404, detail="Not found"), context)
+        assert response.status_code == 404
+
+    async def test_handle_timeout_returns_504(self, middleware):
+        req = MagicMock()
+        req.state = MagicMock()
+        context = {"request_id": "test-timeout"}
+        response = await middleware.handle_timeout_error(req, context)
+        assert response.status_code == 504
