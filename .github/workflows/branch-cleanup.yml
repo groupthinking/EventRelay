@@ -1,0 +1,64 @@
+name: Branch Cleanup
+
+# Manual, gated branch pruning driven by the branch-cleanup assessment.
+# Runs the archive-then-delete harness server-side, where the GITHUB_TOKEN has
+# the `contents: write` rights needed to delete refs.
+#
+# Usage: Actions tab -> Branch Cleanup -> Run workflow -> pick batch + dry_run.
+# Safety:
+#   - dry_run defaults to TRUE; you must set it false to actually delete.
+#   - the delete harness does a LIVE open-PR check per branch (via GITHUB_TOKEN)
+#     and refuses to delete any branch that is the head of an open PR, so a branch
+#     that became active after the assessment snapshot is never deleted.
+#   - every branch SHA is recorded + uploaded as an artifact, and an archive/<branch>
+#     tag is pushed.  Restore:  git push origin <sha>:refs/heads/<branch>
+#
+# NOTE: restoring a deleted branch that contains .github/workflows/* CANNOT be done
+# by this token (GitHub blocks it without the `workflows` scope) — use the PR's
+# "Restore branch" button or a local push with a PAT.
+
+on:
+  workflow_dispatch:
+    inputs:
+      batch:
+        description: "Which verdict batch to delete"
+        required: true
+        default: safe
+        type: choice
+        options: [safe, stale, review]
+      dry_run:
+        description: "Preview only (no deletion). Set to false to actually delete."
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0          # need all remote refs to tag/delete them
+
+      - name: Run branch-cleanup delete (batch=${{ inputs.batch }}, dry_run=${{ inputs.dry_run }})
+        env:
+          DRY_RUN: ${{ inputs.dry_run == true && '1' || '0' }}
+          GITHUB_TOKEN: ${{ github.token }}     # used for the live open-PR guard
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          chmod +x scripts/maintenance/branch-cleanup-delete.sh
+          scripts/maintenance/branch-cleanup-delete.sh "${{ inputs.batch }}"
+
+      - name: Upload recovery refs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: branch-cleanup-recovery-refs
+          path: docs/branch-cleanup-recovery-refs.txt
+          if-no-files-found: warn

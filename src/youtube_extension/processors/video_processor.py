@@ -39,6 +39,3 @@ class VideoProcessor:
         Process a batch of videos using the selected strategy.
         """
         return await self.strategy.process_batch(video_urls, options)
-
-# Default processor instance
-default_processor = VideoProcessor()
