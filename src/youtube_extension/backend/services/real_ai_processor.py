@@ -161,13 +161,13 @@ class RealAIProcessorService:
                 },
             },
             AIProvider.ANTHROPIC: {
-                "default": "claude-3-5-sonnet-20241022",
+                "default": "claude-opus-4-8",
                 "models": {
-                    "claude-3-5-sonnet-20241022": {
+                    "claude-opus-4-8": {
                         "max_tokens": 8192,
                         "cost_tier": "high",
                     },
-                    "claude-3-haiku-20240307": {"max_tokens": 4096, "cost_tier": "low"},
+                    "claude-haiku-4-5": {"max_tokens": 4096, "cost_tier": "low"},
                 },
             },
             AIProvider.GEMINI: {
@@ -484,7 +484,6 @@ Focus on accurate classification for content discovery.
             response = await self.anthropic_client.messages.create(
                 model=model,
                 max_tokens=request.max_tokens or 2048,
-                temperature=request.temperature,
                 messages=[{"role": "user", "content": prompt}],
             )
 
@@ -541,7 +540,7 @@ Focus on accurate classification for content discovery.
 
             return AIProcessingResult(
                 provider="anthropic",
-                model=request.model or "claude-3-5-sonnet-20241022",
+                model=request.model or "claude-opus-4-8",
                 processing_type=request.processing_type.value,
                 result={},
                 tokens_used=0,

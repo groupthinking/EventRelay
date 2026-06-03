@@ -234,7 +234,7 @@ class ClaudeMCPConnector(MCPConnector):
     async def connect(self, config: Dict) -> bool:
         """Connect to Claude API"""
         self.api_key = config.get("api_key")
-        self.model = config.get("model", "claude-3-opus")
+        self.model = config.get("model", "claude-opus-4-8")
 
         if not self.api_key:
             return False

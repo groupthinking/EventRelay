@@ -6,14 +6,57 @@ Extracted AI agent services with clean APIs and proper dependency injection.
 Provides specialized AI agents for different video processing tasks.
 """
 
-from .adapters.action_implementer_agent import ActionImplementerAgent
-from .adapters.agent_orchestrator import AgentOrchestrator
-from .adapters.hybrid_vision_agent import HybridVisionAgent
-from .adapters.personality_agent import PersonalityAgent
-from .adapters.strategy_agent import StrategyAgent
-from .adapters.transcript_action_agent import TranscriptActionAgent
-from .adapters.video_master_agent import VideoMasterAgent
-from .base_agent import BaseAgent
+import logging
+
+logger = logging.getLogger(__name__)
+
+try:
+    from .adapters.action_implementer_agent import ActionImplementerAgent
+except ImportError as exc:
+    ActionImplementerAgent = None
+    logger.warning("ActionImplementerAgent unavailable: %s", exc)
+
+try:
+    from .adapters.agent_orchestrator import AgentOrchestrator
+except ImportError as exc:
+    AgentOrchestrator = None
+    logger.warning("AgentOrchestrator unavailable: %s", exc)
+
+try:
+    from .adapters.hybrid_vision_agent import HybridVisionAgent
+except ImportError as exc:
+    HybridVisionAgent = None
+    logger.warning("HybridVisionAgent unavailable: %s", exc)
+
+try:
+    from .adapters.personality_agent import PersonalityAgent
+except ImportError as exc:
+    PersonalityAgent = None
+    logger.warning("PersonalityAgent unavailable: %s", exc)
+
+try:
+    from .adapters.strategy_agent import StrategyAgent
+except ImportError as exc:
+    StrategyAgent = None
+    logger.warning("StrategyAgent unavailable: %s", exc)
+
+try:
+    from .adapters.transcript_action_agent import TranscriptActionAgent
+except ImportError as exc:
+    TranscriptActionAgent = None
+    logger.warning("TranscriptActionAgent unavailable: %s", exc)
+
+try:
+    from .adapters.video_master_agent import VideoMasterAgent
+except ImportError as exc:
+    VideoMasterAgent = None
+    logger.warning("VideoMasterAgent unavailable: %s", exc)
+
+try:
+    from .base_agent import BaseAgent
+except ImportError as exc:
+    BaseAgent = None
+    logger.warning("BaseAgent unavailable: %s", exc)
 
 __all__ = [
     'AgentOrchestrator',

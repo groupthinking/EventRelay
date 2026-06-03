@@ -130,7 +130,7 @@ ml = [
     "tokenizers>=0.15.0",
     "sentence-transformers>=2.2.0",
     "openai>=1.3.0",
-    "anthropic>=0.7.0",
+    "anthropic>=0.105.0",
     "google-generativeai>=0.3.0",
     "cohere>=4.37.0",
     "numpy>=1.24.0",
@@ -284,7 +284,11 @@ filterwarnings = [
 ]
 
 [tool.coverage.run]
-source = ["src/youtube_extension"]
+# Measure by import-package name (resolved via pythonpath=src) so it matches
+# how tests actually import the code. A path here is overridden by the
+# --cov=youtube_extension in pytest.ini anyway; keeping them in sync avoids
+# the "coverage reads 0%" trap caused by naming modules that never import.
+source = ["youtube_extension"]
 omit = [
     "*/tests/*",
     "*/migrations/*",

@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { Analytics } from '@vercel/analytics/next';
 import { SpeedInsights } from '@vercel/speed-insights/next';
+import { SITE_URL } from '@/lib/site';
 import './globals.css';
 
 // Fonts use the system stack declared in tailwind.config (Inter / JetBrains
@@ -18,11 +19,14 @@ export const metadata: Metadata = {
   authors: [{ name: 'UVAI' }],
   creator: 'UVAI',
   publisher: 'UVAI',
-  metadataBase: new URL('https://v0-uvai.vercel.app'),
+  metadataBase: new URL(SITE_URL),
+  alternates: {
+    canonical: SITE_URL,
+  },
   openGraph: {
     type: 'website',
     locale: 'en_US',
-    url: 'https://v0-uvai.vercel.app',
+    url: SITE_URL,
     siteName: 'UVAI',
     title: 'UVAI — The Action Layer for Video',
     description: 'Paste a YouTube URL. UVAI takes what is inside the video and builds from it — transcripts, typed events, action items, and agentic execution.',
@@ -73,6 +77,44 @@ export const viewport: Viewport = {
   maximumScale: 5,
 };
 
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@graph': [
+    {
+      '@type': 'Organization',
+      '@id': `${SITE_URL}/#organization`,
+      name: 'UVAI',
+      url: SITE_URL,
+      logo: `${SITE_URL}/icon.svg`,
+      sameAs: ['https://github.com/groupthinking/EventRelay'],
+    },
+    {
+      '@type': 'WebSite',
+      '@id': `${SITE_URL}/#website`,
+      url: SITE_URL,
+      name: 'UVAI — The Action Layer for Video',
+      description:
+        'Paste a YouTube URL. UVAI extracts transcripts, typed events, and action items, then builds from them.',
+      publisher: { '@id': `${SITE_URL}/#organization` },
+    },
+    {
+      '@type': 'SoftwareApplication',
+      name: 'UVAI',
+      applicationCategory: 'DeveloperApplication',
+      operatingSystem: 'Web',
+      description:
+        'AI-powered video automation: transcripts, typed events, action items, and agentic execution. Open source via EventRelay.',
+      offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+      url: SITE_URL,
+    },
+  ],
+};
+
+// Escape `<` so a stray "</script>" inside JSON values cannot break out of the
+// inline JSON-LD block. This is the React/Next-recommended safe pattern for
+// inline JSON without `dangerouslySetInnerHTML`.
+const jsonLdString = JSON.stringify(jsonLd).replace(/</g, '\\u003c');
+
 export default function RootLayout({
   children,
 }: {
@@ -81,12 +123,21 @@ export default function RootLayout({
   return (
     <html lang="en" className="bg-void">
       <body className="min-h-screen bg-void font-sans antialiased">
+        <script type="application/ld+json">{jsonLdString}</script>
+        {/* Skip to main content for keyboard/screen reader users */}
+        <a
+          href="#main"
+          className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:px-4 focus:py-2 focus:rounded-lg focus:bg-[#6af2de] focus:text-[#021a18] focus:font-bold"
+        >
+          Skip to main content
+        </a>
         {/* Global background effects */}
-        <div className="fixed inset-0 bg-mesh pointer-events-none" />
-        <div className="fixed inset-0 noise pointer-events-none" />
+        <div className="fixed inset-0 bg-mesh pointer-events-none" aria-hidden="true" />
+        <div className="fixed inset-0 noise pointer-events-none" aria-hidden="true" />
 
-        {/* Main content */}
-        <div className="relative z-10">
+        {/* Main content — id="main" lives on the layout wrapper so the
+            skip-to-main link works on every route, not just the homepage. */}
+        <div id="main" className="relative z-10">
           {children}
         </div>
         <Analytics />
