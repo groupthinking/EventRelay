@@ -1,0 +1,17 @@
+# Supabase project configuration.
+# Docs: https://supabase.com/docs/guides/local-development/cli/config
+#
+# project_id is the project ref (the <ref> in https://<ref>.supabase.co).
+project_id = "nsfrhirwsjqwhagtuaxx"
+
+# --- Edge Functions --------------------------------------------------------
+# verify_jwt = true makes the platform reject any request that does not present
+# a valid Supabase JWT in the `Authorization: Bearer <token>` header BEFORE the
+# function code runs. This is the authoritative gate against anonymous access;
+# the function also re-validates the token in code as defense-in-depth.
+#
+# IMPORTANT: never deploy this function with `supabase functions deploy
+# connect-to-cursor-mcp --no-verify-jwt`, which would override this setting and
+# expose the endpoint anonymously.
+[functions.connect-to-cursor-mcp]
+verify_jwt = true
