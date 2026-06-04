@@ -29,4 +29,10 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
+    """
+    Provide the application Settings instance configured from environment variables.
+    
+    Returns:
+        Settings: The Settings instance populated from environment variables. The same cached instance is returned on subsequent calls.
+    """
     return Settings()

@@ -18,6 +18,14 @@ from service.app.pipeline.ingest import InvalidInput, extract_video_id
 @pytest.fixture
 def client() -> TestClient:
     # Fresh in-memory store per test.
+    """
+    Create a TestClient for the application with a fresh in-memory container store.
+    
+    Resets the application's in-memory container store to None before creating the client to ensure each test runs with a fresh store.
+    
+    Returns:
+        TestClient: A TestClient instance created from create_app().
+    """
     get_container()._store = None  # type: ignore[attr-defined]
     return TestClient(create_app())
 
@@ -41,6 +49,12 @@ def test_extract_video_id_valid(url: str, expected: str) -> None:
     ["", "ftp://youtube.com/watch?v=x", "https://vimeo.com/123", "https://youtube.com/watch?v=short"],
 )
 def test_extract_video_id_invalid(url: str) -> None:
+    """
+    Asserts that `extract_video_id` raises `InvalidInput` when given an unsupported or malformed video URL.
+    
+    Parameters:
+        url (str): A URL string expected to be invalid for video ID extraction.
+    """
     with pytest.raises(InvalidInput):
         extract_video_id(url)
 
@@ -62,6 +76,11 @@ def test_submit_is_idempotent(client: TestClient) -> None:
 def test_job_fails_until_pipeline_ported(client: TestClient) -> None:
     # The background task runs synchronously under TestClient; SC2 is not yet
     # ported, so the job must terminate as 'failed', not hang or fake success.
+    """
+    Verify that a submitted job terminates with a failed status while the SC2 pipeline stage is unimplemented.
+    
+    Submits a job for a known YouTube URL, retrieves the job, and asserts the job's "status" is "failed" and its "error" field contains "SC2".
+    """
     submit = client.post("/api/v1/jobs", json={"video_url": "https://youtu.be/dQw4w9WgXcQ"})
     job_id = submit.json()["job_id"]
     job = client.get(f"/api/v1/jobs/{job_id}").json()

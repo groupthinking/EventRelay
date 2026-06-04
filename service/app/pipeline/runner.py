@@ -12,10 +12,16 @@ from . import artifacts, extract, transcript
 
 
 async def run_job(job_id: str, video_id: str, store: JobStore, language: str | None = None) -> None:
-    """Execute the pipeline for a queued job, updating status as it goes.
-
-    Idempotency (SC6) is handled at submit time by the store's create_or_get;
-    this runner only advances an existing job.
+    """
+    Run the linear pipeline for a queued job and persist its outputs while updating job status.
+    
+    Executes the pipeline stages for the given video and saves the resulting transcript, extracted events, and derived artifacts to `store`. Updates the job status to `running` before execution, to `succeeded` after results are saved, and to `failed` with an error message if any exception occurs. Idempotency is handled at submit time by the store's `create_or_get`; this runner advances an existing job.
+    
+    Parameters:
+        job_id (str): Identifier of the job to run and update in `store`.
+        video_id (str): Identifier of the video to process.
+        store (JobStore): Persistent store used to update status and save results.
+        language (str | None): Optional language hint for transcript fetching; pass `None` to use defaults.
     """
     await store.update_status(job_id, JobStatus.running)
     try:

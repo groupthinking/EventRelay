@@ -15,6 +15,12 @@ from ..domain.events import Event
 
 
 def _utcnow() -> datetime:
+    """
+    Get the current UTC time as a timezone-aware datetime.
+    
+    Returns:
+        datetime: Current time with UTC timezone (tzinfo=timezone.utc).
+    """
     return datetime.now(timezone.utc)
 
 
@@ -38,13 +44,35 @@ class JobStore(Protocol):
     """Durable, idempotent job + event store."""
 
     async def create_or_get(self, video_url: str, idempotency_key: str) -> tuple[JobRecord, bool]:
-        """Return (record, created). If a job with the same idempotency_key
-        exists, return it with created=False (SC6 replay-by-key)."""
+        """
+        Create a new job record for the given video or return an existing record with the same idempotency key.
+        
+        Parameters:
+            video_url (str): Source video URL for the job.
+            idempotency_key (str): Key that ensures repeated requests produce the same job (replay-by-key).
+        
+        Returns:
+            tuple[JobRecord, bool]: `(record, created)` where `created` is `True` if a new record was created, `False` if an existing record was returned.
+        """
         ...
 
-    async def get(self, job_id: str) -> JobRecord | None: ...
+    async def get(self, job_id: str) -> JobRecord | None: """
+Retrieve a stored JobRecord by its job identifier.
 
-    async def update_status(self, job_id: str, status: JobStatus, error: str | None = None) -> None: ...
+Returns:
+    JobRecord if a record with the given job_id exists, `None` otherwise.
+"""
+...
+
+    async def update_status(self, job_id: str, status: JobStatus, error: str | None = None) -> None: """
+Update the stored job's status and optionally set or clear its error message.
+
+Parameters:
+    job_id (str): Identifier of the job to update.
+    status (JobStatus): New status to assign to the job.
+    error (str | None): Error message to set; pass `None` to clear any existing error.
+"""
+...
 
     async def save_results(
         self,
@@ -53,4 +81,13 @@ class JobStore(Protocol):
         transcript: str,
         events: list[Event],
         artifacts: Artifacts,
-    ) -> None: ...
+    ) -> None: """
+        Persist completion results for the specified job.
+        
+        Parameters:
+            job_id (str): Identifier of the job to update.
+            transcript (str): Final transcript text to store for the job.
+            events (list[Event]): Domain events produced by the job to persist alongside the record.
+            artifacts (Artifacts): Artifacts payload (e.g., generated files, metadata) to attach to the job.
+        """
+        ...

@@ -8,10 +8,18 @@ from __future__ import annotations
 
 
 async def fetch_transcript(video_id: str, language: str | None = None) -> str:
-    """Return a word-for-word transcript for the given video id.
-
-    Acceptance test (SC2): captioned video -> exact caption text; caption-less
-    video -> STT transcript; both return the same `str` shape.
+    """
+    Obtain a word-for-word transcript for the specified video.
+    
+    Parameters:
+        video_id (str): Identifier of the video to transcribe.
+        language (str | None): Optional BCP-47 language hint used when selecting captions or configuring STT.
+    
+    Returns:
+        str: Exact caption text when captions are available; otherwise an STT-generated transcript in the same string shape.
+    
+    Raises:
+        NotImplementedError: SC2 transcript acquisition has not been ported yet (see docs/PORTING_PARAMETERS.md).
     """
     raise NotImplementedError(
         "SC2 transcript acquisition not yet ported — see docs/PORTING_PARAMETERS.md"

@@ -13,6 +13,14 @@ from .config import get_settings
 
 
 def create_app() -> FastAPI:
+    """
+    Create and configure the FastAPI application used as the service entrypoint.
+    
+    The application is configured with the project title and version from runtime settings and has the v1 API routes included.
+    
+    Returns:
+        FastAPI: Configured FastAPI application instance.
+    """
     settings = get_settings()
     app = FastAPI(title=settings.app_name, version=settings.app_version)
     app.include_router(v1_router)
