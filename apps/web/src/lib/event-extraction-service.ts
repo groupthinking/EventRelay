@@ -63,7 +63,7 @@ const geminiResponseSchema = {
           timestamp: { type: Type.STRING, nullable: true },
           priority: { type: Type.STRING, enum: ['high', 'medium', 'low'] },
         },
-        required: ['type', 'title', 'description', 'priority'],
+        required: ['type', 'title', 'description', 'timestamp', 'priority'],
       },
     },
     actions: {
@@ -76,7 +76,7 @@ const geminiResponseSchema = {
           category: { type: Type.STRING, enum: ['setup', 'build', 'deploy', 'learn', 'research', 'configure'] },
           estimatedMinutes: { type: Type.NUMBER, nullable: true },
         },
-        required: ['title', 'description', 'category'],
+        required: ['title', 'description', 'category', 'estimatedMinutes'],
       },
     },
     summary: { type: Type.STRING },
@@ -121,7 +121,11 @@ async function extractWithOpenAI(trimmed: string, videoTitle?: string, videoUrl?
       },
     },
   });
-  return JSON.parse(response.output_text);
+  const text = response.output_text;
+  if (!text) {
+    throw new Error('OpenAI returned an empty response');
+  }
+  return JSON.parse(text);
 }
 
 async function extractWithGemini(trimmed: string, videoTitle?: string, videoUrl?: string) {
@@ -137,6 +141,9 @@ async function extractWithGemini(trimmed: string, videoTitle?: string, videoUrl?
     },
   });
   const text = response.text ?? '';
+  if (!text) {
+    throw new Error('Gemini returned an empty response');
+  }
   return JSON.parse(text);
 }
 
