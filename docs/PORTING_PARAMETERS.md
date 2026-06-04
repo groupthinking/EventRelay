@@ -121,7 +121,7 @@ criterion explicitly does **not** justify.
   The DI container to inject it. Nothing else.
 - **Acceptance test:** submit job → poll status to completion; restart process
   mid-flight → job still resolvable; resubmit same URL → identical result
-  without recompute.
+  without recomputation.
 - **Does NOT justify:** in-memory `_video_jobs`/`_agent_executions` dicts, four
   parallel datastores (Prisma + SQLAlchemy + Firebase Data Connect + Supabase),
   multi-tenant/RLS/audit/soft-delete mixins, the load-balancer and
