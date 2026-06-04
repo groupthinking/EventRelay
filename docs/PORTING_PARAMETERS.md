@@ -69,6 +69,7 @@ that may be ported (if any), the acceptance test that proves it, and what this
 criterion explicitly does **not** justify.
 
 ### SC1 — Input ingest & validation
+
 - **Capability:** URL parse + validation; canonical video-id extraction.
 - **Port candidate:** the validation logic only (Pydantic request models in
   `backend/api/v1/models.py`). Port the *shape*, not the surrounding router.
@@ -77,6 +78,7 @@ criterion explicitly does **not** justify.
 - **Does NOT justify:** any persistence, any provider call.
 
 ### SC2 — Faithful transcript acquisition
+
 - **Capability:** caption fetch; STT fallback when captions absent.
 - **Port candidate:** one transcript path. Choose **one** of the existing
   transcript implementations and delete the rest. STT fallback as a pure
@@ -87,6 +89,7 @@ criterion explicitly does **not** justify.
   pipelines beyond what STT needs, NotebookLM browser automation.
 
 ### SC3 — Typed event extraction
+
 - **Capability:** transcript → list of schema-validated `<domain>.<entity>.<action>` events.
 - **Port candidate:** the **event taxonomy** + the event Pydantic schema. The
   extraction step is a pure function: `(transcript) -> list[Event]`.
@@ -96,6 +99,7 @@ criterion explicitly does **not** justify.
   `services/agents`), the three MCP implementations, A2A messaging.
 
 ### SC4 — Derived artifacts
+
 - **Capability:** summary + tasks + insights from transcript/events.
 - **Port candidate:** the *prompt content* from the three Gemini agents
   (transcript_action / personality / strategy) — as data, not as the agent
@@ -106,6 +110,7 @@ criterion explicitly does **not** justify.
   `code_generator`, the orchestrator/ and workflows/ layers.
 
 ### SC5 — Single versioned API contract
+
 - **Capability:** one OpenAPI spec is the source of truth; SDKs are generated.
 - **Port candidate:** `openapi/eventrelay.openapi.json` + `.stainless.yml` +
   `sdk/` (generated, do not hand-edit).
@@ -115,6 +120,7 @@ criterion explicitly does **not** justify.
   the `main_v2.py` shims, multiple `FastAPI()` instances.
 
 ### SC6 — Durable, idempotent, observable jobs
+
 - **Capability:** one durable store of jobs + events with a status lifecycle and
   replay-by-key (URL + pipeline version).
 - **Port candidate:** **one** persistence choice (TBD — see open decisions).
@@ -128,6 +134,7 @@ criterion explicitly does **not** justify.
   horizontal-scaling services.
 
 ### SC7 — Thin client UI
+
 - **Capability:** UI that submits a URL, streams/polls job status, renders
   transcript/events/artifacts — via the generated SDK only.
 - **Port candidate:** `apps/web` pages + components (dashboard, TranscriptViewer,
@@ -178,8 +185,17 @@ If steps 1–3 cannot be satisfied, the item is deleted, not parked.
 ## Open decisions (block scaffolding; tracked separately)
 
 - **Persistence choice for SC6** — one store, to be selected.
+  - Owner: TBD
+  - Target date: TBD
+  - Decision artifact: TBD
 - **Single deployment target** — one of the current six, to be selected.
+  - Owner: TBD
+  - Target date: TBD
+  - Decision artifact: TBD
 - **This-phase build scope** — scaffold skeleton vs. spec/README only vs. full
   pipeline migration.
+  - Owner: TBD
+  - Target date: TBD
+  - Decision artifact: TBD
 
 These are recorded here so the spine is not grown against an unmade decision.
