@@ -188,32 +188,33 @@ export async function extractEvents({ transcript, videoTitle, videoUrl }: Extrac
   let parsed: ExtractionData | undefined;
   let provider = 'openai';
 
-  // Path 1: transcript text available → run structured extraction
-  if (transcript && typeof transcript === 'string' && transcript.length > 50) {
-    const trimmed = transcript.slice(0, 8000);
+  try {
+    // Path 1: transcript text available → run structured extraction
+    if (transcript && typeof transcript === 'string' && transcript.length > 50) {
+      const trimmed = transcript.slice(0, 8000);
 
-    if (process.env.OPENAI_API_KEY) {
-      try {
-        parsed = await extractWithOpenAI(trimmed, videoTitle, videoUrl);
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : '';
-        if ((msg.includes('429') || msg.includes('quota') || msg.includes('rate')) && hasGeminiKey()) {
-          console.warn('OpenAI quota hit, falling back to Gemini');
-          parsed = await extractWithGemini(trimmed, videoTitle, videoUrl);
-          provider = 'gemini';
-        } else {
-          throw err;
+      if (process.env.OPENAI_API_KEY) {
+        try {
+          parsed = await extractWithOpenAI(trimmed, videoTitle, videoUrl);
+        } catch (err) {
+          // Fall back to Gemini for ANY OpenAI failure (rate limit, network,
+          // empty/malformed output), not just quota — as long as a key exists.
+          if (hasGeminiKey()) {
+            console.warn('OpenAI extraction failed, falling back to Gemini:', err);
+            parsed = await extractWithGemini(trimmed, videoTitle, videoUrl);
+            provider = 'gemini';
+          } else {
+            throw err;
+          }
         }
+      } else if (hasGeminiKey()) {
+        parsed = await extractWithGemini(trimmed, videoTitle, videoUrl);
+        provider = 'gemini';
       }
-    } else if (hasGeminiKey()) {
-      parsed = await extractWithGemini(trimmed, videoTitle, videoUrl);
-      provider = 'gemini';
     }
-  }
 
-  // Path 2: no transcript but have videoUrl + Gemini → direct video analysis via Google Search
-  if (!parsed && videoUrl && hasGeminiKey()) {
-    try {
+    // Path 2: no transcript but have videoUrl + Gemini → direct video analysis via Google Search
+    if (!parsed && videoUrl && hasGeminiKey()) {
       const ai = getGeminiClient();
       const response = await ai.models.generateContent({
         model: 'gemini-3-pro-preview',
@@ -232,11 +233,17 @@ Extract events, actions, summary, and topics from the actual video content found
         },
       });
       const text = response.text ?? '';
+      if (!text) {
+        throw new Error('Gemini returned an empty response');
+      }
       parsed = JSON.parse(text);
       provider = 'gemini-search';
-    } catch (e) {
-      console.warn('Gemini direct video extraction failed:', e);
     }
+  } catch (err) {
+    // Honor the ExtractionResult contract: never throw, always return a result.
+    const message = err instanceof Error ? err.message : 'Unknown extraction error';
+    console.error('Event extraction failed:', err);
+    return { success: false, error: message, data: empty };
   }
 
   if (!parsed) {
