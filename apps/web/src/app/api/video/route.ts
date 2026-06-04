@@ -4,7 +4,7 @@ import { analyzeVideoWithGemini } from '@/lib/gemini-video-analyzer';
 import { hasGeminiKey } from '@/lib/gemini-client';
 import { saveTrainingExample } from '@/lib/training-store';
 import { fetchTranscript } from '@/lib/transcription-service';
-import { extractEvents } from '@/lib/event-extraction-service';
+import { extractEvents, type ExtractionData } from '@/lib/event-extraction-service';
 
 // Backend URL with validation - skip if not a valid URL
 const rawBackendUrl = process.env.BACKEND_URL || '';
@@ -227,7 +227,7 @@ export async function POST(request: Request) {
       console.error('Transcript extraction failed:', e);
     }
 
-    let extraction: { events?: Array<{ type: string; title: string; description?: string; timestamp?: string; priority?: string }>; actions?: Array<{ title: string; description?: string; category?: string; estimatedMinutes?: number }>; summary?: string; topics?: string[] } = {};
+    let extraction: ExtractionData = { events: [], actions: [], summary: '', topics: [] };
     if (transcript) {
       try {
         await publishEvent(EventTypes.EXTRACTION_STARTED, { transcriptLength: transcript.length }, url);
