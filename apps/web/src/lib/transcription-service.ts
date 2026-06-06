@@ -231,11 +231,27 @@ ${metadataContext ? `\nKNOWN METADATA:\n${metadataContext}` : ''}`,
         return { success: false, error: 'Audio file exceeds 25 MB limit', transcript: '' };
       }
 
-      const audioBlob = await audioResponse.blob();
-      if (audioBlob.size > MAX_AUDIO_BYTES) {
-        return { success: false, error: 'Audio file exceeds 25 MB limit', transcript: '' };
+      // Stream with an incremental byte counter so a missing or spoofed
+      // Content-Length cannot stream unbounded data into memory (OOM/DoS).
+      const reader = audioResponse.body?.getReader();
+      if (!reader) {
+        return { success: false, error: 'Audio response has no readable body', transcript: '' };
       }
-      const audioFile = new File([audioBlob], 'audio.mp3', { type: 'audio/mpeg' });
+      const chunks: Uint8Array[] = [];
+      let received = 0;
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (value) {
+          received += value.byteLength;
+          if (received > MAX_AUDIO_BYTES) {
+            await reader.cancel();
+            return { success: false, error: 'Audio file exceeds 25 MB limit', transcript: '' };
+          }
+          chunks.push(value);
+        }
+      }
+      const audioFile = new File(chunks as BlobPart[], 'audio.mp3', { type: 'audio/mpeg' });
 
       const transcription = await getOpenAI().audio.transcriptions.create({
         model: 'gpt-4o-mini-transcribe',

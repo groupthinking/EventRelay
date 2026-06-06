@@ -10,7 +10,10 @@ const { default: fetch } = require('node-fetch');
 
 // Supabase MCP endpoint
 const MCP_ENDPOINT = 'https://nsfrhirwsjqwhagtuaxx.supabase.co/functions/v1/connect-to-cursor-mcp';
-const SUPABASE_ANON_KEY = 'REDACTED_JWT_ROTATE';
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
+if (!SUPABASE_ANON_KEY) {
+  throw new Error('SUPABASE_ANON_KEY environment variable is required');
+}
 
 /**
  * GitHub API client - can be real or mock

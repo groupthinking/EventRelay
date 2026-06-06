@@ -10,10 +10,16 @@ const { default: fetch } = require('node-fetch');
 
 // Supabase MCP endpoint
 const MCP_ENDPOINT = 'https://nsfrhirwsjqwhagtuaxx.supabase.co/functions/v1/connect-to-cursor-mcp';
-const SUPABASE_ANON_KEY = 'REDACTED_JWT_ROTATE';
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
+if (!SUPABASE_ANON_KEY) {
+  throw new Error('SUPABASE_ANON_KEY environment variable is required');
+}
 
 // Anthropic API key
-const ANTHROPIC_API_KEY = 'REDACTED_ANTHROPIC_KEY_ROTATE';
+const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+if (!ANTHROPIC_API_KEY) {
+  throw new Error('ANTHROPIC_API_KEY environment variable is required');
+}
 
 /**
  * Anthropic API client

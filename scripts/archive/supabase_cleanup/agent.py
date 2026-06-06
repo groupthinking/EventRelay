@@ -131,7 +131,9 @@ def try_endpoints(api_key, mcp_context, endpoints):
     return None, None
 
 SUPABASE_URL = os.getenv('SUPABASE_URL', 'https://nsfrhirwsjqwhagtuaxx.supabase.co')
-SUPABASE_KEY = os.getenv('SUPABASE_KEY', 'REDACTED_JWT_ROTATE')
+SUPABASE_KEY = os.getenv('SUPABASE_KEY')
+if not SUPABASE_KEY:
+    raise RuntimeError('SUPABASE_KEY environment variable is required')
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 

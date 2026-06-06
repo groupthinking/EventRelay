@@ -225,8 +225,10 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    # Set Gemini API key if provided
-    gemini_key = args.gemini_key or "REDACTED_GOOGLE_API_KEY_ROTATE"
+    # Resolve Gemini API key from flag or env; fail closed for Gemini-based modes.
+    gemini_key = args.gemini_key or os.getenv("GEMINI_API_KEY")
+    if args.mode in {"auto", "gemini", "hybrid"} and not gemini_key:
+        parser.error("Gemini-based modes require --gemini-key or the GEMINI_API_KEY env var")
 
     coordinator = UniversalAutomationCoordinator(
         processing_mode=args.mode,
