@@ -102,10 +102,19 @@ Supabase) are residue.
 
 ## Contract & SDKs (SC5)
 
-FastAPI generates the OpenAPI document from `app/api/v1/schemas.py`. That
-generated document is the source of truth and the input to Stainless SDK
-generation — it replaces the legacy 40-path `openapi/eventrelay.openapi.json`
-(still titled "YouTube Extension API") once the spine takes over.
+FastAPI generates the OpenAPI document from `app/api/v1/schemas.py`. The
+generated document is committed at **`service/openapi.json`** (6 paths, titled
+"EventRelay API") and is the source of truth and input to Stainless SDK
+generation. Regenerate it with:
+
+```bash
+python -c "import json; from service.app.main import app; print(json.dumps(app.openapi(), indent=2))" > service/openapi.json
+```
+
+It does **not** overwrite the legacy 40-path `openapi/eventrelay.openapi.json`
+(still titled "YouTube Extension API") — that remains the live API's contract
+until the SC7 frontend cutover (strangler migration), at which point it is
+replaced and the SDKs are regenerated from `service/openapi.json`.
 
 ## Frontend (SC7)
 
