@@ -48,13 +48,27 @@ service/
 
 ## Status
 
-Implemented in the skeleton: **SC1** (URL validation), **SC5** (contract +
-single app), **SC6** (idempotent job lifecycle + Postgres store).
+All seven criteria are now wired end to end:
 
-Stubbed with `NotImplementedError` and tied to their criterion (port next):
-**SC2** transcript, **SC3** event extraction, **SC4** artifacts. Until ported,
-a submitted job correctly terminates as `failed` — the skeleton never fakes
-success (REAL_MODE_ONLY).
+- **SC1** URL validation · **SC5** single app + clean contract · **SC6**
+  idempotent Job+Event lifecycle over Postgres.
+- **SC2** captions transcript (youtube-transcript-api) + injectable STT fallback.
+- **SC3** event extraction and **SC4** artifact derivation run against the
+  single **model seam** (`app/llm/`), Gemini by default.
+- **SC7** frontend reuse is the one remaining task (strip `apps/web/src/app/api/*`).
+
+The live YouTube and model calls require network + an API key and so are not
+exercised in CI; the 18-test suite drives the full lifecycle with the
+transcript provider and model seam replaced by dependency-injected fakes. No
+production path fakes success (REAL_MODE_ONLY) — a misconfigured or failing
+stage lands on the job as `failed`.
+
+### The model seam (`app/llm/`)
+
+One interface — `LLMClient.generate_json(system, prompt, schema)` — with the
+provider behind it. `GeminiLLMClient` is the default; Anthropic/OpenAI are
+drop-in by implementing the same method and swapping it in the container. This
+replaces the legacy repo's five competing model seams.
 
 ## Run it
 
@@ -62,15 +76,14 @@ success (REAL_MODE_ONLY).
 pip install "fastapi>=0.110" "uvicorn[standard]" "pydantic>=2.5" pydantic-settings \
             "sqlalchemy>=2.0" httpx pytest
 
-# tests (uses the in-memory store; no DB needed)
-pytest service/tests -v
+# tests (in-memory store + fake providers; no DB/keys/network needed)
+pytest service/tests -v -o addopts=""   # -o addopts="" skips the repo-root --cov gate
 
-# local server (in-memory store)
+# local server (in-memory store). For real runs also:
+#   pip install youtube-transcript-api google-genai
+export EVENTRELAY_GEMINI_API_KEY=...                 # SC3/SC4 model seam
+export EVENTRELAY_DATABASE_URL=postgresql+asyncpg://user:pass@localhost:5432/eventrelay  # SC6
 uvicorn service.app.main:app --reload --port 8080
-
-# with Postgres (SC6 durable path)
-export EVENTRELAY_DATABASE_URL=postgresql+asyncpg://user:pass@localhost:5432/eventrelay
-uvicorn service.app.main:app --port 8080
 ```
 
 ## Persistence (SC6)

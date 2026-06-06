@@ -1,20 +1,43 @@
 """SC4 — derived artifacts (summary, tasks, insights).
 
-Pure functions over transcript + events. Port the *prompt content* of the three
-legacy Gemini agents here as data — not the agent orchestration classes.
+Pure function over (transcript, events, model seam) -> Artifacts. The legacy
+three-Gemini-agent orchestration is reduced to one structured call; the agents'
+prompt intent is carried as data here, not as orchestration classes.
 """
 from __future__ import annotations
 
 from ..api.v1.schemas import Artifacts
 from ..domain.events import Event
+from ..llm.base import LLMClient
+
+_SYSTEM = (
+    "You turn a video transcript and its extracted events into actionable output. "
+    "Produce a concise summary, a list of concrete tasks a viewer could act on, "
+    "and an insights object with any strategic observations."
+)
+
+_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "summary": {"type": "string"},
+        "tasks": {"type": "array", "items": {"type": "string"}},
+        "insights": {"type": "object"},
+    },
+    "required": ["summary"],
+}
 
 
-async def derive_artifacts(transcript: str, events: list[Event]) -> Artifacts:
-    """Produce summary + tasks + insights.
+def _prompt(transcript: str, events: list[Event]) -> str:
+    event_lines = "\n".join(f"- {e.type}" for e in events) or "(none)"
+    return f"Transcript:\n\n{transcript}\n\nExtracted events:\n{event_lines}\n\nProduce the artifacts."
 
-    Acceptance test (SC4): golden transcript -> non-empty summary, >=1 typed
-    task, insights validating against schema.
-    """
-    raise NotImplementedError(
-        "SC4 artifact derivation not yet ported — see docs/PORTING_PARAMETERS.md"
+
+async def derive_artifacts(transcript: str, events: list[Event], llm: LLMClient) -> Artifacts:
+    data = await llm.generate_json(
+        system=_SYSTEM, prompt=_prompt(transcript, events), schema=_SCHEMA
+    )
+    return Artifacts(
+        summary=data["summary"],
+        tasks=list(data.get("tasks", [])),
+        insights=dict(data.get("insights", {})),
     )

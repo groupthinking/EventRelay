@@ -26,6 +26,11 @@ class Settings(BaseSettings):
     # pipeline's output for a given URL would legitimately change.
     pipeline_version: str = "1"
 
+    # Model seam (SC3/SC4). Default provider is Gemini; swap in the container
+    # for Anthropic/OpenAI by implementing the same LLMClient interface.
+    gemini_api_key: str | None = None
+    llm_model: str = "gemini-2.5-flash"
+
 
 @lru_cache
 def get_settings() -> Settings:

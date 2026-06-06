@@ -9,7 +9,7 @@ from __future__ import annotations
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 
 from ...config import get_settings
-from ...container import get_store
+from ...container import Container, get_container, get_store
 from ...pipeline.ingest import InvalidInput, extract_video_id
 from ...pipeline.runner import run_job
 from ...store.base import JobStore
@@ -40,7 +40,7 @@ async def health() -> HealthResponse:
 async def submit_job(
     req: SubmitJobRequest,
     background: BackgroundTasks,
-    store: JobStore = Depends(get_store),
+    container: Container = Depends(get_container),
 ) -> SubmitJobResponse:
     """SC1 + SC6: validate the URL, create (or replay) the job, enqueue work."""
     try:
@@ -49,9 +49,9 @@ async def submit_job(
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
 
     idempotency_key = f"{video_id}:{get_settings().pipeline_version}"
-    record, created = await store.create_or_get(req.video_url, idempotency_key)
+    record, created = await container.store.create_or_get(req.video_url, idempotency_key)
     if created:
-        background.add_task(run_job, record.job_id, video_id, store, req.language)
+        background.add_task(run_job, record.job_id, video_id, container, req.language)
     return SubmitJobResponse(job_id=record.job_id, status=record.status)
 
 

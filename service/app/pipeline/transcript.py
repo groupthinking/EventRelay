@@ -1,18 +1,56 @@
 """SC2 — faithful transcript acquisition (+ STT fallback).
 
-Interface only in the skeleton. Port exactly ONE transcript implementation from
-the legacy tree here (see PORTING_PARAMETERS SC2) — not the 7 VideoProcessor
-variants. STT fallback is a second function behind the same return type.
+One transcript path: YouTube captions via youtube-transcript-api, with an
+optional injected STT provider as the fallback when captions are absent. The 7
+legacy VideoProcessor variants are not ported.
 """
 from __future__ import annotations
 
+import asyncio
+from typing import Protocol, runtime_checkable
 
-async def fetch_transcript(video_id: str, language: str | None = None) -> str:
-    """Return a word-for-word transcript for the given video id.
 
-    Acceptance test (SC2): captioned video -> exact caption text; caption-less
-    video -> STT transcript; both return the same `str` shape.
-    """
-    raise NotImplementedError(
-        "SC2 transcript acquisition not yet ported — see docs/PORTING_PARAMETERS.md"
-    )
+class TranscriptUnavailable(RuntimeError):
+    """No captions and no STT fallback could produce a transcript."""
+
+
+@runtime_checkable
+class SttProvider(Protocol):
+    async def transcribe(self, video_id: str, language: str | None) -> str: ...
+
+
+@runtime_checkable
+class TranscriptProvider(Protocol):
+    async def fetch(self, video_id: str, language: str | None = None) -> str: ...
+
+
+class YouTubeCaptionsProvider:
+    """Captions-first transcript provider with optional STT fallback."""
+
+    def __init__(self, stt: SttProvider | None = None) -> None:
+        self._stt = stt
+
+    async def fetch(self, video_id: str, language: str | None = None) -> str:
+        languages = [language] if language else ["en"]
+        try:
+            return await asyncio.to_thread(self._fetch_captions, video_id, languages)
+        except Exception as exc:  # noqa: BLE001 — any caption failure → fallback
+            if self._stt is not None:
+                return await self._stt.transcribe(video_id, language)
+            raise TranscriptUnavailable(
+                f"no captions for {video_id} and no STT fallback configured"
+            ) from exc
+
+    @staticmethod
+    def _fetch_captions(video_id: str, languages: list[str]) -> str:
+        # Imported here so the package imports without the optional dependency.
+        from youtube_transcript_api import YouTubeTranscriptApi
+
+        api = YouTubeTranscriptApi()
+        fetch = getattr(api, "fetch", None)
+        if callable(fetch):  # youtube-transcript-api >= 1.0
+            fetched = fetch(video_id, languages=languages)
+            return " ".join(snippet.text for snippet in fetched).strip()
+        # Legacy 0.6.x static API.
+        data = YouTubeTranscriptApi.get_transcript(video_id, languages=languages)
+        return " ".join(item["text"] for item in data).strip()
