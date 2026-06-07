@@ -10,10 +10,9 @@ import requests
 from supabase import Client, create_client
 
 # ==== CONFIGURATION ====
-ABACUS_API_KEYS = os.getenv('ABACUS_API_KEYS', '').split(',') or [
-    's2_b047b4e76b1e4b15920426bbd42eae5a',
-    's2_1ce25275e9774f4bab8ab10b511693a2'
-]
+ABACUS_API_KEYS = [k.strip() for k in os.getenv('ABACUS_API_KEYS', '').split(',') if k.strip()]
+if not ABACUS_API_KEYS:
+    raise RuntimeError('ABACUS_API_KEYS environment variable is required (comma-separated)')
 ABACUS_API_URL = 'https://api.abacus.ai'
 AGENT_NAME = os.getenv('AGENT_NAME', 'abacus-agent')
 API_REF_URL = 'https://abacus.ai/help/api/ref'
