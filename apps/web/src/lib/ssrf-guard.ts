@@ -19,8 +19,8 @@ const BLOCKED_HOSTNAMES = new Set(['localhost', 'metadata.google.internal']);
  * IPv4 — 10/8, 172.16/12, 192.168/16 (RFC1918), 127/8 (loopback),
  *        169.254/16 (link-local), 100.64/10 (CGNAT, RFC6598),
  *        0/8 (unspecified), >=224 (multicast/reserved).
- * IPv6 — ::1, :: , fe80::/10 (link-local), fc00::/7 (unique-local),
- *        and IPv4-mapped (::ffff:a.b.c.d).
+ * IPv6 — ::1, :: , fe80::/10 (link-local), fc00::/7 (unique-local), and
+ *        IPv4-mapped/compatible in ANY spelling (compressed or expanded).
  */
 function ipIsPrivate(ip: string): boolean {
   if (net.isIPv4(ip)) {
@@ -37,23 +37,62 @@ function ipIsPrivate(ip: string): boolean {
     );
   }
   if (net.isIPv6(ip)) {
-    const lc = ip.toLowerCase();
-    if (lc === '::1' || lc === '::') return true;
-    if (/^fe[89ab]/.test(lc)) return true; // fe80::/10 link-local
-    if (/^f[cd]/.test(lc)) return true; // fc00::/7 unique-local
-    // Any trailing dotted-quad: IPv4-mapped (::ffff:1.2.3.4) or compatible (::1.2.3.4).
-    const dotted = lc.match(/:(\d{1,3}(?:\.\d{1,3}){3})$/);
-    if (dotted) return ipIsPrivate(dotted[1]);
-    // IPv4-mapped hex form (::ffff:7f00:1 === 127.0.0.1) — decode hextets to octets.
-    const hex = lc.match(/::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
-    if (hex) {
-      const a = parseInt(hex[1], 16);
-      const b = parseInt(hex[2], 16);
-      return ipIsPrivate(`${a >> 8}.${a & 0xff}.${b >> 8}.${b & 0xff}`);
+    const h = ipv6ToHextets(ip);
+    if (!h) return true; // valid IPv6 we can't parse → fail closed
+    if (h.every((x) => x === 0)) return true; // :: (unspecified)
+    if (h.slice(0, 7).every((x) => x === 0) && h[7] === 1) return true; // ::1 loopback
+    if ((h[0] & 0xffc0) === 0xfe80) return true; // fe80::/10 link-local
+    if ((h[0] & 0xfe00) === 0xfc00) return true; // fc00::/7 unique-local
+    // IPv4-mapped (::ffff:0:0/96) or compatible (::/96) in ANY spelling
+    // (compressed, expanded, or dotted) — decode the low 32 bits and re-check.
+    if (
+      h[0] === 0 && h[1] === 0 && h[2] === 0 && h[3] === 0 && h[4] === 0 &&
+      (h[5] === 0xffff || h[5] === 0)
+    ) {
+      return ipIsPrivate(`${h[6] >> 8}.${h[6] & 0xff}.${h[7] >> 8}.${h[7] & 0xff}`);
     }
-    return false;
+    return false; // genuine public IPv6
   }
   return true; // unknown form → block
+}
+
+/**
+ * Expand an IPv6 literal to its 8 hextets (numbers), resolving `::` zero
+ * compression and folding any embedded IPv4 (e.g. `::ffff:1.2.3.4`). Returns
+ * null if the input can't be parsed. This lets the private-range checks operate
+ * on a canonical form regardless of how the literal was spelled, so expanded
+ * IPv4-mapped forms like `0:0:0:0:0:ffff:7f00:1` can't slip past.
+ */
+function ipv6ToHextets(input: string): number[] | null {
+  let s = input.toLowerCase();
+  const zone = s.indexOf('%');
+  if (zone !== -1) s = s.slice(0, zone);
+
+  // Fold a trailing embedded IPv4 (a.b.c.d) into two hex groups.
+  const v4 = s.match(/^(.*:)(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (v4) {
+    const o = [v4[2], v4[3], v4[4], v4[5]].map(Number);
+    if (o.some((n) => n > 255)) return null;
+    s = `${v4[1]}${((o[0] << 8) | o[1]).toString(16)}:${((o[2] << 8) | o[3]).toString(16)}`;
+  }
+
+  const halves = s.split('::');
+  if (halves.length > 2) return null;
+  const left = halves[0] ? halves[0].split(':') : [];
+  const right = halves.length === 2 ? (halves[1] ? halves[1].split(':') : []) : null;
+
+  let groups: string[];
+  if (right === null) {
+    groups = left;
+  } else {
+    const missing = 8 - (left.length + right.length);
+    if (missing < 1) return null;
+    groups = [...left, ...new Array(missing).fill('0'), ...right];
+  }
+  if (groups.length !== 8) return null;
+
+  const hextets = groups.map((g) => (/^[0-9a-f]{1,4}$/.test(g) ? parseInt(g, 16) : NaN));
+  return hextets.some((x) => Number.isNaN(x)) ? null : hextets;
 }
 
 /**
