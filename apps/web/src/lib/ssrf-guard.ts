@@ -41,8 +41,16 @@ function ipIsPrivate(ip: string): boolean {
     if (lc === '::1' || lc === '::') return true;
     if (/^fe[89ab]/.test(lc)) return true; // fe80::/10 link-local
     if (/^f[cd]/.test(lc)) return true; // fc00::/7 unique-local
-    const mapped = lc.match(/::ffff:(\d+\.\d+\.\d+\.\d+)/); // IPv4-mapped
-    if (mapped) return ipIsPrivate(mapped[1]);
+    // Any trailing dotted-quad: IPv4-mapped (::ffff:1.2.3.4) or compatible (::1.2.3.4).
+    const dotted = lc.match(/:(\d{1,3}(?:\.\d{1,3}){3})$/);
+    if (dotted) return ipIsPrivate(dotted[1]);
+    // IPv4-mapped hex form (::ffff:7f00:1 === 127.0.0.1) — decode hextets to octets.
+    const hex = lc.match(/::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
+    if (hex) {
+      const a = parseInt(hex[1], 16);
+      const b = parseInt(hex[2], 16);
+      return ipIsPrivate(`${a >> 8}.${a & 0xff}.${b >> 8}.${b & 0xff}`);
+    }
     return false;
   }
   return true; // unknown form → block
