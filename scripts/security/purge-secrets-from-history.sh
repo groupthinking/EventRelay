@@ -14,6 +14,8 @@ set -euo pipefail
 git rev-parse --git-dir >/dev/null 2>&1 || { echo "Error: not in a git repository."; exit 1; }
 if ! git diff-index --quiet HEAD 2>/dev/null; then
   echo "⚠️  Uncommitted changes detected — commit or stash them before rewriting history."
+  read -r -p "Continue anyway? (yes/NO): " proceed
+  [ "$proceed" = "yes" ] || { echo "aborted."; exit 1; }
 fi
 
 echo "⚠️  This rewrites the entire git history and will require:"
