@@ -36,7 +36,7 @@ class Job(Base):
     transcript: Mapped[str | None] = mapped_column(Text, nullable=True)
     artifacts: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
-    events: Mapped[list["EventRow"]] = relationship(
+    events: Mapped[list[EventRow]] = relationship(
         back_populates="job", cascade="all, delete-orphan"
     )
 

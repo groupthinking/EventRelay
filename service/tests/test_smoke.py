@@ -9,7 +9,7 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from service.app.container import Container, get_container
+from service.app.container import Container, get_container, get_store
 from service.app.llm.fake import FakeLLMClient
 from service.app.main import create_app
 from service.app.pipeline.ingest import InvalidInput, extract_video_id
@@ -27,16 +27,21 @@ class FakeTranscriptProvider:
 
 @pytest.fixture
 def container() -> Container:
-    c = get_container()
-    c._store = None  # type: ignore[attr-defined]
-    c._transcript_provider = None  # type: ignore[attr-defined]
-    c._llm = None  # type: ignore[attr-defined]
-    return c
+    # Create a fresh test container instead of mutating the module singleton.
+    test_container = Container()
+    test_container._store = None  # type: ignore[attr-defined]
+    test_container._transcript_provider = None  # type: ignore[attr-defined]
+    test_container._llm = None  # type: ignore[attr-defined]
+    return test_container
 
 
 @pytest.fixture
 def client(container: Container) -> TestClient:
-    return TestClient(create_app())
+    # Use dependency overrides to inject the test container.
+    client_app = create_app()
+    client_app.dependency_overrides[get_container] = lambda: container
+    client_app.dependency_overrides[get_store] = lambda: container.store
+    return TestClient(client_app)
 
 
 # --- SC1: input ingest & validation ---

@@ -31,6 +31,22 @@ class YouTubeCaptionsProvider:
         self._stt = stt
 
     async def fetch(self, video_id: str, language: str | None = None) -> str:
+        """Retrieve transcript for a YouTube video.
+
+        Attempts to fetch captions via youtube-transcript-api. If caption
+        fetching fails for any reason and an STT provider is configured,
+        falls back to self._stt.transcribe.
+
+        Args:
+            video_id: YouTube video identifier (11 characters).
+            language: Optional language code (e.g., "en"). Defaults to "en" if not provided.
+
+        Returns:
+            The video transcript as a string.
+
+        Raises:
+            TranscriptUnavailable: When captions are unavailable and no STT fallback is configured.
+        """
         languages = [language] if language else ["en"]
         try:
             return await asyncio.to_thread(self._fetch_captions, video_id, languages)

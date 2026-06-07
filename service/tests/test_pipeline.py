@@ -13,8 +13,10 @@ from service.app.domain.events import Event
 from service.app.llm.fake import FakeLLMClient
 from service.app.pipeline.artifacts import derive_artifacts
 from service.app.pipeline.extract import extract_events
-from service.app.pipeline.transcript import TranscriptUnavailable, YouTubeCaptionsProvider
-
+from service.app.pipeline.transcript import (
+    TranscriptUnavailable,
+    YouTubeCaptionsProvider,
+)
 
 # --- SC3 ---
 
@@ -49,18 +51,20 @@ def test_derive_artifacts_requires_summary() -> None:
 
 # --- SC2 fallback ---
 
-def test_captions_provider_uses_stt_fallback() -> None:
+def test_captions_provider_uses_stt_on_any_fetch_failure() -> None:
     class FakeStt:
         async def transcribe(self, video_id: str, language: str | None) -> str:
             return "stt transcript"
 
-    # youtube-transcript-api is not installed here, so the captions path raises
-    # ImportError and the STT fallback should take over.
+    # YouTubeCaptionsProvider catches any Exception during caption fetching and
+    # falls back to STT. In this test environment, youtube-transcript-api may
+    # raise ImportError or any other exception, and the provider should use STT.
     provider = YouTubeCaptionsProvider(stt=FakeStt())
     assert asyncio.run(provider.fetch("vid")) == "stt transcript"
 
 
-def test_captions_provider_without_fallback_raises() -> None:
+def test_captions_provider_raises_when_no_fallback_configured() -> None:
+    # Without an STT fallback, any caption fetch failure raises TranscriptUnavailable.
     provider = YouTubeCaptionsProvider()
     with pytest.raises(TranscriptUnavailable):
         asyncio.run(provider.fetch("vid"))

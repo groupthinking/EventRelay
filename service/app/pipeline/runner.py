@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 
 
 async def run_job(
-    job_id: str, video_id: str, container: "Container", language: str | None = None
+    job_id: str, video_id: str, container: Container, language: str | None = None
 ) -> None:
     store = container.store
     await store.update_status(job_id, JobStatus.running)

@@ -7,8 +7,12 @@ emitting an untyped event.
 """
 from __future__ import annotations
 
+import logging
+
 from ..domain.events import Event
 from ..llm.base import LLMClient
+
+logger = logging.getLogger(__name__)
 
 _SYSTEM = (
     "You extract structured events from a video transcript. "
@@ -41,6 +45,21 @@ def _prompt(transcript: str) -> str:
 
 
 async def extract_events(transcript: str, llm: LLMClient) -> list[Event]:
-    data = await llm.generate_json(system=_SYSTEM, prompt=_prompt(transcript), schema=_SCHEMA)
-    raw = data.get("events", [])
-    return [Event(type=item["type"], payload=item.get("payload", {})) for item in raw]
+    logger.info("extract_events: calling LLMClient", extra={"transcript_length": len(transcript)})
+    try:
+        data = await llm.generate_json(system=_SYSTEM, prompt=_prompt(transcript), schema=_SCHEMA)
+        raw = data.get("events", [])
+        events = [Event(type=item["type"], payload=item.get("payload", {})) for item in raw]
+        event_types = [e.type for e in events]
+        logger.info(
+            "extract_events: events extracted",
+            extra={"transcript_length": len(transcript), "event_count": len(events), "event_types": event_types},
+        )
+        return events
+    except Exception as exc:
+        logger.error(
+            "extract_events: failed",
+            extra={"transcript_length": len(transcript), "error": str(exc)},
+            exc_info=True,
+        )
+        raise
