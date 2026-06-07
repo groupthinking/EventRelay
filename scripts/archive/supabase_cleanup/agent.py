@@ -215,20 +215,21 @@ def main_agent():
     endpoints = discover_endpoints(mcp_context)
     print(f"🔎 Discovered endpoints: {endpoints}")
 
-    for api_key in ABACUS_API_KEYS:
+    for idx, api_key in enumerate(ABACUS_API_KEYS, start=1):
         if not api_key.strip():
             continue
-        print(f"\n🔑 Using API Key: {api_key[:8]}...")
+        # Never log key material (even a prefix); reference the key by index only.
+        print(f"\n🔑 Using API Key #{idx}")
         try:
             data, endpoint = try_endpoints(api_key, mcp_context, endpoints)
             if data is None:
-                print(f"⚠️ All endpoints failed for API Key {api_key[:8]}...")
+                print(f"⚠️ All endpoints failed for API Key #{idx}")
                 continue
             print(f"✅ Success with endpoint {endpoint}. Data: {json.dumps(data)[:200]}...")
             # Run multi-step workflow for demonstration
             run_multistep_workflow(api_key, mcp_context)
         except Exception as e:
-            print(f"❌ API Key {api_key[:8]}... failed: {str(e)}")
+            print(f"❌ API Key #{idx} failed: {str(e)}")
     print("\n🎯 Agent Cycle Complete!")
 
 if __name__ == "__main__":
