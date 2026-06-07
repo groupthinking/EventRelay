@@ -10,6 +10,7 @@ import uuid
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.orm import selectinload
 
 from ..api.v1.schemas import Artifacts, JobStatus
 from ..domain.events import Event
@@ -48,7 +49,11 @@ class SqlAlchemyJobStore:
     async def create_or_get(self, video_url: str, idempotency_key: str) -> tuple[JobRecord, bool]:
         async with self._session() as s:
             existing = (
-                await s.execute(select(Job).where(Job.idempotency_key == idempotency_key))
+                await s.execute(
+                    select(Job)
+                    .where(Job.idempotency_key == idempotency_key)
+                    .options(selectinload(Job.events))
+                )
             ).scalar_one_or_none()
             if existing is not None:
                 return self._to_record(existing), False
@@ -60,13 +65,16 @@ class SqlAlchemyJobStore:
             )
             s.add(job)
             await s.commit()
-            await s.refresh(job)
+            # Eager-load `events` so _to_record does not trigger an async lazy load.
+            await s.refresh(job, attribute_names=["events"])
             return self._to_record(job), True
 
     async def get(self, job_id: str) -> JobRecord | None:
         async with self._session() as s:
             job = (
-                await s.execute(select(Job).where(Job.id == job_id))
+                await s.execute(
+                    select(Job).where(Job.id == job_id).options(selectinload(Job.events))
+                )
             ).scalar_one_or_none()
             return self._to_record(job) if job else None
 
@@ -88,7 +96,14 @@ class SqlAlchemyJobStore:
         artifacts: Artifacts,
     ) -> None:
         async with self._session() as s:
-            job = await s.get(Job, job_id)
+            # Eager-load existing events so the delete-orphan cascade can mark
+            # them for removal when the collection is reassigned (an async lazy
+            # load here would raise MissingGreenlet).
+            job = (
+                await s.execute(
+                    select(Job).where(Job.id == job_id).options(selectinload(Job.events))
+                )
+            ).scalar_one_or_none()
             if job is None:
                 raise KeyError(job_id)
             job.transcript = transcript
