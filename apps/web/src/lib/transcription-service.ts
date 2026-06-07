@@ -215,7 +215,7 @@ ${metadataContext ? `\nKNOWN METADATA:\n${metadataContext}` : ''}`,
         };
       }
 
-      const audioResponse = await fetch(audioUrl);
+      const audioResponse = await fetch(audioUrl, { signal: AbortSignal.timeout(30_000) });
       if (!audioResponse.ok) {
         return {
           success: false,
@@ -251,7 +251,28 @@ ${metadataContext ? `\nKNOWN METADATA:\n${metadataContext}` : ''}`,
           chunks.push(value);
         }
       }
-      const audioFile = new File(chunks as BlobPart[], 'audio.mp3', { type: 'audio/mpeg' });
+      // Derive filename + MIME from the response (Whisper rejects mismatched types).
+      const contentType = (audioResponse.headers.get('content-type') || '')
+        .split(';')[0]
+        .trim()
+        .toLowerCase();
+      const extByMime: Record<string, string> = {
+        'audio/mpeg': 'mp3', 'audio/mp3': 'mp3', 'audio/mp4': 'm4a', 'audio/x-m4a': 'm4a',
+        'audio/wav': 'wav', 'audio/x-wav': 'wav', 'audio/webm': 'webm', 'audio/ogg': 'ogg',
+        'audio/flac': 'flac',
+      };
+      let urlExt = '';
+      try {
+        urlExt = new URL(audioUrl).pathname.split('.').pop()?.toLowerCase() ?? '';
+      } catch {
+        urlExt = '';
+      }
+      const ext =
+        extByMime[contentType] ||
+        (['mp3', 'm4a', 'wav', 'webm', 'ogg', 'flac', 'mp4', 'mpga'].includes(urlExt) ? urlExt : 'mp3');
+      const audioFile = new File(chunks as BlobPart[], `audio.${ext}`, {
+        type: contentType || 'audio/mpeg',
+      });
 
       const transcription = await getOpenAI().audio.transcriptions.create({
         model: 'gpt-4o-mini-transcribe',

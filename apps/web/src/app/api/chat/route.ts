@@ -24,6 +24,7 @@ export async function POST(request: Request) {
         video_id: body.video_id || '',
         conversation_history: body.history || [],
       }),
+      signal: AbortSignal.timeout(30_000),
     });
 
     if (!response.ok) {

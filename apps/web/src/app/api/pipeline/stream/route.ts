@@ -148,6 +148,9 @@ async function pollBackendJob(
       const response = await fetch(statusUrl, {
         cache: 'no-store',
         headers: { 'Content-Type': 'application/json' },
+        // Bound each poll so a hung status endpoint can't stall the SSE stream;
+        // a timeout throws → caught below → retried within MAX_JOB_POLL_ATTEMPTS.
+        signal: AbortSignal.timeout(JOB_POLL_INTERVAL_MS * 2),
       });
 
       if (!response.ok) {
