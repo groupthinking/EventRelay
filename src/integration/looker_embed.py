@@ -50,7 +50,7 @@ class LookerEmbedService:
             path,
             nonce,
             time_str,
-            session_length,
+            str(session_length),
             user_id,
             external_group_id,
             json_permissions,
