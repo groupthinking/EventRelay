@@ -644,17 +644,9 @@ export default function PrototypePage() {
           </div>
 
           <div className="flex items-center gap-3">
-            <Badge variant="primary" size="lg" dot>
-              Based on notes
+            <Badge variant="primary" size="lg">
+              Interactive prototype
             </Badge>
-            <Link
-              href="https://www.notion.so/2823c2339c0480a5952ee3f7a156d3f4"
-              target="_blank"
-              className="hidden items-center gap-2 rounded-xl border border-white/[0.1] bg-white/[0.04] px-4 py-2 text-sm font-semibold text-white/85 transition hover:border-white/[0.2] hover:bg-white/[0.08] md:inline-flex"
-            >
-              Source note
-              <ExternalLink className="h-4 w-4" />
-            </Link>
           </div>
         </div>
       </nav>
@@ -664,7 +656,7 @@ export default function PrototypePage() {
           <Card variant="gradient" padding="lg">
             <CardHeader
               title="Video-to-software prototype"
-              subtitle="Derived from the 'Software-On Demand' note and modeled as the smallest end-to-end clickable flow."
+              subtitle="The smallest end-to-end clickable flow: URL in, structured context out, agent pipeline runs, launch package ready."
             />
             <CardContent className="space-y-6">
               <div className="flex flex-wrap items-center gap-3">
@@ -790,7 +782,7 @@ export default function PrototypePage() {
           <Card variant="glass" padding="lg">
             <CardHeader
               title="Pipeline view"
-              subtitle="A clickable simulation of the orchestrated flow described in the source note."
+              subtitle="A clickable simulation of the orchestrated multi-agent flow."
             />
             <CardContent className="space-y-6">
               <div className="flex flex-wrap gap-2">

@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { fetchTranscript } from '@/lib/transcription-service';
 
+export const runtime = 'nodejs';
+export const maxDuration = 120;
+
 /**
  * POST /api/transcribe
  *

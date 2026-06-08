@@ -7,6 +7,9 @@ const rawBackendUrl = process.env.BACKEND_URL || '';
 const BACKEND_URL = rawBackendUrl.startsWith('http') ? rawBackendUrl : 'http://localhost:8000';
 const BACKEND_AVAILABLE = rawBackendUrl.startsWith('http');
 
+export const runtime = 'nodejs';
+export const maxDuration = 300;
+
 /**
  * POST /api/pipeline
  *
