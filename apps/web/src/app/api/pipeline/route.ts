@@ -64,6 +64,100 @@ async function checkBackendHealth(timeoutMs = 1500): Promise<{ configured: boole
   }
 }
 
+function stringValue(value: unknown, fallback: string): string {
+  return typeof value === 'string' && value.trim() ? value.trim() : fallback;
+}
+
+function featureList(value: unknown): string[] {
+  if (!Array.isArray(value)) return ['source_review', 'workflow_steps', 'vercel_handoff'];
+  const features = value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
+  return features.length ? features : ['source_review', 'workflow_steps', 'vercel_handoff'];
+}
+
+function buildLocalFallbackPipeline({
+  url,
+  projectType,
+  deploymentTarget,
+  features,
+  backend,
+}: {
+  url: string;
+  projectType: string;
+  deploymentTarget: string;
+  features: string[];
+  backend: Awaited<ReturnType<typeof checkBackendHealth>>;
+}) {
+  const backendReason = backend.reason || 'Backend pipeline is not available';
+
+  return {
+    live_url: null,
+    github_repo: null,
+    build_status: 'handoff_ready_backend_unavailable',
+    video_analysis: {
+      title: 'Workflow handoff from video source',
+      summary: `UVAI could not run the full backend pipeline for ${url}. A deterministic handoff was created so the user still leaves with review, build, and deploy steps.`,
+      events: [
+        {
+          type: 'source',
+          title: 'Video source captured',
+          description: url,
+          confidence: 0.75,
+        },
+        {
+          type: 'configuration',
+          title: 'Automatic pipeline blocked',
+          description: backendReason,
+          confidence: 1,
+        },
+      ],
+      actions: [
+        {
+          title: 'Review the source and intended outcome',
+          description: 'Confirm the user goal, expected deliverable, and any safety or consent constraints before generating implementation details.',
+          category: 'review',
+          estimatedMinutes: 5,
+        },
+        {
+          title: 'Create the deployable first draft',
+          description: `Prepare the requested ${projectType} package with source notes, acceptance checks, and a Vercel deployment checklist.`,
+          category: 'build',
+          estimatedMinutes: 20,
+        },
+        {
+          title: 'Reconnect automatic execution',
+          description: 'Fix BACKEND_URL and provider billing/quota, then rerun the same source through the full backend pipeline.',
+          category: 'configuration',
+          estimatedMinutes: 10,
+        },
+      ],
+      topics: ['video workflow', projectType, deploymentTarget, 'fallback handoff'],
+      architectureCode: `source -> review -> ${projectType} draft -> ${deploymentTarget} handoff -> verification`,
+    },
+    code_generation: {
+      status: 'handoff_ready',
+      project_type: projectType,
+      files: [
+        'README.md',
+        'workflow/spec.md',
+        'workflow/acceptance-checks.md',
+        'vercel-deploy-checklist.md',
+      ],
+      features,
+    },
+    deployment: {
+      target: deploymentTarget,
+      status: 'blocked_by_configuration',
+      blockers: [
+        backendReason,
+        'Gemini billing or API access must be valid for automatic video analysis.',
+        'OpenAI quota must be available for transcript fallback and realtime voice.',
+      ],
+    },
+    features_implemented: features,
+    message: 'Created a local fallback handoff. Automatic code generation and deployment require a healthy backend pipeline and valid provider billing.',
+  };
+}
+
 /**
  * POST /api/pipeline
  *
@@ -81,7 +175,9 @@ export async function POST(request: Request) {
   try {
     const body = await request.json() as Record<string, unknown>;
     const url = resolveVideoUrl(body);
-    const { project_type = 'web', deployment_target = 'vercel', features } = body;
+    const project_type = stringValue(body.project_type, 'web');
+    const deployment_target = stringValue(body.deployment_target, 'vercel');
+    const features = featureList(body.features);
     videoUrl = url;
 
     if (!url) {
@@ -106,7 +202,7 @@ export async function POST(request: Request) {
             video_url: url,
             project_type,
             deployment_target,
-            features: features || ['responsive_design', 'modern_ui'],
+            features,
           }),
           signal: timeoutSignal(4_000),
         });
@@ -188,14 +284,31 @@ export async function POST(request: Request) {
       }
     }
 
-    return NextResponse.json(
-      {
-        error: 'No pipeline available. Configure a healthy BACKEND_URL for full pipeline or enable billing for the configured Gemini project.',
-        backend: await checkBackendHealth(),
-        gemini_configured: hasGeminiKey(),
-      },
-      { status: 503 },
-    );
+    const backend = await checkBackendHealth();
+    const fallback = buildLocalFallbackPipeline({
+      url,
+      projectType: project_type,
+      deploymentTarget: deployment_target,
+      features,
+      backend,
+    });
+
+    await publishEvent(EventTypes.PIPELINE_COMPLETED, {
+      strategy: 'local-fallback',
+      success: false,
+      backend,
+    }, url);
+
+    return NextResponse.json({
+      id: `pipeline_${Date.now().toString(36)}`,
+      status: 'partial',
+      pipeline: 'local-fallback',
+      degraded: true,
+      backend,
+      gemini_configured: hasGeminiKey(),
+      warning: 'No automatic pipeline is currently available. Returned a fallback handoff instead of blocking the user.',
+      result: fallback,
+    });
   } catch (error) {
     console.error('Pipeline error:', error);
     await publishEvent(EventTypes.PIPELINE_FAILED, { error: String(error) }, videoUrl).catch(() => {});

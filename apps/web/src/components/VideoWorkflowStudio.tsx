@@ -183,13 +183,7 @@ function buildPackage({
   const sourceLabel = videoId ? `YouTube source ${videoId}` : 'Pending source URL';
   const backendHost = pipelineCheck?.backend?.host;
   const backendReason = pipelineCheck?.backend?.reason;
-  const pipelineState = pipelineCheck
-    ? pipelineCheck.ok
-      ? `Pipeline checked successfully${pipelineCheck.pipeline ? ` (${pipelineCheck.pipeline})` : ''}.`
-      : `Pipeline checked and returned ${pipelineCheck.status}${pipelineCheck.message ? `: ${pipelineCheck.message}` : '.'}`
-    : unsafe
-      ? 'Pipeline was not called because the request was redirected for safety.'
-      : 'Local package prepared while source evidence is attached.';
+  const pipelineState = pipelineStateLabel(pipelineCheck, unsafe);
 
   return {
     title: `${copy.noun[0].toUpperCase()}${copy.noun.slice(1)} from video`,
@@ -207,7 +201,7 @@ function buildPackage({
     evidence: [
       videoId ? 'Video preview loaded' : 'Video preview pending',
       frameUrlsForPackage(videoId),
-      pipelineCheck?.ok ? 'Pipeline response received' : 'Fallback package created',
+      pipelineEvidenceLabel(pipelineCheck),
       unsafe ? 'Safety gate applied' : 'Safety gate passed',
     ],
     safetyNote: unsafe
@@ -215,6 +209,30 @@ function buildPackage({
       : undefined,
     createdAt: new Date().toISOString(),
   };
+}
+
+function pipelineStateLabel(pipelineCheck: PipelineCheck | null | undefined, unsafe: boolean) {
+  if (!pipelineCheck) {
+    return unsafe
+      ? 'Pipeline was not called because the request was redirected for safety.'
+      : 'Local package prepared while source evidence is attached.';
+  }
+
+  if (pipelineCheck.pipeline === 'local-fallback') {
+    return 'Pipeline returned a local fallback handoff while automatic execution waits on backend or provider configuration.';
+  }
+
+  if (pipelineCheck.ok) {
+    return `Pipeline checked successfully${pipelineCheck.pipeline ? ` (${pipelineCheck.pipeline})` : ''}.`;
+  }
+
+  return `Pipeline checked and returned ${pipelineCheck.status}${pipelineCheck.message ? `: ${pipelineCheck.message}` : '.'}`;
+}
+
+function pipelineEvidenceLabel(pipelineCheck: PipelineCheck | null | undefined) {
+  if (pipelineCheck?.pipeline === 'local-fallback') return 'Local fallback handoff created';
+  if (pipelineCheck?.ok) return 'Pipeline response received';
+  return 'Fallback package created';
 }
 
 function frameUrlsForPackage(videoId: string) {
@@ -422,7 +440,7 @@ export default function VideoWorkflowStudio() {
       setRunState('ready');
       setActiveAction('preview');
       setActionMessage(
-        pipelineCheck && !pipelineCheck.ok
+        pipelineCheck?.pipeline === 'local-fallback' || (pipelineCheck && !pipelineCheck.ok)
           ? 'Package ready with a fallback handoff. Automatic execution is waiting on backend or provider configuration.'
           : 'Package ready. Choose preview, export, deploy, or save.',
       );
