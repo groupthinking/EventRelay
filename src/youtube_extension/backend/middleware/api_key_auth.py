@@ -98,7 +98,14 @@ class APIKeyAuthMiddleware(BaseHTTPMiddleware):
             )
 
         provided = request.headers.get("x-api-key", "")
-        if not hmac.compare_digest(provided, self.api_key):
+        try:
+            authed = hmac.compare_digest(provided, self.api_key)
+        except (ValueError, TypeError):
+            # A non-ASCII (Latin-1 decoded) or otherwise invalid header value
+            # makes hmac.compare_digest raise; treat it as unauthorized (401)
+            # rather than letting it surface as a 500.
+            authed = False
+        if not authed:
             return Response(
                 content=_UNAUTHORIZED_BODY,
                 status_code=401,

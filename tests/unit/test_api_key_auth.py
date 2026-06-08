@@ -68,3 +68,12 @@ def test_options_preflight_not_blocked_by_auth(monkeypatch):
     c = _make_client(monkeypatch, api_key="secret")
     r = c.options("/api/v1/videos/abc")
     assert r.status_code not in (401, 503)
+
+
+def test_non_ascii_key_returns_401_not_500(monkeypatch):
+    # Raw non-ASCII header bytes (latin-1, as Starlette decodes them) make
+    # hmac.compare_digest raise ValueError; the middleware must treat it as
+    # unauthorized (401), never surface a 500.
+    c = _make_client(monkeypatch, api_key="secret")
+    r = c.get("/api/v1/videos/abc", headers={"X-API-Key": b"caf\xe9"})
+    assert r.status_code == 401
