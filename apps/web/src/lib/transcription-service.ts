@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import { fetchYouTubeMetadata, formatMetadataAsContext } from '@/lib/youtube-metadata';
 import { getGeminiClient, hasGeminiKey } from '@/lib/gemini-client';
+import { assertPublicHttpUrl } from '@/lib/ssrf-guard';
 
 let _openai: OpenAI | null = null;
 function getOpenAI() {
@@ -52,7 +53,7 @@ export async function fetchTranscript({
 
       const ytResponse = await fetch(`${BACKEND_URL}/api/v1/transcript-action`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(process.env.EVENTRELAY_API_KEY ? { 'X-API-Key': process.env.EVENTRELAY_API_KEY } : {}) },
         body: JSON.stringify({ video_url: url, language }),
         signal: controller.signal,
       }).finally(() => clearTimeout(timeout));
@@ -203,7 +204,18 @@ ${metadataContext ? `\nKNOWN METADATA:\n${metadataContext}` : ''}`,
   // Strategy 4: Direct audio file transcription via OpenAI Whisper
   if (audioUrl && process.env.OPENAI_API_KEY) {
     try {
-      const audioResponse = await fetch(audioUrl);
+      // SSRF guard: reject non-public/internal URLs before any server-side fetch.
+      try {
+        await assertPublicHttpUrl(audioUrl);
+      } catch (guardErr) {
+        return {
+          success: false,
+          error: `Rejected audioUrl: ${guardErr instanceof Error ? guardErr.message : 'blocked'}`,
+          transcript: '',
+        };
+      }
+
+      const audioResponse = await fetch(audioUrl, { signal: AbortSignal.timeout(30_000) });
       if (!audioResponse.ok) {
         return {
           success: false,
@@ -212,8 +224,55 @@ ${metadataContext ? `\nKNOWN METADATA:\n${metadataContext}` : ''}`,
         };
       }
 
-      const audioBlob = await audioResponse.blob();
-      const audioFile = new File([audioBlob], 'audio.mp3', { type: 'audio/mpeg' });
+      // Denial-of-wallet guard: cap audio size (OpenAI STT limit is 25 MB).
+      const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
+      const declaredLen = Number(audioResponse.headers.get('content-length') ?? '0');
+      if (declaredLen > MAX_AUDIO_BYTES) {
+        return { success: false, error: 'Audio file exceeds 25 MB limit', transcript: '' };
+      }
+
+      // Stream with an incremental byte counter so a missing or spoofed
+      // Content-Length cannot stream unbounded data into memory (OOM/DoS).
+      const reader = audioResponse.body?.getReader();
+      if (!reader) {
+        return { success: false, error: 'Audio response has no readable body', transcript: '' };
+      }
+      const chunks: Uint8Array[] = [];
+      let received = 0;
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (value) {
+          received += value.byteLength;
+          if (received > MAX_AUDIO_BYTES) {
+            await reader.cancel();
+            return { success: false, error: 'Audio file exceeds 25 MB limit', transcript: '' };
+          }
+          chunks.push(value);
+        }
+      }
+      // Derive filename + MIME from the response (Whisper rejects mismatched types).
+      const contentType = (audioResponse.headers.get('content-type') || '')
+        .split(';')[0]
+        .trim()
+        .toLowerCase();
+      const extByMime: Record<string, string> = {
+        'audio/mpeg': 'mp3', 'audio/mp3': 'mp3', 'audio/mp4': 'm4a', 'audio/x-m4a': 'm4a',
+        'audio/wav': 'wav', 'audio/x-wav': 'wav', 'audio/webm': 'webm', 'audio/ogg': 'ogg',
+        'audio/flac': 'flac',
+      };
+      let urlExt = '';
+      try {
+        urlExt = new URL(audioUrl).pathname.split('.').pop()?.toLowerCase() ?? '';
+      } catch {
+        urlExt = '';
+      }
+      const ext =
+        extByMime[contentType] ||
+        (['mp3', 'm4a', 'wav', 'webm', 'ogg', 'flac', 'mp4', 'mpga'].includes(urlExt) ? urlExt : 'mp3');
+      const audioFile = new File(chunks as BlobPart[], `audio.${ext}`, {
+        type: contentType || 'audio/mpeg',
+      });
 
       const transcription = await getOpenAI().audio.transcriptions.create({
         model: 'gpt-4o-mini-transcribe',

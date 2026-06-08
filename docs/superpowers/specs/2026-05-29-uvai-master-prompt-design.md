@@ -72,7 +72,7 @@ Renders in the LIVE CONSTRAINTS section of the briefing.
 
 ## Output Format
 
-```
+```text
 ╔══════════════════════════════════════════════════════════════╗
 ║  🔬  UVAI ECOSYSTEM — SESSION INITIALIZED                    ║
 ╠══════════════════════════════════════════════════════════════╣

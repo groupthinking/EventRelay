@@ -101,7 +101,7 @@ export async function POST(request: Request) {
       try {
         const response = await fetch(`${BACKEND_URL}/api/v1/video-to-software`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...(process.env.EVENTRELAY_API_KEY ? { 'X-API-Key': process.env.EVENTRELAY_API_KEY } : {}) },
           body: JSON.stringify({
             video_url: url,
             project_type,

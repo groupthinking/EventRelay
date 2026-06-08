@@ -570,7 +570,7 @@ echo "✅ All services started"
 ### **EventRelay Environment Variables:**
 ```bash
 export YOUTUBE_API_KEY="<your-key>"
-export GEMINI_API_KEY="AIzaSyAdaiRnkCVDq_-ac-iDiTPt_KLvT-MW-JY"
+export GEMINI_API_KEY="REDACTED_GOOGLE_API_KEY_ROTATE"
 export OPENAI_API_KEY="<your-key>"
 export ANTHROPIC_API_KEY="<your-key>"
 export GOOGLE_SPEECH_PROJECT_ID="cloudhub-470100"
@@ -580,7 +580,7 @@ export GOOGLE_SPEECH_RECOGNIZER="transcript-recognizer"
 
 ### **Grok-Claude-Hybrid Environment Variables:**
 ```bash
-export GEMINI_API_KEY="AIzaSyAdaiRnkCVDq_-ac-iDiTPt_KLvT-MW-JY"
+export GEMINI_API_KEY="REDACTED_GOOGLE_API_KEY_ROTATE"
 export XAI_API_KEY="<your-grok-key>"
 export ANTHROPIC_API_KEY="<your-key>"
 ```
@@ -628,7 +628,7 @@ export ANTHROPIC_API_KEY="<your-key>"
    ```bash
    cd /Users/garvey/Dev/OpenAI_Hub/projects/EventRelay
    source .venv/bin/activate
-   export GEMINI_API_KEY="AIzaSyAdaiRnkCVDq_-ac-iDiTPt_KLvT-MW-JY"
+   export GEMINI_API_KEY="REDACTED_GOOGLE_API_KEY_ROTATE"
    uvicorn youtube_extension.backend.main:app --reload --port 8000
    ```
 

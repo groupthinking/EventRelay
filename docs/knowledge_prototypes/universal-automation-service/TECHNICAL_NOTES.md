@@ -29,7 +29,7 @@ self.model = "gemini-2.0-flash-exp"
 ```bash
 curl "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent" \
   -H 'Content-Type: application/json' \
-  -H 'X-goog-api-key: AIzaSyAdaiRnkCVDq_-ac-iDiTPt_KLvT-MW-JY' \
+  -H 'X-goog-api-key: REDACTED_GOOGLE_API_KEY_ROTATE' \
   -X POST -d '{"contents": [{"parts": [{"text": "test"}]}]}'
 ```
 
@@ -153,15 +153,15 @@ from agents.infrastructure_packaging_agent import InfrastructurePackagingAgent
 **Problem:** Multiple invalid/expired API keys attempted
 
 **Keys Tried:**
-1. `AIzaSyDu5GN_IxRFg3Ue8SYXSNWkZi-50pwDgS0` - Invalid (from documentation)
+1. `REDACTED_GOOGLE_API_KEY_ROTATE` - Invalid (from documentation)
 2. `AQ.Ab8RN6IRoEf_GhxzousCYeM78xuCg6MBIk_DdlmeRuHljYAROQ` - Wrong format (OAuth token)
-3. `AIzaSyAdaiRnkCVDq_-ac-iDiTPt_KLvT-MW-JY` - ✅ VALID (user created fresh)
+3. `REDACTED_GOOGLE_API_KEY_ROTATE` - ✅ VALID (user created fresh)
 
 **Key Format:** Must start with `AIza` and be ~39 characters
 
 **Valid Key Location:** User must create at https://aistudio.google.com/app/apikey
 
-**Current Working Key:** `AIzaSyAdaiRnkCVDq_-ac-iDiTPt_KLvT-MW-JY`
+**Current Working Key:** `REDACTED_GOOGLE_API_KEY_ROTATE`
 
 ---
 
@@ -171,7 +171,7 @@ from agents.infrastructure_packaging_agent import InfrastructurePackagingAgent
 ```bash
 cd /Users/garvey/Dev/OpenAI_Hub/universal-automation-service
 source venv/bin/activate
-export GEMINI_API_KEY="AIzaSyAdaiRnkCVDq_-ac-iDiTPt_KLvT-MW-JY"
+export GEMINI_API_KEY="REDACTED_GOOGLE_API_KEY_ROTATE"
 ```
 
 ### Test Gemini Mode (Working)
@@ -200,7 +200,7 @@ EventRelay      : ❌ FAIL
 ```bash
 curl "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent" \
   -H 'Content-Type: application/json' \
-  -H 'X-goog-api-key: AIzaSyAdaiRnkCVDq_-ac-iDiTPt_KLvT-MW-JY' \
+  -H 'X-goog-api-key: REDACTED_GOOGLE_API_KEY_ROTATE' \
   -X POST \
   -d '{"contents": [{"parts": [{"text": "Hello"}]}]}'
 ```
@@ -455,7 +455,7 @@ UserWarning: Failed to initialize NumPy: _ARRAY_API not found
 ### Documentation Assumptions
 
 1. **API Keys in Docs Were Examples**
-   - `AIzaSyDu5GN_IxRFg3Ue8SYXSNWkZi-50pwDgS0` - Assumed example key
+   - `REDACTED_GOOGLE_API_KEY_ROTATE` - Assumed example key
    - Reality: Was invalid/expired
    - Confusion: User thought it was supposed to work
    - Learning: Always generate fresh API keys
@@ -985,7 +985,7 @@ output_file = f"results_{video_id}_{timestamp}.json"
    - Zero rate limit errors after fix
 
 4. **API Key Validity**
-   - Working key: `AIzaSyAdaiRnkCVDq_-ac-iDiTPt_KLvT-MW-JY`
+   - Working key: `REDACTED_GOOGLE_API_KEY_ROTATE`
    - Can test with curl command
 
 ### What We'll Measure Soon
@@ -1106,7 +1106,7 @@ output_file = f"results_{video_id}_{timestamp}.json"
 
 ### Secrets in This Document
 
-**API Key Exposed:** `AIzaSyAdaiRnkCVDq_-ac-iDiTPt_KLvT-MW-JY`
+**API Key Exposed:** `REDACTED_GOOGLE_API_KEY_ROTATE`
 
 **Warning:** This file contains a working Gemini API key.
 
