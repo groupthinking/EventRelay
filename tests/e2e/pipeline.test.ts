@@ -27,7 +27,27 @@ const TEST_YOUTUBE_URL =
   process.env.TEST_YOUTUBE_URL ||
   'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
 
+// To exercise a protected deployment (e.g. a Vercel preview, which returns 401
+// to anonymous requests), set VERCEL_AUTOMATION_BYPASS_SECRET to the project's
+// "Protection Bypass for Automation" secret. It is attached as a header on
+// every request so the preview is reachable. Unset (the default — e.g. when
+// BASE_URL is production) → no header is added and behaviour is unchanged.
+const VERCEL_BYPASS_SECRET = process.env.VERCEL_AUTOMATION_BYPASS_SECRET || '';
+
 // ─── Helpers ────────────────────────────────────────────────────────
+
+/** Merge the Vercel protection-bypass header into a request init, when configured. */
+function withBypass(init?: RequestInit): RequestInit {
+  if (!VERCEL_BYPASS_SECRET) return init ?? {};
+  return {
+    ...init,
+    headers: {
+      ...(init?.headers as Record<string, string> | undefined),
+      'x-vercel-protection-bypass': VERCEL_BYPASS_SECRET,
+      'x-vercel-set-bypass-cookie': 'true',
+    },
+  };
+}
 
 /** Fetch with a hard timeout and automatic retry for transient network errors. */
 async function fetchWithTimeout(
@@ -41,7 +61,7 @@ async function fetchWithTimeout(
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const res = await fetch(url, { ...init, signal: controller.signal });
+      const res = await fetch(url, { ...withBypass(init), signal: controller.signal });
       clearTimeout(timer);
       return res;
     } catch (err) {
