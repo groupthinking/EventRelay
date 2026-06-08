@@ -28,6 +28,8 @@ type OutcomeId = 'app' | 'sop' | 'lesson' | 'research' | 'automation' | 'content
 type RunState = 'idle' | 'working' | 'ready';
 type ResultAction = 'preview' | 'export' | 'deploy' | 'save';
 
+const DEFAULT_PROMPT = 'Turn this video into a polished workflow I can review, export, and deploy.';
+
 interface GeneratedPackage {
   title: string;
   summary: string;
@@ -308,7 +310,7 @@ function EmptyFrame() {
 export default function VideoWorkflowStudio() {
   const [videoUrl, setVideoUrl] = useState('');
   const [selectedOutcome, setSelectedOutcome] = useState<OutcomeId>('app');
-  const [prompt, setPrompt] = useState('Turn this video into a polished workflow I can review, export, and deploy.');
+  const [prompt, setPrompt] = useState(DEFAULT_PROMPT);
   const [runState, setRunState] = useState<RunState>('idle');
   const [unsafeRedirect, setUnsafeRedirect] = useState(false);
   const [developerOpen, setDeveloperOpen] = useState(false);
@@ -319,6 +321,8 @@ export default function VideoWorkflowStudio() {
 
   const audioRef = useRef<HTMLAudioElement>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const videoUrlRef = useRef('');
+  const promptRef = useRef(DEFAULT_PROMPT);
   const realtime = useRealtimeVoice(audioRef);
 
   const videoId = useMemo(() => getYouTubeId(videoUrl), [videoUrl]);
@@ -353,13 +357,16 @@ export default function VideoWorkflowStudio() {
     event?.preventDefault();
     if (timerRef.current) clearTimeout(timerRef.current);
 
-    const unsafe = isUnsafeRequest(prompt);
+    const currentVideoUrl = videoUrlRef.current || videoUrl;
+    const currentPrompt = promptRef.current || prompt;
+    const currentVideoId = getYouTubeId(currentVideoUrl);
+    const unsafe = isUnsafeRequest(currentPrompt);
     setUnsafeRedirect(unsafe);
     setRunState('working');
     setActionMessage(unsafe ? 'Preparing a safe alternative package.' : 'Checking source and pipeline readiness.');
 
     let pipelineCheck: PipelineCheck | null = null;
-    if (!unsafe && videoId) {
+    if (!unsafe && currentVideoId) {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 8_000);
       try {
@@ -367,9 +374,9 @@ export default function VideoWorkflowStudio() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            url: videoUrl,
+            url: currentVideoUrl,
             outcome: selectedOutcome,
-            prompt,
+            prompt: currentPrompt,
             project_type: selectedOutcome === 'app' ? 'web' : selectedOutcome,
             deployment_target: 'vercel',
           }),
@@ -404,10 +411,10 @@ export default function VideoWorkflowStudio() {
 
     timerRef.current = setTimeout(() => {
       const nextPackage = buildPackage({
-        videoId,
-        videoUrl,
+        videoId: currentVideoId,
+        videoUrl: currentVideoUrl,
         outcome: selectedOutcome,
-        prompt,
+        prompt: currentPrompt,
         unsafe,
         pipelineCheck,
       });
@@ -502,7 +509,10 @@ export default function VideoWorkflowStudio() {
               <input
                 id="video-url"
                 value={videoUrl}
-                onChange={(event) => setVideoUrl(event.target.value)}
+                onChange={(event) => {
+                  videoUrlRef.current = event.target.value;
+                  setVideoUrl(event.target.value);
+                }}
                 placeholder="Paste a YouTube link"
                 className="h-12 rounded-lg border border-slate-200 bg-slate-50 px-4 text-sm text-slate-950 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100"
               />
@@ -606,7 +616,10 @@ export default function VideoWorkflowStudio() {
               <input
                 id="result-prompt"
                 value={prompt}
-                onChange={(event) => setPrompt(event.target.value)}
+                onChange={(event) => {
+                  promptRef.current = event.target.value;
+                  setPrompt(event.target.value);
+                }}
                 className="h-12 rounded-lg border border-slate-200 bg-slate-50 px-4 text-sm text-slate-950 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100"
               />
               <button
