@@ -12,7 +12,13 @@ permissions:
   issues: write
 
 env:
-  BASE_URL: https://uvai.io
+  # Defaults to production. Override with the `E2E_BASE_URL` repository
+  # variable to point at another deployment (e.g. a Vercel preview). Note:
+  # Vercel preview deployments are protected (HTTP 401) and require a
+  # "Protection Bypass for Automation" token forwarded as a request header
+  # before they can be exercised here — until that is wired up, the E2E
+  # gate validates production rather than the PR's own preview build.
+  BASE_URL: ${{ vars.E2E_BASE_URL || 'https://uvai.io' }}
   TEST_YOUTUBE_URL: https://www.youtube.com/watch?v=auJzb1D-fag
 
 jobs:
