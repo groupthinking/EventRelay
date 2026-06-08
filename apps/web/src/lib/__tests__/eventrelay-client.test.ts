@@ -56,6 +56,10 @@ describe('EventRelayClient', () => {
       fileURLToPath(new URL('../eventrelay-client.ts', import.meta.url)),
       'utf8',
     );
-    expect(src).not.toMatch(/@google\/genai|@google\/generative-ai|['"]openai['"]/);
+    // Match an actual import/require of a model SDK — not a prose mention of
+    // one in the module's own documentation.
+    expect(src).not.toMatch(
+      /(?:import|require)\b[^\n]*['"](?:@google\/genai|@google\/generative-ai|openai)['"]/,
+    );
   });
 });

@@ -55,7 +55,11 @@ All seven criteria are now wired end to end:
 - **SC2** captions transcript (youtube-transcript-api) + injectable STT fallback.
 - **SC3** event extraction and **SC4** artifact derivation run against the
   single **model seam** (`app/llm/`), Gemini by default.
-- **SC7** frontend reuse is the one remaining task (strip `apps/web/src/app/api/*`).
+- **SC7** the frontend is now a pure consumer of this contract: its second
+  backend (`apps/web/src/app/api/*`) and the direct-model `lib/` fallbacks are
+  deleted, and the dashboard reads everything through `eventRelay.*`. The one
+  remaining (non-blocking) follow-up is regenerating the TS SDK from
+  `service/openapi.json` via Stainless to replace the hand-written client.
 
 The live YouTube and model calls require network + an API key and so are not
 exercised in CI; the 18-test suite drives the full lifecycle with the
@@ -118,6 +122,9 @@ replaced and the SDKs are regenerated from `service/openapi.json`.
 
 ## Frontend (SC7)
 
-`apps/web` is salvageable as a **pure SDK consumer**. Before reuse, delete its
-server-side `apps/web/src/app/api/*` route handlers and the direct-Gemini
-fallback in `lib/` — those are a second backend and must not survive the move.
+`apps/web` is now a **pure SDK consumer**. Its server-side
+`apps/web/src/app/api/*` route handlers and the direct-Gemini/OpenAI fallbacks
+in `lib/` — a second backend — have been removed; the dashboard store talks to
+this service through `lib/eventrelay-client.ts` only. The synthetic multi-agent
+visualization (a REAL_MODE_ONLY violation) is gone with it. See
+[`docs/SC7_CUTOVER.md`](../docs/SC7_CUTOVER.md) for the executed teardown.

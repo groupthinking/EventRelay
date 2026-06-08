@@ -4,12 +4,13 @@ Goal (SC7): `apps/web` submits a URL, polls job status, and renders
 transcript/events/artifacts **only** through the backend contract. No business
 logic and no model calls in the frontend.
 
-> Why this is a checklist and not a single commit: it is a delete-heavy refactor
-> of a working app, and it must be executed where TypeScript compiles
-> (`npm install` then `npm run build && npm run test` in `apps/web`) — the
-> review sandbox has no `node_modules` and cannot verify TS. Run it locally or
-> let CI gate each step. Use the **strangler order** below so the app is never
-> in a long-lived broken state.
+> **Status: executed.** The destructive teardown below has been applied and
+> verified locally with `npm install` → `tsc --noEmit` → `vitest run` →
+> `next build` → `eslint --max-warnings 0`, all green. The dashboard now drives
+> the real `/api/v1/jobs` lifecycle through `lib/eventrelay-client.ts`; the
+> second backend, the direct-model `lib/` fallbacks, and the synthetic agent
+> mesh are deleted. The only remaining (non-blocking) step is the Stainless SDK
+> regeneration (step 6). The history below is kept as the record of what moved.
 
 ## Already landed (additive, safe)
 
