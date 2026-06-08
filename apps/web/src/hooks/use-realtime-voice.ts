@@ -44,6 +44,27 @@ function parseJsonObject(value: string | undefined): Record<string, unknown> {
   }
 }
 
+function getFriendlyRealtimeError(value: string) {
+  try {
+    const parsed = JSON.parse(value) as { error?: string; details?: string };
+    const details = parsed.details ? JSON.parse(parsed.details) as { error?: { code?: string; message?: string } } : null;
+    const code = details?.error?.code;
+    const message = details?.error?.message || parsed.error;
+
+    if (code === 'insufficient_quota') {
+      return 'Voice is wired correctly, but the OpenAI project behind OPENAI_API_KEY is out of quota or billing access.';
+    }
+
+    if (code === 'invalid_offer') {
+      return 'Voice could not start because the browser did not provide a usable audio WebRTC offer.';
+    }
+
+    return message || value;
+  } catch {
+    return value;
+  }
+}
+
 function checkCalendar(date: string, time: string) {
   const hour = Number.parseInt(time.split(':')[0] || '0', 10);
   const available = Number.isFinite(hour) ? hour >= 9 && hour < 17 && hour !== 12 : true;
@@ -238,7 +259,7 @@ export function useRealtimeVoice(audioRef: RefObject<HTMLAudioElement | null>) {
 
       const answerSdp = await response.text();
       if (!response.ok) {
-        throw new Error(answerSdp || `Realtime session failed with ${response.status}.`);
+        throw new Error(getFriendlyRealtimeError(answerSdp || `Realtime session failed with ${response.status}.`));
       }
 
       await peer.setRemoteDescription({ type: 'answer', sdp: answerSdp });

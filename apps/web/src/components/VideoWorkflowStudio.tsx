@@ -4,7 +4,10 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
   ChevronRight,
+  CheckCircle2,
+  Clipboard,
   Download,
+  FileText,
   Layers,
   Mic,
   MicOff,
@@ -23,6 +26,18 @@ import { useRealtimeVoice } from '@/hooks/use-realtime-voice';
 
 type OutcomeId = 'app' | 'sop' | 'lesson' | 'research' | 'automation' | 'content';
 type RunState = 'idle' | 'working' | 'ready';
+type ResultAction = 'preview' | 'export' | 'deploy' | 'save';
+
+interface GeneratedPackage {
+  title: string;
+  summary: string;
+  primaryOutput: string;
+  sourceNotes: string[];
+  deliverables: string[];
+  nextSteps: string[];
+  safetyNote?: string;
+  createdAt: string;
+}
 
 const OUTCOMES: Array<{ id: OutcomeId; label: string; description: string }> = [
   { id: 'app', label: 'App', description: 'Product screen or working flow.' },
@@ -45,28 +60,70 @@ const UNSAFE_TERMS = [
   'steal',
 ];
 
-const RESULT_CARDS = [
+const RESULT_CARDS: Array<{
+  id: ResultAction;
+  title: string;
+  description: string;
+  icon: typeof Monitor;
+}> = [
   {
+    id: 'preview',
     title: 'Preview',
     description: 'Open the generated app, SOP, lesson, or brief before export.',
     icon: Monitor,
   },
   {
+    id: 'export',
     title: 'Export',
     description: 'Package the brief, source notes, and handoff files.',
     icon: Download,
   },
   {
+    id: 'deploy',
     title: 'Deploy',
     description: 'Prepare the Vercel-ready app or automation handoff.',
     icon: Rocket,
   },
   {
+    id: 'save',
     title: 'Save',
     description: 'Save this run and keep the source trail attached.',
     icon: SaveIcon,
   },
 ];
+
+const OUTPUT_COPY: Record<OutcomeId, { noun: string; deliverables: string[]; nextSteps: string[] }> = {
+  app: {
+    noun: 'working app brief',
+    deliverables: ['Responsive screen map', 'Component checklist', 'Vercel handoff notes'],
+    nextSteps: ['Confirm the target user journey', 'Scaffold the first route and component states', 'Run lint, build, and browser smoke checks'],
+  },
+  sop: {
+    noun: 'operating procedure',
+    deliverables: ['Role-by-role SOP', 'Acceptance checklist', 'Exception handling notes'],
+    nextSteps: ['Assign an owner', 'Run the process once on a real example', 'Store the final SOP with the source trail'],
+  },
+  lesson: {
+    noun: 'lesson package',
+    deliverables: ['Learning outline', 'Practice tasks', 'Assessment prompts'],
+    nextSteps: ['Confirm learner level', 'Add examples from the video', 'Package as a repeatable lesson'],
+  },
+  research: {
+    noun: 'research brief',
+    deliverables: ['Source-backed summary', 'Open questions', 'Decision memo'],
+    nextSteps: ['Verify source claims', 'Separate facts from assumptions', 'Share the recommendation with stakeholders'],
+  },
+  automation: {
+    noun: 'automation recipe',
+    deliverables: ['Trigger and action map', 'Required integrations', 'Failure and retry notes'],
+    nextSteps: ['Choose the first trigger', 'Connect the service accounts', 'Test the workflow with one safe input'],
+  },
+  content: {
+    noun: 'content plan',
+    deliverables: ['Channel plan', 'Draft script angles', 'Publishing checklist'],
+    nextSteps: ['Pick the primary audience', 'Generate the first draft', 'Schedule review and publish steps'],
+  },
+};
 
 function getYouTubeId(url: string) {
   const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/))([^&?/]+)/);
@@ -86,6 +143,82 @@ function makeFrameUrls(videoId: string) {
     `https://img.youtube.com/vi/${videoId}/2.jpg`,
     `https://img.youtube.com/vi/${videoId}/3.jpg`,
   ];
+}
+
+function buildPackage({
+  videoId,
+  videoUrl,
+  outcome,
+  prompt,
+  unsafe,
+}: {
+  videoId: string;
+  videoUrl: string;
+  outcome: OutcomeId;
+  prompt: string;
+  unsafe: boolean;
+}): GeneratedPackage {
+  const copy = OUTPUT_COPY[outcome];
+  const cleanPrompt = unsafe
+    ? 'Create a benign safety review and educational workflow instead of harmful instructions.'
+    : prompt.trim() || 'Turn this video into a useful workflow package.';
+  const sourceLabel = videoId ? `YouTube source ${videoId}` : 'Pending source URL';
+
+  return {
+    title: `${copy.noun[0].toUpperCase()}${copy.noun.slice(1)} from video`,
+    summary: `${sourceLabel} is packaged as a ${copy.noun}. The output keeps the source visible, turns the request into concrete deliverables, and is ready for review before a deeper backend run.`,
+    primaryOutput: cleanPrompt,
+    sourceNotes: [
+      videoUrl ? `Source URL: ${videoUrl}` : 'No source URL entered yet.',
+      videoId ? 'Preview and thumbnail evidence are attached.' : 'Add a valid YouTube URL to attach video evidence.',
+      'Speaker audio is used for context only; no voice cloning is performed.',
+    ],
+    deliverables: copy.deliverables,
+    nextSteps: copy.nextSteps,
+    safetyNote: unsafe
+      ? 'Unsafe instructions were converted into a benign planning and risk-review package.'
+      : undefined,
+    createdAt: new Date().toISOString(),
+  };
+}
+
+function packageToText(pkg: GeneratedPackage) {
+  return [
+    pkg.title,
+    '',
+    pkg.summary,
+    '',
+    `Primary request: ${pkg.primaryOutput}`,
+    '',
+    'Source notes:',
+    ...pkg.sourceNotes.map((note) => `- ${note}`),
+    '',
+    'Deliverables:',
+    ...pkg.deliverables.map((item) => `- ${item}`),
+    '',
+    'Next steps:',
+    ...pkg.nextSteps.map((item) => `- ${item}`),
+    pkg.safetyNote ? ['', `Safety: ${pkg.safetyNote}`] : [],
+  ].flat().join('\n');
+}
+
+function downloadPackage(pkg: GeneratedPackage) {
+  const blob = new Blob([JSON.stringify(pkg, null, 2)], { type: 'application/json' });
+  const href = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = href;
+  anchor.download = `uvai-package-${new Date(pkg.createdAt).getTime()}.json`;
+  anchor.click();
+  URL.revokeObjectURL(href);
+}
+
+function readSavedPackages() {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem('uvai.savedPackages') || '[]');
+    return Array.isArray(parsed) ? parsed as GeneratedPackage[] : [];
+  } catch {
+    return [];
+  }
 }
 
 function OutcomeCard({
@@ -139,6 +272,10 @@ export default function VideoWorkflowStudio() {
   const [runState, setRunState] = useState<RunState>('idle');
   const [unsafeRedirect, setUnsafeRedirect] = useState(false);
   const [developerOpen, setDeveloperOpen] = useState(false);
+  const [activeAction, setActiveAction] = useState<ResultAction>('preview');
+  const [generatedPackage, setGeneratedPackage] = useState<GeneratedPackage | null>(null);
+  const [saveCount, setSaveCount] = useState(0);
+  const [actionMessage, setActionMessage] = useState('Build a result to unlock preview, export, deploy, and save.');
 
   const audioRef = useRef<HTMLAudioElement>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -179,16 +316,52 @@ export default function VideoWorkflowStudio() {
     const unsafe = isUnsafeRequest(prompt);
     setUnsafeRedirect(unsafe);
     setRunState('working');
+    setActionMessage('Preparing the package from the current source and outcome.');
 
     timerRef.current = setTimeout(() => {
+      const nextPackage = buildPackage({
+        videoId,
+        videoUrl,
+        outcome: selectedOutcome,
+        prompt,
+        unsafe,
+      });
+      setGeneratedPackage(nextPackage);
       setRunState('ready');
+      setActiveAction('preview');
+      setActionMessage('Package ready. Choose preview, export, deploy, or save.');
     }, 900);
   };
 
-  const handleResultAction = () => {
+  const handleResultAction = (action: ResultAction) => {
+    setActiveAction(action);
     if (!resultReady) {
       runWorkflow();
+      return;
     }
+
+    if (!generatedPackage) return;
+
+    if (action === 'export') {
+      downloadPackage(generatedPackage);
+      setActionMessage('Export downloaded as a JSON package.');
+      return;
+    }
+
+    if (action === 'save') {
+      const saved = readSavedPackages();
+      const nextSaved = [generatedPackage, ...saved].slice(0, 12);
+      window.localStorage.setItem('uvai.savedPackages', JSON.stringify(nextSaved));
+      setSaveCount(nextSaved.length);
+      setActionMessage(`Saved locally. ${nextSaved.length} package${nextSaved.length === 1 ? '' : 's'} available in this browser.`);
+      return;
+    }
+
+    setActionMessage(
+      action === 'deploy'
+        ? 'Deploy handoff prepared. Connect the backend pipeline when BACKEND_URL is healthy for automatic deployment.'
+        : 'Preview is open with source notes, deliverables, and next steps.',
+    );
   };
 
   return (
@@ -395,8 +568,11 @@ export default function VideoWorkflowStudio() {
                   <button
                     key={card.title}
                     type="button"
-                    onClick={handleResultAction}
-                    className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-left transition hover:border-slate-300 hover:bg-white"
+                    onClick={() => handleResultAction(card.id)}
+                    className={clsx(
+                      'rounded-lg border p-3 text-left transition hover:border-slate-300 hover:bg-white',
+                      activeAction === card.id ? 'border-blue-200 bg-blue-50' : 'border-slate-200 bg-slate-50',
+                    )}
                   >
                     <div className="flex items-start gap-3">
                       <div className="flex h-9 w-9 flex-none items-center justify-center rounded-lg bg-white text-slate-700 shadow-sm">
@@ -410,6 +586,93 @@ export default function VideoWorkflowStudio() {
                   </button>
                 );
               })}
+            </div>
+
+            <div className="mt-4 rounded-lg border border-slate-200 bg-white p-4">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 text-sm font-semibold text-slate-950">
+                  {activeAction === 'preview' && <Monitor className="h-4 w-4 text-blue-600" />}
+                  {activeAction === 'export' && <FileText className="h-4 w-4 text-blue-600" />}
+                  {activeAction === 'deploy' && <Rocket className="h-4 w-4 text-blue-600" />}
+                  {activeAction === 'save' && <CheckCircle2 className="h-4 w-4 text-blue-600" />}
+                  {RESULT_CARDS.find((card) => card.id === activeAction)?.title}
+                </div>
+                {saveCount > 0 && <span className="text-xs text-slate-500">{saveCount} saved</span>}
+              </div>
+
+              {generatedPackage ? (
+                <div className="space-y-4 text-sm text-slate-700">
+                  {activeAction === 'preview' && (
+                    <>
+                      <div>
+                        <h3 className="text-base font-semibold text-slate-950">{generatedPackage.title}</h3>
+                        <p className="mt-1 leading-6 text-slate-600">{generatedPackage.summary}</p>
+                      </div>
+                      <div className="rounded-lg bg-slate-50 p-3 text-xs leading-5 text-slate-600">
+                        {generatedPackage.primaryOutput}
+                      </div>
+                    </>
+                  )}
+
+                  {activeAction === 'export' && (
+                    <div className="space-y-3">
+                      <p className="leading-6">The package is ready as JSON and plain text for handoff.</p>
+                      <pre className="max-h-56 overflow-auto rounded-lg bg-slate-950 p-3 text-xs leading-5 text-slate-100">
+                        {packageToText(generatedPackage)}
+                      </pre>
+                    </div>
+                  )}
+
+                  {activeAction === 'deploy' && (
+                    <div className="space-y-3">
+                      <p className="leading-6">
+                        This is deployable as a Vercel handoff now. Automatic backend deployment is gated by the configured backend pipeline health.
+                      </p>
+                      <div className="grid gap-2">
+                        {generatedPackage.nextSteps.map((step) => (
+                          <div key={step} className="flex gap-2 rounded-lg bg-slate-50 p-2 text-xs leading-5">
+                            <Rocket className="mt-0.5 h-3.5 w-3.5 flex-none text-blue-600" />
+                            <span>{step}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {activeAction === 'save' && (
+                    <div className="space-y-3">
+                      <p className="leading-6">Saved packages stay in this browser so the user can return to the source trail.</p>
+                      <div className="rounded-lg bg-slate-50 p-3 text-xs leading-5 text-slate-600">
+                        Latest saved package: {generatedPackage.title}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="grid gap-2">
+                    {generatedPackage.deliverables.map((item) => (
+                      <div key={item} className="flex gap-2 text-xs leading-5 text-slate-600">
+                        <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 flex-none text-emerald-600" />
+                        <span>{item}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {generatedPackage.safetyNote && (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900">
+                      {generatedPackage.safetyNote}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="flex items-start gap-2 rounded-lg bg-slate-50 p-3 text-sm leading-6 text-slate-500">
+                  <Clipboard className="mt-1 h-4 w-4 flex-none text-slate-400" />
+                  <span>{actionMessage}</span>
+                </div>
+              )}
+
+              {generatedPackage && (
+                <div className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">{actionMessage}</div>
+              )}
             </div>
           </section>
 

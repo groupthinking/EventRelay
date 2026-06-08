@@ -8,7 +8,60 @@ const BACKEND_URL = rawBackendUrl.startsWith('http') ? rawBackendUrl : 'http://l
 const BACKEND_AVAILABLE = rawBackendUrl.startsWith('http');
 
 export const runtime = 'nodejs';
-export const maxDuration = 300;
+export const maxDuration = 30;
+
+function backendHost(): string | null {
+  if (!BACKEND_AVAILABLE) return null;
+  try {
+    return new URL(BACKEND_URL).host;
+  } catch {
+    return null;
+  }
+}
+
+function timeoutSignal(ms: number): AbortSignal {
+  return AbortSignal.timeout(ms);
+}
+
+async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timeout = setTimeout(() => reject(new Error(`${label} timed out`)), ms);
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
+
+async function checkBackendHealth(timeoutMs = 1500): Promise<{ configured: boolean; available: boolean; host: string | null; reason?: string }> {
+  if (!BACKEND_AVAILABLE) {
+    return { configured: false, available: false, host: null, reason: 'BACKEND_URL is not configured' };
+  }
+
+  try {
+    const response = await fetch(`${BACKEND_URL}/api/v1/health`, {
+      cache: 'no-store',
+      signal: timeoutSignal(timeoutMs),
+    });
+    return {
+      configured: true,
+      available: response.ok,
+      host: backendHost(),
+      reason: response.ok ? undefined : `Backend health returned ${response.status}`,
+    };
+  } catch (error) {
+    return {
+      configured: true,
+      available: false,
+      host: backendHost(),
+      reason: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
 
 /**
  * POST /api/pipeline
@@ -38,25 +91,17 @@ export async function POST(request: Request) {
     // ── Strategy 1: Full backend pipeline (FastAPI video-to-software) ──
     if (BACKEND_AVAILABLE) {
       try {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 300_000); // 5 min for full pipeline
-
-        let response: Response;
-        try {
-          response = await fetch(`${BACKEND_URL}/api/v1/video-to-software`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', ...(process.env.EVENTRELAY_API_KEY ? { 'X-API-Key': process.env.EVENTRELAY_API_KEY } : {}) },
-            body: JSON.stringify({
-              video_url: url,
-              project_type,
-              deployment_target,
-              features: features || ['responsive_design', 'modern_ui'],
-            }),
-            signal: controller.signal,
-          });
-        } finally {
-          clearTimeout(timeout);
-        }
+        const response = await fetch(`${BACKEND_URL}/api/v1/video-to-software`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...(process.env.EVENTRELAY_API_KEY ? { 'X-API-Key': process.env.EVENTRELAY_API_KEY } : {}) },
+          body: JSON.stringify({
+            video_url: url,
+            project_type,
+            deployment_target,
+            features: features || ['responsive_design', 'modern_ui'],
+          }),
+          signal: timeoutSignal(8_000),
+        });
 
         if (response.ok) {
           const result = await response.json();
@@ -95,7 +140,11 @@ export async function POST(request: Request) {
     if (hasGeminiKey()) {
       try {
         const startTime = Date.now();
-        const analysis = await analyzeVideoWithGemini(url);
+        const analysis = await withTimeout(
+          analyzeVideoWithGemini(url),
+          8_000,
+          'Gemini analysis',
+        );
         const elapsed = Date.now() - startTime;
 
         await publishEvent(EventTypes.PIPELINE_COMPLETED, {
@@ -132,7 +181,11 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json(
-      { error: 'No pipeline available. Configure BACKEND_URL for full pipeline or GEMINI_API_KEY for analysis only.' },
+      {
+        error: 'No pipeline available. Configure a healthy BACKEND_URL for full pipeline or enable billing for the configured Gemini project.',
+        backend: await checkBackendHealth(),
+        gemini_configured: hasGeminiKey(),
+      },
       { status: 503 },
     );
   } catch (error) {
@@ -146,6 +199,7 @@ export async function POST(request: Request) {
 }
 
 export async function GET() {
+  const backend = await checkBackendHealth();
   return NextResponse.json({
     name: 'EventRelay End-to-End Pipeline',
     version: '1.0.0',
@@ -156,7 +210,10 @@ export async function GET() {
       '3. Transport: CloudEvents published at each stage',
       '4. Execute: Agents generate code, create repo, deploy to Vercel',
     ],
-    backend_available: BACKEND_AVAILABLE,
+    backend_configured: backend.configured,
+    backend_available: backend.available,
+    backend_host: backend.host,
+    backend_reason: backend.reason,
     gemini_available: hasGeminiKey(),
     endpoints: {
       pipeline: 'POST /api/pipeline - Full end-to-end pipeline',
