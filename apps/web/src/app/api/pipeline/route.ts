@@ -108,7 +108,7 @@ export async function POST(request: Request) {
             deployment_target,
             features: features || ['responsive_design', 'modern_ui'],
           }),
-          signal: timeoutSignal(8_000),
+          signal: timeoutSignal(4_000),
         });
 
         if (response.ok) {
@@ -150,7 +150,7 @@ export async function POST(request: Request) {
         const startTime = Date.now();
         const analysis = await withTimeout(
           analyzeVideoWithGemini(url),
-          8_000,
+          5_000,
           'Gemini analysis',
         );
         const elapsed = Date.now() - startTime;

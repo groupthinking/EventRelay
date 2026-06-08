@@ -146,7 +146,6 @@ export async function proxy(request: NextRequest) {
     if (needsAuth) {
       // next-auth resolves `NextRequest` from a second hoisted copy of `next` in this
       // monorepo; the types are structurally identical, so bridge them.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const token = await getToken({ req: request as any, secret: AUTH_SECRET });
       if (!token) {
         if (isApi) {

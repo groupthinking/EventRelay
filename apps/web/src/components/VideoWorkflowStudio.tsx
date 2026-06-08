@@ -35,8 +35,22 @@ interface GeneratedPackage {
   sourceNotes: string[];
   deliverables: string[];
   nextSteps: string[];
+  evidence: string[];
   safetyNote?: string;
   createdAt: string;
+}
+
+interface PipelineCheck {
+  ok: boolean;
+  status: number;
+  pipeline?: string;
+  backend?: {
+    configured?: boolean;
+    available?: boolean;
+    host?: string | null;
+    reason?: string;
+  };
+  message?: string;
 }
 
 const OUTCOMES: Array<{ id: OutcomeId; label: string; description: string }> = [
@@ -151,35 +165,58 @@ function buildPackage({
   outcome,
   prompt,
   unsafe,
+  pipelineCheck,
 }: {
   videoId: string;
   videoUrl: string;
   outcome: OutcomeId;
   prompt: string;
   unsafe: boolean;
+  pipelineCheck?: PipelineCheck | null;
 }): GeneratedPackage {
   const copy = OUTPUT_COPY[outcome];
   const cleanPrompt = unsafe
     ? 'Create a benign safety review and educational workflow instead of harmful instructions.'
     : prompt.trim() || 'Turn this video into a useful workflow package.';
   const sourceLabel = videoId ? `YouTube source ${videoId}` : 'Pending source URL';
+  const backendHost = pipelineCheck?.backend?.host;
+  const backendReason = pipelineCheck?.backend?.reason;
+  const pipelineState = pipelineCheck
+    ? pipelineCheck.ok
+      ? `Pipeline checked successfully${pipelineCheck.pipeline ? ` (${pipelineCheck.pipeline})` : ''}.`
+      : `Pipeline checked and returned ${pipelineCheck.status}${pipelineCheck.message ? `: ${pipelineCheck.message}` : '.'}`
+    : unsafe
+      ? 'Pipeline was not called because the request was redirected for safety.'
+      : 'Local package prepared while source evidence is attached.';
 
   return {
     title: `${copy.noun[0].toUpperCase()}${copy.noun.slice(1)} from video`,
-    summary: `${sourceLabel} is packaged as a ${copy.noun}. The output keeps the source visible, turns the request into concrete deliverables, and is ready for review before a deeper backend run.`,
+    summary: `${sourceLabel} is packaged as a ${copy.noun}. The source is visible, the request is turned into concrete deliverables, and backend readiness is checked before handoff.`,
     primaryOutput: cleanPrompt,
     sourceNotes: [
       videoUrl ? `Source URL: ${videoUrl}` : 'No source URL entered yet.',
       videoId ? 'Preview and thumbnail evidence are attached.' : 'Add a valid YouTube URL to attach video evidence.',
       'Speaker audio is used for context only; no voice cloning is performed.',
+      pipelineState,
+      backendHost ? `Backend target: ${backendHost}${backendReason ? ` (${backendReason})` : ''}` : 'Backend target was not available for this run.',
     ],
     deliverables: copy.deliverables,
     nextSteps: copy.nextSteps,
+    evidence: [
+      videoId ? 'Video preview loaded' : 'Video preview pending',
+      frameUrlsForPackage(videoId),
+      pipelineCheck?.ok ? 'Pipeline response received' : 'Fallback package created',
+      unsafe ? 'Safety gate applied' : 'Safety gate passed',
+    ],
     safetyNote: unsafe
       ? 'Unsafe instructions were converted into a benign planning and risk-review package.'
       : undefined,
     createdAt: new Date().toISOString(),
   };
+}
+
+function frameUrlsForPackage(videoId: string) {
+  return videoId ? 'Thumbnail frames attached' : 'Thumbnail frames pending';
 }
 
 function packageToText(pkg: GeneratedPackage) {
@@ -195,6 +232,9 @@ function packageToText(pkg: GeneratedPackage) {
     '',
     'Deliverables:',
     ...pkg.deliverables.map((item) => `- ${item}`),
+    '',
+    'Evidence:',
+    ...pkg.evidence.map((item) => `- ${item}`),
     '',
     'Next steps:',
     ...pkg.nextSteps.map((item) => `- ${item}`),
@@ -309,14 +349,58 @@ export default function VideoWorkflowStudio() {
     };
   }, [disconnectRealtime]);
 
-  const runWorkflow = (event?: FormEvent) => {
+  const runWorkflow = async (event?: FormEvent) => {
     event?.preventDefault();
     if (timerRef.current) clearTimeout(timerRef.current);
 
     const unsafe = isUnsafeRequest(prompt);
     setUnsafeRedirect(unsafe);
     setRunState('working');
-    setActionMessage('Preparing the package from the current source and outcome.');
+    setActionMessage(unsafe ? 'Preparing a safe alternative package.' : 'Checking source and pipeline readiness.');
+
+    let pipelineCheck: PipelineCheck | null = null;
+    if (!unsafe && videoId) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 8_000);
+      try {
+        const response = await fetch('/api/pipeline', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            url: videoUrl,
+            outcome: selectedOutcome,
+            prompt,
+            project_type: selectedOutcome === 'app' ? 'web' : selectedOutcome,
+            deployment_target: 'vercel',
+          }),
+          signal: controller.signal,
+        });
+        const payload = await response.json().catch(() => ({}));
+        pipelineCheck = {
+          ok: response.ok,
+          status: response.status,
+          pipeline: typeof payload.pipeline === 'string' ? payload.pipeline : undefined,
+          backend: payload.backend && typeof payload.backend === 'object' ? payload.backend : undefined,
+          message: typeof payload.error === 'string'
+            ? payload.error
+            : typeof payload.result?.message === 'string'
+              ? payload.result.message
+              : undefined,
+        };
+      } catch (error) {
+        pipelineCheck = {
+          ok: false,
+          status: 0,
+          message: error instanceof Error && error.name === 'AbortError'
+            ? 'Pipeline check timed out.'
+            : error instanceof Error
+              ? error.message
+              : 'Pipeline check failed.',
+        };
+      } finally {
+        clearTimeout(timeout);
+      }
+    }
 
     timerRef.current = setTimeout(() => {
       const nextPackage = buildPackage({
@@ -325,12 +409,17 @@ export default function VideoWorkflowStudio() {
         outcome: selectedOutcome,
         prompt,
         unsafe,
+        pipelineCheck,
       });
       setGeneratedPackage(nextPackage);
       setRunState('ready');
       setActiveAction('preview');
-      setActionMessage('Package ready. Choose preview, export, deploy, or save.');
-    }, 900);
+      setActionMessage(
+        pipelineCheck && !pipelineCheck.ok
+          ? 'Package ready with a fallback handoff. Automatic execution is waiting on backend or provider configuration.'
+          : 'Package ready. Choose preview, export, deploy, or save.',
+      );
+    }, unsafe ? 250 : 100);
   };
 
   const handleResultAction = (action: ResultAction) => {
@@ -649,6 +738,13 @@ export default function VideoWorkflowStudio() {
                   )}
 
                   <div className="grid gap-2">
+                    {generatedPackage.evidence.map((item) => (
+                      <div key={item} className="flex gap-2 text-xs leading-5 text-slate-600">
+                        <Layers className="mt-0.5 h-3.5 w-3.5 flex-none text-blue-600" />
+                        <span>{item}</span>
+                      </div>
+                    ))}
+
                     {generatedPackage.deliverables.map((item) => (
                       <div key={item} className="flex gap-2 text-xs leading-5 text-slate-600">
                         <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 flex-none text-emerald-600" />
