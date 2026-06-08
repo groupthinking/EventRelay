@@ -58,13 +58,17 @@ export interface EventExtractRequest {
   video_url?: string;
 }
 
+// Event Classification Taxonomy: ACTION, TOPIC, CODE, ALERT
+// Legacy types (mention, insight) kept for backward compatibility
 export interface ExtractedEvent {
   id: string;
-  type: 'action' | 'mention' | 'topic' | 'insight';
+  type: 'action' | 'topic' | 'code' | 'alert' | 'mention' | 'insight';
   title: string;
   description?: string;
   timestamp?: string;
   confidence: number;
+  severity?: 'low' | 'medium' | 'high' | 'critical';
+  sourceSegment?: string;
 }
 
 export interface EventExtractResponse {

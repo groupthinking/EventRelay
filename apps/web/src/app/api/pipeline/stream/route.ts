@@ -29,6 +29,9 @@ const BACKEND_URL = rawBackendUrl.startsWith('http') ? rawBackendUrl : '';
 const JOB_POLL_INTERVAL_MS = 2000;
 const MAX_JOB_POLL_ATTEMPTS = 90;
 
+export const runtime = 'nodejs';
+export const maxDuration = 240;
+
 /** Shape of each SSE message sent to the frontend. */
 interface AgentStreamEvent {
   type: 'agent_update' | 'consensus' | 'pipeline_status' | 'workflow' | 'error';
@@ -60,6 +63,15 @@ interface BackendVideoJobStatus {
   transcript?: string;
   metadata?: Record<string, any>;
   error?: string;
+}
+
+async function readJsonBody(request: Request): Promise<Record<string, unknown> | null> {
+  try {
+    const body = await request.json();
+    return body && typeof body === 'object' ? body as Record<string, unknown> : null;
+  } catch {
+    return null;
+  }
 }
 
 function makeEvent(event: AgentStreamEvent): string {
@@ -485,10 +497,17 @@ async function* generateAgentEvents(
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
+    const body = await readJsonBody(request);
+    if (!body) {
+      return new Response(JSON.stringify({ error: 'Valid JSON body is required' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
     const { url } = body;
 
-    if (!url) {
+    if (typeof url !== 'string' || !url.trim()) {
       return new Response(JSON.stringify({ error: 'Video URL is required' }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' },

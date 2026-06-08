@@ -1,48 +1,58 @@
 import type { Metadata, Viewport } from 'next';
 import { Analytics } from '@vercel/analytics/next';
 import { SpeedInsights } from '@vercel/speed-insights/next';
-import { SITE_URL } from '@/lib/site';
+import { Inter, JetBrains_Mono, Space_Grotesk } from 'next/font/google';
 import './globals.css';
 
-// Fonts use the system stack declared in tailwind.config (Inter / JetBrains
-// Mono with system-ui fallbacks). We intentionally avoid next/font/google
-// because it hard-fails during build when the Google Fonts API is unreachable
-// (common in sandboxed CI and offline environments).
+const inter = Inter({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-body',
+});
+
+const jetBrainsMono = JetBrains_Mono({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-mono',
+});
+
+const spaceGrotesk = Space_Grotesk({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-heading',
+});
 
 export const metadata: Metadata = {
   title: {
-    default: 'UVAI — The Action Layer for Video',
+    default: 'UVAI — Video to Workflow',
     template: '%s | UVAI',
   },
-  description: 'UVAI takes what is inside a YouTube video and builds from it — transcripts, typed events, action items, and agentic execution powered by Gemini and OpenAI. Open source via EventRelay.',
-  keywords: ['UVAI', 'video to action', 'YouTube build', 'video intelligence', 'structured events', 'Gemini', 'OpenAI', 'EventRelay', 'agentic video execution'],
+  description: 'Paste a YouTube URL. UVAI turns video evidence into useful workflows, exports, and deployable next steps.',
+  keywords: ['video to software', 'AI video analysis', 'video to code', 'agentic video', 'code generation', 'video API', 'UVAI'],
   authors: [{ name: 'UVAI' }],
   creator: 'UVAI',
   publisher: 'UVAI',
-  metadataBase: new URL(SITE_URL),
-  alternates: {
-    canonical: SITE_URL,
-  },
+  metadataBase: new URL('https://uvai.io'),
   openGraph: {
     type: 'website',
     locale: 'en_US',
-    url: SITE_URL,
+    url: 'https://uvai.io',
     siteName: 'UVAI',
-    title: 'UVAI — The Action Layer for Video',
-    description: 'Paste a YouTube URL. UVAI takes what is inside the video and builds from it — transcripts, typed events, action items, and agentic execution.',
+    title: 'UVAI — Video to Workflow',
+    description: 'Paste a YouTube URL. UVAI turns video evidence into useful workflows, exports, and deployable next steps.',
     images: [
       {
         url: '/og-image.png',
         width: 1200,
         height: 630,
-        alt: 'UVAI — The Action Layer for Video',
+        alt: 'UVAI — Agentic Video Execution Platform',
       },
     ],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'UVAI — The Action Layer for Video',
-    description: 'Paste a YouTube URL. UVAI takes what is inside the video and builds from it — transcripts, typed events, action items, and agentic execution.',
+    title: 'UVAI — Video to Workflow',
+    description: 'Paste a YouTube URL. UVAI turns video evidence into useful workflows, exports, and deployable next steps.',
     images: ['/og-image.png'],
     creator: '@groupthinking',
   },
@@ -59,10 +69,8 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
-      { url: '/favicon.ico' },
       { url: '/icon.svg', type: 'image/svg+xml' },
     ],
-    apple: '/apple-touch-icon.png',
   },
   manifest: '/manifest.json',
 };
@@ -77,43 +85,7 @@ export const viewport: Viewport = {
   maximumScale: 5,
 };
 
-const jsonLd = {
-  '@context': 'https://schema.org',
-  '@graph': [
-    {
-      '@type': 'Organization',
-      '@id': `${SITE_URL}/#organization`,
-      name: 'UVAI',
-      url: SITE_URL,
-      logo: `${SITE_URL}/icon.svg`,
-      sameAs: ['https://github.com/groupthinking/EventRelay'],
-    },
-    {
-      '@type': 'WebSite',
-      '@id': `${SITE_URL}/#website`,
-      url: SITE_URL,
-      name: 'UVAI — The Action Layer for Video',
-      description:
-        'Paste a YouTube URL. UVAI extracts transcripts, typed events, and action items, then builds from them.',
-      publisher: { '@id': `${SITE_URL}/#organization` },
-    },
-    {
-      '@type': 'SoftwareApplication',
-      name: 'UVAI',
-      applicationCategory: 'DeveloperApplication',
-      operatingSystem: 'Web',
-      description:
-        'AI-powered video automation: transcripts, typed events, action items, and agentic execution. Open source via EventRelay.',
-      offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
-      url: SITE_URL,
-    },
-  ],
-};
-
-// Escape `<` so a stray "</script>" inside JSON values cannot break out of the
-// inline JSON-LD block. This is the React/Next-recommended safe pattern for
-// inline JSON without `dangerouslySetInnerHTML`.
-const jsonLdString = JSON.stringify(jsonLd).replace(/</g, '\\u003c');
+const shouldLoadAnalytics = process.env.VERCEL === '1';
 
 export default function RootLayout({
   children,
@@ -121,27 +93,20 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className="bg-void">
-      <body className="min-h-screen bg-void font-sans antialiased">
-        <script type="application/ld+json">{jsonLdString}</script>
-        {/* Skip to main content for keyboard/screen reader users */}
-        <a
-          href="#main"
-          className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:px-4 focus:py-2 focus:rounded-lg focus:bg-[#6af2de] focus:text-[#021a18] focus:font-bold"
-        >
-          Skip to main content
-        </a>
+    <html lang="en">
+      <body
+        className={`${inter.variable} ${jetBrainsMono.variable} ${spaceGrotesk.variable} min-h-screen bg-surface-950 font-sans antialiased`}
+      >
         {/* Global background effects */}
-        <div className="fixed inset-0 bg-mesh pointer-events-none" aria-hidden="true" />
-        <div className="fixed inset-0 noise pointer-events-none" aria-hidden="true" />
+        <div className="fixed inset-0 bg-mesh pointer-events-none" />
+        <div className="fixed inset-0 noise pointer-events-none" />
 
-        {/* Main content — id="main" lives on the layout wrapper so the
-            skip-to-main link works on every route, not just the homepage. */}
-        <div id="main" className="relative z-10">
+        {/* Main content */}
+        <div className="relative z-10">
           {children}
         </div>
-        <Analytics />
-        <SpeedInsights />
+        {shouldLoadAnalytics && <Analytics />}
+        {shouldLoadAnalytics && <SpeedInsights />}
       </body>
     </html>
   );

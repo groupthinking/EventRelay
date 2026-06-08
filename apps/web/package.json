@@ -6,9 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint src --ext .ts,.tsx --max-warnings 0",
-    "test": "vitest run",
-    "test:watch": "vitest"
+    "lint": "eslint src"
   },
   "dependencies": {
     "@dataconnect/generated": "file:src/dataconnect-generated",
@@ -23,7 +21,6 @@
     "clsx": "^2.1.0",
     "lucide-react": "^0.300.0",
     "next": "^16.2.7",
-    "next-auth": "^4.24.0",
     "openai": "^6.21.0",
     "react": "^18",
     "react-dom": "^18",
@@ -38,11 +35,18 @@
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "autoprefixer": "^10.0.1",
-    "eslint": "^8",
-    "eslint-config-next": "^15.4.1",
-    "postcss": "^8.5.11",
+    "eslint": "^9",
+    "eslint-config-next": "^16.2.7",
+    "postcss": "^8.5.10",
     "tailwindcss": "^3.4.1",
     "typescript": "^5",
     "vitest": "^4.1.2"
+  },
+  "overrides": {
+    "@protobufjs/utf8": "^1.1.1",
+    "postcss": "^8.5.10",
+    "protobufjs": "^7.6.2",
+    "qs": "^6.15.2",
+    "ws": "^8.21.0"
   }
 }

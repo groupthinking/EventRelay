@@ -13,6 +13,8 @@ import AgentDashboard from '@/components/AgentDashboard';
 import type { ExtractedEvent } from '@/lib/types';
 import { useDashboardStore } from '@/store/dashboard-store';
 import type { PipelineResult, Video } from '@/store/dashboard-store';
+import FeedbackWidget from '@/components/FeedbackWidget';
+import PreferencesPanel from '@/components/PreferencesPanel';
 
 // ============================================
 // Helper
@@ -333,6 +335,7 @@ function SplitView({
                   </div>
                 </section>
               )}
+              <FeedbackWidget videoId={video.id} tab="analysis" />
             </div>
           )}
 
@@ -351,6 +354,7 @@ function SplitView({
             hasTranscript ? (
               <div className="max-w-4xl mx-auto animate-fade-in-up">
                  <TranscriptViewer transcript={video.transcript!} />
+                 <FeedbackWidget videoId={video.id} tab="transcript" />
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center h-full text-center py-20">
@@ -370,6 +374,7 @@ function SplitView({
                 events={video.events || []}
                 onExtract={onExtractEvents ? () => onExtractEvents(video.id) : undefined}
               />
+              <FeedbackWidget videoId={video.id} tab="actions" />
             </div>
           )}
 
@@ -681,6 +686,9 @@ function DashboardContent() {
               <p className="mb-8 max-w-lg" style={{ color: 'rgba(248,245,253,0.4)' }}>
                 Paste a YouTube URL to extract intelligence, generate transcripts, and identify actionable events.
               </p>
+              <div className="w-full max-w-2xl mb-4">
+                <PreferencesPanel />
+              </div>
               <form onSubmit={(e) => { e.preventDefault(); handleAddVideo(); }} className="w-full max-w-2xl">
                 <div className="flex gap-2 p-2 rounded-xl transition-all" style={{ background: 'rgba(25, 25, 31, 0.8)', border: '1px solid rgba(106, 242, 222, 0.15)' }}>
                   <input
