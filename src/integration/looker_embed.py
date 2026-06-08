@@ -52,10 +52,10 @@ class LookerEmbedService:
             time_str,
             str(session_length),
             user_id,
-            external_group_id,
             json_permissions,
             json_models,
             json_group_ids,
+            external_group_id,
             json_user_attributes
         ])
 
