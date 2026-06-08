@@ -2,7 +2,7 @@
  * EventRelay E2E Test Suite
  *
  * Tests the live deployment at BASE_URL (default: https://uvai.io) for:
- *   1. Homepage / Template Gallery rendering
+ *   1. Homepage smoke check + Template Gallery (/features) rendering
  *   2. SSE pipeline stream — full end-to-end with a real YouTube URL
  *   3. SSE stream closes properly (no 95% hang regression)
  *   4. CloudEvent schema compliance in SSE events
@@ -93,9 +93,16 @@ describe('EventRelay E2E — Live Deployment', () => {
     }
   });
 
-  // ── 1. Template Gallery Homepage ──────────────────────────────────
+  // ── 1. Template Gallery / Feature Showcase ────────────────────────
+  // The homepage (BASE_URL) is the interactive Video Workflow Studio and
+  // intentionally does NOT render the template gallery. The workflow /
+  // template content lives on the /features page, so the content
+  // assertions below target /features (the homepage keeps a generic
+  // 200/HTML smoke check).
 
   describe('Template Gallery', () => {
+    const FEATURES_URL = `${BASE_URL}/features`;
+
     it('homepage returns 200 with HTML', async () => {
       const res = await fetchWithTimeout(BASE_URL);
       expect(res.status).toBe(200);
@@ -103,10 +110,11 @@ describe('EventRelay E2E — Live Deployment', () => {
       expect(ct).toContain('text/html');
     });
 
-    it('homepage contains template gallery markup', async () => {
-      const res = await fetchWithTimeout(BASE_URL);
+    it('features page contains template/workflow markup', async () => {
+      const res = await fetchWithTimeout(FEATURES_URL);
+      expect(res.status).toBe(200);
       const html = await res.text();
-      // The template gallery should have at least some of these workflow names
+      // The features page should reference at least some of these workflow names
       const expectedTemplates = [
         'Tutorial',
         'Conference',
@@ -121,12 +129,12 @@ describe('EventRelay E2E — Live Deployment', () => {
       expect(found.length).toBeGreaterThanOrEqual(3);
     });
 
-    it('homepage contains at least 5 template cards', async () => {
-      const res = await fetchWithTimeout(BASE_URL);
+    it('features page surfaces at least 5 workflow/template indicators', async () => {
+      const res = await fetchWithTimeout(FEATURES_URL);
+      expect(res.status).toBe(200);
       const html = await res.text();
-      // Count template card patterns — look for the workflow template structure
-      // Each template card has a "Run" or "Launch" or similar CTA
-      // We check for multiple distinct template-related content blocks
+      // Count distinct template-related content blocks across the feature
+      // sections and the shared footer use-case list.
       const templateIndicators = [
         'youtube',
         'tutorial',
