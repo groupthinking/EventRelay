@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { publishEvent, EventTypes } from '@/lib/cloudevents';
 import { analyzeVideoWithGemini } from '@/lib/gemini-video-analyzer';
 import { hasGeminiKey } from '@/lib/gemini-client';
+import { resolveVideoUrl } from '@/lib/video-url-request';
 
 const rawBackendUrl = process.env.BACKEND_URL || '';
 const BACKEND_URL = rawBackendUrl.startsWith('http') ? rawBackendUrl : 'http://localhost:8000';
@@ -78,12 +79,19 @@ async function checkBackendHealth(timeoutMs = 1500): Promise<{ configured: boole
 export async function POST(request: Request) {
   let videoUrl: string | undefined;
   try {
-    const body = await request.json();
-    const { url, project_type = 'web', deployment_target = 'vercel', features } = body;
+    const body = await request.json() as Record<string, unknown>;
+    const url = resolveVideoUrl(body);
+    const { project_type = 'web', deployment_target = 'vercel', features } = body;
     videoUrl = url;
 
     if (!url) {
-      return NextResponse.json({ error: 'Video URL is required' }, { status: 400 });
+      return NextResponse.json(
+        {
+          error: 'Video URL is required',
+          accepted_fields: ['url', 'youtubeUrl', 'videoUrl', 'video_url'],
+        },
+        { status: 400 },
+      );
     }
 
     await publishEvent(EventTypes.VIDEO_RECEIVED, { url, pipeline: 'end-to-end' }, url);

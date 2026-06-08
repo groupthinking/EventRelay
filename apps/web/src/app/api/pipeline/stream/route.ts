@@ -23,6 +23,7 @@ import { analyzeVideoWithGemini, type VideoAnalysisResult } from '@/lib/gemini-v
 import { hasGeminiKey } from '@/lib/gemini-client';
 import { publishEvent, EventTypes } from '@/lib/cloudevents';
 import { saveTrainingExample, TUNING_THRESHOLD } from '@/lib/training-store';
+import { resolveVideoUrl } from '@/lib/video-url-request';
 
 const rawBackendUrl = process.env.BACKEND_URL || '';
 const BACKEND_URL = rawBackendUrl.startsWith('http') ? rawBackendUrl : '';
@@ -505,10 +506,13 @@ export async function POST(request: Request) {
       });
     }
 
-    const { url } = body;
+    const url = resolveVideoUrl(body);
 
-    if (typeof url !== 'string' || !url.trim()) {
-      return new Response(JSON.stringify({ error: 'Video URL is required' }), {
+    if (!url) {
+      return new Response(JSON.stringify({
+        error: 'Video URL is required',
+        accepted_fields: ['url', 'youtubeUrl', 'videoUrl', 'video_url'],
+      }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' },
       });

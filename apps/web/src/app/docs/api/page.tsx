@@ -7,7 +7,7 @@ export const metadata: Metadata = {
   title: 'API Reference',
   description:
     'HTTP reference for the UVAI / EventRelay public API: transcription, event extraction, agent pipelines, and video metadata.',
-  alternates: { canonical: '/api/docs' },
+  alternates: { canonical: '/docs/api' },
   robots: { index: true, follow: true },
 };
 
@@ -23,7 +23,7 @@ const ENDPOINTS: Endpoint[] = [
   { method: 'POST', path: '/api/transcribe', summary: 'Fetch a transcript for a YouTube URL.', body: '{ "url": "https://youtu.be/..." }' },
   { method: 'POST', path: '/api/extract-events', summary: 'Extract typed events from a transcript.' },
   { method: 'GET', path: '/api/pipeline', summary: 'Inspect available pipeline stages.' },
-  { method: 'POST', path: '/api/pipeline', summary: 'Run the full intake → events → agents pipeline.' },
+  { method: 'POST', path: '/api/pipeline', summary: 'Run the full intake to agents pipeline.' },
   { method: 'POST', path: '/api/pipeline/stream', summary: 'Streaming variant of /api/pipeline (SSE).' },
   { method: 'POST', path: '/api/chat', summary: 'Conversational query over an analyzed video.' },
   { method: 'GET', path: '/api/video', summary: 'List recently analyzed videos.' },

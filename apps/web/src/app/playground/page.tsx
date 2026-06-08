@@ -242,7 +242,7 @@ export default function APIPlaygroundPage() {
         subtitle="API Playground"
         rightSlot={
           <Link
-            href="/api/docs"
+            href="/docs/api"
             className="px-4 py-2 rounded-lg bg-white/5 border border-white/10 text-sm hover:bg-white/10 transition"
           >
             Full API Docs →

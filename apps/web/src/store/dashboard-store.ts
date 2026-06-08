@@ -152,7 +152,7 @@ async function fetchJsonWithTimeout(
   timeoutMs: number,
 ): Promise<{ response: Response; data: Record<string, unknown>; text: string }> {
   const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(input, { ...init, signal: controller.signal });
     const text = await response.text();
@@ -166,7 +166,7 @@ async function fetchJsonWithTimeout(
     }
     return { response, data, text };
   } finally {
-    window.clearTimeout(timeout);
+    clearTimeout(timeout);
   }
 }
 
@@ -356,10 +356,10 @@ function applyStreamEvent(
  */
 async function streamPipeline(url: string, id: string, ctx: StreamCtx): Promise<void> {
   const controller = new AbortController();
-  let timeout = window.setTimeout(() => controller.abort(), 8000);
+  let timeout = setTimeout(() => controller.abort(), 8000);
   const resetTimeout = () => {
-    window.clearTimeout(timeout);
-    timeout = window.setTimeout(() => controller.abort(), 8000);
+    clearTimeout(timeout);
+    timeout = setTimeout(() => controller.abort(), 8000);
   };
   const res = await fetch('/api/pipeline/stream', {
     method: 'POST',
@@ -410,7 +410,7 @@ async function streamPipeline(url: string, id: string, ctx: StreamCtx): Promise<
     }
     throw error;
   } finally {
-    window.clearTimeout(timeout);
+    clearTimeout(timeout);
   }
 }
 

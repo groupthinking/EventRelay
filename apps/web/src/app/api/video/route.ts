@@ -5,6 +5,7 @@ import { hasGeminiKey } from '@/lib/gemini-client';
 import { saveTrainingExample } from '@/lib/training-store';
 import { fetchTranscript } from '@/lib/transcription-service';
 import { extractEvents, type ExtractionData } from '@/lib/event-extraction-service';
+import { resolveVideoUrl } from '@/lib/video-url-request';
 
 // Backend URL with validation - skip if not a valid URL
 const rawBackendUrl = process.env.BACKEND_URL || '';
@@ -23,12 +24,18 @@ const BACKEND_AVAILABLE = rawBackendUrl.startsWith('http');
 export async function POST(request: Request) {
   let videoUrl: string | undefined;
   try {
-    const body = await request.json();
-    const { url } = body;
+    const body = await request.json() as Record<string, unknown>;
+    const url = resolveVideoUrl(body);
     videoUrl = url;
 
     if (!url) {
-      return NextResponse.json({ error: 'Video URL is required' }, { status: 400 });
+      return NextResponse.json(
+        {
+          error: 'Video URL is required',
+          accepted_fields: ['url', 'youtubeUrl', 'videoUrl', 'video_url'],
+        },
+        { status: 400 },
+      );
     }
 
     await publishEvent(EventTypes.VIDEO_RECEIVED, { url }, url);
