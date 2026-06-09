@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@dataconnect/generated": "file:src/dataconnect-generated",
-    "@opentelemetry/api": "^1.7.0",
+    "@opentelemetry/api": "^1.9.1",
     "pino": "^8.17.0",
     "pino-pretty": "^10.3.0"
   },
