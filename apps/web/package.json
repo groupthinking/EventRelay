@@ -23,7 +23,7 @@
     "next": "^16.2.7",
     "next-auth": "^4.24.14",
     "openai": "^6.21.0",
-    "react": "^18",
+    "react": "^19",
     "react-dom": "^18",
     "stripe": "^14.0.0",
     "tailwind-merge": "^2.2.0",
@@ -33,7 +33,7 @@
   },
   "devDependencies": {
     "@types/node": "^20",
-    "@types/react": "^18",
+    "@types/react": "^19",
     "@types/react-dom": "^18",
     "autoprefixer": "^10.0.1",
     "eslint": "^9",
