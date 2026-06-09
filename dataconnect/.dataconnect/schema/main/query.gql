@@ -192,5 +192,10 @@ extend type Query {
     Limit the number of similar vectors returned (defaults to 100 rows).
     """
     limit: Int = 100
+
+    """
+    Number of rows to skip before starting to return the results.
+    """
+    offset: Int
   ): [VideoEmbedding!]! @fdc_generated(from: "VideoEmbedding.embedding", purpose: QUERY_MULTIPLE_BY_SIMILARITY)
 }

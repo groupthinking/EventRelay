@@ -13,6 +13,8 @@ import AgentDashboard from '@/components/AgentDashboard';
 import type { ExtractedEvent } from '@/lib/types';
 import { useDashboardStore } from '@/store/dashboard-store';
 import type { PipelineResult, Video } from '@/store/dashboard-store';
+import FeedbackWidget from '@/components/FeedbackWidget';
+import PreferencesPanel from '@/components/PreferencesPanel';
 
 // ============================================
 // Helper
@@ -21,43 +23,6 @@ function getYouTubeEmbedUrl(url: string) {
   if (!url) return null;
   const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([^&?]+)/);
   return match ? `https://www.youtube.com/embed/${match[1]}` : null;
-}
-
-// ============================================
-// Processing Stage Indicator
-// ============================================
-function ProcessingStage({
-  stage,
-  isActive,
-  isComplete
-}: {
-  stage: string;
-  isActive: boolean;
-  isComplete: boolean;
-}) {
-  return (
-    <div
-      className={clsx(
-        'flex items-center gap-2 px-3 py-1.5 text-xs font-bold uppercase tracking-widest transition-all duration-300',
-        isComplete && 'text-green-400',
-        isActive && 'text-[#6af2de]',
-        !isComplete && !isActive && 'text-white/25'
-      )}
-      style={{
-        background: isComplete ? 'rgba(34, 197, 94, 0.08)' : isActive ? 'rgba(106, 242, 222, 0.08)' : 'rgba(37, 37, 44, 0.4)',
-        borderLeft: isComplete ? '2px solid #22c55e' : isActive ? '2px solid #6af2de' : '2px solid transparent',
-      }}
-    >
-      {isComplete && <span className="text-green-400">✓</span>}
-      {isActive && (
-        <span className="relative flex h-2 w-2">
-          <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style={{ background: '#6af2de' }} />
-          <span className="relative inline-flex rounded-full h-2 w-2" style={{ background: '#6af2de' }} />
-        </span>
-      )}
-      {stage}
-    </div>
-  );
 }
 
 // ============================================
@@ -98,11 +63,6 @@ function SplitView({
   const hasInsights = video.insights && (video.insights.summary !== 'Analysis complete' || video.insights.actions.length > 0);
   const hasTranscript = !!video.transcript;
   const hasEvents = video.events && video.events.length > 0;
-
-  const stages = video.pipelineResult !== undefined
-    ? ['Ingest', 'Generate', 'Deploy', 'Live']
-    : ['Ingest', 'Transcribe', 'Analyze', 'Extract'];
-  const currentStage = Math.floor((video.progress / 100) * stages.length);
 
   return (
     <div className="flex flex-1 overflow-hidden">
@@ -161,24 +121,6 @@ function SplitView({
             </span>
             {video.status === 'processing' && <span className="text-sm font-mono" style={{ color: '#6af2de' }}>{video.progress}%</span>}
           </div>
-
-          {/* Processing stages */}
-          {video.status === 'processing' && (
-            <div className="flex flex-col gap-1 p-5" style={{ background: 'rgba(37, 37, 44, 0.4)', backdropFilter: 'blur(20px)' }}>
-              <div className="flex items-center gap-2 mb-3">
-                <div className="w-1 h-4" style={{ background: '#6af2de' }} />
-                <h3 className="font-heading text-xs font-bold uppercase tracking-widest" style={{ color: '#f8f5fd' }}>Processing Pipeline</h3>
-              </div>
-              {stages.map((stage, i) => (
-                <ProcessingStage
-                  key={stage}
-                  stage={stage}
-                  isActive={i === currentStage}
-                  isComplete={i < currentStage}
-                />
-              ))}
-            </div>
-          )}
 
           {/* Export action */}
           {video.transcript && (
@@ -333,6 +275,7 @@ function SplitView({
                   </div>
                 </section>
               )}
+              <FeedbackWidget videoId={video.id} tab="analysis" />
             </div>
           )}
 
@@ -351,6 +294,7 @@ function SplitView({
             hasTranscript ? (
               <div className="max-w-4xl mx-auto animate-fade-in-up">
                  <TranscriptViewer transcript={video.transcript!} />
+                 <FeedbackWidget videoId={video.id} tab="transcript" />
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center h-full text-center py-20">
@@ -370,6 +314,7 @@ function SplitView({
                 events={video.events || []}
                 onExtract={onExtractEvents ? () => onExtractEvents(video.id) : undefined}
               />
+              <FeedbackWidget videoId={video.id} tab="actions" />
             </div>
           )}
 
@@ -489,11 +434,6 @@ function VideoCard({
   video: Video;
   onClick: () => void;
 }) {
-  const stages = video.pipelineResult !== undefined
-    ? ['Ingest', 'Generate', 'Deploy', 'Live']
-    : ['Ingest', 'Transcribe', 'Analyze', 'Extract'];
-  const currentStage = Math.floor((video.progress / 100) * stages.length);
-
   return (
     <div
       onClick={onClick}
@@ -554,14 +494,6 @@ function VideoCard({
           {video.title}
         </h3>
         <p className="text-xs text-white/40 truncate mb-4">{video.url}</p>
-
-        {video.status === 'processing' && (
-          <div className="flex flex-wrap gap-1.5 mt-auto">
-            {stages.map((stage, i) => (
-              <ProcessingStage key={stage} stage={stage} isActive={i === currentStage} isComplete={i < currentStage} />
-            ))}
-          </div>
-        )}
 
         {video.status === 'complete' && video.insights && (
           <div className="mt-auto flex flex-wrap gap-2 pt-4 border-t border-white/[0.05]">
@@ -639,12 +571,12 @@ function DashboardContent() {
       <Nav
         subtitle="Dashboard"
         rightSlot={
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center justify-end gap-2">
             <Link
               href="/dashboard/agents"
               className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-xs text-indigo-400 font-bold uppercase tracking-wider hover:bg-indigo-500/20 transition-all"
             >
-              ⚡ Agent Pipeline
+              ⚡ <span className="hidden sm:inline">Agent Pipeline</span><span className="sm:hidden">Agents</span>
             </Link>
             {processingCount > 0 ? (
               <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary-500/10 border border-primary-500/20">
@@ -672,17 +604,20 @@ function DashboardContent() {
           onExtractEvents={extractEvents}
         />
       ) : (
-        <div className="flex-1 overflow-y-auto p-6 lg:p-10">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-10">
           <div className="max-w-6xl mx-auto space-y-10">
             {/* Input Section */}
-            <div className="p-10 flex flex-col items-center justify-center text-center" style={{ background: 'rgba(25, 25, 31, 0.8)', border: '1px solid rgba(106, 242, 222, 0.08)' }}>
+            <div className="p-6 sm:p-10 flex flex-col items-center justify-center text-center" style={{ background: 'rgba(25, 25, 31, 0.8)', border: '1px solid rgba(106, 242, 222, 0.08)' }}>
               <span className="text-[10px] tracking-[0.3em] uppercase mb-4 block" style={{ color: '#6af2de', fontFamily: 'var(--font-heading)' }}>Video Intelligence Engine</span>
               <h1 className="font-heading text-4xl font-bold tracking-tighter mb-3" style={{ color: '#f8f5fd' }}>Analyze New Video</h1>
               <p className="mb-8 max-w-lg" style={{ color: 'rgba(248,245,253,0.4)' }}>
                 Paste a YouTube URL to extract intelligence, generate transcripts, and identify actionable events.
               </p>
+              <div className="w-full max-w-2xl mb-4">
+                <PreferencesPanel />
+              </div>
               <form onSubmit={(e) => { e.preventDefault(); handleAddVideo(); }} className="w-full max-w-2xl">
-                <div className="flex gap-2 p-2 rounded-xl transition-all" style={{ background: 'rgba(25, 25, 31, 0.8)', border: '1px solid rgba(106, 242, 222, 0.15)' }}>
+                <div className="flex flex-col gap-2 p-2 rounded-xl transition-all sm:flex-row" style={{ background: 'rgba(25, 25, 31, 0.8)', border: '1px solid rgba(106, 242, 222, 0.15)' }}>
                   <input
                     type="text"
                     value={videoUrl}
@@ -693,7 +628,7 @@ function DashboardContent() {
                   <button
                     type="submit"
                     disabled={!videoUrl.trim()}
-                    className="px-8 py-3 font-bold text-sm transition-all active:scale-95 disabled:opacity-30"
+                    className="px-6 py-3 font-bold text-sm transition-all active:scale-95 disabled:opacity-30 sm:px-8"
                     style={{ background: 'linear-gradient(135deg, #6af2de, #10b7a5)', color: '#002b26' }}
                   >
                     Analyze Footage
@@ -704,12 +639,12 @@ function DashboardContent() {
 
             {/* Library Section */}
             <div>
-              <div className="flex items-center justify-between mb-6">
+              <div className="flex flex-col gap-4 mb-6 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-center gap-3">
                   <div className="w-1 h-6" style={{ background: '#6af2de' }} />
                   <h2 className="font-heading text-xl font-bold tracking-tight" style={{ color: '#f8f5fd' }}>Your Library</h2>
                 </div>
-                <div className="flex p-1" style={{ background: 'rgba(25, 25, 31, 0.8)', border: '1px solid rgba(72, 71, 77, 0.15)' }}>
+                <div className="flex flex-wrap gap-1 p-1 rounded-xl" style={{ background: 'rgba(25, 25, 31, 0.8)', border: '1px solid rgba(72, 71, 77, 0.15)' }}>
                   {(['all', 'processing', 'complete', 'failed'] as const).map((f) => (
                     <button
                       key={f}

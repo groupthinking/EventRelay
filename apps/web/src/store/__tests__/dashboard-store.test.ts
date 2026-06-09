@@ -297,7 +297,7 @@ describe('dashboard-store · processVideo (real SSE pipeline)', () => {
     expect(video.insights?.summary).toBe('Recovered');
   });
 
-  it('marks the video failed when both the stream and direct analysis fail', async () => {
+  it('creates a local workflow package when both the stream and direct analysis fail', async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(sseResponse([], false)) // stream 503
@@ -307,9 +307,11 @@ describe('dashboard-store · processVideo (real SSE pipeline)', () => {
     const id = await store().processVideo('https://youtu.be/x');
     const video = store().videos.find((v) => v.id === id)!;
 
-    expect(video.status).toBe('failed');
-    expect(video.progress).toBe(0);
-    expect(store().activities.some((a) => a.type === 'error')).toBe(true);
+    expect(video.status).toBe('complete');
+    expect(video.progress).toBe(100);
+    expect(video.title).toContain('Workflow brief');
+    expect(video.insights?.summary).toContain('fallback package');
+    expect(store().activities.some((a) => a.event.includes('starter workflow package'))).toBe(true);
   });
 });
 
@@ -414,10 +416,12 @@ describe('dashboard-store · deployPipeline (mocked fetch)', () => {
     expect(store().activities.some((a) => a.event.includes('live.example'))).toBe(true);
   });
 
-  it('marks the video failed when the pipeline call errors', async () => {
+  it('creates a deploy handoff when the pipeline call errors', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(jsonResponse({}, false, 500)));
     await store().deployPipeline('https://youtu.be/x');
-    expect(store().videos[0].status).toBe('failed');
+    expect(store().videos[0].status).toBe('complete');
+    expect(store().videos[0].title).toContain('Deploy handoff');
+    expect(store().videos[0].pipelineResult?.build_status).toBe('handoff_ready_backend_unavailable');
   });
 });
 

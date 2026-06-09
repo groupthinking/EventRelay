@@ -14,6 +14,7 @@ interface NavProps {
 }
 
 const NAV_LINKS = [
+  { href: '/', label: 'Studio' },
   { href: '/features', label: 'Features' },
   { href: '/pricing', label: 'Pricing' },
   { href: '/prototype', label: 'Prototype' },
@@ -26,24 +27,18 @@ export default function Nav({ rightSlot, subtitle, fixed = false }: NavProps) {
   return (
     <nav
       className={clsx(
-        'flex items-center justify-between px-6 lg:px-12 py-4 border-b border-white/[0.05] z-50',
+        'flex flex-wrap items-center justify-between gap-3 px-6 lg:px-12 py-4 border-b border-white/[0.05] z-50',
         fixed
           ? 'fixed top-0 left-0 right-0 bg-surface-950/80 backdrop-blur-xl'
           : 'bg-surface-950/80 backdrop-blur-xl'
       )}
     >
-      <div className="flex items-center gap-4">
-        <Link href="/" className="flex items-center gap-3 group">
-          <div
-            className="w-8 h-8 rounded-lg flex items-center justify-center transition-transform duration-200 group-hover:scale-105"
-            style={{ border: '2px solid #6af2de', color: '#6af2de' }}
-            aria-hidden
-          >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M8 5v14l11-7z" />
-            </svg>
+      <div className="flex min-w-0 items-center gap-3 sm:gap-4">
+        <Link href="/" className="flex shrink-0 items-center gap-3 group">
+          <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center font-black text-base shadow-lg shadow-primary-500/25 transition-transform group-hover:scale-105">
+            U
           </div>
-          <span className="font-bold text-lg tracking-tight font-heading">UVAI</span>
+          <span className="font-bold text-lg font-heading">UVAI</span>
         </Link>
 
         {subtitle && (
@@ -72,7 +67,7 @@ export default function Nav({ rightSlot, subtitle, fixed = false }: NavProps) {
         </div>
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex min-w-0 flex-wrap items-center justify-end gap-2 sm:gap-3">
         {rightSlot || (
           <Link href="/dashboard" className="btn btn-primary py-2 px-5 text-sm">
             Dashboard

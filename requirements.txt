@@ -64,7 +64,7 @@ google-api-python-client>=2.100.0
 yt-dlp>=2023.7.6
 ffmpeg-python>=0.2.0
 qrcode[pil]>=7.0
-opencv-python-headless>=4.8.0
+opencv-python-headless>=4.13.0.92
 
 # Async utilities
 asyncio-throttle>=1.0.0

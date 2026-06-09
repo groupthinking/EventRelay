@@ -23,11 +23,15 @@ import { analyzeVideoWithGemini, type VideoAnalysisResult } from '@/lib/gemini-v
 import { hasGeminiKey } from '@/lib/gemini-client';
 import { publishEvent, EventTypes } from '@/lib/cloudevents';
 import { saveTrainingExample, TUNING_THRESHOLD } from '@/lib/training-store';
+import { resolveVideoUrl } from '@/lib/video-url-request';
 
 const rawBackendUrl = process.env.BACKEND_URL || '';
 const BACKEND_URL = rawBackendUrl.startsWith('http') ? rawBackendUrl : '';
 const JOB_POLL_INTERVAL_MS = 2000;
 const MAX_JOB_POLL_ATTEMPTS = 90;
+
+export const runtime = 'nodejs';
+export const maxDuration = 240;
 
 /** Shape of each SSE message sent to the frontend. */
 interface AgentStreamEvent {
@@ -60,6 +64,15 @@ interface BackendVideoJobStatus {
   transcript?: string;
   metadata?: Record<string, any>;
   error?: string;
+}
+
+async function readJsonBody(request: Request): Promise<Record<string, unknown> | null> {
+  try {
+    const body = await request.json();
+    return body && typeof body === 'object' ? body as Record<string, unknown> : null;
+  } catch {
+    return null;
+  }
 }
 
 function makeEvent(event: AgentStreamEvent): string {
@@ -148,6 +161,9 @@ async function pollBackendJob(
       const response = await fetch(statusUrl, {
         cache: 'no-store',
         headers: { 'Content-Type': 'application/json' },
+        // Bound each poll so a hung status endpoint can't stall the SSE stream;
+        // a timeout throws → caught below → retried within MAX_JOB_POLL_ATTEMPTS.
+        signal: AbortSignal.timeout(JOB_POLL_INTERVAL_MS * 2),
       });
 
       if (!response.ok) {
@@ -485,11 +501,21 @@ async function* generateAgentEvents(
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
-    const { url } = body;
+    const body = await readJsonBody(request);
+    if (!body) {
+      return new Response(JSON.stringify({ error: 'Valid JSON body is required' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    const url = resolveVideoUrl(body);
 
     if (!url) {
-      return new Response(JSON.stringify({ error: 'Video URL is required' }), {
+      return new Response(JSON.stringify({
+        error: 'Video URL is required',
+        accepted_fields: ['url', 'youtubeUrl', 'videoUrl', 'video_url'],
+      }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' },
       });
@@ -586,7 +612,7 @@ export async function POST(request: Request) {
             try {
               const response = await fetch(`${BACKEND_URL}/api/v1/transcript-action`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', ...(process.env.EVENTRELAY_API_KEY ? { 'X-API-Key': process.env.EVENTRELAY_API_KEY } : {}) },
                 body: JSON.stringify({ video_url: url, language: 'en' }),
                 signal: AbortSignal.timeout(120_000),
               });

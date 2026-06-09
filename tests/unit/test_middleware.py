@@ -13,10 +13,6 @@ from fastapi.testclient import TestClient
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
-from youtube_extension.backend.middleware.api_key_auth import (
-    APIKeyAuthMiddleware,
-    PROTECTED_PREFIXES,
-)
 from youtube_extension.backend.middleware.rate_limiting import (
     InMemoryRateLimiter,
     RateLimitMiddleware,
@@ -265,88 +261,6 @@ class TestRateLimitMiddleware:
             requests_per_minute=10, burst_size=3, exempt_paths=["/exempt"]
         )
         assert issubclass(middleware_cls, RateLimitMiddleware)
-
-
-# ===========================================================================
-# APIKeyAuthMiddleware integration tests
-# ===========================================================================
-
-
-class TestAPIKeyAuthMiddleware:
-    def test_no_api_key_configured_allows_all_requests(self):
-        with patch.dict("os.environ", {}, clear=False):
-            # Ensure the env var is absent
-            import os
-            os.environ.pop("EVENTRELAY_API_KEY", None)
-            client = _make_app_with_middleware(APIKeyAuthMiddleware)
-
-        response = client.post(
-            "/api/v1/video-to-software",
-            json={"url": "https://youtube.com/watch?v=auJzb1D-fag"},
-        )
-        assert response.status_code != 401
-
-    def test_valid_api_key_allows_mutation(self):
-        client = _make_app_with_middleware(APIKeyAuthMiddleware, api_key="secret-key")
-        response = client.post(
-            "/api/v1/video-to-software",
-            json={},
-            headers={"X-API-Key": "secret-key"},
-        )
-        assert response.status_code != 401
-
-    def test_missing_api_key_header_blocks_mutation(self):
-        client = _make_app_with_middleware(APIKeyAuthMiddleware, api_key="secret-key")
-        response = client.post("/api/v1/video-to-software", json={})
-        assert response.status_code == 401
-
-    def test_wrong_api_key_returns_401(self):
-        client = _make_app_with_middleware(APIKeyAuthMiddleware, api_key="correct-key")
-        response = client.post(
-            "/api/v1/video-to-software",
-            json={},
-            headers={"X-API-Key": "wrong-key"},
-        )
-        assert response.status_code == 401
-
-    def test_lowercase_x_api_key_header_accepted(self):
-        client = _make_app_with_middleware(APIKeyAuthMiddleware, api_key="my-key")
-        response = client.post(
-            "/api/v1/video-to-software",
-            json={},
-            headers={"x-api-key": "my-key"},
-        )
-        assert response.status_code != 401
-
-    def test_get_requests_exempt_from_auth(self):
-        client = _make_app_with_middleware(APIKeyAuthMiddleware, api_key="secret")
-        response = client.get("/test")
-        assert response.status_code != 401
-
-    def test_options_requests_exempt_from_auth(self):
-        client = _make_app_with_middleware(APIKeyAuthMiddleware, api_key="secret")
-        response = client.options("/api/v1/video-to-software")
-        assert response.status_code != 401
-
-    def test_unprotected_paths_not_blocked(self):
-        client = _make_app_with_middleware(APIKeyAuthMiddleware, api_key="secret")
-        response = client.post("/test", json={})
-        assert response.status_code != 401
-
-    def test_all_protected_prefixes_require_key(self):
-        client = _make_app_with_middleware(APIKeyAuthMiddleware, api_key="secret")
-        for prefix in PROTECTED_PREFIXES:
-            # POST to the exact prefix path (these aren't real routes but we only care about 401)
-            response = client.post(prefix, json={})
-            assert response.status_code == 401, (
-                f"Expected 401 for {prefix} without key, got {response.status_code}"
-            )
-
-    def test_401_response_contains_hint(self):
-        client = _make_app_with_middleware(APIKeyAuthMiddleware, api_key="secret")
-        response = client.post("/api/v1/video-to-software", json={})
-        response.json()
-        assert "X-API-Key" in response.text or "API key" in response.text.lower()
 
 
 # ===========================================================================

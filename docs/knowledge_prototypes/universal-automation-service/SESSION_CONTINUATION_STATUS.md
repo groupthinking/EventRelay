@@ -76,7 +76,7 @@ Resumed work on Universal Automation Service after context summary. The previous
 5. ❌ **Hybrid Mode** - Requires all services running
 
 ### Known Issues from Previous Session
-1. **API Key Confusion** - Multiple keys tried, one working (`AIzaSyAdaiRnkCVDq_-ac-iDiTPt_KLvT-MW-JY`)
+1. **API Key Confusion** - Multiple keys tried, one working (`REDACTED_GOOGLE_API_KEY_ROTATE`)
 2. **Rate Limiting** - 15 RPM free tier limit requires careful request pacing
 3. **NumPy Conflict** - Resolved with virtual environment
 4. **EventRelay Imports** - Requires service-based architecture
@@ -345,7 +345,7 @@ To achieve the user's vision ("VIDEO TO SCALING AGENTS, WORK FLOWS, BUSINESSES T
 ```bash
 cd /Users/garvey/Dev/OpenAI_Hub/universal-automation-service
 source venv/bin/activate
-export GEMINI_API_KEY="AIzaSyAdaiRnkCVDq_-ac-iDiTPt_KLvT-MW-JY"
+export GEMINI_API_KEY="REDACTED_GOOGLE_API_KEY_ROTATE"
 
 # Test with Logan Kilpatrick video (known good result)
 python3 universal_coordinator.py "https://youtu.be/jawdcPoZJmI" --mode gemini --no-deploy

@@ -12,6 +12,12 @@ This directory contains comprehensive guides for deploying and managing EventRel
   - Total time: 20 minutes + DNS propagation
 
 ### 📚 Complete Guides
+- **[VERCEL_PRODUCTION_RUNBOOK.md](./VERCEL_PRODUCTION_RUNBOOK.md)** - Current UVAI launch-readiness runbook
+  - Vercel project and production domains
+  - Incident response and rollback path
+  - Code-verified controls vs dashboard/provider gates
+  - Post-deploy smoke checks
+
 - **[DOMAIN_CONSOLIDATION.md](./DOMAIN_CONSOLIDATION.md)** - Full domain consolidation documentation
   - DNS configuration for uvai.io
   - Vercel project setup
@@ -50,8 +56,8 @@ All these URLs redirect to https://uvai.io:
 
 ### Frontend (Vercel)
 - **Platform**: Vercel
-- **Framework**: Next.js 14
-- **Build Command**: `npm run build`
+- **Framework**: Next.js 16
+- **Build Command**: `npm run build:web`
 - **Environment Variables**: See [DOMAIN_CONSOLIDATION.md](./DOMAIN_CONSOLIDATION.md#vercel-configuration)
 
 ### Backend (Google Cloud Run)

@@ -5,6 +5,6 @@ export async function GET() {
     name: 'EventRelay API',
     version: '2.0.0',
     status: 'operational',
-    documentation: '/api/docs',
+    documentation: '/docs/api',
   });
 }

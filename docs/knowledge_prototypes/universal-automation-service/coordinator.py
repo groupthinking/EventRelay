@@ -225,8 +225,12 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    # Set Gemini API key if provided
-    gemini_key = args.gemini_key or "AIzaSyDu5GN_IxRFg3Ue8SYXSNWkZi-50pwDgS0"
+    # Resolve Gemini API key from flag or env; fail closed only for modes that
+    # always require Gemini. "auto" can fall back to EventRelay via
+    # _select_best_mode(), so it must not hard-require a key here.
+    gemini_key = args.gemini_key or os.getenv("GEMINI_API_KEY")
+    if args.mode in {"gemini", "hybrid"} and not gemini_key:
+        parser.error("gemini and hybrid modes require --gemini-key or the GEMINI_API_KEY env var")
 
     coordinator = UniversalAutomationCoordinator(
         processing_mode=args.mode,
