@@ -96,12 +96,25 @@ async function runWithOpenAI(opts: RunActionAgentOptions, ctx: ToolContext): Pro
     for (const call of calls) {
       const tool = getTool(call.name);
       let input: Record<string, unknown> = {};
+      let result: ActionToolResult;
+
       try {
         input = call.arguments ? JSON.parse(call.arguments) : {};
-      } catch {
-        input = {};
+      } catch (err) {
+        result = {
+          summary: `Failed to parse tool arguments: ${err instanceof Error ? err.message : String(err)}`,
+          isError: true,
+        };
+        actions.push(toAction(call.name, input, result));
+        toolOutputs.push({
+          type: 'function_call_output',
+          call_id: call.call_id,
+          output: JSON.stringify(result),
+        });
+        continue;
       }
-      const result: ActionToolResult = tool
+
+      result = tool
         ? await tool.execute(input, ctx)
         : { summary: `Unknown tool: ${call.name}`, isError: true };
 
