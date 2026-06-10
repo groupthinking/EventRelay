@@ -2,8 +2,10 @@
   "openapi": "3.1.0",
   "info": {
     "title": "EventRelay API",
-    "version": "0.1.0"
+    "version": "0.1.0",
+    "description": "EventRelay — AI video processing and event extraction service.\n\nThis API is **intentionally public with no authentication required**. All endpoints accept unauthenticated requests."
   },
+  "security": [],
   "paths": {
     "/api/v1/health": {
       "get": {
@@ -278,6 +280,7 @@
     }
   },
   "components": {
+    "securitySchemes": {},
     "schemas": {
       "Artifacts": {
         "properties": {
