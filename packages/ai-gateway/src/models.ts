@@ -1,11 +1,16 @@
-import { openai } from '@ai-sdk/openai';
-import { anthropic } from '@ai-sdk/anthropic';
-import { google } from '@ai-sdk/google';
+import { createOpenAI } from '@ai-sdk/openai';
+import { createAnthropic } from '@ai-sdk/anthropic';
+import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import type { LanguageModel } from 'ai';
 import type { AIProvider, ModelConfig } from './types';
 
+export interface RegisteredModel {
+  model: LanguageModel;
+  modelId: string;
+}
+
 export class ModelRegistry {
-  private models = new Map<AIProvider, LanguageModel>();
+  private models = new Map<AIProvider, RegisteredModel>();
 
   constructor(configs: ModelConfig[]) {
     for (const config of configs) {
@@ -14,43 +19,44 @@ export class ModelRegistry {
   }
 
   private registerModel(config: ModelConfig): void {
+    const modelId = config.model || DEFAULT_MODELS[config.provider];
     let model: LanguageModel;
 
     switch (config.provider) {
       case 'grok':
         // Grok uses OpenAI-compatible API
-        model = openai(config.model || 'grok-beta', {
+        model = createOpenAI({
           baseURL: 'https://api.x.ai/v1',
           apiKey: config.apiKey,
-        });
+        })(modelId);
         break;
 
       case 'claude':
-        model = anthropic(config.model || 'claude-opus-4-8', {
+        model = createAnthropic({
           apiKey: config.apiKey,
-        });
+        })(modelId);
         break;
 
       case 'gemini':
-        model = google(config.model || 'gemini-2.0-flash-exp', {
+        model = createGoogleGenerativeAI({
           apiKey: config.apiKey,
-        });
+        })(modelId);
         break;
 
       case 'openai':
-        model = openai(config.model || 'gpt-4o', {
+        model = createOpenAI({
           apiKey: config.apiKey,
-        });
+        })(modelId);
         break;
 
       default:
         throw new Error(`Unsupported provider: ${config.provider}`);
     }
 
-    this.models.set(config.provider, model);
+    this.models.set(config.provider, { model, modelId });
   }
 
-  getModel(provider: AIProvider): LanguageModel | undefined {
+  getModel(provider: AIProvider): RegisteredModel | undefined {
     return this.models.get(provider);
   }
 

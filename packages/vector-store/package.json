@@ -12,13 +12,9 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "2.0.53",
-    "@ai-sdk/google": "2.0.44",
-    "@ai-sdk/openai": "2.0.76",
     "@dataconnect/generated": "file:src/dataconnect-generated",
     "@pinecone-database/pinecone": "^2.0.0",
     "@supabase/supabase-js": "^2.39.0",
-    "ai": "5.0.106",
     "openai": "^4.20.0"
   },
   "devDependencies": {

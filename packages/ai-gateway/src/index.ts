@@ -1,5 +1,6 @@
 import { generateText, streamText } from 'ai';
 import { ModelRegistry, DEFAULT_FALLBACK_ORDER } from './models';
+import type { RegisteredModel } from './models';
 import type {
   AIProvider,
   AIGatewayConfig,
@@ -34,10 +35,10 @@ export class AIGateway {
       }
 
       try {
-        const model = this.registry.getModel(provider);
-        if (!model) continue;
+        const registeredModel = this.registry.getModel(provider);
+        if (!registeredModel) continue;
 
-        const result = await this.generateWithTimeout(model, provider, options);
+        const result = await this.generateWithTimeout(registeredModel, provider, options);
         return result;
       } catch (error) {
         errors.push({
@@ -66,21 +67,21 @@ export class AIGateway {
       }
 
       try {
-        const model = this.registry.getModel(provider);
-        if (!model) continue;
+        const registeredModel = this.registry.getModel(provider);
+        if (!registeredModel) continue;
 
         const { textStream } = await streamText({
-          model,
+          model: registeredModel.model,
           prompt: options.prompt,
           system: options.system,
-          maxTokens: options.maxTokens,
+          maxOutputTokens: options.maxTokens,
           temperature: options.temperature,
         });
 
         return {
           textStream,
           provider,
-          model: model.modelId || 'unknown',
+          model: registeredModel.modelId,
         };
       } catch (error) {
         errors.push({
@@ -100,7 +101,7 @@ export class AIGateway {
    * Generate with timeout enforcement
    */
   private async generateWithTimeout(
-    model: any,
+    registeredModel: RegisteredModel,
     provider: AIProvider,
     options: GenerateOptions
   ): Promise<GenerateResult> {
@@ -109,10 +110,10 @@ export class AIGateway {
     );
 
     const generatePromise = generateText({
-      model,
+      model: registeredModel.model,
       prompt: options.prompt,
       system: options.system,
-      maxTokens: options.maxTokens,
+      maxOutputTokens: options.maxTokens,
       temperature: options.temperature,
     });
 
@@ -121,12 +122,14 @@ export class AIGateway {
     return {
       text: result.text,
       provider,
-      model: model.modelId || 'unknown',
+      model: registeredModel.modelId,
       usage: result.usage
         ? {
-            promptTokens: result.usage.promptTokens,
-            completionTokens: result.usage.completionTokens,
-            totalTokens: result.usage.totalTokens,
+            promptTokens: result.usage.inputTokens ?? 0,
+            completionTokens: result.usage.outputTokens ?? 0,
+            totalTokens:
+              result.usage.totalTokens ??
+              (result.usage.inputTokens ?? 0) + (result.usage.outputTokens ?? 0),
           }
         : undefined,
     };

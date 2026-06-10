@@ -3,7 +3,7 @@ import type * as activities from '../activities/competitiveAnalysisActivities';
 
 // Set up proxy activities with retry policies and timeouts
 const proxyOptions = {
-  startToCloseTimeout: '10 minutes', // Computer use can take time
+  startToCloseTimeout: '10m' as const, // Computer use can take time
   retry: {
     maximumAttempts: 3,
   },

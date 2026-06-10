@@ -1,4 +1,4 @@
-import { generateText, tool } from 'ai';
+import { generateText, stepCountIs } from 'ai';
 import { google } from '@ai-sdk/google';
 import { z } from 'zod';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -37,29 +37,31 @@ export async function extractUrlContent(url: string): Promise<string> {
   await mcpClient.connect(transport);
   
   try {
+    const browserTools = {
+      navigate: {
+        description: 'Navigate the active Chrome tab to a URL',
+        inputSchema: z.object({ url: z.string() }),
+        execute: async ({ url }: { url: string }) => {
+          console.log(`[MCP Tool] Navigating to ${url}`);
+          return await mcpClient.callTool({ name: 'navigate', arguments: { url } });
+        },
+      },
+      evaluate_script: {
+        description: 'Evaluate JavaScript in the active Chrome tab to extract content from the DOM',
+        inputSchema: z.object({ script: z.string() }),
+        execute: async ({ script }: { script: string }) => {
+          console.log(`[MCP Tool] Evaluating script...`);
+          return await mcpClient.callTool({ name: 'evaluate_script', arguments: { script } });
+        },
+      },
+    } as any;
+
     const { text } = await generateText({
       model: MODEL,
       system: "You are an AI agent with Computer Use capabilities via the Chrome DevTools MCP. Navigate to the user's requested URL, extract product offerings and pricing, and return a clean summary. Use your browser tools to evaluate the DOM and navigate.",
       prompt: `Target URL: ${url}`,
-      tools: {
-        navigate: tool({
-          description: 'Navigate the active Chrome tab to a URL',
-          parameters: z.object({ url: z.string() }),
-          execute: async ({ url }) => {
-            console.log(`[MCP Tool] Navigating to ${url}`);
-            return await mcpClient.callTool({ name: 'navigate', arguments: { url } });
-          }
-        }),
-        evaluate_script: tool({
-          description: 'Evaluate JavaScript in the active Chrome tab to extract content from the DOM',
-          parameters: z.object({ script: z.string() }),
-          execute: async ({ script }) => {
-            console.log(`[MCP Tool] Evaluating script...`);
-            return await mcpClient.callTool({ name: 'evaluate_script', arguments: { script } });
-          }
-        })
-      },
-      maxSteps: 10, // Let the model reason and call tools iteratively
+      tools: browserTools,
+      stopWhen: stepCountIs(10), // Let the model reason and call tools iteratively
     });
     return text;
   } finally {
