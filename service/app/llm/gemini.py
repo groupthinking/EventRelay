@@ -78,7 +78,7 @@ class GeminiLLMClient:
         except json.JSONDecodeError as exc:
             logger.error(
                 "generate_json: JSON decode failed",
-                extra={"raw_text": text[:500], "error": str(exc)},
+                extra={"text_length": len(text), "error": str(exc)},
                 exc_info=True,
             )
             raise LLMError(f"model did not return valid JSON: {exc}") from exc
