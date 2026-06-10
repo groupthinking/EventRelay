@@ -97,6 +97,16 @@
               }
             }
           },
+          "404": {
+            "description": "Job not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPError"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -135,6 +145,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/TranscriptView"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Transcript not available",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPError"
                 }
               }
             }
@@ -181,6 +201,16 @@
               }
             }
           },
+          "404": {
+            "description": "Job not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPError"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -219,6 +249,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ArtifactsView"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Artifacts not available",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPError"
                 }
               }
             }
@@ -326,6 +366,19 @@
           "job_id"
         ],
         "title": "EventsView"
+      },
+      "HTTPError": {
+        "properties": {
+          "detail": {
+            "type": "string",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "detail"
+        ],
+        "title": "HTTPError"
       },
       "HTTPValidationError": {
         "properties": {
