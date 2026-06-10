@@ -6,11 +6,14 @@ LLM key) lands on the job's status as `failed` instead of failing the request.
 """
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 from ..api.v1.schemas import JobStatus
 from .artifacts import derive_artifacts
 from .extract import extract_events
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from ..container import Container
@@ -31,4 +34,9 @@ async def run_job(
         )
         await store.update_status(job_id, JobStatus.succeeded)
     except Exception as exc:  # noqa: BLE001 — terminal stage records the failure
-        await store.update_status(job_id, JobStatus.failed, error=str(exc))
+        logger.error(
+            "run_job: pipeline failed",
+            extra={"job_id": job_id, "video_id": video_id},
+            exc_info=True,
+        )
+        await store.update_status(job_id, JobStatus.failed, error="Pipeline failed")
