@@ -49,7 +49,10 @@ class YouTubeCaptionsProvider:
         """
         languages = [language] if language else ["en"]
         try:
-            return await asyncio.to_thread(self._fetch_captions, video_id, languages)
+            return await asyncio.wait_for(
+                asyncio.to_thread(self._fetch_captions, video_id, languages),
+                timeout=30.0
+            )
         except Exception as exc:  # noqa: BLE001 — any caption failure → fallback
             if self._stt is not None:
                 return await self._stt.transcribe(video_id, language)
