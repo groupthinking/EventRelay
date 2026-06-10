@@ -48,12 +48,12 @@ load balancing, horizontal-scaling services.)
 Four existing assets are pre-cleared as core because each maps directly to a
 criterion and is already healthy:
 
-1. **The OpenAPI contract** (`openapi/eventrelay.openapi.json`) + Stainless SDK
+1. **The OpenAPI contract** (`service/openapi.json`) + Stainless SDK
    generation (`.stainless.yml`, `sdk/`) → **SC5**.
 2. **The Next.js frontend** (`apps/web`) → **SC7** — *but only after* its
    server-side `/api/*` business logic and direct-Gemini fallback are removed;
    it must call the backend exclusively through the generated SDK.
-3. **The DI container pattern** (`backend/containers/service_container.py`) →
+3. **The DI container pattern** (`service/app/container.py`) →
    cross-cutting; the one structural pattern worth keeping verbatim.
 4. **The event taxonomy** (`<domain>.<entity>.<action>`) → **SC3** — the domain
    model, not the 10 SQLAlchemy tables built around it.
@@ -72,7 +72,7 @@ criterion explicitly does **not** justify.
 
 - **Capability:** URL parse + validation; canonical video-id extraction.
 - **Port candidate:** the validation logic only (Pydantic request models in
-  `backend/api/v1/models.py`). Port the *shape*, not the surrounding router.
+  `service/app/api/v1/schemas.py`). Port the *shape*, not the surrounding router.
 - **Acceptance test:** valid URL → 202 + job id; malformed/unsupported URL →
   422 with a typed error, no side effects.
 - **Does NOT justify:** any persistence, any provider call.
@@ -112,7 +112,7 @@ criterion explicitly does **not** justify.
 ### SC5 — Single versioned API contract
 
 - **Capability:** one OpenAPI spec is the source of truth; SDKs are generated.
-- **Port candidate:** `openapi/eventrelay.openapi.json` + `.stainless.yml` +
+- **Port candidate:** `service/openapi.json` + `.stainless.yml` +
   `sdk/` (generated, do not hand-edit).
 - **Acceptance test:** spec lints; SDKs regenerate clean; a contract test hits a
   running server and validates every response against the schema.
