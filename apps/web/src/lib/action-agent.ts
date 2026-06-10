@@ -31,7 +31,7 @@ function getOpenAI(): OpenAI {
 }
 
 const MODEL_OPENAI = 'gpt-4o-mini';
-const MODEL_GEMINI = 'gemini-3-pro-preview';
+const MODEL_GEMINI = 'gemini-3.1-pro-preview';
 const MAX_TOOL_ROUNDS = 4;
 const MAX_TRANSCRIPT_CHARS = 8000;
 
