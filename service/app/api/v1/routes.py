@@ -48,7 +48,7 @@ async def submit_job(
     except InvalidInput as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
 
-    idempotency_key = f"{video_id}:{get_settings().pipeline_version}"
+    idempotency_key = f"{video_id}:{req.language}:{get_settings().pipeline_version}"
     record, created = await container.store.create_or_get(req.video_url, idempotency_key)
     if created:
         background.add_task(run_job, record.job_id, video_id, container, req.language)
