@@ -67,20 +67,33 @@ const TERMINAL: ReadonlySet<JobStatus> = new Set<JobStatus>(['succeeded', 'faile
 
 export class EventRelayClient {
   private readonly baseUrl: string;
+  private readonly fetchTimeoutMs: number;
 
-  constructor(baseUrl: string = DEFAULT_BACKEND_URL) {
+  constructor(baseUrl: string = DEFAULT_BACKEND_URL, fetchTimeoutMs: number = 30_000) {
     this.baseUrl = baseUrl.replace(/\/$/, '');
+    this.fetchTimeoutMs = fetchTimeoutMs;
   }
 
   private async request<T>(path: string, init?: RequestInit): Promise<T> {
     let res: Response;
     try {
-      res = await fetch(`${this.baseUrl}${path}`, {
-        ...init,
-        headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
-      });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), this.fetchTimeoutMs);
+      
+      try {
+        res = await fetch(`${this.baseUrl}${path}`, {
+          ...init,
+          signal: controller.signal,
+          headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
+        });
+      } finally {
+        clearTimeout(timeoutId);
+      }
     } catch (err) {
       // Network failure / backend down — surface it, never fall back to a model.
+      if (err instanceof Error && err.name === 'AbortError') {
+        throw new EventRelayError(`backend timeout: request did not complete within ${this.fetchTimeoutMs}ms`);
+      }
       throw new EventRelayError(
         `backend unreachable: ${err instanceof Error ? err.message : String(err)}`,
       );
