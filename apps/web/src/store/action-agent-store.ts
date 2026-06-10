@@ -65,7 +65,7 @@ export const useActionAgentStore = create<ActionAgentState>((set, get) => {
 
     const actions = (body.actions ?? []) as AgentAction[];
     // The server already executed the tools, so the actions arrive resolved.
-    apply({ type: 'ACTIONS_EXTRACTED', actions: actions.map((a) => ({ ...a, status: 'pending' })), provider: body.provider });
+    apply({ type: 'ACTIONS_EXTRACTED', actions, provider: body.provider });
     apply({ type: 'ACTIONS_FULFILLED', actions });
   }
 
