@@ -87,11 +87,12 @@ class MCPProtocolBridge:
     communicating with external AI services through different protocols.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the MCP Protocol Bridge"""
         self.adapters: dict[ProtocolType, ProtocolAdapter] = {}
         self.bridge_status: dict[ProtocolType, BridgeStatus] = {}
         self.request_handlers: dict[str, Callable] = {}
+        self.protocol_stats: dict[ProtocolType, dict[str, int]] = {}
 
         # Register built-in protocol handlers
         self._register_builtin_handlers()
@@ -173,6 +174,11 @@ class MCPProtocolBridge:
                 intent=f"Send {protocol_type.value} protocol request"
             )
 
+        stats = self.protocol_stats.setdefault(
+            protocol_type, {"in_flight": 0, "success": 0, "failure": 0}
+        )
+        stats["in_flight"] += 1
+
         try:
             # Add protocol metadata to context
             context.metadata["protocol"] = protocol_type.value
@@ -189,6 +195,7 @@ class MCPProtocolBridge:
                 "success": True
             })
 
+            stats["success"] += 1
             return response
 
         except Exception as e:
@@ -200,8 +207,12 @@ class MCPProtocolBridge:
                 "success": False
             })
 
+            stats["failure"] += 1
             logger.error(f"Protocol request failed for {protocol_type.value}: {e}")
             raise
+
+        finally:
+            stats["in_flight"] -= 1
 
     async def route_request(
         self,
@@ -211,6 +222,11 @@ class MCPProtocolBridge:
     ) -> dict[str, Any]:
         """
         Route a request to the best available protocol
+
+        Candidates are filtered by the capabilities listed in
+        request["required_capabilities"] (if present), then the least-loaded
+        protocol is selected, with error rate and preference order as
+        tiebreakers.
 
         Args:
             request: Request data
@@ -238,13 +254,67 @@ class MCPProtocolBridge:
         if not candidate_protocols:
             raise RuntimeError("No matching connected protocol adapters available")
 
-        # For now, use the first available protocol
-        # TODO: Implement intelligent routing based on capabilities, load, etc.
-        selected_protocol = candidate_protocols[0]
+        selected_protocol = await self._select_protocol(candidate_protocols, request)
 
         logger.info(f"Routing request to protocol: {selected_protocol.value}")
 
         return await self.send_protocol_request(selected_protocol, request, context)
+
+    async def _select_protocol(
+        self,
+        candidates: list[ProtocolType],
+        request: dict[str, Any]
+    ) -> ProtocolType:
+        """
+        Select the best protocol from connected candidates
+
+        Filters candidates to those whose adapters support every capability in
+        request["required_capabilities"], then picks the candidate with the
+        fewest in-flight requests, breaking ties by lowest historical error
+        rate and finally by candidate order (preference order).
+
+        Args:
+            candidates: Connected protocols to choose from, in preference order
+            request: Request data, optionally containing "required_capabilities"
+
+        Returns:
+            The selected protocol
+
+        Raises:
+            RuntimeError: If no candidate supports the required capabilities
+        """
+        required_capabilities = {
+            capability if isinstance(capability, ServerCapability) else ServerCapability(capability)
+            for capability in request.get("required_capabilities", [])
+        }
+
+        if required_capabilities:
+            capable_protocols = []
+            for protocol in candidates:
+                try:
+                    capabilities = set(await self.adapters[protocol].get_capabilities())
+                except Exception as e:
+                    logger.warning(f"Could not get capabilities for {protocol.value}: {e}")
+                    continue
+                if required_capabilities <= capabilities:
+                    capable_protocols.append(protocol)
+
+            if not capable_protocols:
+                required_names = sorted(c.value for c in required_capabilities)
+                raise RuntimeError(
+                    f"No connected protocol adapter supports required capabilities: {required_names}"
+                )
+
+            candidates = capable_protocols
+
+        def routing_score(item: tuple[int, ProtocolType]) -> tuple[int, float, int]:
+            preference_index, protocol = item
+            stats = self.protocol_stats.get(protocol, {})
+            completed = stats.get("success", 0) + stats.get("failure", 0)
+            error_rate = stats.get("failure", 0) / completed if completed else 0.0
+            return (stats.get("in_flight", 0), error_rate, preference_index)
+
+        return min(enumerate(candidates), key=routing_score)[1]
 
     async def health_check_all(self) -> dict[ProtocolType, bool]:
         """

@@ -414,6 +414,136 @@ class TestMCPProtocolBridgeRouteRequest:
 
 
 # ===========================================================================
+# MCPProtocolBridge._select_protocol (intelligent routing)
+# ===========================================================================
+
+
+class _CapableAdapter(_FakeAdapter):
+    def __init__(self, ptype, capabilities):
+        super().__init__(ptype)
+        self._capabilities = capabilities
+
+    async def send_request(self, request, context):
+        return {"status": "ok", "protocol": self._ptype.value}
+
+    async def get_capabilities(self):
+        return self._capabilities
+
+
+class TestMCPProtocolBridgeIntelligentRouting:
+    async def _bridge_with(self, *adapters):
+        bridge = MCPProtocolBridge()
+        for adapter in adapters:
+            bridge.register_adapter(adapter)
+            await bridge.initialize_adapter(adapter.protocol_type, {})
+        return bridge
+
+    async def test_routes_to_protocol_with_required_capability(self):
+        bridge = await self._bridge_with(
+            _CapableAdapter(ProtocolType.MCP, [ServerCapability.DATA_PROCESSING]),
+            _CapableAdapter(ProtocolType.OPENAI, [ServerCapability.AI_INFERENCE]),
+        )
+        resp = await bridge.route_request(
+            {"required_capabilities": ["ai_inference"]}
+        )
+        assert resp["protocol"] == "openai"
+
+    async def test_accepts_server_capability_enum_values(self):
+        bridge = await self._bridge_with(
+            _CapableAdapter(ProtocolType.MCP, [ServerCapability.DATA_PROCESSING]),
+            _CapableAdapter(ProtocolType.OPENAI, [ServerCapability.AI_INFERENCE]),
+        )
+        resp = await bridge.route_request(
+            {"required_capabilities": [ServerCapability.AI_INFERENCE]}
+        )
+        assert resp["protocol"] == "openai"
+
+    async def test_raises_when_no_protocol_supports_capability(self):
+        bridge = await self._bridge_with(
+            _CapableAdapter(ProtocolType.MCP, [ServerCapability.DATA_PROCESSING]),
+        )
+        with pytest.raises(RuntimeError, match="required capabilities"):
+            await bridge.route_request(
+                {"required_capabilities": [ServerCapability.AI_INFERENCE]}
+            )
+
+    async def test_skips_protocol_when_get_capabilities_raises(self):
+        class _BrokenCapsAdapter(_CapableAdapter):
+            async def get_capabilities(self):
+                raise ConnectionError("unreachable")
+
+        bridge = await self._bridge_with(
+            _BrokenCapsAdapter(ProtocolType.MCP, [ServerCapability.AI_INFERENCE]),
+            _CapableAdapter(ProtocolType.OPENAI, [ServerCapability.AI_INFERENCE]),
+        )
+        resp = await bridge.route_request(
+            {"required_capabilities": [ServerCapability.AI_INFERENCE]}
+        )
+        assert resp["protocol"] == "openai"
+
+    async def test_prefers_less_loaded_protocol(self):
+        bridge = await self._bridge_with(
+            _CapableAdapter(ProtocolType.MCP, [ServerCapability.AI_INFERENCE]),
+            _CapableAdapter(ProtocolType.OPENAI, [ServerCapability.AI_INFERENCE]),
+        )
+        bridge.protocol_stats[ProtocolType.MCP] = {
+            "in_flight": 5, "success": 10, "failure": 0
+        }
+        bridge.protocol_stats[ProtocolType.OPENAI] = {
+            "in_flight": 1, "success": 10, "failure": 0
+        }
+        resp = await bridge.route_request({})
+        assert resp["protocol"] == "openai"
+
+    async def test_prefers_lower_error_rate_when_load_equal(self):
+        bridge = await self._bridge_with(
+            _CapableAdapter(ProtocolType.MCP, [ServerCapability.AI_INFERENCE]),
+            _CapableAdapter(ProtocolType.OPENAI, [ServerCapability.AI_INFERENCE]),
+        )
+        bridge.protocol_stats[ProtocolType.MCP] = {
+            "in_flight": 0, "success": 2, "failure": 8
+        }
+        bridge.protocol_stats[ProtocolType.OPENAI] = {
+            "in_flight": 0, "success": 9, "failure": 1
+        }
+        resp = await bridge.route_request({})
+        assert resp["protocol"] == "openai"
+
+    async def test_preference_order_breaks_ties(self):
+        bridge = await self._bridge_with(
+            _CapableAdapter(ProtocolType.MCP, [ServerCapability.AI_INFERENCE]),
+            _CapableAdapter(ProtocolType.OPENAI, [ServerCapability.AI_INFERENCE]),
+        )
+        resp = await bridge.route_request(
+            {}, preferred_protocols=[ProtocolType.OPENAI, ProtocolType.MCP]
+        )
+        assert resp["protocol"] == "openai"
+
+    async def test_stats_updated_after_successful_request(self):
+        bridge = await self._bridge_with(
+            _CapableAdapter(ProtocolType.MCP, [ServerCapability.AI_INFERENCE]),
+        )
+        await bridge.route_request({})
+        stats = bridge.protocol_stats[ProtocolType.MCP]
+        assert stats == {"in_flight": 0, "success": 1, "failure": 0}
+
+    async def test_stats_updated_after_failed_request(self):
+        class _ErrorAdapter(_FakeAdapter):
+            async def send_request(self, request, context):
+                raise ValueError("bad request")
+
+        bridge = MCPProtocolBridge()
+        bridge.register_adapter(_ErrorAdapter(ProtocolType.MCP))
+        bridge.bridge_status[ProtocolType.MCP] = BridgeStatus.CONNECTED
+
+        with pytest.raises(ValueError):
+            await bridge.route_request({})
+
+        stats = bridge.protocol_stats[ProtocolType.MCP]
+        assert stats == {"in_flight": 0, "success": 0, "failure": 1}
+
+
+# ===========================================================================
 # MCPProtocolBridge.health_check_all
 # ===========================================================================
 
