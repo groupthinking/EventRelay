@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { runActionAgent } from '@/lib/action-agent';
 import { AVAILABLE_TOOL_NAMES } from '@/lib/action-agent';
+import { hasGeminiKey } from '@/lib/gemini-client';
 
 /**
  * GET /api/agents/actions
@@ -9,7 +10,7 @@ import { AVAILABLE_TOOL_NAMES } from '@/lib/action-agent';
  * render affordances without hardcoding the list.
  */
 export async function GET(): Promise<NextResponse> {
-  const hasKey = !!(process.env.OPENAI_API_KEY || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY);
+  const hasKey = !!(process.env.OPENAI_API_KEY || hasGeminiKey());
   return NextResponse.json({ available: hasKey, tools: AVAILABLE_TOOL_NAMES });
 }
 
