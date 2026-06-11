@@ -10,11 +10,18 @@ import {
 const NO_BACKEND: ToolContext = { backendBaseUrl: null };
 
 describe('action tool registry', () => {
-  it('exposes a stable set of named tools with object schemas', () => {
+  it('exposes the exact declared set of named tools with object schemas', () => {
     const names = ACTION_TOOLS.map((t) => t.name);
-    expect(names).toContain('create_workflow_task');
-    expect(names).toContain('save_resource');
-    expect(names).toContain('dispatch_agent');
+    // Assert the full set so adding/removing/renaming a tool fails fast.
+    expect([...names].sort()).toEqual(
+      [
+        'add_to_knowledge_base',
+        'create_workflow_task',
+        'dispatch_agent',
+        'save_resource',
+        'schedule_followup',
+      ].sort(),
+    );
     for (const t of ACTION_TOOLS) {
       expect(t.parameters.type).toBe('object');
       expect(t.parameters.additionalProperties).toBe(false);

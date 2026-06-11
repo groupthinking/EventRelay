@@ -22,17 +22,31 @@ export async function GET() {
  * (REAL_MODE_ONLY) — the route returns an honest error instead.
  */
 export async function POST(request: Request) {
+  // Malformed JSON is a client error (400), not a server failure.
+  let body: { transcript?: unknown; videoTitle?: unknown; jobId?: unknown };
   try {
-    const { transcript, videoTitle, jobId } = await request.json();
+    body = await request.json();
+  } catch {
+    return NextResponse.json(
+      { success: false, error: 'Invalid JSON request body', actions: [] },
+      { status: 400 },
+    );
+  }
 
-    if (!transcript || typeof transcript !== 'string') {
-      return NextResponse.json(
-        { success: false, error: 'transcript (string) is required', actions: [] },
-        { status: 400 },
-      );
-    }
+  const { transcript, videoTitle, jobId } = body;
+  if (!transcript || typeof transcript !== 'string') {
+    return NextResponse.json(
+      { success: false, error: 'transcript (string) is required', actions: [] },
+      { status: 400 },
+    );
+  }
 
-    const result = await runActionAgent({ transcript, videoTitle, jobId });
+  try {
+    const result = await runActionAgent({
+      transcript,
+      videoTitle: typeof videoTitle === 'string' ? videoTitle : undefined,
+      jobId: typeof jobId === 'string' ? jobId : undefined,
+    });
 
     return NextResponse.json({
       success: true,
@@ -42,11 +56,18 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error('Action agent error:', error);
     const message = error instanceof Error ? error.message : String(error);
-    const isConfig = message.includes('API key') || message.includes('too short');
+
+    // Only the agent's own validation/config guards are client errors (400).
+    // Match exact phrases so an upstream provider error that merely mentions
+    // "API key" (e.g. OpenAI's 401 "Incorrect API key provided") is correctly
+    // surfaced as an upstream failure (502), not mislabeled as a bad request.
+    const isClientError =
+      message.startsWith('No AI API key configured') ||
+      message.includes('transcript is too short');
 
     return NextResponse.json(
       { success: false, error: message, actions: [] },
-      { status: isConfig ? 400 : 500 },
+      { status: isClientError ? 400 : 502 },
     );
   }
 }
