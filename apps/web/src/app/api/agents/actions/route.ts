@@ -8,7 +8,7 @@ import { AVAILABLE_TOOL_NAMES } from '@/lib/action-agent';
  * Advertises the executable tools the action agent can invoke, so the UI can
  * render affordances without hardcoding the list.
  */
-export async function GET() {
+export async function GET(): Promise<NextResponse> {
   const hasKey = !!(process.env.OPENAI_API_KEY || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY);
   return NextResponse.json({ available: hasKey, tools: AVAILABLE_TOOL_NAMES });
 }
@@ -21,7 +21,7 @@ export async function GET() {
  * returned. Keys stay server-side; no work is fabricated when a key is missing
  * (REAL_MODE_ONLY) — the route returns an honest error instead.
  */
-export async function POST(request: Request) {
+export async function POST(request: Request): Promise<NextResponse> {
   // Malformed JSON is a client error (400), not a server failure.
   let body: { transcript?: unknown; videoTitle?: unknown; jobId?: unknown };
   try {

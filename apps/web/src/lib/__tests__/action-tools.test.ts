@@ -95,6 +95,31 @@ describe('action tool registry', () => {
     expect(res.summary).toContain('503');
   });
 
+  it('add_to_knowledge_base coerces non-array/invalid tags to a string array', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ stored: true }),
+    } as unknown as Response);
+
+    const tool = getTool('add_to_knowledge_base')!;
+    // tags arrives as a non-array (e.g. a stringified value from a provider).
+    await tool.execute(
+      { insight: 'x', tags: 'not-an-array' },
+      { backendBaseUrl: 'http://backend', fetchImpl },
+    );
+    const body = JSON.parse((fetchImpl.mock.calls[0][1] as RequestInit).body as string);
+    expect(body.tags).toEqual([]);
+
+    // Mixed array drops non-string entries.
+    fetchImpl.mockClear();
+    await tool.execute(
+      { insight: 'x', tags: ['a', 2, null, 'b'] },
+      { backendBaseUrl: 'http://backend', fetchImpl },
+    );
+    const body2 = JSON.parse((fetchImpl.mock.calls[0][1] as RequestInit).body as string);
+    expect(body2.tags).toEqual(['a', 'b']);
+  });
+
   it('adapts tools to OpenAI function-tool format', () => {
     const openai = toOpenAITools();
     expect(openai).toHaveLength(ACTION_TOOLS.length);

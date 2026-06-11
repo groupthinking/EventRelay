@@ -58,6 +58,12 @@ function str(input: Record<string, unknown>, key: string): string {
   return typeof v === 'string' ? v : '';
 }
 
+/** Coerce a value to a string array, dropping non-string entries. */
+function strArray(input: Record<string, unknown>, key: string): string[] {
+  const v = input[key];
+  return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
+}
+
 /**
  * Resolve the configured backend URL, or null when running frontend-only.
  * Validates the URL and enforces an http(s) scheme so a malformed value can't
@@ -251,7 +257,7 @@ const addToKnowledgeBase: ActionTool = {
       const res = await doFetch(`${ctx.backendBaseUrl}/api/v1/knowledge/ingest`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: insight, tags: input.tags ?? [], source: ctx.jobId }),
+        body: JSON.stringify({ text: insight, tags: strArray(input, 'tags'), source: ctx.jobId }),
         signal: AbortSignal.timeout(30_000),
       });
       if (!res.ok) {

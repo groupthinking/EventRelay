@@ -74,6 +74,11 @@ function isQuotaError(err: unknown): boolean {
   return msg.includes('429') || msg.includes('quota') || msg.includes('rate');
 }
 
+/** Tool arguments must be a plain JSON object — not a primitive, array, or null. */
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v);
+}
+
 /** Run the OpenAI Responses-API tool-calling loop until the model stops calling tools. */
 async function runWithOpenAI(opts: RunActionAgentOptions, ctx: ToolContext): Promise<AgentAction[]> {
   const openai = getOpenAI();
@@ -99,10 +104,16 @@ async function runWithOpenAI(opts: RunActionAgentOptions, ctx: ToolContext): Pro
       let result: ActionToolResult;
 
       try {
-        input = call.arguments ? JSON.parse(call.arguments) : {};
+        const parsed = call.arguments ? JSON.parse(call.arguments) : {};
+        // JSON.parse can yield a primitive, array, or null — reject anything
+        // that isn't an object so tools never run with a bogus argument shape.
+        if (!isPlainObject(parsed)) {
+          throw new Error('tool arguments were not a JSON object');
+        }
+        input = parsed;
       } catch (err) {
         result = {
-          summary: `Failed to parse tool arguments: ${err instanceof Error ? err.message : String(err)}`,
+          summary: `Invalid tool arguments for "${call.name}": ${err instanceof Error ? err.message : String(err)}`,
           isError: true,
         };
         actions.push(toAction(call.name, input, result));
@@ -163,7 +174,14 @@ async function runWithGemini(opts: RunActionAgentOptions, ctx: ToolContext): Pro
   for (const call of calls) {
     if (!call.name) continue;
     const tool = getTool(call.name);
-    const input = (call.args ?? {}) as Record<string, unknown>;
+    const rawArgs = call.args ?? {};
+    if (!isPlainObject(rawArgs)) {
+      actions.push(
+        toAction(call.name, {}, { summary: `Invalid tool arguments for "${call.name}"`, isError: true }),
+      );
+      continue;
+    }
+    const input: Record<string, unknown> = rawArgs;
     let result: ActionToolResult;
     try {
       result = tool

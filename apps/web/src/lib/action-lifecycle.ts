@@ -117,7 +117,10 @@ export function reduceLifecycle(
   const updatedAt = now();
 
   if (event.type === 'RESET') {
-    // Cancel from any phase — start a fresh lifecycle for the same id.
+    // In-place cancel from any phase: reset the SAME lifecycle id back to idle.
+    // This is distinct from the store's `reset()`, which deliberately starts a
+    // *new* prompt (fresh id); the reducer preserves identity so a RESET event
+    // is an idempotent "clear this lifecycle" rather than "begin a new one".
     return createLifecycle(state.id, now);
   }
 
