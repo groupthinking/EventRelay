@@ -39,14 +39,13 @@ const VERCEL_BYPASS_SECRET = process.env.VERCEL_AUTOMATION_BYPASS_SECRET || '';
 /** Merge the Vercel protection-bypass header into a request init, when configured. */
 function withBypass(init?: RequestInit): RequestInit {
   if (!VERCEL_BYPASS_SECRET) return init ?? {};
-  return {
-    ...init,
-    headers: {
-      ...(init?.headers as Record<string, string> | undefined),
-      'x-vercel-protection-bypass': VERCEL_BYPASS_SECRET,
-      'x-vercel-set-bypass-cookie': 'true',
-    },
-  };
+  // Normalize via the Headers constructor so any HeadersInit shape (plain
+  // object, Headers instance, or [key, value][] array) is preserved — a bare
+  // spread would silently drop a Headers/array-typed init.headers.
+  const headers = new Headers(init?.headers);
+  headers.set('x-vercel-protection-bypass', VERCEL_BYPASS_SECRET);
+  headers.set('x-vercel-set-bypass-cookie', 'true');
+  return { ...init, headers };
 }
 
 /** Fetch with a hard timeout and automatic retry for transient network errors. */
