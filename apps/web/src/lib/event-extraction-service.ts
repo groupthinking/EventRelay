@@ -131,7 +131,7 @@ async function extractWithOpenAI(trimmed: string, videoTitle?: string, videoUrl?
 async function extractWithGemini(trimmed: string, videoTitle?: string, videoUrl?: string) {
   const ai = getGeminiClient();
   const response = await ai.models.generateContent({
-    model: 'gemini-3-pro-preview',
+    model: 'gemini-3.1-pro-preview',
     contents: `${SYSTEM_PROMPT}\n\n${buildUserPrompt(trimmed, videoTitle, videoUrl)}`,
     config: {
       temperature: 0.3,
@@ -217,7 +217,7 @@ export async function extractEvents({ transcript, videoTitle, videoUrl }: Extrac
     if (!parsed && videoUrl && hasGeminiKey()) {
       const ai = getGeminiClient();
       const response = await ai.models.generateContent({
-        model: 'gemini-3-pro-preview',
+        model: 'gemini-3.1-pro-preview',
         contents: `${SYSTEM_PROMPT}\n\nAnalyze this YouTube video and extract structured data.
 Use your Google Search tool to find the video's transcript, description, and chapter content.
 

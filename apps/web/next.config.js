@@ -37,9 +37,9 @@ const securityHeaders = [
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  turbopack: {
-    root: path.resolve(__dirname, '../..'),
-  },
+  // turbopack: {
+  //   root: path.resolve(__dirname, '../..'),
+  // },
   images: {
     remotePatterns: [
       { protocol: 'https', hostname: 'uvai.io' },
