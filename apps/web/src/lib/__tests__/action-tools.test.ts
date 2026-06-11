@@ -57,10 +57,9 @@ describe('action tool registry', () => {
   });
 
   it('dispatch_agent calls the backend when configured', async () => {
-    const fetchImpl = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ agent_id: 'a1', status: 'queued' }),
-    } as unknown as Response);
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ agent_id: 'a1', status: 'queued' })));
 
     const tool = getTool('dispatch_agent')!;
     const res = await tool.execute(
@@ -80,11 +79,7 @@ describe('action tool registry', () => {
   });
 
   it('add_to_knowledge_base surfaces a non-ok backend response as an error', async () => {
-    const fetchImpl = vi.fn().mockResolvedValue({
-      ok: false,
-      status: 503,
-      text: async () => 'unavailable',
-    } as unknown as Response);
+    const fetchImpl = vi.fn().mockResolvedValue(new Response('unavailable', { status: 503 }));
 
     const tool = getTool('add_to_knowledge_base')!;
     const res = await tool.execute(
@@ -96,10 +91,11 @@ describe('action tool registry', () => {
   });
 
   it('add_to_knowledge_base coerces non-array/invalid tags to a string array', async () => {
-    const fetchImpl = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ stored: true }),
-    } as unknown as Response);
+    // Fresh Response per call: this test invokes the tool twice, and a
+    // Response body is single-use.
+    const fetchImpl = vi
+      .fn()
+      .mockImplementation(async () => new Response(JSON.stringify({ stored: true })));
 
     const tool = getTool('add_to_knowledge_base')!;
     // tags arrives as a non-array (e.g. a stringified value from a provider).
@@ -131,7 +127,7 @@ describe('action tool registry', () => {
     const gemini = toGeminiFunctionDeclarations();
     expect(gemini).toHaveLength(ACTION_TOOLS.length);
     expect(gemini[0]).toHaveProperty('name');
-    expect(gemini[0]).toHaveProperty('parameters');
+    expect(gemini[0]).toHaveProperty('parametersJsonSchema');
     expect(gemini[0]).not.toHaveProperty('strict');
   });
 });

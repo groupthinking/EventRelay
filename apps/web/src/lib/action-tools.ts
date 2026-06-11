@@ -306,8 +306,8 @@ export function toGeminiFunctionDeclarations(
   return tools.map((t) => ({
     name: t.name,
     description: t.description,
-    // Gemini types `parameters` as its own `Schema`; our JSON Schema is
-    // structurally compatible at runtime, so bridge the static types here.
-    parameters: t.parameters as unknown as FunctionDeclaration['parameters'],
+    // `parametersJsonSchema` accepts plain JSON Schema directly (unlike
+    // `parameters`, which expects Gemini's OpenAPI-style `Schema` type).
+    parametersJsonSchema: t.parameters,
   }));
 }

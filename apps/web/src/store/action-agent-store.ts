@@ -26,6 +26,28 @@ function newId(): string {
   return `prompt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
+/**
+ * Upper bound on each API round-trip. Transcription of long sources is the
+ * slowest leg, so this matches the serverless function ceiling rather than a
+ * typical request; without it a hung fetch leaves `isRunning` stuck forever.
+ */
+const REQUEST_TIMEOUT_MS = 300_000;
+
+const ACTION_STATUSES = ['pending', 'fulfilled', 'failed'] as const;
+
+/** Runtime guard for action payloads coming back from /api/agents/actions. */
+function isAgentAction(value: unknown): value is AgentAction {
+  if (!value || typeof value !== 'object') return false;
+  const a = value as Record<string, unknown>;
+  return (
+    typeof a.tool === 'string' &&
+    typeof a.input === 'object' &&
+    a.input !== null &&
+    typeof a.status === 'string' &&
+    (ACTION_STATUSES as readonly string[]).includes(a.status)
+  );
+}
+
 interface SourceInput {
   url?: string;
   audioUrl?: string;
@@ -55,6 +77,7 @@ export const useActionAgentStore = create<ActionAgentState>((set, get) => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ transcript, videoTitle, jobId }),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
     const body = await res.json();
 
@@ -63,7 +86,9 @@ export const useActionAgentStore = create<ActionAgentState>((set, get) => {
       return;
     }
 
-    const actions = (body.actions ?? []) as AgentAction[];
+    const actions: AgentAction[] = Array.isArray(body.actions)
+      ? body.actions.filter(isAgentAction)
+      : [];
     // The server already executed the tools, so the actions arrive resolved.
     apply({ type: 'ACTIONS_EXTRACTED', actions, provider: body.provider });
     apply({ type: 'ACTIONS_FULFILLED', actions });
@@ -100,6 +125,7 @@ export const useActionAgentStore = create<ActionAgentState>((set, get) => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ url, audioUrl }),
+          signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
         });
         const body = await res.json();
 
