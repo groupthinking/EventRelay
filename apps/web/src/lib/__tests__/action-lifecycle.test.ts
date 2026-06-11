@@ -56,7 +56,7 @@ describe('action lifecycle state machine', () => {
     expect(s.error).toBe('mic denied');
   });
 
-  it('RESET only applies from terminal phases and clears state', () => {
+  it('RESET clears state from a terminal phase', () => {
     const failed = reduceLifecycle(fresh(), { type: 'TRANSCRIBED', transcript: 'x' }, NOW);
     expect(failed.phase).toBe('failed');
     const reset = reduceLifecycle(failed, { type: 'RESET' }, NOW);
@@ -65,13 +65,43 @@ describe('action lifecycle state machine', () => {
     expect(reset.id).toBe('p1');
   });
 
+  it('RESET works mid-flight as a cancel (allowed from any phase)', () => {
+    const capturing = reduceLifecycle(fresh(), { type: 'START_CAPTURE' }, NOW);
+    expect(capturing.phase).toBe('capturing');
+    const reset = reduceLifecycle(capturing, { type: 'RESET' }, NOW);
+    expect(reset.phase).toBe('idle');
+    expect(reset.actions).toEqual([]);
+    expect(reset.id).toBe('p1');
+  });
+
+  it('ERROR is a no-op once a lifecycle is terminal (does not clobber the outcome)', () => {
+    // Drive to fulfilled.
+    let s = fresh();
+    for (const e of [
+      { type: 'START_CAPTURE' },
+      { type: 'AUDIO_CAPTURED' },
+      { type: 'TRANSCRIBED', transcript: 'hello world' },
+      { type: 'ACTIONS_EXTRACTED', actions: ACTIONS },
+      { type: 'ACTIONS_FULFILLED', actions: ACTIONS },
+    ] as const) {
+      s = reduceLifecycle(s, e, NOW);
+    }
+    expect(s.phase).toBe('fulfilled');
+    const afterLateError = reduceLifecycle(s, { type: 'ERROR', error: 'late' }, NOW);
+    expect(afterLateError.phase).toBe('fulfilled');
+    expect(afterLateError.error).toBeUndefined();
+    expect(afterLateError).toBe(s); // unchanged reference — true no-op
+  });
+
   it('canTransition matches the reducer rules', () => {
     expect(canTransition('idle', 'START_CAPTURE')).toBe(true);
     expect(canTransition('idle', 'TRANSCRIBED')).toBe(false);
     expect(canTransition('transcribing', 'ERROR')).toBe(true);
     expect(canTransition('fulfilled', 'ERROR')).toBe(false);
+    expect(canTransition('failed', 'ERROR')).toBe(false);
     expect(canTransition('fulfilled', 'RESET')).toBe(true);
-    expect(canTransition('idle', 'RESET')).toBe(false);
+    expect(canTransition('idle', 'RESET')).toBe(true); // cancel allowed anytime
+    expect(canTransition('capturing', 'RESET')).toBe(true);
   });
 
   it('isComplete is false until fulfilled', () => {

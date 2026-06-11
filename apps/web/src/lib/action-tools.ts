@@ -58,10 +58,22 @@ function str(input: Record<string, unknown>, key: string): string {
   return typeof v === 'string' ? v : '';
 }
 
-/** Resolve the configured backend URL, or null when running frontend-only. */
+/**
+ * Resolve the configured backend URL, or null when running frontend-only.
+ * Validates the URL and enforces an http(s) scheme so a malformed value can't
+ * produce a broken endpoint when concatenated; the trailing slash is trimmed so
+ * callers can safely append `/api/...`.
+ */
 export function resolveBackendBaseUrl(): string | null {
-  const raw = process.env.BACKEND_URL || '';
-  return raw.startsWith('http') ? raw : null;
+  const raw = (process.env.BACKEND_URL || '').trim();
+  if (!raw) return null;
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+    return raw.replace(/\/+$/, '');
+  } catch {
+    return null;
+  }
 }
 
 // ── Tool definitions ──

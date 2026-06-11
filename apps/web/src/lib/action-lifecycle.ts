@@ -82,7 +82,9 @@ const TRANSITIONS: Record<LifecyclePhase, Partial<Record<LifecycleEvent['type'],
 
 /** Returns true if `event` is a legal transition from `phase`. */
 export function canTransition(phase: LifecyclePhase, event: LifecycleEvent['type']): boolean {
-  if (event === 'RESET') return phase === 'fulfilled' || phase === 'failed';
+  // RESET is a user-cancel — valid from any phase (including mid-flight).
+  if (event === 'RESET') return true;
+  // ERROR may not overwrite a terminal outcome (fulfilled/failed).
   if (event === 'ERROR') return phase !== 'fulfilled' && phase !== 'failed';
   return TRANSITIONS[phase]?.[event] !== undefined;
 }
@@ -115,10 +117,13 @@ export function reduceLifecycle(
   const updatedAt = now();
 
   if (event.type === 'RESET') {
+    // Cancel from any phase — start a fresh lifecycle for the same id.
     return createLifecycle(state.id, now);
   }
 
   if (event.type === 'ERROR') {
+    // Respect the guard: a late ERROR must not clobber a terminal outcome.
+    if (!canTransition(state.phase, 'ERROR')) return state;
     return { ...state, phase: 'failed', error: event.error, updatedAt };
   }
 

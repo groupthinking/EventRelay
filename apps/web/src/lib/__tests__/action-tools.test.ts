@@ -1,7 +1,8 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
   ACTION_TOOLS,
   getTool,
+  resolveBackendBaseUrl,
   toGeminiFunctionDeclarations,
   toOpenAITools,
   type ToolContext,
@@ -107,5 +108,36 @@ describe('action tool registry', () => {
     expect(gemini[0]).toHaveProperty('name');
     expect(gemini[0]).toHaveProperty('parameters');
     expect(gemini[0]).not.toHaveProperty('strict');
+  });
+});
+
+describe('resolveBackendBaseUrl', () => {
+  const original = process.env.BACKEND_URL;
+  afterEach(() => {
+    if (original === undefined) delete process.env.BACKEND_URL;
+    else process.env.BACKEND_URL = original;
+  });
+
+  it('returns null when unset or empty', () => {
+    delete process.env.BACKEND_URL;
+    expect(resolveBackendBaseUrl()).toBeNull();
+    process.env.BACKEND_URL = '   ';
+    expect(resolveBackendBaseUrl()).toBeNull();
+  });
+
+  it('returns null for non-http(s) or malformed values', () => {
+    process.env.BACKEND_URL = 'ftp://example.com';
+    expect(resolveBackendBaseUrl()).toBeNull();
+    process.env.BACKEND_URL = 'not a url';
+    expect(resolveBackendBaseUrl()).toBeNull();
+    process.env.BACKEND_URL = 'localhost:8000'; // no scheme
+    expect(resolveBackendBaseUrl()).toBeNull();
+  });
+
+  it('accepts http(s) URLs and trims trailing slashes', () => {
+    process.env.BACKEND_URL = 'https://api.example.com';
+    expect(resolveBackendBaseUrl()).toBe('https://api.example.com');
+    process.env.BACKEND_URL = 'http://localhost:8000///';
+    expect(resolveBackendBaseUrl()).toBe('http://localhost:8000');
   });
 });

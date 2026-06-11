@@ -114,9 +114,18 @@ async function runWithOpenAI(opts: RunActionAgentOptions, ctx: ToolContext): Pro
         continue;
       }
 
-      result = tool
-        ? await tool.execute(input, ctx)
-        : { summary: `Unknown tool: ${call.name}`, isError: true };
+      // A throwing tool becomes a failed action — it must not abort the run
+      // or drop the remaining tool calls.
+      try {
+        result = tool
+          ? await tool.execute(input, ctx)
+          : { summary: `Unknown tool: ${call.name}`, isError: true };
+      } catch (err) {
+        result = {
+          summary: `Tool "${call.name}" threw: ${err instanceof Error ? err.message : String(err)}`,
+          isError: true,
+        };
+      }
 
       actions.push(toAction(call.name, input, result));
       toolOutputs.push({
@@ -155,9 +164,17 @@ async function runWithGemini(opts: RunActionAgentOptions, ctx: ToolContext): Pro
     if (!call.name) continue;
     const tool = getTool(call.name);
     const input = (call.args ?? {}) as Record<string, unknown>;
-    const result: ActionToolResult = tool
-      ? await tool.execute(input, ctx)
-      : { summary: `Unknown tool: ${call.name}`, isError: true };
+    let result: ActionToolResult;
+    try {
+      result = tool
+        ? await tool.execute(input, ctx)
+        : { summary: `Unknown tool: ${call.name}`, isError: true };
+    } catch (err) {
+      result = {
+        summary: `Tool "${call.name}" threw: ${err instanceof Error ? err.message : String(err)}`,
+        isError: true,
+      };
+    }
     actions.push(toAction(call.name, input, result));
   }
   return actions;
