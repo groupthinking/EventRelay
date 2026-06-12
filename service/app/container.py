@@ -15,12 +15,18 @@ from .store.memory import InMemoryJobStore
 
 class Container:
     def __init__(self, settings: Settings | None = None) -> None:
+class Container:
+    """Dependency injection container.
+    
+    Lazily builds and caches service dependencies. Store selection is based
+    on settings.database_url: SqlAlchemyJobStore (Postgres) if set, otherwise
+    InMemoryJobStore for tests/local development.
+    """
+    def __init__(self, settings: Settings | None = None) -> None:
         self.settings = settings or get_settings()
         self._store: JobStore | None = None
-        self._transcript_provider: TranscriptProvider | None = None
-        self._llm: LLMClient | None = None
 
-    @property
+    `@property`
     def store(self) -> JobStore:
         if self._store is None:
             self._store = self._build_store()
