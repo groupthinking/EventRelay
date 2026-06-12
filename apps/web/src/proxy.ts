@@ -28,6 +28,12 @@ type MemoryBucket = {
   resetAt: number;
 };
 
+/**
+ * In-process memory cache is ONLY for local dev without Redis.
+ * Per Vercel Functions best practices and the confirmed remediation outcome,
+ * production MUST use Redis (Upstash) or explicitly fail-open with warning.
+ * The global Map is unsuitable for serverless scaling.
+ */
 const memoryBuckets = new Map<string, MemoryBucket>();
 
 const redis =
@@ -37,6 +43,13 @@ const redis =
         token: process.env.UPSTASH_REDIS_REST_TOKEN,
       })
     : null;
+
+if (!redis && process.env.NODE_ENV === 'production') {
+  console.warn(
+    '[RateLimit] No UPSTASH_REDIS_* configured in production. Rate limiting is bypassed (fail-open) to avoid silent in-process state. ' +
+    'Configure Upstash for enforcement. See src/proxy.ts and the rate-limit-middleware agent in config/agent_network.json.'
+  );
+}
 
 function isAiRoute(pathname: string): boolean {
   return AI_ROUTE_PREFIXES.some((prefix) => pathname.startsWith(prefix));
@@ -108,7 +121,18 @@ async function checkRateLimit(request: NextRequest): Promise<RateLimitResult> {
     }
   }
 
-  return checkMemoryLimit(key, limit);
+  // Memory fallback strictly for non-production (dev / local).
+  if (process.env.NODE_ENV !== 'production') {
+    return checkMemoryLimit(key, limit);
+  }
+
+  // Production without Redis: fail-open (allowed) with the warning already emitted above.
+  return {
+    allowed: true,
+    limit,
+    remaining: limit,
+    resetAt: Math.ceil((Date.now() + WINDOW_SECONDS * 1000) / 1000),
+  };
 }
 
 export async function proxy(request: NextRequest) {
@@ -144,6 +168,6 @@ export async function proxy(request: NextRequest) {
   return response;
 }
 
-export const config = {
-  matcher: ['/api/:path*'],
-};
+// NOTE: The old `export const config` was moved to the real middleware.ts (apps/web/middleware.ts)
+// so that the rate limiter is actually executed by Next.js for /api/* paths.
+// This file now exports only the `proxy` logic (and the hardened dev-only memory behavior).
