@@ -54,6 +54,16 @@ def test_derive_artifacts_requires_summary() -> None:
 def test_captions_provider_uses_stt_on_any_fetch_failure() -> None:
     class FakeStt:
         async def transcribe(self, video_id: str, language: str | None) -> str:
+            """
+            Produce a transcript for the given video using speech-to-text.
+            
+            Parameters:
+                video_id (str): Identifier of the video to transcribe.
+                language (str | None): Optional language hint for the transcription; if None, language detection may be used.
+            
+            Returns:
+                transcript (str): The transcribed text for the video.
+            """
             return "stt transcript"
 
     # YouTubeCaptionsProvider catches any Exception during caption fetching and

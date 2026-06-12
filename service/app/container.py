@@ -23,17 +23,37 @@ class Container:
     InMemoryJobStore for tests/local development.
     """
     def __init__(self, settings: Settings | None = None) -> None:
+        """
+        Initialize the container with the provided settings or the application default.
+        
+        Parameters:
+            settings (Settings | None): Optional settings object to configure the container.
+                If omitted, the global `get_settings()` result is used. Initializes internal
+                caches (e.g., `_store`) to `None`.
+        """
         self.settings = settings or get_settings()
         self._store: JobStore | None = None
 
     `@property`
     def store(self) -> JobStore:
+        """
+        Lazily constructs and caches the application's JobStore and returns it.
+        
+        Returns:
+            JobStore: The container's cached JobStore instance.
+        """
         if self._store is None:
             self._store = self._build_store()
         return self._store
 
     @property
     def transcript_provider(self) -> TranscriptProvider:
+        """
+        Lazily constructs and returns the application's transcript provider, defaulting to a YouTube captions provider.
+        
+        Returns:
+            TranscriptProvider: The cached transcript provider instance; a YouTubeCaptionsProvider is created and stored on first access.
+        """
         if self._transcript_provider is None:
             from .pipeline.transcript import YouTubeCaptionsProvider
 
@@ -42,11 +62,23 @@ class Container:
 
     @property
     def llm(self) -> LLMClient:
+        """
+        Return the application's cached LLM client, building and caching it on first access.
+        
+        Returns:
+            LLMClient: The configured LLM client instance.
+        """
         if self._llm is None:
             self._llm = self._build_llm()
         return self._llm
 
     def _build_store(self) -> JobStore:
+        """
+        Constructs and returns the application's JobStore based on the configured database URL.
+        
+        Returns:
+            JobStore: A `SqlAlchemyJobStore` when `self.settings.database_url` is set, otherwise an `InMemoryJobStore`.
+        """
         dsn = self.settings.database_url
         if dsn:
             from .store.sqlalchemy_store import SqlAlchemyJobStore
@@ -55,6 +87,15 @@ class Container:
         return InMemoryJobStore()
 
     def _build_llm(self) -> LLMClient:
+        """
+        Build an LLM client configured from the container's settings.
+        
+        Returns:
+            LLMClient: a configured GeminiLLMClient instance using the container's Gemini API key and LLM model.
+        
+        Raises:
+            RuntimeError: if the Gemini API key is not set in settings (set EVENTRELAY_GEMINI_API_KEY).
+        """
         key = self.settings.gemini_api_key
         if not key:
             raise RuntimeError("No LLM configured: set EVENTRELAY_GEMINI_API_KEY")
@@ -68,8 +109,20 @@ _container = Container()
 
 
 def get_container() -> Container:
+    """
+    Get the module-level dependency-injection container.
+    
+    Returns:
+        container (Container): The shared module-level Container instance used by the application.
+    """
     return _container
 
 
 def get_store() -> JobStore:
+    """
+    Access the application's shared JobStore instance.
+    
+    Returns:
+        The shared `JobStore` singleton managed by the module-level container.
+    """
     return _container.store

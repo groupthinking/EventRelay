@@ -19,15 +19,41 @@ GOOD_URL = "https://youtu.be/dQw4w9WgXcQ"
 
 class FakeTranscriptProvider:
     def __init__(self, text: str) -> None:
+        """
+        Initialize the fake transcript provider with a fixed transcript.
+        
+        Parameters:
+            text (str): Transcript text that will be returned by fetch() regardless of video_id or language.
+        """
         self._text = text
 
     async def fetch(self, video_id: str, language: str | None = None) -> str:
+        """
+        Return the fixed transcript text stored by this provider.
+        
+        Parameters:
+            video_id (str): Ignored; accepted for interface compatibility.
+            language (str | None): Ignored; accepted for interface compatibility.
+        
+        Returns:
+            str: The provider's stored transcript text.
+        """
         return self._text
 
 
 @pytest.fixture
 def container() -> Container:
     # Create a fresh test container instead of mutating the module singleton.
+    """
+    Create a fresh test Container with isolated internals for use in tests.
+    
+    The returned Container has its internal singletons for store, transcript provider,
+    and LLM reset to None to avoid cross-test state leakage.
+    
+    Returns:
+        Container: A new Container instance with `_store`, `_transcript_provider`,
+        and `_llm` cleared.
+    """
     test_container = Container()
     test_container._store = None  # type: ignore[attr-defined]
     test_container._transcript_provider = None  # type: ignore[attr-defined]
@@ -38,6 +64,15 @@ def container() -> Container:
 @pytest.fixture
 def client(container: Container) -> TestClient:
     # Use dependency overrides to inject the test container.
+    """
+    Create a TestClient for the application with the provided test Container injected via FastAPI dependency overrides.
+    
+    Parameters:
+        container (Container): Test container whose `store` and other test doubles will be provided to the app's dependencies.
+    
+    Returns:
+        TestClient: A TestClient instance for the app configured to use `container` for `get_container` and `get_store`.
+    """
     client_app = create_app()
     client_app.dependency_overrides[get_container] = lambda: container
     client_app.dependency_overrides[get_store] = lambda: container.store
@@ -84,6 +119,11 @@ def test_submit_is_idempotent(container: Container, client: TestClient) -> None:
 # --- SC2 -> SC3 -> SC4 happy path through the seam ---
 
 def test_full_pipeline_success(container: Container, client: TestClient) -> None:
+    """
+    Validates the end-to-end happy path from job submission through events, artifacts, and transcript retrieval.
+    
+    Configures fake transcript and LLM responses, submits a job, then asserts the job reaches "succeeded", the first produced event has type "youtube.video.captured", the artifacts include the expected summary, and the stored transcript contains the word "capture".
+    """
     container._transcript_provider = FakeTranscriptProvider(  # type: ignore[attr-defined]
         "In this video we capture events and ship software."
     )
@@ -106,6 +146,11 @@ def test_full_pipeline_success(container: Container, client: TestClient) -> None
 def test_untyped_event_fails_job(container: Container, client: TestClient) -> None:
     # A model returning an off-taxonomy event name must fail the job, not leak
     # an untyped event (SC3).
+    """
+    Ensure a job fails when the LLM produces an event type that does not match the allowed taxonomy.
+    
+    Configures the container with a fixed transcript and an LLM fake that returns an event with an invalid `type`, submits a job, and asserts the job's status becomes "failed".
+    """
     container._transcript_provider = FakeTranscriptProvider("text")  # type: ignore[attr-defined]
     container._llm = FakeLLMClient([{"events": [{"type": "NOT-valid"}]}])  # type: ignore[attr-defined]
     job_id = client.post("/api/v1/jobs", json={"video_url": GOOD_URL}).json()["job_id"]

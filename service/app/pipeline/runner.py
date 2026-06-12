@@ -22,6 +22,19 @@ if TYPE_CHECKING:
 async def run_job(
     job_id: str, video_id: str, container: Container, language: str | None = None
 ) -> None:
+    """
+    Orchestrates a single pipeline job: fetches the transcript, derives events and artifacts, persists results, and records job status.
+    
+    Parameters:
+        job_id (str): Identifier of the job to run.
+        video_id (str): Identifier of the video to process.
+        container (Container): Dependency container providing `store`, `transcript_provider`, and `llm`.
+        language (str | None): Optional language hint passed to the transcript provider.
+    
+    Notes:
+        - Sets the job status to `running` at start, `succeeded` on successful completion, and `failed` if any exception occurs.
+        - Persists `transcript`, `events`, and `artifacts` to the store.
+    """
     store = container.store
     await store.update_status(job_id, JobStatus.running)
     try:

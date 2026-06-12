@@ -13,6 +13,12 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
 def _utcnow() -> datetime:
+    """
+    Get the current time as a timezone-aware UTC datetime.
+    
+    Returns:
+        datetime: Current datetime with UTC timezone information.
+    """
     return datetime.now(timezone.utc)
 
 

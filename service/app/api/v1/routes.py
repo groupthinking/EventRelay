@@ -28,6 +28,12 @@ router = APIRouter(prefix="/api/v1")
 
 @router.get("/health", response_model=HealthResponse, tags=["ops"])
 async def health() -> HealthResponse:
+    """
+    Provide the application's health information including the current app version.
+    
+    Returns:
+        HealthResponse: Object containing the configured `app_version` as `version`.
+    """
     return HealthResponse(version=get_settings().app_version)
 
 
@@ -42,7 +48,18 @@ async def submit_job(
     background: BackgroundTasks,
     container: Container = Depends(get_container),
 ) -> SubmitJobResponse:
-    """SC1 + SC6: validate the URL, create (or replay) the job, enqueue work."""
+    """
+    Validate a submitted video URL, create or reuse a job record, and enqueue processing when a new job is created.
+    
+    Parameters:
+        req (SubmitJobRequest): Request payload containing `video_url` and desired `language` for the job.
+    
+    Returns:
+        SubmitJobResponse: Response containing the job's `job_id` and current `status`.
+    
+    Raises:
+        HTTPException: With status 422 if `video_url` cannot be parsed or is otherwise invalid.
+    """
     try:
         video_id = extract_video_id(req.video_url)
     except InvalidInput as exc:
@@ -57,6 +74,15 @@ async def submit_job(
 
 @router.get("/jobs/{job_id}", response_model=JobView, tags=["jobs"])
 async def get_job(job_id: str, store: JobStore = Depends(get_store)) -> JobView:
+    """
+    Retrieve job metadata for the given job ID.
+    
+    Raises:
+        HTTPException: with status 404 if the job does not exist.
+    
+    Returns:
+        JobView: Job view containing `job_id`, `status`, `video_url`, `created_at`, `updated_at`, and `error`.
+    """
     rec = await store.get(job_id)
     if rec is None:
         raise HTTPException(status_code=404, detail="job not found")
@@ -72,6 +98,15 @@ async def get_job(job_id: str, store: JobStore = Depends(get_store)) -> JobView:
 
 @router.get("/jobs/{job_id}/transcript", response_model=TranscriptView, tags=["jobs"])
 async def get_transcript(job_id: str, store: JobStore = Depends(get_store)) -> TranscriptView:
+    """
+    Retrieve the transcript view for a job.
+    
+    Returns:
+        TranscriptView: The view containing `job_id` and the job's `transcript`.
+    
+    Raises:
+        HTTPException: 404 if the job does not exist or the transcript is not available.
+    """
     rec = await store.get(job_id)
     if rec is None or rec.transcript is None:
         raise HTTPException(status_code=404, detail="transcript not available")
@@ -80,6 +115,18 @@ async def get_transcript(job_id: str, store: JobStore = Depends(get_store)) -> T
 
 @router.get("/jobs/{job_id}/events", response_model=EventsView, tags=["jobs"])
 async def get_events(job_id: str, store: JobStore = Depends(get_store)) -> EventsView:
+    """
+    Retrieve the event list for a job.
+    
+    Parameters:
+        job_id (str): Identifier of the job to fetch events for.
+    
+    Returns:
+        EventsView: View containing `job_id` and the job's `events` list.
+    
+    Raises:
+        HTTPException: 404 with detail "job not found" if no job exists for `job_id`.
+    """
     rec = await store.get(job_id)
     if rec is None:
         raise HTTPException(status_code=404, detail="job not found")
@@ -88,6 +135,18 @@ async def get_events(job_id: str, store: JobStore = Depends(get_store)) -> Event
 
 @router.get("/jobs/{job_id}/artifacts", response_model=ArtifactsView, tags=["jobs"])
 async def get_artifacts(job_id: str, store: JobStore = Depends(get_store)) -> ArtifactsView:
+    """
+    Retrieve artifacts for a job by its ID.
+    
+    Parameters:
+        job_id (str): ID of the job to fetch artifacts for.
+    
+    Returns:
+        ArtifactsView: View containing `job_id` and the job's `artifacts`.
+    
+    Raises:
+        HTTPException: 404 if the job does not exist or artifacts are not available.
+    """
     rec = await store.get(job_id)
     if rec is None or rec.artifacts is None:
         raise HTTPException(status_code=404, detail="artifacts not available")
