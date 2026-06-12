@@ -22,10 +22,9 @@ reviews:
   auto_assign_reviewers: true
   auto_review:
     enabled: true
-    # Drafts are not auto-reviewed (cost/noise); reviews run when a PR is marked
-    # ready. This resolves a prior conflict where the dashboard had drafts:true
-    # but the repo file had drafts:false — flip to true to review drafts too.
-    drafts: false
+    # Drafts are auto-reviewed too (matches the prior dashboard setting), so
+    # feedback arrives before a PR is marked ready.
+    drafts: true
     base_branches:
       - main
     # Skip work-in-progress PRs that are not opened as drafts.
