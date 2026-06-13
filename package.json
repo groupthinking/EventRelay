@@ -22,10 +22,10 @@
     "npm": ">=8.0.0"
   },
   "devDependencies": {
-    "@modelcontextprotocol/sdk": "^1.26.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "brace-expansion": "^1.1.12",
-    "turbo": "^2.9.14",
-    "vitest": "^4.1.2"
+    "turbo": "^2.9.18",
+    "vitest": "^4.1.8"
   },
   "overrides": {
     "next": ">=16.2.6",
@@ -46,8 +46,8 @@
   },
   "dependencies": {
     "@dataconnect/generated": "file:src/dataconnect-generated",
-    "@google-cloud/text-to-speech": "^6.4.0",
-    "@google/genai": "^2.7.0",
+    "@google-cloud/text-to-speech": "^6.4.1",
+    "@google/genai": "^2.8.0",
     "chrome-devtools-mcp": "^0.10.2",
     "openai": "^6.41.0"
   }
