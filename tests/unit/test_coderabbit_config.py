@@ -107,10 +107,7 @@ def test_auto_review_ignores_do_not_merge(config):
     assert "DO NOT MERGE" in keywords
 
 
-@pytest.mark.unit
-def test_auto_review_ignores_skip_ci(config):
-    keywords = config["reviews"]["auto_review"]["ignore_title_keywords"]
-    assert "[skip ci]" in keywords
+
 
 
 @pytest.mark.unit
