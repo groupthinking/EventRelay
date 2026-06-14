@@ -13,7 +13,7 @@
  * Environment:
  *   BASE_URL — deployment URL (default: https://uvai.io)
  *   TEST_YOUTUBE_URL — short video for pipeline test
- *     (default: https://www.youtube.com/watch?v=dQw4w9WgXcQ — 3:33)
+ *     (default: https://www.youtube.com/watch?v=auJzb1D-fag)
  *
  * Red/Green Signal:
  *   - GREEN: all tests pass → stdout: "✅ ALL TESTS PASSED"
@@ -25,7 +25,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 const BASE_URL = process.env.BASE_URL || 'https://uvai.io';
 const TEST_YOUTUBE_URL =
   process.env.TEST_YOUTUBE_URL ||
-  'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
+  'https://www.youtube.com/watch?v=auJzb1D-fag';
 
 // To exercise a protected deployment (e.g. a Vercel preview, which returns 401
 // to anonymous requests), set VERCEL_AUTOMATION_BYPASS_SECRET to the project's
