@@ -23,11 +23,25 @@ import yaml
 # Fixture
 # ---------------------------------------------------------------------------
 
-REPO_ROOT = Path(__file__).parents[2]
+def _find_repo_root(start: Path) -> Path:
+    """Walk up from *start* until a directory containing ``.git`` is found.
+
+    This is more robust than a hardcoded ``parents[N]`` index: it works
+    regardless of how deeply nested the test file is within the repository.
+    """
+    for candidate in (start, *start.parents):
+        if (candidate / ".git").exists():
+            return candidate
+    raise FileNotFoundError(
+        f"Could not locate repository root (no .git directory) starting from {start}"
+    )
+
+
+REPO_ROOT = _find_repo_root(Path(__file__).parent)
 CONFIG_PATH = REPO_ROOT / ".coderabbit.yaml"
 
 
-@pytest.fixture(scope="module")
+
 def config() -> dict:
     """Load and return the parsed .coderabbit.yaml as a plain dict."""
     with CONFIG_PATH.open("r", encoding="utf-8") as fh:
@@ -107,7 +121,10 @@ def test_auto_review_ignores_do_not_merge(config):
     assert "DO NOT MERGE" in keywords
 
 
-
+@pytest.mark.unit
+def test_auto_review_ignores_skip_ci(config):
+    keywords = config["reviews"]["auto_review"]["ignore_title_keywords"]
+    assert "[skip ci]" in keywords
 
 
 @pytest.mark.unit
