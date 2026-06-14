@@ -35,9 +35,10 @@ reviews:
   finishing_touches:
     simplify:
       enabled: true
-  # Generated, vendored, and lock files are excluded so reviews stay
+  # Generated, vendored, lock files, and test directories are excluded so reviews stay
   # signal-rich. The hand-maintained SDK (sdk/python/**) is intentionally NOT
-  # excluded — CLAUDE.md requires it stay in sync with the backend models.
+  # excluded — CLAUDE.md requires it stay in sync with the backend models. Test files are
+  # excluded to prevent PII scanner false positives on mock/fixture data.
   path_filters:
     - "!**/package-lock.json"
     - "!**/*.lock"
@@ -49,6 +50,7 @@ reviews:
     - "!**/.turbo/**"
     - "!**/coverage/**"
     - "!**/htmlcov/**"
+    - "!tests/**"
   path_instructions:
     - path: "**/*.ts"
       instructions: >-
