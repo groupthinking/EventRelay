@@ -12,6 +12,7 @@
     "@dataconnect/generated": "file:src/dataconnect-generated",
     "@google/genai": "^2.8.0",
     "@google/generative-ai": "^0.24.1",
+    "@sentry/nextjs": "^10.57.0",
     "@stripe/stripe-js": "^2.0.0",
     "@supabase/supabase-js": "^2.39.0",
     "@upstash/redis": "^1.28.0",

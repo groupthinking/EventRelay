@@ -54,6 +54,10 @@ This directory contains comprehensive guides for deploying and managing EventRel
 | API Docs | https://api.uvai.io/docs | Interactive Swagger UI |
 | Health Check | https://api.uvai.io/api/v1/health | Backend health endpoint |
 
+See `VERCEL_PRODUCTION_RUNBOOK.md` for the current launch-readiness gate. As
+of the latest Vercel audit, frontend TLS and headers pass, but the backend
+health endpoint is still failing upstream.
+
 ### Legacy URLs (Redirected)
 
 All these URLs redirect to https://uvai.io:

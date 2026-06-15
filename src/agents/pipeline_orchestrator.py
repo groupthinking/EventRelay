@@ -8,9 +8,19 @@ Supports two execution modes:
   - DAG parallel: Independent stages run concurrently via DAGExecutor
 
 Pass options={"execution_mode": "dag"} to run_pipeline() to enable parallel mode.
+
+VERA Integration:
+  Every agent stage is wrapped with Zero Trust security checks:
+    1. Identity — verify agent credential before execution
+    2. Gateway  — check tool/operation permission
+    3. Firewall — scan inputs for injection
+    4. Breaker  — check circuit breaker state
+    5. Proof    — record tamper-evident execution proof
+    6. Enforcer — route anomalies through escalation tiers
 """
 
 import logging
+import time
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Optional
@@ -20,6 +30,38 @@ from .mcp_agent_network import get_agent_network
 from .skill_monitor_emitter import get_emitter
 
 logger = logging.getLogger(__name__)
+
+
+# --- VERA imports (lazy-loaded to avoid import-time side effects) ---
+
+def _get_vera():
+    """Lazy-load VERA components. Returns None for each component if VERA is unavailable."""
+    try:
+        from vera.identity import get_identity_service
+        from vera.firewall import get_firewall
+        from vera.gateway import get_gateway
+        from vera.proof_chain import ExecutionProof, get_proof_store, hash_data
+        from vera.enforcement import get_breaker_manager
+        from vera.maturity import get_maturity_runtime
+        from vera.enforcer import get_enforcer
+
+        return {
+            "identity": get_identity_service(),
+            "firewall": get_firewall(),
+            "gateway": get_gateway(),
+            "proof_store": get_proof_store(),
+            "ExecutionProof": ExecutionProof,
+            "hash_data": hash_data,
+            "breakers": get_breaker_manager(),
+            "maturity": get_maturity_runtime(),
+            "enforcer": get_enforcer(),
+        }
+    except ImportError:
+        logger.warning("VERA modules not available — running without security layer")
+        return None
+    except Exception as e:
+        logger.error(f"VERA initialization failed: {e} — running without security layer")
+        return None
 
 
 # --- Stage dependency declarations ---
@@ -87,6 +129,12 @@ class VideoPipelineOrchestrator:
         self.pipeline_state: dict[str, Any] = {}
         self.results: dict[str, PipelineResult] = {}
         self.emitter = get_emitter()
+
+        # VERA security layer (None if VERA modules unavailable)
+        self._vera = _get_vera()
+        self._vera_credentials: dict[str, Any] = {}  # agent_id → (token, credential)
+        if self._vera:
+            logger.info("VERA security layer active — all agent stages will be verified")
 
     async def run_pipeline(self, video_url: str, options: Optional[dict] = None) -> dict:
         """Execute video-to-software pipeline.
@@ -256,7 +304,18 @@ class VideoPipelineOrchestrator:
         return executor
 
     async def _execute_agent_stage(self, agent_id: str) -> PipelineResult:
-        """Execute a single agent stage"""
+        """Execute a single agent stage, wrapped with VERA security checks.
+
+        VERA integration sequence:
+          1. Check circuit breaker — is this agent allowed to act?
+          2. Issue/verify credential — does this agent have valid identity?
+          3. Check gateway permission — is this tool/operation allowed?
+          4. Scan inputs — any prompt injection in the payload?
+          5. Execute the actual agent action
+          6. Record execution proof — tamper-evident chain entry
+          7. On failure: notify enforcer for escalation
+        """
+        start_time = time.monotonic()
         start = datetime.now()
         agent = self.network.get_agent(agent_id)
 
@@ -264,6 +323,17 @@ class VideoPipelineOrchestrator:
             return PipelineResult(agent_id, False, {}, 0, f"Agent {agent_id} not found")
 
         logger.info(f"Executing stage: {agent.name}")
+
+        # Determine action before VERA checks (needed for gateway + proof)
+        action, payload = self._prepare_agent_action(agent_id)
+
+        # --- VERA pre-execution checks ---
+        if self._vera:
+            vera_check = self._vera_pre_check(agent_id, agent.name, action, payload)
+            if vera_check is not None:
+                # Pre-check failed — return the rejection result
+                duration = (time.monotonic() - start_time) * 1000
+                return PipelineResult(agent_id, False, {}, duration, vera_check)
 
         # Emit stage start event
         await self.emitter.emit("pipeline.event", {
@@ -274,23 +344,183 @@ class VideoPipelineOrchestrator:
         })
 
         try:
-            # Determine action based on agent role
-            action, payload = self._prepare_agent_action(agent_id)
-
             # Route through MCP network
             result = await self.network.route_to_agent(agent_id, action, payload)
 
-            duration = (datetime.now() - start).total_seconds() * 1000
+            duration = (time.monotonic() - start_time) * 1000
 
             if "error" in result:
+                # --- VERA: record failure proof + notify enforcer ---
+                if self._vera:
+                    self._vera_record_proof(
+                        agent_id, action, payload, result, duration,
+                        authorized=True, success=False,
+                    )
+                    self._vera["enforcer"].on_enforcement_event(
+                        agent_id, "stage_error",
+                        details=f"Stage {agent_id} returned error: {result.get('error', '')}",
+                    )
+                    self._vera["breakers"].get_breaker(agent_id).record_failure("error")
+
                 return PipelineResult(agent_id, False, result, duration, result["error"])
+
+            # --- VERA: record success proof ---
+            if self._vera:
+                self._vera_record_proof(
+                    agent_id, action, payload, result, duration,
+                    authorized=True, success=True,
+                )
+                self._vera["breakers"].get_breaker(agent_id).record_success()
 
             return PipelineResult(agent_id, True, result, duration)
 
         except Exception as e:
-            duration = (datetime.now() - start).total_seconds() * 1000
+            duration = (time.monotonic() - start_time) * 1000
             logger.exception(f"Agent {agent_id} failed")
+
+            # --- VERA: record exception proof + notify enforcer ---
+            if self._vera:
+                self._vera_record_proof(
+                    agent_id, action, payload, {"error": str(e)}, duration,
+                    authorized=True, success=False,
+                )
+                self._vera["enforcer"].on_enforcement_event(
+                    agent_id, "stage_exception",
+                    details=f"Stage {agent_id} raised: {str(e)[:200]}",
+                )
+                self._vera["breakers"].get_breaker(agent_id).record_failure("error")
+
             return PipelineResult(agent_id, False, {}, duration, str(e))
+
+    def _vera_pre_check(
+        self, agent_id: str, agent_name: str, action: str, payload: dict
+    ) -> Optional[str]:
+        """Run VERA pre-execution checks. Returns error message or None if clear."""
+        v = self._vera
+        if not v:
+            return None
+
+        # 1. Circuit breaker check
+        breaker = v["breakers"].get_breaker(agent_id)
+        if not breaker.allow_action():
+            snap = breaker.snapshot()
+            return (
+                f"VERA: Circuit breaker OPEN for {agent_id} "
+                f"(trips={snap.consecutive_trips}, "
+                f"cooldown={snap.current_cooldown_seconds}s)"
+            )
+
+        # 2. Identity — issue credential if not yet issued, verify if cached
+        if agent_id not in self._vera_credentials:
+            maturity_level = v["maturity"].get_level(agent_id)
+            # Register agent in maturity system if not yet registered
+            v["maturity"].register_agent(agent_id, agent_name, initial_level=maturity_level)
+
+            token, credential = v["identity"].issue_credential(
+                agent_id=agent_id,
+                agent_name=agent_name,
+                maturity_level=maturity_level,
+            )
+            self._vera_credentials[agent_id] = (token, credential)
+        else:
+            token, credential = self._vera_credentials[agent_id]
+            # Re-verify the cached credential
+            verified = v["identity"].verify_credential(token)
+            if verified is None:
+                # Credential invalid/expired/revoked — re-issue
+                if v["identity"].is_revoked(agent_id):
+                    return f"VERA: Agent {agent_id} credentials revoked"
+                maturity_level = v["maturity"].get_level(agent_id)
+                token, credential = v["identity"].issue_credential(
+                    agent_id=agent_id,
+                    agent_name=agent_name,
+                    maturity_level=maturity_level,
+                )
+                self._vera_credentials[agent_id] = (token, credential)
+
+        # 3. Gateway permission check
+        maturity_level = v["maturity"].get_level(agent_id)
+        decision = v["gateway"].check_permission(
+            agent_id=agent_id,
+            tool="mcp-agent-network",
+            operation=action,
+            maturity_level=maturity_level,
+        )
+
+        if not decision.allowed:
+            # Log the denial and notify enforcer
+            v["enforcer"].on_gateway_event(
+                agent_id, "authorization_failed",
+                details=f"Denied: {action} — {decision.reason}",
+            )
+            breaker.record_failure("auth_failure")
+            return f"VERA: Permission denied — {decision.reason}"
+
+        # 4. Input firewall scan (scan serialized payload)
+        try:
+            import json
+            payload_text = json.dumps(payload, default=str)
+            scan = v["firewall"].scan_input(payload_text, context=f"pipeline.{agent_id}.{action}")
+
+            from vera.firewall import FirewallAction
+            if scan.action == FirewallAction.BLOCK:
+                v["enforcer"].on_firewall_event(
+                    agent_id,
+                    f"threat_detected_{scan.threat_level.value}",
+                    details=f"Blocked input for {action}: {scan.details}",
+                )
+                return f"VERA: Input blocked by firewall — {scan.threat_level.value} threat"
+        except Exception as e:
+            logger.warning(f"VERA firewall scan error (non-blocking): {e}")
+
+        return None  # All checks passed
+
+    def _vera_record_proof(
+        self,
+        agent_id: str,
+        action: str,
+        payload: dict,
+        result: dict,
+        duration_ms: float,
+        authorized: bool,
+        success: bool,
+    ) -> None:
+        """Record a tamper-evident execution proof for this stage."""
+        v = self._vera
+        if not v:
+            return
+
+        try:
+            import json
+
+            _, credential = self._vera_credentials.get(agent_id, (None, None))
+            jti = credential.token_id if credential else ""
+            maturity = credential.maturity_level if credential else 0
+
+            input_text = json.dumps(payload, default=str)
+            output_text = json.dumps(result, default=str)[:2000]
+
+            proof = v["ExecutionProof"](
+                agent_id=agent_id,
+                agent_credential_jti=jti,
+                maturity_level=maturity,
+                action_type="stage_execution",
+                tool="mcp-agent-network",
+                operation=action,
+                input_hash=v["hash_data"](input_text),
+                output_hash=v["hash_data"](output_text),
+                input_summary=f"pipeline.{action}",
+                output_summary=("success" if success else f"error: {result.get('error', 'unknown')}")[:200],
+                duration_ms=duration_ms,
+                capability_used=action,
+                authorization_approved=authorized,
+                session_id=self.pipeline_state.get("run_id", ""),
+                correlation_id=self.pipeline_state.get("run_id", ""),
+                chain_prev=v["proof_store"].get_chain_tip(agent_id),
+            )
+            v["proof_store"].append(proof)
+        except Exception as e:
+            logger.error(f"VERA proof recording failed (non-blocking): {e}")
 
     def _prepare_agent_action(self, agent_id: str) -> tuple:
         """Prepare action and payload for agent based on pipeline state"""

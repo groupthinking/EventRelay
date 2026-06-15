@@ -54,11 +54,11 @@ shipped code.
 
 These are dashboard or provider configuration items, not frontend code changes.
 
-- `BACKEND_URL` must point to a healthy backend. Current checks found:
-  - production `BACKEND_URL` host `eventrelay-production.up.railway.app` returns
-    Railway `404 Application not found`.
+- `BACKEND_URL` and `NEXT_PUBLIC_BACKEND_URL` are configured in Vercel for
+  Production, Preview, and Development with the Cloud Run backend URL, but the
+  backend itself must become healthy before launch. Current checks found:
+  - `https://uvai-backend-gpwz4wb5na-uc.a.run.app/api/v1/health` returns `500`.
   - `https://api.uvai.io/api/v1/health` returns `503`.
-  - the Cloud Run candidate returns `500`.
 - Gemini billing/API access must be fixed for Google project `688578214833`.
 - OpenAI project quota/billing must be fixed for project
   `proj_r6YRYxAKC2FeLk7NUmrBp9wg`.
