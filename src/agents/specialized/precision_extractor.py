@@ -32,7 +32,7 @@ class PrecisionExtractorAgent:
             raise ValueError("GOOGLE_API_KEY or GEMINI_API_KEY required")
 
         self.client = genai.Client(api_key=self.api_key)
-        self.model_id = "gemini-2.0-flash"  # Standard Gemini 2.0 Flash model
+        self.model_id = os.getenv("GEMINI_VIDEO_MODEL", "gemini-3.5-flash")
 
     async def extract_precision_data(
         self, video_url: str, context: Optional[str] = None

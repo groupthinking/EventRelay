@@ -204,7 +204,7 @@ class VideoMasterAgent(BaseAgent):
         def _sync_call():
             try:
                 response = self._gemini_client.models.generate_content(
-                    model="models/gemini-2.0-flash",
+                    model=os.getenv("GEMINI_VIDEO_MODEL", "models/gemini-3.5-flash"),
                     contents=prompt,
                 )
                 return response.text

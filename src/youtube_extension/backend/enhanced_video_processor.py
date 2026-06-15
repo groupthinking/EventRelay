@@ -71,7 +71,7 @@ class EnhancedVideoProcessor:
             try:
                 config = GeminiConfig(
                     api_key=self.gemini_api_key,
-                    model_name="gemini-2.0-flash-exp",
+                    model_name=os.getenv("GEMINI_MODEL", "gemini-3.5-flash"),
                     temperature=0.2,
                     max_output_tokens=4096
                 )
@@ -170,7 +170,8 @@ class EnhancedVideoProcessor:
                 raise ValueError("GEMINI_API_KEY not configured")
             
             # Use Gemini's OpenAI-compatible transcription endpoint
-            url = f"{self.gemini_base_url}/models/gemini-1.5-flash:generateContent"
+            model = os.getenv("GEMINI_VIDEO_MODEL", "gemini-3.5-flash")
+            url = f"{self.gemini_base_url}/models/{model}:generateContent"
             
             # Create prompt for video analysis
             prompt = f"""
@@ -279,7 +280,8 @@ class EnhancedVideoProcessor:
             if not self.gemini_api_key:
                 return {'error': 'GEMINI_API_KEY not configured'}
             
-            url = f"{self.gemini_base_url}/models/gemini-1.5-flash:generateContent"
+            model = os.getenv("GEMINI_VIDEO_MODEL", "gemini-3.5-flash")
+            url = f"{self.gemini_base_url}/models/{model}:generateContent"
             
             # Create comprehensive analysis prompt with strict JSON schema
             prompt = f"""

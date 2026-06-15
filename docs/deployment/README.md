@@ -34,6 +34,17 @@ This directory contains comprehensive guides for deploying and managing EventRel
   - CI/CD pipeline configuration
   - Rollback procedures
 
+- **[VERCEL_PRODUCTION_RUNBOOK.md](./VERCEL_PRODUCTION_RUNBOOK.md)** - Vercel launch and incident runbook
+  - Incident response and escalation
+  - Stage, promote, and rollback steps
+  - Vercel Pro launch checklist
+  - DNS and TLS verification
+
+- **[VERCEL_PRODUCTION_CHECKLIST_AUDIT.md](./VERCEL_PRODUCTION_CHECKLIST_AUDIT.md)** - Vercel checklist status matrix
+  - Operational excellence, security, reliability, performance, and cost status
+  - Confirmed repo changes and blocked dashboard items
+  - Residual dependency advisory notes
+
 ## Current Production URLs
 
 | Service | URL | Description |

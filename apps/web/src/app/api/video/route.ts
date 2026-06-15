@@ -3,39 +3,41 @@ import { publishEvent, EventTypes } from '@/lib/cloudevents';
 import { analyzeVideoWithGemini } from '@/lib/gemini-video-analyzer';
 import { hasGeminiKey } from '@/lib/gemini-client';
 import { saveTrainingExample } from '@/lib/training-store';
-import { fetchTranscript } from '@/lib/transcription-service';
-import { extractEvents, type ExtractionData } from '@/lib/event-extraction-service';
-import { resolveVideoUrl } from '@/lib/video-url-request';
 
 // Backend URL with validation - skip if not a valid URL
 const rawBackendUrl = process.env.BACKEND_URL || '';
 const BACKEND_URL = rawBackendUrl.startsWith('http') ? rawBackendUrl : 'http://localhost:8000';
 const BACKEND_AVAILABLE = rawBackendUrl.startsWith('http');
 
+export const runtime = 'nodejs';
+export const maxDuration = 120;
+
+/**
+ * Get the absolute base URL for the current request.
+ * Uses the request's origin or falls back to environment variables.
+ */
+function getBaseUrl(request: Request): string {
+  const url = new URL(request.url);
+  return `${url.protocol}//${url.host}`;
+}
 
 /**
  * POST /api/video
  *
  * Tries the full backend pipeline first (FastAPI transcript-action workflow).
  * If the backend is unreachable — common on Vercel where no Python server
- * runs — falls through to Strategy 2 (Gemini agentic) then Strategy 3
- * (fetchTranscript + extractEvents called directly, no internal HTTP loopback).
+ * runs — falls through to a frontend-only path that chains /api/transcribe
+ * and /api/extract-events serverless functions directly.
  */
 export async function POST(request: Request) {
   let videoUrl: string | undefined;
   try {
-    const body = await request.json() as Record<string, unknown>;
-    const url = resolveVideoUrl(body);
+    const body = await request.json();
+    const { url } = body;
     videoUrl = url;
 
     if (!url) {
-      return NextResponse.json(
-        {
-          error: 'Video URL is required',
-          accepted_fields: ['url', 'youtubeUrl', 'videoUrl', 'video_url'],
-        },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: 'Video URL is required' }, { status: 400 });
     }
 
     await publishEvent(EventTypes.VIDEO_RECEIVED, { url }, url);
@@ -219,12 +221,17 @@ export async function POST(request: Request) {
     }
 
     // ── Strategy 3: Frontend-only transcribe → extract chain (fallback) ──
-    // Calls service functions directly — no internal HTTP loopback that breaks on Vercel.
     let transcript = '';
     let transcriptSource = 'none';
     try {
       await publishEvent(EventTypes.TRANSCRIPT_STARTED, { url, strategy: 'frontend-chain' }, url);
-      const transcribeResult = await fetchTranscript({ url });
+      const baseUrl = getBaseUrl(request);
+      const transcribeRes = await fetch(`${baseUrl}/api/transcribe`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }),
+      });
+      const transcribeResult = await transcribeRes.json();
       if (transcribeResult.success && transcribeResult.transcript) {
         transcript = transcribeResult.transcript;
         transcriptSource = transcribeResult.source || 'frontend';
@@ -234,11 +241,17 @@ export async function POST(request: Request) {
       console.error('Transcript extraction failed:', e);
     }
 
-    let extraction: ExtractionData = { events: [], actions: [], summary: '', topics: [] };
+    let extraction: { events?: Array<{ type: string; title: string; description?: string; timestamp?: string; priority?: string }>; actions?: Array<{ title: string; description?: string; category?: string; estimatedMinutes?: number }>; summary?: string; topics?: string[] } = {};
     if (transcript) {
       try {
         await publishEvent(EventTypes.EXTRACTION_STARTED, { transcriptLength: transcript.length }, url);
-        const extractResult = await extractEvents({ transcript, videoUrl: url });
+        const baseUrl = getBaseUrl(request);
+        const extractRes = await fetch(`${baseUrl}/api/extract-events`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ transcript, videoUrl: url }),
+        });
+        const extractResult = await extractRes.json();
         if (extractResult.success && extractResult.data) {
           extraction = extractResult.data;
           await publishEvent(EventTypes.EXTRACTION_COMPLETED, { events: extraction.events?.length || 0, actions: extraction.actions?.length || 0 }, url);
@@ -263,7 +276,7 @@ export async function POST(request: Request) {
       result: {
         success: hasResults,
         insights: {
-          summary: extraction.summary || (hasResults ? 'Transcript extracted successfully' : 'Could not extract transcript — ensure GEMINI_API_KEY or OPENAI_API_KEY is set in Vercel environment variables'),
+          summary: extraction.summary || (hasResults ? 'Transcript extracted successfully' : 'Could not extract transcript — configure GEMINI_API_KEY'),
           actions: extraction.actions || [],
           topics: extraction.topics || [],
           sentiment: 'Neutral',
@@ -271,7 +284,7 @@ export async function POST(request: Request) {
         transcript_segments: 0,
         transcript_source: transcriptSource,
         agents_used: ['frontend-pipeline'],
-        errors: hasResults ? [] : ['All strategies failed — ensure GEMINI_API_KEY or OPENAI_API_KEY is set in Vercel environment variables'],
+        errors: hasResults ? [] : ['All strategies failed — ensure GEMINI_API_KEY is set'],
         raw_response: {
           transcript: { text: transcript },
           extraction,
