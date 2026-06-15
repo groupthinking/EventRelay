@@ -1,0 +1,202 @@
+{
+  "metadata": {
+    "package_id": "2c7dd58d-bb70-44c0-9b65-8a902171abfb",
+    "created_at": "2025-09-20 02:48:28.210783",
+    "version": "1.0.0",
+    "service_version": "1.0.0",
+    "schema_version": "1.0.0"
+  },
+  "video_metadata": {
+    "video_id": "dQw4w9WgXcQ",
+    "title": "React Tutorial - Complete Guide for Beginners",
+    "channel": "Code Academy Pro",
+    "duration": "PT2H15M30S",
+    "view_count": 150000,
+    "upload_date": null,
+    "tags": [
+      "react",
+      "javascript",
+      "tutorial",
+      "beginners"
+    ]
+  },
+  "project_analysis": {
+    "project_type": "tutorial",
+    "complexity_score": 0.7,
+    "tech_stack": {
+      "primary_language": "JavaScript",
+      "frameworks": [
+        "React",
+        "Create React App"
+      ],
+      "tools": [
+        "npm",
+        "VS Code",
+        "Chrome DevTools"
+      ],
+      "libraries": [
+        "React DOM",
+        "React Scripts"
+      ]
+    },
+    "learning_objectives": [
+      {
+        "objective": "Understand React component fundamentals",
+        "difficulty": "beginner",
+        "estimated_time": "2 hours"
+      },
+      {
+        "objective": "Master state management with useState",
+        "difficulty": "intermediate",
+        "estimated_time": "3 hours"
+      },
+      {
+        "objective": "Build interactive user interfaces",
+        "difficulty": "intermediate",
+        "estimated_time": "4 hours"
+      }
+    ],
+    "prerequisites": [
+      "Basic HTML",
+      "Basic CSS",
+      "JavaScript fundamentals"
+    ]
+  },
+  "content_structure": {
+    "sections": [
+      {
+        "title": "Introduction to React",
+        "duration": "15 minutes"
+      },
+      {
+        "title": "Setting up the Environment",
+        "duration": "10 minutes"
+      },
+      {
+        "title": "Your First Component",
+        "duration": "20 minutes"
+      },
+      {
+        "title": "State and Props",
+        "duration": "30 minutes"
+      }
+    ],
+    "code_examples": [
+      {
+        "filename": "App.js",
+        "code": "import React from 'react';\n\nfunction App() {\n  return <h1>Hello React!</h1>;\n}\n\nexport default App;",
+        "description": "Basic React component"
+      }
+    ],
+    "key_concepts": [
+      "Components",
+      "JSX",
+      "Props",
+      "State",
+      "Event Handling"
+    ],
+    "practice_exercises": [
+      {
+        "title": "Create a Counter Component",
+        "description": "Build a component that increments/decrements a counter",
+        "difficulty": "beginner"
+      }
+    ]
+  },
+  "web_analysis": {
+    "youtube_insights": {
+      "description_analysis": {
+        "links_mentioned": [
+          "https://react.dev/",
+          "https://create-react-app.dev/",
+          "https://github.com/example/react-tutorial"
+        ],
+        "timestamps": [],
+        "prerequisites": [
+          "basic html, css, javascript knowledge"
+        ]
+      },
+      "engagement_metrics": {
+        "video_duration": "PT2H15M30S",
+        "view_count": 150000,
+        "likes": 8500,
+        "upload_date": "2023-10-01",
+        "tags": [
+          "react",
+          "javascript",
+          "tutorial",
+          "beginners",
+          "web development"
+        ],
+        "transcript_extracted": true,
+        "firecrawl_version": "v2.3.0",
+        "enhanced_parsing": true,
+        "processing_speed": "50x_faster"
+      }
+    },
+    "channel_info": {
+      "channel_focus": [
+        "react",
+        "javascript",
+        "web development"
+      ],
+      "content_series": [
+        "Project Series",
+        "programming tutorial",
+        "React Tutorial"
+      ],
+      "channel_metrics": {
+        "subscriber_count": 250000,
+        "video_count": 150,
+        "channel_created": "2020-01-15",
+        "verified": true
+      }
+    },
+    "related_resources": [
+      {
+        "title": "Generic Web Page",
+        "url": "https://react.dev/learn",
+        "summary": "Scraped content would appear here via Firecrawl MCP integration."
+      },
+      {
+        "title": "Generic Web Page",
+        "url": "https://developer.mozilla.org/en-US/docs/Learn/Tools_and_testing/Client-side_JavaScript_frameworks/React_getting_started",
+        "summary": "Scraped content would appear here via Firecrawl MCP integration."
+      },
+      {
+        "title": "Generic Web Page",
+        "url": "https://www.freecodecamp.org/news/react-tutorial-for-beginners/",
+        "summary": "Scraped content would appear here via Firecrawl MCP integration."
+      }
+    ],
+    "documentation": [
+      {
+        "title": "Generic Web Page",
+        "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript",
+        "type": "official_documentation"
+      },
+      {
+        "title": "Generic Web Page",
+        "url": "https://javascript.info/",
+        "type": "official_documentation"
+      }
+    ],
+    "community_resources": [
+      {
+        "title": "Generic Web Page",
+        "url": "https://stackoverflow.com/questions/tagged/javascript",
+        "type": "community"
+      },
+      {
+        "title": "Generic Web Page",
+        "url": "https://www.reddit.com/r/javascript/",
+        "type": "community"
+      },
+      {
+        "title": "Generic Web Page",
+        "url": "https://dev.to/t/javascript",
+        "type": "community"
+      }
+    ]
+  }
+}
