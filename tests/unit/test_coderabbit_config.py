@@ -42,6 +42,7 @@ CONFIG_PATH = REPO_ROOT / ".coderabbit.yaml"
 
 
 
+@pytest.fixture(scope="module")
 def config() -> dict:
     """Load and return the parsed .coderabbit.yaml as a plain dict."""
     with CONFIG_PATH.open("r", encoding="utf-8") as fh:
