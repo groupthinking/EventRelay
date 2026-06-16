@@ -1,4 +1,3 @@
-import { Redis } from '@upstash/redis';
 import { NextRequest, NextResponse } from 'next/server';
 
 const WINDOW_SECONDS = 60;
@@ -36,20 +35,7 @@ type MemoryBucket = {
  */
 const memoryBuckets = new Map<string, MemoryBucket>();
 
-const redis =
-  process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
-    ? new Redis({
-        url: process.env.UPSTASH_REDIS_REST_URL,
-        token: process.env.UPSTASH_REDIS_REST_TOKEN,
-      })
-    : null;
-
-if (!redis && process.env.NODE_ENV === 'production') {
-  console.warn(
-    '[RateLimit] No UPSTASH_REDIS_* configured in production. Rate limiting is bypassed (fail-open) to avoid silent in-process state. ' +
-    'Configure Upstash for enforcement. See src/proxy.ts and the rate-limit-middleware agent in config/agent_network.json.'
-  );
-}
+let prodRedisWarned = false;
 
 function isAiRoute(pathname: string): boolean {
   return AI_ROUTE_PREFIXES.some((prefix) => pathname.startsWith(prefix));
@@ -68,15 +54,15 @@ function getRateLimit(pathname: string): number {
   return isAiRoute(pathname) ? AI_LIMIT : GENERAL_LIMIT;
 }
 
-async function checkRedisLimit(key: string, limit: number): Promise<RateLimitResult> {
+async function checkRedisLimit(redisClient: any, key: string, limit: number): Promise<RateLimitResult> {
   const now = Date.now();
   const bucket = Math.floor(now / (WINDOW_SECONDS * 1000));
   const resetAt = (bucket + 1) * WINDOW_SECONDS;
   const redisKey = `uvai:ratelimit:${key}:${bucket}`;
-  const count = await redis!.incr(redisKey);
+  const count = await redisClient.incr(redisKey);
 
   if (count === 1) {
-    await redis!.expire(redisKey, WINDOW_SECONDS + 5);
+    await redisClient.expire(redisKey, WINDOW_SECONDS + 5);
   }
 
   return {
@@ -113,11 +99,36 @@ async function checkRateLimit(request: NextRequest): Promise<RateLimitResult> {
   const routeClass = isAiRoute(pathname) ? 'ai' : 'api';
   const key = `${routeClass}:${clientIp}`;
 
-  if (redis) {
+  let redisClient = null;
+  if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
     try {
-      return await checkRedisLimit(key, limit);
+      const { Redis } = await import('@upstash/redis');
+      redisClient = new Redis({
+        url: process.env.UPSTASH_REDIS_REST_URL,
+        token: process.env.UPSTASH_REDIS_REST_TOKEN,
+      });
+    } catch (e) {
+      // dynamic import failed; fall through to fallback
+    }
+  }
+
+  if (!redisClient && process.env.NODE_ENV === 'production' && !prodRedisWarned) {
+    console.warn(
+      '[RateLimit] No UPSTASH_REDIS_* configured in production. Rate limiting is bypassed (fail-open) to avoid silent in-process state. ' +
+      'Configure Upstash for enforcement. See src/proxy.ts and the rate-limit-middleware agent in config/agent_network.json.'
+    );
+    prodRedisWarned = true;
+  }
+
+  if (redisClient) {
+    try {
+      return await checkRedisLimit(redisClient, key, limit);
     } catch (error) {
-      console.warn('Upstash rate limit check failed; using in-memory fallback.', error);
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn('Upstash rate limit check failed; using in-memory fallback.', error);
+      } else {
+        console.warn('Upstash rate limit check failed in production; failing open.', error);
+      }
     }
   }
 

@@ -27,6 +27,9 @@ export async function POST(request: Request) {
   let videoUrl: string | undefined;
   try {
     const body = await request.json();
+    if (!body || typeof body !== 'object') {
+      return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
+    }
     const { url, project_type = 'web', deployment_target = 'vercel', features } = body;
     videoUrl = url;
 
@@ -39,25 +42,18 @@ export async function POST(request: Request) {
     // ── Strategy 1: Full backend pipeline (FastAPI video-to-software) ──
     if (BACKEND_AVAILABLE) {
       try {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 300_000); // 5 min for full pipeline
-
-        let response: Response;
-        try {
-          response = await fetch(`${BACKEND_URL}/api/v1/video-to-software`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              video_url: url,
-              project_type,
-              deployment_target,
-              features: features || ['responsive_design', 'modern_ui'],
-            }),
-            signal: controller.signal,
-          });
-        } finally {
-          clearTimeout(timeout);
-        }
+        const HEADROOM_MS = 5000;
+        const response = await fetch(`${BACKEND_URL}/api/v1/video-to-software`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            video_url: url,
+            project_type,
+            deployment_target,
+            features: features || ['responsive_design', 'modern_ui'],
+          }),
+          signal: AbortSignal.timeout(Math.max(0, 300_000 - HEADROOM_MS)),
+        });
 
         if (response.ok) {
           const result = await response.json();

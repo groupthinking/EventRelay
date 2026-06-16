@@ -34,6 +34,9 @@ export async function POST(request: Request) {
   let videoUrl: string | undefined;
   try {
     const body = await request.json();
+    if (!body || typeof body !== 'object') {
+      return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
+    }
     const { url } = body;
     videoUrl = url;
 
@@ -241,6 +244,7 @@ export async function POST(request: Request) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url }),
+        signal: AbortSignal.timeout(15000),
       });
       const transcribeResult = await transcribeRes.json();
       if (transcribeResult.success && transcribeResult.transcript) {
@@ -261,6 +265,7 @@ export async function POST(request: Request) {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ transcript, videoUrl: url }),
+          signal: AbortSignal.timeout(15000),
         });
         const extractResult = await extractRes.json();
         if (extractResult.success && extractResult.data) {
