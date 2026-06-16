@@ -721,11 +721,12 @@ export async function POST(request: Request) {
             schedulePostProcessing(url, analysis);
           }
         } catch (err) {
+          console.error('Pipeline stream processing error:', err);
           controller.enqueue(
             encoder.encode(
               makeEvent({
                 type: 'error',
-                data: { message: String(err) },
+                data: { message: 'Pipeline processing failed' },
                 timestamp: new Date().toISOString(),
               }),
             ),
@@ -765,7 +766,7 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error('Pipeline stream error:', error);
-    return new Response(JSON.stringify({ error: String(error) }), {
+    return new Response(JSON.stringify({ error: 'Pipeline stream failed' }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
     });
