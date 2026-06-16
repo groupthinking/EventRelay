@@ -1,0 +1,32 @@
+# VERA Capability Manifest — Build Validator Agent
+# Tests generated code, runs builds, identifies error patterns.
+# Can execute builds in sandbox but not deploy.
+
+agent_id: build-validator
+agent_name: Build Validator Agent
+version: "1"
+denied_by_default: true
+
+capabilities:
+  - tool: mcp-agent-network
+    operations:
+      - name: get_error_patterns
+        allowed: true
+        constraints: {}
+
+  - tool: build-sandbox
+    operations:
+      - name: run_build
+        allowed: true
+        constraints:
+          requires_maturity: 1
+      - name: run_tests
+        allowed: true
+        constraints:
+          requires_maturity: 1
+
+  - tool: file-system
+    operations:
+      - name: read
+        allowed: true
+        constraints: {}

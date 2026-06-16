@@ -1,0 +1,21 @@
+# VERA Capability Manifest — Blueprint Generator Agent
+# Generates business blueprint documents from video analysis.
+# Read + document generation only.
+
+agent_id: blueprint
+agent_name: Blueprint Generator Agent
+version: "1"
+denied_by_default: true
+
+capabilities:
+  - tool: mcp-agent-network
+    operations:
+      - name: generate_blueprint
+        allowed: true
+        constraints: {}
+
+  - tool: knowledge-store
+    operations:
+      - name: read
+        allowed: true
+        constraints: {}

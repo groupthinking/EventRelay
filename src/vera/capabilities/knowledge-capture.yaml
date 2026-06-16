@@ -1,0 +1,28 @@
+# VERA Capability Manifest — Knowledge Capture Agent
+# Learns from pipeline runs, writes to knowledge store.
+# Read-heavy with write access to knowledge base.
+
+agent_id: knowledge-capture
+agent_name: Knowledge Capture Agent
+version: "1"
+denied_by_default: true
+
+capabilities:
+  - tool: mcp-agent-network
+    operations:
+      - name: capture_technology
+        allowed: true
+        constraints: {}
+
+  - tool: knowledge-store
+    operations:
+      - name: read
+        allowed: true
+        constraints: {}
+      - name: write
+        allowed: true
+        constraints:
+          requires_maturity: 1
+      - name: query
+        allowed: true
+        constraints: {}

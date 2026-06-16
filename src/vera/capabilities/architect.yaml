@@ -1,0 +1,24 @@
+# VERA Capability Manifest — Architect Agent
+# Determines tech stack and architecture from video analysis.
+# Read/analyze only — no code generation or deployment.
+
+agent_id: architect
+agent_name: Architect Agent
+version: "1"
+denied_by_default: true
+
+capabilities:
+  - tool: mcp-agent-network
+    operations:
+      - name: determine_architecture
+        allowed: true
+        constraints: {}
+
+  - tool: knowledge-store
+    operations:
+      - name: read
+        allowed: true
+        constraints: {}
+      - name: query
+        allowed: true
+        constraints: {}

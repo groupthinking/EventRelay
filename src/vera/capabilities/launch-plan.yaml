@@ -1,0 +1,21 @@
+# VERA Capability Manifest — Launch Plan Agent
+# Generates go-to-market launch plans from video analysis.
+# Read + document generation only.
+
+agent_id: launch-plan
+agent_name: Launch Plan Agent
+version: "1"
+denied_by_default: true
+
+capabilities:
+  - tool: mcp-agent-network
+    operations:
+      - name: generate_launch_plan
+        allowed: true
+        constraints: {}
+
+  - tool: knowledge-store
+    operations:
+      - name: read
+        allowed: true
+        constraints: {}

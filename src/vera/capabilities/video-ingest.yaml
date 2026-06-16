@@ -1,0 +1,37 @@
+# VERA Capability Manifest — Video Ingest Agent
+# This agent extracts transcripts and content from YouTube videos.
+# Read-heavy, no deployment or code execution permissions.
+
+agent_id: video-ingest
+agent_name: Video Ingest Agent
+version: "1"
+denied_by_default: true
+
+capabilities:
+  - tool: youtube-api
+    operations:
+      - name: fetch_transcript
+        allowed: true
+        constraints: {}
+      - name: fetch_metadata
+        allowed: true
+        constraints: {}
+      - name: analyze_content
+        allowed: true
+        constraints: {}
+
+  - tool: mcp-agent-network
+    operations:
+      - name: process_video_markdown
+        allowed: true
+        constraints: {}
+
+  - tool: knowledge-store
+    operations:
+      - name: read
+        allowed: true
+        constraints: {}
+      - name: write
+        allowed: true
+        constraints:
+          requires_maturity: 1

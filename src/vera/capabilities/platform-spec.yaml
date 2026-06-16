@@ -1,0 +1,21 @@
+# VERA Capability Manifest — Platform Spec Agent
+# Generates platform specification documents.
+# Read + document generation only.
+
+agent_id: platform-spec
+agent_name: Platform Spec Agent
+version: "1"
+denied_by_default: true
+
+capabilities:
+  - tool: mcp-agent-network
+    operations:
+      - name: generate_platform_spec
+        allowed: true
+        constraints: {}
+
+  - tool: knowledge-store
+    operations:
+      - name: read
+        allowed: true
+        constraints: {}

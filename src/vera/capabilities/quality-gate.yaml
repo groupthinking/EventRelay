@@ -1,0 +1,21 @@
+# VERA Capability Manifest — Quality Gate Agent
+# Assesses build quality and decides whether to proceed.
+# Read-only — cannot modify code or deploy.
+
+agent_id: quality-gate
+agent_name: Quality Gate Agent
+version: "1"
+denied_by_default: true
+
+capabilities:
+  - tool: mcp-agent-network
+    operations:
+      - name: assess_quality
+        allowed: true
+        constraints: {}
+
+  - tool: build-sandbox
+    operations:
+      - name: read_results
+        allowed: true
+        constraints: {}

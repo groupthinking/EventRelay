@@ -1,0 +1,41 @@
+# VERA Capability Manifest — Deployer Agent
+# Pushes code to GitHub and deploys to Vercel.
+# Highest-risk agent — requires SUPERVISED maturity minimum.
+
+agent_id: deployer
+agent_name: Deployer Agent
+version: "1"
+denied_by_default: true
+
+capabilities:
+  - tool: mcp-agent-network
+    operations:
+      - name: create_repo
+        allowed: true
+        constraints:
+          requires_maturity: 2
+
+  - tool: github-api
+    operations:
+      - name: create_repository
+        allowed: true
+        constraints:
+          requires_maturity: 2
+      - name: push_code
+        allowed: true
+        constraints:
+          requires_maturity: 2
+      - name: read_repository
+        allowed: true
+        constraints:
+          requires_maturity: 1
+
+  - tool: vercel-api
+    operations:
+      - name: deploy
+        allowed: true
+        constraints:
+          requires_maturity: 2
+      - name: check_status
+        allowed: true
+        constraints: {}

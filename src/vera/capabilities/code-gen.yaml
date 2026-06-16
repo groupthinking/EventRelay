@@ -1,0 +1,32 @@
+# VERA Capability Manifest — Code Generation Agent
+# Generates application code from architecture specs.
+# Can write files but not deploy or execute.
+
+agent_id: code-gen
+agent_name: Code Generation Agent
+version: "1"
+denied_by_default: true
+
+capabilities:
+  - tool: mcp-agent-network
+    operations:
+      - name: generate_fullstack
+        allowed: true
+        constraints:
+          requires_maturity: 1
+
+  - tool: file-system
+    operations:
+      - name: write
+        allowed: true
+        constraints:
+          requires_maturity: 1
+      - name: read
+        allowed: true
+        constraints: {}
+
+  - tool: knowledge-store
+    operations:
+      - name: read
+        allowed: true
+        constraints: {}
