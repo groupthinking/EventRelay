@@ -145,7 +145,7 @@ export async function POST(request: Request) {
       publishEvent(EventTypes.PIPELINE_FAILED, { error: String(error) }, videoUrl).catch(() => {}),
     );
     return NextResponse.json(
-      { error: 'Pipeline failed', details: String(error) },
+      { error: 'Pipeline failed' },
       { status: 500 },
     );
   }

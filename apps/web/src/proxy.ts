@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import type { Redis } from '@upstash/redis';
 
 const WINDOW_SECONDS = 60;
 const GENERAL_LIMIT = Number(process.env.UVAI_API_RATE_LIMIT_PER_MINUTE || 60);
@@ -42,19 +43,29 @@ function isAiRoute(pathname: string): boolean {
 }
 
 function getClientIp(request: NextRequest): string {
-  const forwardedFor = request.headers.get('x-forwarded-for');
-  if (forwardedFor) {
-    return forwardedFor.split(',')[0]?.trim() || 'unknown';
+  // Prefer x-real-ip: set by Vercel's edge network and not client-controllable.
+  const realIp = request.headers.get('x-real-ip');
+  if (realIp) {
+    return realIp.trim();
   }
 
-  return request.headers.get('x-real-ip') || 'unknown';
+  // Fallback: the LAST (rightmost) entry of x-forwarded-for is the one added by
+  // the trusted proxy closest to us. The leftmost entry is client-supplied and
+  // can be spoofed to bypass per-IP rate limiting.
+  const forwardedFor = request.headers.get('x-forwarded-for');
+  if (forwardedFor) {
+    const entries = forwardedFor.split(',');
+    return entries[entries.length - 1]?.trim() || 'unknown';
+  }
+
+  return 'unknown';
 }
 
 function getRateLimit(pathname: string): number {
   return isAiRoute(pathname) ? AI_LIMIT : GENERAL_LIMIT;
 }
 
-async function checkRedisLimit(redisClient: any, key: string, limit: number): Promise<RateLimitResult> {
+async function checkRedisLimit(redisClient: Redis, key: string, limit: number): Promise<RateLimitResult> {
   const now = Date.now();
   const bucket = Math.floor(now / (WINDOW_SECONDS * 1000));
   const resetAt = (bucket + 1) * WINDOW_SECONDS;
@@ -144,6 +155,18 @@ async function checkRateLimit(request: NextRequest): Promise<RateLimitResult> {
     remaining: limit,
     resetAt: Math.ceil((Date.now() + WINDOW_SECONDS * 1000) / 1000),
   };
+}
+
+// Surface a loud warning at module init if rate limiting is fully disabled in
+// production. Combined with the Redis fail-open path, this could otherwise leave
+// expensive AI routes entirely unprotected with no signal.
+if (
+  process.env.UVAI_RATE_LIMIT_DISABLED === '1' &&
+  process.env.NODE_ENV === 'production'
+) {
+  console.warn(
+    '[RateLimit] UVAI_RATE_LIMIT_DISABLED=1 — rate limiting is OFF in production.',
+  );
 }
 
 export async function proxy(request: NextRequest) {

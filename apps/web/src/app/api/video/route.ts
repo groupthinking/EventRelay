@@ -317,7 +317,7 @@ export async function POST(request: Request) {
       publishEvent(EventTypes.PIPELINE_FAILED, { error: String(error) }, videoUrl).catch(() => {}),
     );
     return NextResponse.json(
-      { error: 'Failed to analyze video', details: String(error) },
+      { error: 'Failed to analyze video' },
       { status: 500 },
     );
   }
@@ -327,7 +327,9 @@ export async function GET() {
   // If backend URL is configured and valid, check its health
   if (BACKEND_AVAILABLE) {
     try {
-      const response = await fetch(`${BACKEND_URL}/api/v1/health`);
+      const response = await fetch(`${BACKEND_URL}/api/v1/health`, {
+        signal: AbortSignal.timeout(5000),
+      });
       const health = await response.json();
 
       return NextResponse.json({
