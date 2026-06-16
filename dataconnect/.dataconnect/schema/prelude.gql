@@ -743,6 +743,9 @@ enum GeneratedPurpose @fdc_forbiddenAsVariableType @fdc_forbiddenAsFieldType {
   IMPLICIT_KEY_FIELD
   IMPLICIT_REF_FIELD
 
+  # Implicit primary-key identifier field (e.g. the generated `_id`).
+  ENTITY_ID
+
   # Generated static fields extended to table types.
   METADATA_FIELD
 

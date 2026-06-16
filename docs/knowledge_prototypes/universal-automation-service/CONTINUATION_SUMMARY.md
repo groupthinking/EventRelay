@@ -20,7 +20,7 @@
 ### 2. Tested Current State
 ✅ **API Key Status:** WORKING
 - Got successful `HTTP/1.1 200 OK` response
-- Proves API key `AIzaSyAdaiRnkCVDq_-ac-iDiTPt_KLvT-MW-JY` is valid
+- Proves API key `REDACTED_GOOGLE_API_KEY_ROTATE` is valid
 - Not expired as initially suspected
 
 ⚠️ **Rate Limit Hit:** `HTTP/1.1 429 Too Many Requests`
@@ -49,7 +49,7 @@ The Gemini integration from the previous session is **fully functional**:
 **Status:** VALID (not expired)
 - Successfully made requests (200 OK)
 - Only blocked by rate limiting from previous tests
-- Key: `AIzaSyAdaiRnkCVDq_-ac-iDiTPt_KLvT-MW-JY`
+- Key: `REDACTED_GOOGLE_API_KEY_ROTATE`
 
 ### Finding 3: Rate Limit from Previous Testing ⚠️
 **Issue:** Hit 429 errors due to previous session's testing
@@ -96,7 +96,7 @@ User correctly identified:
 # Wait 2 minutes, then test:
 cd /Users/garvey/Dev/OpenAI_Hub/universal-automation-service
 source venv/bin/activate
-export GEMINI_API_KEY="AIzaSyAdaiRnkCVDq_-ac-iDiTPt_KLvT-MW-JY"
+export GEMINI_API_KEY="REDACTED_GOOGLE_API_KEY_ROTATE"
 python3 universal_coordinator.py "https://youtu.be/jawdcPoZJmI" --mode gemini --no-deploy
 ```
 

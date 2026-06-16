@@ -20,5 +20,10 @@ jobs:
         uses: actions/dependency-review-action@v4
         with:
           fail-on-severity: moderate
+          # GHSA-w5hq-g745-h8pq: transitive uuid@8.3.2 pulled by next-auth@4.24 (which pins uuid ^8.3.2).
+          # The moderate advisory affects uuid v3/v5/v6 when a caller-provided buffer is passed; next-auth
+          # only calls v4(), so the vulnerable code path is unreachable here. The first patched uuid is
+          # 11.1.1, outside next-auth's declared range. Remove this allow once next-auth bumps uuid.
+          allow-ghsas: GHSA-w5hq-g745-h8pq
           allow-licenses: MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC, Python-2.0
           comment-summary-in-pr: always

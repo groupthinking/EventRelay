@@ -54,14 +54,24 @@ shipped code.
 
 These are dashboard or provider configuration items, not frontend code changes.
 
-- `BACKEND_URL` and `NEXT_PUBLIC_BACKEND_URL` are configured in Vercel for
-  Production, Preview, and Development with the Cloud Run backend URL, but the
-  backend itself must become healthy before launch. Current checks found:
-  - `https://uvai-backend-gpwz4wb5na-uc.a.run.app/api/v1/health` returns `500`.
+- `BACKEND_URL` must point to a healthy backend. Current checks found:
+  - the Vercel production environment currently reports `BACKEND_URL` host
+    `eventrelay-production.up.railway.app`, which returns Railway
+    `404 Application not found`.
   - `https://api.uvai.io/api/v1/health` returns `503`.
-- Gemini billing/API access must be fixed for Google project `688578214833`.
-- OpenAI project quota/billing must be fixed for project
-  `proj_r6YRYxAKC2FeLk7NUmrBp9wg`.
+  - the Cloud Run candidate returns `500`.
+- `GEMINI_API_KEY` / `GOOGLE_API_KEY` must be replaced with a key from a
+  billable project, or billing must be enabled for Google project
+  `688578214833`. Current provider error: `BILLING_DISABLED` for
+  `aiplatform.googleapis.com`.
+- `OPENAI_API_KEY` must be replaced with a key from a project with available
+  quota, or billing/quota must be fixed for OpenAI project
+  `proj_r6YRYxAKC2FeLk7NUmrBp9wg`. Current provider error:
+  `insufficient_quota`.
+- Where to fix them: Vercel dashboard -> `garv1/v0-uvai` -> Settings ->
+  Environment Variables -> Production values for `BACKEND_URL`,
+  `EVENTRELAY_API_KEY`, `GEMINI_API_KEY` / `GOOGLE_API_KEY`, and
+  `OPENAI_API_KEY`.
 - Configure Vercel Log Drains for persistent logs.
 - Configure Vercel WAF/bot rules and any IP blocks required for launch.
 - Configure Deployment Protection for preview deployments.

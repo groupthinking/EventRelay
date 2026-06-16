@@ -28,7 +28,7 @@ cd /Users/garvey/Dev/OpenAI_Hub/universal-automation-service
 source venv/bin/activate
 
 # Set API key
-export GEMINI_API_KEY="AIzaSyDu5GN_IxRFg3Ue8SYXSNWkZi-50pwDgS0"
+export GEMINI_API_KEY="REDACTED_GOOGLE_API_KEY_ROTATE"
 
 # Process video
 python3 universal_coordinator.py "https://youtu.be/VIDEO" --mode gemini --no-deploy
@@ -134,7 +134,7 @@ Wait 1 minute for Gemini quota to reset, then:
 ```bash
 cd /Users/garvey/Dev/OpenAI_Hub/universal-automation-service
 source venv/bin/activate
-export GEMINI_API_KEY="AIzaSyDu5GN_IxRFg3Ue8SYXSNWkZi-50pwDgS0"
+export GEMINI_API_KEY="REDACTED_GOOGLE_API_KEY_ROTATE"
 
 # Use a SHORT video (2-5 minutes) to avoid quota issues
 python3 universal_coordinator.py "https://youtu.be/SHORT_VIDEO" --mode gemini --no-deploy
@@ -147,7 +147,7 @@ cat results_*.json | python3 -m json.tool
 
 ```bash
 source venv/bin/activate
-export GEMINI_API_KEY="AIzaSyDu5GN_IxRFg3Ue8SYXSNWkZi-50pwDgS0"
+export GEMINI_API_KEY="REDACTED_GOOGLE_API_KEY_ROTATE"
 python3 test_imports.py
 ```
 
@@ -333,7 +333,7 @@ All files in: `/Users/garvey/Dev/OpenAI_Hub/universal-automation-service/`
 ```bash
 cd /Users/garvey/Dev/OpenAI_Hub/universal-automation-service
 source venv/bin/activate
-export GEMINI_API_KEY="AIzaSyDu5GN_IxRFg3Ue8SYXSNWkZi-50pwDgS0"
+export GEMINI_API_KEY="REDACTED_GOOGLE_API_KEY_ROTATE"
 
 # Wait 1 minute for quota reset, then:
 python3 universal_coordinator.py "https://youtu.be/SHORT_VIDEO" --mode gemini --no-deploy

@@ -160,6 +160,9 @@ async function pollBackendJob(
       const response = await fetch(statusUrl, {
         cache: 'no-store',
         headers: { 'Content-Type': 'application/json' },
+        // Bound each poll so a hung status endpoint can't stall the SSE stream;
+        // a timeout throws → caught below → retried within MAX_JOB_POLL_ATTEMPTS.
+        signal: AbortSignal.timeout(JOB_POLL_INTERVAL_MS * 2),
       });
 
       if (!response.ok) {
@@ -605,7 +608,7 @@ export async function POST(request: Request) {
             try {
               const response = await fetch(`${BACKEND_URL}/api/v1/transcript-action`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', ...(process.env.EVENTRELAY_API_KEY ? { 'X-API-Key': process.env.EVENTRELAY_API_KEY } : {}) },
                 body: JSON.stringify({ video_url: url, language: 'en' }),
                 signal: AbortSignal.timeout(120_000),
               });
