@@ -38,8 +38,7 @@ const memoryBuckets = new Map<string, MemoryBucket>();
 
 let prodRedisWarned = false;
 
-let cachedRedisClient: Redis | null = null;
-let redisClientInitialized = false;
+let redisClientPromise: Promise<Redis | null> | null = null;
 
 /**
  * Lazily construct the Upstash Redis client once and reuse it across requests.
@@ -47,26 +46,34 @@ let redisClientInitialized = false;
  * single module-scoped instance is safe and avoids the latency, allocation, and
  * GC overhead of constructing a new client on every request. The dynamic import
  * keeps the dependency out of the statically-bundled middleware entrypoint.
+ *
+ * The initialization promise is memoized so concurrent callers await the same
+ * in-flight construction rather than racing — without this, a request arriving
+ * while the dynamic import is still pending could observe a half-initialized
+ * state and incorrectly fall open.
  */
-async function getRedisClient(): Promise<Redis | null> {
-  if (redisClientInitialized) {
-    return cachedRedisClient;
+function getRedisClient(): Promise<Redis | null> {
+  if (redisClientPromise) {
+    return redisClientPromise;
   }
-  redisClientInitialized = true;
 
-  if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
-    try {
-      const { Redis } = await import('@upstash/redis');
-      cachedRedisClient = new Redis({
-        url: process.env.UPSTASH_REDIS_REST_URL,
-        token: process.env.UPSTASH_REDIS_REST_TOKEN,
-      });
-    } catch {
-      // dynamic import failed; leave the client null and fall back below
+  redisClientPromise = (async () => {
+    if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
+      try {
+        const { Redis } = await import('@upstash/redis');
+        return new Redis({
+          url: process.env.UPSTASH_REDIS_REST_URL,
+          token: process.env.UPSTASH_REDIS_REST_TOKEN,
+        });
+      } catch {
+        // dynamic import failed; fall back to null below
+        return null;
+      }
     }
-  }
+    return null;
+  })();
 
-  return cachedRedisClient;
+  return redisClientPromise;
 }
 
 function isAiRoute(pathname: string): boolean {
