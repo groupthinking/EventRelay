@@ -169,7 +169,7 @@ if (
   );
 }
 
-export async function proxy(request: NextRequest) {
+export async function proxy(request: NextRequest): Promise<NextResponse> {
   if (
     process.env.UVAI_RATE_LIMIT_DISABLED === '1' ||
     request.method === 'OPTIONS'
