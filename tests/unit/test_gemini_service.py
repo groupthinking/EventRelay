@@ -99,7 +99,10 @@ class TestGeminiConfig:
         cfg = m.GeminiConfig()
         assert cfg.max_video_duration == 600
 
-    def test_default_nones(self):
+    def test_default_nones(self, monkeypatch):
+        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+        monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+        monkeypatch.delenv("GOOGLE_GENERATIVE_AI_API_KEY", raising=False)
         m = _import_module()
         cfg = m.GeminiConfig()
         assert cfg.api_key is None
@@ -182,13 +185,16 @@ class TestGeminiResult:
 # ===========================================================================
 
 class TestGeminiServiceInit:
-    def test_default_config_no_api_key(self):
+    def test_default_config_no_api_key(self, monkeypatch):
+        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+        monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+        monkeypatch.delenv("GOOGLE_GENERATIVE_AI_API_KEY", raising=False)
         m = _import_module()
         with patch.object(m, "GEMINI_AVAILABLE", True), \
              patch.object(m, "VERTEX_AVAILABLE", False), \
              patch.object(m, "TRANSFORMERS_AVAILABLE", False):
             svc = m.GeminiService()
-            assert svc.config.model_name == "gemini-2.5-flash"
+            assert svc.config.model_name == m.DEFAULT_GEMINI_MODEL
             assert not svc.is_initialized()
             assert not svc.is_available()
 

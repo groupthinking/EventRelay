@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
 _SRC = Path(__file__).resolve().parents[2] / "src"
 sys.path.insert(0, str(_SRC))
 
+import youtube_extension.processors.strategies as _mod
 from youtube_extension.processors.strategies import (
     OptimizedStrategy,
     ParallelStrategy,
@@ -347,7 +349,9 @@ class TestEnhancedStrategyInit:
         assert enh.config == {}
 
     def test_no_video_client_without_deps(self):
-        enh = EnhancedStrategy()
+        with patch.object(_mod, "HAS_VIDEO_DEPS", False), \
+             patch.object(_mod, "HAS_AI_DEPS", False):
+            enh = EnhancedStrategy()
         assert not hasattr(enh, "video_client")
 
 
