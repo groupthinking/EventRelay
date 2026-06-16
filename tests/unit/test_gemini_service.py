@@ -33,12 +33,14 @@ def _import_module():
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _make_service(api_key: str = "fake_key", model_name: str = "gemini-2.5-flash", **extra):
+def _make_service(api_key: str = "fake_key", model_name: str | None = None, **extra):
     """Create a GeminiService with a mocked Gemini model so no real API calls happen."""
     m = _import_module()
     GeminiConfig = m.GeminiConfig
     GeminiService = m.GeminiService
 
+    if model_name is None:
+        model_name = m.DEFAULT_GEMINI_MODEL
     cfg = GeminiConfig(api_key=api_key, model_name=model_name, **extra)
     with patch.object(m, "GEMINI_AVAILABLE", True), \
          patch.object(m, "genai") as mock_genai:
@@ -62,7 +64,7 @@ class TestGeminiConfig:
     def test_default_model_name(self):
         m = _import_module()
         cfg = m.GeminiConfig()
-        assert cfg.model_name == "gemini-2.5-flash"
+        assert cfg.model_name == m.DEFAULT_GEMINI_MODEL
 
     def test_default_temperature(self):
         m = _import_module()
@@ -490,12 +492,12 @@ class TestSelectModel:
     def test_none_model_name_noop(self):
         svc, m = self._make_uninit_service()
         svc.select_model(None)
-        assert svc.config.model_name == "gemini-2.5-flash"
+        assert svc.config.model_name == m.DEFAULT_GEMINI_MODEL
 
     def test_same_model_name_noop(self):
         svc, m = self._make_uninit_service()
         original_model = svc._model
-        svc.select_model("gemini-2.5-flash")
+        svc.select_model(m.DEFAULT_GEMINI_MODEL)
         assert svc._model is original_model
 
     def test_cached_model_retrieved(self):
@@ -558,7 +560,7 @@ class TestSelectModel:
             mock_genai.GenerativeModel = MagicMock(side_effect=RuntimeError("fail"))
             svc.select_model("gemini-99.0")
         # model should remain the default
-        assert svc.config.model_name == "gemini-2.5-flash"
+        assert svc.config.model_name == m.DEFAULT_GEMINI_MODEL
 
 
 # ===========================================================================
