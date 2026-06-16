@@ -99,7 +99,35 @@ class EnhancedVideoProcessor:
                 },
                 connector=aiohttp.TCPConnector(ssl=ssl_context)
             )
-    
+
+    async def _generate_build_plan(self, video_url: str, metadata: dict, transcript: dict, ai_analysis: dict) -> dict:
+        """Minimal build plan generator to unblock pipeline.
+        (Quick & dirty — will evolve via specialized agents later.)
+        """
+        return {
+            "title": (ai_analysis.get("title") if isinstance(ai_analysis, dict) else None)
+                     or (metadata.get("title") if isinstance(metadata, dict) else None)
+                     or "Video Build Plan",
+            "overview": (ai_analysis.get("summary") if isinstance(ai_analysis, dict) else None)
+                        or "No summary available",
+            "key_moments": (ai_analysis.get("key_moments") if isinstance(ai_analysis, dict) else []) or [],
+            "suggested_structure": ["intro", "main_content", "conclusion"],
+            "assets_needed": ["thumbnails", "clips"],
+            "status": "draft",
+            "generated_at": datetime.now().isoformat(),
+            "video_url": video_url
+        }
+
+    def _build_extracted_info(self, metadata: dict, ai_analysis: dict, build_plan: dict, transcript: dict) -> dict:
+        """Minimal extracted info builder to unblock the pipeline after build_plan."""
+        return {
+            "metadata": metadata or {},
+            "ai_analysis": ai_analysis or {},
+            "build_plan": build_plan or {},
+            "transcript": transcript or {},
+            "status": "extracted"
+        }
+
     async def process_video(self, video_url: str) -> Dict[str, Any]:
         """
         Enhanced video processing pipeline
