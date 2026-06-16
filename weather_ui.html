@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Weather • San Francisco</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&amp;family=Space+Grotesk:wght@500;600&amp;display=swap');
+        
+        :root {
+            --bg: #0a0a0a;
+            --card: #121212;
+            --accent: #3b82f6;
+        }
+        
+        body {
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(145deg, #0a0a0a, #111111);
+            color: #f1f1f1;
+            font-family: 'Inter', system_ui, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow-x: hidden;
+        }
+        
+        .container {
+            max-width: 720px;
+            width: 92%;
+            background: var(--card);
+            border-radius: 24px;
+            box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.4);
+            overflow: hidden;
+            border: 1px solid #222;
+        }
+        
+        .header {
+            background: linear-gradient(to right, #1a1a1a, #111);
+            padding: 24px 32px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid #222;
+        }
+        
+        .location {
+            font-size: 28px;
+            font-weight: 600;
+            letter-spacing: -0.5px;
+        }
+        
+        .time {
+            font-size: 13px;
+            opacity: 0.6;
+            font-family: monospace;
+        }
+        
+        .main {
+            padding: 48px 40px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            position: relative;
+        }
+        
+        .temp {
+            font-size: 96px;
+            font-weight: 700;
+            line-height: 1;
+            margin: 8px 0;
+            background: linear-gradient(90deg, #fff, #ddd);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-family: 'Space Grotesk', system_ui, sans-serif;
+        }
+        
+        .condition {
+            font-size: 22px;
+            font-weight: 500;
+            color: #aaa;
+            margin-bottom: 12px;
+        }
+        
+        .details {
+            display: flex;
+            gap: 32px;
+            margin: 24px 0 40px;
+            font-size: 15px;
+            color: #888;
+        }
+        
+        .detail {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .joke {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 16px;
+            padding: 24px 28px;
+            font-size: 15.5px;
+            line-height: 1.5;
+            max-width: 460px;
+            position: relative;
+        }
+        
+        .joke::before {
+            content: "💬";
+            position: absolute;
+            top: -10px;
+            left: 28px;
+            background: #1a1a1a;
+            padding: 0 8px;
+            font-size: 18px;
+        }
+        
+        .clouds {
+            position: absolute;
+            top: 30px;
+            right: 40px;
+            width: 140px;
+            height: 60px;
+            opacity: 0.15;
+        }
+        
+        .cloud {
+            position: absolute;
+            background: #fff;
+            border-radius: 50%;
+            box-shadow: 0 4px 10px rgb(0 0 0 / 0.1);
+        }
+        
+        .cloud1 { width: 80px; height: 42px; top: 10px; left: 10px; }
+        .cloud2 { width: 60px; height: 32px; top: 20px; left: 55px; }
+        
+        .footer {
+            padding: 16px 32px;
+            background: #0a0a0a;
+            font-size: 12px;
+            color: #555;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .badge {
+            background: #222;
+            color: #777;
+            padding: 2px 10px;
+            border-radius: 9999px;
+            font-size: 11px;
+            font-family: monospace;
+        }
+        
+        .generative-note {
+            font-size: 11px;
+            opacity: 0.4;
+            margin-top: 8px;
+        }
+        
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-12px); }
+        }
+        
+        .weather-icon {
+            font-size: 64px;
+            margin-bottom: 8px;
+            animation: float 3s ease-in-out infinite;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <div>
+                <div class="location">San Francisco</div>
+                <div class="time">06:19 PM</div>
+            </div>
+            <div class="badge">LIVE</div>
+        </div>
+        
+        <!-- Main content -->
+        <div class="main">
+            <!-- Animated decorative clouds -->
+            <div class="clouds">
+                <div class="cloud cloud1"></div>
+                <div class="cloud cloud2"></div>
+            </div>
+            
+            <div class="weather-icon">⛅</div>
+            
+            <div class="temp">62°</div>
+            <div class="condition">Partly Cloudy</div>
+            
+            <div class="details">
+                <div class="detail">
+                    <span>💧</span>
+                    <span>68% humidity</span>
+                </div>
+            </div>
+            
+            <!-- The joke -->
+            <div class="joke">
+                Why did the cloud break up with the sun? It needed some space... and a little shade!
+            </div>
+            
+            <div class="generative-note">
+                Generated live by Grok • No components used
+            </div>
+        </div>
+        
+        <div class="footer">
+            <div>wttr.in + xAI</div>
+            <div>Generative UI Demo</div>
+        </div>
+    </div>
+    
+    <script>
+        // Tiny bit of interactivity for the demo
+        console.log('%c[Generative UI] Self-contained preview loaded', 'color:#555');
+        
+        const container = document.querySelector('.container');
+        
+        container.addEventListener('mousemove', (e) => {
+            const rect = container.getBoundingClientRect();
+            const x = ((e.clientX - rect.left) / rect.width) - 0.5;
+            const y = ((e.clientY - rect.top) / rect.height) - 0.5;
+            
+            container.style.transform = `perspective(1000px) rotateX(${-y * 6}deg) rotateY(${x * 8}deg)`;
+        });
+        
+        container.addEventListener('mouseleave', () => {
+            container.style.transform = 'perspective(1000px) rotateX(0deg) rotateY(0deg)';
+        });
+        
+        // Easter egg: click the temp to change mood
+        const temp = document.querySelector('.temp');
+        let clicks = 0;
+        temp.addEventListener('click', () => {
+            clicks++;
+            const moods = ['☀️', '🌧️', '❄️', '⛈️', '🌫️'];
+            document.querySelector('.weather-icon').textContent = moods[clicks % moods.length];
+            
+            if (clicks % 3 === 0) {
+                container.style.transition = 'transform 0.4s cubic-bezier(0.23, 1, 0.32, 1)';
+                container.style.transform = 'scale(0.96)';
+                setTimeout(() => {
+                    container.style.transform = 'perspective(1000px) rotateX(0deg) rotateY(0deg)';
+                }, 180);
+            }
+        });
+        
+        // Keyboard hint
+        document.addEventListener('keydown', (e) => {
+            if (e.key === '?') {
+                temp.click();
+            }
+        });
+    </script>
+</body>
+</html>
