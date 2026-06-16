@@ -1,5 +1,5 @@
 import type { NextRequest, NextResponse } from 'next/server';
-import { proxy } from './src/proxy';
+import { proxy } from '@/proxy';
 
 /**
  * Standard Next.js middleware that activates the rate limiting logic from src/proxy.ts

@@ -38,6 +38,37 @@ const memoryBuckets = new Map<string, MemoryBucket>();
 
 let prodRedisWarned = false;
 
+let cachedRedisClient: Redis | null = null;
+let redisClientInitialized = false;
+
+/**
+ * Lazily construct the Upstash Redis client once and reuse it across requests.
+ * The `@upstash/redis` client is HTTP/REST-based (no connection pool), so a
+ * single module-scoped instance is safe and avoids the latency, allocation, and
+ * GC overhead of constructing a new client on every request. The dynamic import
+ * keeps the dependency out of the statically-bundled middleware entrypoint.
+ */
+async function getRedisClient(): Promise<Redis | null> {
+  if (redisClientInitialized) {
+    return cachedRedisClient;
+  }
+  redisClientInitialized = true;
+
+  if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
+    try {
+      const { Redis } = await import('@upstash/redis');
+      cachedRedisClient = new Redis({
+        url: process.env.UPSTASH_REDIS_REST_URL,
+        token: process.env.UPSTASH_REDIS_REST_TOKEN,
+      });
+    } catch {
+      // dynamic import failed; leave the client null and fall back below
+    }
+  }
+
+  return cachedRedisClient;
+}
+
 function isAiRoute(pathname: string): boolean {
   return AI_ROUTE_PREFIXES.some((prefix) => pathname.startsWith(prefix));
 }
@@ -110,18 +141,7 @@ async function checkRateLimit(request: NextRequest): Promise<RateLimitResult> {
   const routeClass = isAiRoute(pathname) ? 'ai' : 'api';
   const key = `${routeClass}:${clientIp}`;
 
-  let redisClient = null;
-  if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
-    try {
-      const { Redis } = await import('@upstash/redis');
-      redisClient = new Redis({
-        url: process.env.UPSTASH_REDIS_REST_URL,
-        token: process.env.UPSTASH_REDIS_REST_TOKEN,
-      });
-    } catch (e) {
-      // dynamic import failed; fall through to fallback
-    }
-  }
+  const redisClient = await getRedisClient();
 
   if (!redisClient && process.env.NODE_ENV === 'production' && !prodRedisWarned) {
     console.warn(
