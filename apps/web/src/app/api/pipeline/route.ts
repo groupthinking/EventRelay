@@ -11,6 +11,13 @@ const BACKEND_AVAILABLE = rawBackendUrl.startsWith('http');
 export const runtime = 'nodejs';
 export const maxDuration = 30;
 
+/** Health probe budget for Cloud Run cold start + TLS. */
+export const PIPELINE_HEALTH_TIMEOUT_MS = 5_000;
+/** Backend video-to-software call — most of the Vercel function window. */
+export const PIPELINE_BACKEND_TIMEOUT_MS = 25_000;
+/** Gemini-only fallback when backend is down. */
+export const PIPELINE_GEMINI_TIMEOUT_MS = 20_000;
+
 function backendHost(): string | null {
   if (!BACKEND_AVAILABLE) return null;
   try {
@@ -38,7 +45,7 @@ async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): P
   }
 }
 
-async function checkBackendHealth(timeoutMs = 1500): Promise<{ configured: boolean; available: boolean; host: string | null; reason?: string }> {
+async function checkBackendHealth(timeoutMs = PIPELINE_HEALTH_TIMEOUT_MS): Promise<{ configured: boolean; available: boolean; host: string | null; reason?: string }> {
   if (!BACKEND_AVAILABLE) {
     return { configured: false, available: false, host: null, reason: 'BACKEND_URL is not configured' };
   }
@@ -204,7 +211,7 @@ export async function POST(request: Request) {
             deployment_target,
             features,
           }),
-          signal: timeoutSignal(4_000),
+          signal: timeoutSignal(PIPELINE_BACKEND_TIMEOUT_MS),
         });
 
         if (response.ok) {
@@ -246,7 +253,7 @@ export async function POST(request: Request) {
         const startTime = Date.now();
         const analysis = await withTimeout(
           analyzeVideoWithGemini(url),
-          5_000,
+          PIPELINE_GEMINI_TIMEOUT_MS,
           'Gemini analysis',
         );
         const elapsed = Date.now() - startTime;

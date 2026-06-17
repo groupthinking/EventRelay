@@ -8,7 +8,7 @@ import logging
 import os
 
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -129,6 +129,14 @@ except Exception as e:
 async def health_check():
     """Health check endpoint"""
     return {"status": "healthy", "service": "uvai-youtube-extension"}
+
+
+@app.post("/test-sentry")
+async def test_sentry():
+    """Deliberate error for Sentry smoke tests. Disabled unless ALLOW_SENTRY_SMOKE=1."""
+    if os.getenv("ALLOW_SENTRY_SMOKE") != "1":
+        raise HTTPException(status_code=404, detail="Not found")
+    raise RuntimeError("sentry-smoke")
 
 
 # Root endpoint

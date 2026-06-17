@@ -85,3 +85,18 @@ async def test_run_pipeline_resets_results_between_runs():
         await orchestrator.run_pipeline("https://youtu.be/jNQXAC9IVRw")
 
     assert orchestrator.results == {}
+
+
+def test_sentry_smoke_endpoint_gated(monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from youtube_extension.main import app
+
+    client = TestClient(app)
+    monkeypatch.delenv("ALLOW_SENTRY_SMOKE", raising=False)
+    assert client.post("/test-sentry").status_code == 404
+
+    monkeypatch.setenv("ALLOW_SENTRY_SMOKE", "1")
+    gated_client = TestClient(app, raise_server_exceptions=False)
+    response = gated_client.post("/test-sentry")
+    assert response.status_code == 500
