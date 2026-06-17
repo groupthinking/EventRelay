@@ -90,7 +90,7 @@ Open http://localhost:3000 — paste a YouTube URL and run the studio workflow. 
 
 ## UVAI Studio + Realtime Voice
 
-The public first screen is `apps/web/src/components/VideoWorkflowStudio.tsx`: a lightweight video-to-workflow studio with YouTube preview, frame proof, outcome chips, safety gating, one minimal readiness strip, and result actions for preview/export/deploy/save.
+The public first screen is `apps/web/src/components/VideoWorkflowStudio.tsx`: a lightweight video-to-workflow studio with YouTube preview, frame proof, outcome chips, workflow progress, safety gating, and result actions for preview/export/deploy/save.
 
 Optional voice input is hidden behind a small toggle. The browser creates an `RTCPeerConnection`, sends microphone audio, receives model audio, and opens an `oai-events` data channel. The server endpoint `POST /api/realtime/session` accepts raw SDP and uses `OPENAI_API_KEY` to post multipart `FormData` fields named `sdp` and `session` to OpenAI `/v1/realtime/calls` with `gpt-realtime-2`. The client registers a sample `check_calendar(date, time)` function tool with `session.update`.
 

@@ -1,4 +1,5 @@
 const path = require('path');
+const { withSentryConfig } = require('@sentry/nextjs');
 
 const contentSecurityPolicy = [
   "default-src 'self'",
@@ -78,4 +79,11 @@ const nextConfig = {
   },
 };
 
-module.exports = nextConfig;
+const sentryWebpackPluginOptions = {
+  // For all available options, see https://github.com/getsentry/sentry-webpack-plugin#options
+  org: process.env.SENTRY_ORG || '',
+  project: process.env.SENTRY_PROJECT || 'v0-uvai',
+  silent: !process.env.CI,
+};
+
+module.exports = withSentryConfig(nextConfig, sentryWebpackPluginOptions);

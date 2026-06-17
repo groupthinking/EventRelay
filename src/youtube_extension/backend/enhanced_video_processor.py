@@ -29,7 +29,8 @@ logger = logging.getLogger(__name__)
 
 # Optional Gemini Vision integration for frame analysis
 try:
-    from src.youtube_extension.services.ai.gemini_service import GeminiService, GeminiConfig
+    # Use package import (works with PYTHONPATH=src and when the real MCP server on 8010 is exercised)
+    from youtube_extension.services.ai.gemini_service import GeminiService, GeminiConfig
     GEMINI_VISION_AVAILABLE = True
 except ImportError:
     GeminiService = None
@@ -71,7 +72,7 @@ class EnhancedVideoProcessor:
             try:
                 config = GeminiConfig(
                     api_key=self.gemini_api_key,
-                    model_name="gemini-2.0-flash-exp",
+                    model_name=os.getenv("GEMINI_MODEL", "gemini-3.5-flash"),
                     temperature=0.2,
                     max_output_tokens=4096
                 )
@@ -99,7 +100,35 @@ class EnhancedVideoProcessor:
                 },
                 connector=aiohttp.TCPConnector(ssl=ssl_context)
             )
-    
+
+    async def _generate_build_plan(self, video_url: str, metadata: dict, transcript: dict, ai_analysis: dict) -> dict:
+        """Minimal build plan generator to unblock pipeline.
+        (Quick & dirty — will evolve via specialized agents later.)
+        """
+        return {
+            "title": (ai_analysis.get("title") if isinstance(ai_analysis, dict) else None)
+                     or (metadata.get("title") if isinstance(metadata, dict) else None)
+                     or "Video Build Plan",
+            "overview": (ai_analysis.get("summary") if isinstance(ai_analysis, dict) else None)
+                        or "No summary available",
+            "key_moments": (ai_analysis.get("key_moments") if isinstance(ai_analysis, dict) else []) or [],
+            "suggested_structure": ["intro", "main_content", "conclusion"],
+            "assets_needed": ["thumbnails", "clips"],
+            "status": "draft",
+            "generated_at": datetime.now().isoformat(),
+            "video_url": video_url
+        }
+
+    def _build_extracted_info(self, metadata: dict, ai_analysis: dict, build_plan: dict, transcript: dict) -> dict:
+        """Minimal extracted info builder to unblock the pipeline after build_plan."""
+        return {
+            "metadata": metadata or {},
+            "ai_analysis": ai_analysis or {},
+            "build_plan": build_plan or {},
+            "transcript": transcript or {},
+            "status": "extracted"
+        }
+
     async def process_video(self, video_url: str) -> Dict[str, Any]:
         """
         Enhanced video processing pipeline
@@ -170,7 +199,8 @@ class EnhancedVideoProcessor:
                 raise ValueError("GEMINI_API_KEY not configured")
             
             # Use Gemini's OpenAI-compatible transcription endpoint
-            url = f"{self.gemini_base_url}/models/gemini-1.5-flash:generateContent"
+            model = os.getenv("GEMINI_VIDEO_MODEL", "gemini-3.5-flash")
+            url = f"{self.gemini_base_url}/models/{model}:generateContent"
             
             # Create prompt for video analysis
             prompt = f"""
@@ -279,7 +309,8 @@ class EnhancedVideoProcessor:
             if not self.gemini_api_key:
                 return {'error': 'GEMINI_API_KEY not configured'}
             
-            url = f"{self.gemini_base_url}/models/gemini-1.5-flash:generateContent"
+            model = os.getenv("GEMINI_VIDEO_MODEL", "gemini-3.5-flash")
+            url = f"{self.gemini_base_url}/models/{model}:generateContent"
             
             # Create comprehensive analysis prompt with strict JSON schema
             prompt = f"""

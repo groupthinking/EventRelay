@@ -152,7 +152,7 @@ class TestAgentConfig:
     def test_defaults(self):
         from youtube_extension.services.cloud.vertex_ai_agent import AgentConfig
         cfg = AgentConfig()
-        assert cfg.model_name == "gemini-2.0-flash-exp"
+        assert cfg.model_name == "gemini-3.5-flash"
         assert cfg.temperature == pytest.approx(0.4)
         assert cfg.top_p == pytest.approx(0.95)
         assert cfg.top_k == 40

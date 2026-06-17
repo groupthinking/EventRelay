@@ -11,7 +11,7 @@ import asyncio
 import json
 import logging
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Union
 
 try:
@@ -37,7 +37,9 @@ logger = logging.getLogger(__name__)
 @dataclass
 class AgentConfig:
     """Configuration for Vertex AI Agent"""
-    model_name: str = "gemini-2.0-flash-exp"
+    model_name: str = field(
+        default_factory=lambda: os.getenv("VERTEX_AI_MODEL", "gemini-3.5-flash")
+    )
     temperature: float = 0.4
     top_p: float = 0.95
     top_k: int = 40

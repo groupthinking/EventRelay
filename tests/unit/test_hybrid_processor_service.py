@@ -201,7 +201,7 @@ class TestHybridConfig:
         cfg = HybridConfig()
         assert cfg.model_routing is not None
         assert TaskType.YOUTUBE_ANALYSIS in cfg.model_routing
-        assert cfg.model_routing[TaskType.YOUTUBE_ANALYSIS] == "gemini-2.0-flash"
+        assert cfg.model_routing[TaskType.YOUTUBE_ANALYSIS] == cfg.gemini.model_name
 
     def test_custom_gemini_config_preserved(self):
         g = GeminiConfig(model_name="gemini-1.5-pro")
@@ -679,7 +679,7 @@ class TestProcessLiveGeminiPath:
     async def test_process_selects_model_from_routing(self):
         svc = self._svc()
         await svc.process("clip.mp4", "describe", task_type=TaskType.VIDEO_UNDERSTANDING)
-        svc.gemini.select_model.assert_called_once_with("gemini-2.0-flash")
+        svc.gemini.select_model.assert_called_once_with(svc.config.gemini.model_name)
 
     async def test_process_uses_explicit_model_name_kwarg(self):
         svc = self._svc()
