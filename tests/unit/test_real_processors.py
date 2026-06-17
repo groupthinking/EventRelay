@@ -55,7 +55,7 @@ _openai_mod = _stub_module("openai", AsyncOpenAI=MagicMock())
 _anthropic_mod = _stub_module("anthropic", AsyncAnthropic=MagicMock())
 
 # dotenv
-_stub_module("dotenv", load_dotenv=lambda: None)
+_stub_module("dotenv", load_dotenv=lambda *args, **kwargs: None)
 
 # pytubefix (used by some transitive imports)
 _stub_module("pytubefix")

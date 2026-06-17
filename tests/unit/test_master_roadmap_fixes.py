@@ -2,7 +2,14 @@
 
 from __future__ import annotations
 
+import sys
+import types
 from unittest.mock import MagicMock, patch
+
+# Agents import chain calls load_dotenv(override=True); accept kwargs on any stub.
+_dotenv = sys.modules.get("dotenv") or types.ModuleType("dotenv")
+_dotenv.load_dotenv = lambda *args, **kwargs: None
+sys.modules["dotenv"] = _dotenv
 
 import pytest
 
