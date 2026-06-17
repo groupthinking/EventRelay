@@ -25,11 +25,12 @@ jobs:
           # only calls v4(), so the vulnerable code path is unreachable here. The first patched uuid is
           # 11.1.1, outside next-auth's declared range. Remove this allow once next-auth bumps uuid.
           allow-ghsas: GHSA-w5hq-g745-h8pq
-          # PR #295: vite/vitest tree (BlueOak-1.0.0, MPL-2.0 lightningcss), type-fest (CC0-1.0).
+          # PR #295: vite/vitest tree (BlueOak-1.0.0, MPL-2.0 lightningcss), type-fest (CC0-1.0),
+          # rollup@4.x compound SPDX (0BSD AND ISC AND MIT).
           # FSL-1.1-MIT is not a valid SPDX id for allow-licenses — exclude @sentry/* via purls.
           allow-licenses: >-
             MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC, Python-2.0,
-            BlueOak-1.0.0, MPL-2.0, CC0-1.0
+            BlueOak-1.0.0, MPL-2.0, CC0-1.0, 0BSD
           allow-dependencies-licenses: >-
             pkg:npm/@sentry/nextjs,
             pkg:npm/@sentry/cli,
