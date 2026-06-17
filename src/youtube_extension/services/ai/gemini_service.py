@@ -25,6 +25,12 @@ from PIL import Image
 try:
     import google.generativeai as genai
     GEMINI_AVAILABLE = True
+    import warnings
+    warnings.filterwarnings(
+        "ignore",
+        category=FutureWarning,
+        message=".*google.generativeai.*"
+    )
 except ImportError:
     genai = None
     GEMINI_AVAILABLE = False

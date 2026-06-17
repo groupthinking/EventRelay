@@ -29,7 +29,8 @@ logger = logging.getLogger(__name__)
 
 # Optional Gemini Vision integration for frame analysis
 try:
-    from src.youtube_extension.services.ai.gemini_service import GeminiService, GeminiConfig
+    # Use package import (works with PYTHONPATH=src and when the real MCP server on 8010 is exercised)
+    from youtube_extension.services.ai.gemini_service import GeminiService, GeminiConfig
     GEMINI_VISION_AVAILABLE = True
 except ImportError:
     GeminiService = None
