@@ -5,6 +5,7 @@ Provides the core API endpoints and integrates all services including cloud AI
 """
 
 import logging
+import os
 
 import uvicorn
 from fastapi import FastAPI
@@ -18,6 +19,24 @@ from starlette.middleware.base import BaseHTTPMiddleware
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+_sentry_dsn = os.getenv("SENTRY_DSN")
+if _sentry_dsn:
+    try:
+        import sentry_sdk
+        from sentry_sdk.integrations.fastapi import FastApiIntegration
+        from sentry_sdk.integrations.starlette import StarletteIntegration
+
+        sentry_sdk.init(
+            dsn=_sentry_dsn,
+            environment=os.getenv("ENVIRONMENT", os.getenv("VERCEL_ENV", "development")),
+            traces_sample_rate=float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.1")),
+            integrations=[StarletteIntegration(), FastApiIntegration()],
+            send_default_pii=False,
+        )
+        logger.info("Sentry initialized for backend")
+    except Exception as exc:
+        logger.warning("Sentry init skipped: %s", exc)
 
 # Create FastAPI application
 app = FastAPI(

@@ -1,7 +1,8 @@
 # EventRelay / UVAI — Master Roadmap to a Full Working System
 
 **Last updated:** 2026-06-17  
-**Repo baseline:** `main` @ `a4aedfa5` (PRs [#295](https://github.com/groupthinking/EventRelay/pull/295), [#303](https://github.com/groupthinking/EventRelay/pull/303) landed)  
+**Repo baseline:** `feat/master-roadmap-phases` (implements Phases 1–6 code paths; Phase 1 provider keys remain dashboard ops)  
+**Prior landings:** PRs [#295](https://github.com/groupthinking/EventRelay/pull/295), [#303](https://github.com/groupthinking/EventRelay/pull/303)  
 **Live surface:** [uvai.io](https://uvai.io) · Vercel `garv1/v0-uvai` · Backend Cloud Run / Railway (misconfigured)
 
 This document merges:
@@ -220,10 +221,22 @@ Source: [`docs/EventRelay-Full-System-Breakdown.md`](./EventRelay-Full-System-Br
 
 ---
 
+## Implementation status (feat/master-roadmap-phases)
+
+| Phase | Code status | Operator action still required |
+|-------|-------------|-------------------------------|
+| **1** | `scripts/deployment/production_smoke.sh` added | Vercel/GCP/OpenAI env vars + billing |
+| **2** | VERA guard, aiohttp timeout, build_plan payload, results reset | — |
+| **3** | Python `sentry_sdk.init` in `main.py` | Set `SENTRY_DSN` in backend deploy env |
+| **4** | `PipelineJobStore`, `/video/analyze`, `/jobs/{id}`, sandbox runner | GitHub App + repair loop deferred |
+| **5** | `/api/v1/audit/pipeline/*`, JSON-LD HowTo on web | Lighthouse CI deferred |
+| **6** | `VideoProcessorFacade` entry hook | Full processor merge deferred (90d plan) |
+
 ## Changelog (roadmap maintenance)
 
 | Date | Change |
 |------|--------|
 | 2026-06-17 | Initial master roadmap: merged post-#295/#303 state, CodeRabbit backlog, Sentry/env gaps, see-script-ship MVP track |
+| 2026-06-17 | `feat/master-roadmap-phases`: Phases 2–6 code + Phase 1 smoke script |
 
 *Append a row when a phase exit criterion is met or scope shifts.*

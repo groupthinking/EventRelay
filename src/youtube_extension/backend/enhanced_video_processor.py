@@ -98,6 +98,7 @@ class EnhancedVideoProcessor:
                     'User-Agent': 'UVAI-Enhanced-Video-Processor/1.0',
                     'Content-Type': 'application/json'
                 },
+                timeout=aiohttp.ClientTimeout(total=30, connect=10, sock_read=20),
                 connector=aiohttp.TCPConnector(ssl=ssl_context)
             )
 
@@ -114,7 +115,8 @@ class EnhancedVideoProcessor:
             "key_moments": (ai_analysis.get("key_moments") if isinstance(ai_analysis, dict) else []) or [],
             "suggested_structure": ["intro", "main_content", "conclusion"],
             "assets_needed": ["thumbnails", "clips"],
-            "status": "draft",
+            "status": "handoff",
+            "handoff_only": True,
             "generated_at": datetime.now().isoformat(),
             "video_url": video_url
         }
@@ -178,6 +180,8 @@ class EnhancedVideoProcessor:
                 'metadata': metadata,
                 'transcript': transcript,
                 'ai_analysis': ai_analysis,
+                'build_plan': build_plan,
+                'extracted_info': extracted_info,
                 'visual_context': visual_context,
                 'markdown_analysis': markdown_content,
                 'save_path': save_path,
