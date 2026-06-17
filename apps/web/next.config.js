@@ -80,10 +80,12 @@ const nextConfig = {
 };
 
 const sentryWebpackPluginOptions = {
-  // For all available options, see https://github.com/getsentry/sentry-webpack-plugin#options
   org: process.env.SENTRY_ORG || '',
   project: process.env.SENTRY_PROJECT || 'v0-uvai',
   silent: !process.env.CI,
+  // Preview/prod builds succeed without Sentry upload credentials.
+  disableServerWebpackPlugin: !process.env.SENTRY_AUTH_TOKEN,
+  disableClientWebpackPlugin: !process.env.SENTRY_AUTH_TOKEN,
 };
 
 module.exports = withSentryConfig(nextConfig, sentryWebpackPluginOptions);
