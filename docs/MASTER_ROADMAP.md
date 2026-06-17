@@ -66,14 +66,16 @@ flowchart LR
 
 Source: [`docs/deployment/VERCEL_PRODUCTION_RUNBOOK.md`](./deployment/VERCEL_PRODUCTION_RUNBOOK.md)
 
-| Item | Current state | Fix location | Verify |
-|------|---------------|--------------|--------|
-| `BACKEND_URL` | Points at dead Railway host | Vercel → `garv1/v0-uvai` → Env → Production | `curl -sS $BACKEND_URL/api/v1/health` |
-| `api.uvai.io` | 503 | Cloud Run / DNS / service health | `curl -sS https://api.uvai.io/api/v1/health` |
-| `GEMINI_API_KEY` / billing | `BILLING_DISABLED` on project `688578214833` | GCP billing + API enablement | POST `/api/pipeline` with test video |
-| `OPENAI_API_KEY` | `insufficient_quota` | OpenAI project billing | `/api/transcribe` or STT fallback path |
-| `SENTRY_DSN` (web) | Optional — builds without it | Vercel env (Preview + Production) | Trigger test error on preview |
-| `SENTRY_AUTH_TOKEN` | Optional — source maps skipped without it | Vercel env + Sentry project | Build log shows upload or clean skip |
+| Item | Current state (2026-06-17) | Fix location | Verify |
+|------|---------------------------|--------------|--------|
+| `BACKEND_URL` | **Set** → `https://api.uvai.io` on Vercel | Redeploy production after env change | `curl -sS https://api.uvai.io/api/v1/health` |
+| `api.uvai.io` | **200** healthy | Cloud Run min-instances=1 | `curl -sS https://api.uvai.io/api/v1/health` |
+| `GEMINI_API_KEY` / billing | Live probes: no `BILLING_DISABLED` today | GCP billing if regressions return | POST `/api/pipeline` with test video |
+| `OPENAI_API_KEY` | Live probes: transcribe **200** | OpenAI dashboard if regressions return | `/api/transcribe` |
+| `SENTRY_DSN` (web) | **Set** on Vercel (`v0-uvai-web`) | Redeploy + client config PR pending | Deliberate smoke after deploy |
+| `SENTRY_DSN` (backend) | **Set** on Cloud Run (`eventrelay-backend`) | — | Backend logs: Sentry initialized |
+| `SENTRY_AUTH_TOKEN` | Optional — not set | Vercel env + Sentry auth token | Build log shows upload or clean skip |
+| `GITHUB_TOKEN` | **Set** on Vercel | — | Pipeline deploy path (no "token not configured") |
 
 **Smoke script (run after every prod promote):**
 
