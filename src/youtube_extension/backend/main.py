@@ -142,14 +142,6 @@ app.add_middleware(
     expose_headers=["*"],
 )
 
-# Security headers middleware
-# from .middleware.security_headers import SecurityHeadersMiddleware
-# app.add_middleware(
-#     SecurityHeadersMiddleware,
-#     enable_hsts=True,  # Enable HSTS in production with HTTPS
-#     hsts_max_age=31536000,  # 1 year
-# )
-
 from .middleware.rate_limiting import RateLimitMiddleware
 
 app.add_middleware(
@@ -162,6 +154,14 @@ app.add_middleware(
 from .middleware.api_key_auth import APIKeyAuthMiddleware
 
 app.add_middleware(APIKeyAuthMiddleware)
+
+from .middleware.security_headers import SecurityHeadersMiddleware
+
+app.add_middleware(
+    SecurityHeadersMiddleware,
+    enable_hsts=True,
+    hsts_max_age=63072000,
+)
 
 # Include API version routers
 app.include_router(v1_router)

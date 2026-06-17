@@ -9,11 +9,9 @@ import sys
 from pathlib import Path
 from typing import Any
 
-# Add paths for imports
-project_root = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(project_root))
-
-from src.core.collections import SmartCollectionEngine
+# Clean imports for PYTHONPATH=src layout (used by the real MCP server on 8010 path)
+# The old "from src.xxx" + sys.path hack broke when the agent network exercised the live HTTP endpoint.
+from core.collections import SmartCollectionEngine
 from youtube_extension.backend.video_processor_factory import get_video_processor
 
 logger = logging.getLogger(__name__)

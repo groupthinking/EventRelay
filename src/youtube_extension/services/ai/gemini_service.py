@@ -15,7 +15,7 @@ import logging
 import mimetypes
 import os
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Dict, List, Optional, Union
@@ -25,6 +25,12 @@ from PIL import Image
 try:
     import google.generativeai as genai
     GEMINI_AVAILABLE = True
+    import warnings
+    warnings.filterwarnings(
+        "ignore",
+        category=FutureWarning,
+        message=".*google.generativeai.*"
+    )
 except ImportError:
     genai = None
     GEMINI_AVAILABLE = False
@@ -50,6 +56,18 @@ except ImportError:
     logging.warning("Vertex AI not available - install: pip install google-cloud-aiplatform")
 
 TRANSFORMERS_DISABLE_FLAG = os.getenv("YOUTUBE_EXTENSION_DISABLE_TRANSFORMERS", "0").lower() in {"1", "true", "yes"}
+
+DEFAULT_GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
+
+
+def get_gemini_api_key() -> Optional[str]:
+    """Prefer the dedicated Gemini key over a possibly stale shared Google key."""
+
+    return (
+        os.getenv("GEMINI_API_KEY")
+        or os.getenv("GOOGLE_API_KEY")
+        or os.getenv("GOOGLE_GENERATIVE_AI_API_KEY")
+    )
 
 try:
     if TRANSFORMERS_DISABLE_FLAG:
@@ -257,8 +275,8 @@ class VeoVideoClient:
 @dataclass
 class GeminiConfig:
     """Configuration for Gemini service"""
-    api_key: Optional[str] = None
-    model_name: str = "gemini-2.5-flash"
+    api_key: Optional[str] = field(default_factory=get_gemini_api_key)
+    model_name: str = field(default_factory=lambda: DEFAULT_GEMINI_MODEL)
     project_id: Optional[str] = None
     location: str = "us-central1"
     max_output_tokens: int = 8192

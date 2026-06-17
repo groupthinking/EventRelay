@@ -266,7 +266,9 @@ async def get_capabilities_v1(
     try:
         # Check Gemini availability via the hybrid processor service
         gemini_available = hybrid_processor is not None
-        gemini_model = "gemini-2.0-flash" if gemini_available else None
+        gemini_model = (
+            hybrid_processor.config.gemini.model_name if gemini_available else None
+        )
 
         # Check which video processors are available
         available_processors = []
