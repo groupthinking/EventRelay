@@ -281,3 +281,24 @@ class LLMRouter:
             temperature=temperature,
         )
         return response.choices[0].message.content or None
+
+    def close(self) -> None:
+        """Explicit close for all initialized provider clients (best-effort hygiene for unclosed sessions)."""
+        for attr in (
+            "_gemini_client",
+            "_anthropic_client",
+            "_openai_client",
+            "_grok_client",
+            "_perplexity_client",
+        ):
+            client = getattr(self, attr, None)
+            if not client:
+                continue
+            for m in ("close", "aclose"):
+                fn = getattr(client, m, None)
+                if callable(fn):
+                    try:
+                        fn()
+                        break
+                    except Exception:
+                        pass

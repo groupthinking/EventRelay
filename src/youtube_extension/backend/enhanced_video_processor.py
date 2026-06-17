@@ -189,6 +189,12 @@ class EnhancedVideoProcessor:
         except Exception as e:
             logger.error(f"❌ Enhanced processing failed: {e}")
             raise
+        finally:
+            # Ensure session is closed to prevent "Unclosed client session" at exit (LLM/ingest paths)
+            try:
+                await self.close()
+            except Exception:
+                pass
     
     async def _get_gemini_transcript(self, video_id: str, video_url: str) -> Dict[str, Any]:
         """

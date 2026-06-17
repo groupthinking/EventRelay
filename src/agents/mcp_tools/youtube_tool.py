@@ -98,6 +98,12 @@ class YouTubeMCPTool:
 
             traceback.print_exc()
             return {"status": "error", "error": str(e), "video_url": video_url}
+        finally:
+            # Explicit close for the processor's aiohttp session (prevents unclosed at shutdown)
+            try:
+                await self.close()
+            except Exception:
+                pass
 
     def _generate_markdown(self, result: dict[str, Any]) -> str:
         """Generate markdown from processing result"""
