@@ -25,5 +25,9 @@ jobs:
           # only calls v4(), so the vulnerable code path is unreachable here. The first patched uuid is
           # 11.1.1, outside next-auth's declared range. Remove this allow once next-auth bumps uuid.
           allow-ghsas: GHSA-w5hq-g745-h8pq
-          allow-licenses: MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC, Python-2.0
+          # PR #295 adds Sentry (@sentry/cli FSL-1.1-MIT), vite/vitest tree (BlueOak-1.0.0,
+          # MPL-2.0 lightningcss), and type-fest (CC0-1.0). All are permissive or file-level.
+          allow-licenses: >-
+            MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC, Python-2.0,
+            FSL-1.1-MIT, BlueOak-1.0.0, MPL-2.0, CC0-1.0
           comment-summary-in-pr: always
