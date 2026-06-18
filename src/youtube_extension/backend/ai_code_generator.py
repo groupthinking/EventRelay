@@ -437,16 +437,30 @@ Return ONLY the code."""
             "dashboard API route",
             architecture,
             video_analysis,
-            """Generate API route at app/api/dashboard/route.ts:
+            """Generate API route at app/api/dashboard/route.ts using Next.js 14 App Router format:
+
+EXACT FORMAT REQUIRED (do not deviate):
+import { NextResponse } from 'next/server';
+
+export async function GET() {
+  // return NextResponse.json({ ... })
+}
+
+export async function POST(request: Request) {
+  // const body = await request.json();
+  // return NextResponse.json({ ... })
+}
 
 Requirements:
-1. GET endpoint returning dashboard metrics/data
-2. POST endpoint for dashboard actions
-3. Real data sources (file system, Docker, processes, etc)
-4. TypeScript interfaces
-5. Error handling
+1. GET endpoint returning dashboard metrics/data (real, not mock)
+2. POST endpoint for dashboard actions (e.g. start/stop)
+3. Real data sources (file system, Docker, processes, etc) - use dockerode if MCP
+4. TypeScript interfaces/types
+5. Proper error handling with try/catch
+6. Return NextResponse.json
 
-For MCP Dashboard: Return Docker container list with status.
+For MCP Dashboard: Include logic for Docker container list/status/start/stop using dockerode.
+DO NOT export anything named "router" or use express style. Must be GET/POST functions.
 Return ONLY the code."""
         )
         self._write_file(project_path / "src/app/api/dashboard/route.ts", dashboard_api)
@@ -461,6 +475,12 @@ Return ONLY the code."""
 
 PRIORITY: Working data flow over visual design.
 
+CRITICAL CONSTRAINTS (MUST FOLLOW):
+- Use ONLY Tailwind CSS classes + lucide-react icons (already in package.json). 
+- DO NOT import or use ANY external UI libraries: no @material-ui, no @mui/material, no Chakra, no AntD, no shadcn components.
+- All UI must be built with <div>, <button>, Tailwind (border, p-4, grid, flex, bg-white, shadow etc).
+- Keep it simple and functional.
+
 Requirements:
 1. 'use client' directive (uses hooks)
 2. Fetch real data from /api/dashboard on mount
@@ -473,6 +493,7 @@ Requirements:
 9. Responsive grid with Tailwind
 
 IMPLEMENTATION NOTES:
+- Use native fetch (not axios or other http libs if possible; axios is available as fallback)
 - For MCP Dashboard: Include Docker container operations (start/stop/list)
 - API endpoints should return real system data (Docker SDK, process info, etc)
 - State updates after each action
@@ -636,6 +657,11 @@ TASK: Generate {description}
         if frontend.get("state") == "zustand":
             package["dependencies"]["zustand"] = "^4.5.0"
 
+        if frontend.get("styling") in ("material_ui", "material-ui", "mui"):
+            # Support legacy or explicit MUI (old v4 to match possible generated imports)
+            package["dependencies"]["@material-ui/core"] = "^4.12.4"
+            package["dependencies"]["@material-ui/icons"] = "^4.11.3"
+
         if backend.get("auth") == "nextauth":
             package["dependencies"]["next-auth"] = "^4.24.0"
 
@@ -652,6 +678,7 @@ TASK: Generate {description}
         package["dependencies"]["clsx"] = "^2.1.0"  # Utility
         package["dependencies"]["tailwind-merge"] = "^2.2.0"  # Tailwind utility
         package["dependencies"]["class-variance-authority"] = "^0.7.0"  # Button variants
+        package["dependencies"]["axios"] = "^1.6.0"  # HTTP client (commonly used by AI generated code)
 
         # Add infrastructure packages for production-ready apps
         # State management
