@@ -166,7 +166,9 @@ async function pollBackendJob(
       throw new Error('Stream pipeline deadline exceeded while polling async job');
     }
 
-    await sleep(JOB_POLL_INTERVAL_MS);
+    if (attempt > 0) {
+      await sleep(JOB_POLL_INTERVAL_MS);
+    }
 
     try {
       const response = await fetch(statusUrl, {

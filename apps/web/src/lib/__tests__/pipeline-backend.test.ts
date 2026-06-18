@@ -24,6 +24,14 @@ describe('backendHeaders', () => {
     delete process.env.EVENTRELAY_API_KEY;
     expect(backendHeaders()).toEqual({ 'Content-Type': 'application/json' });
   });
+
+  it('merges extra headers', () => {
+    delete process.env.EVENTRELAY_API_KEY;
+    expect(backendHeaders({ Accept: 'application/json' })).toEqual({
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    });
+  });
 });
 
 describe('resolveBackendStatusUrl', () => {
@@ -31,6 +39,12 @@ describe('resolveBackendStatusUrl', () => {
 
   it('accepts relative paths on the configured backend', () => {
     expect(resolveBackendStatusUrl('/api/v1/jobs/abc', backend)).toBe(
+      'https://api.uvai.io/api/v1/jobs/abc',
+    );
+  });
+
+  it('accepts relative paths without a leading slash', () => {
+    expect(resolveBackendStatusUrl('api/v1/jobs/abc', backend)).toBe(
       'https://api.uvai.io/api/v1/jobs/abc',
     );
   });
