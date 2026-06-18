@@ -259,6 +259,18 @@ export async function POST(request: Request) {
         if (response.ok) {
           const result = await response.json();
           const jobId = typeof result.job_id === 'string' ? result.job_id : undefined;
+          const backendStatusUrl =
+            typeof result.status_url === 'string' ? result.status_url : undefined;
+          const statusUrl = jobId ? `/api/jobs/${jobId}` : backendStatusUrl;
+
+          if (result.async_processing && !statusUrl) {
+            return NextResponse.json(
+              {
+                error: 'Async processing started but backend returned no job_id or status_url',
+              },
+              { status: 502 },
+            );
+          }
 
           return NextResponse.json({
             id: jobId || `pipeline_${Date.now().toString(36)}`,
@@ -266,7 +278,7 @@ export async function POST(request: Request) {
             pipeline: 'backend-async',
             async_processing: Boolean(result.async_processing),
             job_id: jobId,
-            status_url: jobId ? `/api/jobs/${jobId}` : result.status_url,
+            status_url: statusUrl,
             result: result.async_processing ? undefined : result,
           });
         }

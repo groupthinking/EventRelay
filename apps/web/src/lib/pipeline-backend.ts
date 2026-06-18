@@ -13,3 +13,20 @@ export function backendHeaders(extra?: Record<string, string>): Record<string, s
   }
   return headers;
 }
+
+/** Resolve and validate a backend job status URL (blocks SSRF before sending API key). */
+export function resolveBackendStatusUrl(statusUrl: string, backendUrl: string): string {
+  const backendOrigin = new URL(backendUrl).origin;
+  const base = backendUrl.replace(/\/$/, '');
+  const resolved = statusUrl.startsWith('http')
+    ? statusUrl
+    : `${base}${statusUrl.startsWith('/') ? statusUrl : `/${statusUrl}`}`;
+
+  const parsed = new URL(resolved);
+  if (parsed.origin !== backendOrigin) {
+    throw new Error(
+      `Refusing to poll job status at untrusted origin ${parsed.origin} (expected ${backendOrigin})`,
+    );
+  }
+  return parsed.toString();
+}

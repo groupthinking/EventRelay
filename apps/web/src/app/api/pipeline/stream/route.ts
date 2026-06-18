@@ -22,7 +22,7 @@
 import { analyzeVideoWithGemini, type VideoAnalysisResult } from '@/lib/gemini-video-analyzer';
 import { hasGeminiKey } from '@/lib/gemini-client';
 import { publishEvent, EventTypes } from '@/lib/cloudevents';
-import { backendHeaders } from '@/lib/pipeline-backend';
+import { backendHeaders, resolveBackendStatusUrl } from '@/lib/pipeline-backend';
 import { saveTrainingExample, TUNING_THRESHOLD } from '@/lib/training-store';
 import { PipelineDeadline } from '../route';
 
@@ -645,9 +645,10 @@ export async function POST(request: Request) {
                     ),
                   );
 
-                  const statusUrl = transcriptResult.status_url.startsWith('http')
-                    ? transcriptResult.status_url
-                    : `${BACKEND_URL}${transcriptResult.status_url}`;
+                  const statusUrl = resolveBackendStatusUrl(
+                    transcriptResult.status_url,
+                    BACKEND_URL,
+                  );
                   const job = await pollBackendJob(statusUrl, controller, encoder, deadline);
                   if (job.status === 'failed') {
                     throw new Error(job.error || 'Async transcript job failed');

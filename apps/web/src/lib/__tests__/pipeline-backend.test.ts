@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { backendHeaders } from '@/lib/pipeline-backend';
+import { backendHeaders, resolveBackendStatusUrl } from '@/lib/pipeline-backend';
 
 describe('backendHeaders', () => {
   const original = process.env.EVENTRELAY_API_KEY;
@@ -23,5 +23,27 @@ describe('backendHeaders', () => {
   it('omits X-API-Key when unset', () => {
     delete process.env.EVENTRELAY_API_KEY;
     expect(backendHeaders()).toEqual({ 'Content-Type': 'application/json' });
+  });
+});
+
+describe('resolveBackendStatusUrl', () => {
+  const backend = 'https://api.uvai.io';
+
+  it('accepts relative paths on the configured backend', () => {
+    expect(resolveBackendStatusUrl('/api/v1/jobs/abc', backend)).toBe(
+      'https://api.uvai.io/api/v1/jobs/abc',
+    );
+  });
+
+  it('accepts absolute URLs on the configured backend origin', () => {
+    expect(resolveBackendStatusUrl('https://api.uvai.io/api/v1/jobs/abc', backend)).toBe(
+      'https://api.uvai.io/api/v1/jobs/abc',
+    );
+  });
+
+  it('rejects untrusted origins', () => {
+    expect(() =>
+      resolveBackendStatusUrl('https://evil.example/jobs/abc', backend),
+    ).toThrow(/untrusted origin/);
   });
 });

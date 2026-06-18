@@ -26,7 +26,8 @@ async_body=$(curl -sS -X POST "${BASE_URL}/api/pipeline" \
 async_rc=$?
 set -e
 if [[ "${async_rc}" -eq 28 ]]; then
-  echo "WARN: async kickoff timed out — production may still run sync video-to-software; deploy latest web"
+  echo "FAIL: async kickoff timed out — deploy latest web with async=true handler"
+  exit 1
 elif echo "${async_body}" | grep -qE '"job_id"|"status":"complete"'; then
   echo "${async_body}" | head -c 600
   echo
@@ -34,7 +35,8 @@ elif echo "${async_body}" | grep -qE '"job_id"|"status":"complete"'; then
 else
   echo "${async_body}" | head -c 600
   echo
-  echo "WARN: async kickoff missing job_id/complete — check BACKEND_URL + EVENTRELAY_API_KEY"
+  echo "FAIL: async kickoff missing job_id/complete — check BACKEND_URL + EVENTRELAY_API_KEY"
+  exit 1
 fi
 
 echo "-- Pipeline stream SSE (bounded, primary long-path check)"
@@ -55,17 +57,24 @@ if [[ "${stream_code}" != "200" ]]; then
   exit 1
 fi
 
-if grep -q '"type":"pipeline_status"' "${stream_tmp}" && grep -q '"status":"complete"' "${stream_tmp}"; then
+terminal_status=$(
+  grep '"type":"pipeline_status"' "${stream_tmp}" \
+    | sed -n 's/.*"status":"\([^"]*\)".*/\1/p' \
+    | tail -n 1
+)
+
+if [[ "${terminal_status}" == "complete" ]]; then
   echo "OK: stream reached pipeline_status complete"
-elif grep -q '"type":"pipeline_status"' "${stream_tmp}" && grep -q '"status":"error"' "${stream_tmp}"; then
+elif [[ "${terminal_status}" == "error" ]]; then
   echo "FAIL: stream ended with pipeline_status error"
   tail -c 1200 "${stream_tmp}" || true
   echo
   exit 1
 else
-  echo "WARN: stream closed without terminal pipeline_status (degraded/Gemini-only mode?)"
+  echo "FAIL: stream closed without terminal pipeline_status"
   head -c 800 "${stream_tmp}" || true
   echo
+  exit 1
 fi
 
 echo "-- Realtime SDP validation"
