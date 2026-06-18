@@ -11,12 +11,51 @@ const BACKEND_AVAILABLE = rawBackendUrl.startsWith('http');
 export const runtime = 'nodejs';
 export const maxDuration = 30;
 
+export const MAX_DURATION_MS = maxDuration * 1000;
+
 /** Health probe budget for Cloud Run cold start + TLS. */
 export const PIPELINE_HEALTH_TIMEOUT_MS = 5_000;
-/** Backend video-to-software call — most of the Vercel function window. */
-export const PIPELINE_BACKEND_TIMEOUT_MS = 25_000;
-/** Gemini-only fallback when backend is down. */
-export const PIPELINE_GEMINI_TIMEOUT_MS = 20_000;
+/** Backend video-to-software cap — clamped to remaining request budget. */
+export const PIPELINE_BACKEND_TIMEOUT_MS = 22_000;
+/** Gemini fallback cap — only runs if backend left enough wall-clock time. */
+export const PIPELINE_GEMINI_TIMEOUT_MS = 15_000;
+
+/** Tracks elapsed time so sequential fallback steps stay within maxDuration. */
+export class PipelineDeadline {
+  constructor(private readonly endsAt: number) {}
+
+  static fromMaxDuration(): PipelineDeadline {
+    return new PipelineDeadline(Date.now() + MAX_DURATION_MS);
+  }
+
+  remainingMs(): number {
+    return Math.max(0, this.endsAt - Date.now());
+  }
+
+  budgetMs(requestedMs: number): number {
+    return Math.min(requestedMs, this.remainingMs());
+  }
+
+  signalFor(requestedMs: number): AbortSignal {
+    const ms = this.budgetMs(requestedMs);
+    if (ms <= 0) {
+      throw new Error('Pipeline deadline exceeded');
+    }
+    return timeoutSignal(ms);
+  }
+
+  async runWithBudget<T>(
+    promise: Promise<T>,
+    requestedMs: number,
+    label: string,
+  ): Promise<T> {
+    const ms = this.budgetMs(requestedMs);
+    if (ms <= 0) {
+      throw new Error(`${label}: pipeline deadline exceeded`);
+    }
+    return withTimeout(promise, ms, label);
+  }
+}
 
 function backendHost(): string | null {
   if (!BACKEND_AVAILABLE) return null;
@@ -199,8 +238,10 @@ export async function POST(request: Request) {
 
     await publishEvent(EventTypes.VIDEO_RECEIVED, { url, pipeline: 'end-to-end' }, url);
 
+    const deadline = PipelineDeadline.fromMaxDuration();
+
     // ── Strategy 1: Full backend pipeline (FastAPI video-to-software) ──
-    if (BACKEND_AVAILABLE) {
+    if (BACKEND_AVAILABLE && deadline.remainingMs() > 1_000) {
       try {
         const response = await fetch(`${BACKEND_URL}/api/v1/video-to-software`, {
           method: 'POST',
@@ -211,7 +252,7 @@ export async function POST(request: Request) {
             deployment_target,
             features,
           }),
-          signal: timeoutSignal(PIPELINE_BACKEND_TIMEOUT_MS),
+          signal: deadline.signalFor(PIPELINE_BACKEND_TIMEOUT_MS),
         });
 
         if (response.ok) {
@@ -248,10 +289,10 @@ export async function POST(request: Request) {
     }
 
     // ── Strategy 2: Gemini analysis (video intelligence only, no deployment) ──
-    if (hasGeminiKey()) {
+    if (hasGeminiKey() && deadline.remainingMs() > 1_000) {
       try {
         const startTime = Date.now();
-        const analysis = await withTimeout(
+        const analysis = await deadline.runWithBudget(
           analyzeVideoWithGemini(url),
           PIPELINE_GEMINI_TIMEOUT_MS,
           'Gemini analysis',
@@ -291,7 +332,7 @@ export async function POST(request: Request) {
       }
     }
 
-    const backend = await checkBackendHealth();
+    const backend = await checkBackendHealth(deadline.budgetMs(PIPELINE_HEALTH_TIMEOUT_MS) || PIPELINE_HEALTH_TIMEOUT_MS);
     const fallback = buildLocalFallbackPipeline({
       url,
       projectType: project_type,

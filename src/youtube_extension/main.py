@@ -132,8 +132,8 @@ async def health_check():
 
 
 @app.post("/test-sentry")
-async def test_sentry():
-    """Deliberate error for Sentry smoke tests. Disabled unless ALLOW_SENTRY_SMOKE=1."""
+async def test_sentry() -> None:
+    """Deliberate Sentry smoke error. Requires X-API-Key (middleware) and ALLOW_SENTRY_SMOKE=1."""
     if os.getenv("ALLOW_SENTRY_SMOKE") != "1":
         raise HTTPException(status_code=404, detail="Not found")
     raise RuntimeError("sentry-smoke")
