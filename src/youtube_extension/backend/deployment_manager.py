@@ -131,7 +131,10 @@ class DeploymentManager:
         try:
             # Run npm install
             logger.info("📦 Running npm install...")
-            npm_path = "/usr/local/bin/npm" if os.path.exists("/usr/local/bin/npm") else "npm"
+            import shutil
+            npm_path = shutil.which("npm") or "/usr/local/bin/npm" if os.path.exists("/usr/local/bin/npm") else "npm"
+            if not shutil.which("npm") and not os.path.exists("/usr/local/bin/npm"):
+                logger.warning("⚠️ npm not found in PATH; build verification may fail. Ensure Node.js is installed in the container.")
             install_result = subprocess.run(
                 [npm_path, "install", "--legacy-peer-deps", "--ignore-scripts"],
                 cwd=str(resolved_path),
@@ -154,6 +157,9 @@ class DeploymentManager:
 
             # Run npm run build
             logger.info("🔨 Running npm run build...")
+            if not shutil.which("npm") and npm_path == "npm":
+                # Re-detect
+                npm_path = shutil.which("npm") or npm_path
             build_result = subprocess.run(
                 [npm_path, "run", "build"],
                 cwd=str(resolved_path),
@@ -208,7 +214,8 @@ class DeploymentManager:
             tsconfig = project_dir / "tsconfig.json"
             if tsconfig.exists():
                 logger.info("🔎 Running TypeScript check...")
-                npx_path = "/usr/local/bin/npx" if os.path.exists("/usr/local/bin/npx") else "npx"
+                import shutil
+                npx_path = shutil.which("npx") or "/usr/local/bin/npx" if os.path.exists("/usr/local/bin/npx") else "npx"
                 tsc_result = subprocess.run(
                     [npx_path, "tsc", "--noEmit"],
                     cwd=str(resolved_path),
