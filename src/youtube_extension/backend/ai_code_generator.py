@@ -461,6 +461,12 @@ Return ONLY the code."""
 
 PRIORITY: Working data flow over visual design.
 
+CRITICAL CONSTRAINTS (MUST FOLLOW):
+- Use ONLY Tailwind CSS classes + lucide-react icons (already in package.json). 
+- DO NOT import or use ANY external UI libraries: no @material-ui, no @mui/material, no Chakra, no AntD, no shadcn components.
+- All UI must be built with <div>, <button>, Tailwind (border, p-4, grid, flex, bg-white, shadow etc).
+- Keep it simple and functional.
+
 Requirements:
 1. 'use client' directive (uses hooks)
 2. Fetch real data from /api/dashboard on mount
@@ -635,6 +641,11 @@ TASK: Generate {description}
 
         if frontend.get("state") == "zustand":
             package["dependencies"]["zustand"] = "^4.5.0"
+
+        if frontend.get("styling") in ("material_ui", "material-ui", "mui"):
+            # Support legacy or explicit MUI (old v4 to match possible generated imports)
+            package["dependencies"]["@material-ui/core"] = "^4.12.4"
+            package["dependencies"]["@material-ui/icons"] = "^4.11.3"
 
         if backend.get("auth") == "nextauth":
             package["dependencies"]["next-auth"] = "^4.24.0"
