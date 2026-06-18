@@ -123,10 +123,11 @@ if [[ -n "$LATEST_GEN" ]]; then
       ' 2>/dev/null || true
       BUILD_LOG=$(npm run build 2>&1)
       echo "$BUILD_LOG" | tail -10
-      if echo "$BUILD_LOG" | grep -qi "compiled successfully\|build complete\|successfully\|route.*compiled" || true; then
+      if echo "$BUILD_LOG" | grep -qi "compiled successfully"; then
         echo "   ✅ npm run build: SUCCESS (deep runtime verified)"
       else
-        echo "   ✅ npm run build: SUCCESS (deep runtime verified - executed with notes)"
+        echo "   ❌ npm run build FAILED (no 'Compiled successfully' in output) - failing verification for max"
+        exit 1  # Make demo fail hard for strict max verification
       fi
 
       # Additional runtime tests for max verification

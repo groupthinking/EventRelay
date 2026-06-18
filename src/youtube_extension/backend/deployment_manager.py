@@ -98,6 +98,14 @@ class DeploymentManager:
         Runs npm install and npm run build to catch errors early.
         """
         logger.info("🔍 Verifying project build...")
+        if os.getenv("SENTRY_DSN"):
+            import sentry_sdk
+            sentry_sdk.add_breadcrumb(
+                category="deployment",
+                message="Starting build verification",
+                data={"project_path": project_path, "has_package_json": package_json.exists()},
+                level="info"
+            )
 
         result = {
             "passed": False,

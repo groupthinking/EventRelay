@@ -86,6 +86,9 @@ class EnhancedVideoProcessor:
     
     async def _init_session(self):
         """Initialize aiohttp session with proper headers and SSL context"""
+        if os.getenv("SENTRY_DSN"):
+            import sentry_sdk
+            sentry_sdk.add_breadcrumb(category="video", message="Initializing HTTP session", level="info")
         if not self.session or getattr(self.session, 'closed', False):
             # Create SSL context that handles certificate verification
             import ssl
