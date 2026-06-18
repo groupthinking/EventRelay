@@ -9,6 +9,19 @@ const rawBackendUrl = process.env.BACKEND_URL || '';
 const BACKEND_URL = rawBackendUrl.startsWith('http') ? rawBackendUrl : 'http://localhost:8000';
 const BACKEND_AVAILABLE = rawBackendUrl.startsWith('http');
 
+interface BackendApiResponse<T> {
+  status?: string;
+  data?: T;
+  error?: string;
+  detail?: string;
+}
+
+interface VideoProcessJobResponse {
+  job_id: string;
+  video_url?: string;
+  status?: string;
+}
+
 export const runtime = 'nodejs';
 /** Sync route — short budget; use /api/pipeline/stream or async=true for long runs. */
 export const maxDuration = 60;
@@ -246,7 +259,7 @@ export async function POST(request: Request) {
     // ── Strategy 0: Async kickoff (returns job_id immediately) ──
     if (asyncMode && BACKEND_AVAILABLE) {
       try {
-        const response = await fetch(`${BACKEND_URL}/api/v1/transcript-action`, {
+        const response = await fetch(`${BACKEND_URL}/api/v1/videos/process`, {
           method: 'POST',
           headers: backendHeaders(),
           body: JSON.stringify({
@@ -256,35 +269,35 @@ export async function POST(request: Request) {
           signal: deadline.signalFor(10_000),
         });
 
-        if (response.ok) {
-          const result = await response.json();
-          const jobId = typeof result.job_id === 'string' ? result.job_id : undefined;
-          const backendStatusUrl =
-            typeof result.status_url === 'string' ? result.status_url : undefined;
-          const statusUrl = jobId ? `/api/jobs/${jobId}` : backendStatusUrl;
+        const payload = (await response.json()) as BackendApiResponse<VideoProcessJobResponse>;
+        const jobId = payload.data?.job_id;
 
-          if (result.async_processing && !statusUrl) {
-            return NextResponse.json(
-              {
-                error: 'Async processing started but backend returned no job_id or status_url',
-              },
-              { status: 502 },
-            );
-          }
-
+        if (response.ok && jobId) {
           return NextResponse.json({
-            id: jobId || `pipeline_${Date.now().toString(36)}`,
-            status: result.async_processing ? 'pending' : (result.success ? 'complete' : 'failed'),
+            id: jobId,
+            status: 'pending',
             pipeline: 'backend-async',
-            async_processing: Boolean(result.async_processing),
+            async_processing: true,
             job_id: jobId,
-            status_url: statusUrl,
-            result: result.async_processing ? undefined : result,
+            status_url: `/api/jobs/${jobId}`,
           });
         }
-        console.warn(`Async transcript-action returned ${response.status}, falling back`);
+
+        return NextResponse.json(
+          {
+            error: 'Async video job kickoff failed',
+            detail: payload.error || payload.detail || `HTTP ${response.status}`,
+          },
+          { status: response.ok ? 502 : response.status },
+        );
       } catch (e) {
-        console.warn('Async pipeline kickoff failed:', e);
+        return NextResponse.json(
+          {
+            error: 'Async pipeline kickoff failed',
+            detail: e instanceof Error ? e.message : String(e),
+          },
+          { status: 502 },
+        );
       }
     }
 

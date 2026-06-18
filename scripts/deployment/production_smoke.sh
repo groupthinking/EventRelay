@@ -28,7 +28,7 @@ set -e
 if [[ "${async_rc}" -eq 28 ]]; then
   echo "FAIL: async kickoff timed out — deploy latest web with async=true handler"
   exit 1
-elif echo "${async_body}" | grep -qE '"job_id"|"status":"complete"'; then
+elif echo "${async_body}" | grep -qE '"job_id":"job_[^"]+"|"status":"pending"|"status":"complete"'; then
   echo "${async_body}" | head -c 600
   echo
   echo "OK: async pipeline kickoff responded"
