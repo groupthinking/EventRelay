@@ -689,9 +689,11 @@ TASK: Generate {description}
         package["dependencies"]["@ai-sdk/openai"] = "^0.0.15"  # OpenAI provider
         package["dependencies"]["@ai-sdk/anthropic"] = "^0.0.15"  # Anthropic provider
 
-        # For agent/MCP apps: Add dockerode for container management
-        if architecture.get("type") == "agent" or "docker" in str(architecture.get("features", [])).lower():
-            package["dependencies"]["dockerode"] = "^4.0.2"  # Docker SDK
+        # For agent/MCP apps or dashboards with container features: Add dockerode
+        if (architecture.get("type") in ("agent", "fullstack_app") or 
+            "docker" in str(architecture.get("features", [])).lower() or
+            "dashboard" in str(architecture.get("features", [])).lower()):
+            package["dependencies"]["dockerode"] = "^4.0.2"
             package["devDependencies"]["@types/dockerode"] = "^3.3.0"
 
         return package
