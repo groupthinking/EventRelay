@@ -437,16 +437,30 @@ Return ONLY the code."""
             "dashboard API route",
             architecture,
             video_analysis,
-            """Generate API route at app/api/dashboard/route.ts:
+            """Generate API route at app/api/dashboard/route.ts using Next.js 14 App Router format:
+
+EXACT FORMAT REQUIRED (do not deviate):
+import { NextResponse } from 'next/server';
+
+export async function GET() {
+  // return NextResponse.json({ ... })
+}
+
+export async function POST(request: Request) {
+  // const body = await request.json();
+  // return NextResponse.json({ ... })
+}
 
 Requirements:
-1. GET endpoint returning dashboard metrics/data
-2. POST endpoint for dashboard actions
-3. Real data sources (file system, Docker, processes, etc)
-4. TypeScript interfaces
-5. Error handling
+1. GET endpoint returning dashboard metrics/data (real, not mock)
+2. POST endpoint for dashboard actions (e.g. start/stop)
+3. Real data sources (file system, Docker, processes, etc) - use dockerode if MCP
+4. TypeScript interfaces/types
+5. Proper error handling with try/catch
+6. Return NextResponse.json
 
-For MCP Dashboard: Return Docker container list with status.
+For MCP Dashboard: Include logic for Docker container list/status/start/stop using dockerode.
+DO NOT export anything named "router" or use express style. Must be GET/POST functions.
 Return ONLY the code."""
         )
         self._write_file(project_path / "src/app/api/dashboard/route.ts", dashboard_api)
