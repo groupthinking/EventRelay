@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { publishEvent, EventTypes } from '@/lib/cloudevents';
 import { analyzeVideoWithGemini } from '@/lib/gemini-video-analyzer';
 import { hasGeminiKey } from '@/lib/gemini-client';
+import { backendHeaders } from '@/lib/pipeline-backend';
 import { resolveVideoUrl } from '@/lib/video-url-request';
 
 const rawBackendUrl = process.env.BACKEND_URL || '';
@@ -9,14 +10,15 @@ const BACKEND_URL = rawBackendUrl.startsWith('http') ? rawBackendUrl : 'http://l
 const BACKEND_AVAILABLE = rawBackendUrl.startsWith('http');
 
 export const runtime = 'nodejs';
-export const maxDuration = 30;
+/** Sync route — short budget; use /api/pipeline/stream or async=true for long runs. */
+export const maxDuration = 60;
 
 export const MAX_DURATION_MS = maxDuration * 1000;
 
 /** Health probe budget for Cloud Run cold start + TLS. */
 export const PIPELINE_HEALTH_TIMEOUT_MS = 5_000;
 /** Backend video-to-software cap — clamped to remaining request budget. */
-export const PIPELINE_BACKEND_TIMEOUT_MS = 22_000;
+export const PIPELINE_BACKEND_TIMEOUT_MS = 50_000;
 /** Gemini fallback cap — only runs if backend left enough wall-clock time. */
 export const PIPELINE_GEMINI_TIMEOUT_MS = 15_000;
 
@@ -239,13 +241,59 @@ export async function POST(request: Request) {
     await publishEvent(EventTypes.VIDEO_RECEIVED, { url, pipeline: 'end-to-end' }, url);
 
     const deadline = PipelineDeadline.fromMaxDuration();
+    const asyncMode = body.async === true || body.async === 'true';
+
+    // ── Strategy 0: Async kickoff (returns job_id immediately) ──
+    if (asyncMode && BACKEND_AVAILABLE) {
+      try {
+        const response = await fetch(`${BACKEND_URL}/api/v1/transcript-action`, {
+          method: 'POST',
+          headers: backendHeaders(),
+          body: JSON.stringify({
+            video_url: url,
+            language: stringValue(body.language, 'en'),
+          }),
+          signal: deadline.signalFor(10_000),
+        });
+
+        if (response.ok) {
+          const result = await response.json();
+          const jobId = typeof result.job_id === 'string' ? result.job_id : undefined;
+          const backendStatusUrl =
+            typeof result.status_url === 'string' ? result.status_url : undefined;
+          const statusUrl = jobId ? `/api/jobs/${jobId}` : backendStatusUrl;
+
+          if (result.async_processing && !statusUrl) {
+            return NextResponse.json(
+              {
+                error: 'Async processing started but backend returned no job_id or status_url',
+              },
+              { status: 502 },
+            );
+          }
+
+          return NextResponse.json({
+            id: jobId || `pipeline_${Date.now().toString(36)}`,
+            status: result.async_processing ? 'pending' : (result.success ? 'complete' : 'failed'),
+            pipeline: 'backend-async',
+            async_processing: Boolean(result.async_processing),
+            job_id: jobId,
+            status_url: statusUrl,
+            result: result.async_processing ? undefined : result,
+          });
+        }
+        console.warn(`Async transcript-action returned ${response.status}, falling back`);
+      } catch (e) {
+        console.warn('Async pipeline kickoff failed:', e);
+      }
+    }
 
     // ── Strategy 1: Full backend pipeline (FastAPI video-to-software) ──
     if (BACKEND_AVAILABLE && deadline.remainingMs() > 1_000) {
       try {
         const response = await fetch(`${BACKEND_URL}/api/v1/video-to-software`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...(process.env.EVENTRELAY_API_KEY ? { 'X-API-Key': process.env.EVENTRELAY_API_KEY } : {}) },
+          headers: backendHeaders(),
           body: JSON.stringify({
             video_url: url,
             project_type,

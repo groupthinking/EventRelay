@@ -41,12 +41,8 @@ describe('pipeline timeouts', () => {
     expect(MAX_DURATION_MS).toBe(maxDuration * 1000);
     expect(PIPELINE_HEALTH_TIMEOUT_MS).toBeGreaterThanOrEqual(5_000);
 
-    const backendStep = Math.min(PIPELINE_BACKEND_TIMEOUT_MS, MAX_DURATION_MS);
-    const geminiStep = Math.min(
-      PIPELINE_GEMINI_TIMEOUT_MS,
-      MAX_DURATION_MS - backendStep,
-    );
-    expect(backendStep + geminiStep).toBeLessThanOrEqual(MAX_DURATION_MS);
+    expect(PIPELINE_BACKEND_TIMEOUT_MS).toBeLessThanOrEqual(MAX_DURATION_MS);
+    expect(PIPELINE_GEMINI_TIMEOUT_MS).toBeLessThanOrEqual(MAX_DURATION_MS);
 
     const deadline = PipelineDeadline.fromMaxDuration();
     expect(deadline.budgetMs(PIPELINE_BACKEND_TIMEOUT_MS)).toBeGreaterThan(0);
