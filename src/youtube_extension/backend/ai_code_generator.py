@@ -479,6 +479,7 @@ Requirements:
 9. Responsive grid with Tailwind
 
 IMPLEMENTATION NOTES:
+- Use native fetch (not axios or other http libs if possible; axios is available as fallback)
 - For MCP Dashboard: Include Docker container operations (start/stop/list)
 - API endpoints should return real system data (Docker SDK, process info, etc)
 - State updates after each action
@@ -663,6 +664,7 @@ TASK: Generate {description}
         package["dependencies"]["clsx"] = "^2.1.0"  # Utility
         package["dependencies"]["tailwind-merge"] = "^2.2.0"  # Tailwind utility
         package["dependencies"]["class-variance-authority"] = "^0.7.0"  # Button variants
+        package["dependencies"]["axios"] = "^1.6.0"  # HTTP client (commonly used by AI generated code)
 
         # Add infrastructure packages for production-ready apps
         # State management
