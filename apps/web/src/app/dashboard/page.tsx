@@ -15,6 +15,7 @@ import { useDashboardStore } from '@/store/dashboard-store';
 import type { PipelineResult, Video } from '@/store/dashboard-store';
 import FeedbackWidget from '@/components/FeedbackWidget';
 import PreferencesPanel from '@/components/PreferencesPanel';
+import { hasRichDashboardInsights, isThinDashboardAnalysis } from '@/lib/dashboard-analysis';
 
 // ============================================
 // Helper
@@ -60,7 +61,8 @@ function SplitView({
 
   const embedUrl = getYouTubeEmbedUrl(video.url);
 
-  const hasInsights = video.insights && (video.insights.summary !== 'Analysis complete' || video.insights.actions.length > 0);
+  const hasInsights = hasRichDashboardInsights(video);
+  const thinAnalysis = isThinDashboardAnalysis(video);
   const hasTranscript = !!video.transcript;
   const hasEvents = video.events && video.events.length > 0;
 
@@ -112,12 +114,32 @@ function SplitView({
             <span
               className="text-[10px] font-bold uppercase tracking-widest px-3 py-1"
               style={{
-                background: video.status === 'complete' ? 'rgba(34,197,94,0.1)' : video.status === 'failed' ? 'rgba(255,113,108,0.1)' : 'rgba(106,242,222,0.1)',
-                color: video.status === 'complete' ? '#22c55e' : video.status === 'failed' ? '#ff716c' : '#6af2de',
-                borderLeft: `2px solid ${video.status === 'complete' ? '#22c55e' : video.status === 'failed' ? '#ff716c' : '#6af2de'}`,
+                background: thinAnalysis && video.status === 'complete'
+                  ? 'rgba(245,158,11,0.1)'
+                  : video.status === 'complete'
+                    ? 'rgba(34,197,94,0.1)'
+                    : video.status === 'failed'
+                      ? 'rgba(255,113,108,0.1)'
+                      : 'rgba(106,242,222,0.1)',
+                color: thinAnalysis && video.status === 'complete'
+                  ? '#f59e0b'
+                  : video.status === 'complete'
+                    ? '#22c55e'
+                    : video.status === 'failed'
+                      ? '#ff716c'
+                      : '#6af2de',
+                borderLeft: `2px solid ${
+                  thinAnalysis && video.status === 'complete'
+                    ? '#f59e0b'
+                    : video.status === 'complete'
+                      ? '#22c55e'
+                      : video.status === 'failed'
+                        ? '#ff716c'
+                        : '#6af2de'
+                }`,
               }}
             >
-              {video.status.toUpperCase()}
+              {thinAnalysis && video.status === 'complete' ? 'PARTIAL' : video.status.toUpperCase()}
             </span>
             {video.status === 'processing' && <span className="text-sm font-mono" style={{ color: '#6af2de' }}>{video.progress}%</span>}
           </div>
@@ -285,7 +307,9 @@ function SplitView({
                <p className="text-white/40 max-w-md">
                  {video.status === 'processing'
                    ? 'AI is currently analyzing the video. Insights will appear here shortly.'
-                   : 'No analysis available for this video.'}
+                   : thinAnalysis
+                     ? 'Agents finished but the backend returned minimal transcript/action data. Check Cloud Run logs for transcript-action, or retry from the library.'
+                     : 'No analysis available for this video.'}
                </p>
              </div>
           )}

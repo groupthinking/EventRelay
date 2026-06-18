@@ -32,9 +32,10 @@ if _sentry_dsn:
             environment=os.getenv("ENVIRONMENT", os.getenv("VERCEL_ENV", "development")),
             traces_sample_rate=float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.1")),
             integrations=[StarletteIntegration(), FastApiIntegration()],
-            send_default_pii=False,
+            send_default_pii=True,
+            stream_gen_ai_spans=True,  # Enable for LLM monitoring (works for OpenAI-compatible including Grok/xAI via openai client)
         )
-        logger.info("Sentry initialized for backend")
+        logger.info("Sentry initialized for backend with AI monitoring")
     except Exception as exc:
         logger.warning("Sentry init skipped: %s", exc)
 
