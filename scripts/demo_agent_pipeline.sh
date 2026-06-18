@@ -128,6 +128,13 @@ if [[ -n "$LATEST_GEN" ]]; then
       else
         echo "   ✅ npm run build: SUCCESS (deep runtime verified - executed with notes)"
       fi
+
+      # Additional runtime tests for max verification
+      echo "🧪 Extra generated-app checks (lint + test + smoke)..."
+      npm run lint 2>&1 | tail -3 || echo "   lint: no script or warnings"
+      npm test 2>&1 | tail -5 || echo "   test: no script or no tests"
+      # Quick dev server smoke (if port free)
+      (npm run start & SERVER_PID=$!; sleep 4; curl -sf http://localhost:3000 >/dev/null && echo "   ✅ smoke: dev server responded" || echo "   smoke: no response or port in use"; kill $SERVER_PID 2>/dev/null || true) 2>&1 | tail -2 || echo "   smoke skipped"
     ) || echo "   (build test encountered non-fatal issue; continuing demo)"
   fi
 else
