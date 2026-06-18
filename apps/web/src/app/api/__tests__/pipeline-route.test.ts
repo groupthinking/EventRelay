@@ -13,7 +13,15 @@ vi.mock('@/lib/gemini-client', () => ({
   hasGeminiKey: vi.fn(() => false),
 }));
 
-import { POST } from '@/app/api/pipeline/route';
+import {
+  POST,
+  MAX_DURATION_MS,
+  PIPELINE_BACKEND_TIMEOUT_MS,
+  PIPELINE_GEMINI_TIMEOUT_MS,
+  PIPELINE_HEALTH_TIMEOUT_MS,
+  PipelineDeadline,
+  maxDuration,
+} from '@/app/api/pipeline/route';
 
 function postRequest(body: unknown) {
   return new Request('http://localhost:3000/api/pipeline', {
@@ -26,6 +34,23 @@ function postRequest(body: unknown) {
 afterEach(() => {
   vi.clearAllMocks();
   vi.unstubAllGlobals();
+});
+
+describe('pipeline timeouts', () => {
+  it('clamps sequential fallback steps to the shared maxDuration budget', () => {
+    expect(MAX_DURATION_MS).toBe(maxDuration * 1000);
+    expect(PIPELINE_HEALTH_TIMEOUT_MS).toBeGreaterThanOrEqual(5_000);
+
+    const backendStep = Math.min(PIPELINE_BACKEND_TIMEOUT_MS, MAX_DURATION_MS);
+    const geminiStep = Math.min(
+      PIPELINE_GEMINI_TIMEOUT_MS,
+      MAX_DURATION_MS - backendStep,
+    );
+    expect(backendStep + geminiStep).toBeLessThanOrEqual(MAX_DURATION_MS);
+
+    const deadline = PipelineDeadline.fromMaxDuration();
+    expect(deadline.budgetMs(PIPELINE_BACKEND_TIMEOUT_MS)).toBeGreaterThan(0);
+  });
 });
 
 describe('POST /api/pipeline', () => {
