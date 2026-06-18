@@ -9,6 +9,19 @@ const rawBackendUrl = process.env.BACKEND_URL || '';
 const BACKEND_URL = rawBackendUrl.startsWith('http') ? rawBackendUrl : 'http://localhost:8000';
 const BACKEND_AVAILABLE = rawBackendUrl.startsWith('http');
 
+interface BackendApiResponse<T> {
+  status?: string;
+  data?: T;
+  error?: string;
+  detail?: string;
+}
+
+interface VideoProcessJobResponse {
+  job_id: string;
+  video_url?: string;
+  status?: string;
+}
+
 export const runtime = 'nodejs';
 /** Sync route — short budget; use /api/pipeline/stream or async=true for long runs. */
 export const maxDuration = 60;
@@ -256,9 +269,8 @@ export async function POST(request: Request) {
           signal: deadline.signalFor(10_000),
         });
 
-        const payload = await response.json();
-        const result = (payload.data ?? payload) as Record<string, unknown>;
-        const jobId = typeof result.job_id === 'string' ? result.job_id : undefined;
+        const payload = (await response.json()) as BackendApiResponse<VideoProcessJobResponse>;
+        const jobId = payload.data?.job_id;
 
         if (response.ok && jobId) {
           return NextResponse.json({
