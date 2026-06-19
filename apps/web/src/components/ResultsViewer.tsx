@@ -1,6 +1,7 @@
 'use client';
 
 import { clsx } from 'clsx';
+import { Check } from 'lucide-react';
 import type { AgentExecution, ExtractedEvent } from '@/lib/types';
 
 interface ResultsViewerProps {
@@ -29,8 +30,8 @@ export default function ResultsViewer({ executions, events, className }: Results
               className="p-4 rounded-xl bg-green-500/5 border border-green-500/10"
             >
               <div className="flex items-center gap-2 mb-2">
-                <span className="text-sm font-medium text-green-400">
-                  ✓ {exec.agent_type}
+                <span className="inline-flex items-center gap-1 text-sm font-medium text-green-400">
+                  <Check className="h-4 w-4" aria-hidden="true" /> {exec.agent_type}
                 </span>
                 {event && (
                   <span className="text-xs text-white/30">→ {event.title.slice(0, 50)}</span>

@@ -2,7 +2,7 @@
 
 import { forwardRef, ButtonHTMLAttributes, HTMLAttributes } from 'react';
 import { clsx } from 'clsx';
-import { Leaf, Radio, Landmark, Cog, Columns3, type LucideIcon } from 'lucide-react';
+import { Leaf, Radio, Landmark, Cog, Columns, type LucideIcon } from 'lucide-react';
 
 // Topic data with icons
 const SUGGESTED_TOPICS: {
@@ -53,7 +53,7 @@ const SUGGESTED_TOPICS: {
   {
     id: 'ancient-greece',
     label: 'Ancient Greece',
-    icon: Columns3,
+    icon: Columns,
     gradient: 'from-amber-500/20 to-yellow-500/20',
     borderColor: 'border-amber-500/30',
     textColor: 'text-amber-400',

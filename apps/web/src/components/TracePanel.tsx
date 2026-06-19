@@ -2,6 +2,18 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { clsx } from 'clsx';
+import {
+  Target,
+  Split,
+  Zap,
+  FileText,
+  Eye,
+  Volume2,
+  Cog,
+  ShieldCheck,
+  ClipboardList,
+  type LucideIcon,
+} from 'lucide-react';
 import type { TraceStep, AgentNodeStatus, AgentRole } from '@/lib/agent-types';
 
 // ── Helpers ──
@@ -14,15 +26,15 @@ const STATUS_STYLES: Record<AgentNodeStatus, { bg: string; text: string; dot: st
   error:    { bg: 'bg-red-500/[0.06]', text: 'text-red-400', dot: 'bg-red-400',    border: 'border-red-500/20' },
 };
 
-const ROLE_ICONS: Record<AgentRole, string> = {
-  orchestrator:       '🎯',
-  router:             '🔀',
-  parallel_crew:      '⚡',
-  transcript_analyst: '📝',
-  visual_analyst:     '👁️',
-  audio_analyst:      '🔊',
-  action_generator:   '⚙️',
-  quality_checker:    '🛡️',
+const ROLE_ICONS: Record<AgentRole, LucideIcon> = {
+  orchestrator:       Target,
+  router:             Split,
+  parallel_crew:      Zap,
+  transcript_analyst: FileText,
+  visual_analyst:     Eye,
+  audio_analyst:      Volume2,
+  action_generator:   Cog,
+  quality_checker:    ShieldCheck,
 };
 
 function formatTime(isoString: string): string {
@@ -64,7 +76,7 @@ export default function TracePanel({
       {/* Header */}
       <div className="flex-none flex items-center justify-between px-5 py-4 border-b border-white/[0.05]">
         <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse" />
+          <div className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse motion-reduce:animate-none" />
           <h3 className="text-sm font-bold text-white/70 uppercase tracking-wider">
             Execution Trace
           </h3>
@@ -75,10 +87,10 @@ export default function TracePanel({
       </div>
 
       {/* Trace Steps */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto" role="log" aria-live="polite" aria-label="Execution trace steps">
         {steps.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center py-12 px-4">
-            <div className="text-3xl mb-3 opacity-20">📋</div>
+            <ClipboardList className="h-8 w-8 mb-3 text-white/20" aria-hidden="true" />
             <p className="text-white/30 text-sm">
               Trace steps will appear here as agents execute
             </p>
@@ -97,15 +109,25 @@ export default function TracePanel({
               return (
                 <div
                   key={step.id}
+                  role="button"
+                  tabIndex={0}
+                  aria-expanded={isExpanded}
                   className={clsx(
-                    'relative pl-11 pr-4 py-3 transition-all duration-200 cursor-pointer',
-                    'hover:bg-white/[0.02]',
+                    'relative pl-11 pr-4 py-3 transition-[background-color] duration-200 cursor-pointer',
+                    'hover:bg-white/[0.02] focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/40 focus-visible:ring-inset',
                     isSelected && 'bg-indigo-500/[0.04]',
-                    isLatest && step.status === 'running' && 'animate-fade-in-up',
+                    isLatest && step.status === 'running' && 'animate-fade-in-up motion-reduce:animate-none',
                   )}
                   onClick={() => {
                     onSelectAgent(step.agentId);
                     toggleExpand(step.id);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      onSelectAgent(step.agentId);
+                      toggleExpand(step.id);
+                    }
                   }}
                 >
                   {/* Timeline dot */}
@@ -116,14 +138,17 @@ export default function TracePanel({
                     )}
                   >
                     {step.status === 'running' && (
-                      <span className="absolute inset-0 rounded-full bg-indigo-400 animate-ping opacity-50" />
+                      <span className="absolute inset-0 rounded-full bg-indigo-400 animate-ping motion-reduce:animate-none opacity-50" />
                     )}
                   </div>
 
                   {/* Step content */}
                   <div className="flex items-center justify-between mb-1">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm">{ROLE_ICONS[step.agentRole] || '⚙️'}</span>
+                      {(() => {
+                        const RoleIcon = ROLE_ICONS[step.agentRole] || Cog;
+                        return <RoleIcon className="h-4 w-4 text-white/70" aria-hidden="true" />;
+                      })()}
                       <span className="text-sm font-semibold text-white/80">
                         {step.agentName.length > 22
                           ? step.agentName.substring(0, 20) + '…'
@@ -149,7 +174,7 @@ export default function TracePanel({
 
                   {/* Expanded details */}
                   {isExpanded && (
-                    <div className="mt-3 space-y-2 animate-scale-in">
+                    <div className="mt-3 space-y-2 animate-scale-in motion-reduce:animate-none">
                       {step.input && (
                         <div className="p-2.5 rounded-lg bg-blue-500/[0.05] border border-blue-500/10">
                           <div className="text-[10px] font-bold text-blue-400/70 uppercase tracking-wider mb-1">

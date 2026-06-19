@@ -129,15 +129,17 @@ export default function FeedbackWidget({ videoId, tab, compact = false }: Feedba
           />
           <div className="flex justify-end">
             <button
+              type="button"
               onClick={handleSubmit}
               disabled={submitting || rating === 0}
-              className="px-4 py-1.5 font-heading font-bold text-[10px] tracking-wider uppercase transition-all disabled:opacity-30 active:scale-95"
+              aria-busy={submitting || undefined}
+              className="px-4 py-1.5 font-heading font-bold text-[10px] tracking-wider uppercase transition-[transform,opacity] motion-reduce:transition-none focus:outline-none focus-visible:ring-2 focus-visible:ring-[#6af2de]/40 disabled:opacity-30 active:scale-95 motion-reduce:active:scale-100"
               style={{
                 background: 'rgba(16, 183, 165, 0.9)',
                 color: '#002b26',
               }}
             >
-              {submitting ? 'Sending...' : 'Submit'}
+              {submitting ? 'Sending…' : 'Submit'}
             </button>
           </div>
         </div>

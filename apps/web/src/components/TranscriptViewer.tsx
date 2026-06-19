@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useId } from 'react';
+import { ChevronUp, ChevronDown } from 'lucide-react';
 import { clsx } from 'clsx';
 
 interface TranscriptViewerProps {
@@ -11,16 +12,19 @@ interface TranscriptViewerProps {
 export default function TranscriptViewer({ transcript, className }: TranscriptViewerProps) {
   const [expanded, setExpanded] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const searchId = useId();
 
   const paragraphs = transcript.split('\n').filter((p) => p.trim().length > 0);
   const displayParagraphs = expanded ? paragraphs : paragraphs.slice(0, 8);
 
   const highlight = (text: string) => {
     if (!searchQuery) return text;
-    const regex = new RegExp(`(${searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
-    const parts = text.split(regex);
+    const escaped = searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    // Capturing split regex (no global flag) so `.test()` lastIndex state can't desync.
+    const parts = text.split(new RegExp(`(${escaped})`, 'i'));
+    const lower = searchQuery.toLowerCase();
     return parts.map((part, i) =>
-      regex.test(part) ? (
+      part.toLowerCase() === lower ? (
         <mark key={i} className="bg-primary-500/30 text-primary-300 rounded px-0.5">
           {part}
         </mark>
@@ -40,12 +44,16 @@ export default function TranscriptViewer({ transcript, className }: TranscriptVi
       </div>
 
       {/* Search */}
+      <label htmlFor={searchId} className="sr-only">
+        Search transcript
+      </label>
       <input
-        type="text"
+        id={searchId}
+        type="search"
         value={searchQuery}
         onChange={(e) => setSearchQuery(e.target.value)}
-        placeholder="Search transcript..."
-        className="w-full px-3 py-2 text-sm rounded-lg bg-white/[0.03] border border-white/[0.08] text-white placeholder:text-white/25 focus:outline-none focus:border-primary-500/30"
+        placeholder="Search transcript…"
+        className="w-full px-3 py-2 text-sm rounded-lg bg-white/[0.03] border border-white/[0.08] text-white placeholder:text-white/25 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40 focus:border-primary-500/30"
       />
 
       {/* Content */}
@@ -63,10 +71,20 @@ export default function TranscriptViewer({ transcript, className }: TranscriptVi
 
       {paragraphs.length > 8 && (
         <button
+          type="button"
           onClick={() => setExpanded(!expanded)}
-          className="text-sm text-primary-400 hover:text-primary-300 transition-colors"
+          aria-expanded={expanded}
+          className="inline-flex items-center gap-1 text-sm text-primary-400 hover:text-primary-300 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40 rounded"
         >
-          {expanded ? '▲ Show less' : `▼ Show all ${paragraphs.length} lines`}
+          {expanded ? (
+            <>
+              <ChevronUp className="h-4 w-4" aria-hidden="true" /> Show less
+            </>
+          ) : (
+            <>
+              <ChevronDown className="h-4 w-4" aria-hidden="true" /> Show all {paragraphs.length} lines
+            </>
+          )}
         </button>
       )}
     </div>

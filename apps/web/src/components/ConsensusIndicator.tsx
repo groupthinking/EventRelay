@@ -1,12 +1,13 @@
 'use client';
 
 import { clsx } from 'clsx';
+import { FileText, Eye, Volume2, Cog, Users, Check, X, type LucideIcon } from 'lucide-react';
 import type { ConsensusResult } from '@/lib/agent-types';
 
-const ROLE_ICONS: Record<string, string> = {
-  transcript: '📝',
-  visual: '👁️',
-  audio: '🔊',
+const ROLE_ICONS: Record<string, LucideIcon> = {
+  transcript: FileText,
+  visual: Eye,
+  audio: Volume2,
 };
 
 interface ConsensusIndicatorProps {
@@ -27,7 +28,7 @@ export default function ConsensusIndicator({
   return (
     <div
       className={clsx(
-        'rounded-xl border overflow-hidden transition-all duration-500',
+        'rounded-xl border overflow-hidden transition-colors duration-500 motion-reduce:transition-none',
         percentage >= 80
           ? 'bg-emerald-500/[0.04] border-emerald-500/20'
           : percentage >= 50
@@ -39,7 +40,7 @@ export default function ConsensusIndicator({
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.05]">
         <div className="flex items-center gap-2">
-          <span className="text-sm">🤝</span>
+          <Users className="h-4 w-4 text-white/60" aria-hidden="true" />
           <h4 className="text-xs font-bold text-white/60 uppercase tracking-wider">
             Consensus: {consensus.method}
           </h4>
@@ -63,7 +64,7 @@ export default function ConsensusIndicator({
         <div className="w-full h-2 rounded-full bg-white/[0.05] overflow-hidden">
           <div
             className={clsx(
-              'h-full rounded-full transition-all duration-1000 ease-out',
+              'h-full rounded-full transition-[width] duration-1000 ease-out motion-reduce:transition-none',
               percentage >= 80 ? 'bg-emerald-500' :
               percentage >= 50 ? 'bg-amber-500' :
               'bg-red-500',
@@ -89,20 +90,20 @@ export default function ConsensusIndicator({
 
       {/* Votes */}
       <div className="px-4 pb-4 pt-2 space-y-2">
-        {consensus.votes.map((vote) => (
+        {consensus.votes.map((vote) => {
+          const RoleIcon = ROLE_ICONS[vote.agentId] || Cog;
+          return (
           <div
             key={vote.agentId}
             className={clsx(
-              'flex items-center justify-between px-3 py-2 rounded-lg border transition-all',
+              'flex items-center justify-between px-3 py-2 rounded-lg border transition-colors',
               vote.agrees
                 ? 'bg-emerald-500/[0.04] border-emerald-500/15'
                 : 'bg-red-500/[0.04] border-red-500/15',
             )}
           >
             <div className="flex items-center gap-2">
-              <span className="text-sm">
-                {ROLE_ICONS[vote.agentId] || '⚙️'}
-              </span>
+              <RoleIcon className="h-4 w-4 text-white/60" aria-hidden="true" />
               <span className="text-xs font-medium text-white/70">
                 {vote.agentName}
               </span>
@@ -121,12 +122,21 @@ export default function ConsensusIndicator({
               >
                 {Math.round(vote.confidence * 100)}%
               </span>
-              <span className={vote.agrees ? 'text-emerald-400' : 'text-red-400'}>
-                {vote.agrees ? '✓' : '✗'}
+              <span
+                className={vote.agrees ? 'text-emerald-400' : 'text-red-400'}
+                role="img"
+                aria-label={vote.agrees ? 'Agrees' : 'Disagrees'}
+              >
+                {vote.agrees ? (
+                  <Check className="h-3.5 w-3.5" aria-hidden="true" />
+                ) : (
+                  <X className="h-3.5 w-3.5" aria-hidden="true" />
+                )}
               </span>
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Result */}

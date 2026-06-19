@@ -1,6 +1,7 @@
 'use client';
 
 import { clsx } from 'clsx';
+import { Loader2, RefreshCw, Check, X } from 'lucide-react';
 import type { AgentExecution } from '@/lib/types';
 
 interface AgentDashboardProps {
@@ -23,8 +24,12 @@ export default function AgentDashboard({ executions, loading, className }: Agent
         <h3 className="text-sm font-semibold text-white/50 uppercase tracking-wider">
           Agent Executions
         </h3>
-        <div className="flex items-center gap-2 text-sm text-white/40 py-6 justify-center">
-          <span className="animate-spin">⚙️</span> Dispatching agents…
+        <div
+          role="status"
+          aria-live="polite"
+          className="flex items-center gap-2 text-sm text-white/40 py-6 justify-center"
+        >
+          <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" /> Dispatching agents…
         </div>
       </div>
     );
@@ -42,10 +47,22 @@ export default function AgentDashboard({ executions, loading, className }: Agent
         <h3 className="text-sm font-semibold text-white/50 uppercase tracking-wider">
           Agent Executions
         </h3>
-        <div className="flex gap-3 text-xs">
-          {running > 0 && <span className="text-primary-400">🔄 {running} running</span>}
-          {complete > 0 && <span className="text-green-400">✓ {complete} done</span>}
-          {failed > 0 && <span className="text-red-400">✗ {failed} failed</span>}
+        <div className="flex gap-3 text-xs" role="status" aria-live="polite">
+          {running > 0 && (
+            <span className="inline-flex items-center gap-1 text-primary-400">
+              <RefreshCw className="h-3 w-3 animate-spin motion-reduce:animate-none" aria-hidden="true" /> {running} running
+            </span>
+          )}
+          {complete > 0 && (
+            <span className="inline-flex items-center gap-1 text-green-400">
+              <Check className="h-3 w-3" aria-hidden="true" /> {complete} done
+            </span>
+          )}
+          {failed > 0 && (
+            <span className="inline-flex items-center gap-1 text-red-400">
+              <X className="h-3 w-3" aria-hidden="true" /> {failed} failed
+            </span>
+          )}
         </div>
       </div>
 
@@ -56,7 +73,7 @@ export default function AgentDashboard({ executions, loading, className }: Agent
             <div
               key={exec.agent_id}
               className={clsx(
-                'p-3.5 rounded-xl border border-white/[0.06] transition-all',
+                'p-3.5 rounded-xl border border-white/[0.06] transition-colors',
                 style.bg,
               )}
             >
@@ -74,7 +91,7 @@ export default function AgentDashboard({ executions, loading, className }: Agent
               <div className="w-full h-1.5 rounded-full bg-white/[0.05] overflow-hidden">
                 <div
                   className={clsx(
-                    'h-full rounded-full transition-all duration-500',
+                    'h-full rounded-full transition-[width] duration-500 motion-reduce:transition-none',
                     exec.status === 'complete'
                       ? 'bg-green-500'
                       : exec.status === 'failed'

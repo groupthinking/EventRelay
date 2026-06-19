@@ -1,6 +1,7 @@
 'use client';
 
 import { clsx } from 'clsx';
+import { Zap, Pin, Code2, AlertTriangle, Loader2, type LucideIcon } from 'lucide-react';
 import type { ExtractedEvent } from '@/lib/types';
 
 interface EventListProps {
@@ -12,14 +13,14 @@ interface EventListProps {
 
 // Event Classification Taxonomy: ACTION (blue), TOPIC (purple), CODE (green), ALERT (red)
 // Legacy types (mention, insight) map to the new taxonomy for backward compat
-const TYPE_STYLES: Record<string, { bg: string; text: string; icon: string }> = {
-  action:  { bg: 'bg-blue-500/10 border-blue-500/20', text: 'text-blue-400', icon: '⚡' },
-  topic:   { bg: 'bg-purple-500/10 border-purple-500/20', text: 'text-purple-400', icon: '📌' },
-  code:    { bg: 'bg-green-500/10 border-green-500/20', text: 'text-green-400', icon: '💻' },
-  alert:   { bg: 'bg-red-500/10 border-red-500/20', text: 'text-red-400', icon: '⚠️' },
+const TYPE_STYLES: Record<string, { bg: string; text: string; icon: LucideIcon }> = {
+  action:  { bg: 'bg-blue-500/10 border-blue-500/20', text: 'text-blue-400', icon: Zap },
+  topic:   { bg: 'bg-purple-500/10 border-purple-500/20', text: 'text-purple-400', icon: Pin },
+  code:    { bg: 'bg-green-500/10 border-green-500/20', text: 'text-green-400', icon: Code2 },
+  alert:   { bg: 'bg-red-500/10 border-red-500/20', text: 'text-red-400', icon: AlertTriangle },
   // Legacy type mappings
-  mention: { bg: 'bg-purple-500/10 border-purple-500/20', text: 'text-purple-400', icon: '📌' },
-  insight: { bg: 'bg-red-500/10 border-red-500/20', text: 'text-red-400', icon: '⚠️' },
+  mention: { bg: 'bg-purple-500/10 border-purple-500/20', text: 'text-purple-400', icon: Pin },
+  insight: { bg: 'bg-red-500/10 border-red-500/20', text: 'text-red-400', icon: AlertTriangle },
 };
 
 export default function EventList({ events, loading, onExtract, className }: EventListProps) {
@@ -29,8 +30,12 @@ export default function EventList({ events, loading, onExtract, className }: Eve
         <h3 className="text-sm font-semibold text-white/50 uppercase tracking-wider">
           Extracted Events
         </h3>
-        <div className="flex items-center gap-2 text-sm text-white/40 py-8 justify-center">
-          <span className="animate-spin">⏳</span> Extracting events…
+        <div
+          role="status"
+          aria-live="polite"
+          className="flex items-center gap-2 text-sm text-white/40 py-8 justify-center"
+        >
+          <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" /> Extracting events…
         </div>
       </div>
     );
@@ -62,6 +67,7 @@ export default function EventList({ events, loading, onExtract, className }: Eve
       <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
         {events.map((event) => {
           const style = TYPE_STYLES[event.type] || TYPE_STYLES.topic;
+          const Icon = style.icon;
           return (
             <div
               key={event.id}
@@ -71,7 +77,7 @@ export default function EventList({ events, loading, onExtract, className }: Eve
               )}
             >
               <div className="flex items-start gap-2">
-                <span className="text-base mt-0.5">{style.icon}</span>
+                <Icon className={clsx('h-4 w-4 mt-0.5 flex-none', style.text)} aria-hidden="true" />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className={clsx('text-xs font-semibold uppercase', style.text)}>
