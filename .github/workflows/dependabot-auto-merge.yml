@@ -116,8 +116,20 @@ jobs:
                   mediaType: { previews: ['dorian'] },
                 }
               );
-              const updateType = metadata.data?.dependency?.update_type;
-              if (updateType === 'version-update:semver-major') {
+
+              const updateType =
+                metadata.data?.dependency?.update_type ??
+                metadata.data?.update_type ??
+                metadata.data?.dependency_update_type;
+
+              if (!updateType) {
+                core.info(
+                  `Could not determine update type for PR #${pullRequest.number}; skipping.`
+                );
+                continue;
+              }
+
+              if (updateType.includes('semver-major')) {
                 core.info(`Skipping major update PR #${pullRequest.number}.`);
                 continue;
               }
