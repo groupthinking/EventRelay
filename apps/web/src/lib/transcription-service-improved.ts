@@ -226,7 +226,7 @@ INSTRUCTIONS:
               const openai = getOpenAI();
 
               const response = await withTimeout(
-                openai.beta.messages.create({
+                openai.chat.completions.create({
                   model: 'gpt-4o',
                   max_tokens: 4096,
                   messages: [
@@ -235,8 +235,7 @@ INSTRUCTIONS:
                       content: `Extract the complete transcript or full content summary of this video: ${url}\n\nBe comprehensive and include all spoken content, descriptions, and key points.`,
                     },
                   ],
-                  betas: ['interop-2024-12-06'],
-                } as any),
+                }),
                 30_000,
                 'OpenAI transcription timeout'
               );
@@ -249,8 +248,7 @@ INSTRUCTIONS:
         }
       );
 
-      const text =
-        result.content?.[0]?.type === 'text' ? result.content[0].text : '';
+      const text = result.choices?.[0]?.message?.content ?? '';
       if (text && text.length > 100) {
         return {
           success: true,

@@ -19,7 +19,7 @@ import {
   Search,
   Sparkles,
   X,
-  Youtube,
+  Video,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useRealtimeVoice } from '@/hooks/use-realtime-voice';
@@ -323,7 +323,7 @@ function EmptyFrame() {
   return (
     <div className="flex h-full min-h-[300px] flex-col items-center justify-center gap-4 rounded-lg border border-dashed border-slate-300 bg-slate-50 text-center">
       <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white text-slate-600 shadow-sm">
-        <Youtube className="h-7 w-7" />
+        <Video className="h-7 w-7" />
       </div>
       <div>
         <div className="text-base font-semibold text-slate-950">Paste a YouTube link</div>
