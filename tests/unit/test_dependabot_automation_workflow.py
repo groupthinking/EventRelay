@@ -40,6 +40,9 @@ def test_dependabot_workflow_approves_and_merges_without_checkout() -> None:
     merge_job = jobs["merge"]
 
     assert "dependabot[bot]" in approve_job["if"]
+    assert "github.event.pull_request.user.login == 'dependabot[bot]'" in approve_job["if"]
+    assert "github.repository == 'groupthinking/EventRelay'" in approve_job["if"]
+    assert "github.actor == 'dependabot[bot]'" not in approve_job["if"]
 
     approve_steps = approve_job["steps"]
     merge_steps = merge_job["steps"]
