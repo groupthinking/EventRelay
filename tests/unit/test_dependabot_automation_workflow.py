@@ -29,6 +29,7 @@ def test_dependabot_workflow_uses_safe_triggers_and_permissions() -> None:
     assert workflow["permissions"] == {
         "contents": "write",
         "pull-requests": "write",
+        "statuses": "read",
     }
 
 
