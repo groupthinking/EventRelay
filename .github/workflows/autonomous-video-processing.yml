@@ -28,7 +28,7 @@ jobs:
     outputs:
       matrix: ${{ steps.build-matrix.outputs.matrix }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Build category matrix
         id: build-matrix
@@ -57,7 +57,7 @@ jobs:
       fail-fast: false
       max-parallel: 4
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-python@v5
         with:
