@@ -15,7 +15,9 @@ RUN pip install --no-cache-dir \
     "pydantic>=2.5.0" \
     "pydantic-settings>=2.1.0" \
     "sqlalchemy>=2.0.0" \
-    "asyncpg>=0.29.0"
+    "asyncpg>=0.29.0" \
+    "youtube-transcript-api>=1.0.0" \
+    "google-genai>=1.0.0"
 
 COPY service /srv/service
 

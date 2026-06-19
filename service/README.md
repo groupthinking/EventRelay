@@ -48,13 +48,31 @@ service/
 
 ## Status
 
-Implemented in the skeleton: **SC1** (URL validation), **SC5** (contract +
-single app), **SC6** (idempotent job lifecycle + Postgres store).
+All seven criteria are now wired end to end:
 
-Stubbed with `NotImplementedError` and tied to their criterion (port next):
-**SC2** transcript, **SC3** event extraction, **SC4** artifacts. Until ported,
-a submitted job correctly terminates as `failed` — the skeleton never fakes
-success (REAL_MODE_ONLY).
+- **SC1** URL validation · **SC5** single app + clean contract · **SC6**
+  idempotent Job+Event lifecycle over Postgres.
+- **SC2** captions transcript (youtube-transcript-api) + injectable STT fallback.
+- **SC3** event extraction and **SC4** artifact derivation run against the
+  single **model seam** (`app/llm/`), Gemini by default.
+- **SC7** the frontend is now a pure consumer of this contract: its second
+  backend (`apps/web/src/app/api/*`) and the direct-model `lib/` fallbacks are
+  deleted, and the dashboard reads everything through `eventRelay.*`. The one
+  remaining (non-blocking) follow-up is regenerating the TS SDK from
+  `service/openapi.json` via Stainless to replace the hand-written client.
+
+The live YouTube and model calls require network + an API key and so are not
+exercised in CI; the 18-test suite drives the full lifecycle with the
+transcript provider and model seam replaced by dependency-injected fakes. No
+production path fakes success (REAL_MODE_ONLY) — a misconfigured or failing
+stage lands on the job as `failed`.
+
+### The model seam (`app/llm/`)
+
+One interface — `LLMClient.generate_json(system, prompt, schema)` — with the
+provider behind it. `GeminiLLMClient` is the default; Anthropic/OpenAI are
+drop-in by implementing the same method and swapping it in the container. This
+replaces the legacy repo's five competing model seams.
 
 ## Run it
 
@@ -62,15 +80,14 @@ success (REAL_MODE_ONLY).
 pip install "fastapi>=0.110" "uvicorn[standard]" "pydantic>=2.5" pydantic-settings \
             "sqlalchemy>=2.0" httpx pytest
 
-# tests (uses the in-memory store; no DB needed)
-pytest service/tests -v
+# tests (in-memory store + fake providers; no DB/keys/network needed)
+pytest service/tests -v -o addopts=""   # -o addopts="" skips the repo-root --cov gate
 
-# local server (in-memory store)
+# local server (in-memory store). For real runs also:
+#   pip install youtube-transcript-api google-genai
+export EVENTRELAY_GEMINI_API_KEY=...                 # SC3/SC4 model seam
+export EVENTRELAY_DATABASE_URL=postgresql+asyncpg://user:pass@localhost:5432/eventrelay  # SC6
 uvicorn service.app.main:app --reload --port 8080
-
-# with Postgres (SC6 durable path)
-export EVENTRELAY_DATABASE_URL=postgresql+asyncpg://user:pass@localhost:5432/eventrelay
-uvicorn service.app.main:app --port 8080
 ```
 
 ## Persistence (SC6)
@@ -89,13 +106,25 @@ Supabase) are residue.
 
 ## Contract & SDKs (SC5)
 
-FastAPI generates the OpenAPI document from `app/api/v1/schemas.py`. That
-generated document is the source of truth and the input to Stainless SDK
-generation — it replaces the legacy 40-path `openapi/eventrelay.openapi.json`
-(still titled "YouTube Extension API") once the spine takes over.
+FastAPI generates the OpenAPI document from `app/api/v1/schemas.py`. The
+generated document is committed at **`service/openapi.json`** (6 paths, titled
+"EventRelay API") and is the source of truth and input to Stainless SDK
+generation. Regenerate it with:
+
+```bash
+python -c "import json; from service.app.main import app; print(json.dumps(app.openapi(), indent=2))" > service/openapi.json
+```
+
+It does **not** overwrite the legacy 40-path `openapi/eventrelay.openapi.json`
+(still titled "YouTube Extension API") — that remains the live API's contract
+until the SC7 frontend cutover (strangler migration), at which point it is
+replaced and the SDKs are regenerated from `service/openapi.json`.
 
 ## Frontend (SC7)
 
-`apps/web` is salvageable as a **pure SDK consumer**. Before reuse, delete its
-server-side `apps/web/src/app/api/*` route handlers and the direct-Gemini
-fallback in `lib/` — those are a second backend and must not survive the move.
+`apps/web` is now a **pure SDK consumer**. Its server-side
+`apps/web/src/app/api/*` route handlers and the direct-Gemini/OpenAI fallbacks
+in `lib/` — a second backend — have been removed; the dashboard store talks to
+this service through `lib/eventrelay-client.ts` only. The synthetic multi-agent
+visualization (a REAL_MODE_ONLY violation) is gone with it. See
+[`docs/SC7_CUTOVER.md`](../docs/SC7_CUTOVER.md) for the executed teardown.

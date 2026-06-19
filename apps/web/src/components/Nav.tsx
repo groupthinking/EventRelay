@@ -16,7 +16,6 @@ interface NavProps {
 const NAV_LINKS = [
   { href: '/features', label: 'Features' },
   { href: '/pricing', label: 'Pricing' },
-  { href: '/prototype', label: 'Prototype' },
   { href: '/playground', label: 'API' },
 ];
 
