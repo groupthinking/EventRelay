@@ -297,6 +297,39 @@ describe('dashboard-store · processVideo (real SSE pipeline)', () => {
     expect(video.insights?.summary).toBe('Recovered');
   });
 
+  it('enriches thin stream results via direct analysis', async () => {
+    const events = [
+      { type: 'pipeline_status', status: 'running', timestamp: 't' },
+      {
+        type: 'workflow',
+        data: { title: 'Video x', summary: 'Analysis complete', actions: [], topics: [], events: [] },
+        timestamp: 't',
+      },
+      { type: 'pipeline_status', status: 'complete', timestamp: 't' },
+    ];
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(sseResponse(events))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          status: 'complete',
+          result: {
+            insights: { summary: 'Enriched summary', actions: [], sentiment: 'Neutral', topics: ['ai'] },
+            raw_response: { transcript: { text: 'z'.repeat(200) } },
+          },
+        }),
+      )
+      .mockResolvedValueOnce(jsonResponse({ success: false, error: 'no key' }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const id = await store().processVideo('https://youtu.be/thin');
+    const video = store().videos.find((v) => v.id === id)!;
+
+    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/video', expect.anything());
+    expect(video.insights?.summary).toBe('Enriched summary');
+    expect(video.transcript).toBe('z'.repeat(200));
+  });
+
   it('creates a local workflow package when both the stream and direct analysis fail', async () => {
     const fetchMock = vi
       .fn()

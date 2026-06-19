@@ -415,6 +415,21 @@ async function legacyAnalyze(url: string, id: string, ctx: StreamCtx & { getVide
   }
 }
 
+/** True when stream completed but insights/transcript are still empty or generic. */
+function isThinStreamResult(video: Video | undefined): boolean {
+  if (!video?.insights) return true;
+  const summary = video.insights.summary?.trim() ?? '';
+  const generic =
+    summary === 'Analysis complete' ||
+    summary.startsWith('Local fallback package');
+  const hasPayload =
+    (video.insights.actions?.length ?? 0) > 0 ||
+    (video.insights.topics?.length ?? 0) > 0 ||
+    (video.events?.length ?? 0) > 0 ||
+    (video.transcript?.trim().length ?? 0) >= 50;
+  return generic && !hasPayload;
+}
+
 /** Last-resort package when live pipeline and direct analysis are both unavailable. */
 function createLocalWorkflowPackage(
   url: string,
@@ -563,6 +578,26 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     try {
       await streamPipeline(url, id, ctx);
       addActivity('Pipeline complete', 'success');
+
+      const streamed = get().videos.find((v) => v.id === id);
+      if (isThinStreamResult(streamed)) {
+        addActivity('Stream returned minimal data — enriching via direct analysis…', 'info');
+        try {
+          await legacyAnalyze(url, id, ctx);
+        } catch (enrichErr) {
+          const reason =
+            enrichErr instanceof Error ? enrichErr.message : 'enrichment unavailable';
+          updateVideo(id, {
+            insights: {
+              summary: `Pipeline agents finished but returned thin analysis (${reason}). Try another video or check backend transcript-action output.`,
+              actions: streamed?.insights?.actions ?? [],
+              sentiment: 'Neutral',
+              topics: streamed?.insights?.topics ?? ['partial-analysis'],
+            },
+          });
+          addActivity('Analysis enrichment unavailable — showing partial result', 'info');
+        }
+      }
     } catch (streamErr) {
       console.warn('[Dashboard] Live pipeline unavailable, using direct analysis:', streamErr);
       addActivity('Live pipeline unavailable — using direct analysis…', 'info');
