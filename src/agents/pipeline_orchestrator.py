@@ -192,6 +192,14 @@ class VideoPipelineOrchestrator:
                 continue_on_error: bool
                 preferences: dict of user preferences for agent context
         """
+        # Sentry AI monitoring: group LLM calls (code-gen, analysis, etc.) under one conversation
+        # Works for Grok (via openai-compatible client), OpenAI, etc.
+        try:
+            import sentry_sdk
+            conversation_id = f"video-to-software-{video_url.split('=')[-1]}-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+            sentry_sdk.ai.set_conversation_id(conversation_id)
+        except Exception:
+            pass  # Sentry not configured or ai not available
         options = options or {}
         self.results = {}
         execution_mode = options.get("execution_mode", "sequential")
