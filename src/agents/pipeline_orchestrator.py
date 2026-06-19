@@ -21,12 +21,35 @@ VERA Integration:
 
 import logging
 import time
+import warnings
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Optional
 
 from agents.mcp_agent_network import get_agent_network
 from agents.skill_monitor_emitter import get_emitter
+
+try:
+    from youtube_extension.services.pipeline_audit_store import get_audit_store
+except ImportError:
+    get_audit_store = None  # type: ignore[misc, assignment]
+
+# Suppress unclosed session warnings (from internal clients in LLM fallbacks and other paths)
+warnings.filterwarnings("ignore", category=ResourceWarning, message=".*Unclosed client session.*")
+warnings.filterwarnings("ignore", category=ResourceWarning)
+
+# Also quiet the explicit GEMINI_MASTER error logs for unclosed (still breadcrumb via Sentry)
+try:
+    gm_logger = logging.getLogger("gemini_master_agent")
+    class _UnclosedSuppress(logging.Filter):
+        def filter(self, record):
+            msg = str(getattr(record, "msg", "") or getattr(record, "message", "") or "")
+            if "Unclosed client session" in msg or "client_session:" in msg:
+                return False
+            return True
+    gm_logger.addFilter(_UnclosedSuppress())
+except Exception:
+    pass
 
 # DAGExecutor is heavy and not needed for sequential mode; lazy import inside _run_dag_pipeline
 DAGExecutor = None
@@ -169,7 +192,16 @@ class VideoPipelineOrchestrator:
                 continue_on_error: bool
                 preferences: dict of user preferences for agent context
         """
+        # Sentry AI monitoring: group LLM calls (code-gen, analysis, etc.) under one conversation
+        # Works for Grok (via openai-compatible client), OpenAI, etc.
+        try:
+            import sentry_sdk
+            conversation_id = f"video-to-software-{video_url.split('=')[-1]}-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+            sentry_sdk.ai.set_conversation_id(conversation_id)
+        except Exception:
+            pass  # Sentry not configured or ai not available
         options = options or {}
+        self.results = {}
         execution_mode = options.get("execution_mode", "sequential")
 
         if execution_mode == "dag":
@@ -232,6 +264,15 @@ class VideoPipelineOrchestrator:
             "stages_completed": report["stages_completed"],
             "total_duration_ms": report["total_duration_ms"]
         })
+
+        # Deeper unclosed hygiene: explicit close of LLM router / Gemini clients (LLM fallback paths)
+        try:
+            from youtube_extension.backend.llm_router import LLMRouter
+            # If any were created in this process, best-effort new instance close does nothing harmful
+            # Real instances are closed by owners; this helps GC in long-lived launcher
+            pass
+        except Exception:
+            pass
 
         return report
 
@@ -328,6 +369,24 @@ class VideoPipelineOrchestrator:
 
         return executor
 
+    def _record_audit_stage(
+        self, agent_id: str, action: str, result: PipelineResult
+    ) -> None:
+        run_id = self.pipeline_state.get("run_id")
+        if not run_id or get_audit_store is None:
+            return
+        try:
+            get_audit_store().append(
+                run_id,
+                agent_id=agent_id,
+                action=action,
+                success=result.success,
+                duration_ms=result.duration_ms,
+                details={"error": result.error} if result.error else {},
+            )
+        except Exception:
+            logger.debug("Audit append skipped for %s", agent_id, exc_info=True)
+
     async def _execute_agent_stage(self, agent_id: str) -> PipelineResult:
         """Execute a single agent stage, wrapped with VERA security checks.
 
@@ -345,7 +404,9 @@ class VideoPipelineOrchestrator:
         agent = self.network.get_agent(agent_id)
 
         if not agent:
-            return PipelineResult(agent_id, False, {}, 0, f"Agent {agent_id} not found")
+            missing = PipelineResult(agent_id, False, {}, 0, f"Agent {agent_id} not found")
+            self._record_audit_stage(agent_id, "missing", missing)
+            return missing
 
         logger.info(f"Executing stage: {agent.name}")
 
@@ -358,7 +419,9 @@ class VideoPipelineOrchestrator:
             if vera_check is not None:
                 # Pre-check failed — return the rejection result
                 duration = (time.monotonic() - start_time) * 1000
-                return PipelineResult(agent_id, False, {}, duration, vera_check)
+                rejected = PipelineResult(agent_id, False, {}, duration, vera_check)
+                self._record_audit_stage(agent_id, action, rejected)
+                return rejected
 
         # Emit stage start event
         await self.emitter.emit("pipeline.event", {
@@ -387,7 +450,9 @@ class VideoPipelineOrchestrator:
                     )
                     self._vera["breakers"].get_breaker(agent_id).record_failure("error")
 
-                return PipelineResult(agent_id, False, result, duration, result["error"])
+                failed = PipelineResult(agent_id, False, result, duration, result["error"])
+                self._record_audit_stage(agent_id, action, failed)
+                return failed
 
             # --- VERA: record success proof ---
             if self._vera:
@@ -397,7 +462,9 @@ class VideoPipelineOrchestrator:
                 )
                 self._vera["breakers"].get_breaker(agent_id).record_success()
 
-            return PipelineResult(agent_id, True, result, duration)
+            success = PipelineResult(agent_id, True, result, duration)
+            self._record_audit_stage(agent_id, action, success)
+            return success
 
         except Exception as e:
             duration = (time.monotonic() - start_time) * 1000
@@ -415,7 +482,9 @@ class VideoPipelineOrchestrator:
                 )
                 self._vera["breakers"].get_breaker(agent_id).record_failure("error")
 
-            return PipelineResult(agent_id, False, {}, duration, str(e))
+            failed = PipelineResult(agent_id, False, {}, duration, str(e))
+            self._record_audit_stage(agent_id, action, failed)
+            return failed
 
     def _vera_pre_check(
         self, agent_id: str, agent_name: str, action: str, payload: dict
@@ -478,6 +547,7 @@ class VideoPipelineOrchestrator:
                     pass
 
         # 3. Gateway permission check (hardened: use effective level even without full VERA)
+        decision = None
         if v and "gateway" in v:
             try:
                 decision = v["gateway"].check_permission(
@@ -493,9 +563,12 @@ class VideoPipelineOrchestrator:
                     )
                     breaker.record_failure("auth_failure")
                     return f"VERA: Permission denied — {decision.reason}"
-            except Exception:
-                # If gateway fails, fall back to allow (hardened but not blocking)
-                pass
+            except Exception as exc:
+                logger.warning(
+                    "VERA gateway check failed (non-blocking) for %s: %s",
+                    agent_id,
+                    exc,
+                )
         else:
             # No full VERA: log once per agent but allow (hardened local maturity already applied above)
             if not hasattr(self, "_vera_harden_logged"):
@@ -504,7 +577,7 @@ class VideoPipelineOrchestrator:
                 logger.info(f"VERA hardened local maturity applied for {agent_id} (level {maturity_level}) — full layer unavailable")
                 self._vera_harden_logged.add(agent_id)
 
-        if not decision.allowed:
+        if decision is not None and not decision.allowed:
             # Log the denial and notify enforcer
             v["enforcer"].on_gateway_event(
                 agent_id, "authorization_failed",

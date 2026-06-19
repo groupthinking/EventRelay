@@ -260,6 +260,41 @@ class GeminiVideoMasterAgent:
 
         logger.info("🎯 GEMINI VIDEO MASTER AGENT INITIALIZED")
 
+        # Best-effort cleanup registration for any internal clients/sessions
+        try:
+            import atexit
+            atexit.register(self.close)
+        except Exception:
+            pass
+
+    def close(self):
+        """Explicit close for the Gemini client and any held resources (unclosed hygiene)."""
+        try:
+            if getattr(self, 'gemini_client', None) is not None:
+                # google-genai Client may expose transport close in newer sdks
+                client = self.gemini_client
+                for attr in ('close', 'aclose', '_close'):
+                    if hasattr(client, attr):
+                        fn = getattr(client, attr)
+                        try:
+                            if asyncio.iscoroutinefunction(fn):
+                                # schedule if possible; ignore in sync close
+                                pass
+                            else:
+                                fn()
+                        except Exception:
+                            pass
+                        break
+                self.gemini_client = None
+        except Exception:
+            pass
+
+    def __del__(self):
+        try:
+            self.close()
+        except Exception:
+            pass
+
     def extract_video_id(self, url: str) -> str:
         """Extract video ID from YouTube URL"""
         return extract_video_id(url)
