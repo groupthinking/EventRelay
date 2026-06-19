@@ -29,8 +29,8 @@
     "stripe": "^14.0.0",
     "tailwind-merge": "^3.6.0",
     "use-sync-external-store": "^1.6.0",
-    "zod": "^4.3.6",
-    "zustand": "^5.0.14"
+    "zod": "^4.4.3",
+    "zustand": "^4.5.0"
   },
   "devDependencies": {
     "@types/node": "^20",
