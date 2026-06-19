@@ -110,7 +110,7 @@ export default function Footer({ variant = 'compact' }: FooterProps) {
         <div className="border-t border-white/[0.05] pt-6 flex flex-col md:flex-row items-center justify-between gap-3 text-xs text-white/25">
           <span>© 2026 UVAI. MIT License.</span>
           <div className="flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+            <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse motion-reduce:animate-none" />
             <span>All systems operational</span>
           </div>
         </div>
