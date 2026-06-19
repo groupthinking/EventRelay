@@ -14,8 +14,8 @@ import {
   RefreshCcw,
   ShieldCheck,
   Sparkles,
+  Video,
   Workflow,
-  Youtube,
 } from 'lucide-react';
 import AgentFlowVisualizer from '@/components/AgentFlowVisualizer';
 import TracePanel from '@/components/TracePanel';
@@ -412,7 +412,7 @@ function getScreenContent(screen: ScreenId) {
         right: (
           <div className="rounded-2xl border border-primary-500/20 bg-primary-500/10 p-5">
             <div className="flex items-center gap-2 text-primary-300">
-              <Youtube className="h-4 w-4" />
+              <Video className="h-4 w-4" />
               <p className="text-sm font-semibold">Primary happy-path question</p>
             </div>
             <p className="mt-3 text-sm leading-7 text-white/75">
@@ -652,6 +652,30 @@ export default function PrototypePage() {
       </nav>
 
       <main className="mx-auto flex w-full max-w-7xl flex-col gap-8 px-6 py-8 lg:px-8">
+        <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 px-5 py-4 text-sm text-amber-100/90">
+          <p>
+            <span className="font-semibold text-amber-50">Design preview only.</span>
+            {' '}
+            This page runs scripted happy-path, fallback, and schema scenarios — it does not call production
+            {' '}
+            <code className="rounded bg-black/20 px-1 py-0.5 text-xs">/api/pipeline</code>
+            {' '}
+            or
+            {' '}
+            <code className="rounded bg-black/20 px-1 py-0.5 text-xs">/api/pipeline/stream</code>.
+            {' '}
+            For live analysis use{' '}
+            <Link href="/dashboard" className="font-semibold text-amber-50 underline underline-offset-2">
+              Dashboard
+            </Link>
+            ; for local planning drafts use{' '}
+            <Link href="/" className="font-semibold text-amber-50 underline underline-offset-2">
+              Studio
+            </Link>
+            .
+          </p>
+        </div>
+
         <section className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
           <Card variant="gradient" padding="lg">
             <CardHeader
@@ -683,7 +707,7 @@ export default function PrototypePage() {
                   value={videoUrl}
                   onChange={(event) => setVideoUrl(event.target.value)}
                   helperText="Assumption: this first prototype starts from a single tutorial or walkthrough URL."
-                  leftIcon={<Youtube className="h-4 w-4" />}
+                  leftIcon={<Video className="h-4 w-4" />}
                 />
                 <div className="flex flex-col justify-end gap-3 sm:flex-row md:flex-col">
                   <Button

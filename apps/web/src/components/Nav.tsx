@@ -16,10 +16,12 @@ interface NavProps {
 }
 
 const NAV_LINKS = [
-  { href: '/', label: 'Studio' },
+  { href: '/', label: 'Studio', hint: 'Local drafts' },
+  { href: '/dashboard', label: 'Dashboard', hint: 'Live pipeline' },
+  { href: '/dashboard/agents', label: 'Agents', hint: 'SSE graph' },
   { href: '/features', label: 'Features' },
   { href: '/pricing', label: 'Pricing' },
-  { href: '/prototype', label: 'Prototype' },
+  { href: '/prototype', label: 'Prototype', hint: 'Design preview' },
   { href: '/playground', label: 'API' },
 ];
 
@@ -53,11 +55,12 @@ export default function Nav({ rightSlot, subtitle, fixed = false }: NavProps) {
 
         {/* Desktop links */}
         <div className="hidden md:flex items-center gap-1 ml-4">
-          {NAV_LINKS.map(({ href, label }) => (
+          {NAV_LINKS.map(({ href, label, hint }) => (
             <Link
               key={href}
               href={href}
               aria-current={pathname === href ? 'page' : undefined}
+              title={hint}
               className={clsx(
                 'text-sm px-3 py-2 rounded-lg transition-colors',
                 pathname === href
@@ -65,7 +68,12 @@ export default function Nav({ rightSlot, subtitle, fixed = false }: NavProps) {
                   : 'text-white/40 hover:text-white/70 hover:bg-white/[0.03]'
               )}
             >
-              {label}
+              <span>{label}</span>
+              {hint && (
+                <span className="ml-1.5 hidden lg:inline text-[9px] uppercase tracking-wider text-white/25">
+                  {hint}
+                </span>
+              )}
             </Link>
           ))}
         </div>

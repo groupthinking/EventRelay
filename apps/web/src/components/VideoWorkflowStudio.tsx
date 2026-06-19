@@ -18,11 +18,18 @@ import {
   Save as SaveIcon,
   Search,
   Sparkles,
+  Video,
   X,
-  Youtube,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useRealtimeVoice } from '@/hooks/use-realtime-voice';
+import {
+  studioRunQuality,
+  studioStatusLabel,
+  studioStatusMessage,
+  type StudioPipelineCheck,
+  type StudioRunQuality,
+} from '@/lib/studio-pipeline-status';
 
 type OutcomeId = 'app' | 'sop' | 'lesson' | 'research' | 'automation' | 'content';
 type RunState = 'idle' | 'working' | 'ready';
@@ -42,18 +49,14 @@ interface GeneratedPackage {
   createdAt: string;
 }
 
-interface PipelineCheck {
-  ok: boolean;
-  status: number;
-  pipeline?: string;
+type PipelineCheck = StudioPipelineCheck & {
   backend?: {
     configured?: boolean;
     available?: boolean;
     host?: string | null;
     reason?: string;
   };
-  message?: string;
-}
+};
 
 const OUTCOMES: Array<{ id: OutcomeId; label: string; description: string }> = [
   { id: 'app', label: 'App', description: 'Product screen or working flow.' },
@@ -144,6 +147,13 @@ const OUTPUT_COPY: Record<OutcomeId, { noun: string; deliverables: string[]; nex
 function getYouTubeId(url: string) {
   const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/))([^&?/]+)/);
   return match?.[1] || '';
+}
+
+function currentVideoUrlForLink(videoUrl: string) {
+  const id = getYouTubeId(videoUrl);
+  if (!id) return '/dashboard';
+  const normalized = videoUrl.trim() || `https://www.youtube.com/watch?v=${id}`;
+  return `/dashboard?video=${encodeURIComponent(normalized)}`;
 }
 
 function isUnsafeRequest(text: string) {
@@ -314,7 +324,7 @@ function EmptyFrame() {
   return (
     <div className="flex h-full min-h-[300px] flex-col items-center justify-center gap-4 rounded-lg border border-dashed border-slate-300 bg-slate-50 text-center">
       <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white text-slate-600 shadow-sm">
-        <Youtube className="h-7 w-7" aria-hidden="true" />
+        <Video className="h-7 w-7" aria-hidden="true" />
       </div>
       <div>
         <div className="text-base font-semibold text-slate-950">Paste a YouTube link</div>
@@ -337,6 +347,7 @@ export default function VideoWorkflowStudio() {
   const [generatedPackage, setGeneratedPackage] = useState<GeneratedPackage | null>(null);
   const [saveCount, setSaveCount] = useState(0);
   const [actionMessage, setActionMessage] = useState('Build a result to unlock preview, export, deploy, and save.');
+  const [runQuality, setRunQuality] = useState<StudioRunQuality>('idle');
 
   const audioRef = useRef<HTMLAudioElement>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -354,14 +365,14 @@ export default function VideoWorkflowStudio() {
   const voiceEngaged = realtime.isActive || voiceConnecting;
   const voiceLabel = voiceConnecting ? 'Voice connecting' : realtime.isActive ? 'Voice on' : 'Voice off';
 
-  const statusLabel = resultReady ? 'Ready' : isWorking ? 'Working' : 'Idle';
-  const statusMessage = unsafeRedirect
-    ? 'Safe alternative prepared. Harmful instructions stay out of the output.'
-    : resultReady
-      ? `${selectedOutcomeLabel} package ready for preview, export, deploy, or save.`
-      : isWorking
-        ? `Building the ${selectedOutcomeLabel.toLowerCase()} from the current source.`
-        : 'Ready when the source and outcome are set.';
+  const statusLabel = studioStatusLabel(runQuality, runState);
+  const statusMessage = studioStatusMessage(
+    runQuality,
+    runState,
+    selectedOutcomeLabel,
+    unsafeRedirect,
+  );
+  const dashboardHandoffUrl = currentVideoUrlForLink(videoUrl);
 
   const disconnectRealtime = realtime.disconnect;
 
@@ -382,18 +393,20 @@ export default function VideoWorkflowStudio() {
     const unsafe = isUnsafeRequest(currentPrompt);
     setUnsafeRedirect(unsafe);
     setRunState('working');
-    setActionMessage(unsafe ? 'Preparing a safe alternative package.' : 'Checking source and pipeline readiness.');
+    setRunQuality('idle');
+    setActionMessage(unsafe ? 'Preparing a safe alternative package.' : 'Checking backend readiness (async kickoff).');
 
     let pipelineCheck: PipelineCheck | null = null;
     if (!unsafe && currentVideoId) {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 8_000);
+      const timeout = setTimeout(() => controller.abort(), 12_000);
       try {
         const response = await fetch('/api/pipeline', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             url: currentVideoUrl,
+            async: true,
             outcome: selectedOutcome,
             prompt: currentPrompt,
             project_type: selectedOutcome === 'app' ? 'web' : selectedOutcome,
@@ -402,31 +415,37 @@ export default function VideoWorkflowStudio() {
           signal: controller.signal,
         });
         const payload = await response.json().catch(() => ({}));
+        const jobId = typeof payload.job_id === 'string' ? payload.job_id : undefined;
         pipelineCheck = {
           ok: response.ok,
           status: response.status,
           pipeline: typeof payload.pipeline === 'string' ? payload.pipeline : undefined,
+          jobId,
           backend: payload.backend && typeof payload.backend === 'object' ? payload.backend : undefined,
           message: typeof payload.error === 'string'
             ? payload.error
-            : typeof payload.result?.message === 'string'
-              ? payload.result.message
-              : undefined,
+            : typeof payload.detail === 'string'
+              ? payload.detail
+              : typeof payload.result?.message === 'string'
+                ? payload.result.message
+                : undefined,
         };
       } catch (error) {
         pipelineCheck = {
           ok: false,
           status: 0,
           message: error instanceof Error && error.name === 'AbortError'
-            ? 'Pipeline check timed out.'
+            ? 'Backend check timed out.'
             : error instanceof Error
               ? error.message
-              : 'Pipeline check failed.',
+              : 'Backend check failed.',
         };
       } finally {
         clearTimeout(timeout);
       }
     }
+
+    const quality = studioRunQuality(pipelineCheck, unsafe, Boolean(currentVideoId));
 
     timerRef.current = setTimeout(() => {
       const nextPackage = buildPackage({
@@ -438,12 +457,13 @@ export default function VideoWorkflowStudio() {
         pipelineCheck,
       });
       setGeneratedPackage(nextPackage);
+      setRunQuality(quality);
       setRunState('ready');
       setActiveAction('preview');
       setActionMessage(
-        pipelineCheck?.pipeline === 'local-fallback' || (pipelineCheck && !pipelineCheck.ok)
-          ? 'Package ready with a fallback handoff. Automatic execution is waiting on backend or provider configuration.'
-          : 'Package ready. Choose preview, export, deploy, or save.',
+        quality === 'live'
+          ? 'Backend accepted the job. This package is a planning draft — open Dashboard for live analysis.'
+          : 'Planning draft only. Studio does not run the full agent pipeline; use Dashboard for live results.',
       );
     }, unsafe ? 250 : 100);
   };
@@ -504,6 +524,10 @@ export default function VideoWorkflowStudio() {
             </Link>
             <Link href="/prototype" className="rounded-full px-4 py-1.5 hover:bg-white hover:text-slate-950">
               Prototype
+              <span className="ml-1.5 text-[10px] font-semibold uppercase tracking-wide text-amber-600">Preview</span>
+            </Link>
+            <Link href="/dashboard/agents" className="rounded-full px-4 py-1.5 hover:bg-white hover:text-slate-950">
+              Agents
             </Link>
           </nav>
 
@@ -520,6 +544,25 @@ export default function VideoWorkflowStudio() {
       </header>
 
       <main className="mx-auto grid max-w-[1440px] gap-5 px-5 py-5 lg:grid-cols-[minmax(0,1.45fr)_minmax(340px,0.75fr)] lg:px-8">
+        <div className="lg:col-span-2 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div className="text-sm text-slate-600">
+              <span className="font-semibold text-slate-950">Studio</span> builds local planning drafts.
+              {' '}
+              <span className="font-semibold text-slate-950">Dashboard</span> runs the live agent pipeline (transcript, actions, agents).
+              {' '}
+              <span className="font-semibold text-slate-950">Prototype</span> is a design walkthrough — not connected to production APIs.
+            </div>
+            <Link
+              href={dashboardHandoffUrl}
+              className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700 transition hover:bg-blue-100"
+            >
+              Open live analysis
+              <ChevronRight className="h-4 w-4" />
+            </Link>
+          </div>
+        </div>
+
         <section className="space-y-5">
           <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
             <form onSubmit={runWorkflow} className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
@@ -677,7 +720,8 @@ export default function VideoWorkflowStudio() {
               <span
                 className={clsx(
                   'inline-flex w-fit rounded-full px-2 py-1 font-semibold',
-                  resultReady && 'bg-emerald-100 text-emerald-700',
+                  resultReady && runQuality === 'live' && 'bg-emerald-100 text-emerald-700',
+                  resultReady && runQuality !== 'live' && 'bg-amber-100 text-amber-800',
                   isWorking && 'bg-blue-100 text-blue-700',
                   runState === 'idle' && 'bg-white text-slate-500',
                 )}
