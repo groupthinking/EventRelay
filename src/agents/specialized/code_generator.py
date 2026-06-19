@@ -114,6 +114,11 @@ class CodeGeneratorAgent:
                     }
                 ],
             }
+        except ValueError as exc:
+            return {
+                "valid": False,
+                "errors": [{"message": str(exc), "line": None, "offset": None}],
+            }
 
     async def execute(self, inputs: dict[str, Any]) -> dict[str, Any]:
         """Execute code generation based on inputs"""

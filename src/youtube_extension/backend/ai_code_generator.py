@@ -692,6 +692,11 @@ TASK: Generate {description}
                     }
                 ],
             }
+        except ValueError as exc:
+            return {
+                "valid": False,
+                "errors": [{"message": str(exc), "line": None, "offset": None}],
+            }
 
     @staticmethod
     def validate_typescript_syntax(code: str) -> dict[str, Any]:
