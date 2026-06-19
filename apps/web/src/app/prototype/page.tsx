@@ -15,7 +15,7 @@ import {
   ShieldCheck,
   Sparkles,
   Workflow,
-  Youtube,
+  Video,
 } from 'lucide-react';
 import AgentFlowVisualizer from '@/components/AgentFlowVisualizer';
 import TracePanel from '@/components/TracePanel';
@@ -412,7 +412,7 @@ function getScreenContent(screen: ScreenId) {
         right: (
           <div className="rounded-2xl border border-primary-500/20 bg-primary-500/10 p-5">
             <div className="flex items-center gap-2 text-primary-300">
-              <Youtube className="h-4 w-4" />
+              <Video className="h-4 w-4" />
               <p className="text-sm font-semibold">Primary happy-path question</p>
             </div>
             <p className="mt-3 text-sm leading-7 text-white/75">
@@ -707,7 +707,7 @@ export default function PrototypePage() {
                   value={videoUrl}
                   onChange={(event) => setVideoUrl(event.target.value)}
                   helperText="Assumption: this first prototype starts from a single tutorial or walkthrough URL."
-                  leftIcon={<Youtube className="h-4 w-4" />}
+                  leftIcon={<Video className="h-4 w-4" />}
                 />
                 <div className="flex flex-col justify-end gap-3 sm:flex-row md:flex-col">
                   <Button

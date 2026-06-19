@@ -21,7 +21,7 @@
   },
   "devDependencies": {
     "@types/node": "^20",
-    "eslint": "^8",
+    "eslint": "^9",
     "typescript": "^5"
   }
 }
