@@ -94,8 +94,22 @@ check_or_create_secret() {
 check_or_create_secret "GEMINI_API_KEY" "GEMINI_API_KEY"
 check_or_create_secret "YOUTUBE_API_KEY" "YOUTUBE_API_KEY"
 
-# Step 4: Deploy to Cloud Run
-echo -e "${YELLOW}Step 4: Deploying to Cloud Run...${NC}"
+# Step 4: Run database migrations (if DATABASE_URL is configured)
+echo -e "${YELLOW}Step 4: Running database migrations...${NC}"
+
+if [ -n "${DATABASE_URL:-}" ]; then
+    docker run --rm \
+        -e DATABASE_URL="${DATABASE_URL}" \
+        "${IMAGE_NAME}:${TAG}" \
+        python -m alembic upgrade head && \
+        echo -e "${GREEN}✓ Database migrations applied${NC}" || \
+        echo -e "${YELLOW}⚠ Migrations skipped (alembic not configured or no pending migrations)${NC}"
+else
+    echo -e "${YELLOW}⚠ DATABASE_URL not set, skipping migrations${NC}"
+fi
+
+# Step 5: Deploy to Cloud Run
+echo -e "${YELLOW}Step 5: Deploying to Cloud Run...${NC}"
 
 gcloud run deploy "${SERVICE_NAME}" \
     --project="${PROJECT_ID}" \
@@ -116,8 +130,8 @@ gcloud run deploy "${SERVICE_NAME}" \
 
 echo -e "${GREEN}✓ Deployment complete${NC}"
 
-# Step 5: Get the service URL
-echo -e "${YELLOW}Step 5: Getting service URL...${NC}"
+# Step 6: Get the service URL
+echo -e "${YELLOW}Step 6: Getting service URL...${NC}"
 
 SERVICE_URL=$(gcloud run services describe "${SERVICE_NAME}" \
     --project="${PROJECT_ID}" \
@@ -129,8 +143,8 @@ echo -e "${GREEN}=== Deployment Successful ===${NC}"
 echo "Service URL: ${SERVICE_URL}"
 echo ""
 
-# Step 6: Map custom domain api.uvai.io (idempotent)
-echo -e "${YELLOW}Step 6: Mapping custom domain api.uvai.io...${NC}"
+# Step 7: Map custom domain api.uvai.io (idempotent)
+echo -e "${YELLOW}Step 7: Mapping custom domain api.uvai.io...${NC}"
 
 if gcloud run domain-mappings describe \
     --domain=api.uvai.io \

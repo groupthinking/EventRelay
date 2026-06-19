@@ -1,0 +1,26 @@
+{
+  "job_id": "job_unit_success",
+  "status": "complete",
+  "progress": 100.0,
+  "video_url": "https://www.youtube.com/watch?v=auJzb1D-fag",
+  "transcript": "hello",
+  "metadata": {
+    "success": true,
+    "agents_used": [
+      "t"
+    ],
+    "outputs": {
+      "summary": "Test summary"
+    },
+    "metadata": {
+      "video_id": "auJzb1D-fag"
+    },
+    "orchestration_meta": {
+      "agents_used": [
+        "t"
+      ],
+      "processing_time": 1.0
+    }
+  },
+  "error": null
+}

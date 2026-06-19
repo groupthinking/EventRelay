@@ -1,0 +1,13 @@
+{
+  "agent_id": "agent_a8022636",
+  "agent_type": "analyzer",
+  "status": "complete",
+  "progress": 100.0,
+  "event_id": "evt_aaa",
+  "result": {
+    "agent_type": "analyzer",
+    "summary": "Processed event evt_aaa",
+    "status": "completed"
+  },
+  "error": null
+}

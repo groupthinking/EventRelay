@@ -1,0 +1,14 @@
+{
+  "dispatch_id": "dsp_20b46c0f",
+  "executions": [
+    {
+      "agent_id": "agent_b449feb4",
+      "agent_type": "analyzer",
+      "status": "queued",
+      "progress": 0.0,
+      "event_id": "evt_ccc",
+      "result": null,
+      "error": null
+    }
+  ]
+}

@@ -37,8 +37,7 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install ruff
-      - name: Lint Python (informational)
-        continue-on-error: true
+      - name: Lint Python
         run: ruff check src/youtube_extension/backend/ src/youtube_extension/main.py --ignore E402,F811,F401,F821,B904,B020,E701,E722
 
   test:

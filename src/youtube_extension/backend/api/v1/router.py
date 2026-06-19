@@ -1083,8 +1083,8 @@ async def ingest_performance_report_v1(report: dict[str, Any]):
 
 
 # ============================================================
-# In-memory stores for async job tracking
-# (Replace with Redis/DB in production)
+# In-memory caches backed by durable job store
+# In-memory dict acts as hot cache; job store provides durability
 # ============================================================
 
 _video_jobs: dict[str, VideoJobStatusResponse] = {}
@@ -1110,6 +1110,41 @@ def _load_video_job(job_id: str) -> Optional[VideoJobStatusResponse]:
     job = VideoJobStatusResponse(**raw)
     _video_jobs[job_id] = job
     return job
+
+
+def _persist_agent_execution(execution: AgentExecution) -> None:
+    """Persist agent execution to hot cache and durable store."""
+    _agent_executions[execution.agent_id] = execution
+    try:
+        get_job_store().save(
+            f"agent_{execution.agent_id}", execution.model_dump()
+        )
+    except Exception as exc:
+        logger.warning("Agent persist failed for %s: %s", execution.agent_id, exc)
+
+
+def _load_agent_execution(agent_id: str) -> Optional[AgentExecution]:
+    """Load agent execution from hot cache or durable store."""
+    cached = _agent_executions.get(agent_id)
+    if cached is not None:
+        return cached
+    raw = get_job_store().load(f"agent_{agent_id}")
+    if not raw:
+        return None
+    execution = AgentExecution(**raw)
+    _agent_executions[agent_id] = execution
+    return execution
+
+
+def _persist_dispatch(dispatch: AgentDispatchResponse) -> None:
+    """Persist dispatch to hot cache and durable store."""
+    _dispatches[dispatch.dispatch_id] = dispatch
+    try:
+        get_job_store().save(
+            f"dispatch_{dispatch.dispatch_id}", dispatch.model_dump()
+        )
+    except Exception as exc:
+        logger.warning("Dispatch persist failed for %s: %s", dispatch.dispatch_id, exc)
 
 
 def _absolute_status_url(request: Request, job_id: str) -> str:
@@ -1618,9 +1653,9 @@ async def dispatch_agents(request: AgentDispatchRequest):
                 event_id=event.get("id"),
             )
             dispatch.executions.append(execution)
-            _agent_executions[execution.agent_id] = execution
+            _persist_agent_execution(execution)
 
-    _dispatches[dispatch.dispatch_id] = dispatch
+    _persist_dispatch(dispatch)
 
     for execution in dispatch.executions:
         asyncio.create_task(_run_agent(execution, request.events))
@@ -1633,6 +1668,7 @@ async def _run_agent(execution: AgentExecution, events: list[dict[str, Any]]):
     try:
         execution.status = AgentStatus.running
         execution.progress = 10.0
+        _persist_agent_execution(execution)
 
         try:
             orchestrator = AgentOrchestrator()
@@ -1656,9 +1692,11 @@ async def _run_agent(execution: AgentExecution, events: list[dict[str, Any]]):
 
         execution.status = AgentStatus.complete
         execution.progress = 100.0
+        _persist_agent_execution(execution)
     except Exception as exc:
         execution.status = AgentStatus.failed
         execution.error = str(exc)
+        _persist_agent_execution(execution)
         logger.error(f"Agent {execution.agent_id} failed: {exc}")
 
 
@@ -1670,7 +1708,7 @@ async def _run_agent(execution: AgentExecution, events: list[dict[str, Any]]):
 )
 async def get_agent_status(agent_id: str):
     """Return the current status of an agent execution."""
-    execution = _agent_executions.get(agent_id)
+    execution = _load_agent_execution(agent_id)
     if not execution:
         raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found")
     return ApiResponse.success(

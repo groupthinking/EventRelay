@@ -51,9 +51,9 @@ ENV PYTHONPATH=/app/src:$PYTHONPATH
 # Expose port
 EXPOSE 8000
 
-# Health check
+# Health check — use httpx (installed with fastapi extras) instead of requests
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD python -c "import requests; requests.get('http://localhost:8000/health', timeout=5)"
+    CMD python -c "import httpx; httpx.get('http://localhost:8000/health', timeout=5).raise_for_status()"
 
 # Run application with uvicorn
 # Cloud Run manages scaling, so we use 1 worker

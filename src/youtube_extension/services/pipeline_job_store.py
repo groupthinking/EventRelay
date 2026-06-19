@@ -1,23 +1,47 @@
-"""File-backed persistence for async video / pipeline jobs."""
+"""Durable persistence for async video / pipeline jobs.
+
+Supports two backends:
+- File-based JSON store (default, suitable for single-instance dev)
+- Redis store (production, survives restarts and scales across instances)
+
+Backend is selected via UVAI_JOB_STORE_BACKEND env var ('file' | 'redis').
+"""
 
 from __future__ import annotations
 
+import abc
 import json
 import logging
 import os
+import time
 from pathlib import Path
 from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_ROOT = Path(os.getenv("UVAI_JOB_STORE_DIR", "data/jobs"))
+
+class JobStore(abc.ABC):
+    """Abstract interface for job persistence."""
+
+    @abc.abstractmethod
+    def save(self, job_id: str, payload: dict[str, Any]) -> None: ...
+
+    @abc.abstractmethod
+    def load(self, job_id: str) -> Optional[dict[str, Any]]: ...
+
+    @abc.abstractmethod
+    def list_recent(self, limit: int = 50) -> list[dict[str, Any]]: ...
+
+    @abc.abstractmethod
+    def delete(self, job_id: str) -> None: ...
 
 
-class PipelineJobStore:
+class FileJobStore(JobStore):
     """JSON file store for VideoJobStatusResponse-shaped records."""
 
     def __init__(self, root: Optional[Path] = None) -> None:
-        self.root = Path(root or _DEFAULT_ROOT)
+        _default_root = Path(os.getenv("UVAI_JOB_STORE_DIR", "data/jobs"))
+        self.root = Path(root or _default_root)
         self.root.mkdir(parents=True, exist_ok=True)
 
     def _path(self, job_id: str) -> Path:
@@ -48,12 +72,86 @@ class PipelineJobStore:
                 continue
         return records
 
+    def delete(self, job_id: str) -> None:
+        path = self._path(job_id)
+        if path.exists():
+            path.unlink()
 
-_job_store: Optional[PipelineJobStore] = None
+
+class RedisJobStore(JobStore):
+    """Redis-backed job store for production multi-instance deployments."""
+
+    _KEY_PREFIX = "uvai:job:"
+    _INDEX_KEY = "uvai:jobs:recent"
+    _DEFAULT_TTL = 60 * 60 * 24 * 7  # 7 days
+
+    def __init__(self) -> None:
+        try:
+            import redis
+        except ImportError:
+            raise ImportError("redis package required: pip install redis")
+
+        redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+        self._client = redis.Redis.from_url(redis_url, decode_responses=True)
+        self._ttl = int(os.getenv("UVAI_JOB_TTL_SECONDS", str(self._DEFAULT_TTL)))
+
+    def save(self, job_id: str, payload: dict[str, Any]) -> None:
+        key = f"{self._KEY_PREFIX}{job_id}"
+        self._client.setex(key, self._ttl, json.dumps(payload, ensure_ascii=False))
+        # Maintain a sorted set of recent jobs by timestamp
+        self._client.zadd(self._INDEX_KEY, {job_id: time.time()})
+        # Trim index to latest 500 entries
+        self._client.zremrangebyrank(self._INDEX_KEY, 0, -501)
+
+    def load(self, job_id: str) -> Optional[dict[str, Any]]:
+        key = f"{self._KEY_PREFIX}{job_id}"
+        raw = self._client.get(key)
+        if not raw:
+            return None
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError:
+            logger.warning("Corrupt Redis job record %s", job_id)
+            return None
+
+    def list_recent(self, limit: int = 50) -> list[dict[str, Any]]:
+        job_ids = self._client.zrevrange(self._INDEX_KEY, 0, limit - 1)
+        records: list[dict[str, Any]] = []
+        for job_id in job_ids:
+            record = self.load(job_id)
+            if record:
+                records.append(record)
+        return records
+
+    def delete(self, job_id: str) -> None:
+        key = f"{self._KEY_PREFIX}{job_id}"
+        self._client.delete(key)
+        self._client.zrem(self._INDEX_KEY, job_id)
 
 
-def get_job_store() -> PipelineJobStore:
+# Backward-compatible aliases
+PipelineJobStore = FileJobStore
+
+_job_store: Optional[JobStore] = None
+
+
+def get_job_store() -> JobStore:
+    """Get the configured job store singleton.
+
+    Backend is selected via UVAI_JOB_STORE_BACKEND env var:
+    - 'file' (default): File-based JSON store
+    - 'redis': Redis-backed store (requires REDIS_URL)
+    """
     global _job_store
     if _job_store is None:
-        _job_store = PipelineJobStore()
+        backend = os.getenv("UVAI_JOB_STORE_BACKEND", "file").lower()
+        if backend == "redis":
+            try:
+                _job_store = RedisJobStore()
+                logger.info("Using Redis job store")
+            except (ImportError, Exception) as exc:
+                logger.warning("Redis unavailable (%s), falling back to file store", exc)
+                _job_store = FileJobStore()
+        else:
+            _job_store = FileJobStore()
     return _job_store

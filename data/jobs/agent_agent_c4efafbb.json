@@ -1,0 +1,13 @@
+{
+  "agent_id": "agent_c4efafbb",
+  "agent_type": "content_creator",
+  "status": "complete",
+  "progress": 100.0,
+  "event_id": "evt_42c99f72",
+  "result": {
+    "agent_type": "content_creator",
+    "summary": "Processed event evt_42c99f72",
+    "status": "completed"
+  },
+  "error": null
+}

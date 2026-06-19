@@ -1,0 +1,15 @@
+{
+  "job_id": "job_unit_noerr",
+  "status": "failed",
+  "progress": 100.0,
+  "video_url": "https://www.youtube.com/watch?v=auJzb1D-fag",
+  "transcript": "plain text",
+  "metadata": {
+    "success": false,
+    "agents_used": [],
+    "outputs": {},
+    "metadata": {},
+    "orchestration_meta": {}
+  },
+  "error": "Transcript-action workflow failed"
+}

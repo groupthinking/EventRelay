@@ -9,6 +9,7 @@ parallel processing, and intelligent routing.
 
 import asyncio
 import logging
+import os
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -168,10 +169,14 @@ class AgentOrchestrator:
                     total_processing_time=asyncio.get_event_loop().time() - start_time,
                 )
 
-        # Execute agents in parallel
+        # Execute agents in parallel with timeout
+        agent_timeout = float(os.environ.get("AGENT_TIMEOUT_SECONDS", "120"))
         try:
             tasks = [
-                agent.run(AgentRequest(task=task_type, params=input_data))
+                asyncio.wait_for(
+                    agent.run(AgentRequest(task=task_type, params=input_data)),
+                    timeout=agent_timeout,
+                )
                 for agent in agents
             ]
             results = await asyncio.gather(*tasks, return_exceptions=True)
