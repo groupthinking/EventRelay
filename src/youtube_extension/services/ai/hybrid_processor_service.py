@@ -72,16 +72,17 @@ class HybridConfig:
         if self.gemini is None:
             self.gemini = GeminiConfig()
         if self.model_routing is None:
+            model = self.gemini.model_name
             self.model_routing = {
-                TaskType.YOUTUBE_ANALYSIS: "gemini-2.0-flash",
-                TaskType.VIDEO_UNDERSTANDING: "gemini-2.0-flash",
-                TaskType.AUDIO_ANALYSIS: "gemini-2.0-flash",
-                TaskType.COMPLEX_REASONING: "gemini-2.0-flash",
-                TaskType.MULTIMODAL_SEARCH: "gemini-2.0-flash",
-                TaskType.BATCH_PROCESSING: "gemini-2.0-flash",
-                TaskType.GENERAL_QA: "gemini-2.0-flash",
-                TaskType.PRIVACY_SENSITIVE: "gemini-2.0-flash",
-                TaskType.PRODUCT_DEMO: "gemini-2.0-flash",
+                TaskType.YOUTUBE_ANALYSIS: model,
+                TaskType.VIDEO_UNDERSTANDING: model,
+                TaskType.AUDIO_ANALYSIS: model,
+                TaskType.COMPLEX_REASONING: model,
+                TaskType.MULTIMODAL_SEARCH: model,
+                TaskType.BATCH_PROCESSING: model,
+                TaskType.GENERAL_QA: model,
+                TaskType.PRIVACY_SENSITIVE: model,
+                TaskType.PRODUCT_DEMO: model,
             }
 
 

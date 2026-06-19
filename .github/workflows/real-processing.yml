@@ -30,7 +30,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-python@v5
         with:
@@ -183,7 +183,7 @@ jobs:
 
       - name: Upload processing results
         if: ${{ github.event.inputs.store_results == 'true' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: video-processing-${{ steps.resolve.outputs.video_id }}
           path: processing_results/

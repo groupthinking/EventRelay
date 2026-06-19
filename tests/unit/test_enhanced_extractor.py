@@ -48,7 +48,10 @@ if "transformers" not in sys.modules:
     _tr = types.ModuleType("transformers")
     _tr.pipeline = None
     sys.modules["transformers"] = _tr
-sys.modules.setdefault("openai", types.ModuleType("openai"))
+if "openai" not in sys.modules:
+    _openai_stub = types.ModuleType("openai")
+    _openai_stub.AsyncOpenAI = MagicMock()
+    sys.modules["openai"] = _openai_stub
 
 # pandas
 if "pandas" not in sys.modules:
