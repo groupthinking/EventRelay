@@ -19,7 +19,7 @@
     "@pinecone-database/pinecone": "^2.0.0",
     "@supabase/supabase-js": "^2.39.0",
     "ai": "5.0.106",
-    "openai": "^4.20.0"
+    "openai": "^6.43.0"
   },
   "devDependencies": {
     "@repo/typescript-config": "*",
