@@ -14,6 +14,7 @@ name: Dependabot Auto Merge
 permissions:
   contents: write
   pull-requests: write
+  statuses: read
 
 jobs:
   approve:
