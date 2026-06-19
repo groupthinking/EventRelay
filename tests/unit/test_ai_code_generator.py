@@ -291,10 +291,136 @@ class TestWriteFile:
         gen._write_file(dest, "nested")
         assert dest.exists()
 
+    def test_write_valid_python_logs_no_warning(self, tmp_path, caplog):
+        import logging
+        gen = AICodeGenerator(output_dir=str(tmp_path))
+        dest = tmp_path / "valid.py"
+        with caplog.at_level(logging.WARNING):
+            gen._write_file(dest, "x = 1\n")
+        assert "failed AST validation" not in caplog.text
+
+    def test_write_invalid_python_logs_warning(self, tmp_path, caplog):
+        import logging
+        gen = AICodeGenerator(output_dir=str(tmp_path))
+        dest = tmp_path / "bad.py"
+        with caplog.at_level(logging.WARNING):
+            gen._write_file(dest, "def foo(:\n    pass\n")
+        assert "failed AST validation" in caplog.text
+
+    def test_write_invalid_python_still_writes_file(self, tmp_path):
+        gen = AICodeGenerator(output_dir=str(tmp_path))
+        dest = tmp_path / "bad.py"
+        gen._write_file(dest, "???syntax error???")
+        assert dest.exists()
+
+    def test_write_valid_ts_logs_no_warning(self, tmp_path, caplog):
+        import logging
+        gen = AICodeGenerator(output_dir=str(tmp_path))
+        dest = tmp_path / "comp.tsx"
+        valid_ts = "export default function Page() { return <div>hello</div>; }\n"
+        with caplog.at_level(logging.WARNING):
+            gen._write_file(dest, valid_ts)
+        assert "failed syntax check" not in caplog.text
+
+    def test_write_unbalanced_ts_logs_warning(self, tmp_path, caplog):
+        import logging
+        gen = AICodeGenerator(output_dir=str(tmp_path))
+        dest = tmp_path / "bad.ts"
+        with caplog.at_level(logging.WARNING):
+            gen._write_file(dest, "const x = {")
+        assert "failed syntax check" in caplog.text
+
 
 # ===========================================================================
-# get_ai_code_generator global function
+# AICodeGenerator.validate_python_syntax
 # ===========================================================================
+
+
+class TestAICodeGeneratorValidatePythonSyntax:
+    def test_valid_code_returns_valid_true(self, tmp_path):
+        gen = AICodeGenerator(output_dir=str(tmp_path))
+        assert gen.validate_python_syntax("x = 1\n")["valid"] is True
+
+    def test_invalid_code_returns_valid_false(self, tmp_path):
+        gen = AICodeGenerator(output_dir=str(tmp_path))
+        assert gen.validate_python_syntax("def foo(:\n    pass\n")["valid"] is False
+
+    def test_valid_code_has_no_errors(self, tmp_path):
+        gen = AICodeGenerator(output_dir=str(tmp_path))
+        assert gen.validate_python_syntax("pass\n")["errors"] == []
+
+    def test_invalid_code_has_errors(self, tmp_path):
+        gen = AICodeGenerator(output_dir=str(tmp_path))
+        result = gen.validate_python_syntax("???")
+        assert len(result["errors"]) > 0
+
+    def test_error_contains_message(self, tmp_path):
+        gen = AICodeGenerator(output_dir=str(tmp_path))
+        result = gen.validate_python_syntax("if True\n    pass\n")
+        assert "message" in result["errors"][0]
+
+    def test_is_static_method(self, tmp_path):
+        # Can be called on the class directly
+        result = AICodeGenerator.validate_python_syntax("x = 1\n")
+        assert result["valid"] is True
+
+
+# ===========================================================================
+# AICodeGenerator.validate_typescript_syntax
+# ===========================================================================
+
+
+class TestAICodeGeneratorValidateTypescriptSyntax:
+    def test_valid_ts_returns_valid_true(self, tmp_path):
+        gen = AICodeGenerator(output_dir=str(tmp_path))
+        code = "export const x = () => { return 1; };\n"
+        assert gen.validate_typescript_syntax(code)["valid"] is True
+
+    def test_empty_string_returns_valid_false(self, tmp_path):
+        gen = AICodeGenerator(output_dir=str(tmp_path))
+        assert gen.validate_typescript_syntax("")["valid"] is False
+
+    def test_whitespace_only_returns_valid_false(self, tmp_path):
+        gen = AICodeGenerator(output_dir=str(tmp_path))
+        assert gen.validate_typescript_syntax("   \n  ")["valid"] is False
+
+    def test_error_marker_returns_valid_false(self, tmp_path):
+        gen = AICodeGenerator(output_dir=str(tmp_path))
+        code = "// Error: LLM router returned no code\n// Please implement manually"
+        assert gen.validate_typescript_syntax(code)["valid"] is False
+
+    def test_unbalanced_open_brace_returns_valid_false(self, tmp_path):
+        gen = AICodeGenerator(output_dir=str(tmp_path))
+        assert gen.validate_typescript_syntax("const x = {")["valid"] is False
+
+    def test_unbalanced_close_brace_returns_valid_false(self, tmp_path):
+        gen = AICodeGenerator(output_dir=str(tmp_path))
+        assert gen.validate_typescript_syntax("};")["valid"] is False
+
+    def test_balanced_braces_returns_valid_true(self, tmp_path):
+        gen = AICodeGenerator(output_dir=str(tmp_path))
+        code = "function foo() { const x = { a: 1 }; return x; }"
+        assert gen.validate_typescript_syntax(code)["valid"] is True
+
+    def test_empty_errors_on_valid_code(self, tmp_path):
+        gen = AICodeGenerator(output_dir=str(tmp_path))
+        result = gen.validate_typescript_syntax("const ok = true;")
+        assert result["errors"] == []
+
+    def test_errors_populated_on_invalid_code(self, tmp_path):
+        gen = AICodeGenerator(output_dir=str(tmp_path))
+        result = gen.validate_typescript_syntax("const x = {")
+        assert len(result["errors"]) > 0
+
+    def test_block_comment_error_marker_returns_valid_false(self, tmp_path):
+        gen = AICodeGenerator(output_dir=str(tmp_path))
+        code = "/* Error: generation failed */\n"
+        assert gen.validate_typescript_syntax(code)["valid"] is False
+
+    def test_is_static_method(self, tmp_path):
+        result = AICodeGenerator.validate_typescript_syntax("const ok = true;")
+        assert result["valid"] is True
+
 
 
 class TestGetAICodeGenerator:

@@ -1,9 +1,13 @@
 # Code Generation Agent
 # Specialized agent for generating API endpoint code
 
+import ast
+import logging
 import textwrap
 from datetime import datetime
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 class CodeGeneratorAgent:
@@ -88,6 +92,29 @@ class CodeGeneratorAgent:
             ),
         }
 
+    @staticmethod
+    def validate_python_syntax(code: str) -> dict[str, Any]:
+        """Validate Python code syntax using AST parsing.
+
+        Returns a dict with:
+          - ``valid``: bool indicating whether the code parses without errors.
+          - ``errors``: list of error dicts (keys: ``message``, ``line``, ``offset``).
+        """
+        try:
+            ast.parse(code)
+            return {"valid": True, "errors": []}
+        except SyntaxError as exc:
+            return {
+                "valid": False,
+                "errors": [
+                    {
+                        "message": exc.msg,
+                        "line": exc.lineno,
+                        "offset": exc.offset,
+                    }
+                ],
+            }
+
     async def execute(self, inputs: dict[str, Any]) -> dict[str, Any]:
         """Execute code generation based on inputs"""
         intent = inputs.get("intent", "")
@@ -106,12 +133,22 @@ class CodeGeneratorAgent:
         else:
             code = self._generate_generic_api(context)
 
+        # Validate generated code before returning to the caller
+        validation = self.validate_python_syntax(code)
+        if not validation["valid"]:
+            logger.warning(
+                "Generated code failed AST validation: %s",
+                validation["errors"],
+            )
+
         return {
             "success": True,
             "generated_code": code,
             "generation_type": generation_type,
             "files_created": self._get_file_list(code),
             "instructions": self._get_implementation_instructions(generation_type),
+            "syntax_valid": validation["valid"],
+            "syntax_errors": validation["errors"],
             "timestamp": datetime.utcnow().isoformat(),
         }
 
