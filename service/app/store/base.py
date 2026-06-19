@@ -16,10 +16,10 @@ from ..domain.events import Event
 
 def _utcnow() -> datetime:
     """
-    Get the current UTC datetime as a timezone-aware `datetime`.
+    Get the current UTC time as a timezone-aware datetime.
     
     Returns:
-        datetime: A timezone-aware `datetime` set to UTC representing the current time.
+        datetime: Current time with UTC timezone (tzinfo=timezone.utc).
     """
     return datetime.now(timezone.utc)
 
@@ -45,32 +45,32 @@ class JobStore(Protocol):
 
     async def create_or_get(self, video_url: str, idempotency_key: str) -> tuple[JobRecord, bool]:
         """
-        Create a new job record for the given video or retrieve an existing record that matches the provided idempotency key.
+        Create a new job record for the given video or return an existing record with the same idempotency key.
         
         Parameters:
-            video_url (str): Source URL for the job.
-            idempotency_key (str): Key used to ensure idempotent creation; requests with the same key return the same existing job rather than creating a duplicate.
+            video_url (str): Source video URL for the job.
+            idempotency_key (str): Key that ensures repeated requests produce the same job (replay-by-key).
         
         Returns:
-            tuple[JobRecord, bool]: A tuple of the job record and a boolean `created` flag — `True` if a new record was created, `False` if an existing record was returned.
+            tuple[JobRecord, bool]: `(record, created)` where `created` is `True` if a new record was created, `False` if an existing record was returned.
         """
         ...
 
     async def get(self, job_id: str) -> JobRecord | None: """
-Fetches the stored JobRecord for the specified job identifier.
+Retrieve a stored JobRecord by its job identifier.
 
 Returns:
-    JobRecord | None: The JobRecord matching job_id, or `None` if no record exists.
+    JobRecord if a record with the given job_id exists, `None` otherwise.
 """
 ...
 
     async def update_status(self, job_id: str, status: JobStatus, error: str | None = None) -> None: """
-Set the stored status for a job and optionally set or clear its error message.
+Update the stored job's status and optionally set or clear its error message.
 
 Parameters:
     job_id (str): Identifier of the job to update.
-    status (JobStatus): New status to persist for the job.
-    error (str | None): Error message to record for the job; pass None to clear any existing error.
+    status (JobStatus): New status to assign to the job.
+    error (str | None): Error message to set; pass `None` to clear any existing error.
 """
 ...
 
@@ -82,12 +82,12 @@ Parameters:
         events: list[Event],
         artifacts: Artifacts,
     ) -> None: """
-        Persist job completion outputs (transcript, events, and artifacts) to the stored job record identified by `job_id`.
+        Persist completion results for the specified job.
         
         Parameters:
-            job_id (str): Identifier of the job record to update.
-            transcript (str): Final transcript text produced by the job.
-            events (list[Event]): Domain events associated with the job's processing results.
-            artifacts (Artifacts): Resulting artifacts (e.g., files, metadata) to store alongside the job.
+            job_id (str): Identifier of the job to update.
+            transcript (str): Final transcript text to store for the job.
+            events (list[Event]): Domain events produced by the job to persist alongside the record.
+            artifacts (Artifacts): Artifacts payload (e.g., generated files, metadata) to attach to the job.
         """
         ...

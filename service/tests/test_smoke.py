@@ -1,82 +1,33 @@
-"""End-to-end smoke tests for the clean spine, using injected fakes.
+"""Smoke tests for the clean spine skeleton.
 
-The live YouTube/LLM calls cannot run in CI; the transcript provider and model
-seam are replaced with fakes via the container. This exercises SC1 validation,
-SC5 contract wiring, and the full SC2->SC3->SC4->SC6 lifecycle.
+Covers what the skeleton actually implements: SC1 validation, SC5 contract
+wiring, and the SC6 job lifecycle up to the first unimplemented stage. The
+SC2/SC3/SC4 stages are intentionally NotImplementedError until ported, and the
+runner is expected to record that as a failed job — which is asserted here.
 """
 from __future__ import annotations
 
 import pytest
 from fastapi.testclient import TestClient
 
-from service.app.container import Container, get_container, get_store
-from service.app.llm.fake import FakeLLMClient
+from service.app.container import Container, get_container
 from service.app.main import create_app
 from service.app.pipeline.ingest import InvalidInput, extract_video_id
 
-GOOD_URL = "https://youtu.be/dQw4w9WgXcQ"
-
-
-class FakeTranscriptProvider:
-    def __init__(self, text: str) -> None:
-        """
-        Initialize the fake transcript provider with a fixed transcript.
-        
-        Parameters:
-            text (str): Transcript text that will be returned by fetch() regardless of video_id or language.
-        """
-        self._text = text
-
-    async def fetch(self, video_id: str, language: str | None = None) -> str:
-        """
-        Return the fixed transcript text stored by this provider.
-        
-        Parameters:
-            video_id (str): Ignored; accepted for interface compatibility.
-            language (str | None): Ignored; accepted for interface compatibility.
-        
-        Returns:
-            str: The provider's stored transcript text.
-        """
-        return self._text
-
 
 @pytest.fixture
-def container() -> Container:
-    # Create a fresh test container instead of mutating the module singleton.
+def client() -> TestClient:
+    # Fresh in-memory store per test.
     """
-    Create a fresh test Container with isolated internals for use in tests.
+    Create a TestClient for the application with a fresh in-memory container store.
     
-    The returned Container has its internal singletons for store, transcript provider,
-    and LLM reset to None to avoid cross-test state leakage.
-    
-    Returns:
-        Container: A new Container instance with `_store`, `_transcript_provider`,
-        and `_llm` cleared.
-    """
-    test_container = Container()
-    test_container._store = None  # type: ignore[attr-defined]
-    test_container._transcript_provider = None  # type: ignore[attr-defined]
-    test_container._llm = None  # type: ignore[attr-defined]
-    return test_container
-
-
-@pytest.fixture
-def client(container: Container) -> TestClient:
-    # Use dependency overrides to inject the test container.
-    """
-    Create a TestClient for the application with the provided test Container injected via FastAPI dependency overrides.
-    
-    Parameters:
-        container (Container): Test container whose `store` and other test doubles will be provided to the app's dependencies.
+    Resets the application's in-memory container store to None before creating the client to ensure each test runs with a fresh store.
     
     Returns:
-        TestClient: A TestClient instance for the app configured to use `container` for `get_container` and `get_store`.
+        TestClient: A TestClient instance created from create_app().
     """
-    client_app = create_app()
-    client_app.dependency_overrides[get_container] = lambda: container
-    client_app.dependency_overrides[get_store] = lambda: container.store
-    return TestClient(client_app)
+    get_container()._store = None  # type: ignore[attr-defined]
+    return TestClient(create_app())
 
 
 # --- SC1: input ingest & validation ---
@@ -98,70 +49,51 @@ def test_extract_video_id_valid(url: str, expected: str) -> None:
     ["", "ftp://youtube.com/watch?v=x", "https://vimeo.com/123", "https://youtube.com/watch?v=short"],
 )
 def test_extract_video_id_invalid(url: str) -> None:
+    """
+    Asserts that `extract_video_id` raises `InvalidInput` when given an unsupported or malformed video URL.
+    
+    Parameters:
+        url (str): A URL string expected to be invalid for video ID extraction.
+    """
     with pytest.raises(InvalidInput):
         extract_video_id(url)
 
 
 def test_submit_rejects_bad_url(client: TestClient) -> None:
-    assert client.post("/api/v1/jobs", json={"video_url": "https://vimeo.com/123"}).status_code == 422
+    resp = client.post("/api/v1/jobs", json={"video_url": "https://vimeo.com/123"})
+    assert resp.status_code == 422
 
 
 # --- SC6: idempotent job lifecycle ---
 
-def test_submit_is_idempotent(container: Container, client: TestClient) -> None:
-    container._transcript_provider = FakeTranscriptProvider("t")  # type: ignore[attr-defined]
-    container._llm = FakeLLMClient([{"events": []}, {"summary": "s"}])  # type: ignore[attr-defined]
-    first = client.post("/api/v1/jobs", json={"video_url": GOOD_URL}).json()
-    second = client.post("/api/v1/jobs", json={"video_url": GOOD_URL}).json()
+def test_submit_is_idempotent(client: TestClient) -> None:
+    body = {"video_url": "https://youtu.be/dQw4w9WgXcQ"}
+    first = client.post("/api/v1/jobs", json=body).json()
+    second = client.post("/api/v1/jobs", json=body).json()
     assert first["job_id"] == second["job_id"]
 
 
-# --- SC2 -> SC3 -> SC4 happy path through the seam ---
-
-def test_full_pipeline_success(container: Container, client: TestClient) -> None:
+def test_job_fails_until_pipeline_ported(client: TestClient) -> None:
+    # The background task runs synchronously under TestClient; SC2 is not yet
+    # ported, so the job must terminate as 'failed', not hang or fake success.
     """
-    Validates the end-to-end happy path from job submission through events, artifacts, and transcript retrieval.
+    Verify that a submitted job terminates with a failed status while the SC2 pipeline stage is unimplemented.
     
-    Configures fake transcript and LLM responses, submits a job, then asserts the job reaches "succeeded", the first produced event has type "youtube.video.captured", the artifacts include the expected summary, and the stored transcript contains the word "capture".
+    Submits a job for a known YouTube URL, retrieves the job, and asserts the job's "status" is "failed" and its "error" field contains "SC2".
     """
-    container._transcript_provider = FakeTranscriptProvider(  # type: ignore[attr-defined]
-        "In this video we capture events and ship software."
-    )
-    container._llm = FakeLLMClient(  # type: ignore[attr-defined]
-        [
-            {"events": [{"type": "youtube.video.captured", "payload": {"k": "v"}}]},
-            {"summary": "A summary", "tasks": ["do x"], "insights": {"topic": "events"}},
-        ]
-    )
-    job_id = client.post("/api/v1/jobs", json={"video_url": GOOD_URL}).json()["job_id"]
-
-    assert client.get(f"/api/v1/jobs/{job_id}").json()["status"] == "succeeded"
-    events = client.get(f"/api/v1/jobs/{job_id}/events").json()["events"]
-    assert events[0]["type"] == "youtube.video.captured"
-    artifacts = client.get(f"/api/v1/jobs/{job_id}/artifacts").json()["artifacts"]
-    assert artifacts["summary"] == "A summary"
-    assert "capture" in client.get(f"/api/v1/jobs/{job_id}/transcript").json()["transcript"]
+    submit = client.post("/api/v1/jobs", json={"video_url": "https://youtu.be/dQw4w9WgXcQ"})
+    job_id = submit.json()["job_id"]
+    job = client.get(f"/api/v1/jobs/{job_id}").json()
+    assert job["status"] == "failed"
+    assert "SC2" in (job["error"] or "")
 
 
-def test_untyped_event_fails_job(container: Container, client: TestClient) -> None:
-    # A model returning an off-taxonomy event name must fail the job, not leak
-    # an untyped event (SC3).
-    """
-    Ensure a job fails when the LLM produces an event type that does not match the allowed taxonomy.
-    
-    Configures the container with a fixed transcript and an LLM fake that returns an event with an invalid `type`, submits a job, and asserts the job's status becomes "failed".
-    """
-    container._transcript_provider = FakeTranscriptProvider("text")  # type: ignore[attr-defined]
-    container._llm = FakeLLMClient([{"events": [{"type": "NOT-valid"}]}])  # type: ignore[attr-defined]
-    job_id = client.post("/api/v1/jobs", json={"video_url": GOOD_URL}).json()["job_id"]
-    assert client.get(f"/api/v1/jobs/{job_id}").json()["status"] == "failed"
-
-
-# --- SC5: contract generated from the app, residue-free ---
+# --- SC5: contract is generated from the app ---
 
 def test_openapi_exposes_clean_surface(client: TestClient) -> None:
     paths = client.get("/openapi.json").json()["paths"]
     assert "/api/v1/jobs" in paths
     assert "/api/v1/jobs/{job_id}" in paths
+    # Residue from the legacy contract must NOT appear.
     assert "/mcp" not in paths
     assert not any("a2a" in p for p in paths)

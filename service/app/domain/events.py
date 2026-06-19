@@ -20,10 +20,10 @@ EVENT_NAME_RE = re.compile(
 
 def _utcnow() -> datetime:
     """
-    Get the current time as a timezone-aware UTC datetime.
+    Get the current UTC time as a timezone-aware datetime.
     
     Returns:
-        datetime: Current time with UTC timezone (tzinfo=timezone.utc).
+        datetime: Current UTC time with tzinfo set to timezone.utc.
     """
     return datetime.now(timezone.utc)
 
@@ -39,16 +39,16 @@ class Event(BaseModel):
     @classmethod
     def _validate_name(cls, v: str) -> str:
         """
-        Validate an event type string matches the `<domain>.<entity>.<action>` taxonomy.
+        Validate that an event name follows the `<domain>.<entity>.<action>` taxonomy.
         
         Parameters:
-            v (str): Event type to validate; expected as three dot-separated lowercase segments.
+            v (str): Event name to validate (expected as three lowercase, dot-separated segments).
         
         Returns:
-            str: The same event type string `v` when it matches the required pattern.
+            str: The validated event name.
         
         Raises:
-            ValueError: If `v` does not match the `<domain>.<entity>.<action>` lowercase, dot-separated format.
+            ValueError: If `v` does not match the required `<domain>.<entity>.<action>` pattern.
         """
         if not EVENT_NAME_RE.match(v):
             raise ValueError(
