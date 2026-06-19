@@ -18,11 +18,11 @@
     "@dataconnect/generated": "file:src/dataconnect-generated",
     "@octokit/rest": "^20.0.0",
     "@slack/web-api": "^6.9.0",
-    "pg": "^8.11.0"
+    "pg": "^8.22.0"
   },
   "devDependencies": {
     "@types/node": "^20",
-    "@types/pg": "^8.10.0",
+    "@types/pg": "^8.20.0",
     "eslint": "^8",
     "typescript": "^5"
   }
