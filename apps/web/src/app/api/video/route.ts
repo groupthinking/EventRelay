@@ -5,11 +5,26 @@ import { hasGeminiKey } from '@/lib/gemini-client';
 import { saveTrainingExample } from '@/lib/training-store';
 import { fetchTranscript } from '@/lib/transcription-service';
 import { extractEvents, type ExtractionData } from '@/lib/event-extraction-service';
+import { resolveVideoUrl } from '@/lib/video-url-request';
 
 // Backend URL with validation - skip if not a valid URL
 const rawBackendUrl = process.env.BACKEND_URL || '';
 const BACKEND_URL = rawBackendUrl.startsWith('http') ? rawBackendUrl : 'http://localhost:8000';
 const BACKEND_AVAILABLE = rawBackendUrl.startsWith('http');
+
+async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timeout = setTimeout(() => reject(new Error(`${label} timed out`)), ms);
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
 
 
 /**
@@ -23,12 +38,18 @@ const BACKEND_AVAILABLE = rawBackendUrl.startsWith('http');
 export async function POST(request: Request) {
   let videoUrl: string | undefined;
   try {
-    const body = await request.json();
-    const { url } = body;
+    const body = await request.json() as Record<string, unknown>;
+    const url = resolveVideoUrl(body);
     videoUrl = url;
 
     if (!url) {
-      return NextResponse.json({ error: 'Video URL is required' }, { status: 400 });
+      return NextResponse.json(
+        {
+          error: 'Video URL is required',
+          accepted_fields: ['url', 'youtubeUrl', 'videoUrl', 'video_url'],
+        },
+        { status: 400 },
+      );
     }
 
     await publishEvent(EventTypes.VIDEO_RECEIVED, { url }, url);
@@ -39,19 +60,19 @@ export async function POST(request: Request) {
     if (BACKEND_AVAILABLE) {
       try {
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 15_000);
+        const timeout = setTimeout(() => controller.abort(), 4_000);
 
-      let response: Response;
-      try {
-        response = await fetch(`${BACKEND_URL}/api/v1/transcript-action`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ video_url: url, language: 'en' }),
-          signal: controller.signal,
-        });
-      } finally {
-        clearTimeout(timeout);
-      }
+        let response: Response;
+        try {
+          response = await fetch(`${BACKEND_URL}/api/v1/transcript-action`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...(process.env.EVENTRELAY_API_KEY ? { 'X-API-Key': process.env.EVENTRELAY_API_KEY } : {}) },
+            body: JSON.stringify({ video_url: url, language: 'en' }),
+            signal: controller.signal,
+          });
+        } finally {
+          clearTimeout(timeout);
+        }
 
         if (response.ok) {
           const result = await response.json();
@@ -165,7 +186,11 @@ export async function POST(request: Request) {
       try {
         await publishEvent(EventTypes.TRANSCRIPT_STARTED, { url, strategy: 'gemini-agentic' }, url);
         const startTime = Date.now();
-        const analysis = await analyzeVideoWithGemini(url);
+        const analysis = await withTimeout(
+          analyzeVideoWithGemini(url),
+          5_000,
+          'Gemini agentic analysis',
+        );
         const elapsed = Date.now() - startTime;
 
         await publishEvent(EventTypes.PIPELINE_COMPLETED, {
@@ -217,7 +242,11 @@ export async function POST(request: Request) {
     let transcriptSource = 'none';
     try {
       await publishEvent(EventTypes.TRANSCRIPT_STARTED, { url, strategy: 'frontend-chain' }, url);
-      const transcribeResult = await fetchTranscript({ url });
+      const transcribeResult = await withTimeout(
+        fetchTranscript({ url }),
+        8_000,
+        'Transcript fallback',
+      );
       if (transcribeResult.success && transcribeResult.transcript) {
         transcript = transcribeResult.transcript;
         transcriptSource = transcribeResult.source || 'frontend';

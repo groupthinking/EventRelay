@@ -54,7 +54,6 @@ exports.embedJobAnalysis = embedJobAnalysis;
 exports.getEmbeddingsForJob = getEmbeddingsForJob;
 exports.clearJobEmbeddings = clearJobEmbeddings;
 exports.listRecentEmbeddings = listRecentEmbeddings;
-const vertexai_1 = require("@google-cloud/vertexai");
 const pg_1 = require("pg");
 const index_js_1 = require("./dataconnect-generated/index.js");
 // =============================================================================
@@ -73,22 +72,10 @@ const getPoolConfig = () => ({
     password: process.env.CLOUDSQL_PASSWORD,
     max: 5,
 });
-// =============================================================================
-// Vertex AI Embeddings
-// =============================================================================
-let vertexAI = null;
-function getVertexAI() {
-    if (!vertexAI) {
-        vertexAI = new vertexai_1.VertexAI({ project: PROJECT_ID, location: LOCATION });
-    }
-    return vertexAI;
-}
 /**
  * Generate embedding for a single text using Vertex AI
  */
 async function generateEmbedding(text) {
-    const vertexai = getVertexAI();
-    const model = vertexai.getGenerativeModel({ model: EMBEDDING_MODEL });
     // Vertex AI embedding via content generation
     // For actual embeddings, use the Embeddings API
     const response = await fetch(`https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${PROJECT_ID}/locations/${LOCATION}/publishers/google/models/${EMBEDDING_MODEL}:predict`, {

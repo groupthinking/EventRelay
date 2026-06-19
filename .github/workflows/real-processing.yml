@@ -183,7 +183,7 @@ jobs:
 
       - name: Upload processing results
         if: ${{ github.event.inputs.store_results == 'true' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: video-processing-${{ steps.resolve.outputs.video_id }}
           path: processing_results/

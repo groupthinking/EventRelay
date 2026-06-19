@@ -1,19 +1,46 @@
-/** @type {import('next').NextConfig} */
+const path = require('path');
+const { withSentryConfig } = require('@sentry/nextjs');
 
-const LEGACY_HOSTS = [
-  'event-relay-web.vercel.app',
-  'v0-uvai.vercel.app',
-  'youtube-extension.vercel.app',
-  'uvai-io.pages.dev',
-  'sell.solutions',
-  'www.sell.solutions',
-  'myai.directory',
-  'www.myai.directory',
-  'www.uvai.io',
+const contentSecurityPolicy = [
+  "default-src 'self'",
+  "base-uri 'self'",
+  "object-src 'none'",
+  "frame-ancestors 'none'",
+  "form-action 'self'",
+  "img-src 'self' data: blob: https://uvai.io https://api.uvai.io https://img.youtube.com https://i.ytimg.com https://*.ytimg.com",
+  "font-src 'self' data:",
+  "style-src 'self' 'unsafe-inline'",
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://va.vercel-scripts.com https://vitals.vercel-insights.com",
+  "connect-src 'self' https://api.uvai.io https://uvai-backend-gpwz4wb5na-uc.a.run.app https://api.openai.com https://generativelanguage.googleapis.com https://*.supabase.co wss://*.supabase.co https://*.upstash.io https://vitals.vercel-insights.com https://*.vercel-insights.com https://*.ingest.us.sentry.io https://*.ingest.sentry.io",
+  "frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com https://js.stripe.com https://hooks.stripe.com",
+  "media-src 'self' blob: data:",
+  "worker-src 'self' blob:",
+  "manifest-src 'self'",
+  "upgrade-insecure-requests",
+].join('; ');
+
+const securityHeaders = [
+  { key: 'X-DNS-Prefetch-Control', value: 'on' },
+  {
+    key: 'Strict-Transport-Security',
+    value: 'max-age=63072000; includeSubDomains; preload',
+  },
+  { key: 'X-Content-Type-Options', value: 'nosniff' },
+  { key: 'X-Frame-Options', value: 'DENY' },
+  { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+  {
+    key: 'Permissions-Policy',
+    value: 'camera=(), geolocation=(), microphone=(self), payment=(), usb=()',
+  },
+  { key: 'Content-Security-Policy', value: contentSecurityPolicy },
 ];
 
+/** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // turbopack: {
+  //   root: path.resolve(__dirname, '../..'),
+  // },
   images: {
     remotePatterns: [
       { protocol: 'https', hostname: 'uvai.io' },
@@ -22,40 +49,43 @@ const nextConfig = {
       { protocol: 'https', hostname: 'i.ytimg.com' },
     ],
   },
-
   async redirects() {
-    return LEGACY_HOSTS.map((host) => ({
+    const legacyHosts = [
+      'event-relay-web.vercel.app',
+      'v0-uvai.vercel.app',
+      'youtube-extension.vercel.app',
+      'uvai-io.pages.dev',
+      'sell.solutions',
+      'www.sell.solutions',
+      'myai.directory',
+      'www.myai.directory',
+      'www.uvai.io',
+    ];
+
+    return legacyHosts.map((host) => ({
       source: '/:path*',
       has: [{ type: 'host', value: host }],
       destination: 'https://uvai.io/:path*',
       permanent: true,
     }));
   },
-
   async headers() {
     return [
       {
-        source: '/(.*)',
-        headers: [
-          { key: 'X-DNS-Prefetch-Control', value: 'on' },
-          { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' },
-          { key: 'X-Content-Type-Options', value: 'nosniff' },
-          { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
-          { key: 'X-XSS-Protection', value: '1; mode=block' },
-          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
-          { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
-        ],
-      },
-      {
-        source: '/api/(.*)',
-        headers: [
-          { key: 'Access-Control-Allow-Origin', value: 'https://uvai.io' },
-          { key: 'Access-Control-Allow-Methods', value: 'GET, POST, OPTIONS' },
-          { key: 'Access-Control-Allow-Headers', value: 'Content-Type, Authorization' },
-        ],
+        source: '/:path*',
+        headers: securityHeaders,
       },
     ];
   },
 };
 
-module.exports = nextConfig;
+const sentryWebpackPluginOptions = {
+  org: process.env.SENTRY_ORG || '',
+  project: process.env.SENTRY_PROJECT || 'v0-uvai',
+  silent: !process.env.CI,
+  // Preview/prod builds succeed without Sentry upload credentials.
+  disableServerWebpackPlugin: !process.env.SENTRY_AUTH_TOKEN,
+  disableClientWebpackPlugin: !process.env.SENTRY_AUTH_TOKEN,
+};
+
+module.exports = withSentryConfig(nextConfig, sentryWebpackPluginOptions);

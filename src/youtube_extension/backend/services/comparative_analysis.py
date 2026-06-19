@@ -372,7 +372,7 @@ class ComparativeAnalysisService:
         response = await loop.run_in_executor(
             None,
             lambda: self._gemini_client.models.generate_content(
-                model="gemini-2.0-flash",
+                model=os.getenv("GEMINI_MODEL", "gemini-3.5-flash"),
                 contents=prompt,
                 config=genai_types.GenerateContentConfig(
                     max_output_tokens=max_tokens,
@@ -384,7 +384,7 @@ class ComparativeAnalysisService:
         latency = int((time.monotonic() - start) * 1000)
         return ProviderResult(
             provider="gemini",
-            model_name="gemini-2.0-flash",
+            model_name=os.getenv("GEMINI_MODEL", "gemini-3.5-flash"),
             response=text,
             latency_ms=latency,
             token_estimate=len(text.split()),

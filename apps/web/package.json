@@ -6,29 +6,28 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint src --ext .ts,.tsx --max-warnings 0",
-    "test": "vitest run",
-    "test:watch": "vitest"
+    "lint": "eslint src"
   },
   "dependencies": {
     "@dataconnect/generated": "file:src/dataconnect-generated",
     "@google/genai": "^2.8.0",
     "@google/generative-ai": "^0.24.1",
+    "@sentry/nextjs": "^10.57.0",
     "@stripe/stripe-js": "^2.0.0",
     "@supabase/supabase-js": "^2.39.0",
-    "@upstash/redis": "^1.28.0",
+    "@upstash/redis": "^1.38.0",
     "@vercel/analytics": "^2.0.1",
     "@vercel/speed-insights": "^2.0.0",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.0",
-    "lucide-react": "^0.300.0",
+    "lucide-react": "^1.21.0",
     "next": "^16.2.7",
-    "next-auth": "^4.24.0",
-    "openai": "^6.21.0",
+    "next-auth": "^4.24.14",
+    "openai": "^6.43.0",
     "react": "^18",
     "react-dom": "^18",
     "stripe": "^14.0.0",
-    "tailwind-merge": "^2.2.0",
+    "tailwind-merge": "^3.6.0",
     "use-sync-external-store": "^1.6.0",
     "zod": "^4.3.6",
     "zustand": "^4.5.0"
@@ -38,11 +37,20 @@
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "autoprefixer": "^10.0.1",
-    "eslint": "^8",
-    "eslint-config-next": "^15.4.1",
-    "postcss": "^8.5.11",
+    "eslint": "^9",
+    "eslint-config-next": "^16.2.7",
+    "postcss": "^8.5.10",
     "tailwindcss": "^3.4.1",
     "typescript": "^5",
-    "vitest": "^4.1.2"
+    "vite": "8.0.16",
+    "vitest": "4.1.8"
+  },
+  "overrides": {
+    "@protobufjs/utf8": "^1.1.1",
+    "postcss": "^8.5.10",
+    "protobufjs": "^7.6.2",
+    "qs": "^6.15.2",
+    "uuid": "^11.1.1",
+    "ws": "^8.21.0"
   }
 }

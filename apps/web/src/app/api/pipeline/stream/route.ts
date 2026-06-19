@@ -22,12 +22,22 @@
 import { analyzeVideoWithGemini, type VideoAnalysisResult } from '@/lib/gemini-video-analyzer';
 import { hasGeminiKey } from '@/lib/gemini-client';
 import { publishEvent, EventTypes } from '@/lib/cloudevents';
+import { backendHeaders, resolveBackendStatusUrl } from '@/lib/pipeline-backend';
 import { saveTrainingExample, TUNING_THRESHOLD } from '@/lib/training-store';
+import { PipelineDeadline } from '../route';
 
 const rawBackendUrl = process.env.BACKEND_URL || '';
 const BACKEND_URL = rawBackendUrl.startsWith('http') ? rawBackendUrl : '';
 const JOB_POLL_INTERVAL_MS = 2000;
 const MAX_JOB_POLL_ATTEMPTS = 90;
+
+export const runtime = 'nodejs';
+export const maxDuration = 240;
+
+/** Wall-clock budget for the full SSE response (poll + agent events). */
+export const STREAM_MAX_DURATION_MS = maxDuration * 1000;
+/** Initial transcript-action kickoff — clamped to remaining stream budget. */
+export const STREAM_BACKEND_KICKOFF_MS = 120_000;
 
 /** Shape of each SSE message sent to the frontend. */
 interface AgentStreamEvent {
@@ -60,6 +70,15 @@ interface BackendVideoJobStatus {
   transcript?: string;
   metadata?: Record<string, any>;
   error?: string;
+}
+
+async function readJsonBody(request: Request): Promise<Record<string, unknown> | null> {
+  try {
+    const body = await request.json();
+    return body && typeof body === 'object' ? body as Record<string, unknown> : null;
+  } catch {
+    return null;
+  }
 }
 
 function makeEvent(event: AgentStreamEvent): string {
@@ -138,16 +157,24 @@ async function pollBackendJob(
   statusUrl: string,
   controller: ReadableStreamDefaultController<Uint8Array>,
   encoder: TextEncoder,
+  deadline: PipelineDeadline,
 ): Promise<BackendVideoJobStatus> {
   let lastError: Error | null = null;
 
   for (let attempt = 0; attempt < MAX_JOB_POLL_ATTEMPTS; attempt += 1) {
-    await sleep(JOB_POLL_INTERVAL_MS);
+    if (deadline.remainingMs() <= JOB_POLL_INTERVAL_MS) {
+      throw new Error('Stream pipeline deadline exceeded while polling async job');
+    }
+
+    if (attempt > 0) {
+      await sleep(JOB_POLL_INTERVAL_MS);
+    }
 
     try {
       const response = await fetch(statusUrl, {
         cache: 'no-store',
-        headers: { 'Content-Type': 'application/json' },
+        headers: backendHeaders(),
+        signal: deadline.signalFor(JOB_POLL_INTERVAL_MS * 2),
       });
 
       if (!response.ok) {
@@ -485,10 +512,17 @@ async function* generateAgentEvents(
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
+    const body = await readJsonBody(request);
+    if (!body) {
+      return new Response(JSON.stringify({ error: 'Valid JSON body is required' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
     const { url } = body;
 
-    if (!url) {
+    if (typeof url !== 'string' || !url.trim()) {
       return new Response(JSON.stringify({ error: 'Video URL is required' }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' },
@@ -507,6 +541,7 @@ export async function POST(request: Request) {
 
     const encoder = new TextEncoder();
     const startTime = Date.now();
+    const deadline = new PipelineDeadline(Date.now() + STREAM_MAX_DURATION_MS);
 
     const stream = new ReadableStream({
       async start(controller) {
@@ -586,9 +621,9 @@ export async function POST(request: Request) {
             try {
               const response = await fetch(`${BACKEND_URL}/api/v1/transcript-action`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: backendHeaders(),
                 body: JSON.stringify({ video_url: url, language: 'en' }),
-                signal: AbortSignal.timeout(120_000),
+                signal: deadline.signalFor(STREAM_BACKEND_KICKOFF_MS),
               });
 
               if (response.ok) {
@@ -612,10 +647,11 @@ export async function POST(request: Request) {
                     ),
                   );
 
-                  const statusUrl = transcriptResult.status_url.startsWith('http')
-                    ? transcriptResult.status_url
-                    : `${BACKEND_URL}${transcriptResult.status_url}`;
-                  const job = await pollBackendJob(statusUrl, controller, encoder);
+                  const statusUrl = resolveBackendStatusUrl(
+                    transcriptResult.status_url,
+                    BACKEND_URL,
+                  );
+                  const job = await pollBackendJob(statusUrl, controller, encoder, deadline);
                   if (job.status === 'failed') {
                     throw new Error(job.error || 'Async transcript job failed');
                   }
@@ -654,8 +690,12 @@ export async function POST(request: Request) {
             } catch (backendErr) {
               // Fall through to Gemini if backend fails
               console.warn('Backend stream failed, falling through to Gemini:', backendErr);
-              if (hasGeminiKey()) {
-                const analysis = await analyzeVideoWithGemini(url);
+              if (hasGeminiKey() && deadline.remainingMs() > 1_000) {
+                const analysis = await deadline.runWithBudget(
+                  analyzeVideoWithGemini(url),
+                  deadline.remainingMs(),
+                  'Gemini stream fallback',
+                );
 
                 // Stream all agent events including pipeline_status:complete
                 for await (const event of generateAgentEvents(analysis, startTime)) {
@@ -682,7 +722,11 @@ export async function POST(request: Request) {
               await publishEvent(EventTypes.TRANSCRIPT_STARTED, { url, strategy: 'gemini-stream' }, url);
             });
 
-            const analysis = await analyzeVideoWithGemini(url);
+            const analysis = await deadline.runWithBudget(
+              analyzeVideoWithGemini(url),
+              deadline.remainingMs(),
+              'Gemini stream analysis',
+            );
 
             // Stream all agent events including pipeline_status:complete
             for await (const event of generateAgentEvents(analysis, startTime)) {

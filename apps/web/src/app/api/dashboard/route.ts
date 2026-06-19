@@ -49,6 +49,7 @@ export async function POST(request: Request) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...(process.env.EVENTRELAY_API_KEY ? { 'X-API-Key': process.env.EVENTRELAY_API_KEY } : {}),
       },
       body: JSON.stringify({
         dashboard_id: body.dashboard_id || 'events_overview',

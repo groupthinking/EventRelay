@@ -14,9 +14,12 @@ interface NavProps {
 }
 
 const NAV_LINKS = [
+  { href: '/', label: 'Studio', hint: 'Local drafts' },
+  { href: '/dashboard', label: 'Dashboard', hint: 'Live pipeline' },
+  { href: '/dashboard/agents', label: 'Agents', hint: 'SSE graph' },
   { href: '/features', label: 'Features' },
   { href: '/pricing', label: 'Pricing' },
-  { href: '/prototype', label: 'Prototype' },
+  { href: '/prototype', label: 'Prototype', hint: 'Design preview' },
   { href: '/playground', label: 'API' },
 ];
 
@@ -34,16 +37,10 @@ export default function Nav({ rightSlot, subtitle, fixed = false }: NavProps) {
     >
       <div className="flex items-center gap-4">
         <Link href="/" className="flex items-center gap-3 group">
-          <div
-            className="w-8 h-8 rounded-lg flex items-center justify-center transition-transform duration-200 group-hover:scale-105"
-            style={{ border: '2px solid #6af2de', color: '#6af2de' }}
-            aria-hidden
-          >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M8 5v14l11-7z" />
-            </svg>
+          <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center font-black text-base shadow-lg shadow-primary-500/25 transition-transform group-hover:scale-105">
+            U
           </div>
-          <span className="font-bold text-lg tracking-tight font-heading">UVAI</span>
+          <span className="font-bold text-lg font-heading">UVAI</span>
         </Link>
 
         {subtitle && (
@@ -55,10 +52,11 @@ export default function Nav({ rightSlot, subtitle, fixed = false }: NavProps) {
 
         {/* Desktop links */}
         <div className="hidden md:flex items-center gap-1 ml-4">
-          {NAV_LINKS.map(({ href, label }) => (
+          {NAV_LINKS.map(({ href, label, hint }) => (
             <Link
               key={href}
               href={href}
+              title={hint}
               className={clsx(
                 'text-sm px-3 py-2 rounded-lg transition-colors',
                 pathname === href
@@ -66,7 +64,12 @@ export default function Nav({ rightSlot, subtitle, fixed = false }: NavProps) {
                   : 'text-white/40 hover:text-white/70 hover:bg-white/[0.03]'
               )}
             >
-              {label}
+              <span>{label}</span>
+              {hint && (
+                <span className="ml-1.5 hidden lg:inline text-[9px] uppercase tracking-wider text-white/25">
+                  {hint}
+                </span>
+              )}
             </Link>
           ))}
         </div>

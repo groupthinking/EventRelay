@@ -10,11 +10,16 @@ interface EventListProps {
   className?: string;
 }
 
+// Event Classification Taxonomy: ACTION (blue), TOPIC (purple), CODE (green), ALERT (red)
+// Legacy types (mention, insight) map to the new taxonomy for backward compat
 const TYPE_STYLES: Record<string, { bg: string; text: string; icon: string }> = {
   action:  { bg: 'bg-blue-500/10 border-blue-500/20', text: 'text-blue-400', icon: '⚡' },
-  mention: { bg: 'bg-purple-500/10 border-purple-500/20', text: 'text-purple-400', icon: '💬' },
-  topic:   { bg: 'bg-green-500/10 border-green-500/20', text: 'text-green-400', icon: '📌' },
-  insight: { bg: 'bg-amber-500/10 border-amber-500/20', text: 'text-amber-400', icon: '💡' },
+  topic:   { bg: 'bg-purple-500/10 border-purple-500/20', text: 'text-purple-400', icon: '📌' },
+  code:    { bg: 'bg-green-500/10 border-green-500/20', text: 'text-green-400', icon: '💻' },
+  alert:   { bg: 'bg-red-500/10 border-red-500/20', text: 'text-red-400', icon: '⚠️' },
+  // Legacy type mappings
+  mention: { bg: 'bg-purple-500/10 border-purple-500/20', text: 'text-purple-400', icon: '📌' },
+  insight: { bg: 'bg-red-500/10 border-red-500/20', text: 'text-red-400', icon: '⚠️' },
 };
 
 export default function EventList({ events, loading, onExtract, className }: EventListProps) {

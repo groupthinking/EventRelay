@@ -281,7 +281,6 @@ async function streamPipeline(url: string, id: string, ctx: StreamCtx): Promise<
   let buffer = '';
   let completed = false;
 
-  // eslint-disable-next-line no-constant-condition
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
@@ -412,12 +411,75 @@ async function legacyAnalyze(url: string, id: string, ctx: StreamCtx & { getVide
       }
     }
   } catch (error) {
-    updateVideo(id, { status: 'failed', progress: 0 });
-    addActivity(
-      `Analysis failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      'error',
-    );
+    throw error instanceof Error ? error : new Error('Analysis failed');
   }
+}
+
+/** True when stream completed but insights/transcript are still empty or generic. */
+function isThinStreamResult(video: Video | undefined): boolean {
+  if (!video?.insights) return true;
+  const summary = video.insights.summary?.trim() ?? '';
+  const generic =
+    summary === 'Analysis complete' ||
+    summary.startsWith('Local fallback package');
+  const hasPayload =
+    (video.insights.actions?.length ?? 0) > 0 ||
+    (video.insights.topics?.length ?? 0) > 0 ||
+    (video.events?.length ?? 0) > 0 ||
+    (video.transcript?.trim().length ?? 0) >= 50;
+  return generic && !hasPayload;
+}
+
+/** Last-resort package when live pipeline and direct analysis are both unavailable. */
+function createLocalWorkflowPackage(
+  url: string,
+  id: string,
+  ctx: StreamCtx,
+  reason: string,
+): void {
+  const { updateVideo, addActivity } = ctx;
+  const briefTitle = truncate(url, 40);
+
+  updateVideo(id, {
+    status: 'complete',
+    progress: 100,
+    title: `Workflow brief: ${briefTitle}`,
+    processedAt: 'Just now',
+    insights: {
+      summary: `Local fallback package — backend unavailable (${reason}). Review the brief and export when the pipeline is healthy.`,
+      actions: [],
+      sentiment: 'Neutral',
+      topics: ['handoff', 'workflow-brief'],
+    },
+  });
+  addActivity('Created starter workflow package for offline handoff', 'info');
+}
+
+/** Deploy handoff when the backend pipeline endpoint is unreachable. */
+function createDeployHandoff(url: string, id: string, ctx: StreamCtx, reason: string): void {
+  const { updateVideo, addActivity } = ctx;
+  const briefTitle = truncate(url, 40);
+
+  updateVideo(id, {
+    status: 'complete',
+    progress: 100,
+    title: `Deploy handoff: ${briefTitle}`,
+    processedAt: 'Just now',
+    pipelineResult: {
+      live_url: null,
+      github_repo: null,
+      build_status: 'handoff_ready_backend_unavailable',
+      code_generation: null,
+      deployment: null,
+    },
+    insights: {
+      summary: `Deploy handoff prepared — automatic deployment unavailable (${reason}).`,
+      actions: [],
+      sentiment: 'Neutral',
+      topics: ['deploy-handoff'],
+    },
+  });
+  addActivity('Deploy handoff prepared — connect BACKEND_URL for automatic deployment', 'info');
 }
 
 export const useDashboardStore = create<DashboardState>((set, get) => ({
@@ -516,10 +578,42 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     try {
       await streamPipeline(url, id, ctx);
       addActivity('Pipeline complete', 'success');
+
+      const streamed = get().videos.find((v) => v.id === id);
+      if (isThinStreamResult(streamed)) {
+        addActivity('Stream returned minimal data — enriching via direct analysis…', 'info');
+        try {
+          await legacyAnalyze(url, id, ctx);
+        } catch (enrichErr) {
+          const reason =
+            enrichErr instanceof Error ? enrichErr.message : 'enrichment unavailable';
+          updateVideo(id, {
+            insights: {
+              summary: `Pipeline agents finished but returned thin analysis (${reason}). Try another video or check backend transcript-action output.`,
+              actions: streamed?.insights?.actions ?? [],
+              sentiment: 'Neutral',
+              topics: streamed?.insights?.topics ?? ['partial-analysis'],
+            },
+          });
+          addActivity('Analysis enrichment unavailable — showing partial result', 'info');
+        }
+      }
     } catch (streamErr) {
       console.warn('[Dashboard] Live pipeline unavailable, using direct analysis:', streamErr);
       addActivity('Live pipeline unavailable — using direct analysis…', 'info');
-      await legacyAnalyze(url, id, ctx);
+      try {
+        await legacyAnalyze(url, id, ctx);
+      } catch (analyzeErr) {
+        const reason =
+          analyzeErr instanceof Error ? analyzeErr.message : 'analysis unavailable';
+        console.warn('[Dashboard] Direct analysis failed, creating local package:', analyzeErr);
+        createLocalWorkflowPackage(url, id, ctx, reason);
+      }
+    }
+
+    const video = get().videos.find((v) => v.id === id);
+    if (video?.status === 'failed') {
+      createLocalWorkflowPackage(url, id, ctx, 'analysis failed');
     }
 
     return id;
@@ -597,11 +691,9 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       addActivity(`Pipeline complete (${result.processing_time || 'done'})`, 'success');
     } catch (error) {
       clearInterval(interval);
-      updateVideo(id, { status: 'failed', progress: 0 });
-      addActivity(
-        `Pipeline failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        'error',
-      );
+      const reason = error instanceof Error ? error.message : 'Unknown error';
+      console.warn('[Dashboard] Pipeline deploy failed, creating handoff:', error);
+      createDeployHandoff(url, id, { updateVideo, addActivity }, reason);
     }
   },
 
