@@ -4,6 +4,9 @@ import { RefObject, useCallback, useRef, useState } from 'react';
 
 type RealtimeStatus = 'idle' | 'connecting' | 'connected' | 'muted' | 'error';
 
+const OPENAI_REALTIME_CALLS_URL = 'https://api.openai.com/v1/realtime/calls';
+const REALTIME_CONNECTION_TIMEOUT_MS = 20_000;
+
 export interface RealtimeEventLog {
   id: string;
   type: string;
@@ -23,6 +26,15 @@ interface RealtimeServerEvent {
   response?: {
     output?: FunctionCallItem[];
   };
+}
+
+interface RealtimeClientSecretResponse {
+  value?: string;
+  client_secret?: {
+    value?: string;
+  };
+  error?: unknown;
+  details?: unknown;
 }
 
 function makeLog(type: string, label: string): RealtimeEventLog {
@@ -46,10 +58,13 @@ function parseJsonObject(value: string | undefined): Record<string, unknown> {
 
 function getFriendlyRealtimeError(value: string) {
   try {
-    const parsed = JSON.parse(value) as { error?: string; details?: string };
-    const details = parsed.details ? JSON.parse(parsed.details) as { error?: { code?: string; message?: string } } : null;
-    const code = details?.error?.code;
-    const message = details?.error?.message || parsed.error;
+    const parsed = JSON.parse(value) as { error?: string | { code?: string; message?: string }; details?: string | { error?: { code?: string; message?: string } } };
+    const details = typeof parsed.details === 'string'
+      ? JSON.parse(parsed.details) as { error?: { code?: string; message?: string } }
+      : parsed.details;
+    const parsedError = typeof parsed.error === 'object' ? parsed.error : null;
+    const code = details?.error?.code || parsedError?.code;
+    const message = details?.error?.message || parsedError?.message || (typeof parsed.error === 'string' ? parsed.error : null);
 
     if (code === 'insufficient_quota') {
       return 'Voice is wired correctly, but the OpenAI project behind OPENAI_API_KEY is out of quota or billing access.';
@@ -63,6 +78,84 @@ function getFriendlyRealtimeError(value: string) {
   } catch {
     return value;
   }
+}
+
+function getFriendlyStartError(err: unknown) {
+  if (err instanceof DOMException) {
+    if (err.name === 'NotAllowedError' || err.name === 'SecurityError') {
+      return 'Microphone permission was blocked. Allow microphone access for this site and try voice again.';
+    }
+
+    if (err.name === 'NotFoundError') {
+      return 'No microphone input device was found.';
+    }
+
+    if (err.name === 'NotReadableError') {
+      return 'The microphone is already in use or cannot be read by the browser.';
+    }
+  }
+
+  return err instanceof Error ? err.message : 'Voice input failed to start.';
+}
+
+async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit, timeoutMs: number) {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
+
+async function readRealtimeError(response: Response, fallback: string) {
+  const body = await response.text();
+  if (!body) return fallback;
+  return getFriendlyRealtimeError(body);
+}
+
+function getClientSecret(data: RealtimeClientSecretResponse) {
+  return data.value || data.client_secret?.value || '';
+}
+
+function waitForDataChannelOpen(channel: RTCDataChannel, peer: RTCPeerConnection, timeoutMs: number) {
+  if (channel.readyState === 'open') return Promise.resolve();
+
+  return new Promise<void>((resolve, reject) => {
+    const timeout = window.setTimeout(() => {
+      cleanup();
+      reject(new Error('Voice connected to OpenAI, but the Realtime event channel did not open.'));
+    }, timeoutMs);
+
+    const cleanup = () => {
+      window.clearTimeout(timeout);
+      channel.removeEventListener('open', handleOpen);
+      channel.removeEventListener('error', handleChannelError);
+      peer.removeEventListener('connectionstatechange', handlePeerState);
+    };
+
+    const handleOpen = () => {
+      cleanup();
+      resolve();
+    };
+
+    const handleChannelError = () => {
+      cleanup();
+      reject(new Error('The Realtime event channel failed to open.'));
+    };
+
+    const handlePeerState = () => {
+      if (peer.connectionState === 'failed' || peer.connectionState === 'closed') {
+        cleanup();
+        reject(new Error(`The Realtime WebRTC connection ${peer.connectionState}.`));
+      }
+    };
+
+    channel.addEventListener('open', handleOpen);
+    channel.addEventListener('error', handleChannelError);
+    peer.addEventListener('connectionstatechange', handlePeerState);
+  });
 }
 
 function checkCalendar(date: string, time: string) {
@@ -107,6 +200,11 @@ export function useRealtimeVoice(audioRef: RefObject<HTMLAudioElement | null>) {
         instructions:
           'Help the user turn video evidence into safe workflows, plans, exports, and deployable app ideas. Ask short clarifying questions only when needed.',
         audio: {
+          input: {
+            turn_detection: {
+              type: 'server_vad',
+            },
+          },
           output: {
             voice: 'marin',
           },
@@ -140,6 +238,24 @@ export function useRealtimeVoice(audioRef: RefObject<HTMLAudioElement | null>) {
       },
     });
     appendEvent('session.update', 'Voice input is ready.');
+  }, [appendEvent, sendEvent]);
+
+  const requestAudioReadyCheck = useCallback(() => {
+    sendEvent({
+      type: 'conversation.item.create',
+      item: {
+        type: 'message',
+        role: 'user',
+        content: [
+          {
+            type: 'input_text',
+            text: 'Say one brief sentence confirming that UVAI voice is ready, then wait for my spoken request.',
+          },
+        ],
+      },
+    });
+    sendEvent({ type: 'response.create' });
+    appendEvent('response.create', 'Assistant audio check requested.');
   }, [appendEvent, sendEvent]);
 
   const handleFunctionCall = useCallback(
@@ -216,26 +332,67 @@ export function useRealtimeVoice(audioRef: RefObject<HTMLAudioElement | null>) {
     appendEvent('session.start', 'Preparing voice input.');
 
     try {
+      if (typeof RTCPeerConnection === 'undefined') {
+        throw new Error('This browser does not support WebRTC voice sessions.');
+      }
+
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error('This browser does not expose microphone input to the app.');
+      }
+
+      const tokenResponse = await fetchWithTimeout('/api/realtime/session', {
+        method: 'GET',
+        cache: 'no-store',
+      }, REALTIME_CONNECTION_TIMEOUT_MS);
+
+      if (!tokenResponse.ok) {
+        throw new Error(await readRealtimeError(
+          tokenResponse,
+          `Realtime client secret creation failed with ${tokenResponse.status}.`,
+        ));
+      }
+
+      const tokenData = await tokenResponse.json() as RealtimeClientSecretResponse;
+      const clientSecret = getClientSecret(tokenData);
+      if (!clientSecret) {
+        throw new Error('Realtime client secret response did not include a usable token.');
+      }
+      appendEvent('session.secret', 'Realtime session token ready.');
+
       const peer = new RTCPeerConnection();
       peerRef.current = peer;
+      peer.addEventListener('connectionstatechange', () => {
+        if (peer.connectionState === 'failed') {
+          setError('The Realtime WebRTC connection failed.');
+          setStatus('error');
+          appendEvent('connection.failed', 'Realtime WebRTC connection failed.');
+          cleanupConnection();
+        }
+      });
 
       peer.ontrack = (event) => {
         if (audioRef.current) {
+          audioRef.current.autoplay = true;
+          audioRef.current.setAttribute('playsinline', 'true');
+          audioRef.current.setAttribute('webkit-playsinline', 'true');
           audioRef.current.srcObject = event.streams[0];
           audioRef.current.play().catch(() => undefined);
         }
         appendEvent('audio.output', 'Assistant audio connected.');
       };
 
+      appendEvent('audio.input', 'Requesting microphone access.');
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
       stream.getAudioTracks().forEach((track) => peer.addTrack(track, stream));
+      appendEvent('audio.input', 'Microphone input connected.');
 
       const channel = peer.createDataChannel('oai-events');
       channelRef.current = channel;
       channel.addEventListener('open', () => {
         setStatus('connected');
         configureSession();
+        requestAudioReadyCheck();
       });
       channel.addEventListener('message', (message) => {
         try {
@@ -249,13 +406,18 @@ export function useRealtimeVoice(audioRef: RefObject<HTMLAudioElement | null>) {
       const offer = await peer.createOffer();
       await peer.setLocalDescription(offer);
 
-      const response = await fetch('/api/realtime/session', {
+      if (!offer.sdp) {
+        throw new Error('The browser did not create a usable WebRTC SDP offer.');
+      }
+
+      const response = await fetchWithTimeout(OPENAI_REALTIME_CALLS_URL, {
         method: 'POST',
         headers: {
+          Authorization: `Bearer ${clientSecret}`,
           'Content-Type': 'application/sdp',
         },
         body: offer.sdp,
-      });
+      }, REALTIME_CONNECTION_TIMEOUT_MS);
 
       const answerSdp = await response.text();
       if (!response.ok) {
@@ -263,15 +425,16 @@ export function useRealtimeVoice(audioRef: RefObject<HTMLAudioElement | null>) {
       }
 
       await peer.setRemoteDescription({ type: 'answer', sdp: answerSdp });
+      await waitForDataChannelOpen(channel, peer, REALTIME_CONNECTION_TIMEOUT_MS);
       appendEvent('session.connected', 'Voice input connected.');
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Voice input failed to start.';
+      const message = getFriendlyStartError(err);
       setError(message);
       setStatus('error');
       appendEvent('session.error', message);
       cleanupConnection();
     }
-  }, [appendEvent, audioRef, cleanupConnection, configureSession, handleServerEvent, status]);
+  }, [appendEvent, audioRef, cleanupConnection, configureSession, handleServerEvent, requestAudioReadyCheck, status]);
 
   const toggleMute = useCallback(() => {
     const stream = streamRef.current;

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import re
 import subprocess
 import sys
@@ -58,6 +59,17 @@ def _make_manager(**kwargs) -> DeploymentManager:
          patch("youtube_extension.backend.deployment_manager.AI_CODE_GENERATOR_AVAILABLE", False), \
          patch("youtube_extension.backend.deployment_manager.GitHubDeploymentAgent", None):
         return DeploymentManager(**kwargs)
+
+
+def _make_manager_without_github_token() -> DeploymentManager:
+    """Create a manager with GITHUB_TOKEN stripped from the environment."""
+    with patch.dict(os.environ, {"GITHUB_TOKEN": ""}, clear=False):
+        with patch("youtube_extension.backend.deployment_manager.SKILL_LEARNING_ENABLED", False), \
+             patch("youtube_extension.backend.deployment_manager.AI_CODE_GENERATOR_AVAILABLE", False), \
+             patch("youtube_extension.backend.deployment_manager.GitHubDeploymentAgent", None):
+            mgr = DeploymentManager()
+            mgr.github_token = None
+            return mgr
 
 
 # ===========================================================================
@@ -614,6 +626,8 @@ class TestVerifyAndFixProject:
 
 class TestDeployProject:
     def _patched_manager(self, github_token=None):
+        if github_token is None:
+            return _make_manager_without_github_token()
         return _make_manager(github_token=github_token)
 
     async def test_verification_failure_returns_failed_status(self, tmp_path) -> None:
@@ -871,7 +885,7 @@ class TestDeployProject:
 
 class TestDeployToGithub:
     async def test_no_token_returns_failed(self) -> None:
-        mgr = _make_manager()
+        mgr = _make_manager_without_github_token()
         result = await mgr._deploy_to_github("/some/path", {})
         assert result["status"] == "failed"
         assert "token" in result["error"].lower()
@@ -1075,7 +1089,7 @@ def _make_aiohttp_session(
 
 class TestCreateGithubRepository:
     async def test_no_token_raises(self) -> None:
-        mgr = _make_manager()
+        mgr = _make_manager_without_github_token()
         with pytest.raises(Exception, match="token"):
             await mgr._create_github_repository("repo", {})
 
@@ -1172,7 +1186,7 @@ class TestCreateGithubRepository:
 
 class TestUploadToGithub:
     async def test_no_token_raises(self) -> None:
-        mgr = _make_manager()
+        mgr = _make_manager_without_github_token()
         with pytest.raises(Exception, match="token"):
             await mgr._upload_to_github("/path", "repo")
 

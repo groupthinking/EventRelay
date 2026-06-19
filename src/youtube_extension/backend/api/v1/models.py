@@ -190,7 +190,7 @@ class ChatRequest(BaseModel):
         json_schema_extra = {
             "example": {
                 "query": "How can I process a YouTube video?",
-                "video_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+                "video_url": "https://www.youtube.com/watch?v=jNQXAC9IVRw",
                 "context": "tooltip-assistant",
                 "session_id": "user123",
             }

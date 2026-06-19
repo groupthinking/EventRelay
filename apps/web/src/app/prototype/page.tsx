@@ -652,6 +652,30 @@ export default function PrototypePage() {
       </nav>
 
       <main className="mx-auto flex w-full max-w-7xl flex-col gap-8 px-6 py-8 lg:px-8">
+        <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 px-5 py-4 text-sm text-amber-100/90">
+          <p>
+            <span className="font-semibold text-amber-50">Design preview only.</span>
+            {' '}
+            This page runs scripted happy-path, fallback, and schema scenarios — it does not call production
+            {' '}
+            <code className="rounded bg-black/20 px-1 py-0.5 text-xs">/api/pipeline</code>
+            {' '}
+            or
+            {' '}
+            <code className="rounded bg-black/20 px-1 py-0.5 text-xs">/api/pipeline/stream</code>.
+            {' '}
+            For live analysis use{' '}
+            <Link href="/dashboard" className="font-semibold text-amber-50 underline underline-offset-2">
+              Dashboard
+            </Link>
+            ; for local planning drafts use{' '}
+            <Link href="/" className="font-semibold text-amber-50 underline underline-offset-2">
+              Studio
+            </Link>
+            .
+          </p>
+        </div>
+
         <section className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
           <Card variant="gradient" padding="lg">
             <CardHeader

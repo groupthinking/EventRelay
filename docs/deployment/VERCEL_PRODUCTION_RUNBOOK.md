@@ -1,6 +1,6 @@
 # UVAI Vercel Production Runbook
 
-Last reviewed: 2026-06-08
+Last reviewed: 2026-06-17
 
 This runbook tracks the Vercel launch gates for the public UVAI web app at
 `https://uvai.io`. It is intentionally short: code-verifiable items live in the
@@ -50,28 +50,31 @@ shipped code.
 - API routes return bounded JSON errors for bad inputs and provider outages.
 - `/api/docs` redirects to the public docs page at `/docs/api`.
 
-## Production Gates Not Yet Ready
+## Production Gates — Status (2026-06-17)
 
-These are dashboard or provider configuration items, not frontend code changes.
+Operator changes applied on 2026-06-17:
 
-- `BACKEND_URL` must point to a healthy backend. Current checks found:
-  - the Vercel production environment currently reports `BACKEND_URL` host
-    `eventrelay-production.up.railway.app`, which returns Railway
-    `404 Application not found`.
-  - `https://api.uvai.io/api/v1/health` returns `503`.
-  - the Cloud Run candidate returns `500`.
-- `GEMINI_API_KEY` / `GOOGLE_API_KEY` must be replaced with a key from a
-  billable project, or billing must be enabled for Google project
-  `688578214833`. Current provider error: `BILLING_DISABLED` for
-  `aiplatform.googleapis.com`.
-- `OPENAI_API_KEY` must be replaced with a key from a project with available
-  quota, or billing/quota must be fixed for OpenAI project
-  `proj_r6YRYxAKC2FeLk7NUmrBp9wg`. Current provider error:
-  `insufficient_quota`.
-- Where to fix them: Vercel dashboard -> `garv1/v0-uvai` -> Settings ->
-  Environment Variables -> Production values for `BACKEND_URL`,
-  `EVENTRELAY_API_KEY`, `GEMINI_API_KEY` / `GOOGLE_API_KEY`, and
-  `OPENAI_API_KEY`.
+- **Vercel (`garv1/v0-uvai`)**: `BACKEND_URL`, `NEXT_PUBLIC_BACKEND_URL`, and
+  `NEXT_PUBLIC_API_URL` set to `https://api.uvai.io`; `GITHUB_TOKEN` added;
+  `SENTRY_DSN` / `SENTRY_ORG` / `SENTRY_PROJECT` configured for `v0-uvai-web`.
+- **Cloud Run (`uvai-backend`)**: `min-instances=1`; `SENTRY_DSN` +
+  `ENVIRONMENT=production` on service revision.
+- **Sentry (`rdo-llc`)**: projects `v0-uvai-web` and `eventrelay-backend`
+  created and linked to `groupthinking/EventRelay`.
+
+Live verification (post-change):
+
+- `https://api.uvai.io/api/v1/health` → **200** healthy.
+- `https://uvai-backend-gpwz4wb5na-uc.a.run.app/api/v1/health` → **200**.
+- `eventrelay-production.up.railway.app` → **404** (legacy; do not use).
+- `POST /api/transcribe` on `uvai.io` → **200** (OpenAI path working).
+- `POST /api/pipeline` → bounded JSON; backend link may still timeout until
+  the next Vercel production redeploy picks up env changes.
+
+Remaining dashboard items (optional / follow-up):
+
+- `SENTRY_AUTH_TOKEN` on Vercel for source-map upload at build time.
+- Configure Vercel Log Drains for persistent logs.
 - Configure Vercel Log Drains for persistent logs.
 - Configure Vercel WAF/bot rules and any IP blocks required for launch.
 - Configure Deployment Protection for preview deployments.

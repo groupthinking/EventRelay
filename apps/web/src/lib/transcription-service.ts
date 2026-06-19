@@ -116,7 +116,7 @@ export async function fetchTranscript({
       const metadataContext = metadata ? formatMetadataAsContext(metadata) : '';
 
       const result = await ai.models.generateContent({
-        model: 'gemini-3-pro-preview',
+        model: 'gemini-3.1-pro-preview',
         contents: `You are a video transcription assistant with access to Google Search.
 
 For the following YouTube video, use your googleSearch tool to find the ACTUAL transcript,

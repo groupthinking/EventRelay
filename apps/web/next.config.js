@@ -1,4 +1,5 @@
 const path = require('path');
+const { withSentryConfig } = require('@sentry/nextjs');
 
 const contentSecurityPolicy = [
   "default-src 'self'",
@@ -10,7 +11,7 @@ const contentSecurityPolicy = [
   "font-src 'self' data:",
   "style-src 'self' 'unsafe-inline'",
   "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://va.vercel-scripts.com https://vitals.vercel-insights.com",
-  "connect-src 'self' https://api.uvai.io https://uvai-backend-gpwz4wb5na-uc.a.run.app https://api.openai.com https://generativelanguage.googleapis.com https://*.supabase.co wss://*.supabase.co https://*.upstash.io https://vitals.vercel-insights.com https://*.vercel-insights.com",
+  "connect-src 'self' https://api.uvai.io https://uvai-backend-gpwz4wb5na-uc.a.run.app https://api.openai.com https://generativelanguage.googleapis.com https://*.supabase.co wss://*.supabase.co https://*.upstash.io https://vitals.vercel-insights.com https://*.vercel-insights.com https://*.ingest.us.sentry.io https://*.ingest.sentry.io",
   "frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com https://js.stripe.com https://hooks.stripe.com",
   "media-src 'self' blob: data:",
   "worker-src 'self' blob:",
@@ -37,9 +38,9 @@ const securityHeaders = [
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  turbopack: {
-    root: path.resolve(__dirname, '../..'),
-  },
+  // turbopack: {
+  //   root: path.resolve(__dirname, '../..'),
+  // },
   images: {
     remotePatterns: [
       { protocol: 'https', hostname: 'uvai.io' },
@@ -78,4 +79,13 @@ const nextConfig = {
   },
 };
 
-module.exports = nextConfig;
+const sentryWebpackPluginOptions = {
+  org: process.env.SENTRY_ORG || '',
+  project: process.env.SENTRY_PROJECT || 'v0-uvai',
+  silent: !process.env.CI,
+  // Preview/prod builds succeed without Sentry upload credentials.
+  disableServerWebpackPlugin: !process.env.SENTRY_AUTH_TOKEN,
+  disableClientWebpackPlugin: !process.env.SENTRY_AUTH_TOKEN,
+};
+
+module.exports = withSentryConfig(nextConfig, sentryWebpackPluginOptions);

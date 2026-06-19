@@ -2,14 +2,75 @@ import { NextResponse } from 'next/server';
 import { publishEvent, EventTypes } from '@/lib/cloudevents';
 import { analyzeVideoWithGemini } from '@/lib/gemini-video-analyzer';
 import { hasGeminiKey } from '@/lib/gemini-client';
+import { backendHeaders } from '@/lib/pipeline-backend';
 import { resolveVideoUrl } from '@/lib/video-url-request';
 
 const rawBackendUrl = process.env.BACKEND_URL || '';
 const BACKEND_URL = rawBackendUrl.startsWith('http') ? rawBackendUrl : 'http://localhost:8000';
 const BACKEND_AVAILABLE = rawBackendUrl.startsWith('http');
 
+interface BackendApiResponse<T> {
+  status?: string;
+  data?: T;
+  error?: string;
+  detail?: string;
+}
+
+interface VideoProcessJobResponse {
+  job_id: string;
+  video_url?: string;
+  status?: string;
+}
+
 export const runtime = 'nodejs';
-export const maxDuration = 30;
+/** Sync route — short budget; use /api/pipeline/stream or async=true for long runs. */
+export const maxDuration = 60;
+
+export const MAX_DURATION_MS = maxDuration * 1000;
+
+/** Health probe budget for Cloud Run cold start + TLS. */
+export const PIPELINE_HEALTH_TIMEOUT_MS = 5_000;
+/** Backend video-to-software cap — clamped to remaining request budget. */
+export const PIPELINE_BACKEND_TIMEOUT_MS = 50_000;
+/** Gemini fallback cap — only runs if backend left enough wall-clock time. */
+export const PIPELINE_GEMINI_TIMEOUT_MS = 15_000;
+
+/** Tracks elapsed time so sequential fallback steps stay within maxDuration. */
+export class PipelineDeadline {
+  constructor(private readonly endsAt: number) {}
+
+  static fromMaxDuration(): PipelineDeadline {
+    return new PipelineDeadline(Date.now() + MAX_DURATION_MS);
+  }
+
+  remainingMs(): number {
+    return Math.max(0, this.endsAt - Date.now());
+  }
+
+  budgetMs(requestedMs: number): number {
+    return Math.min(requestedMs, this.remainingMs());
+  }
+
+  signalFor(requestedMs: number): AbortSignal {
+    const ms = this.budgetMs(requestedMs);
+    if (ms <= 0) {
+      throw new Error('Pipeline deadline exceeded');
+    }
+    return timeoutSignal(ms);
+  }
+
+  async runWithBudget<T>(
+    promise: Promise<T>,
+    requestedMs: number,
+    label: string,
+  ): Promise<T> {
+    const ms = this.budgetMs(requestedMs);
+    if (ms <= 0) {
+      throw new Error(`${label}: pipeline deadline exceeded`);
+    }
+    return withTimeout(promise, ms, label);
+  }
+}
 
 function backendHost(): string | null {
   if (!BACKEND_AVAILABLE) return null;
@@ -38,7 +99,7 @@ async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): P
   }
 }
 
-async function checkBackendHealth(timeoutMs = 1500): Promise<{ configured: boolean; available: boolean; host: string | null; reason?: string }> {
+async function checkBackendHealth(timeoutMs = PIPELINE_HEALTH_TIMEOUT_MS): Promise<{ configured: boolean; available: boolean; host: string | null; reason?: string }> {
   if (!BACKEND_AVAILABLE) {
     return { configured: false, available: false, host: null, reason: 'BACKEND_URL is not configured' };
   }
@@ -192,19 +253,67 @@ export async function POST(request: Request) {
 
     await publishEvent(EventTypes.VIDEO_RECEIVED, { url, pipeline: 'end-to-end' }, url);
 
+    const deadline = PipelineDeadline.fromMaxDuration();
+    const asyncMode = body.async === true || body.async === 'true';
+
+    // ── Strategy 0: Async kickoff (returns job_id immediately) ──
+    if (asyncMode && BACKEND_AVAILABLE) {
+      try {
+        const response = await fetch(`${BACKEND_URL}/api/v1/videos/process`, {
+          method: 'POST',
+          headers: backendHeaders(),
+          body: JSON.stringify({
+            video_url: url,
+            language: stringValue(body.language, 'en'),
+          }),
+          signal: deadline.signalFor(10_000),
+        });
+
+        const payload = (await response.json()) as BackendApiResponse<VideoProcessJobResponse>;
+        const jobId = payload.data?.job_id;
+
+        if (response.ok && jobId) {
+          return NextResponse.json({
+            id: jobId,
+            status: 'pending',
+            pipeline: 'backend-async',
+            async_processing: true,
+            job_id: jobId,
+            status_url: `/api/jobs/${jobId}`,
+          });
+        }
+
+        return NextResponse.json(
+          {
+            error: 'Async video job kickoff failed',
+            detail: payload.error || payload.detail || `HTTP ${response.status}`,
+          },
+          { status: response.ok ? 502 : response.status },
+        );
+      } catch (e) {
+        return NextResponse.json(
+          {
+            error: 'Async pipeline kickoff failed',
+            detail: e instanceof Error ? e.message : String(e),
+          },
+          { status: 502 },
+        );
+      }
+    }
+
     // ── Strategy 1: Full backend pipeline (FastAPI video-to-software) ──
-    if (BACKEND_AVAILABLE) {
+    if (BACKEND_AVAILABLE && deadline.remainingMs() > 1_000) {
       try {
         const response = await fetch(`${BACKEND_URL}/api/v1/video-to-software`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...(process.env.EVENTRELAY_API_KEY ? { 'X-API-Key': process.env.EVENTRELAY_API_KEY } : {}) },
+          headers: backendHeaders(),
           body: JSON.stringify({
             video_url: url,
             project_type,
             deployment_target,
             features,
           }),
-          signal: timeoutSignal(4_000),
+          signal: deadline.signalFor(PIPELINE_BACKEND_TIMEOUT_MS),
         });
 
         if (response.ok) {
@@ -241,12 +350,12 @@ export async function POST(request: Request) {
     }
 
     // ── Strategy 2: Gemini analysis (video intelligence only, no deployment) ──
-    if (hasGeminiKey()) {
+    if (hasGeminiKey() && deadline.remainingMs() > 1_000) {
       try {
         const startTime = Date.now();
-        const analysis = await withTimeout(
+        const analysis = await deadline.runWithBudget(
           analyzeVideoWithGemini(url),
-          5_000,
+          PIPELINE_GEMINI_TIMEOUT_MS,
           'Gemini analysis',
         );
         const elapsed = Date.now() - startTime;
@@ -284,7 +393,7 @@ export async function POST(request: Request) {
       }
     }
 
-    const backend = await checkBackendHealth();
+    const backend = await checkBackendHealth(deadline.budgetMs(PIPELINE_HEALTH_TIMEOUT_MS) || PIPELINE_HEALTH_TIMEOUT_MS);
     const fallback = buildLocalFallbackPipeline({
       url,
       projectType: project_type,
