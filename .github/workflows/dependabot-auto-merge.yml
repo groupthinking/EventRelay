@@ -97,6 +97,12 @@ jobs:
                 pull_number: pullRequestRef.number,
               });
 
+              if (pullRequest.head?.sha !== context.payload.check_suite.head_sha) {
+                core.info(
+                  `Skipping PR #${pullRequest.number} because the check suite SHA does not match the PR head SHA.`,
+                );
+                continue;
+              }
               if (pullRequest.user.login !== 'dependabot[bot]') {
                 core.info(`Skipping PR #${pullRequest.number} because it was not opened by Dependabot.`);
                 continue;
