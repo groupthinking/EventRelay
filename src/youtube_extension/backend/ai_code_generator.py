@@ -718,7 +718,7 @@ TASK: Generate {description}
             errors.append({"message": "Empty code", "line": None, "offset": None})
             return {"valid": False, "errors": errors}
 
-        if stripped.startswith("// Error:") or stripped.startswith("/* Error:"):
+        if stripped.startswith("// Error") or stripped.startswith("/* Error"):
             errors.append(
                 {
                     "message": "Code generation error marker detected",
@@ -777,7 +777,7 @@ TASK: Generate {description}
                 )
 
         path.parent.mkdir(parents=True, exist_ok=True)
-        with open(path, "w") as f:
+        with open(path, "w", encoding="utf-8") as f:
             f.write(content)
 
     def _tailwind_config(self) -> str:

@@ -389,6 +389,11 @@ class TestAICodeGeneratorValidateTypescriptSyntax:
         code = "// Error: LLM router returned no code\n// Please implement manually"
         assert gen.validate_typescript_syntax(code)["valid"] is False
 
+    def test_error_generating_marker_returns_valid_false(self, tmp_path):
+        gen = AICodeGenerator(output_dir=str(tmp_path))
+        code = "// Error generating MyComponent: timeout\n// Please implement manually"
+        assert gen.validate_typescript_syntax(code)["valid"] is False
+
     def test_unbalanced_open_brace_returns_valid_false(self, tmp_path):
         gen = AICodeGenerator(output_dir=str(tmp_path))
         assert gen.validate_typescript_syntax("const x = {")["valid"] is False
