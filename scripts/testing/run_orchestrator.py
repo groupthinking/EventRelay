@@ -11,11 +11,6 @@ Usage examples:
 
   # DAG parallel mode
   python scripts/testing/run_orchestrator.py --video-id ftBWgcwvEk4 --mode dag
-
-This wraps the existing:
-  from agents.pipeline_orchestrator import run_video_to_software, run_video_to_software_parallel
-
-It is the canonical way to "fire a real VideoPipelineOrchestrator run".
 """
 import argparse
 import asyncio
@@ -52,7 +47,6 @@ def build_video_url(args):
 async def main_async(args):
     video_url = build_video_url(args)
 
-    # Environment hints for mock / real mode
     if args.mock:
         os.environ.setdefault("USE_MOCK_SERVERS", "true")
         os.environ.setdefault("REAL_MODE", "false")
@@ -87,14 +81,17 @@ async def main_async(args):
             print(f"Total duration (ms): {result.get('total_duration_ms')}")
             if result.get("error"):
                 print(f"Error: {result['error']}")
-            # Show per-agent high-level status if present
             stages = result.get("stages", {}) or result.get("results", {})
             if stages:
                 print("\nPer-stage:")
                 for sid, data in stages.items():
-                    ok = data.get("success") if isinstance(data, dict) else "?"
-                    dur = data.get("duration_ms") if isinstance(data, dict) else "?"
-                    print(f"  {sid}: success={ok} duration_ms={dur}")
+                    if isinstance(data, dict):
+                        ok = data.get("success")
+                        dur = data.get("duration_ms")
+                        err = str(data.get("error", ""))[:50]
+                        print(f"  {sid}: success={ok} duration_ms={dur} err={err}")
+                    else:
+                        print(f"  {sid}: {data}")
 
         return 0 if result.get("success") else 1
 

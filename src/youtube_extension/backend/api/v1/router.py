@@ -30,6 +30,8 @@ from youtube_extension.services.cloud.cloud_tasks_queue import (
     TaskConfig,
     VideoProcessingTask,
 )
+from youtube_extension.services.pipeline_audit_store import get_audit_store
+from youtube_extension.services.pipeline_job_store import get_job_store
 from youtube_extension.services.workflows.transcript_action_workflow import (
     TranscriptActionWorkflow,
 )
@@ -266,7 +268,9 @@ async def get_capabilities_v1(
     try:
         # Check Gemini availability via the hybrid processor service
         gemini_available = hybrid_processor is not None
-        gemini_model = "gemini-2.0-flash" if gemini_available else None
+        gemini_model = (
+            hybrid_processor.config.gemini.model_name if gemini_available else None
+        )
 
         # Check which video processors are available
         available_processors = []
@@ -1088,6 +1092,26 @@ _agent_executions: dict[str, AgentExecution] = {}
 _dispatches: dict[str, AgentDispatchResponse] = {}
 
 
+def _persist_video_job(job: VideoJobStatusResponse) -> None:
+    _video_jobs[job.job_id] = job
+    try:
+        get_job_store().save(job.job_id, job.model_dump())
+    except Exception as exc:
+        logger.warning("Job persist failed for %s: %s", job.job_id, exc)
+
+
+def _load_video_job(job_id: str) -> Optional[VideoJobStatusResponse]:
+    cached = _video_jobs.get(job_id)
+    if cached is not None:
+        return cached
+    raw = get_job_store().load(job_id)
+    if not raw:
+        return None
+    job = VideoJobStatusResponse(**raw)
+    _video_jobs[job_id] = job
+    return job
+
+
 def _absolute_status_url(request: Request, job_id: str) -> str:
     base_url = str(request.base_url).rstrip("/")
     return f"{base_url}/api/v1/videos/{job_id}/status"
@@ -1112,7 +1136,7 @@ async def _queue_transcript_action_job(
             "duration_seconds": TranscriptActionWorkflow.get_duration_seconds(metadata),
         },
     )
-    _video_jobs[job_id] = job
+    _persist_video_job(job)
 
     video_request = VideoProcessJobRequest(
         video_url=request.video_url,
@@ -1201,6 +1225,17 @@ async def _queue_transcript_action_job(
 
 
 @router.post(
+    "/video/analyze",
+    response_model=ApiResponse,
+    summary="Analyze video (YouTube-to-Repo MVP alias)",
+    tags=["Jobs"],
+)
+async def video_analyze_alias(request: VideoProcessJobRequest):
+    """see-script-ship contract alias for /videos/process."""
+    return await start_video_processing(request)
+
+
+@router.post(
     "/videos/process",
     response_model=ApiResponse,
     summary="Start async video processing",
@@ -1215,7 +1250,7 @@ async def start_video_processing(request: VideoProcessJobRequest):
         progress=0.0,
         video_url=request.video_url,
     )
-    _video_jobs[job_id] = job
+    _persist_video_job(job)
 
     asyncio.create_task(_run_video_job(job_id, request))
 
@@ -1234,14 +1269,19 @@ async def _run_video_job(
     transcript_text: str | None = None,
 ):
     """Background coroutine that drives the transcript-action workflow."""
-    job = _video_jobs[job_id]
+    job = _load_video_job(job_id)
+    if job is None:
+        logger.error("Video job %s missing at run time", job_id)
+        return
     try:
         job.status = JobStatus.downloading
         job.progress = 10.0
+        _persist_video_job(job)
 
         workflow = TranscriptActionWorkflow()
         job.status = JobStatus.transcribing
         job.progress = 30.0
+        _persist_video_job(job)
 
         result = await workflow.run(
             video_url=request.video_url,
@@ -1272,9 +1312,11 @@ async def _run_video_job(
             job.error = "; ".join(str(error) for error in errors if error) or (
                 "Transcript-action workflow failed"
             )
+        _persist_video_job(job)
     except Exception as exc:
         job.status = JobStatus.failed
         job.error = str(exc)
+        _persist_video_job(job)
         logger.error(f"Video job {job_id} failed: {exc}")
 
 
@@ -1314,16 +1356,17 @@ async def process_video_task(
             detail="Missing or invalid 'video_url' in task payload",
         )
 
-    job = _video_jobs.setdefault(
-        job_id,
-        VideoJobStatusResponse(
+    job = _load_video_job(job_id)
+    if job is None:
+        job = VideoJobStatusResponse(
             job_id=job_id,
             status=JobStatus.pending,
             progress=0.0,
             video_url=video_url,
-        ),
-    )
+        )
+        _persist_video_job(job)
     job.status = JobStatus.pending
+    _persist_video_job(job)
     await _run_video_job(
         job_id,
         VideoProcessJobRequest(
@@ -1349,10 +1392,45 @@ async def process_video_task(
 )
 async def get_video_job_status(job_id: str):
     """Return the current status of a video-processing job."""
-    job = _video_jobs.get(job_id)
+    job = _load_video_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
     return ApiResponse.success(job.model_dump())
+
+
+@router.get(
+    "/jobs/{job_id}",
+    response_model=ApiResponse,
+    summary="Poll job status (see-script-ship alias)",
+    tags=["Jobs"],
+)
+async def get_job_status_alias(job_id: str):
+    """Alias for /videos/{job_id}/status — YouTube-to-Repo MVP contract."""
+    return await get_video_job_status(job_id)
+
+
+@router.get(
+    "/audit/pipeline",
+    response_model=ApiResponse,
+    summary="List recent pipeline audit runs",
+    tags=["Audit"],
+)
+async def list_pipeline_audit_runs(limit: int = 20):
+    runs = get_audit_store().list_runs(limit=limit)
+    return ApiResponse.success({"runs": runs, "count": len(runs)})
+
+
+@router.get(
+    "/audit/pipeline/{run_id}",
+    response_model=ApiResponse,
+    summary="Get pipeline audit trail for a run",
+    tags=["Audit"],
+)
+async def get_pipeline_audit_run(run_id: str):
+    entries = get_audit_store().get_run(run_id)
+    if not entries:
+        raise HTTPException(status_code=404, detail=f"Audit run {run_id} not found")
+    return ApiResponse.success({"run_id": run_id, "entries": entries, "count": len(entries)})
 
 
 # ============================================================
@@ -1371,7 +1449,7 @@ async def extract_events(request: EventExtractRequest):
     transcript_text = request.transcript
 
     if request.job_id:
-        job = _video_jobs.get(request.job_id)
+        job = _load_video_job(request.job_id)
         if not job:
             raise HTTPException(
                 status_code=404, detail=f"Job {request.job_id} not found"

@@ -425,9 +425,10 @@ class TestGetVideoMetadata:
 
 
 class TestGetMetadataYouTubeApi:
-    async def test_no_api_key_raises(self):
+    async def test_no_api_key_raises(self, monkeypatch):
+        monkeypatch.delenv("YOUTUBE_API_KEY", raising=False)
         svc = RobustYouTubeService(api_key=None)
-        svc.session = MagicMock(spec=httpx.AsyncClient)
+        assert svc.youtube_api_key is None
         with pytest.raises(Exception, match="YouTube API key required"):
             await svc._get_metadata_youtube_api(VIDEO_ID)
 
