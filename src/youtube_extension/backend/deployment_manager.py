@@ -632,7 +632,7 @@ class DeploymentManager:
                             if response.status == 201:
                                 blob_result = await response.json()
                                 tree_items.append({
-                                    "path": str(relative_path).replace("\\\\", "/"),
+                                    "path": str(relative_path).replace("\\", "/"),
                                     "mode": "100644",
                                     "type": "blob",
                                     "sha": blob_result["sha"]

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import os
 import re
 import subprocess
@@ -47,7 +46,6 @@ from youtube_extension.backend.deployment_manager import (  # noqa: E402
     get_deployment_manager,
     validate_deployment_environment,
 )
-
 
 # ===========================================================================
 # Helpers
@@ -1206,7 +1204,7 @@ class TestUploadToGithub:
             elif "commits" in url:
                 resp.json = AsyncMock(return_value={"tree": {"sha": "tsha"}})
             return _make_aiohttp_ctx(resp)
-            
+
         def mock_post(url, *args, **kwargs):
             resp = MagicMock()
             resp.status = 201
@@ -1216,12 +1214,12 @@ class TestUploadToGithub:
                 resp.json = AsyncMock(return_value={"sha": "ntsha"})
             elif "commits" in url:
                 resp.json = AsyncMock(return_value={"sha": "ncsha"})
-            
+
             cm = MagicMock()
             cm.__aenter__ = AsyncMock(return_value=resp)
             cm.__aexit__ = AsyncMock(return_value=False)
             return cm
-            
+
         def mock_patch(url, *args, **kwargs):
             resp = MagicMock()
             resp.status = 200
@@ -1263,7 +1261,7 @@ class TestUploadToGithub:
             elif "commits" in url:
                 resp.json = AsyncMock(return_value={"tree": {"sha": "tsha"}})
             return _make_aiohttp_ctx(resp)
-            
+
         def mock_post(url, *args, **kwargs):
             resp = MagicMock()
             resp.status = 201
@@ -1272,7 +1270,7 @@ class TestUploadToGithub:
             cm.__aenter__ = AsyncMock(return_value=resp)
             cm.__aexit__ = AsyncMock(return_value=False)
             return cm
-            
+
         def mock_patch(url, *args, **kwargs):
             resp = MagicMock()
             resp.status = 200
@@ -1297,7 +1295,7 @@ class TestUploadToGithub:
         assert result["files_uploaded"] == 1
         assert "app.ts" in result["file_list"][0]
 
-    async def test_does_not_skip_dotfiles(self, tmp_path) -> None:
+    async def test_uploads_dotfiles(self, tmp_path) -> None:
         mgr = _make_manager(github_token="tok")
 
         (tmp_path / ".env").write_text("SECRET=abc")
@@ -1313,7 +1311,7 @@ class TestUploadToGithub:
             elif "commits" in url:
                 resp.json = AsyncMock(return_value={"tree": {"sha": "tsha"}})
             return _make_aiohttp_ctx(resp)
-            
+
         def mock_post(url, *args, **kwargs):
             resp = MagicMock()
             resp.status = 201
@@ -1322,7 +1320,7 @@ class TestUploadToGithub:
             cm.__aenter__ = AsyncMock(return_value=resp)
             cm.__aexit__ = AsyncMock(return_value=False)
             return cm
-            
+
         def mock_patch(url, *args, **kwargs):
             resp = MagicMock()
             resp.status = 200
@@ -1369,7 +1367,7 @@ class TestUploadToGithub:
             else:
                 resp.status = 201
                 resp.json = AsyncMock(return_value={"sha": "msha"})
-            
+
             cm = MagicMock()
             cm.__aenter__ = AsyncMock(return_value=resp)
             cm.__aexit__ = AsyncMock(return_value=False)
