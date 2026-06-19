@@ -3,6 +3,7 @@
 # --- Archives ---
 # --- Build Artifacts ---
 # --- Data & Models ---
+data/jobs/
 data/knowledge_base.json
 data/mcp_contexts/
 # --- Dependencies ---
