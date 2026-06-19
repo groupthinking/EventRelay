@@ -12,7 +12,12 @@ import type { Video } from '@/store/dashboard-store';
 
 // ============================================
 // Helper
-// ============================================
+/**
+ * Create a YouTube embed URL from a supported YouTube link.
+ *
+ * @param url - The YouTube URL to convert. Supported formats include short links (youtu.be/), embed URLs, /v/ paths, and watch URLs with `v=` (including additional query parameters).
+ * @returns The embed URL `https://www.youtube.com/embed/<id>` if a video ID can be extracted from `url`, `null` otherwise.
+ */
 function getYouTubeEmbedUrl(url: string) {
   if (!url) return null;
   const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([^&?]+)/);
@@ -62,7 +67,13 @@ function ProcessingStage({
 
 // ============================================
 // Split View (Active State)
-// ============================================
+/**
+ * Renders a split view for a selected video: left panel with player, metadata and processing controls, and right panel with tabbed intelligence (Summary, Transcript, Actions).
+ *
+ * @param video - Video object containing title, url, status, progress, transcript, insights, events, and related metadata used to populate the view.
+ * @param onClose - Callback invoked when the user closes the split view (e.g., returns to the library).
+ * @returns The split-view React element for inspecting and interacting with the selected video.
+ */
 function SplitView({
   video,
   onClose,
@@ -346,7 +357,14 @@ function SplitView({
 
 // ============================================
 // Video Card Component (Library View)
-// ============================================
+/**
+ * Render a clickable video library card that shows the thumbnail, title, URL, status badge,
+ * progress indicator when processing, pipeline stage pills while processing, and brief insights when complete.
+ *
+ * @param video - The video object to display (title, url, thumbnail, status, progress, insights, events).
+ * @param onClick - Callback invoked when the card is clicked.
+ * @returns The rendered JSX element for the video card.
+ */
 function VideoCard({
   video,
   onClick
@@ -446,7 +464,13 @@ function VideoCard({
 
 // ============================================
 // Dashboard Content wrapper
-// ============================================
+/**
+ * Render the dashboard content area: top navigation, new-video input, library filters/grid, and a split view for a selected video.
+ *
+ * The component synchronizes the `video` query parameter with store selection and can start processing a provided YouTube URL. It also manages local input and filter state and displays processing counts and the user's video library.
+ *
+ * @returns The dashboard UI as a React element
+ */
 function DashboardContent() {
   const searchParams = useSearchParams();
   const [videoUrl, setVideoUrl] = useState('');

@@ -34,4 +34,10 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
+    """
+    Provide a cached application Settings instance loaded from environment variables using the EVENTRELAY_ prefix.
+    
+    Returns:
+        Settings: The application's configuration object.
+    """
     return Settings()

@@ -41,10 +41,29 @@ _SCHEMA = {
 
 
 def _prompt(transcript: str) -> str:
+    """
+    Builds the LLM user prompt by embedding the transcript and instructing the model to extract events.
+    
+    Parameters:
+        transcript (str): The transcript text to include in the prompt.
+    
+    Returns:
+        str: A formatted prompt containing the transcript followed by an instruction to extract events.
+    """
     return f"Transcript:\n\n{transcript}\n\nExtract the events."
 
 
 async def extract_events(transcript: str, llm: LLMClient) -> list[Event]:
+    """
+    Extracts typed Event objects from a transcript by calling the provided LLM with a JSON schema.
+    
+    Parameters:
+    	transcript (str): Transcript text to extract events from.
+    	llm (LLMClient): LLM client used to generate schema-constrained JSON (omitted for services in param docs only when not necessary, included here for clarity).
+    
+    Returns:
+    	events (list[Event]): List of extracted Event instances; each event has a `type` string and a `payload` dict (defaults to an empty dict if absent).
+    """
     logger.info("extract_events: calling LLMClient", extra={"transcript_length": len(transcript)})
     try:
         data = await llm.generate_json(system=_SYSTEM, prompt=_prompt(transcript), schema=_SCHEMA)

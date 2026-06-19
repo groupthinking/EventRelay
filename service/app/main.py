@@ -14,6 +14,14 @@ from .config import get_settings
 
 
 def create_app() -> FastAPI:
+    """
+    Create and configure the FastAPI application for the service.
+    
+    Configures application metadata from settings, applies CORS middleware permitting frontend cross-origin requests, and registers the v1 API router.
+    
+    Returns:
+        A configured FastAPI application instance with title/version from settings, CORS middleware, and the v1 router included.
+    """
     settings = get_settings()
     app = FastAPI(title=settings.app_name, version=settings.app_version)
     

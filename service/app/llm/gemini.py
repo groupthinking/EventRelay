@@ -21,11 +21,29 @@ logger = logging.getLogger(__name__)
 
 class GeminiLLMClient:
     def __init__(self, api_key: str, model: str = "gemini-2.5-flash") -> None:
+        """
+        Create a GeminiLLMClient configured with an API key and model name.
+        
+        Parameters:
+            api_key (str): API key used to authenticate requests to the Gemini (google-genai) service.
+            model (str): Model identifier to use for generation (defaults to "gemini-2.5-flash").
+        """
         self._api_key = api_key
         self._model = model
         self._client: Any | None = None
 
     def _ensure_client(self) -> Any:
+        """
+        Ensure a cached google.genai.Client is created and return it.
+        
+        Creates and caches a genai.Client using the instance API key on first call and returns the cached client thereafter.
+        
+        Returns:
+            The cached `google.genai.Client` instance.
+        
+        Raises:
+            LLMError: If the `google-genai` package is not installed (the original ImportError is set as the cause).
+        """
         if self._client is None:
             try:
                 from google import genai
@@ -37,6 +55,20 @@ class GeminiLLMClient:
     async def generate_json(
         self, *, system: str, prompt: str, schema: dict[str, Any]
     ) -> dict[str, Any]:
+        """
+        Generate JSON output from the model that conforms to the provided schema.
+        
+        Parameters:
+        	system (str): System instruction passed to the model as the system-level context.
+        	prompt (str): Text prompt sent to the model as the content to complete.
+        	schema (dict[str, Any]): Response schema describing the expected JSON structure (used as the model's response_schema).
+        
+        Returns:
+        	dict[str, Any]: The parsed top-level JSON object produced by the model.
+        
+        Raises:
+        	LLMError: If the underlying model API call fails, if the model response is not valid JSON, or if the parsed JSON is not an object.
+        """
         client = self._ensure_client()
         schema_summary = {k: type(v).__name__ for k, v in list(schema.items())[:3]}
         logger.info(
@@ -49,6 +81,15 @@ class GeminiLLMClient:
         )
 
         def _call() -> str:
+            """
+            Call the Gemini client to generate content using the provided system instruction, prompt, and response schema and return the model's raw text output.
+            
+            Returns:
+                str: The model response text, or an empty string if the response has no text.
+            
+            Raises:
+                LLMError: If the underlying model API call fails.
+            """
             from google.genai import types
 
             try:

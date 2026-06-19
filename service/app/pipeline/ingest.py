@@ -18,9 +18,17 @@ _ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
 
 
 def extract_video_id(video_url: str) -> str:
-    """Parse a YouTube URL and return its canonical 11-char video id.
-
-    Raises InvalidInput for anything that is not a supported YouTube video URL.
+    """
+    Extract the canonical 11-character YouTube video ID from a supported YouTube URL.
+    
+    Parameters:
+        video_url (str): A YouTube URL in one of the supported forms (e.g. youtu.be/<id>, /watch?v=<id>, /embed/<id>, /shorts/<id>, /v/<id>).
+    
+    Returns:
+        str: The validated 11-character YouTube video ID.
+    
+    Raises:
+        InvalidInput: If `video_url` is missing or not a string; if the URL scheme is not http(s); if the hostname is not an allowed YouTube host; if a video id cannot be located in the URL; or if the located id is not a valid 11-character YouTube id.
     """
     if not video_url or not isinstance(video_url, str):
         raise InvalidInput("video_url is required")

@@ -78,7 +78,13 @@ interface DashboardState {
 
 // ── Contract → view mappers ──
 
-/** Trim a URL for display in titles/activity. */
+/**
+ * Create a display-friendly string truncated to at most `max` characters.
+ *
+ * @param value - The input string (e.g., a URL) to truncate
+ * @param max - Maximum allowed length of the returned string, including the ellipsis if added
+ * @returns The original string when its length is less than or equal to `max`; otherwise a truncated string that ends with the Unicode ellipsis character `…`
+ */
 function truncate(value: string, max: number): string {
   return value.length > max ? value.substring(0, max - 3) + '…' : value;
 }
@@ -90,7 +96,19 @@ const EXTRACTED_TYPES: ReadonlySet<ExtractedEvent['type']> = new Set([
   'insight',
 ]);
 
-/** Map a backend `<domain>.<entity>.<action>` event onto the display shape. */
+/**
+ * Convert a backend EventItem into a normalized ExtractedEvent suitable for display.
+ *
+ * @param e - Backend event object containing `type`, `payload`, and `ts`.
+ * @param i - Zero-based index used to generate the event `id` as `evt_<i>`.
+ * @returns The normalized ExtractedEvent:
+ * - `id`: `evt_<i>`
+ * - `type`: first taxonomy segment present in `EXTRACTED_TYPES`, or `'topic'` if none
+ * - `title`: `payload.title` or `payload.name` or `payload.text`, falling back to the original `e.type`
+ * - `description`: `payload.description` (if present)
+ * - `timestamp`: `payload.timestamp` or `e.ts`
+ * - `confidence`: numeric `payload.confidence` or `0.8` by default
+ */
 function toExtractedEvent(e: EventItem, i: number): ExtractedEvent {
   const p = e.payload ?? {};
   // Display category comes from whichever taxonomy segment names one
@@ -111,7 +129,12 @@ function toExtractedEvent(e: EventItem, i: number): ExtractedEvent {
   };
 }
 
-/** Map SC4 artifacts onto the dashboard's insights block. */
+/**
+ * Convert backend Artifacts into the dashboard's insights object.
+ *
+ * @param a - Artifacts returned by the backend (may contain `insights`, `tasks`, and `summary`)
+ * @returns An insights object with `summary`, `actions`, `sentiment`, and `topics` populated from `a`. `actions` is derived from `a.tasks` (each task becomes an action with category `Task`), `sentiment` falls back to `"Neutral"` when not provided as a string, and `topics` is an array when available.
+ */
 function toInsights(a: Artifacts): NonNullable<Video['insights']> {
   const ins = a.insights ?? {};
   return {

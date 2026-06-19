@@ -20,19 +20,44 @@ from .models import Base, EventRow, Job
 
 class SqlAlchemyJobStore:
     def __init__(self, dsn: str) -> None:
+        """
+        Initialize the SQLAlchemy-based job store with an async engine and session factory.
+        
+        Parameters:
+            dsn (str): Database connection string (Data Source Name) used to create the async engine.
+        """
         self._engine = create_async_engine(dsn, pool_pre_ping=True)
         self._session: async_sessionmaker[AsyncSession] = async_sessionmaker(
             self._engine, expire_on_commit=False
         )
 
     async def init_models(self) -> None:
-        """Create tables. Production uses Alembic migrations instead; this is a
-        convenience for local Postgres bring-up."""
+        """
+        Create database tables for all ORM models defined on Base.
+        
+        This is a convenience for local development; production deployments should use migrations.
+        """
         async with self._engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
 
     @staticmethod
     def _to_record(job: Job) -> JobRecord:
+        """
+        Convert a SQLAlchemy Job ORM instance into a domain JobRecord.
+        
+        Parameters:
+        	job (Job): ORM Job instance whose fields, related events, and artifacts will be mapped to a JobRecord.
+        
+        Returns:
+        	JobRecord: Domain record with mapped fields:
+        	- job_id: job.id
+        	- video_url: job.video_url
+        	- status: JobStatus created from job.status
+        	- idempotency_key: job.idempotency_key
+        	- created_at, updated_at, error, transcript: copied from the ORM object
+        	- events: list of Event objects built from job.events
+        	- artifacts: Artifacts constructed from job.artifacts or `None` if absent
+        """
         return JobRecord(
             job_id=job.id,
             video_url=job.video_url,
@@ -47,6 +72,16 @@ class SqlAlchemyJobStore:
         )
 
     async def create_or_get(self, video_url: str, idempotency_key: str) -> tuple[JobRecord, bool]:
+        """
+        Fetches a job by idempotency key or creates a new queued job when none exists.
+        
+        Parameters:
+            video_url (str): URL of the video the job will process.
+            idempotency_key (str): Key used to deduplicate/create a single job for the same request.
+        
+        Returns:
+            tuple[JobRecord, bool]: The job record and `True` if a new job was created, `False` otherwise.
+        """
         async with self._session() as s:
             existing = (
                 await s.execute(
@@ -70,6 +105,15 @@ class SqlAlchemyJobStore:
             return self._to_record(job), True
 
     async def get(self, job_id: str) -> JobRecord | None:
+        """
+        Retrieve a job by its primary key, loading its associated events.
+        
+        Parameters:
+            job_id (str): The job's primary key (UUID string).
+        
+        Returns:
+            JobRecord | None: `JobRecord` for the job if found, `None` otherwise.
+        """
         async with self._session() as s:
             job = (
                 await s.execute(
@@ -79,6 +123,19 @@ class SqlAlchemyJobStore:
             return self._to_record(job) if job else None
 
     async def update_status(self, job_id: str, status: JobStatus, error: str | None = None) -> None:
+        """
+        Set a job's status and optional error message.
+        
+        Update the persisted job identified by `job_id` to the provided `status` and `error`. Raises KeyError if no job with `job_id` exists.
+        
+        Parameters:
+            job_id (str): Primary key of the job to update.
+            status (JobStatus): New status to assign to the job.
+            error (str | None): Optional error message to store on the job; use None to clear any existing error.
+        
+        Raises:
+            KeyError: If no job with `job_id` exists.
+        """
         async with self._session() as s:
             job = await s.get(Job, job_id)
             if job is None:
@@ -95,6 +152,18 @@ class SqlAlchemyJobStore:
         events: list[Event],
         artifacts: Artifacts,
     ) -> None:
+        """
+        Persist the transcript, artifacts, and event list for a job, replacing any existing events.
+        
+        Parameters:
+            job_id (str): Identifier of the job to update.
+            transcript (str): Final transcript text to store on the job.
+            events (list[Event]): Events to persist; the job's existing events are replaced with these.
+            artifacts (Artifacts): Artifacts object which will be serialized via `model_dump()` and stored.
+        
+        Raises:
+            KeyError: If no job exists with the given `job_id`.
+        """
         async with self._session() as s:
             # Eager-load existing events so the delete-orphan cascade can mark
             # them for removal when the collection is reassigned (an async lazy
