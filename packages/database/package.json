@@ -19,7 +19,7 @@
   },
   "dependencies": {
     "@dataconnect/generated": "file:src/dataconnect-generated",
-    "@prisma/client": "^5.7.0",
+    "@prisma/client": "^7.8.0",
     "@supabase/supabase-js": "^2.39.0"
   },
   "devDependencies": {
