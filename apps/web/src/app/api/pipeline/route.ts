@@ -31,9 +31,12 @@ export const MAX_DURATION_MS = maxDuration * 1000;
 /** Health probe budget for Cloud Run cold start + TLS. */
 export const PIPELINE_HEALTH_TIMEOUT_MS = 5_000;
 /** Backend video-to-software cap — clamped to remaining request budget. */
-export const PIPELINE_BACKEND_TIMEOUT_MS = 50_000;
+// Reduced from 50s to 25s to leave buffer for response serialization and overhead
+export const PIPELINE_BACKEND_TIMEOUT_MS = 25_000;
 /** Gemini fallback cap — only runs if backend left enough wall-clock time. */
 export const PIPELINE_GEMINI_TIMEOUT_MS = 15_000;
+/** Minimum time to reserve for response handling */
+export const PIPELINE_RESPONSE_BUFFER_MS = 2_000;
 
 /** Tracks elapsed time so sequential fallback steps stay within maxDuration. */
 export class PipelineDeadline {
@@ -302,7 +305,8 @@ export async function POST(request: Request) {
     }
 
     // ── Strategy 1: Full backend pipeline (FastAPI video-to-software) ──
-    if (BACKEND_AVAILABLE && deadline.remainingMs() > 1_000) {
+    // Check we have enough time left (backend timeout + response buffer)
+    if (BACKEND_AVAILABLE && deadline.remainingMs() > PIPELINE_BACKEND_TIMEOUT_MS + PIPELINE_RESPONSE_BUFFER_MS) {
       try {
         const response = await fetch(`${BACKEND_URL}/api/v1/video-to-software`, {
           method: 'POST',
