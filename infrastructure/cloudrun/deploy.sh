@@ -98,12 +98,21 @@ check_or_create_secret "YOUTUBE_API_KEY" "YOUTUBE_API_KEY"
 echo -e "${YELLOW}Step 4: Running database migrations...${NC}"
 
 if [ -n "${DATABASE_URL:-}" ]; then
-    docker run --rm \
+    MIGRATION_OUTPUT=$(docker run --rm \
         -e DATABASE_URL="${DATABASE_URL}" \
         "${IMAGE_NAME}:${TAG}" \
-        python -m alembic upgrade head && \
-        echo -e "${GREEN}✓ Database migrations applied${NC}" || \
-        echo -e "${YELLOW}⚠ Migrations skipped (alembic not configured or no pending migrations)${NC}"
+        python -m alembic upgrade head 2>&1) && \
+        echo -e "${GREEN}✓ Database migrations applied${NC}" || {
+            # Check if failure is due to alembic not being configured vs actual migration error
+            if echo "$MIGRATION_OUTPUT" | grep -qi "No module named.*alembic\|ModuleNotFoundError"; then
+                echo -e "${YELLOW}⚠ Alembic not installed in image, skipping migrations${NC}"
+            else
+                echo -e "${RED}✗ Database migration FAILED:${NC}"
+                echo "$MIGRATION_OUTPUT"
+                echo -e "${RED}Aborting deployment — schema may be incompatible with new code.${NC}"
+                exit 1
+            fi
+        }
 else
     echo -e "${YELLOW}⚠ DATABASE_URL not set, skipping migrations${NC}"
 fi

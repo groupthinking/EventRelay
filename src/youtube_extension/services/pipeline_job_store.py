@@ -116,11 +116,18 @@ class RedisJobStore(JobStore):
 
     def list_recent(self, limit: int = 50) -> list[dict[str, Any]]:
         job_ids = self._client.zrevrange(self._INDEX_KEY, 0, limit - 1)
+        if not job_ids:
+            return []
+        keys = [f"{self._KEY_PREFIX}{jid}" for jid in job_ids]
+        raw_values = self._client.mget(keys)
         records: list[dict[str, Any]] = []
-        for job_id in job_ids:
-            record = self.load(job_id)
-            if record:
-                records.append(record)
+        for raw in raw_values:
+            if not raw:
+                continue
+            try:
+                records.append(json.loads(raw))
+            except json.JSONDecodeError:
+                continue
         return records
 
     def delete(self, job_id: str) -> None:
@@ -149,8 +156,11 @@ def get_job_store() -> JobStore:
             try:
                 _job_store = RedisJobStore()
                 logger.info("Using Redis job store")
-            except (ImportError, Exception) as exc:
-                logger.warning("Redis unavailable (%s), falling back to file store", exc)
+            except ImportError as exc:
+                logger.warning("Redis package not installed (%s), falling back to file store", exc)
+                _job_store = FileJobStore()
+            except Exception as exc:
+                logger.error("Redis connection failed (%s), falling back to file store", exc)
                 _job_store = FileJobStore()
         else:
             _job_store = FileJobStore()
