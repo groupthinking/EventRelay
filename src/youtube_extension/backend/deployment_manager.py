@@ -553,7 +553,7 @@ class DeploymentManager:
         }
 
     async def _upload_to_github(self, project_path: str, repo_name: str) -> dict[str, Any]:
-        """Upload project files to GitHub repository"""
+        """Upload project files to GitHub repository using Git Trees API for atomic commit"""
         if not self.github_token:
             raise Exception("GitHub token not configured")
 
@@ -568,7 +568,6 @@ class DeploymentManager:
                 user_data = await user_response.json()
                 username = user_data["login"]
 
-            uploaded_files = []
             project_path_obj = Path(project_path)
 
             # Directories to exclude from GitHub upload (standard .gitignore patterns)
@@ -578,49 +577,113 @@ class DeploymentManager:
                 """Check if any parent directory is in the exclusion list"""
                 return any(part in EXCLUDED_DIRS for part in path.parts)
 
-            # Prepare files for concurrent upload
-            upload_tasks = []
-            semaphore = asyncio.Semaphore(10)  # Limit concurrent uploads to avoid rate limits
+            files_to_upload = []
+            for file_path in project_path_obj.rglob("*"):
+                # Skip excluded directories
+                if should_skip_path(file_path.relative_to(project_path_obj)):
+                    continue
+                if file_path.is_file():  # Dotfiles should be uploaded
+                    files_to_upload.append(file_path)
 
-            async def upload_single_file(file_path: Path, relative_path: Path):
+            if not files_to_upload:
+                return {
+                    "files_uploaded": 0,
+                    "file_list": []
+                }
+
+            # 1. Get branch reference
+            branch_url = f"https://api.github.com/repos/{username}/{repo_name}/git/refs/heads/main"
+            async with session.get(branch_url, headers=headers) as branch_response:
+                if branch_response.status != 200:
+                    error_text = await branch_response.text()
+                    raise Exception(f"Failed to get branch reference: {error_text}")
+                branch_data = await branch_response.json()
+                base_commit_sha = branch_data["object"]["sha"]
+
+            # 2. Get base tree
+            commit_url = f"https://api.github.com/repos/{username}/{repo_name}/git/commits/{base_commit_sha}"
+            async with session.get(commit_url, headers=headers) as commit_response:
+                if commit_response.status != 200:
+                    error_text = await commit_response.text()
+                    raise Exception(f"Failed to get base commit: {error_text}")
+                commit_data = await commit_response.json()
+                base_tree_sha = commit_data["tree"]["sha"]
+
+            # 3. Create blobs concurrently
+            tree_items = []
+            uploaded_files = []
+            semaphore = asyncio.Semaphore(10)
+
+            async def create_blob(file_path: Path):
+                relative_path = file_path.relative_to(project_path_obj)
                 async with semaphore:
                     try:
-                        # Read file content
                         with open(file_path, 'rb') as f:
                             content = f.read()
 
-                        # Encode content
                         encoded_content = base64.b64encode(content).decode('utf-8')
-
-                        # Upload file
-                        file_data = {
-                            "message": f"Add {relative_path}",
-                            "content": encoded_content
+                        blob_data = {
+                            "content": encoded_content,
+                            "encoding": "base64"
                         }
 
-                        upload_url = f"https://api.github.com/repos/{username}/{repo_name}/contents/{relative_path}"
-                        async with session.put(upload_url, headers=headers, json=file_data) as response:
-                            if response.status in [201, 200]:
+                        blob_url = f"https://api.github.com/repos/{username}/{repo_name}/git/blobs"
+                        async with session.post(blob_url, headers=headers, json=blob_data) as response:
+                            if response.status == 201:
+                                blob_result = await response.json()
+                                tree_items.append({
+                                    "path": str(relative_path).replace("\\\\", "/"),
+                                    "mode": "100644",
+                                    "type": "blob",
+                                    "sha": blob_result["sha"]
+                                })
                                 uploaded_files.append(str(relative_path))
                             else:
                                 error_text = await response.text()
-                                logger.warning(f"Failed to upload {relative_path}: {error_text}")
-
+                                raise Exception(f"Failed to create blob for {relative_path}: {error_text}")
                     except Exception as e:
-                        logger.warning(f"Error uploading {file_path}: {e}")
+                        logger.error(f"Error uploading {file_path}: {e}")
+                        raise
 
-            # Collect tasks
-            for file_path in project_path_obj.rglob("*"):
-                # Skip excluded directories and dotfiles
-                if should_skip_path(file_path.relative_to(project_path_obj)):
-                    continue
-                if file_path.is_file() and not file_path.name.startswith('.'):
-                    relative_path = file_path.relative_to(project_path_obj)
-                    upload_tasks.append(upload_single_file(file_path, relative_path))
+            # Execute blob creations and fail fast if any errors out
+            await asyncio.gather(*(create_blob(f) for f in files_to_upload))
 
-            # Execute all uploads concurrently (limited by semaphore)
-            if upload_tasks:
-                await asyncio.gather(*upload_tasks)
+            # 4. Create new tree
+            tree_data = {
+                "base_tree": base_tree_sha,
+                "tree": tree_items
+            }
+            tree_url = f"https://api.github.com/repos/{username}/{repo_name}/git/trees"
+            async with session.post(tree_url, headers=headers, json=tree_data) as tree_response:
+                if tree_response.status != 201:
+                    error_text = await tree_response.text()
+                    raise Exception(f"Failed to create tree: {error_text}")
+                new_tree_data = await tree_response.json()
+                new_tree_sha = new_tree_data["sha"]
+
+            # 5. Create new commit
+            new_commit_data = {
+                "message": "Initial project deployment from EventRelay",
+                "tree": new_tree_sha,
+                "parents": [base_commit_sha]
+            }
+            new_commit_url = f"https://api.github.com/repos/{username}/{repo_name}/git/commits"
+            async with session.post(new_commit_url, headers=headers, json=new_commit_data) as new_commit_response:
+                if new_commit_response.status != 201:
+                    error_text = await new_commit_response.text()
+                    raise Exception(f"Failed to create commit: {error_text}")
+                created_commit_data = await new_commit_response.json()
+                new_commit_sha = created_commit_data["sha"]
+
+            # 6. Update reference
+            ref_update_data = {
+                "sha": new_commit_sha,
+                "force": False
+            }
+            async with session.patch(branch_url, headers=headers, json=ref_update_data) as ref_response:
+                if ref_response.status != 200:
+                    error_text = await ref_response.text()
+                    raise Exception(f"Failed to update reference: {error_text}")
 
         return {
             "files_uploaded": len(uploaded_files),

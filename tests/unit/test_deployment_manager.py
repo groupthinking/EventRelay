@@ -1196,21 +1196,44 @@ class TestUploadToGithub:
         (tmp_path / "index.ts").write_text("const x = 1;")
         (tmp_path / "style.css").write_text("body {}")
 
-        user_resp = MagicMock()
-        user_resp.status = 200
-        user_resp.json = AsyncMock(return_value={"login": "u"})
-
-        put_resp = MagicMock()
-        put_resp.status = 201
-        put_resp.text = AsyncMock(return_value="")
+        def mock_get(url, *args, **kwargs):
+            resp = MagicMock()
+            resp.status = 200
+            if "user" in url:
+                resp.json = AsyncMock(return_value={"login": "u"})
+            elif "refs/heads" in url:
+                resp.json = AsyncMock(return_value={"object": {"sha": "csha"}})
+            elif "commits" in url:
+                resp.json = AsyncMock(return_value={"tree": {"sha": "tsha"}})
+            return _make_aiohttp_ctx(resp)
+            
+        def mock_post(url, *args, **kwargs):
+            resp = MagicMock()
+            resp.status = 201
+            if "blobs" in url:
+                resp.json = AsyncMock(return_value={"sha": "bsha"})
+            elif "trees" in url:
+                resp.json = AsyncMock(return_value={"sha": "ntsha"})
+            elif "commits" in url:
+                resp.json = AsyncMock(return_value={"sha": "ncsha"})
+            
+            cm = MagicMock()
+            cm.__aenter__ = AsyncMock(return_value=resp)
+            cm.__aexit__ = AsyncMock(return_value=False)
+            return cm
+            
+        def mock_patch(url, *args, **kwargs):
+            resp = MagicMock()
+            resp.status = 200
+            cm = MagicMock()
+            cm.__aenter__ = AsyncMock(return_value=resp)
+            cm.__aexit__ = AsyncMock(return_value=False)
+            return cm
 
         session_mock = MagicMock()
-        get_cm = _make_aiohttp_ctx(user_resp)
-        session_mock.get = MagicMock(return_value=get_cm)
-        put_cm = MagicMock()
-        put_cm.__aenter__ = AsyncMock(return_value=put_resp)
-        put_cm.__aexit__ = AsyncMock(return_value=False)
-        session_mock.put = MagicMock(return_value=put_cm)
+        session_mock.get = MagicMock(side_effect=mock_get)
+        session_mock.post = MagicMock(side_effect=mock_post)
+        session_mock.patch = MagicMock(side_effect=mock_patch)
 
         session_cm = MagicMock()
         session_cm.__aenter__ = AsyncMock(return_value=session_mock)
@@ -1230,20 +1253,38 @@ class TestUploadToGithub:
         (node_modules / "dep.js").write_text("module.exports = {}")
         (tmp_path / "app.ts").write_text("export const x = 1;")
 
-        user_resp = MagicMock()
-        user_resp.status = 200
-        user_resp.json = AsyncMock(return_value={"login": "u"})
-
-        put_resp = MagicMock()
-        put_resp.status = 201
-        put_resp.text = AsyncMock(return_value="")
+        def mock_get(url, *args, **kwargs):
+            resp = MagicMock()
+            resp.status = 200
+            if "user" in url:
+                resp.json = AsyncMock(return_value={"login": "u"})
+            elif "refs/heads" in url:
+                resp.json = AsyncMock(return_value={"object": {"sha": "csha"}})
+            elif "commits" in url:
+                resp.json = AsyncMock(return_value={"tree": {"sha": "tsha"}})
+            return _make_aiohttp_ctx(resp)
+            
+        def mock_post(url, *args, **kwargs):
+            resp = MagicMock()
+            resp.status = 201
+            resp.json = AsyncMock(return_value={"sha": "msha"})
+            cm = MagicMock()
+            cm.__aenter__ = AsyncMock(return_value=resp)
+            cm.__aexit__ = AsyncMock(return_value=False)
+            return cm
+            
+        def mock_patch(url, *args, **kwargs):
+            resp = MagicMock()
+            resp.status = 200
+            cm = MagicMock()
+            cm.__aenter__ = AsyncMock(return_value=resp)
+            cm.__aexit__ = AsyncMock(return_value=False)
+            return cm
 
         session_mock = MagicMock()
-        session_mock.get = MagicMock(return_value=_make_aiohttp_ctx(user_resp))
-        put_cm = MagicMock()
-        put_cm.__aenter__ = AsyncMock(return_value=put_resp)
-        put_cm.__aexit__ = AsyncMock(return_value=False)
-        session_mock.put = MagicMock(return_value=put_cm)
+        session_mock.get = MagicMock(side_effect=mock_get)
+        session_mock.post = MagicMock(side_effect=mock_post)
+        session_mock.patch = MagicMock(side_effect=mock_patch)
 
         session_cm = MagicMock()
         session_cm.__aenter__ = AsyncMock(return_value=session_mock)
@@ -1256,26 +1297,44 @@ class TestUploadToGithub:
         assert result["files_uploaded"] == 1
         assert "app.ts" in result["file_list"][0]
 
-    async def test_skips_dotfiles(self, tmp_path) -> None:
+    async def test_does_not_skip_dotfiles(self, tmp_path) -> None:
         mgr = _make_manager(github_token="tok")
 
         (tmp_path / ".env").write_text("SECRET=abc")
         (tmp_path / "main.ts").write_text("export const y = 2;")
 
-        user_resp = MagicMock()
-        user_resp.status = 200
-        user_resp.json = AsyncMock(return_value={"login": "u"})
-
-        put_resp = MagicMock()
-        put_resp.status = 201
-        put_resp.text = AsyncMock(return_value="")
+        def mock_get(url, *args, **kwargs):
+            resp = MagicMock()
+            resp.status = 200
+            if "user" in url:
+                resp.json = AsyncMock(return_value={"login": "u"})
+            elif "refs/heads" in url:
+                resp.json = AsyncMock(return_value={"object": {"sha": "csha"}})
+            elif "commits" in url:
+                resp.json = AsyncMock(return_value={"tree": {"sha": "tsha"}})
+            return _make_aiohttp_ctx(resp)
+            
+        def mock_post(url, *args, **kwargs):
+            resp = MagicMock()
+            resp.status = 201
+            resp.json = AsyncMock(return_value={"sha": "msha"})
+            cm = MagicMock()
+            cm.__aenter__ = AsyncMock(return_value=resp)
+            cm.__aexit__ = AsyncMock(return_value=False)
+            return cm
+            
+        def mock_patch(url, *args, **kwargs):
+            resp = MagicMock()
+            resp.status = 200
+            cm = MagicMock()
+            cm.__aenter__ = AsyncMock(return_value=resp)
+            cm.__aexit__ = AsyncMock(return_value=False)
+            return cm
 
         session_mock = MagicMock()
-        session_mock.get = MagicMock(return_value=_make_aiohttp_ctx(user_resp))
-        put_cm = MagicMock()
-        put_cm.__aenter__ = AsyncMock(return_value=put_resp)
-        put_cm.__aexit__ = AsyncMock(return_value=False)
-        session_mock.put = MagicMock(return_value=put_cm)
+        session_mock.get = MagicMock(side_effect=mock_get)
+        session_mock.post = MagicMock(side_effect=mock_post)
+        session_mock.patch = MagicMock(side_effect=mock_patch)
 
         session_cm = MagicMock()
         session_cm.__aenter__ = AsyncMock(return_value=session_mock)
@@ -1284,37 +1343,49 @@ class TestUploadToGithub:
         with patch("youtube_extension.backend.deployment_manager.aiohttp.ClientSession", return_value=session_cm):
             result = await mgr._upload_to_github(str(tmp_path), "repo")
 
-        assert result["files_uploaded"] == 1
-        assert all(not Path(f).name.startswith(".") for f in result["file_list"])
+        assert result["files_uploaded"] == 2
+        assert any(Path(f).name == ".env" for f in result["file_list"])
 
-    async def test_upload_failure_warned_but_not_raised(self, tmp_path) -> None:
+    async def test_upload_failure_raises_exception(self, tmp_path) -> None:
         mgr = _make_manager(github_token="tok")
         (tmp_path / "app.ts").write_text("export const z = 3;")
 
-        user_resp = MagicMock()
-        user_resp.status = 200
-        user_resp.json = AsyncMock(return_value={"login": "u"})
+        def mock_get(url, *args, **kwargs):
+            resp = MagicMock()
+            resp.status = 200
+            if "user" in url:
+                resp.json = AsyncMock(return_value={"login": "u"})
+            elif "refs/heads" in url:
+                resp.json = AsyncMock(return_value={"object": {"sha": "csha"}})
+            elif "commits" in url:
+                resp.json = AsyncMock(return_value={"tree": {"sha": "tsha"}})
+            return _make_aiohttp_ctx(resp)
 
-        put_fail = MagicMock()
-        put_fail.status = 500
-        put_fail.text = AsyncMock(return_value="server error")
+        def mock_post(url, *args, **kwargs):
+            resp = MagicMock()
+            if "blobs" in url:
+                resp.status = 500
+                resp.text = AsyncMock(return_value="server error")
+            else:
+                resp.status = 201
+                resp.json = AsyncMock(return_value={"sha": "msha"})
+            
+            cm = MagicMock()
+            cm.__aenter__ = AsyncMock(return_value=resp)
+            cm.__aexit__ = AsyncMock(return_value=False)
+            return cm
 
         session_mock = MagicMock()
-        session_mock.get = MagicMock(return_value=_make_aiohttp_ctx(user_resp))
-        put_cm = MagicMock()
-        put_cm.__aenter__ = AsyncMock(return_value=put_fail)
-        put_cm.__aexit__ = AsyncMock(return_value=False)
-        session_mock.put = MagicMock(return_value=put_cm)
+        session_mock.get = MagicMock(side_effect=mock_get)
+        session_mock.post = MagicMock(side_effect=mock_post)
 
         session_cm = MagicMock()
         session_cm.__aenter__ = AsyncMock(return_value=session_mock)
         session_cm.__aexit__ = AsyncMock(return_value=False)
 
         with patch("youtube_extension.backend.deployment_manager.aiohttp.ClientSession", return_value=session_cm):
-            result = await mgr._upload_to_github(str(tmp_path), "repo")
-
-        # Upload failed but no exception raised; count stays 0
-        assert result["files_uploaded"] == 0
+            with pytest.raises(Exception, match="Failed to create blob"):
+                await mgr._upload_to_github(str(tmp_path), "repo")
 
 
 # ===========================================================================
