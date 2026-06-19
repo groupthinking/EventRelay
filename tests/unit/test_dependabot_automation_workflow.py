@@ -49,13 +49,25 @@ def test_dependabot_workflow_approves_and_merges_without_checkout() -> None:
 
     assert all(step.get("uses") != "actions/checkout@v4" for step in approve_steps)
     assert all(step.get("uses") != "actions/checkout@v4" for step in merge_steps)
+    assert any(
+        step.get("uses") == "dependabot/fetch-metadata@v2"
+        and step.get("id") == "metadata"
+        for step in approve_steps
+    )
 
     assert any(
         "createReview" in step.get("with", {}).get("script", "")
         for step in approve_steps
     )
     assert any(
+        step.get("if")
+        == "steps.metadata.outputs.update-type != 'version-update:semver-major'"
+        and "enablePullRequestAutoMerge" in step.get("with", {}).get("script", "")
+        for step in approve_steps
+    )
+    assert any(
         "dependabot[bot]" in step.get("with", {}).get("script", "")
         and "pulls.merge" in step.get("with", {}).get("script", "")
+        and "version-update:semver-major" in step.get("with", {}).get("script", "")
         for step in merge_steps
     )
