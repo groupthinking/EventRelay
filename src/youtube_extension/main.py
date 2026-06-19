@@ -8,7 +8,7 @@ import logging
 import os
 
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -32,9 +32,10 @@ if _sentry_dsn:
             environment=os.getenv("ENVIRONMENT", os.getenv("VERCEL_ENV", "development")),
             traces_sample_rate=float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.1")),
             integrations=[StarletteIntegration(), FastApiIntegration()],
-            send_default_pii=False,
+            send_default_pii=True,
+            stream_gen_ai_spans=True,  # Enable for LLM monitoring (works for OpenAI-compatible including Grok/xAI via openai client)
         )
-        logger.info("Sentry initialized for backend")
+        logger.info("Sentry initialized for backend with AI monitoring")
     except Exception as exc:
         logger.warning("Sentry init skipped: %s", exc)
 
@@ -55,8 +56,6 @@ app.add_middleware(
         "http://localhost:5173",
         "http://localhost:8080",
         "http://localhost:3001",
-        "https://event-relay-web.vercel.app",
-        "https://eventrelay-production.up.railway.app",
         "https://uvai.io",
         "https://www.uvai.io",
         "https://uvaiio.vercel.app",
@@ -129,6 +128,14 @@ except Exception as e:
 async def health_check():
     """Health check endpoint"""
     return {"status": "healthy", "service": "uvai-youtube-extension"}
+
+
+@app.post("/test-sentry")
+async def test_sentry() -> None:
+    """Deliberate Sentry smoke error. Requires X-API-Key (middleware) and ALLOW_SENTRY_SMOKE=1."""
+    if os.getenv("ALLOW_SENTRY_SMOKE") != "1":
+        raise HTTPException(status_code=404, detail="Not found")
+    raise RuntimeError("sentry-smoke")
 
 
 # Root endpoint
