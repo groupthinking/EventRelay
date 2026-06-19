@@ -254,7 +254,9 @@ export async function POST(request: Request) {
     await publishEvent(EventTypes.VIDEO_RECEIVED, { url, pipeline: 'end-to-end' }, url);
 
     const deadline = PipelineDeadline.fromMaxDuration();
-    const asyncMode = body.async === true || body.async === 'true';
+    // Default to async for long-running video-to-software (prevents 524 timeouts on Vercel/Cloud Run)
+    // Sync POST kept for backward compat but discouraged (see sync note from composer terminal)
+    const asyncMode = body.async !== false && body.async !== 'false';  // default true unless explicitly false
 
     // ── Strategy 0: Async kickoff (returns job_id immediately) ──
     if (asyncMode && BACKEND_AVAILABLE) {

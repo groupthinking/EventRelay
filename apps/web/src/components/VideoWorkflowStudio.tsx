@@ -394,6 +394,7 @@ export default function VideoWorkflowStudio() {
           body: JSON.stringify({
             url: currentVideoUrl,
             outcome: selectedOutcome,
+            async: true,  // prefer async to avoid 524 on long runs (sync note)
             prompt: currentPrompt,
             project_type: selectedOutcome === 'app' ? 'web' : selectedOutcome,
             deployment_target: 'vercel',
