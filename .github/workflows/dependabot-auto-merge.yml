@@ -134,6 +134,19 @@ jobs:
                 continue;
               }
 
+              const { data: combined } = await github.rest.repos.getCombinedStatusForRef({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: pullRequest.head.sha,
+              });
+
+              if (combined.state !== 'success') {
+                core.info(
+                  `Skipping PR #${pullRequest.number} because combined status is ${combined.state}.`
+                );
+                continue;
+              }
+
               try {
                 await github.rest.pulls.merge({
                   owner: context.repo.owner,
