@@ -26,10 +26,7 @@ import { waitUntil } from '@vercel/functions';
 import { publishEvent, EventTypes } from '@/lib/cloudevents';
 import { backendHeaders, resolveBackendStatusUrl } from '@/lib/pipeline-backend';
 import { saveTrainingExample, TUNING_THRESHOLD } from '@/lib/training-store';
-<<<<<<< HEAD
-=======
 import { PipelineDeadline } from '../route';
->>>>>>> origin/main
 
 const rawBackendUrl = process.env.BACKEND_URL || '';
 const BACKEND_URL = rawBackendUrl.startsWith('http') ? rawBackendUrl : '';
@@ -40,9 +37,9 @@ export const runtime = 'nodejs';
 export const maxDuration = 240;
 
 /** Wall-clock budget for the full SSE response (poll + agent events). */
-export const STREAM_MAX_DURATION_MS = maxDuration * 1000;
+const STREAM_MAX_DURATION_MS = maxDuration * 1000;
 /** Initial transcript-action kickoff — clamped to remaining stream budget. */
-export const STREAM_BACKEND_KICKOFF_MS = 120_000;
+const STREAM_BACKEND_KICKOFF_MS = 120_000;
 
 /** Shape of each SSE message sent to the frontend. */
 interface AgentStreamEvent {

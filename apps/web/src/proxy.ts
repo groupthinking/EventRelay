@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-<<<<<<< HEAD
 import type { Redis } from '@upstash/redis';
-=======
 import { getToken } from 'next-auth/jwt';
 
 /**
@@ -11,7 +9,6 @@ import { getToken } from 'next-auth/jwt';
  * a valid NextAuth session. Server-to-server loopback calls carrying a matching
  * `x-eventrelay-internal` header (INTERNAL_REQUEST_TOKEN) bypass both.
  */
->>>>>>> origin/main
 
 const WINDOW_SECONDS = 60;
 const GENERAL_LIMIT = Number(process.env.UVAI_API_RATE_LIMIT_PER_MINUTE || 60);
@@ -203,7 +200,6 @@ async function checkRateLimit(request: NextRequest): Promise<RateLimitResult> {
   };
 }
 
-<<<<<<< HEAD
 // Surface a loud warning at module init if rate limiting is fully disabled in
 // production. Combined with the Redis fail-open path, this could otherwise leave
 // expensive AI routes entirely unprotected with no signal.
@@ -217,8 +213,6 @@ if (
 }
 
 export async function proxy(request: NextRequest): Promise<NextResponse> {
-=======
-export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
 
   // Server-to-server loopback calls bypass both rate limiting and auth.
@@ -249,7 +243,6 @@ export async function proxy(request: NextRequest) {
     }
   }
 
->>>>>>> origin/main
   if (
     process.env.UVAI_RATE_LIMIT_DISABLED === '1' ||
     request.method === 'OPTIONS'
@@ -282,12 +275,6 @@ export async function proxy(request: NextRequest) {
   return response;
 }
 
-<<<<<<< HEAD
 // NOTE: The old `export const config` was moved to the real middleware.ts (apps/web/middleware.ts)
 // so that the rate limiter is actually executed by Next.js for /api/* paths.
 // This file now exports only the `proxy` logic (and the hardened dev-only memory behavior).
-=======
-export const config = {
-  matcher: ['/api/:path*', '/dashboard', '/dashboard/:path*'],
-};
->>>>>>> origin/main

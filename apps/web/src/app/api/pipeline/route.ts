@@ -3,11 +3,8 @@ import { waitUntil } from '@vercel/functions';
 import { publishEvent, EventTypes } from '@/lib/cloudevents';
 import { analyzeVideoWithGemini } from '@/lib/gemini-video-analyzer';
 import { hasGeminiKey } from '@/lib/gemini-client';
-<<<<<<< HEAD
-=======
 import { backendHeaders } from '@/lib/pipeline-backend';
 import { resolveVideoUrl } from '@/lib/video-url-request';
->>>>>>> origin/main
 
 const rawBackendUrl = process.env.BACKEND_URL || '';
 const BACKEND_URL = rawBackendUrl.startsWith('http') ? rawBackendUrl : 'http://localhost:8000';
@@ -27,9 +24,6 @@ interface VideoProcessJobResponse {
 }
 
 export const runtime = 'nodejs';
-<<<<<<< HEAD
-export const maxDuration = 300;
-=======
 /** Sync route — short budget; use /api/pipeline/stream or async=true for long runs. */
 export const maxDuration = 60;
 
@@ -134,7 +128,6 @@ async function checkBackendHealth(timeoutMs = PIPELINE_HEALTH_TIMEOUT_MS): Promi
     };
   }
 }
->>>>>>> origin/main
 
 function stringValue(value: unknown, fallback: string): string {
   return typeof value === 'string' && value.trim() ? value.trim() : fallback;
@@ -245,19 +238,11 @@ function buildLocalFallbackPipeline({
 export async function POST(request: Request) {
   let videoUrl: string | undefined;
   try {
-<<<<<<< HEAD
-    const body = await request.json();
-    if (!body || typeof body !== 'object') {
-      return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
-    }
-    const { url, project_type = 'web', deployment_target = 'vercel', features } = body;
-=======
     const body = await request.json() as Record<string, unknown>;
     const url = resolveVideoUrl(body);
     const project_type = stringValue(body.project_type, 'web');
     const deployment_target = stringValue(body.deployment_target, 'vercel');
     const features = featureList(body.features);
->>>>>>> origin/main
     videoUrl = url;
 
     if (!url) {
@@ -328,11 +313,7 @@ export async function POST(request: Request) {
             deployment_target,
             features,
           }),
-<<<<<<< HEAD
-          signal: AbortSignal.timeout(Math.max(0, 300_000 - HEADROOM_MS)),
-=======
           signal: deadline.signalFor(PIPELINE_BACKEND_TIMEOUT_MS),
->>>>>>> origin/main
         });
 
         if (response.ok) {
@@ -375,15 +356,11 @@ export async function POST(request: Request) {
     if (hasGeminiKey() && deadline.remainingMs() > 1_000) {
       try {
         const startTime = Date.now();
-<<<<<<< HEAD
-        const analysis = await analyzeVideoWithGemini(url);
-=======
         const analysis = await deadline.runWithBudget(
           analyzeVideoWithGemini(url),
           PIPELINE_GEMINI_TIMEOUT_MS,
           'Gemini analysis',
         );
->>>>>>> origin/main
         const elapsed = Date.now() - startTime;
 
         // Direct waitUntil on publishEvent (CloudEvent) for completion — ancillary, non-blocking return to client
@@ -422,12 +399,6 @@ export async function POST(request: Request) {
       }
     }
 
-<<<<<<< HEAD
-    return NextResponse.json(
-      { error: 'No pipeline available. Configure BACKEND_URL for full pipeline or GEMINI_API_KEY for analysis only.' },
-      { status: 503 },
-    );
-=======
     const backend = await checkBackendHealth(deadline.budgetMs(PIPELINE_HEALTH_TIMEOUT_MS) || PIPELINE_HEALTH_TIMEOUT_MS);
     const fallback = buildLocalFallbackPipeline({
       url,
@@ -453,7 +424,6 @@ export async function POST(request: Request) {
       warning: 'No automatic pipeline is currently available. Returned a fallback handoff instead of blocking the user.',
       result: fallback,
     });
->>>>>>> origin/main
   } catch (error) {
     console.error('Pipeline error:', error);
     // Direct waitUntil on publishEvent (ancillary CloudEvent) so it does not block error response

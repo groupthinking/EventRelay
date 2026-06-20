@@ -187,3 +187,4 @@ ob.txt
 supabase/functions/**/index.js
 supabase/functions/**/index.js.map
 supabase/functions/**/index.d.ts
+apps/web/package-lock.json

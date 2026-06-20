@@ -10,7 +10,6 @@ const rawBackendUrl = process.env.BACKEND_URL || '';
 const BACKEND_URL = rawBackendUrl.startsWith('http') ? rawBackendUrl : 'http://localhost:8000';
 const BACKEND_AVAILABLE = rawBackendUrl.startsWith('http');
 
-<<<<<<< HEAD
 export const runtime = 'nodejs';
 export const maxDuration = 120;
 
@@ -22,7 +21,6 @@ function getBaseUrl(request: Request): string {
   const url = new URL(request.url);
   return `${url.protocol}//${url.host}`;
 }
-=======
 async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   let timeout: ReturnType<typeof setTimeout> | undefined;
   try {
@@ -37,7 +35,6 @@ async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): P
   }
 }
 
->>>>>>> origin/main
 
 /**
  * POST /api/video
@@ -260,7 +257,6 @@ export async function POST(request: Request) {
     let transcriptSource = 'none';
     try {
       await publishEvent(EventTypes.TRANSCRIPT_STARTED, { url, strategy: 'frontend-chain' }, url);
-<<<<<<< HEAD
       const baseUrl = getBaseUrl(request);
       const transcribeRes = await fetch(`${baseUrl}/api/transcribe`, {
         method: 'POST',
@@ -269,13 +265,6 @@ export async function POST(request: Request) {
         signal: AbortSignal.timeout(15000),
       });
       const transcribeResult = await transcribeRes.json();
-=======
-      const transcribeResult = await withTimeout(
-        fetchTranscript({ url }),
-        8_000,
-        'Transcript fallback',
-      );
->>>>>>> origin/main
       if (transcribeResult.success && transcribeResult.transcript) {
         transcript = transcribeResult.transcript;
         transcriptSource = transcribeResult.source || 'frontend';
