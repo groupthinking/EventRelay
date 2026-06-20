@@ -102,30 +102,71 @@ class EnhancedVideoProcessor:
 
     async def _generate_build_plan(self, video_url: str, metadata: dict, transcript: dict, ai_analysis: dict) -> dict:
         """Minimal build plan generator to unblock pipeline.
-        (Quick & dirty — will evolve via specialized agents later.)
+        Reads from the Gemini-structured ``build_plan`` sub-object inside
+        ``ai_analysis`` (see ``_analyze_with_gemini`` schema).
+        Will evolve via specialized agents in feat/vera-platform.
         """
+        ai = ai_analysis if isinstance(ai_analysis, dict) else {}
+        nested = ai.get("build_plan") or {}
+        if not isinstance(nested, dict):
+            nested = {}
+
+        title = (
+            nested.get("title")
+            or (metadata.get("title") if isinstance(metadata, dict) else None)
+            or "Video Build Plan"
+        )
+        summary = (
+            nested.get("summary")
+            or ai.get("Content Summary")
+            or "No summary available"
+        )
+        steps = nested.get("steps") or []
+        key_concepts = ai.get("Key Concepts") or []
+        if isinstance(key_concepts, str):
+            key_concepts = [k.strip() for k in key_concepts.split(",") if k.strip()]
+
         return {
-            "title": (ai_analysis.get("title") if isinstance(ai_analysis, dict) else None)
-                     or (metadata.get("title") if isinstance(metadata, dict) else None)
-                     or "Video Build Plan",
-            "overview": (ai_analysis.get("summary") if isinstance(ai_analysis, dict) else None)
-                        or "No summary available",
-            "key_moments": (ai_analysis.get("key_moments") if isinstance(ai_analysis, dict) else []) or [],
+            "title": title,
+            "project_type": nested.get("project_type", "other"),
+            "technologies": nested.get("technologies") or [],
+            "summary": summary,
+            "steps": steps,
+            "key_concepts": key_concepts,
             "suggested_structure": ["intro", "main_content", "conclusion"],
             "assets_needed": ["thumbnails", "clips"],
             "status": "draft",
             "generated_at": datetime.now().isoformat(),
-            "video_url": video_url
+            "video_url": video_url,
         }
 
     def _build_extracted_info(self, metadata: dict, ai_analysis: dict, build_plan: dict, transcript: dict) -> dict:
-        """Minimal extracted info builder to unblock the pipeline after build_plan."""
+        """Build a flat extracted-info dict consumed by code_generator.py and
+        video_processing_service.py.  Keys match what those modules call via
+        ``extracted_info.get("title")``, ``extracted_info.get("project_type")``, etc.
+        """
+        bp = build_plan if isinstance(build_plan, dict) else {}
+        ai = ai_analysis if isinstance(ai_analysis, dict) else {}
+        md = metadata if isinstance(metadata, dict) else {}
+
+        technologies = bp.get("technologies") or ai.get("Related Topics") or []
+        if isinstance(technologies, str):
+            technologies = [t.strip() for t in technologies.split(",") if t.strip()]
+
+        features: List[str] = []
+        for step in (bp.get("steps") or []):
+            if isinstance(step, dict) and step.get("action"):
+                features.append(step["action"])
+
         return {
-            "metadata": metadata or {},
-            "ai_analysis": ai_analysis or {},
-            "build_plan": build_plan or {},
-            "transcript": transcript or {},
-            "status": "extracted"
+            "title": bp.get("title") or md.get("title") or "UVAI Generated Project",
+            "project_type": bp.get("project_type", "web"),
+            "technologies": technologies,
+            "features": features,
+            "tutorial_steps": bp.get("steps") or [],
+            "summary": bp.get("summary") or ai.get("Content Summary") or "",
+            "build_plan": bp,
+            "status": "extracted",
         }
 
     async def process_video(self, video_url: str) -> Dict[str, Any]:
@@ -178,6 +219,8 @@ class EnhancedVideoProcessor:
                 'transcript': transcript,
                 'ai_analysis': ai_analysis,
                 'visual_context': visual_context,
+                'build_plan': build_plan,
+                'extracted_info': extracted_info,
                 'markdown_analysis': markdown_content,
                 'save_path': save_path,
                 'processing_time': datetime.now().isoformat(),
