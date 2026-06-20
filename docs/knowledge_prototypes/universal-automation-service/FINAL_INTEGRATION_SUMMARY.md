@@ -185,7 +185,7 @@ python3 universal_coordinator.py "https://youtube.com/watch?v=VIDEO" --mode gemi
 
 ```bash
 # Gemini API (for enhanced analysis)
-export GEMINI_API_KEY="AIzaSyDu5GN_IxRFg3Ue8SYXSNWkZi-50pwDgS0"
+export GEMINI_API_KEY="REDACTED_GOOGLE_API_KEY_ROTATE"
 
 # GitHub (for auto-deployment)
 export GITHUB_TOKEN="your-github-token-here"

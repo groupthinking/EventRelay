@@ -1,6 +1,10 @@
 # UVAI Vercel Production Runbook
 
+<<<<<<< HEAD
 Last reviewed: 2026-06-12 (rate-limit-middleware agent updates + full Vercel Functions remediation verification matrix by code-reviewer agent; coordinated with launch-plan agent per config/agent_network.json for runbook + checklist docs; + general-purpose agent pickup for Vercel Functions remediation remaining tasks)
+=======
+Last reviewed: 2026-06-17
+>>>>>>> origin/main
 
 This runbook tracks the Vercel launch gates for the public UVAI web app at
 `https://uvai.io`. It is intentionally short: code-verifiable items live in the
@@ -59,6 +63,7 @@ shipped code.
 - API routes return bounded JSON errors for bad inputs and provider outages.
 - `/api/docs` redirects to the public docs page at `/docs/api`.
 
+<<<<<<< HEAD
 **Verification Gate (16-agent network — verification-gate agent) PASSED 2026-06-12**
 Re-executed criticals on resume:
 - fireAndForget grep (apps/web/src/app/api): 0 active (non-comment). Only explanatory comments ("no fireAndForget", "Direct waitUntil (no fireAndForget...)").
@@ -66,9 +71,13 @@ Re-executed criticals on resume:
 All 3 user outcomes + supporting items (grep 0, waitUntil close-before-BG + no block in stream finally + schedule, active middleware+headers, @vercel/functions package with waitUntil, 16-net/agent_network.json refs in comments, lint on core) confirmed PASS via re-exec + source. .verification-gate-pass marker created. Recommend commit + handoff to launch-plan. (Build has unrelated prerender notes; core remediations green.)
 
 ## Production Gates Not Yet Ready
+=======
+## Production Gates — Status (2026-06-17)
+>>>>>>> origin/main
 
-These are dashboard or provider configuration items, not frontend code changes.
+Operator changes applied on 2026-06-17:
 
+<<<<<<< HEAD
 - `BACKEND_URL` and `NEXT_PUBLIC_BACKEND_URL` are configured in Vercel for
   Production, Preview, and Development with the Cloud Run backend URL, but the
   backend itself must become healthy before launch. Current checks found:
@@ -77,6 +86,29 @@ These are dashboard or provider configuration items, not frontend code changes.
 - Gemini billing/API access must be fixed for Google project `688578214833`.
 - OpenAI project quota/billing must be fixed for project
   `proj_r6YRYxAKC2FeLk7NUmrBp9wg`.
+=======
+- **Vercel (`garv1/v0-uvai`)**: `BACKEND_URL`, `NEXT_PUBLIC_BACKEND_URL`, and
+  `NEXT_PUBLIC_API_URL` set to `https://api.uvai.io`; `GITHUB_TOKEN` added;
+  `SENTRY_DSN` / `SENTRY_ORG` / `SENTRY_PROJECT` configured for `v0-uvai-web`.
+- **Cloud Run (`uvai-backend`)**: `min-instances=1`; `SENTRY_DSN` +
+  `ENVIRONMENT=production` on service revision.
+- **Sentry (`rdo-llc`)**: projects `v0-uvai-web` and `eventrelay-backend`
+  created and linked to `groupthinking/EventRelay`.
+
+Live verification (post-change):
+
+- `https://api.uvai.io/api/v1/health` → **200** healthy.
+- `https://uvai-backend-gpwz4wb5na-uc.a.run.app/api/v1/health` → **200**.
+- `eventrelay-production.up.railway.app` → **404** (legacy; do not use).
+- `POST /api/transcribe` on `uvai.io` → **200** (OpenAI path working).
+- `POST /api/pipeline` → bounded JSON; backend link may still timeout until
+  the next Vercel production redeploy picks up env changes.
+
+Remaining dashboard items (optional / follow-up):
+
+- `SENTRY_AUTH_TOKEN` on Vercel for source-map upload at build time.
+- Configure Vercel Log Drains for persistent logs.
+>>>>>>> origin/main
 - Configure Vercel Log Drains for persistent logs.
 - Configure Vercel WAF/bot rules and any IP blocks required for launch.
 - Configure Deployment Protection for preview deployments.

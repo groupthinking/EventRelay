@@ -12,14 +12,22 @@ permissions:
   issues: write
 
 env:
-  # Defaults to production. Override with the `E2E_BASE_URL` repository
-  # variable to point at another deployment (e.g. a Vercel preview). Note:
-  # Vercel preview deployments are protected (HTTP 401) and require a
-  # "Protection Bypass for Automation" token forwarded as a request header
-  # before they can be exercised here — until that is wired up, the E2E
-  # gate validates production rather than the PR's own preview build.
+  # By default the E2E suite runs against production. To validate a PR's own
+  # Vercel preview instead, two things are needed:
+  #   1. Point BASE_URL at the preview — set the `E2E_BASE_URL` repository
+  #      variable, or compute the per-PR preview URL in a prior step and export
+  #      it to $GITHUB_ENV as E2E_BASE_URL.
+  #   2. Provide `VERCEL_AUTOMATION_BYPASS_SECRET` as a repository secret.
+  #      Vercel previews return HTTP 401 to anonymous traffic; the test harness
+  #      forwards this value as the `x-vercel-protection-bypass` header on every
+  #      request (see tests/e2e/pipeline.test.ts). Generate it under Vercel →
+  #      Project → Settings → Deployment Protection → Protection Bypass for
+  #      Automation.
+  # When the variable/secret are unset (the default), BASE_URL falls back to
+  # production and no bypass header is sent — behaviour is unchanged.
   BASE_URL: ${{ vars.E2E_BASE_URL || 'https://uvai.io' }}
   TEST_YOUTUBE_URL: https://www.youtube.com/watch?v=auJzb1D-fag
+  VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
 
 jobs:
   e2e:
@@ -30,7 +38,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Node.js
         uses: actions/setup-node@v4

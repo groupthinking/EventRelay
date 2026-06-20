@@ -1172,7 +1172,7 @@ class TestEventRoutes:
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "ignored"
-        assert "user_logout" in data["message"]
+        assert "user_logout" in data["metadata"]["message"]
 
     def test_ingest_event_missing_type_returns_422(self):
         response = self._client().post("/api/v1/events/", json={
@@ -1198,17 +1198,21 @@ class TestEventRoutes:
 
     def test_process_event_helper_user_login(self, capsys):
         """Test the standalone process_event function."""
+        from core.event_types import migrate_legacy_type
+
         payload = EventPayload(type="user_login", data={"user_id": "bob"})
-        process_event(payload)
+        process_event(payload, migrate_legacy_type(payload.type))
         captured = capsys.readouterr()
         assert "bob" in captured.out
 
     def test_process_event_helper_unknown_user(self, capsys):
         """process_event when user_id key is missing."""
+        from core.event_types import migrate_legacy_type
+
         payload = EventPayload(type="user_login", data={})
-        process_event(payload)
+        process_event(payload, migrate_legacy_type(payload.type))
         captured = capsys.readouterr()
-        assert "unknown" in captured.out
+        assert "user_login" in captured.out
 
     def test_ingest_event_with_extra_fields(self):
         """EventPayload allows extra fields (Config.extra = allow)."""

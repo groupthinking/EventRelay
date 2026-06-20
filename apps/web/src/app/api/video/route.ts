@@ -10,6 +10,7 @@ const rawBackendUrl = process.env.BACKEND_URL || '';
 const BACKEND_URL = rawBackendUrl.startsWith('http') ? rawBackendUrl : 'http://localhost:8000';
 const BACKEND_AVAILABLE = rawBackendUrl.startsWith('http');
 
+<<<<<<< HEAD
 export const runtime = 'nodejs';
 export const maxDuration = 120;
 
@@ -21,6 +22,22 @@ function getBaseUrl(request: Request): string {
   const url = new URL(request.url);
   return `${url.protocol}//${url.host}`;
 }
+=======
+async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timeout = setTimeout(() => reject(new Error(`${label} timed out`)), ms);
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
+
+>>>>>>> origin/main
 
 /**
  * POST /api/video
@@ -52,19 +69,19 @@ export async function POST(request: Request) {
     if (BACKEND_AVAILABLE) {
       try {
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 15_000);
+        const timeout = setTimeout(() => controller.abort(), 4_000);
 
-      let response: Response;
-      try {
-        response = await fetch(`${BACKEND_URL}/api/v1/transcript-action`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ video_url: url, language: 'en' }),
-          signal: controller.signal,
-        });
-      } finally {
-        clearTimeout(timeout);
-      }
+        let response: Response;
+        try {
+          response = await fetch(`${BACKEND_URL}/api/v1/transcript-action`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...(process.env.EVENTRELAY_API_KEY ? { 'X-API-Key': process.env.EVENTRELAY_API_KEY } : {}) },
+            body: JSON.stringify({ video_url: url, language: 'en' }),
+            signal: controller.signal,
+          });
+        } finally {
+          clearTimeout(timeout);
+        }
 
         if (response.ok) {
           const result = await response.json();
@@ -183,7 +200,11 @@ export async function POST(request: Request) {
       try {
         await publishEvent(EventTypes.TRANSCRIPT_STARTED, { url, strategy: 'gemini-agentic' }, url);
         const startTime = Date.now();
-        const analysis = await analyzeVideoWithGemini(url);
+        const analysis = await withTimeout(
+          analyzeVideoWithGemini(url),
+          5_000,
+          'Gemini agentic analysis',
+        );
         const elapsed = Date.now() - startTime;
 
         // Direct waitUntil on publishEvent (CloudEvent) for completion — ancillary, does not block response
@@ -239,6 +260,7 @@ export async function POST(request: Request) {
     let transcriptSource = 'none';
     try {
       await publishEvent(EventTypes.TRANSCRIPT_STARTED, { url, strategy: 'frontend-chain' }, url);
+<<<<<<< HEAD
       const baseUrl = getBaseUrl(request);
       const transcribeRes = await fetch(`${baseUrl}/api/transcribe`, {
         method: 'POST',
@@ -247,6 +269,13 @@ export async function POST(request: Request) {
         signal: AbortSignal.timeout(15000),
       });
       const transcribeResult = await transcribeRes.json();
+=======
+      const transcribeResult = await withTimeout(
+        fetchTranscript({ url }),
+        8_000,
+        'Transcript fallback',
+      );
+>>>>>>> origin/main
       if (transcribeResult.success && transcribeResult.transcript) {
         transcript = transcribeResult.transcript;
         transcriptSource = transcribeResult.source || 'frontend';
