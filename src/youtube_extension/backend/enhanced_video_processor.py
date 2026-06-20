@@ -29,7 +29,8 @@ logger = logging.getLogger(__name__)
 
 # Optional Gemini Vision integration for frame analysis
 try:
-    from src.youtube_extension.services.ai.gemini_service import GeminiService, GeminiConfig
+    # Use package import (works with PYTHONPATH=src and when the real MCP server on 8010 is exercised)
+    from youtube_extension.services.ai.gemini_service import GeminiService, GeminiConfig
     GEMINI_VISION_AVAILABLE = True
 except ImportError:
     GeminiService = None
@@ -97,6 +98,7 @@ class EnhancedVideoProcessor:
                     'User-Agent': 'UVAI-Enhanced-Video-Processor/1.0',
                     'Content-Type': 'application/json'
                 },
+                timeout=aiohttp.ClientTimeout(total=30, connect=10, sock_read=20),
                 connector=aiohttp.TCPConnector(ssl=ssl_context)
             )
 
@@ -191,6 +193,14 @@ class EnhancedVideoProcessor:
             if transcript.get("source") == "failed" or not transcript.get("text"):
                 transcript = await self._get_gemini_transcript(video_id, video_url)
 
+            # Step 3.5: Optional OpenAI Whisper fallback for better STT / avoid Gemini 403s
+            # (Sentry AI monitoring will capture these LLM calls too)
+            if (transcript.get("source") == "failed" or not transcript.get("text")) and os.getenv("OPENAI_API_KEY"):
+                try:
+                    transcript = await self._get_openai_whisper_transcript(video_id, video_url)
+                except Exception as e:
+                    logger.warning(f"OpenAI Whisper fallback failed: {e}")
+
             # Step 4: Enhanced AI analysis using Gemini
             ai_analysis = await self._analyze_with_gemini(video_url, transcript, metadata)
 
@@ -219,6 +229,8 @@ class EnhancedVideoProcessor:
                 'metadata': metadata,
                 'transcript': transcript,
                 'ai_analysis': ai_analysis,
+                'build_plan': build_plan,
+                'extracted_info': extracted_info,
                 'visual_context': visual_context,
                 'build_plan': build_plan,
                 'extracted_info': extracted_info,
@@ -232,6 +244,12 @@ class EnhancedVideoProcessor:
         except Exception as e:
             logger.error(f"❌ Enhanced processing failed: {e}")
             raise
+        finally:
+            # Ensure session is closed to prevent "Unclosed client session" at exit (LLM/ingest paths)
+            try:
+                await self.close()
+            except Exception:
+                pass
     
     async def _get_gemini_transcript(self, video_id: str, video_url: str) -> Dict[str, Any]:
         """
@@ -297,6 +315,42 @@ class EnhancedVideoProcessor:
             logger.warning(f"Gemini transcript failed: {e}")
             # Fallback to YouTube transcript API
             return await self._get_youtube_transcript_fallback(video_id)
+
+    async def _get_openai_whisper_transcript(self, video_id: str, video_url: str) -> Dict[str, Any]:
+        """Fallback to OpenAI Whisper for transcription (avoids Gemini 403s, better STT)."""
+        try:
+            from openai import OpenAI
+            import tempfile
+            import os as os_mod
+
+            client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+            # Download audio snippet using yt-dlp (already dep)
+            with tempfile.TemporaryDirectory() as tmpdir:
+                audio_path = os_mod.path.join(tmpdir, f"{video_id}.mp3")
+                # yt-dlp command for audio only
+                import subprocess
+                subprocess.run([
+                    "yt-dlp", "-x", "--audio-format", "mp3",
+                    "-o", audio_path, video_url
+                ], check=True, capture_output=True, timeout=60)
+
+                with open(audio_path, "rb") as audio_file:
+                    transcription = client.audio.transcriptions.create(
+                        model="whisper-1",
+                        file=audio_file,
+                        response_format="text"
+                    )
+
+            return {
+                'text': transcription,
+                'source': 'openai_whisper',
+                'confidence': 0.92,
+                'processing_time': datetime.now().isoformat()
+            }
+        except Exception as e:
+            logger.warning(f"OpenAI Whisper failed: {e}")
+            return {'text': '', 'source': 'failed', 'error': str(e)}
     
     async def _get_youtube_transcript_fallback(self, video_id: str) -> Dict[str, Any]:
         """Fallback to YouTube transcript API"""

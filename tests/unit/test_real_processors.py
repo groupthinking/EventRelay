@@ -33,13 +33,14 @@ if str(_SRC) not in sys.path:
 # ---------------------------------------------------------------------------
 
 def _stub_module(name: str, **attrs):
-    """Insert a MagicMock module into sys.modules under *name* if not present."""
-    if name not in sys.modules:
+    """Ensure *name* is stubbed in sys.modules with the expected attributes."""
+    mod = sys.modules.get(name)
+    if mod is None:
         mod = types.ModuleType(name)
-        for k, v in attrs.items():
-            setattr(mod, k, v)
         sys.modules[name] = mod
-    return sys.modules[name]
+    for k, v in attrs.items():
+        setattr(mod, k, v)
+    return mod
 
 
 # google.genai
@@ -54,7 +55,7 @@ _openai_mod = _stub_module("openai", AsyncOpenAI=MagicMock())
 _anthropic_mod = _stub_module("anthropic", AsyncAnthropic=MagicMock())
 
 # dotenv
-_stub_module("dotenv", load_dotenv=lambda: None)
+_stub_module("dotenv", load_dotenv=lambda *args, **kwargs: None)
 
 # pytubefix (used by some transitive imports)
 _stub_module("pytubefix")

@@ -1,7 +1,19 @@
 # EventRelay — Session Handoff & System Documentation
 
+> ⚠️ **OUTDATED (deployment section).** This doc was generated 2026-03-02 and the
+> hosting topology below is no longer accurate. The backend is **no longer on
+> Railway** — `eventrelay-production.up.railway.app` is dead (404). Current
+> production topology (verified 2026-06-16):
+>
+> - **Frontend (canonical):** https://uvai.io (Vercel) — `event-relay-web.vercel.app` is a dead alias.
+> - **Backend:** https://api.uvai.io → Google Cloud Run service `uvai-backend` (us-central1), fronted by Cloudflare. Health: `https://api.uvai.io/api/v1/health`.
+> - Deploy config: `.github/workflows/deploy-cloud-run.yml` (manual dispatch). `railway.toml` is legacy.
+>
+> Treat any "Railway" / `event-relay-web.vercel.app` references in the rest of
+> this document as historical only.
+
 > **Generated**: 2026-03-02 | **Repo**: [groupthinking/EventRelay](https://github.com/groupthinking/EventRelay)  
-> **Frontend**: https://event-relay-web.vercel.app | **Backend**: https://eventrelay-production.up.railway.app
+> **Frontend**: https://uvai.io | **Backend**: https://api.uvai.io (Google Cloud Run)
 
 ---
 
