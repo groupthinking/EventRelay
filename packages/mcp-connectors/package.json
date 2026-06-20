@@ -16,7 +16,7 @@
   },
   "dependencies": {
     "@dataconnect/generated": "file:src/dataconnect-generated",
-    "@octokit/rest": "^20.0.0",
+    "@octokit/rest": "^22.0.1",
     "@slack/web-api": "^6.9.0",
     "pg": "^8.11.0"
   },
