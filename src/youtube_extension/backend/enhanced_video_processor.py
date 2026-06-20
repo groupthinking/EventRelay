@@ -153,10 +153,11 @@ class EnhancedVideoProcessor:
         if isinstance(technologies, str):
             technologies = [t.strip() for t in technologies.split(",") if t.strip()]
 
-        features: List[str] = []
-        for step in (bp.get("steps") or []):
-            if isinstance(step, dict) and step.get("action"):
-                features.append(step["action"])
+        features: List[str] = [
+            step["action"]
+            for step in (bp.get("steps") or [])
+            if isinstance(step, dict) and step.get("action")
+        ]
 
         return {
             "title": bp.get("title") or md.get("title") or "UVAI Generated Project",
