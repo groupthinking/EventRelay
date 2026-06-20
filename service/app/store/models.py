@@ -33,7 +33,7 @@ class Job(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     video_url: Mapped[str] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(16))
-    idempotency_key: Mapped[str] = mapped_column(String(128), index=True)
+    idempotency_key: Mapped[str] = mapped_column(String(128))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
