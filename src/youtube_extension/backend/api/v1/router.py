@@ -1568,23 +1568,31 @@ async def extract_events(request: EventExtractRequest):
         chunks = []
         start = 0
         while start < len(text):
-            end = start + _CHUNK_SIZE
+            end = min(start + _CHUNK_SIZE, len(text))
             if end < len(text):
                 # Find the nearest sentence boundary (. ! ?) before the hard
                 # cut by taking the rightmost (max) position across all three
                 # punctuation marks.  Fall back to the nearest space (word
-                # boundary) if no sentence end is found in the window.
+                # boundary) if no sentence end is found in the window.  Only
+                # snap to a boundary that leaves the chunk longer than the
+                # overlap, otherwise a boundary near `start` would collapse
+                # forward progress (and could push `start` backwards below).
+                min_end = start + _CHUNK_OVERLAP + 1
                 boundary_pos = max(
                     text.rfind(b, start, end) for b in ('.', '!', '?')
                 )
-                if boundary_pos != -1:
+                if boundary_pos != -1 and boundary_pos + 1 >= min_end:
                     end = boundary_pos + 1  # include the punctuation mark
                 else:
                     space = text.rfind(' ', start, end)
-                    if space != -1:
+                    if space != -1 and space + 1 >= min_end:
                         end = space + 1
             chunks.append(text[start:end])
-            start = end - _CHUNK_OVERLAP
+            if end >= len(text):
+                break
+            # Guarantee forward progress: advance by at least one character so
+            # a short chunk can never produce a non-advancing or negative start.
+            start = max(end - _CHUNK_OVERLAP, start + 1)
         return chunks
 
     transcript_chunks = _build_chunks(transcript_text)

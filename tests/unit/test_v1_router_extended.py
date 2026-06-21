@@ -167,9 +167,16 @@ def _make_cache_svc():
 
 def _make_data_svc():
     svc = MagicMock()
-    svc.get_videos_summary.return_value = [
-        {"video_id": "auJzb1D-fag", "title": "Test"}
-    ]
+    # Mirror the real DataService.get_videos_summary pagination contract:
+    # the router delegates slicing to the service, so the mock must honor
+    # limit/offset (offset beyond total → empty page).
+    _all_videos = [{"video_id": "auJzb1D-fag", "title": "Test"}]
+
+    def _videos_summary(limit=None, offset=0):
+        end = offset + limit if limit is not None else len(_all_videos)
+        return _all_videos[offset:end]
+
+    svc.get_videos_summary.side_effect = _videos_summary
     svc.count_videos.return_value = 1
     svc.get_video_detail.return_value = {
         "video_id": "auJzb1D-fag",

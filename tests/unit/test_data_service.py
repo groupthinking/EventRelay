@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -160,7 +161,12 @@ class TestGetVideosSummary:
         cat = enhanced / "cat"
         cat.mkdir(parents=True)
         for i in range(5):
-            (cat / f"vid{i:03d}_test_enhanced.md").write_text("x")
+            f = cat / f"vid{i:03d}_test_enhanced.md"
+            f.write_text("x")
+            # Space out mtimes so newest-first ordering is deterministic;
+            # tight-loop writes can otherwise share an mtime at filesystem
+            # resolution and make the page ordering nondeterministic.
+            os.utime(f, (1_000_000 + i, 1_000_000 + i))
         svc = DataService(str(enhanced), str(tmp_path / "feedback"))
         all_results = svc.get_videos_summary()
         paged = svc.get_videos_summary(limit=5, offset=2)
