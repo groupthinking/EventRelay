@@ -18,7 +18,7 @@
     "mcp-servers/*"
   ],
   "engines": {
-    "node": ">=20.0.0",
+    "node": ">=20.6.0",
     "npm": ">=8.0.0"
   },
   "devDependencies": {
@@ -28,6 +28,7 @@
     "vitest": "^4.1.9"
   },
   "overrides": {
+    "@opentelemetry/instrumentation": "^0.219.0",
     "next": ">=16.2.6",
     "nth-check": "^2.0.1",
     "postcss": "^8.5.15",
