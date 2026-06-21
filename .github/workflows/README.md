@@ -1,136 +1,112 @@
 # GitHub Actions Workflows
 
-This directory contains GitHub Actions workflows for automated testing, building, and deployment.
+This directory contains the CI/CD, security, automation, and operational
+workflows for EventRelay. Each file is a self-contained GitHub Actions
+workflow; this README is the index.
 
-## CodeQL Analysis Workflow
+## Workflow Catalog
 
-**File:** `codeql-analysis.yml`
+| Workflow | File | Trigger | Purpose |
+|----------|------|---------|---------|
+| CI | `ci.yml` | push / PR to `main` | Build web app, lint Python (informational), run unit tests |
+| Coverage | `coverage.yml` | push / PR to `main`,`develop`; manual | Generate pytest coverage and upload lcov to Qlty |
+| CodeQL Analysis | `codeql-analysis.yml` | push / PR to `main`; weekly (Mon 06:00 UTC) | Static security analysis for JavaScript/TypeScript and Python |
+| Security Scan | `security.yml` | push / PR to `main`; weekly (Sun 00:00 UTC) | npm audit, Python safety, bandit, Trivy image scan |
+| Dependency Review | `dependency-review.yml` | PR to `main`,`develop` | Review new dependencies for vulnerabilities and license policy |
+| Secret Scan | `secret-scan.yml` | push to `main`; all PRs | gitleaks scan of the working tree |
+| Dependabot Auto Merge | `dependabot-auto-merge.yml` | `pull_request_target`, `check_suite` | Approve and auto-merge patch/minor Dependabot PRs (majors excluded) |
+| PR Checks | `pr-checks.yml` | PR opened/edited/synchronize | Validate PR title (conventional commits) and description |
+| Auto Label | `auto-label.yml` | PR opened/reopened/synchronize | Label PRs by changed file type (docs, tests, python, etc.) |
+| Auto-Assign Issues | `auto-assign.yml` | issue opened | Assign new issues to the repository owner |
+| Issue Triage | `issue-triage.yml` | issue opened | Auto-label new issues by keyword and post a triage comment |
+| Bulk Issue Processor | `bulk-issue-processor.yml` | manual | Bulk label / summarize / close-stale across many issues |
+| Close stale issues | `stale.yml` | daily (00:00 UTC) | Mark and close stale issues and PRs |
+| Branch Cleanup | `branch-cleanup.yml` | manual | Gated archive-then-delete of branches (dry-run by default) |
+| E2E Tests | `e2e-tests.yml` | push / PR to `main` | Run Vitest E2E pipeline tests and report results on the PR |
+| Verify LiteRT-LM MCP | `verify-litert-mcp.yml` | push / PR touching `mcp-servers/litert-mcp/**` | Smoke-test the LiteRT MCP server (initialize, tools/list) |
+| Vision-Reasoning Stack | `vision-reasoning.yml` | push / PR touching `mcp-servers/shared-state/**` | Lint, type-check, and test the shared-state vision/reasoning modules |
+| Autonomous Video Processing | `autonomous-video-processing.yml` | manual | Batch-process YouTube videos by category (matrix) |
+| Real Video Processing (Cloud) | `real-processing.yml` | manual | Process a single video: transcript and/or AI analysis |
+| Deploy to Google Cloud Run | `deploy-cloud-run.yml` | manual | Build, push, and deploy the API image to Cloud Run |
+| Emergency Stop | `emergency-stop.yml` | manual (typed confirmation) | Operational kill-switch announcement for running automation |
 
-This workflow performs static code analysis to detect security vulnerabilities and code quality issues using GitHub's CodeQL.
+## Key Workflows
 
-### Features:
-- Runs on push to `main` branch
-- Runs on pull requests to `main` branch
-- Weekly scheduled analysis (Mondays at 6:00 AM UTC)
-- Multi-language support with matrix strategy
-- Analyzes JavaScript/TypeScript and Python code
-- Uses custom configuration for path exclusions
+### CodeQL Analysis — `codeql-analysis.yml`
 
-### Languages Analyzed:
-- **JavaScript/TypeScript**: Covers `.js`, `.jsx`, `.ts`, `.tsx` files
-- **Python**: Covers `.py` files
+Static analysis for security vulnerabilities and code-quality issues using
+GitHub CodeQL.
 
-### Configuration:
-- Main workflow: `.github/workflows/codeql-analysis.yml`
-- Configuration file: `.github/codeql/codeql-config.yml`
-- Uses `security-and-quality` query suite for comprehensive analysis
+- Runs on push and PRs to `main`, plus a weekly scheduled scan (Mondays 06:00 UTC).
+- Matrix over JavaScript/TypeScript and Python.
+- Uses the custom config at `.github/codeql/codeql-config.yml` (path exclusions,
+  `security-extended` query suite).
+- Requires permissions: `contents: read`, `security-events: write`, `actions: read`.
 
-### Workflow Stages:
-1. **Checkout**: Checks out repository code with full history
-2. **Initialize CodeQL**: Sets up CodeQL for each language in the matrix
-3. **Autobuild**: Automatically builds the codebase
-4. **Analyze**: Performs static analysis and uploads results
+Dependency / supply-chain scanning is intentionally **not** part of this
+workflow — it is covered by `dependency-review.yml` (PR time) and `security.yml`
+(scheduled and push).
 
-### Viewing Results:
-- **Security Tab**: View detected vulnerabilities in the repository's Security tab
-- **Pull Requests**: Analysis results appear as checks on PRs
-- **Actions Tab**: View detailed workflow runs and logs
+### Security Scan — `security.yml`
 
-### Permissions Required:
-- `contents: read` - To checkout repository
-- `security-events: write` - To upload analysis results
-- `actions: read` - To read workflow information
+Comprehensive dependency and image scanning:
 
-## Coverage Workflow
+- **npm audit** — Node dependency vulnerabilities.
+- **safety** — Python dependency vulnerabilities.
+- **bandit** — Python static security analysis.
+- **trivy** — builds the Docker image and scans OS + library layers; uploads
+  SARIF to the Security tab.
 
-**File:** `coverage.yml`
+Runs on push and PRs to `main` and weekly on Sunday at midnight UTC.
 
-This workflow automatically generates and uploads code coverage reports to Qlty.
+### Coverage — `coverage.yml`
 
-### Features:
-- Runs on push to `main` and `develop` branches
-- Runs on pull requests to `main` and `develop` branches
-- Generates coverage reports in lcov format
-- Uploads coverage to Qlty for tracking
-- Stores coverage artifacts for 30 days
+Generates pytest coverage and uploads lcov to Qlty.
 
-### Requirements:
+- Runs on push/PR to `main` and `develop`, and can be run manually
+  (`workflow_dispatch`).
+- Requires the `QLTY_COVERAGE_TOKEN` repository secret. Get the token from
+  <https://qlty.sh>, then add it under **Settings → Secrets and variables →
+  Actions**.
+- Coverage HTML and lcov are stored as artifacts for 30 days.
 
-1. **Python Dependencies**: Automatically installed via `pip install -e ".[dev]"`
-2. **QLTY_COVERAGE_TOKEN**: Must be set as a repository secret
+### Deploy to Google Cloud Run — `deploy-cloud-run.yml`
 
-### Setting up QLTY_COVERAGE_TOKEN:
-
-1. Get your coverage token from https://qlty.sh
-2. Go to repository Settings → Secrets and variables → Actions
-3. Add a new secret:
-   - Name: `QLTY_COVERAGE_TOKEN`
-   - Value: Your Qlty coverage token
-4. Save the secret
-
-### Workflow Stages:
-
-1. **Checkout**: Checks out the repository code
-2. **Setup Python**: Installs Python 3.12 with pip caching
-3. **Install Dependencies**: Installs project dependencies including dev extras
-4. **Create Reports Directory**: Ensures the reports directory exists
-5. **Run Tests with Coverage**: Executes pytest with coverage reporting
-6. **Upload to Qlty**: Sends coverage data to Qlty for tracking
-7. **Upload Artifacts**: Stores coverage reports as GitHub artifacts
-
-### Manual Trigger:
-
-You can also run this workflow manually from the Actions tab in GitHub.
-
-### Viewing Results:
-
-- **GitHub Actions**: View workflow runs in the "Actions" tab
-- **Coverage Reports**: Download artifacts from completed workflow runs
-- **Qlty Dashboard**: View coverage trends at https://qlty.sh
-
-## Security Scan Workflow
-
-**File:** `security.yml`
-
-This workflow performs comprehensive security scanning using multiple tools to detect vulnerabilities in dependencies and code.
-
-### Features:
-- Runs on push to `main` branch
-- Runs on pull requests to `main` branch
-- Weekly scheduled scan (Sundays at midnight UTC)
-- Multiple security tools for comprehensive coverage
-
-### Security Tools:
-
-1. **npm-audit**: Scans Node.js dependencies for known vulnerabilities
-2. **python-safety**: Checks Python dependencies against safety database
-3. **bandit**: Static analysis for Python code security issues
-4. **trivy**: Container image vulnerability scanning
-
-### Artifacts:
-- npm audit reports
-- Python safety reports
-- Bandit security analysis reports
-
-### Viewing Results:
-- **Actions Tab**: View workflow runs and download security reports
-- **Artifacts**: Download detailed security reports for each tool
-- **Pull Requests**: Security checks appear on PRs
-
-**Note**: CodeQL analysis has been moved to a dedicated workflow (`codeql-analysis.yml`) for better separation of concerns.
+The production deployment path. Manual (`workflow_dispatch`) only — it was
+converted away from automatic triggers to avoid failing runs when Google Cloud
+auth inputs are absent. Re-enable automatic deploys by restoring the `on:`
+triggers after configuring `GCP_SA_KEY` / Workload Identity Federation.
 
 ## Adding More Workflows
 
-To add additional workflows:
+1. Create a new `.yml` file in this directory (always include a top-level
+   `name:`).
+2. Follow the GitHub Actions syntax and pin third-party actions to a tag or SHA.
+3. Define triggers, jobs, and steps; scope `permissions` to the minimum needed.
+4. Test locally with `act` or on a branch before merging.
+5. Add a row to the **Workflow Catalog** table above.
 
-1. Create a new `.yml` file in this directory
-2. Follow the GitHub Actions syntax
-3. Define triggers, jobs, and steps
-4. Test locally using `act` or similar tools
-5. Commit and push to trigger the workflow
+## Maintenance Log
+
+A full audit of this directory was performed (see
+`.github/workflows/AUDIT.md` for the per-file decision matrix). Summary:
+
+- **Removed** `deploy.yml` — referenced a non-existent `deployments/` tree
+  (actual infra lives in `infrastructure/`) and duplicated
+  `deploy-cloud-run.yml`.
+- **Removed** `mcp-optimization.yml` — targeted the non-existent
+  `mcp-servers/mcp-profiling/` directory, so every run failed.
+- **Renamed** `.yaml` → `stale.yml` — the file had no basename.
+- **Fixed** `codeql-analysis.yml` — removed the fragile OWASP dependency-check
+  job (`@main`, dead paths) and switched the Node cache from a dead
+  `frontend/node_modules` path to the npm cache (`~/.npm`), which works with the
+  repo's npm workspaces.
+- **Fixed** `coverage.yml` — added a `name:` and the `workflow_dispatch`
+  trigger the docs already described.
 
 ## Resources
 
 - [GitHub Actions Documentation](https://docs.github.com/en/actions)
+- [CodeQL Action](https://github.com/github/codeql-action)
 - [Qlty Coverage Action](https://github.com/qltysh/qlty-action)
 - [pytest-cov Documentation](https://pytest-cov.readthedocs.io/)

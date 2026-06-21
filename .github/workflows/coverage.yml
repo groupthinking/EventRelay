@@ -1,3 +1,5 @@
+name: Coverage
+
 on:
   push:
     branches: [main, develop]
@@ -9,6 +11,7 @@ on:
     paths-ignore:
       - "**/*.md"
       - "**/*.txt"
+  workflow_dispatch:
 
 permissions:
   contents: read
