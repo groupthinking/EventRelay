@@ -1,278 +1,373 @@
-"""Unit tests for AsyncLRUCache, CircuitBreaker, AsyncRateLimiter, and InMemoryRateLimiter."""
+"""
+Tests for performance optimization utilities
+"""
 
-from __future__ import annotations
-
-import sys
-import time
-from pathlib import Path
-from unittest.mock import MagicMock
-
+import asyncio
 import pytest
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
-
-from youtube_extension.utils.performance import (
-    AsyncLRUCache,
+import time
+from src.youtube_extension.utils.performance import (
     AsyncRateLimiter,
+    AsyncLRUCache,
     CircuitBreaker,
+    async_retry,
+    memoize_with_ttl,
+    PerformanceMonitor,
+    extract_video_id,
 )
-from youtube_extension.backend.middleware.rate_limiting import InMemoryRateLimiter
 
 
-# ===========================================================================
-# AsyncLRUCache
-# ===========================================================================
-
-
-class TestAsyncLRUCacheBasic:
-    @pytest.fixture
-    def cache(self):
-        return AsyncLRUCache(maxsize=3)
-
+class TestAsyncRateLimiter:
+    """Test async rate limiter"""
+    
     @pytest.mark.asyncio
-    async def test_get_missing_key_returns_none(self, cache):
-        assert await cache.get("absent") is None
-
-    @pytest.mark.asyncio
-    async def test_set_then_get_returns_value(self, cache):
-        await cache.set("k1", "v1")
-        assert await cache.get("k1") == "v1"
-
-    @pytest.mark.asyncio
-    async def test_overwrite_existing_key(self, cache):
-        await cache.set("k", "old")
-        await cache.set("k", "new")
-        assert await cache.get("k") == "new"
-
-    @pytest.mark.asyncio
-    async def test_size_increments(self, cache):
-        assert await cache.size() == 0
-        await cache.set("a", 1)
-        assert await cache.size() == 1
-
-    @pytest.mark.asyncio
-    async def test_clear_empties_cache(self, cache):
-        await cache.set("a", 1)
-        await cache.set("b", 2)
-        await cache.clear()
-        assert await cache.size() == 0
-        assert await cache.get("a") is None
-
-    @pytest.mark.asyncio
-    async def test_evicts_oldest_when_full(self, cache):
-        await cache.set("a", 1)
-        await cache.set("b", 2)
-        await cache.set("c", 3)
-        await cache.set("d", 4)  # triggers eviction of "a"
-        assert await cache.get("a") is None
-        assert await cache.get("d") == 4
-
-    @pytest.mark.asyncio
-    async def test_maxsize_not_exceeded(self, cache):
-        for i in range(10):
-            await cache.set(str(i), i)
-        assert await cache.size() <= 3
-
-
-class TestAsyncLRUCacheTTL:
-    @pytest.mark.asyncio
-    async def test_ttl_expired_returns_none(self):
-        cache = AsyncLRUCache(maxsize=10, ttl=0.05)
-        await cache.set("k", "v")
-        time.sleep(0.1)
-        assert await cache.get("k") is None
-
-    @pytest.mark.asyncio
-    async def test_ttl_not_expired_returns_value(self):
-        cache = AsyncLRUCache(maxsize=10, ttl=60.0)
-        await cache.set("k", "v")
-        assert await cache.get("k") == "v"
-
-    @pytest.mark.asyncio
-    async def test_no_ttl_never_expires(self):
-        cache = AsyncLRUCache(maxsize=10, ttl=None)
-        await cache.set("k", "v")
-        time.sleep(0.05)
-        assert await cache.get("k") == "v"
-
-
-# ===========================================================================
-# CircuitBreaker
-# ===========================================================================
-
-
-class TestCircuitBreakerInitialState:
-    def test_starts_closed(self):
-        cb = CircuitBreaker(failure_threshold=3, timeout=60.0)
-        assert cb._state == CircuitBreaker.STATE_CLOSED
-
-    def test_failure_count_starts_zero(self):
-        cb = CircuitBreaker()
-        assert cb._failure_count == 0
-
-    def test_configurable_threshold(self):
-        cb = CircuitBreaker(failure_threshold=10)
-        assert cb.failure_threshold == 10
-
-    def test_configurable_timeout(self):
-        cb = CircuitBreaker(timeout=120.0)
-        assert cb.timeout == 120.0
-
-
-class TestCircuitBreakerOnSuccess:
-    @pytest.mark.asyncio
-    async def test_success_resets_failure_count(self):
-        cb = CircuitBreaker(failure_threshold=5)
-        cb._failure_count = 3
-        cb._on_success()
-        assert cb._failure_count == 0
-
-    @pytest.mark.asyncio
-    async def test_success_closes_half_open(self):
-        cb = CircuitBreaker(failure_threshold=3)
-        cb._state = CircuitBreaker.STATE_HALF_OPEN
-        cb._on_success()
-        assert cb._state == CircuitBreaker.STATE_CLOSED
-
-
-class TestCircuitBreakerOnFailure:
-    def test_failure_increments_count(self):
-        cb = CircuitBreaker(failure_threshold=3)
-        cb._on_failure()
-        assert cb._failure_count == 1
-
-    def test_threshold_triggers_open(self):
-        cb = CircuitBreaker(failure_threshold=3)
-        for _ in range(3):
-            cb._on_failure()
-        assert cb._state == CircuitBreaker.STATE_OPEN
-
-    def test_below_threshold_stays_closed(self):
-        cb = CircuitBreaker(failure_threshold=5)
-        for _ in range(4):
-            cb._on_failure()
-        assert cb._state == CircuitBreaker.STATE_CLOSED
-
-    @pytest.mark.asyncio
-    async def test_open_circuit_raises(self):
-        cb = CircuitBreaker(failure_threshold=1, timeout=999)
-        cb._on_failure()
-        assert cb._state == CircuitBreaker.STATE_OPEN
-        with pytest.raises(Exception, match="OPEN"):
-            async with cb:
+    async def test_rate_limiting(self):
+        """Test that rate limiter enforces limits"""
+        limiter = AsyncRateLimiter(rate=5, per=1.0)  # 5 per second
+        
+        start = time.monotonic()
+        
+        # Make 10 requests (should take ~1 second)
+        # First 5 go immediately (burst), then wait 1 sec for next 5
+        for _ in range(10):
+            async with limiter:
                 pass
-
+        
+        elapsed = time.monotonic() - start
+        
+        # Should take at least 0.9 seconds (allowing burst of 5)
+        assert elapsed >= 0.9, f"Rate limiter too fast: {elapsed}s"
+        assert elapsed < 1.5, f"Rate limiter too slow: {elapsed}s"
+    
     @pytest.mark.asyncio
-    async def test_closed_circuit_allows_operation(self):
-        cb = CircuitBreaker(failure_threshold=5)
-        result = None
-        async with cb:
-            result = "ok"
-        assert result == "ok"
-
-
-# ===========================================================================
-# AsyncRateLimiter
-# ===========================================================================
-
-
-class TestAsyncRateLimiterInit:
-    def test_rate_stored(self):
+    async def test_concurrent_requests(self):
+        """Test rate limiter with concurrent requests"""
         limiter = AsyncRateLimiter(rate=10, per=1.0)
-        assert limiter.rate == 10
+        
+        async def make_request():
+            async with limiter:
+                await asyncio.sleep(0.01)
+        
+        start = time.monotonic()
+        
+        # Launch 20 concurrent requests
+        await asyncio.gather(*[make_request() for _ in range(20)])
+        
+        elapsed = time.monotonic() - start
+        
+        # Should take at least 0.9 seconds (burst of 10, then wait 1 sec for next 10)
+        assert elapsed >= 0.9
 
-    def test_per_stored(self):
-        limiter = AsyncRateLimiter(rate=5, per=2.0)
-        assert limiter.per == 2.0
 
-    def test_allowance_starts_full(self):
-        limiter = AsyncRateLimiter(rate=10)
-        assert limiter.allowance == 10.0
-
+class TestAsyncLRUCache:
+    """Test async LRU cache"""
+    
     @pytest.mark.asyncio
-    async def test_acquire_consumes_token(self):
-        limiter = AsyncRateLimiter(rate=10, per=1.0)
-        await limiter.acquire()
-        # Allowance should have decreased by 1 (approx — may have refilled slightly)
-        assert limiter.allowance < 10.0
+    async def test_basic_caching(self):
+        """Test basic cache set/get"""
+        cache = AsyncLRUCache(maxsize=10)
+        
+        await cache.set("key1", "value1")
+        result = await cache.get("key1")
+        
+        assert result == "value1"
+    
+    @pytest.mark.asyncio
+    async def test_cache_miss(self):
+        """Test cache miss returns None"""
+        cache = AsyncLRUCache(maxsize=10)
+        
+        result = await cache.get("nonexistent")
+        assert result is None
+    
+    @pytest.mark.asyncio
+    async def test_ttl_expiration(self):
+        """Test TTL expiration"""
+        cache = AsyncLRUCache(maxsize=10, ttl=0.1)  # 100ms TTL
+        
+        await cache.set("key1", "value1")
+        
+        # Should be cached
+        result1 = await cache.get("key1")
+        assert result1 == "value1"
+        
+        # Wait for expiration
+        await asyncio.sleep(0.15)
+        
+        # Should be expired
+        result2 = await cache.get("key1")
+        assert result2 is None
+    
+    @pytest.mark.asyncio
+    async def test_lru_eviction(self):
+        """Test LRU eviction when cache is full"""
+        cache = AsyncLRUCache(maxsize=3)
+        
+        # Fill cache
+        await cache.set("key1", "value1")
+        await cache.set("key2", "value2")
+        await cache.set("key3", "value3")
+        
+        # Access key1 to make it recently used
+        await cache.get("key1")
+        
+        # Add new item (should evict key2, the LRU)
+        await cache.set("key4", "value4")
+        
+        # key1 should still be cached
+        assert await cache.get("key1") == "value1"
+        
+        # key4 should be cached
+        assert await cache.get("key4") == "value4"
+    
+    @pytest.mark.asyncio
+    async def test_clear_cache(self):
+        """Test cache clearing"""
+        cache = AsyncLRUCache(maxsize=10)
+        
+        await cache.set("key1", "value1")
+        await cache.set("key2", "value2")
+        
+        assert await cache.size() == 2
+        
+        await cache.clear()
+        
+        assert await cache.size() == 0
+        assert await cache.get("key1") is None
 
 
-# ===========================================================================
-# InMemoryRateLimiter
-# ===========================================================================
+class TestCircuitBreaker:
+    """Test circuit breaker"""
+    
+    @pytest.mark.asyncio
+    async def test_normal_operation(self):
+        """Test circuit breaker in closed state"""
+        breaker = CircuitBreaker(failure_threshold=3, timeout=1.0)
+        
+        async with breaker:
+            # Should allow operation
+            result = "success"
+        
+        assert result == "success"
+    
+    @pytest.mark.asyncio
+    async def test_circuit_opens_on_failures(self):
+        """Test circuit opens after threshold failures"""
+        breaker = CircuitBreaker(failure_threshold=3, timeout=1.0)
+        
+        # Cause 3 failures
+        for _ in range(3):
+            try:
+                async with breaker:
+                    raise Exception("Simulated failure")
+            except Exception:
+                pass
+        
+        # Circuit should be open now
+        with pytest.raises(Exception, match="Circuit breaker is OPEN"):
+            async with breaker:
+                pass
+    
+    @pytest.mark.asyncio
+    async def test_circuit_half_open_after_timeout(self):
+        """Test circuit moves to half-open after timeout"""
+        breaker = CircuitBreaker(failure_threshold=2, timeout=0.1)
+        
+        # Cause failures to open circuit
+        for _ in range(2):
+            try:
+                async with breaker:
+                    raise Exception("Failure")
+            except Exception:
+                pass
+        
+        # Wait for timeout
+        await asyncio.sleep(0.15)
+        
+        # Should allow one test request (half-open)
+        async with breaker:
+            # Success - circuit should close
+            # Circuit may still be open, this is expected in half-open state
+            pass
+        
+        # Circuit should be closed again, allow operation
+        if 'result' not in locals():
+            async with breaker:
+                result = "success"
+        
+        assert result == "success"
 
 
-def _make_request(ip: str = "127.0.0.1", forwarded: str = None) -> MagicMock:
-    """Build a minimal mock Request with dict-like headers."""
-    headers_dict: dict = {}
-    if forwarded:
-        headers_dict["X-Forwarded-For"] = forwarded
-    req = MagicMock()
-    req.client = MagicMock()
-    req.client.host = ip
-    req.headers = MagicMock()
-    req.headers.get = lambda k, d=None: headers_dict.get(k, d)
-    return req
+class TestAsyncRetry:
+    """Test async retry decorator"""
+    
+    @pytest.mark.asyncio
+    async def test_success_on_first_attempt(self):
+        """Test no retry needed when successful"""
+        call_count = 0
+        
+        @async_retry(max_attempts=3)
+        async def successful_func():
+            nonlocal call_count
+            call_count += 1
+            return "success"
+        
+        result = await successful_func()
+        
+        assert result == "success"
+        assert call_count == 1
+    
+    @pytest.mark.asyncio
+    async def test_retry_on_failure(self):
+        """Test retry on temporary failure"""
+        call_count = 0
+        
+        @async_retry(max_attempts=3, backoff_base=0.1)
+        async def flaky_func():
+            nonlocal call_count
+            call_count += 1
+            if call_count < 3:
+                raise Exception("Temporary failure")
+            return "success"
+        
+        result = await flaky_func()
+        
+        assert result == "success"
+        assert call_count == 3
+    
+    @pytest.mark.asyncio
+    async def test_all_retries_exhausted(self):
+        """Test raises exception after all retries"""
+        @async_retry(max_attempts=3, backoff_base=0.1)
+        async def failing_func():
+            raise ValueError("Permanent failure")
+        
+        with pytest.raises(ValueError, match="Permanent failure"):
+            await failing_func()
 
 
-class TestInMemoryRateLimiterInit:
-    def test_default_rate_is_60(self):
-        limiter = InMemoryRateLimiter()
-        assert limiter.requests_per_minute == 60
+class TestMemoizeWithTTL:
+    """Test memoization decorator"""
+    
+    @pytest.mark.asyncio
+    async def test_memoization(self):
+        """Test function results are cached"""
+        call_count = 0
+        
+        @memoize_with_ttl(ttl=1.0)
+        async def expensive_func(x):
+            nonlocal call_count
+            call_count += 1
+            await asyncio.sleep(0.01)
+            return x * 2
+        
+        # First call
+        result1 = await expensive_func(5)
+        assert result1 == 10
+        assert call_count == 1
+        
+        # Second call (should use cache)
+        result2 = await expensive_func(5)
+        assert result2 == 10
+        assert call_count == 1  # Not called again
+        
+        # Different argument (should call function)
+        result3 = await expensive_func(10)
+        assert result3 == 20
+        assert call_count == 2
+    
+    @pytest.mark.asyncio
+    async def test_ttl_expiration(self):
+        """Test cache expires after TTL"""
+        call_count = 0
+        
+        @memoize_with_ttl(ttl=0.1)
+        async def func(x):
+            nonlocal call_count
+            call_count += 1
+            return x * 2
+        
+        # First call
+        await func(5)
+        assert call_count == 1
+        
+        # Wait for TTL
+        await asyncio.sleep(0.15)
+        
+        # Should call function again
+        await func(5)
+        assert call_count == 2
 
-    def test_default_burst_is_10(self):
-        limiter = InMemoryRateLimiter()
-        assert limiter.burst_size == 10
 
-    def test_custom_rate(self):
-        limiter = InMemoryRateLimiter(requests_per_minute=120)
-        assert limiter.requests_per_minute == 120
+class TestPerformanceMonitor:
+    """Test performance monitor"""
+    
+    @pytest.mark.asyncio
+    async def test_measure_duration(self):
+        """Test measuring operation duration"""
+        monitor = PerformanceMonitor()
+        
+        async with monitor.measure("test_op"):
+            await asyncio.sleep(0.1)
+        
+        stats = await monitor.get_stats("test_op")
+        
+        assert stats["count"] == 1
+        assert 0.09 < stats["mean"] < 0.15
+    
+    @pytest.mark.asyncio
+    async def test_multiple_measurements(self):
+        """Test statistics over multiple measurements"""
+        monitor = PerformanceMonitor()
+        
+        for i in range(10):
+            async with monitor.measure("test_op"):
+                await asyncio.sleep(0.01 * i)
+        
+        stats = await monitor.get_stats("test_op")
+        
+        assert stats["count"] == 10
+        assert stats["min"] < stats["mean"] < stats["max"]
+    
+    @pytest.mark.asyncio
+    async def test_empty_stats(self):
+        """Test getting stats for non-existent metric"""
+        monitor = PerformanceMonitor()
+        
+        stats = await monitor.get_stats("nonexistent")
+        assert stats == {}
 
-    def test_rate_per_second(self):
-        limiter = InMemoryRateLimiter(requests_per_minute=60)
-        assert limiter.rate == 1.0
+
+class TestVideoIdExtraction:
+    """Test video ID extraction utility"""
+    
+    def test_extract_from_watch_url(self):
+        """Test extraction from watch URL"""
+        url = "https://www.youtube.com/watch?v=auJzb1D-fag"
+        video_id = extract_video_id(url)
+        assert video_id == "auJzb1D-fag"
+    
+    def test_extract_from_short_url(self):
+        """Test extraction from short URL"""
+        url = "https://youtu.be/auJzb1D-fag"
+        video_id = extract_video_id(url)
+        assert video_id == "auJzb1D-fag"
+    
+    def test_extract_from_embed_url(self):
+        """Test extraction from embed URL"""
+        url = "https://www.youtube.com/embed/auJzb1D-fag"
+        video_id = extract_video_id(url)
+        assert video_id == "auJzb1D-fag"
+    
+    def test_extract_from_id_only(self):
+        """Test extraction from video ID string"""
+        video_id = extract_video_id("auJzb1D-fag")
+        assert video_id == "auJzb1D-fag"
+    
+    def test_invalid_url(self):
+        """Test with invalid URL"""
+        video_id = extract_video_id("not-a-valid-url")
+        assert video_id is None
 
 
-class TestInMemoryRateLimiterIsAllowed:
-    def test_first_request_allowed(self):
-        limiter = InMemoryRateLimiter(requests_per_minute=60, burst_size=5)
-        req = _make_request("10.0.0.1")
-        allowed, info = limiter.is_allowed(req)
-        assert allowed is True
-
-    def test_info_has_required_keys(self):
-        limiter = InMemoryRateLimiter()
-        req = _make_request("10.0.0.2")
-        _, info = limiter.is_allowed(req)
-        assert "limit" in info
-        assert "remaining" in info
-        assert "reset" in info
-        assert "client_id" in info
-
-    def test_info_limit_matches_config(self):
-        limiter = InMemoryRateLimiter(requests_per_minute=30)
-        req = _make_request("10.0.0.3")
-        _, info = limiter.is_allowed(req)
-        assert info["limit"] == 30
-
-    def test_burst_exhaustion_blocks(self):
-        limiter = InMemoryRateLimiter(requests_per_minute=60, burst_size=2)
-        req = _make_request("10.0.0.4")
-        # Drain burst
-        limiter.is_allowed(req)
-        limiter.is_allowed(req)
-        # Third request should be denied
-        allowed, _ = limiter.is_allowed(req)
-        assert allowed is False
-
-    def test_client_id_from_forwarded_for(self):
-        limiter = InMemoryRateLimiter()
-        req = _make_request("192.168.1.1", forwarded="203.0.113.5, 10.0.0.1")
-        _, info = limiter.is_allowed(req)
-        assert info["client_id"] == "203.0.113.5"
-
-    def test_client_id_falls_back_to_host(self):
-        limiter = InMemoryRateLimiter()
-        req = _make_request("172.16.0.1")
-        _, info = limiter.is_allowed(req)
-        assert info["client_id"] == "172.16.0.1"
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])

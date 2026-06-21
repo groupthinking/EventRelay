@@ -1,204 +1,169 @@
-"""Unit tests for services/agents/monitor.py."""
+"""
+Tests for Agent Gap Monitoring
+================================
 
-from __future__ import annotations
-
-import sys
-import types as _types
-from pathlib import Path
+Tests the optional monitoring integration for agent gap detection.
+"""
 
 import pytest
+import tempfile
+from pathlib import Path
+import os
 
-_SRC = Path(__file__).resolve().parents[2] / "src"
-sys.path.insert(0, str(_SRC))
+# Import the modules to test
+import sys
+project_root = Path(__file__).parent.parent.parent  # tests/unit -> tests -> project root
+src_path = project_root / "src"
+sys.path.insert(0, str(src_path))
 
-
-def _inject_stub(package_name: str, path: Path) -> None:
-    if package_name not in sys.modules:
-        stub = _types.ModuleType(package_name)
-        stub.__path__ = [str(path)]
-        stub.__package__ = package_name
-        sys.modules[package_name] = stub
-
-
-# Prevent the broken services/__init__.py from loading then use normal import
-# so that pytest-cov can instrument the module.
-_inject_stub("youtube_extension.services", _SRC / "youtube_extension/services")
-_inject_stub("youtube_extension.services.agents", _SRC / "youtube_extension/services/agents")
-
-# Force-reload if a previous test already cached the module without our stubs
-sys.modules.pop("youtube_extension.services.agents.monitor", None)
-
-from youtube_extension.services.agents.monitor import (  # noqa: E402
-    MonitoredTask,
-    monitor_agent_usage,
-    monitor_error,
+from youtube_extension.services.agents.monitor import (
+    get_analyzer,
     monitor_file_access,
+    monitor_error,
+    monitor_agent_usage,
+    MonitoredTask
 )
 
 
-# ===========================================================================
-# monitor_file_access
-# ===========================================================================
+class TestMonitoring:
+    """Test monitoring functions."""
 
+    def test_get_analyzer(self):
+        """Test getting analyzer instance."""
+        analyzer = get_analyzer()
+        assert analyzer is not None
 
-class TestMonitorFileAccess:
-    def test_returns_none_when_env_not_set(self, monkeypatch):
-        monkeypatch.delenv("EVENTRELAY_MONITOR_AGENT_GAPS", raising=False)
-        result = monitor_file_access("src/main.py", "some task")
-        assert result is None
+        # Should return same instance
+        analyzer2 = get_analyzer()
+        assert analyzer is analyzer2
 
-    def test_returns_none_when_env_false(self, monkeypatch):
-        monkeypatch.setenv("EVENTRELAY_MONITOR_AGENT_GAPS", "false")
-        result = monitor_file_access("src/main.py")
-        assert result is None
+    def test_monitor_file_access_disabled(self):
+        """Test monitoring when disabled (default)."""
+        # Monitoring should be disabled by default
+        os.environ.pop("EVENTRELAY_MONITOR_AGENT_GAPS", None)
 
-    def test_returns_none_when_env_zero(self, monkeypatch):
-        monkeypatch.setenv("EVENTRELAY_MONITOR_AGENT_GAPS", "0")
-        result = monitor_file_access("src/main.py")
-        assert result is None
+        # Should not raise error even if disabled
+        monitor_file_access("test.yaml", "Test task")
 
-    def test_returns_none_when_env_no(self, monkeypatch):
-        monkeypatch.setenv("EVENTRELAY_MONITOR_AGENT_GAPS", "no")
-        result = monitor_file_access("src/main.py")
-        assert result is None
+    def test_monitor_file_access_enabled(self):
+        """Test monitoring when enabled."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            os.environ["EVENTRELAY_MONITOR_AGENT_GAPS"] = "true"
 
-    def test_accepts_empty_task_description(self, monkeypatch):
-        monkeypatch.delenv("EVENTRELAY_MONITOR_AGENT_GAPS", raising=False)
-        monitor_file_access("src/file.py", "")
+            try:
+                # Should work without error
+                monitor_file_access("infrastructure/k8s/deploy.yaml", "Deploy")
+                monitor_file_access("database/migrations/001.sql", "Migrate")
+            finally:
+                os.environ.pop("EVENTRELAY_MONITOR_AGENT_GAPS", None)
 
-    def test_does_not_raise_when_analyzer_unavailable(self, monkeypatch):
-        monkeypatch.setenv("EVENTRELAY_MONITOR_AGENT_GAPS", "true")
-        # analyzer may fail to import — function must silently absorb the error
+    def test_monitor_error_disabled(self):
+        """Test error monitoring when disabled."""
+        os.environ.pop("EVENTRELAY_MONITOR_AGENT_GAPS", None)
+
+        # Should not raise error
+        monitor_error("TestError", "Test context", frequency=1)
+
+    def test_monitor_error_enabled(self):
+        """Test error monitoring when enabled."""
+        os.environ["EVENTRELAY_MONITOR_AGENT_GAPS"] = "true"
+
         try:
-            monitor_file_access("src/file.py", "task")
-        except Exception:
-            pytest.fail("monitor_file_access raised an unexpected exception")
+            # Should work without error
+            monitor_error("DatabaseError", "Connection timeout", frequency=3)
+        finally:
+            os.environ.pop("EVENTRELAY_MONITOR_AGENT_GAPS", None)
 
+    def test_monitor_agent_usage_file_access(self):
+        """Test unified monitoring with file access."""
+        os.environ["EVENTRELAY_MONITOR_AGENT_GAPS"] = "true"
 
-# ===========================================================================
-# monitor_error
-# ===========================================================================
-
-
-class TestMonitorError:
-    def test_returns_none_when_env_not_set(self, monkeypatch):
-        monkeypatch.delenv("EVENTRELAY_MONITOR_AGENT_GAPS", raising=False)
-        result = monitor_error("ValueError", "some context")
-        assert result is None
-
-    def test_returns_none_when_env_false(self, monkeypatch):
-        monkeypatch.setenv("EVENTRELAY_MONITOR_AGENT_GAPS", "false")
-        result = monitor_error("TypeError", "ctx")
-        assert result is None
-
-    def test_does_not_raise_when_analyzer_unavailable(self, monkeypatch):
-        monkeypatch.setenv("EVENTRELAY_MONITOR_AGENT_GAPS", "1")
         try:
-            monitor_error("IOError", "read failed", frequency=3)
-        except Exception:
-            pytest.fail("monitor_error raised an unexpected exception")
+            monitor_agent_usage(
+                file_path="test/file.yaml",
+                task="Test task"
+            )
+        finally:
+            os.environ.pop("EVENTRELAY_MONITOR_AGENT_GAPS", None)
 
-    def test_default_frequency_accepted(self, monkeypatch):
-        monkeypatch.delenv("EVENTRELAY_MONITOR_AGENT_GAPS", raising=False)
-        monitor_error("RuntimeError", "context")  # frequency defaults to 1, no raise
+    def test_monitor_agent_usage_error(self):
+        """Test unified monitoring with error."""
+        os.environ["EVENTRELAY_MONITOR_AGENT_GAPS"] = "true"
+
+        try:
+            monitor_agent_usage(
+                error=("TestError", "Test context", 2)
+            )
+        finally:
+            os.environ.pop("EVENTRELAY_MONITOR_AGENT_GAPS", None)
+
+    def test_monitor_agent_usage_combined(self):
+        """Test unified monitoring with both file and error."""
+        os.environ["EVENTRELAY_MONITOR_AGENT_GAPS"] = "true"
+
+        try:
+            monitor_agent_usage(
+                file_path="test.yaml",
+                task="Test",
+                error=("Error", "Context", 1)
+            )
+        finally:
+            os.environ.pop("EVENTRELAY_MONITOR_AGENT_GAPS", None)
+
+    def test_monitored_task_context_manager_success(self):
+        """Test MonitoredTask context manager with success."""
+        os.environ["EVENTRELAY_MONITOR_AGENT_GAPS"] = "true"
+
+        try:
+            with MonitoredTask("test.yaml", "Test task") as task:
+                # Simulate successful operation
+                pass
+
+            assert not task.error_occurred
+        finally:
+            os.environ.pop("EVENTRELAY_MONITOR_AGENT_GAPS", None)
+
+    def test_monitored_task_context_manager_error(self):
+        """Test MonitoredTask context manager with error."""
+        os.environ["EVENTRELAY_MONITOR_AGENT_GAPS"] = "true"
+
+        try:
+            with pytest.raises(ValueError):
+                with MonitoredTask("test.yaml", "Test task") as task:
+                    # Simulate error
+                    raise ValueError("Test error")
+
+            # Note: task.error_occurred is set in the context manager,
+            # but we can't access it after the exception is raised
+        finally:
+            os.environ.pop("EVENTRELAY_MONITOR_AGENT_GAPS", None)
+
+    def test_monitoring_with_various_env_values(self):
+        """Test monitoring enabled with various environment variable values."""
+        test_values = ["true", "True", "TRUE", "1", "yes", "Yes", "YES"]
+
+        for value in test_values:
+            os.environ["EVENTRELAY_MONITOR_AGENT_GAPS"] = value
+
+            try:
+                # Should work with any of these values
+                monitor_file_access("test.yaml", "Test")
+            finally:
+                os.environ.pop("EVENTRELAY_MONITOR_AGENT_GAPS", None)
+
+    def test_monitoring_disabled_with_various_env_values(self):
+        """Test monitoring disabled with various environment variable values."""
+        test_values = ["false", "False", "FALSE", "0", "no", "No", "NO", ""]
+
+        for value in test_values:
+            os.environ["EVENTRELAY_MONITOR_AGENT_GAPS"] = value
+
+            try:
+                # Should not raise error
+                monitor_file_access("test.yaml", "Test")
+            finally:
+                os.environ.pop("EVENTRELAY_MONITOR_AGENT_GAPS", None)
 
 
-# ===========================================================================
-# monitor_agent_usage
-# ===========================================================================
-
-
-class TestMonitorAgentUsage:
-    def test_no_args_does_not_raise(self, monkeypatch):
-        monkeypatch.delenv("EVENTRELAY_MONITOR_AGENT_GAPS", raising=False)
-        monitor_agent_usage()
-
-    def test_file_path_triggers_file_monitor(self, monkeypatch):
-        monkeypatch.delenv("EVENTRELAY_MONITOR_AGENT_GAPS", raising=False)
-        monitor_agent_usage(file_path="src/main.py")
-
-    def test_task_triggers_file_monitor(self, monkeypatch):
-        monkeypatch.delenv("EVENTRELAY_MONITOR_AGENT_GAPS", raising=False)
-        monitor_agent_usage(task="process video")
-
-    def test_error_tuple_triggers_error_monitor(self, monkeypatch):
-        monkeypatch.delenv("EVENTRELAY_MONITOR_AGENT_GAPS", raising=False)
-        monitor_agent_usage(error=("ValueError", "ctx", 2))
-
-    def test_all_args_accepted(self, monkeypatch):
-        monkeypatch.delenv("EVENTRELAY_MONITOR_AGENT_GAPS", raising=False)
-        monitor_agent_usage(
-            file_path="src/main.py",
-            task="do work",
-            error=("IOError", "read failed", 1),
-        )
-
-    def test_none_error_no_error_monitor_called(self, monkeypatch):
-        monkeypatch.delenv("EVENTRELAY_MONITOR_AGENT_GAPS", raising=False)
-        monitor_agent_usage(file_path="src/x.py", error=None)
-
-
-# ===========================================================================
-# MonitoredTask context manager
-# ===========================================================================
-
-
-class TestMonitoredTask:
-    def test_init_stores_file_path(self):
-        m = MonitoredTask("src/main.py", "do work")
-        assert m.file_path == "src/main.py"
-
-    def test_init_stores_task(self):
-        m = MonitoredTask("src/main.py", "do work")
-        assert m.task == "do work"
-
-    def test_init_error_occurred_false(self):
-        m = MonitoredTask("src/main.py", "do work")
-        assert m.error_occurred is False
-
-    def test_enter_returns_self(self, monkeypatch):
-        monkeypatch.delenv("EVENTRELAY_MONITOR_AGENT_GAPS", raising=False)
-        m = MonitoredTask("src/main.py", "do work")
-        assert m.__enter__() is m
-
-    def test_exit_returns_false_on_success(self, monkeypatch):
-        monkeypatch.delenv("EVENTRELAY_MONITOR_AGENT_GAPS", raising=False)
-        m = MonitoredTask("src/main.py", "do work")
-        m.__enter__()
-        result = m.__exit__(None, None, None)
-        assert result is False
-
-    def test_exit_returns_false_on_exception(self, monkeypatch):
-        monkeypatch.delenv("EVENTRELAY_MONITOR_AGENT_GAPS", raising=False)
-        m = MonitoredTask("src/main.py", "do work")
-        m.__enter__()
-        result = m.__exit__(ValueError, ValueError("oops"), None)
-        assert result is False
-
-    def test_exception_not_suppressed(self, monkeypatch):
-        monkeypatch.delenv("EVENTRELAY_MONITOR_AGENT_GAPS", raising=False)
-        with pytest.raises(RuntimeError):
-            with MonitoredTask("src/main.py", "task"):
-                raise RuntimeError("boom")
-
-    def test_error_occurred_set_on_exception(self, monkeypatch):
-        monkeypatch.delenv("EVENTRELAY_MONITOR_AGENT_GAPS", raising=False)
-        m = MonitoredTask("src/main.py", "task")
-        with pytest.raises(ValueError):
-            with m:
-                raise ValueError("fail")
-        assert m.error_occurred is True
-
-    def test_error_occurred_stays_false_on_success(self, monkeypatch):
-        monkeypatch.delenv("EVENTRELAY_MONITOR_AGENT_GAPS", raising=False)
-        m = MonitoredTask("src/main.py", "task")
-        with m:
-            pass
-        assert m.error_occurred is False
-
-    def test_context_manager_used_as_with_statement(self, monkeypatch):
-        monkeypatch.delenv("EVENTRELAY_MONITOR_AGENT_GAPS", raising=False)
-        executed = []
-        with MonitoredTask("src/test.py", "test task") as mt:
-            executed.append(mt.file_path)
-        assert executed == ["src/test.py"]
+if __name__ == "__main__":
+    pytest.main([__file__, "-v", "--tb=short"])

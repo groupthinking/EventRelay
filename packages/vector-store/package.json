@@ -18,13 +18,13 @@
     "@dataconnect/generated": "file:src/dataconnect-generated",
     "@pinecone-database/pinecone": "^2.0.0",
     "@supabase/supabase-js": "^2.39.0",
-    "ai": "5.0.106",
-    "openai": "^4.20.0"
+    "ai": "6.0.208",
+    "openai": "^6.43.0"
   },
   "devDependencies": {
     "@repo/typescript-config": "*",
     "tsup": "^8.0.0",
     "typescript": "^5.3.0",
-    "vitest": "^4.0.15"
+    "vitest": "^4.1.9"
   }
 }

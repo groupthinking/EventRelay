@@ -7,15 +7,8 @@ import Footer from '@/components/Footer';
 
 interface APIResponse {
   status: 'success' | 'error' | 'loading' | null;
-  data: unknown;
+  data: any;
   latency?: number;
-}
-
-interface PlaygroundEndpoint {
-  method: 'GET' | 'POST';
-  endpoint: string;
-  description: string;
-  realBody: string | null;
 }
 
 // Code editor component
@@ -114,45 +107,65 @@ function EndpointCard({
 export default function APIPlaygroundPage() {
   const [selectedEndpoint, setSelectedEndpoint] = useState(0);
   const [requestBody, setRequestBody] = useState(`{
-  "url": "https://www.youtube.com/watch?v=jNQXAC9IVRw"
+  "video_url": "https://youtube.com/watch?v=example",
+  "task": "Summarize this video and extract key insights"
 }`);
   const [response, setResponse] = useState<APIResponse>({ status: null, data: null });
 
-  const endpoints: PlaygroundEndpoint[] = [
+  // Dynamic BASE_URL: Use local backend in development, production URL otherwise
+  const getBaseUrl = () => {
+    if (typeof window !== 'undefined') {
+      const hostname = window.location.hostname;
+      if (hostname === 'localhost' || hostname === '127.0.0.1') {
+        return 'http://localhost:8000';
+      }
+    }
+    return 'https://api.uvai.io';
+  };
+
+  const BASE_URL = getBaseUrl();
+
+  const endpoints = [
     {
       method: 'POST',
-      endpoint: '/api/video',
+      endpoint: '/api/v1/transcript-action',
       description: 'Analyze a YouTube video — extract transcript, generate insights and actions',
       realBody: '{"url": "https://www.youtube.com/watch?v=jNQXAC9IVRw"}',
     },
     {
       method: 'POST',
-      endpoint: '/api/pipeline',
-      description: 'Create a Vercel-oriented app or workflow handoff from a video',
-      realBody: '{"url": "https://www.youtube.com/watch?v=jNQXAC9IVRw", "project_type": "web", "deployment_target": "vercel"}',
+      endpoint: '/api/v1/chat',
+      description: 'Chat with the AI about a previously analyzed video',
+      realBody: '{"message": "What are the key takeaways?", "video_url": "https://www.youtube.com/watch?v=jNQXAC9IVRw"}',
     },
     {
       method: 'POST',
-      endpoint: '/api/extract-events',
-      description: 'Turn transcript text into events, decisions and action items',
-      realBody: '{"transcript": "The video explains how to turn a tutorial into a working product workflow.", "videoTitle": "Sample workflow", "videoUrl": "https://www.youtube.com/watch?v=jNQXAC9IVRw"}',
+      endpoint: '/api/v1/process-video',
+      description: 'Basic video processing — metadata and transcript extraction',
+      realBody: '{"url": "https://www.youtube.com/watch?v=jNQXAC9IVRw", "task": "Summarize this video"}',
     },
     {
       method: 'POST',
-      endpoint: '/api/chat',
-      description: 'Ask a question with optional video context',
-      realBody: '{"message": "What should this video become?", "context": "A YouTube tutorial should become a deployable workflow."}',
+      endpoint: '/api/v1/process-video-markdown',
+      description: 'Process video and return a markdown-formatted learning guide',
+      realBody: '{"url": "https://www.youtube.com/watch?v=jNQXAC9IVRw", "task": "Create a study guide"}',
     },
     {
       method: 'GET',
-      endpoint: '/api/pipeline',
-      description: 'Check whether backend and model services are configured',
+      endpoint: '/api/v1/health',
+      description: 'Health check — verify backend is running and responsive',
       realBody: null,
     },
     {
       method: 'GET',
-      endpoint: '/api',
-      description: 'List the public app API surface',
+      endpoint: '/api/v1/capabilities',
+      description: 'List available AI model capabilities',
+      realBody: null,
+    },
+    {
+      method: 'GET',
+      endpoint: '/api/v1/metrics',
+      description: 'System metrics in Prometheus format',
       realBody: null,
     },
   ];
@@ -162,14 +175,11 @@ export default function APIPlaygroundPage() {
 
     const start = Date.now();
     const currentEndpoint = endpoints[selectedEndpoint];
-    const url = currentEndpoint.endpoint;
-    const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), 15000);
+    const url = `${BASE_URL}${currentEndpoint.endpoint}`;
 
     try {
       const fetchOptions: RequestInit = {
         method: currentEndpoint.method,
-        signal: controller.signal,
         headers: {
           'Content-Type': 'application/json',
         },
@@ -188,23 +198,7 @@ export default function APIPlaygroundPage() {
       }
 
       const res = await fetch(url, fetchOptions);
-      const text = await res.text();
-      const contentType = res.headers.get('content-type') || '';
-      let data: unknown;
-      if (text.length === 0) {
-        data = { status: res.status, message: 'Empty response body' };
-      } else {
-        try {
-          data = JSON.parse(text);
-        } catch {
-          data = {
-            status: res.status,
-            contentType,
-            error: 'Non-JSON response',
-            body: text.slice(0, 1200),
-          };
-        }
-      }
+      const data = await res.json();
       const latency = Date.now() - start;
 
       setResponse({
@@ -213,20 +207,11 @@ export default function APIPlaygroundPage() {
         latency
       });
     } catch (error) {
-      const timedOut = error instanceof DOMException && error.name === 'AbortError';
       setResponse({
         status: 'error',
-        data: {
-          error: timedOut ? 'Request timed out' : 'Request failed',
-          message: timedOut
-            ? 'The backend did not respond within 15 seconds. Check provider billing and BACKEND_URL before retrying.'
-            : String(error),
-          url,
-        },
+        data: { error: 'Request failed', message: String(error), url },
         latency: Date.now() - start
       });
-    } finally {
-      window.clearTimeout(timeout);
     }
   };
 
@@ -242,7 +227,8 @@ export default function APIPlaygroundPage() {
         subtitle="API Playground"
         rightSlot={
           <Link
-            href="/docs/api"
+            href={`${BASE_URL}/docs`}
+            target="_blank"
             className="px-4 py-2 rounded-lg bg-white/5 border border-white/10 text-sm hover:bg-white/10 transition"
           >
             Full API Docs →
@@ -255,7 +241,7 @@ export default function APIPlaygroundPage() {
         <div className="mb-8">
           <h1 className="text-3xl font-bold mb-2 font-heading">API Playground</h1>
           <p className="text-white/60">
-            Test UVAI routes directly in this Vercel app. Responses stay JSON-first, even when a backend key or service is missing.
+            Test UVAI APIs directly in your browser. No authentication required for sandbox mode.
           </p>
         </div>
 
@@ -270,11 +256,7 @@ export default function APIPlaygroundPage() {
                 endpoint={ep.endpoint}
                 description={ep.description}
                 isSelected={selectedEndpoint === i}
-                onClick={() => {
-                  setSelectedEndpoint(i);
-                  setRequestBody(ep.realBody || '');
-                  setResponse({ status: null, data: null });
-                }}
+                onClick={() => setSelectedEndpoint(i)}
               />
             ))}
           </div>
@@ -291,7 +273,7 @@ export default function APIPlaygroundPage() {
                 {currentEndpoint.method}
               </span>
               <code className="flex-1 text-white/80 font-mono">
-                {currentEndpoint.endpoint}
+                {BASE_URL}{currentEndpoint.endpoint}
               </code>
               <button
                 onClick={handleSendRequest}
@@ -324,11 +306,12 @@ export default function APIPlaygroundPage() {
                   <p className="text-xs text-white/40 mb-2">JavaScript / Node.js</p>
                   <pre className="p-4 bg-slate-900 rounded-lg text-xs text-white/70 overflow-x-auto">
 {`const response = await fetch(
-  'https://uvai.io/api/video',
+  'https://api.uvai.io/video/analyze',
   {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer YOUR_API_KEY'
     },
     body: JSON.stringify({
       url: 'https://youtube.com/...'
@@ -343,7 +326,10 @@ export default function APIPlaygroundPage() {
 {`import requests
 
 response = requests.post(
-    'https://uvai.io/api/video',
+    'https://api.uvai.io/video/analyze',
+    headers={
+        'Authorization': 'Bearer YOUR_API_KEY'
+    },
     json={
         'url': 'https://youtube.com/...'
     }

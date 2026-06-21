@@ -44,11 +44,12 @@ _VIDEO_ID = "auJzb1D-fag"
 
 def _make_processor(monkeypatch=None, *, gemini_key="test-key", youtube_key=None):
     """Create an EnhancedVideoProcessor with external deps mocked out."""
-    env = {"GEMINI_API_KEY": gemini_key}
+    env = {k: v for k, v in os.environ.items() if k in ("PATH", "HOME", "LANG", "PYTHONPATH")}
+    env["GEMINI_API_KEY"] = gemini_key
     if youtube_key:
         env["YOUTUBE_API_KEY"] = youtube_key
 
-    with patch.dict(os.environ, env, clear=False):
+    with patch.dict(os.environ, env, clear=True):
         with patch.object(_mod, "GEMINI_VISION_AVAILABLE", False):
             proc = EnhancedVideoProcessor()
     return proc
