@@ -41,7 +41,7 @@ jobs:
       if: matrix.language == 'javascript'
       uses: actions/cache@v5
       with:
-        path: frontend/node_modules
+        path: apps/web/node_modules
         key: ${{ runner.os }}-npm-${{ hashFiles('**/package-lock.json') }}
     
     - name: Initialize CodeQL
@@ -59,27 +59,9 @@ jobs:
         category: "/language:${{matrix.language}}"
         wait-for-processing: true
 
-  # BONUS: Dependency scanning for supply chain security
-  dependency-check:
-    name: "Dependency Scanning"
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v7
-    
-    - name: Run dependency check
-      uses: dependency-check/Dependency-Check_Action@main
-      with:
-        project: 'EventRelay'
-        path: '.'
-        format: 'SARIF'
-        args: >-
-          --enable-retired
-          --exclude './frontend/node_modules,./src/mcp-bridge.py'
-    
-    - name: Upload dependency check results
-      uses: github/codeql-action/upload-sarif@v4
-      with:
-        sarif-file: 'reports/dependency-check-report.sarif'
+  # Dependency / supply-chain scanning is handled by dedicated workflows:
+  #   - dependency-review.yml  (PR-time review of new dependencies)
+  #   - security.yml           (npm audit, safety, bandit, trivy)
+  # The previous OWASP dependency-check job was removed: it was pinned to an
+  # unstable @main ref and pointed at paths that no longer exist (frontend/,
+  # src/mcp-bridge.py), so it produced no usable SARIF.
