@@ -31,6 +31,7 @@ reviews:
     ignore_title_keywords:
       - WIP
       - DO NOT MERGE
+      - "[skip ci]"
   finishing_touches:
     simplify:
       enabled: true
