@@ -24,7 +24,10 @@ function firstNonNull<T>(candidates: Promise<T | null>[]): Promise<T | null> {
       return;
     }
     const settle = (value: T | null) => {
-      if (value) {
+      // Null check, not a truthy check: a falsy-but-valid result (e.g. an
+      // empty string or 0 for other T) must count as a real result, not a
+      // failed candidate. null is the only "no result" sentinel here.
+      if (value !== null) {
         resolve(value);
       } else if (--remaining === 0) {
         resolve(null);
