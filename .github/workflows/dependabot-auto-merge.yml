@@ -137,7 +137,7 @@ jobs:
                 continue;
               }
 
-              if (updateType.includes('semver-major')) {
+              if (updateType.includes('version-update:semver-major')) {
                 core.info(`Skipping major update PR #${pullRequest.number}.`);
                 continue;
               }
