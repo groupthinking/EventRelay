@@ -103,9 +103,7 @@ export async function fetchTranscript({
   let metadata: Awaited<ReturnType<typeof fetchYouTubeMetadata>> = null;
   if (url) {
     try {
-      const controller = new AbortController();
-      const metadataTimeout = setTimeout(() => controller.abort(), 5_000);
-      metadata = await fetchYouTubeMetadata(url).finally(() => clearTimeout(metadataTimeout));
+      metadata = await fetchYouTubeMetadata(url);
     } catch {
       console.log('YouTube metadata fetch failed, continuing without');
     }
@@ -214,12 +212,17 @@ ${metadataContext ? `\nKNOWN METADATA:\n${metadataContext}` : ''}`,
     }
 
     if (candidates.length > 0) {
-      // race() but ignore null results — resolve with first non-null winner
+      // Run all candidates concurrently. `Promise.race([])` is used as a
+      // "pending-forever" sentinel: mapping each result through
+      // `r ?? Promise.race([])` turns a null (no usable transcript) into a
+      // promise that never resolves, so the outer race() skips it and
+      // continues waiting for a non-null winner.
       const winner = await Promise.race(
-        candidates.map(p => p.then(r => r ?? Promise.race([])))
+        candidates.map(p => p.then(r => r ?? new Promise<never>(() => undefined)))
       ).catch(() => null);
       if (winner) return winner;
-      // If race produced no winner, wait for all to settle
+      // If the race produced no winner (both resolved to null simultaneously),
+      // wait for all results and return the first usable one.
       const results = await Promise.allSettled(candidates);
       for (const r of results) {
         if (r.status === 'fulfilled' && r.value) return r.value;

@@ -160,7 +160,7 @@ class DataService:
                 return []
 
             # ── Pass 1: collect file paths + mtimes (no JSON reads) ──────────
-            all_files: list[tuple[Any, float]] = []
+            all_files: list[tuple[Path, float]] = []
             for md_file in self.enhanced_analysis_dir.rglob("*_enhanced.md"):
                 try:
                     mtime = md_file.stat().st_mtime

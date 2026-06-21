@@ -1085,12 +1085,13 @@ async def ingest_performance_report_v1(report: dict[str, Any]):
 # ============================================================
 
 
-class _TTLDict(dict):  # type: ignore[type-arg]
+class _TTLDict(dict[str, Any]):
     """A dict subclass that evicts entries older than *ttl* seconds.
 
     Eviction is lazy (on any mutation or `get`/`__getitem__`) plus an optional
     periodic sweep via `evict_expired()`. A *max_size* cap prevents unbounded
-    growth: when the limit is reached the oldest entry is dropped first.
+    growth: when the limit is reached the oldest (first-inserted) entry is
+    dropped. Python 3.7+ insertion-order guarantees make this O(1).
     """
 
     def __init__(
@@ -1119,15 +1120,20 @@ class _TTLDict(dict):  # type: ignore[type-arg]
 
     def evict_expired(self) -> None:
         """Remove all entries whose TTL has elapsed."""
-        expired = [k for k in list(self._timestamps) if self._is_expired(k)]
+        # Iterate a snapshot so we can mutate during the loop.
+        expired = [k for k in self._timestamps if self._is_expired(k)]
         for k in expired:
             super().pop(k, None)
             self._timestamps.pop(k, None)
 
     def _enforce_max_size(self) -> None:
-        """Drop the oldest entry when the dict exceeds *max_size*."""
+        """Drop the first-inserted entry when the dict exceeds *max_size*.
+
+        Python 3.7+ dicts preserve insertion order, so ``next(iter(...))``
+        returns the oldest entry in O(1) without scanning all keys.
+        """
         while len(self) > self._max_size:
-            oldest = min(self._timestamps, key=self._timestamps.__getitem__, default=None)
+            oldest = next(iter(self._timestamps), None)
             if oldest is None:
                 break
             super().pop(oldest, None)
