@@ -1132,12 +1132,11 @@ class _TTLDict(dict[str, Any]):
         Python 3.7+ dicts preserve insertion order, so ``next(iter(...))``
         returns the oldest entry in O(1) without scanning all keys.
         """
-        while len(self) > self._max_size:
+        if len(self) > self._max_size:
             oldest = next(iter(self._timestamps), None)
-            if oldest is None:
-                break
-            super().pop(oldest, None)
-            self._timestamps.pop(oldest, None)
+            if oldest is not None:
+                super().pop(oldest, None)
+                self._timestamps.pop(oldest, None)
 
     # ------------------------------------------------------------------
     # Overridden dict methods
@@ -1570,8 +1569,22 @@ async def extract_events(request: EventExtractRequest):
         start = 0
         while start < len(text):
             end = start + _CHUNK_SIZE
+            if end < len(text):
+                # Find the nearest sentence boundary (. ! ?) before the hard
+                # cut by taking the rightmost (max) position across all three
+                # punctuation marks.  Fall back to the nearest space (word
+                # boundary) if no sentence end is found in the window.
+                boundary_pos = max(
+                    text.rfind(b, start, end) for b in ('.', '!', '?')
+                )
+                if boundary_pos != -1:
+                    end = boundary_pos + 1  # include the punctuation mark
+                else:
+                    space = text.rfind(' ', start, end)
+                    if space != -1:
+                        end = space + 1
             chunks.append(text[start:end])
-            start += _CHUNK_SIZE - _CHUNK_OVERLAP
+            start = end - _CHUNK_OVERLAP
         return chunks
 
     transcript_chunks = _build_chunks(transcript_text)
