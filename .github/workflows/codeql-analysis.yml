@@ -59,9 +59,9 @@ jobs:
         category: "/language:${{matrix.language}}"
         wait-for-processing: true
 
-  # Dependency / supply-chain scanning is handled by dedicated workflows:
-  #   - dependency-review.yml  (PR-time review of new dependencies)
-  #   - security.yml           (npm audit, safety, bandit, trivy)
-  # The previous OWASP dependency-check job was removed: it was pinned to an
-  # unstable @main ref and pointed at paths that no longer exist (frontend/,
-  # src/mcp-bridge.py), so it produced no usable SARIF.
+# Dependency / supply-chain scanning is handled by dedicated workflows:
+#   - dependency-review.yml  (PR-time review of new dependencies)
+#   - security.yml           (npm audit, safety, bandit, trivy)
+# The previous OWASP dependency-check job was removed: it was pinned to an
+# unstable @main ref and pointed at paths that no longer exist (frontend/,
+# src/mcp-bridge.py), so it produced no usable SARIF.
