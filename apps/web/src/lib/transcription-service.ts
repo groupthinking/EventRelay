@@ -212,16 +212,17 @@ ${metadataContext ? `\nKNOWN METADATA:\n${metadataContext}` : ''}`,
     }
 
     if (candidates.length > 0) {
-      // Run all candidates concurrently. `Promise.race([])` is used as a
-      // "pending-forever" sentinel: mapping each result through
-      // `r ?? Promise.race([])` turns a null (no usable transcript) into a
-      // promise that never resolves, so the outer race() skips it and
-      // continues waiting for a non-null winner.
+      // Run all candidates concurrently and return the first non-null result.
+      // When a candidate resolves to null (no usable transcript found), we
+      // replace it with a never-resolving promise so Promise.race() skips it
+      // and continues waiting for a successful result from another candidate.
+      // eslint-disable-next-line @typescript-eslint/no-empty-function
+      const PENDING_FOREVER = new Promise<never>(() => {});
       const winner = await Promise.race(
-        candidates.map(p => p.then(r => r ?? new Promise<never>(() => undefined)))
+        candidates.map(p => p.then(r => r ?? PENDING_FOREVER))
       ).catch(() => null);
       if (winner) return winner;
-      // If the race produced no winner (both resolved to null simultaneously),
+      // If the race produced no winner (all candidates resolved to null),
       // wait for all results and return the first usable one.
       const results = await Promise.allSettled(candidates);
       for (const r of results) {

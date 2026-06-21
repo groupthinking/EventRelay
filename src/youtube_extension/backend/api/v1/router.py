@@ -1104,7 +1104,7 @@ class _TTLDict(dict[str, Any]):
         super().__init__(*args, **kwargs)
         self._ttl = ttl
         self._max_size = max_size
-        # Timestamps stored separately to avoid serialisation side-effects.
+        # Timestamps stored separately to avoid serialization side-effects.
         self._timestamps: dict[str, float] = {}
 
     # ------------------------------------------------------------------
