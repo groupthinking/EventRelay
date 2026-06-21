@@ -108,5 +108,3 @@ A full audit of this directory was performed (see
 - [CodeQL Action](https://github.com/github/codeql-action)
 - [Qlty Coverage Action](https://github.com/qltysh/qlty-action)
 - [pytest-cov Documentation](https://pytest-cov.readthedocs.io/)
-</content>
-</invoke>

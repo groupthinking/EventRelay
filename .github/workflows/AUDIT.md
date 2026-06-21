@@ -54,4 +54,3 @@ valid. Referenced paths were checked against the working tree:
   `tests/e2e/`, `tests/failure-log.md`, `apps/web` (with `build:web` script).
 - Absent (drove the deletes): `mcp-servers/mcp-profiling/`, `deployments/`,
   `frontend/`, `src/mcp-bridge.py`.
-</content>
