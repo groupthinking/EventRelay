@@ -40,7 +40,7 @@ GitHub CodeQL.
 - Runs on push and PRs to `main`, plus a weekly scheduled scan (Mondays 06:00 UTC).
 - Matrix over JavaScript/TypeScript and Python.
 - Uses the custom config at `.github/codeql/codeql-config.yml` (path exclusions,
-  `security-and-quality` query suite).
+  `security-extended` query suite).
 - Requires permissions: `contents: read`, `security-events: write`, `actions: read`.
 
 Dependency / supply-chain scanning is intentionally **not** part of this
@@ -98,7 +98,9 @@ A full audit of this directory was performed (see
   `mcp-servers/mcp-profiling/` directory, so every run failed.
 - **Renamed** `.yaml` → `stale.yml` — the file had no basename.
 - **Fixed** `codeql-analysis.yml` — removed the fragile OWASP dependency-check
-  job (`@main`, dead paths) and corrected the Node cache path to `apps/web/`.
+  job (`@main`, dead paths) and switched the Node cache from a dead
+  `frontend/node_modules` path to the npm cache (`~/.npm`), which works with the
+  repo's npm workspaces.
 - **Fixed** `coverage.yml` — added a `name:` and the `workflow_dispatch`
   trigger the docs already described.
 
