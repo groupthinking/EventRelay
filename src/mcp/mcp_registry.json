@@ -38,6 +38,20 @@
         "method": "tools/list",
         "params": {}
       }
+    },
+    {
+      "name": "vercel",
+      "transport": "sse",
+      "url": "https://mcp.vercel.com/sse",
+      "env": {
+        "VERCEL_TOKEN": "${VERCEL_TOKEN}",
+        "VERCEL_TEAM_ID": "${VERCEL_TEAM_ID}"
+      },
+      "description": "Vercel MCP server — list deployments, fetch logs, inspect env vars, manage projects",
+      "health": {
+        "method": "tools/list",
+        "params": {}
+      }
     }
   ]
 }

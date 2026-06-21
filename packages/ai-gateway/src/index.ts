@@ -69,18 +69,18 @@ export class AIGateway {
         const model = this.registry.getModel(provider);
         if (!model) continue;
 
-        const { textStream } = await streamText({
+        const { textStream } = streamText({
           model,
           prompt: options.prompt,
           system: options.system,
-          maxTokens: options.maxTokens,
+          maxOutputTokens: options.maxTokens,
           temperature: options.temperature,
         });
 
         return {
           textStream,
           provider,
-          model: model.modelId || 'unknown',
+          model: typeof model === 'string' ? model : model.modelId || 'unknown',
         };
       } catch (error) {
         errors.push({
@@ -112,7 +112,7 @@ export class AIGateway {
       model,
       prompt: options.prompt,
       system: options.system,
-      maxTokens: options.maxTokens,
+      maxOutputTokens: options.maxTokens,
       temperature: options.temperature,
     });
 
@@ -121,12 +121,14 @@ export class AIGateway {
     return {
       text: result.text,
       provider,
-      model: model.modelId || 'unknown',
+      model: typeof model === 'string' ? model : model.modelId || 'unknown',
       usage: result.usage
         ? {
-            promptTokens: result.usage.promptTokens,
-            completionTokens: result.usage.completionTokens,
-            totalTokens: result.usage.totalTokens,
+            promptTokens: result.usage.inputTokens ?? 0,
+            completionTokens: result.usage.outputTokens ?? 0,
+            totalTokens:
+              result.usage.totalTokens ??
+              (result.usage.inputTokens ?? 0) + (result.usage.outputTokens ?? 0),
           }
         : undefined,
     };

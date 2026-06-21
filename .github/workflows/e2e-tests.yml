@@ -10,6 +10,7 @@ permissions:
   contents: write
   pull-requests: write
   issues: write
+  deployments: read
 
 env:
   # By default the E2E suite runs against production. To validate a PR's own
@@ -45,6 +46,45 @@ jobs:
         with:
           node-version: '22'
           cache: 'npm'
+
+      - name: Extract Vercel preview URL for this PR
+        id: preview
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          SHA="${{ github.event.pull_request.head.sha }}"
+          echo "Looking for Vercel deployment for SHA: $SHA"
+
+          # Poll up to 5 minutes for the Vercel deployment to become ready.
+          PREVIEW_URL=""
+          for i in $(seq 1 30); do
+            DEPLOY_ID=$(gh api \
+              "/repos/${{ github.repository }}/deployments?sha=${SHA}&per_page=20" \
+              --jq '[.[] | select(.environment | ascii_downcase | startswith("preview"))] | first | .id // empty' 2>/dev/null || true)
+
+            if [ -n "$DEPLOY_ID" ]; then
+              PREVIEW_URL=$(gh api \
+                "/repos/${{ github.repository }}/deployments/${DEPLOY_ID}/statuses" \
+                --jq '[.[] | select(.state=="success")] | first | .environment_url // empty' 2>/dev/null || true)
+            fi
+
+            if [ -n "$PREVIEW_URL" ]; then
+              echo "✅ Vercel preview ready: $PREVIEW_URL"
+              break
+            fi
+
+            echo "⏳ Waiting for Vercel deployment... attempt $i/30 ($((i*10))s elapsed)"
+            sleep 10
+          done
+
+          if [ -z "$PREVIEW_URL" ]; then
+            echo "⚠️  No Vercel preview found — falling back to default BASE_URL"
+            PREVIEW_URL="${{ vars.E2E_BASE_URL || 'https://uvai.io' }}"
+          fi
+
+          echo "BASE_URL=${PREVIEW_URL}" >> "$GITHUB_ENV"
+          echo "preview_url=${PREVIEW_URL}" >> "$GITHUB_OUTPUT"
 
       - name: Install dependencies
         run: npm install --legacy-peer-deps

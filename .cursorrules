@@ -1,0 +1,30 @@
+# EventRelay Cursor Rules
+
+## Project overview
+Monorepo: Next.js 16 App Router (apps/web) + Python FastAPI backend (src/).
+Deployed on Vercel (frontend) and Cloud Run/Railway (backend).
+AI pipeline: SSE streaming, CloudEvents, Ray Serve, MCP tools.
+
+## Critical paths — always flag issues here
+- apps/web/src/app/api/pipeline/stream/route.ts — SSE streaming (source of #139 hang)
+- src/uvai/unified_ai_sdk/ — must be real implementations, not stubs
+- src/mcp/ — MCP tool definitions and registry
+
+## Vercel documentation
+Full LLM context: https://vercel.com/docs/llms-full.txt
+
+## AI Gateway
+- Client: apps/web/src/lib/ai-gateway.ts
+- Chat fallback model: openai/gpt-4o
+- Video model: google/veo-3.1-generate-001
+- Env var: AI_GATEWAY_API_KEY
+
+## TypeScript rules
+- strict mode is ON — no implicit any, no unsafe assertions
+- All fetch() calls must have AbortSignal.timeout()
+- SSE streams must always call controller.close() in finally block
+
+## Never do
+- Return mock/hardcoded data from production AI SDK methods
+- Use bare catch without logging
+- Commit secrets or API keys
