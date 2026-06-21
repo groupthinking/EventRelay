@@ -10,6 +10,7 @@ Provides versioned API endpoints with proper OpenAPI documentation.
 import asyncio
 import logging
 import os
+import time
 import uuid as _uuid
 from dataclasses import asdict
 from datetime import datetime
@@ -853,19 +854,15 @@ async def list_videos_v1(
 ):
     """Get paginated list of processed videos"""
     try:
-        all_videos = data_service.get_videos_summary()
-
-        # Apply pagination
-        start = offset
-        end = offset + limit
-        paginated_videos = all_videos[start:end]
+        total = data_service.count_videos()
+        paginated_videos = data_service.get_videos_summary(limit=limit, offset=offset)
 
         return {
             "videos": paginated_videos,
-            "total": len(all_videos),
+            "total": total,
             "limit": limit,
             "offset": offset,
-            "has_more": end < len(all_videos),
+            "has_more": (offset + limit) < total,
         }
 
     except Exception as e:
@@ -1087,9 +1084,101 @@ async def ingest_performance_report_v1(report: dict[str, Any]):
 # (Replace with Redis/DB in production)
 # ============================================================
 
-_video_jobs: dict[str, VideoJobStatusResponse] = {}
-_agent_executions: dict[str, AgentExecution] = {}
-_dispatches: dict[str, AgentDispatchResponse] = {}
+
+class _TTLDict(dict):  # type: ignore[type-arg]
+    """A dict subclass that evicts entries older than *ttl* seconds.
+
+    Eviction is lazy (on any mutation or `get`/`__getitem__`) plus an optional
+    periodic sweep via `evict_expired()`. A *max_size* cap prevents unbounded
+    growth: when the limit is reached the oldest entry is dropped first.
+    """
+
+    def __init__(
+        self,
+        ttl: float = 3600.0,
+        max_size: int = 2000,
+        *args: Any,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(*args, **kwargs)
+        self._ttl = ttl
+        self._max_size = max_size
+        # Timestamps stored separately to avoid serialisation side-effects.
+        self._timestamps: dict[str, float] = {}
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _touch(self, key: str) -> None:
+        self._timestamps[key] = time.monotonic()
+
+    def _is_expired(self, key: str) -> bool:
+        ts = self._timestamps.get(key)
+        return ts is None or (time.monotonic() - ts) > self._ttl
+
+    def evict_expired(self) -> None:
+        """Remove all entries whose TTL has elapsed."""
+        expired = [k for k in list(self._timestamps) if self._is_expired(k)]
+        for k in expired:
+            super().pop(k, None)
+            self._timestamps.pop(k, None)
+
+    def _enforce_max_size(self) -> None:
+        """Drop the oldest entry when the dict exceeds *max_size*."""
+        while len(self) > self._max_size:
+            oldest = min(self._timestamps, key=self._timestamps.__getitem__, default=None)
+            if oldest is None:
+                break
+            super().pop(oldest, None)
+            self._timestamps.pop(oldest, None)
+
+    # ------------------------------------------------------------------
+    # Overridden dict methods
+    # ------------------------------------------------------------------
+
+    def __setitem__(self, key: str, value: Any) -> None:  # type: ignore[override]
+        self.evict_expired()
+        super().__setitem__(key, value)
+        self._touch(key)
+        self._enforce_max_size()
+
+    def __getitem__(self, key: str) -> Any:
+        if self._is_expired(key):
+            super().pop(key, None)
+            self._timestamps.pop(key, None)
+            raise KeyError(key)
+        return super().__getitem__(key)
+
+    def __delitem__(self, key: str) -> None:
+        super().__delitem__(key)
+        self._timestamps.pop(key, None)
+
+    def get(self, key: str, default: Any = None) -> Any:  # type: ignore[override]
+        try:
+            return self[key]
+        except KeyError:
+            return default
+
+    def pop(self, key: str, *args: Any) -> Any:  # type: ignore[override]
+        self._timestamps.pop(key, None)
+        return super().pop(key, *args)
+
+    def __contains__(self, key: object) -> bool:
+        if isinstance(key, str) and self._is_expired(key):
+            super().pop(key, None)
+            self._timestamps.pop(key, None)
+            return False
+        return super().__contains__(key)
+
+
+# Default TTL: 2 hours; max 2 000 entries per store.
+_JOB_TTL: float = float(os.getenv("JOB_STORE_TTL_SECONDS", "7200"))
+_JOB_MAX_SIZE: int = int(os.getenv("JOB_STORE_MAX_SIZE", "2000"))
+
+_video_jobs: _TTLDict = _TTLDict(ttl=_JOB_TTL, max_size=_JOB_MAX_SIZE)
+_agent_executions: _TTLDict = _TTLDict(ttl=_JOB_TTL, max_size=_JOB_MAX_SIZE)
+_dispatches: _TTLDict = _TTLDict(ttl=_JOB_TTL, max_size=_JOB_MAX_SIZE)
 
 
 def _persist_video_job(job: VideoJobStatusResponse) -> None:
@@ -1461,44 +1550,81 @@ async def extract_events(request: EventExtractRequest):
     if not transcript_text:
         raise HTTPException(status_code=400, detail="No transcript available")
 
+    # Chunked AI extraction: process the transcript in overlapping windows so
+    # tail content is never silently dropped.  Each chunk is up to 24 000 chars
+    # with a 500-char overlap to preserve sentence context across boundaries.
+    _CHUNK_SIZE = 24_000
+    _CHUNK_OVERLAP = 500
+    _MAX_EVENTS = 50
+
+    def _build_chunks(text: str) -> list[str]:
+        if len(text) <= _CHUNK_SIZE:
+            return [text]
+        chunks = []
+        start = 0
+        while start < len(text):
+            end = start + _CHUNK_SIZE
+            chunks.append(text[start:end])
+            start += _CHUNK_SIZE - _CHUNK_OVERLAP
+        return chunks
+
+    transcript_chunks = _build_chunks(transcript_text)
+
     events: list[ExtractedEvent] = []
-    try:
-        processor = HybridProcessorService()
-        ai_result = await processor.process(
-            input_data=transcript_text[:8000],
-            prompt=(
-                "Extract key actionable events from this transcript. "
-                "For each event provide: type (action/mention/topic/insight), title, description, "
-                "and timestamp if mentioned."
-            ),
-        )
-        # process() returns a HybridResult dataclass whose payload is `.response`.
-        # REAL_MODE_ONLY: never synthesize events from a mocked or empty AI
-        # response -- fall through to the deterministic heuristic instead.
-        cloud_result = ai_result.cloud_result
-        backend = cloud_result.backend if cloud_result else None
-        raw_text = (ai_result.response or "") if ai_result.success else ""
-        if not raw_text.strip() or backend == "mock":
-            raise RuntimeError("AI extraction unavailable (no real Gemini response)")
-        for line in raw_text.strip().split("\n"):
-            line = line.strip("- •*")
-            if len(line) > 5:
-                events.append(
-                    ExtractedEvent(
-                        type=(
-                            "action"
-                            if any(
-                                w in line.lower()
-                                for w in ["do", "create", "build", "implement", "add"]
-                            )
-                            else "topic"
-                        ),
-                        title=line[:120],
-                        description=line if len(line) > 120 else None,
+    seen_titles: set[str] = set()
+
+    async def _extract_chunk(chunk: str) -> list[ExtractedEvent]:
+        """Run AI extraction on one chunk; returns events, empty list on failure."""
+        chunk_events: list[ExtractedEvent] = []
+        try:
+            processor = HybridProcessorService()
+            ai_result = await processor.process(
+                input_data=chunk,
+                prompt=(
+                    "Extract key actionable events from this transcript. "
+                    "For each event provide: type (action/mention/topic/insight), title, description, "
+                    "and timestamp if mentioned."
+                ),
+            )
+            # REAL_MODE_ONLY: never synthesize events from a mocked or empty AI
+            # response -- fall through to the deterministic heuristic instead.
+            cloud_result = ai_result.cloud_result
+            backend = cloud_result.backend if cloud_result else None
+            raw_text = (ai_result.response or "") if ai_result.success else ""
+            if not raw_text.strip() or backend == "mock":
+                raise RuntimeError("AI extraction unavailable (no real Gemini response)")
+            for line in raw_text.strip().split("\n"):
+                line = line.strip("- •*")
+                if len(line) > 5:
+                    chunk_events.append(
+                        ExtractedEvent(
+                            type=(
+                                "action"
+                                if any(
+                                    w in line.lower()
+                                    for w in ["do", "create", "build", "implement", "add"]
+                                )
+                                else "topic"
+                            ),
+                            title=line[:120],
+                            description=line if len(line) > 120 else None,
+                        )
                     )
-                )
+        except Exception as exc:
+            logger.warning(f"Direct Gemini extraction unavailable for chunk: {exc}")
+        return chunk_events
+
+    try:
+        for chunk in transcript_chunks:
+            if len(events) >= _MAX_EVENTS:
+                break
+            chunk_events = await _extract_chunk(chunk)
+            for ev in chunk_events:
+                if ev.title not in seen_titles and len(events) < _MAX_EVENTS:
+                    seen_titles.add(ev.title)
+                    events.append(ev)
     except Exception as exc:
-        logger.warning(f"Direct Gemini extraction unavailable: {exc}")
+        logger.warning(f"Chunked extraction failed: {exc}")
 
     # Real-AI fallback: if no events yet, try the Vercel AI Gateway (uses
     # VERCEL_API_KEY, routes to Gemini/GPT/Claude). This keeps the AI path
