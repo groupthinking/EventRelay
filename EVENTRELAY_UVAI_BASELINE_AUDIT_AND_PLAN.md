@@ -182,6 +182,7 @@ All entries traceable. Format: [ISO] Action | Details | Source/Commit/SHA/Link |
 - [2026-05-22] Diff analysis | Repo = full pipeline impl; site = polished landing (synced branding, minor lag possible on latest commit). Vercel = deploy target. | Cross-ref README + site text + commits | Grok
 - [2026-05-22] Todo + Phased Plan + Self-build seed created | Full artifact written. Immediate actions embedded (no user ping needed). | /home/workdir/artifacts/EVENTRELAY_UVAI_BASELINE_AUDIT_AND_PLAN.md | Grok
 - [2026-05-22] CHANGELOG init + audit artifact | This file + living doc. | Local artifact creation | Grok
+- [2026-06-22] Loop-engineering fulfillment pass | Added objective loop gates, persistent state expectations, maker/checker split, and security constraints so this plan can be executed by `/loop` without quiet failure. | EVENTRELAY_UVAI_BASELINE_AUDIT_AND_PLAN.md | Copilot
 - [Future] Phase 1 actions | [To be appended with new SHAs/links upon execution: e.g. SEO meta PR, audit logging commit] | TBD | Grok / User / v0[bot]
 
 **Next Milestone Ping Criteria:** Phase 1 complete (polish deployed, audit hooks in, Lighthouse clean) OR any blocker/break (e.g. need keys for live test, Vercel access). Will include new commit links, measured outputs, updated coords.
@@ -200,6 +201,84 @@ To fulfill "after initial round of changes, get the site into a place where we c
 - **Benefit:** Demonstrates platform power, provides immediate value (this plan itself partly "self-built" from site+repo analysis), builds muscle for dynamic Network (orchestrator using sub-capabilities reactively).
 
 This artifact is now the single source of truth for next actions. Ready for Phase 1 trigger.
+
+## 7. Loop Engineering Fulfillment Gates (2026-06-22)
+This section makes the document executable by an unattended or semi-attended `/loop`: each cycle must pick exactly one ready item, apply the smallest safe change, run objective checks, feed every failure back as the next instruction, and stop only when the checker is green or a hard approval boundary is reached.
+
+### 7.1 Four-Condition Test Before Any Automated Loop
+Run this test before turning any item above into an automation:
+
+| Condition | EventRelay requirement | Current decision |
+|-----------|------------------------|------------------|
+| Repeats weekly | The task recurs in audit, CI, SEO/a11y, pipeline reliability, or dependency hygiene work. | Required for automation |
+| Automated verification exists | The item has a test, lint, typecheck, build, Lighthouse, security scan, or log query that can fail objectively. | Required before unattended execution |
+| Token budget can absorb waste | The loop is bounded to one plan item and one failure class per cycle. | Required for cost control |
+| Senior tools are available | The loop has repo state, CI logs, test output, reproduction commands, and GitHub/MCP context. | Required for diagnosis |
+
+If any condition fails, keep the item manual and record the missing prerequisite as the next plan item.
+
+### 7.2 Thirty-Second Loop Check
+Before a cycle starts, the agent must answer:
+
+1. What single plan item is being built?
+2. What command proves it works?
+3. What hard stop prevents endless retries?
+4. What irreversible action needs human approval?
+5. What state will be written so the next cycle resumes instead of restarting?
+6. What security or secret-scan gate protects the change?
+
+If any answer is missing, the loop must stop and add that missing gate to the plan.
+
+### 7.3 Minimum Viable Loop for This Plan
+The first safe loop is:
+
+1. **Automation:** manual `/loop` trigger or scheduled audit trigger.
+2. **Skill:** repository instructions in `SKILL.md`, `AGENTS.md`, `CLAUDE.md`, and this living plan.
+3. **State:** this file remains the canonical state record; any future external tracker must link back here.
+4. **Objective gate:** relevant tests, typecheck, lint, build, and security checks must pass before completion.
+5. **Scope control:** one item per loop cycle; failures become the next instruction.
+
+### 7.4 Maker/Checker Split
+Keep implementation and verification separate:
+
+- **Maker:** makes the smallest change for one plan item.
+- **Checker:** reads the diff, runs the objective gates, reviews logs, and rejects quiet failure.
+- **Security checker:** verifies no secrets, no broad permissions, no unreviewed community skills, and no unattended irreversible actions.
+
+The maker cannot mark completion from opinion alone; only checker output can close a loop item.
+
+### 7.5 Persistent State Contract
+Every loop cycle appends or updates:
+
+- selected plan item;
+- commands run;
+- failures found;
+- fixes applied;
+- remaining blocker, if any;
+- final checker result.
+
+This prevents comprehension debt and makes later agents read the diff and state instead of blindly continuing.
+
+### 7.6 Roadmap Fulfillment Matrix
+| Roadmap step | Fulfillment in this document |
+|--------------|------------------------------|
+| 1. Replace yourself as prompter | The loop now derives the next instruction from this plan plus checker failures. |
+| 2. Four-condition test | Section 7.1 defines the required preflight. |
+| 3. Economics of loops | Section 7.1 bounds loops to repetitive, objectively checkable tasks. |
+| 4. 30-second loop check | Section 7.2 defines the tactical preflight. |
+| 5. Automations | Section 7.3 defines the minimum automation trigger. |
+| 6. Worktrees | Parallel loops must use separate worktrees before implementation work starts. |
+| 7. Skills | Section 7.3 names the persistent repository skills/instructions. |
+| 8. Connectors | Senior tools include GitHub, CI logs, MCP context, and reproduction environments. |
+| 9. Sub-agents | Section 7.4 separates maker, checker, and security review. |
+| 10. State file | Section 7.5 makes this living document the current state contract. |
+| 11. Minimum viable loop | Section 7.3 defines one automation, one skill set, one state record, and one gate. |
+| 12. Quiet-failure prevention | Objective gates and failure-fed next instructions are mandatory. |
+| 13. Comprehension debt | Section 7.5 requires diff/state review before continuing. |
+| 14. Security tax | Section 7.4 requires permission, secret, and security review gates. |
+
+### 7.7 Next Loop Instruction
+Build the next unchecked Phase 1 item only after this document update passes the repository's requested checks. If any test, typecheck, lint, build, secret scan, or validation fails, treat that failure as the next instruction and fix it before advancing the roadmap.
 
 **End of Initial Round.** No breaks/roadblocks encountered. All within Orchestrator depth. Network flexible — units completed reactively. User trust maximized via full transparency here.
 
