@@ -358,7 +358,12 @@ class TestMCPProtocolBridgeSendProtocolRequest:
         # Raw request (and its secret) must not be persisted; only a summary.
         assert "request" not in details
         assert "sk-super-secret" not in str(details)
-        assert set(details["request_summary"]["keys"]) == {"api_key", "prompt"}
+        summary = details["request_summary"]
+        assert set(summary["keys"]) == {"api_key", "prompt"}
+        # Summary must be strictly structural: key count only, never a
+        # value-dependent measure (e.g. len(str(request))) that leaks payload size.
+        assert summary["key_count"] == 2
+        assert "size" not in summary
 
     async def test_exception_propagates_and_history_records_failure(self):
         class _ErrorAdapter(_FakeAdapter):
@@ -714,6 +719,15 @@ class TestOpenAIAdapter:
         adapter = OpenAIAdapter()
         result = await adapter.initialize(
             {"api_key": "sk-test", "base_url": "https:///no-host"}
+        )
+        assert result is False
+
+    async def test_initialize_rejects_non_string_base_url(self):
+        # An explicit null/non-string base_url must be rejected cleanly rather
+        # than raising TypeError out of urlparse() inside initialize().
+        adapter = OpenAIAdapter()
+        result = await adapter.initialize(
+            {"api_key": "sk-test", "base_url": None}
         )
         assert result is False
 
