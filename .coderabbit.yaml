@@ -22,8 +22,9 @@ reviews:
   auto_assign_reviewers: true
   auto_review:
     enabled: true
-    # Drafts are not auto-reviewed (reduces cost/noise); mark the PR ready when you want feedback.
-    drafts: false
+    # Drafts are auto-reviewed too (matches the prior dashboard setting), so
+    # feedback arrives before a PR is marked ready.
+    drafts: true
     base_branches:
       - main
     # Skip work-in-progress PRs that are not opened as drafts.
