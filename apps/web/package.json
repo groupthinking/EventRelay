@@ -28,7 +28,7 @@
     "next-auth": "^4.24.14",
     "openai": "^6.43.0",
     "react": "^18",
-    "react-dom": "^18",
+    "react-dom": "^19",
     "stripe": "^22.2.2",
     "tailwind-merge": "^3.6.0",
     "use-sync-external-store": "^1.6.0",
@@ -38,7 +38,7 @@
   "devDependencies": {
     "@types/node": "^20",
     "@types/react": "^18",
-    "@types/react-dom": "^18",
+    "@types/react-dom": "^19",
     "@tailwindcss/postcss": "^4.3.1",
     "autoprefixer": "^10.0.1",
     "eslint": "^9",
