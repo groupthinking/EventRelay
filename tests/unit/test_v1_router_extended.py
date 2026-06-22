@@ -170,6 +170,7 @@ def _make_data_svc():
     svc.get_videos_summary.return_value = [
         {"video_id": "auJzb1D-fag", "title": "Test"}
     ]
+    svc.count_videos.return_value = 1
     svc.get_video_detail.return_value = {
         "video_id": "auJzb1D-fag",
         "metadata": {"title": "Test", "transcript_text": "hello world"},
