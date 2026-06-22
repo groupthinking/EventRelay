@@ -717,6 +717,14 @@ class TestOpenAIAdapter:
         )
         assert result is False
 
+    async def test_initialize_rejects_non_string_base_url(self):
+        # An explicit non-string base_url must not crash urlparse with TypeError.
+        adapter = OpenAIAdapter()
+        result = await adapter.initialize(
+            {"api_key": "sk-test", "base_url": None}
+        )
+        assert result is False
+
     async def test_health_check_returns_true(self):
         adapter = OpenAIAdapter()
         assert await adapter.health_check() is True

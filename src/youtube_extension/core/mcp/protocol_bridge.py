@@ -38,7 +38,9 @@ def _summarize_request(request: dict[str, Any]) -> dict[str, Any]:
         keys = sorted(str(k) for k in request.keys())
     except AttributeError:
         keys = []
-    return {"keys": keys, "size": len(str(request))}
+    # Strictly structural: never derive anything (size, hashes) from the
+    # values, since even a length can leak information (e.g. prompt size).
+    return {"keys": keys, "key_count": len(keys)}
 
 
 class ProtocolType(Enum):
@@ -448,6 +450,9 @@ class OpenAIAdapter(ProtocolAdapter):
         # Reject non-HTTPS or hostless base URLs. An attacker-influenced config
         # could otherwise point requests at internal targets such as the cloud
         # metadata endpoint (http://169.254.169.254) or file:// URIs (SSRF).
+        if not isinstance(base_url, str):
+            logger.error("OpenAI base_url must be a string; rejecting config")
+            return False
         parsed = urlparse(base_url)
         if parsed.scheme != "https" or not parsed.netloc:
             logger.error("Unsafe OpenAI base_url rejected (must be HTTPS with a host)")
