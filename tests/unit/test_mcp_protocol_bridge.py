@@ -342,6 +342,24 @@ class TestMCPProtocolBridgeSendProtocolRequest:
         history_actions = [h["action"] for h in context.history]
         assert "protocol_request" in history_actions
 
+    async def test_history_entry_redacts_raw_request(self):
+        bridge = await self._connected_bridge()
+        ctx_manager = _ctx_mod.get_context_manager()
+        context = ctx_manager.create_context(
+            user="testuser", task="test_task", intent="testing"
+        )
+        await bridge.send_protocol_request(
+            ProtocolType.MCP,
+            {"api_key": "sk-super-secret", "prompt": "hello"},
+            context=context,
+        )
+        last = context.history[-1]
+        details = last["details"]
+        # Raw request (and its secret) must not be persisted; only a summary.
+        assert "request" not in details
+        assert "sk-super-secret" not in str(details)
+        assert set(details["request_summary"]["keys"]) == {"api_key", "prompt"}
+
     async def test_exception_propagates_and_history_records_failure(self):
         class _ErrorAdapter(_FakeAdapter):
             async def send_request(self, request, context):
@@ -519,6 +537,25 @@ class TestMCPProtocolBridgeIntelligentRouting:
         )
         assert resp["protocol"] == "openai"
 
+    async def test_unknown_capability_string_raises_value_error(self):
+        bridge = await self._bridge_with(
+            _CapableAdapter(ProtocolType.MCP, [ServerCapability.AI_INFERENCE]),
+        )
+        with pytest.raises(ValueError, match="Unknown capability"):
+            await bridge.route_request(
+                {"required_capabilities": ["not_a_real_capability"]}
+            )
+
+    async def test_bare_string_required_capabilities_raises_type_error(self):
+        # A bare string must not be iterated character-by-character.
+        bridge = await self._bridge_with(
+            _CapableAdapter(ProtocolType.MCP, [ServerCapability.AI_INFERENCE]),
+        )
+        with pytest.raises(TypeError, match="required_capabilities"):
+            await bridge.route_request(
+                {"required_capabilities": "ai_inference"}
+            )
+
     async def test_stats_updated_after_successful_request(self):
         bridge = await self._bridge_with(
             _CapableAdapter(ProtocolType.MCP, [ServerCapability.AI_INFERENCE]),
@@ -647,6 +684,38 @@ class TestOpenAIAdapter:
         adapter = OpenAIAdapter()
         await adapter.initialize({"api_key": "sk-test"})
         assert adapter.base_url == "https://api.openai.com/v1"
+
+    async def test_initialize_accepts_custom_https_base_url(self):
+        adapter = OpenAIAdapter()
+        result = await adapter.initialize(
+            {"api_key": "sk-test", "base_url": "https://proxy.example.com/v1"}
+        )
+        assert result is True
+        assert adapter.base_url == "https://proxy.example.com/v1"
+
+    async def test_initialize_rejects_metadata_endpoint_base_url(self):
+        adapter = OpenAIAdapter()
+        result = await adapter.initialize(
+            {
+                "api_key": "sk-test",
+                "base_url": "http://169.254.169.254/latest/meta-data/",
+            }
+        )
+        assert result is False
+
+    async def test_initialize_rejects_non_https_scheme_base_url(self):
+        adapter = OpenAIAdapter()
+        result = await adapter.initialize(
+            {"api_key": "sk-test", "base_url": "file:///etc/passwd"}
+        )
+        assert result is False
+
+    async def test_initialize_rejects_hostless_base_url(self):
+        adapter = OpenAIAdapter()
+        result = await adapter.initialize(
+            {"api_key": "sk-test", "base_url": "https:///no-host"}
+        )
+        assert result is False
 
     async def test_health_check_returns_true(self):
         adapter = OpenAIAdapter()

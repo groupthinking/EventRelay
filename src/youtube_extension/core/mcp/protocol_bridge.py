@@ -15,15 +15,30 @@ Key Responsibilities:
 
 import logging
 from abc import ABC, abstractmethod
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Callable, Optional
+from urllib.parse import urlparse
 
 from .context_manager import MCPContext, get_context_manager
 from .server_registry import ServerCapability
 
 # Configure logging
 logger = logging.getLogger(__name__)
+
+
+def _summarize_request(request: dict[str, Any]) -> dict[str, Any]:
+    """Build a non-sensitive summary of a request for history/logging.
+
+    The raw request may carry API keys, tokens, prompts, or PII. Persisting it
+    verbatim would leak those into context history (which is serialized and
+    logged), so we record only structural metadata, never values.
+    """
+    try:
+        keys = sorted(str(k) for k in request.keys())
+    except AttributeError:
+        keys = []
+    return {"keys": keys, "size": len(str(request))}
 
 
 class ProtocolType(Enum):
@@ -182,15 +197,16 @@ class MCPProtocolBridge:
         try:
             # Add protocol metadata to context
             context.metadata["protocol"] = protocol_type.value
-            context.metadata["request_timestamp"] = datetime.utcnow().isoformat()
+            context.metadata["request_timestamp"] = datetime.now(timezone.utc).isoformat()
 
             # Send request through adapter
             response = await self.adapters[protocol_type].send_request(request, context)
 
-            # Update context with response
+            # Update context with response. Store only a non-sensitive summary of
+            # the request — the raw dict may contain API keys/tokens/PII.
             context.add_history_entry("protocol_request", {
                 "protocol": protocol_type.value,
-                "request": request,
+                "request_summary": _summarize_request(request),
                 "response": response,
                 "success": True
             })
@@ -202,7 +218,7 @@ class MCPProtocolBridge:
             # Update context with error
             context.add_history_entry("protocol_request", {
                 "protocol": protocol_type.value,
-                "request": request,
+                "request_summary": _summarize_request(request),
                 "error": str(e),
                 "success": False
             })
@@ -281,12 +297,34 @@ class MCPProtocolBridge:
             The selected protocol
 
         Raises:
+            TypeError: If "required_capabilities" is not a list/tuple/set
+            ValueError: If a capability string is not a known ServerCapability
             RuntimeError: If no candidate supports the required capabilities
         """
-        required_capabilities = {
-            capability if isinstance(capability, ServerCapability) else ServerCapability(capability)
-            for capability in request.get("required_capabilities", [])
-        }
+        raw_capabilities = request.get("required_capabilities", [])
+        # A bare string is iterable: without this guard the loop below would
+        # iterate over its characters, raising a confusing cascade of
+        # ValueErrors. Reject non-collection inputs up front.
+        if isinstance(raw_capabilities, (str, bytes)) or not isinstance(
+            raw_capabilities, (list, tuple, set, frozenset)
+        ):
+            raise TypeError(
+                "'required_capabilities' must be a list/tuple/set of "
+                f"ServerCapability or str, got {type(raw_capabilities).__name__}"
+            )
+
+        required_capabilities: set[ServerCapability] = set()
+        for capability in raw_capabilities:
+            if isinstance(capability, ServerCapability):
+                required_capabilities.add(capability)
+                continue
+            try:
+                required_capabilities.add(ServerCapability(capability))
+            except ValueError as exc:
+                valid = [c.value for c in ServerCapability]
+                raise ValueError(
+                    f"Unknown capability {capability!r}. Valid values: {valid}"
+                ) from exc
 
         if required_capabilities:
             capable_protocols = []
@@ -301,8 +339,15 @@ class MCPProtocolBridge:
 
             if not capable_protocols:
                 required_names = sorted(c.value for c in required_capabilities)
+                # Log specifics internally for debugging, but keep the raised
+                # message generic so it doesn't disclose which capabilities the
+                # system knows about if it propagates to an API response.
+                logger.error(
+                    "No connected protocol adapter supports required "
+                    f"capabilities: {required_names}"
+                )
                 raise RuntimeError(
-                    f"No connected protocol adapter supports required capabilities: {required_names}"
+                    "No connected protocol adapter supports the required capabilities"
                 )
 
             candidates = capable_protocols
@@ -393,12 +438,21 @@ class OpenAIAdapter(ProtocolAdapter):
     async def initialize(self, config: dict[str, Any]) -> bool:
         """Initialize OpenAI adapter"""
         self.api_key = config.get("api_key")
-        self.base_url = config.get("base_url", "https://api.openai.com/v1")
+        base_url = config.get("base_url", "https://api.openai.com/v1")
         self.model = config.get("model", "gpt-4")
 
         if not self.api_key:
             logger.error("OpenAI API key not provided")
             return False
+
+        # Reject non-HTTPS or hostless base URLs. An attacker-influenced config
+        # could otherwise point requests at internal targets such as the cloud
+        # metadata endpoint (http://169.254.169.254) or file:// URIs (SSRF).
+        parsed = urlparse(base_url)
+        if parsed.scheme != "https" or not parsed.netloc:
+            logger.error("Unsafe OpenAI base_url rejected (must be HTTPS with a host)")
+            return False
+        self.base_url = base_url
 
         return True
 
