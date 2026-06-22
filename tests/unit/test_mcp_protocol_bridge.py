@@ -579,6 +579,17 @@ class TestMCPProtocolBridgeIntelligentRouting:
         stats = bridge.protocol_stats[ProtocolType.MCP]
         assert stats == {"in_flight": 0, "success": 0, "failure": 1}
 
+    async def test_partial_pre_existing_stats_dict_does_not_raise(self):
+        # A pre-populated stats dict missing some counters must not cause a
+        # KeyError when a request increments them.
+        bridge = await self._bridge_with(
+            _CapableAdapter(ProtocolType.MCP, [ServerCapability.AI_INFERENCE]),
+        )
+        bridge.protocol_stats[ProtocolType.MCP] = {"success": 2}
+        await bridge.route_request({})
+        stats = bridge.protocol_stats[ProtocolType.MCP]
+        assert stats == {"in_flight": 0, "success": 3, "failure": 0}
+
 
 # ===========================================================================
 # MCPProtocolBridge.health_check_all

@@ -192,6 +192,11 @@ class MCPProtocolBridge:
         stats = self.protocol_stats.setdefault(
             protocol_type, {"in_flight": 0, "success": 0, "failure": 0}
         )
+        # Ensure every counter exists before incrementing so a pre-existing
+        # partial stats dict (from a caller or future refactor) can't raise
+        # KeyError and leave the counters in an inconsistent state.
+        for _counter in ("in_flight", "success", "failure"):
+            stats.setdefault(_counter, 0)
         stats["in_flight"] += 1
 
         try:
