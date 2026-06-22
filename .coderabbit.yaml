@@ -1,10 +1,17 @@
 # yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+#
+# Single source of truth for CodeRabbit. Settings that previously lived only in
+# the CodeRabbit dashboard (inheritance, auto_assign_reviewers, finishing
+# touches, knowledge base, issue enrichment, presidio) are version-controlled
+# here so every change is reviewable in a PR. `inheritance: true` still lets the
+# org-level config layer underneath this file.
 language: en-US
 tone_instructions: >-
   Be assertive and direct. Focus on real bugs, security issues, and performance
   problems — not style nitpicks. Flag anything that could break in production.
   When you find an issue, explain why it matters and suggest a concrete fix.
 early_access: true
+inheritance: true
 reviews:
   profile: assertive
   request_changes_workflow: true
@@ -12,11 +19,37 @@ reviews:
   high_level_summary_in_walkthrough: true
   review_details: true
   fail_commit_status: true
+  auto_assign_reviewers: true
   auto_review:
     enabled: true
+    # Drafts are not auto-reviewed (reduces cost/noise); mark the PR ready when you want feedback.
     drafts: false
     base_branches:
       - main
+    # Skip work-in-progress PRs that are not opened as drafts.
+    ignore_title_keywords:
+      - WIP
+      - DO NOT MERGE
+      - "[skip ci]"
+  finishing_touches:
+    simplify:
+      enabled: true
+  # Generated, vendored, lock files, and test directories are excluded so reviews stay
+  # signal-rich. The hand-maintained SDK (sdk/python/**) is intentionally NOT
+  # excluded — CLAUDE.md requires it stay in sync with the backend models. Test files are
+  # excluded to prevent PII scanner false positives on mock/fixture data.
+  path_filters:
+    - "!**/package-lock.json"
+    - "!**/*.lock"
+    - "!src/dataconnect-generated/**"
+    - "!**/__pycache__/**"
+    - "!**/dist/**"
+    - "!**/build/**"
+    - "!**/.next/**"
+    - "!**/.turbo/**"
+    - "!**/coverage/**"
+    - "!**/htmlcov/**"
+    - "!tests/**"
   path_instructions:
     - path: "**/*.ts"
       instructions: >-
@@ -73,6 +106,12 @@ reviews:
         Stainless SDK integration. Verify the SDK is actually wired into real API calls —
         not just installed as a dependency. Flag any ad-hoc fetch() calls that should be
         using the type-safe Stainless-generated client instead.
+    - path: "sdk/python/eventrelay_sdk/**"
+      instructions: >-
+        Hand-maintained Python SDK that MUST stay in sync with
+        src/youtube_extension/backend/api/v1/models.py (the source of truth). Flag drift:
+        required backend fields weakened to Optional, enum fields typed as str instead of the
+        SDK enum, or response shapes that diverge from the backend models.
   tools:
     shellcheck:
       enabled: true
@@ -93,6 +132,8 @@ reviews:
     checkov:
       enabled: true
     ast-grep:
+      enabled: true
+    presidio:
       enabled: true
   labeling_instructions:
     - label: security
@@ -127,3 +168,12 @@ chat:
 knowledge_base:
   learnings:
     scope: auto
+  linear:
+    usage: enabled
+  mcp:
+    usage: enabled
+issue_enrichment:
+  auto_enrich:
+    enabled: true
+  labeling:
+    auto_apply_labels: true
