@@ -12,6 +12,9 @@
     "@dataconnect/generated": "file:src/dataconnect-generated",
     "@google/genai": "^2.8.0",
     "@google/generative-ai": "^0.24.1",
+    "@opentelemetry/core": "^2.6.1",
+    "@opentelemetry/instrumentation": "^0.214.0",
+    "@opentelemetry/sdk-trace-base": "^2.6.1",
     "@sentry/nextjs": "^10.57.0",
     "@stripe/stripe-js": "^9.8.0",
     "@supabase/supabase-js": "^2.39.0",
@@ -29,21 +32,22 @@
     "stripe": "^22.2.2",
     "tailwind-merge": "^3.6.0",
     "use-sync-external-store": "^1.6.0",
-    "zod": "^4.4.3",
+    "zod": "^3.25.76",
     "zustand": "^4.5.0"
   },
   "devDependencies": {
-    "@types/node": "^26",
+    "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
+    "@tailwindcss/postcss": "^4.3.1",
     "autoprefixer": "^10.0.1",
-    "eslint": "^10",
+    "eslint": "^9",
     "eslint-config-next": "^16.2.7",
     "postcss": "^8.5.10",
-    "tailwindcss": "^3.4.1",
+    "tailwindcss": "^4.3.1",
     "typescript": "^5",
-    "vite": "8.0.16",
-    "vitest": "4.1.8"
+    "vite": "^8.0.16",
+    "vitest": "4.1.9"
   },
   "overrides": {
     "@protobufjs/utf8": "^1.1.1",
