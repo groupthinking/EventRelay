@@ -9,6 +9,7 @@ Handles video information retrieval, learning logs, feedback collection, and dat
 
 import json
 import logging
+import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
@@ -26,6 +27,7 @@ class DataService:
         self,
         enhanced_analysis_dir: str = "youtube_processed_videos/enhanced_analysis",
         feedback_dir: str = "youtube_processed_videos/feedback",
+        knowledge_dir: str = "youtube_processed_videos/knowledge",
     ):
         """
         Initialize data service.
@@ -33,12 +35,15 @@ class DataService:
         Args:
             enhanced_analysis_dir: Directory for enhanced analysis data
             feedback_dir: Directory for feedback data
+            knowledge_dir: Directory for knowledge-ingest data
         """
         self.enhanced_analysis_dir = Path(enhanced_analysis_dir)
         self.feedback_dir = Path(feedback_dir)
+        self.knowledge_dir = Path(knowledge_dir)
 
         # Ensure directories exist
         self.feedback_dir.mkdir(parents=True, exist_ok=True)
+        self.knowledge_dir.mkdir(parents=True, exist_ok=True)
 
     def get_learning_log(self) -> list[dict[str, Any]]:
         """
@@ -325,6 +330,39 @@ class DataService:
         except Exception as e:
             logger.error(f"Error saving feedback: {e}")
             return False
+
+    def save_knowledge_entry(
+        self, *, text: str, tags: list[str], source: str | None = None
+    ) -> Optional[dict[str, Any]]:
+        """
+        Save a durable knowledge entry to persistent storage.
+
+        Args:
+            text: Knowledge text payload
+            tags: Normalized tag list
+            source: Optional source identifier
+
+        Returns:
+            Stored entry metadata, or None when persistence fails
+        """
+        try:
+            self.knowledge_dir.mkdir(parents=True, exist_ok=True)
+            entry_id = f"kb_{uuid.uuid4().hex[:16]}"
+            normalized_source = (source or "").strip() or "api:v1:knowledge"
+            entry = {
+                "id": entry_id,
+                "text": text,
+                "tags": tags,
+                "source": normalized_source,
+                "timestamp": datetime.now().isoformat(),
+            }
+            log_file = self.knowledge_dir / "knowledge.jsonl"
+            with open(log_file, "a", encoding="utf-8") as file_handle:
+                file_handle.write(json.dumps(entry) + "\n")
+            return {"id": entry_id, "source": normalized_source, "tags": tags}
+        except Exception as exc:
+            logger.error(f"Error saving knowledge entry: {exc}")
+            return None
 
     def get_feedback_summary(self, limit: int = 100) -> list[dict[str, Any]]:
         """

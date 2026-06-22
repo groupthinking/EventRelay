@@ -614,6 +614,28 @@ class TranscriptActionResponse(BaseModel):
     processing_transport: Optional[str] = None
 
 
+class KnowledgeIngestRequest(BaseModel):
+    """Request model for knowledge ingest."""
+
+    text: str = Field(..., description="Non-empty transcript-derived insight or durable fact")
+    tags: Optional[Any] = Field(
+        default=None, description="Optional topic tags; normalized server-side"
+    )
+    source: Optional[str] = Field(
+        default=None, description="Optional source identifier (job id, video id, etc.)"
+    )
+
+
+class KnowledgeIngestResponse(BaseModel):
+    """Response model for knowledge ingest."""
+
+    stored: bool = Field(..., description="True when persisted successfully")
+    id: str = Field(..., description="Stored knowledge entry identifier")
+    source: str = Field(..., description="Source identifier attached to this entry")
+    tags: list[str] = Field(default_factory=list, description="Normalized topic tags")
+    message: str = Field(..., description="Human-readable storage result")
+
+
 class FeedbackRequest(BaseModel):
     """Request model for feedback submission"""
 
