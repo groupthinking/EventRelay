@@ -4,7 +4,7 @@ Validates the fields added or changed in the PR that version-controlled
 CodeRabbit settings from the dashboard into the repository:
   - inheritance
   - auto_assign_reviewers
-  - auto_review.drafts (true) and ignore_title_keywords
+  - auto_review.drafts (false) and ignore_title_keywords
   - finishing_touches
   - path_filters
   - new path_instructions entry for sdk/python/eventrelay_sdk/**
@@ -95,11 +95,11 @@ def test_auto_assign_reviewers_enabled(config):
 
 
 @pytest.mark.unit
-def test_auto_review_drafts_is_true(config):
-    """drafts are auto-reviewed too (matches the prior dashboard setting), so
-    feedback arrives before a PR is marked ready."""
+def test_auto_review_drafts_is_false(config):
+    """drafts is disabled (reduces cost/noise and avoids a stale
+    request-changes review silently blocking a PR once it is marked ready)."""
     auto_review = config["reviews"]["auto_review"]
-    assert auto_review.get("drafts") is True
+    assert auto_review.get("drafts") is False
 
 
 @pytest.mark.unit
