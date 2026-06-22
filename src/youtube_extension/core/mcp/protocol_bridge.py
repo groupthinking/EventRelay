@@ -38,7 +38,7 @@ def _summarize_request(request: dict[str, Any]) -> dict[str, Any]:
         keys = sorted(str(k) for k in request.keys())
     except AttributeError:
         keys = []
-    return {"keys": keys, "size": len(str(request))}
+    return {"keys": keys, "key_count": len(keys)}
 
 
 class ProtocolType(Enum):
@@ -448,6 +448,15 @@ class OpenAIAdapter(ProtocolAdapter):
 
         if not self.api_key:
             logger.error("OpenAI API key not provided")
+            return False
+
+        # base_url may arrive as a non-string (e.g. an explicit None in config);
+        # urlparse would raise TypeError on such input, so reject it up front.
+        if not isinstance(base_url, str):
+            logger.error(
+                "Unsafe OpenAI base_url rejected (must be a string, got %s)",
+                type(base_url).__name__,
+            )
             return False
 
         # Reject non-HTTPS or hostless base URLs. An attacker-influenced config
