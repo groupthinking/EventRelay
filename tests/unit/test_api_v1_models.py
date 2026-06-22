@@ -21,6 +21,8 @@ from youtube_extension.backend.api.v1.models import (
     EventExtractResponse,
     ExtractedEvent,
     JobStatus,
+    KnowledgeIngestRequest,
+    KnowledgeIngestResponse,
     VideoJobStatusResponse,
     VideoProcessJobRequest,
     VideoProcessJobResponse,
@@ -138,3 +140,22 @@ class TestAgentStatusEnum:
         assert AgentStatus.queued == "queued"
         assert AgentStatus.running == "running"
         assert AgentStatus.complete == "complete"
+
+
+class TestKnowledgeIngestModels:
+    def test_knowledge_ingest_request_accepts_optional_fields(self):
+        req = KnowledgeIngestRequest(text="Insight", tags=["topic"], source="job_1")
+        assert req.text == "Insight"
+        assert req.tags == ["topic"]
+        assert req.source == "job_1"
+
+    def test_knowledge_ingest_response_shape(self):
+        resp = KnowledgeIngestResponse(
+            stored=True,
+            id="kb_123",
+            source="job_1",
+            tags=["topic"],
+            message="Stored insight in knowledge base",
+        )
+        assert resp.stored is True
+        assert resp.tags == ["topic"]
