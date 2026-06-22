@@ -127,34 +127,70 @@ class DataService:
             logger.error(f"Error building learning log: {e}")
             return []
 
-    def get_videos_summary(self) -> list[dict[str, Any]]:
+    def count_videos(self) -> int:
+        """Return the total number of processed videos (fast — counts files only)."""
+        try:
+            if not self.enhanced_analysis_dir.exists():
+                return 0
+            return sum(1 for _ in self.enhanced_analysis_dir.rglob("*_enhanced.md"))
+        except Exception as e:
+            logger.error(f"Error counting videos: {e}")
+            return 0
+
+    def get_videos_summary(
+        self,
+        limit: Optional[int] = None,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
         """
-        Get summary list of processed videos.
+        Get paginated summary list of processed videos.
+
+        Uses a two-pass approach: the first pass collects only file paths and
+        mtimes (cheap), sorts by newest-first, then the second pass reads
+        metadata JSON only for the requested page — avoiding loading every
+        file's metadata when the collection is large.
+
+        Args:
+            limit: Maximum number of results (``None`` = all).
+            offset: Number of entries to skip (default 0).
 
         Returns:
-            List of video summaries
+            List of video summaries for the requested page.
         """
         try:
-            results = []
-
             if not self.enhanced_analysis_dir.exists():
                 logger.warning(
                     f"Enhanced analysis directory does not exist: {self.enhanced_analysis_dir}"
                 )
-                return results
+                return []
 
-            # Use recursive glob for all enhanced markdown files
+            # ── Pass 1: collect file paths + mtimes (no JSON reads) ──────────
+            all_files: list[tuple[Path, float]] = []
             for md_file in self.enhanced_analysis_dir.rglob("*_enhanced.md"):
                 try:
-                    # Extract video ID from filename
+                    mtime = md_file.stat().st_mtime
+                    all_files.append((md_file, mtime))
+                except OSError:
+                    continue
+
+            # Sort by newest first
+            all_files.sort(key=lambda x: x[1], reverse=True)
+
+            # Apply pagination slice
+            end = offset + limit if limit is not None else len(all_files)
+            page_files = all_files[offset:end]
+
+            # ── Pass 2: read metadata only for the requested page ─────────────
+            results = []
+            for md_file, mtime in page_files:
+                try:
                     video_id = md_file.name.split("_")[0]
                     parent_dir = md_file.parent
 
-                    # Find corresponding metadata file in the same directory
                     metadata_file = next(
                         parent_dir.glob(f"{video_id}_*_metadata.json"), None
                     )
-                    metadata = {}
+                    metadata: dict[str, Any] = {}
 
                     if metadata_file and metadata_file.exists():
                         try:
@@ -165,20 +201,14 @@ class DataService:
                                 f"Failed to parse metadata file {metadata_file}: {e}"
                             )
 
-                    # Get file statistics
-                    stat = md_file.stat()
-
-                    # Extract information from metadata
                     title = (
                         metadata.get("title")
                         or metadata.get("snippet", {}).get("title")
                         or f"Video {video_id}"
                     )
-
                     published_at = metadata.get("published_at") or metadata.get(
                         "snippet", {}
                     ).get("publishedAt")
-
                     view_count = metadata.get("view_count") or metadata.get(
                         "statistics", {}
                     ).get("viewCount")
@@ -190,27 +220,20 @@ class DataService:
                             "category": parent_dir.relative_to(
                                 self.enhanced_analysis_dir
                             ).as_posix(),
-                            "timestamp": datetime.fromtimestamp(
-                                stat.st_mtime
-                            ).isoformat(),
+                            "timestamp": datetime.fromtimestamp(mtime).isoformat(),
                             "published_at": published_at,
                             "view_count": view_count,
-                            "last_modified": datetime.fromtimestamp(
-                                stat.st_mtime
-                            ).isoformat(),
+                            "last_modified": datetime.fromtimestamp(mtime).isoformat(),
                             "markdown_path": str(md_file),
                             "metadata_path": (
                                 str(metadata_file) if metadata_file else None
                             ),
                         }
                     )
-
                 except Exception as e:
                     logger.error(f"Error processing summary for {md_file}: {e}")
                     continue
 
-            # Sort by newest first
-            results.sort(key=lambda x: x["timestamp"], reverse=True)
             return results
 
         except Exception as e:
