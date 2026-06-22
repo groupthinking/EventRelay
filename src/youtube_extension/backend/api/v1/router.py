@@ -947,10 +947,10 @@ async def ingest_knowledge_v1(
         raise HTTPException(status_code=400, detail="text must be a non-empty string")
 
     tags = _normalize_tag_list(request.tags)
-    source = (request.source or "").strip() or "api:v1:knowledge"
-
     try:
-        saved = data_service.save_knowledge_entry(text=text, tags=tags, source=source)
+        saved = data_service.save_knowledge_entry(
+            text=text, tags=tags, source=request.source
+        )
         if not saved:
             raise HTTPException(status_code=500, detail="Failed to store insight")
         return KnowledgeIngestResponse(

@@ -11,6 +11,7 @@ import TranscriptViewer from '@/components/TranscriptViewer';
 import EventList from '@/components/EventList';
 import AgentDashboard from '@/components/AgentDashboard';
 import type { ExtractedEvent } from '@/lib/types';
+import type { LifecyclePhase } from '@/lib/action-lifecycle';
 import { useDashboardStore } from '@/store/dashboard-store';
 import { useActionAgentStore } from '@/store/action-agent-store';
 import type { PipelineResult, Video } from '@/store/dashboard-store';
@@ -39,6 +40,13 @@ function SplitView({
   onClose: () => void;
   onExtractEvents?: (videoId: string) => void;
 }) {
+  const ACTION_VISIBLE_PHASES: LifecyclePhase[] = [
+    'fulfilled',
+    'failed',
+    'dispatching',
+    'extracting',
+    'transcribing',
+  ];
   const [activeTab, setActiveTab] = useState<'analysis' | 'transcript' | 'actions' | 'agents' | 'search'>('analysis');
   const searchQuery = useDashboardStore((s) => s.searchQuery);
   const setSearchQuery = useDashboardStore((s) => s.setSearchQuery);
@@ -72,9 +80,7 @@ function SplitView({
   const hasTranscript = !!video.transcript;
   const hasEvents = video.events && video.events.length > 0;
   const actionAgentActions = actionLifecycle.actions || [];
-  const actionPhaseLabel = (
-    ['fulfilled', 'failed', 'dispatching', 'extracting', 'transcribing'] as string[]
-  ).includes(actionLifecycle.phase)
+  const actionPhaseLabel = ACTION_VISIBLE_PHASES.includes(actionLifecycle.phase)
     ? actionLifecycle.phase
     : null;
 

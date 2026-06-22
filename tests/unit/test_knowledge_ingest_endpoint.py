@@ -85,7 +85,7 @@ def test_knowledge_ingest_success() -> None:
 
 
 def test_knowledge_ingest_rejects_blank_text() -> None:
-    fake_data_service = _FakeDataService(result={"id": "unused", "source": "unused", "tags": []})
+    fake_data_service = _FakeDataService(result=None)
     client = _build_client(fake_data_service)
 
     response = client.post(
