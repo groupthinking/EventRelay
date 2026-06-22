@@ -117,7 +117,7 @@ async def _emit_event(event_type: str, data: dict, subject: str | None = None) -
             logger.debug("CloudEvent publish failed: %s", exc)
 
 
-def _normalize_knowledge_tags(raw_tags: Any) -> list[str]:
+def _normalize_tag_list(raw_tags: Any) -> list[str]:
     """Normalize tags into a deduplicated list of non-empty strings."""
     if not isinstance(raw_tags, list):
         return []
@@ -946,7 +946,7 @@ async def ingest_knowledge_v1(
     if not text:
         raise HTTPException(status_code=400, detail="text must be a non-empty string")
 
-    tags = _normalize_knowledge_tags(request.tags)
+    tags = _normalize_tag_list(request.tags)
     source = (request.source or "").strip() or "api:v1:knowledge"
 
     try:
@@ -955,9 +955,9 @@ async def ingest_knowledge_v1(
             raise HTTPException(status_code=500, detail="Failed to store insight")
         return KnowledgeIngestResponse(
             stored=True,
-            id=str(saved.get("id")),
-            source=str(saved.get("source") or source),
-            tags=list(saved.get("tags") or tags),
+            id=saved["id"],
+            source=saved["source"],
+            tags=saved["tags"],
             message="Stored insight in knowledge base",
         )
     except HTTPException:

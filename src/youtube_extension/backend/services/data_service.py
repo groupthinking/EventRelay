@@ -9,6 +9,7 @@ Handles video information retrieval, learning logs, feedback collection, and dat
 
 import json
 import logging
+import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
@@ -346,7 +347,7 @@ class DataService:
         """
         try:
             self.knowledge_dir.mkdir(parents=True, exist_ok=True)
-            entry_id = f"kb_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}"
+            entry_id = f"kb_{uuid.uuid4().hex[:16]}"
             normalized_source = (source or "").strip() or "api:v1:knowledge"
             entry = {
                 "id": entry_id,

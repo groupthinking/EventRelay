@@ -72,14 +72,11 @@ function SplitView({
   const hasTranscript = !!video.transcript;
   const hasEvents = video.events && video.events.length > 0;
   const actionAgentActions = actionLifecycle.actions || [];
-  const actionPhaseLabel =
-    actionLifecycle.phase === 'fulfilled' || actionLifecycle.phase === 'failed'
-      ? actionLifecycle.phase
-      : actionLifecycle.phase === 'dispatching' ||
-          actionLifecycle.phase === 'extracting' ||
-          actionLifecycle.phase === 'transcribing'
-        ? actionLifecycle.phase
-        : null;
+  const actionPhaseLabel = (
+    ['fulfilled', 'failed', 'dispatching', 'extracting', 'transcribing'] as string[]
+  ).includes(actionLifecycle.phase)
+    ? actionLifecycle.phase
+    : null;
 
   return (
     <div className="flex flex-1 overflow-hidden">
