@@ -12,6 +12,7 @@ import EventList from '@/components/EventList';
 import AgentDashboard from '@/components/AgentDashboard';
 import type { ExtractedEvent } from '@/lib/types';
 import { useDashboardStore } from '@/store/dashboard-store';
+import { useActionAgentStore } from '@/store/action-agent-store';
 import type { PipelineResult, Video } from '@/store/dashboard-store';
 import FeedbackWidget from '@/components/FeedbackWidget';
 import PreferencesPanel from '@/components/PreferencesPanel';
@@ -46,6 +47,11 @@ function SplitView({
   const searchLoading = useDashboardStore((s) => s.searchLoading);
   const dispatchToAgents = useDashboardStore((s) => s.dispatchToAgents);
   const refreshAgentStatus = useDashboardStore((s) => s.refreshAgentStatus);
+  const actionLifecycle = useActionAgentStore((s) => s.lifecycle);
+  const actionAgentRunning = useActionAgentStore((s) => s.isRunning);
+  const runActionAgentFromSource = useActionAgentStore((s) => s.runFromSource);
+  const runActionAgentFromTranscript = useActionAgentStore((s) => s.runFromTranscript);
+  const resetActionAgent = useActionAgentStore((s) => s.reset);
 
   // Probe whether the backend agent + MCP layer is reachable so we only offer
   // the dispatch action when it can actually do something.
@@ -65,6 +71,15 @@ function SplitView({
   const thinAnalysis = isThinDashboardAnalysis(video);
   const hasTranscript = !!video.transcript;
   const hasEvents = video.events && video.events.length > 0;
+  const actionAgentActions = actionLifecycle.actions || [];
+  const actionPhaseLabel =
+    actionLifecycle.phase === 'fulfilled' || actionLifecycle.phase === 'failed'
+      ? actionLifecycle.phase
+      : actionLifecycle.phase === 'dispatching' ||
+          actionLifecycle.phase === 'extracting' ||
+          actionLifecycle.phase === 'transcribing'
+        ? actionLifecycle.phase
+        : null;
 
   return (
     <div className="flex flex-1 overflow-hidden">
@@ -334,6 +349,87 @@ function SplitView({
 
           {activeTab === 'actions' && (
             <div className="max-w-4xl mx-auto animate-fade-in-up">
+              <div
+                className="mb-4 p-4"
+                style={{
+                  background: 'rgba(37, 37, 44, 0.4)',
+                  border: '1px solid rgba(106, 242, 222, 0.12)',
+                }}
+              >
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p
+                      className="text-[10px] uppercase tracking-[0.2em] mb-1"
+                      style={{ color: 'rgba(248,245,253,0.45)' }}
+                    >
+                      Action Agent
+                    </p>
+                    <p className="text-sm" style={{ color: '#f8f5fd' }}>
+                      {actionPhaseLabel ? `Phase: ${actionPhaseLabel}` : 'Ready from YouTube flow'}
+                    </p>
+                    {actionLifecycle.error && (
+                      <p className="text-xs mt-1" style={{ color: '#ff716c' }}>
+                        {actionLifecycle.error}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() =>
+                        video.transcript
+                          ? runActionAgentFromTranscript(video.transcript, video.title)
+                          : runActionAgentFromSource({ url: video.url, videoTitle: video.title })
+                      }
+                      disabled={actionAgentRunning}
+                      className="px-4 py-2 text-xs font-bold uppercase tracking-wider transition-all disabled:opacity-40"
+                      style={{
+                        background: 'rgba(106,242,222,0.15)',
+                        color: '#6af2de',
+                        border: '1px solid rgba(106,242,222,0.3)',
+                      }}
+                    >
+                      {actionAgentRunning ? 'Running…' : 'Run Action Agent'}
+                    </button>
+                    {actionLifecycle.phase !== 'idle' && (
+                      <button
+                        onClick={resetActionAgent}
+                        className="px-4 py-2 text-xs font-bold uppercase tracking-wider transition-all"
+                        style={{
+                          background: 'rgba(255,255,255,0.05)',
+                          color: 'rgba(248,245,253,0.7)',
+                          border: '1px solid rgba(255,255,255,0.1)',
+                        }}
+                      >
+                        Reset
+                      </button>
+                    )}
+                  </div>
+                </div>
+                {actionAgentActions.length > 0 && (
+                  <div className="mt-4 space-y-2">
+                    {actionAgentActions.map((action, index) => (
+                      <div
+                        key={`${action.tool}-${index}`}
+                        className="p-3 text-xs"
+                        style={{
+                          background: 'rgba(25, 25, 31, 0.8)',
+                          border: '1px solid rgba(255,255,255,0.08)',
+                        }}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span style={{ color: '#f8f5fd' }}>{action.tool}</span>
+                          <span style={{ color: 'rgba(248,245,253,0.45)' }}>{action.status}</span>
+                        </div>
+                        {action.result && (
+                          <p className="mt-1" style={{ color: 'rgba(248,245,253,0.6)' }}>
+                            {action.result}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
               <EventList
                 events={video.events || []}
                 onExtract={onExtractEvents ? () => onExtractEvents(video.id) : undefined}
