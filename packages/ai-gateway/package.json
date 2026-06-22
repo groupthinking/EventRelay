@@ -10,7 +10,7 @@
   },
   "scripts": {
     "lint": "eslint . --max-warnings 0",
-    "test": "jest"
+    "test": "jest --passWithNoTests"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.85",
