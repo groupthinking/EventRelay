@@ -1,69 +1,37 @@
-{
-  "actor": {
-    "audience": [
-      "https://api.anthropic.com"
-    ],
-    "ip_address": "132.196.94.33",
-    "issuer": "https://token.actions.githubusercontent.com",
-    "subject": "repo:groupthinking/EventRelay:ref:refs/heads/main",
-    "type": "federated_identity_actor",
-    "user_agent": "curl/8.5.0"
-  },
-  "created_at": "2026-06-22T08:16:02.468761Z",
-  "event_data": {
-    "federation_rule_id": "fdrl_013i3heYNdeqkhJJ8oqMJysH",
-    "issuer_id": "fdis_019VxprZUYct3pJpQKPL7wNJ",
-    "oidc_token": {
-      "claims": {
-        "actor": "groupthinking",
-        "actor_id": "154503486",
-        "aud": "https://api.anthropic.com",
-        "base_ref": "",
-        "check_run_id": "82667563483",
-        "event_name": "push",
-        "exp": 1782116462,
-        "head_ref": "",
-        "iat": 1782116162,
-        "iss": "https://token.actions.githubusercontent.com",
-        "job_workflow_ref": "groupthinking/EventRelay/.github/workflows/anthropic-wif-test.yml@refs/heads/main",
-        "job_workflow_sha": "6ba341391543b584ea651cf53387a747e64040dd",
-        "jti": "d23e0dc3-2eed-48dd-8c0d-270105b35b75",
-        "nbf": 1782115862,
-        "ref": "refs/heads/main",
-        "ref_protected": "true",
-        "ref_type": "branch",
-        "repository": "groupthinking/EventRelay",
-        "repository_id": "1141250918",
-        "repository_owner": "groupthinking",
-        "repository_owner_id": "154503486",
-        "repository_visibility": "public",
-        "run_attempt": "1",
-        "run_id": "27939015872",
-        "run_number": "4",
-        "runner_environment": "github-hosted",
-        "sha": "6ba341391543b584ea651cf53387a747e64040dd",
-        "sub": "repo:groupthinking/EventRelay:ref:refs/heads/main",
-        "workflow": "anthropic-wif-test",
-        "workflow_ref": "groupthinking/EventRelay/.github/workflows/anthropic-wif-test.yml@refs/heads/main",
-        "workflow_sha": "6ba341391543b584ea651cf53387a747e64040dd"
-      },
-      "jti": "d23e0dc3-2eed-48dd-8c0d-270105b35b75"
-    },
-    "requested_service_account_id": "svac_01Rs4TwnH2VNmB47jDa8Wrcj"
-  },
-  "id": "activity_01EKqGUAPKR4RiJTeiyCbnog",
-  "organization_id": "dd5f3379-f417-4545-8ab1-b9e2c8a95c08",
-  "request_id": "req_011CcHy1ZD2vrdEsCLeHNTv5",
-  "resources": [
-    {
-      "id": "svac_01Rs4TwnH2VNmB47jDa8Wrcj",
-      "type": "service_account"
-    }
-  ],
-  "status": {
-    "detail": null,
-    "outcome": "failure",
-    "reason": "match_subject_prefix"
-  },
-  "type": "platform_federated_authentication"
-}
+cd ~/dev/EventRelay
+git checkout main && git pull
+cat > .github/workflows/anthropic-wif-test.yml <<'EOF'
+name: anthropic-wif-test
+on: push
+permissions:
+  id-token: write
+  contents: read
+jobs:
+  call-claude:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch GitHub OIDC token
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const token = await core.getIDToken('https://api.anthropic.com');
+            core.setSecret(token);
+            core.exportVariable('JWT', token);
+      - name: Exchange for an Anthropic access token
+        run: |
+          curl -sS https://api.anthropic.com/v1/oauth/token \
+            -H "content-type: application/json" \
+            --data @- <<JSON | jq 'with_entries(if (.key | test("token$")) then .value = "<redacted>" else . end)'
+          {
+            "grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer",
+            "assertion": "$JWT",
+            "federation_rule_id": "fdrl_013i3heYNdeqkhJJ8oqMJysH",
+            "organization_id": "dd5f3379-f417-4545-8ab1-b9e2c8a95c08",
+            "service_account_id": "svac_01Rs4TwnH2VNmB47jDa8Wrcj",
+            "workspace_id": "wrkspc_01ADvvQXic1etGMwF8SSqRm7"
+          }
+          JSON
+EOF
+git add .github/workflows/anthropic-wif-test.yml
+git commit -m "Add valid Anthropic WIF test workflow"
+git push origin main
