@@ -84,6 +84,8 @@ from .models import (
     GeminiTokenResponse,
     HealthResponse,
     JobStatus,
+    KnowledgeIngestRequest,
+    KnowledgeIngestResponse,
     MarkdownRequest,
     MarkdownResponse,
     TranscriptActionRequest,
@@ -113,6 +115,23 @@ async def _emit_event(event_type: str, data: dict, subject: str | None = None) -
             )
         except Exception as exc:
             logger.debug("CloudEvent publish failed: %s", exc)
+
+
+def _normalize_tag_list(raw_tags: Any) -> list[str]:
+    """Normalize tags into a deduplicated list of non-empty strings."""
+    if not isinstance(raw_tags, list):
+        return []
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for value in raw_tags:
+        if not isinstance(value, str):
+            continue
+        tag = value.strip()
+        if not tag or tag in seen:
+            continue
+        seen.add(tag)
+        normalized.append(tag)
+    return normalized
 
 
 # Create API v1 router
@@ -911,6 +930,41 @@ async def get_learning_log_v1(data_service: DataService = Depends(get_data_servi
     except Exception as e:
         logger.error(f"Error getting learning log: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post(
+    "/knowledge/ingest",
+    response_model=KnowledgeIngestResponse,
+    summary="Ingest transcript-derived knowledge",
+    description="Persist a durable transcript-derived insight into backend knowledge storage",
+)
+async def ingest_knowledge_v1(
+    request: KnowledgeIngestRequest, data_service: DataService = Depends(get_data_service)
+):
+    """Store transcript-derived knowledge with normalized tags."""
+    text = request.text.strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="text must be a non-empty string")
+
+    tags = _normalize_tag_list(request.tags)
+    try:
+        saved = data_service.save_knowledge_entry(
+            text=text, tags=tags, source=request.source
+        )
+        if not saved:
+            raise HTTPException(status_code=500, detail="Failed to store insight")
+        return KnowledgeIngestResponse(
+            stored=True,
+            id=saved["id"],
+            source=saved["source"],
+            tags=saved["tags"],
+            message="Stored insight in knowledge base",
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error(f"Error ingesting knowledge entry: {exc}")
+        raise HTTPException(status_code=500, detail="Failed to store insight")
 
 
 # Actions Endpoints (minimal implementation to integrate with repositories)
