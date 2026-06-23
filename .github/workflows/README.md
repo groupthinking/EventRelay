@@ -103,6 +103,9 @@ A full audit of this directory was performed (see
   repo's npm workspaces.
 - **Fixed** `coverage.yml` — added a `name:` and the `workflow_dispatch`
   trigger the docs already described.
+- **Fixed** `auto-assign.yml` — replaced `gh issue edit` with the REST
+  assignees endpoint after run logs showed GitHub App installation tokens cannot
+  use the CLI's GraphQL assignable mutation for this assignment.
 
 ## Resources
 
