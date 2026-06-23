@@ -4,6 +4,7 @@ Exactly two tables: jobs and events. The legacy models/ tree had 10 tables with
 multi-tenant / RLS / audit / soft-delete mixins — none of that is ported until
 a success criterion demands it (see docs/PORTING_PARAMETERS.md residue ledger).
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -13,12 +14,6 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
 def _utcnow() -> datetime:
-    """
-    Get the current time as a timezone-aware UTC datetime.
-    
-    Returns:
-        datetime: Current datetime with UTC timezone information.
-    """
     return datetime.now(timezone.utc)
 
 
@@ -28,13 +23,17 @@ class Base(DeclarativeBase):
 
 class Job(Base):
     __tablename__ = "jobs"
-    __table_args__ = (UniqueConstraint("idempotency_key", name="uq_jobs_idempotency_key"),)
+    __table_args__ = (
+        UniqueConstraint("idempotency_key", name="uq_jobs_idempotency_key"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     video_url: Mapped[str] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(16))
-    idempotency_key: Mapped[str] = mapped_column(String(128))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    idempotency_key: Mapped[str] = mapped_column(String(128), index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
     )
@@ -51,7 +50,9 @@ class EventRow(Base):
     __tablename__ = "events"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    job_id: Mapped[str] = mapped_column(ForeignKey("jobs.id", ondelete="CASCADE"), index=True)
+    job_id: Mapped[str] = mapped_column(
+        ForeignKey("jobs.id", ondelete="CASCADE"), index=True
+    )
     type: Mapped[str] = mapped_column(String(128))
     ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     payload: Mapped[dict] = mapped_column(JSON, default=dict)

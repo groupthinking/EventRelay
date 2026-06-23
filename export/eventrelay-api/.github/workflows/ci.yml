@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: pip install -e ".[dev,youtube,gemini,postgres]"
+
+      - name: Lint (ruff)
+        run: ruff check service
+
+      - name: Format check (black)
+        run: black --check service
+
+      - name: Tests
+        # In-memory store + fake providers; no DB, keys, or network needed.
+        run: pytest
+
+      - name: Types (mypy)
+        # Non-blocking until the spine's strict-mypy debt is burned down; flip
+        # to a hard gate once `mypy service/app` is clean.
+        continue-on-error: true
+        run: mypy service/app

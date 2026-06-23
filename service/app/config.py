@@ -3,6 +3,7 @@
 Settings are read from the environment. There is exactly one settings object;
 the legacy repo's scattered config layers are not ported.
 """
+
 from __future__ import annotations
 
 from functools import lru_cache
@@ -26,13 +27,12 @@ class Settings(BaseSettings):
     # pipeline's output for a given URL would legitimately change.
     pipeline_version: str = "1"
 
+    # Model seam (SC3/SC4). Default provider is Gemini; swap in the container
+    # for Anthropic/OpenAI by implementing the same LLMClient interface.
+    gemini_api_key: str | None = None
+    llm_model: str = "gemini-2.5-flash"
+
 
 @lru_cache
 def get_settings() -> Settings:
-    """
-    Provide the application Settings instance configured from environment variables.
-    
-    Returns:
-        Settings: The Settings instance populated from environment variables. The same cached instance is returned on subsequent calls.
-    """
     return Settings()

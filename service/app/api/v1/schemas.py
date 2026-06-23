@@ -8,6 +8,7 @@ as the source of truth for SDK generation.
 Field names are aligned with the legacy contract where they carry over
 (`video_url`, `language`, `options`) so the SDK delta stays small.
 """
+
 from __future__ import annotations
 
 from datetime import datetime

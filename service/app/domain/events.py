@@ -3,6 +3,7 @@
 The taxonomy `<domain>.<entity>.<action>` is the salvageable spine asset —
 the 10 SQLAlchemy platform tables built around it are not ported.
 """
+
 from __future__ import annotations
 
 import re
@@ -19,12 +20,6 @@ EVENT_NAME_RE = re.compile(
 
 
 def _utcnow() -> datetime:
-    """
-    Get the current UTC time as a timezone-aware datetime.
-    
-    Returns:
-        datetime: Current UTC time with tzinfo set to timezone.utc.
-    """
     return datetime.now(timezone.utc)
 
 
@@ -38,18 +33,6 @@ class Event(BaseModel):
     @field_validator("type")
     @classmethod
     def _validate_name(cls, v: str) -> str:
-        """
-        Validate that an event name follows the `<domain>.<entity>.<action>` taxonomy.
-        
-        Parameters:
-            v (str): Event name to validate (expected as three lowercase, dot-separated segments).
-        
-        Returns:
-            str: The validated event name.
-        
-        Raises:
-            ValueError: If `v` does not match the required `<domain>.<entity>.<action>` pattern.
-        """
         if not EVENT_NAME_RE.match(v):
             raise ValueError(
                 f"event type {v!r} must match <domain>.<entity>.<action> "

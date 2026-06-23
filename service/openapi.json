@@ -2,10 +2,9 @@
   "openapi": "3.1.0",
   "info": {
     "title": "EventRelay API",
-    "version": "0.1.0",
-    "description": "EventRelay — AI video processing and event extraction service.\n\nThis API is **intentionally public with no authentication required**. All endpoints accept unauthenticated requests."
+    "description": "Paste a YouTube URL; get a transcript, typed `<domain>.<entity>.<action>` events, and derived artifacts over one job-centric contract. This API is intentionally public \u2014 no authentication is required.",
+    "version": "0.1.0"
   },
-  "security": [],
   "paths": {
     "/api/v1/health": {
       "get": {
@@ -99,16 +98,6 @@
               }
             }
           },
-          "404": {
-            "description": "Job not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPError"
-                }
-              }
-            }
-          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -147,16 +136,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/TranscriptView"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Transcript not available",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPError"
                 }
               }
             }
@@ -203,16 +182,6 @@
               }
             }
           },
-          "404": {
-            "description": "Job not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPError"
-                }
-              }
-            }
-          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -255,16 +224,6 @@
               }
             }
           },
-          "404": {
-            "description": "Artifacts not available",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPError"
-                }
-              }
-            }
-          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -280,7 +239,6 @@
     }
   },
   "components": {
-    "securitySchemes": {},
     "schemas": {
       "Artifacts": {
         "properties": {
@@ -369,19 +327,6 @@
           "job_id"
         ],
         "title": "EventsView"
-      },
-      "HTTPError": {
-        "properties": {
-          "detail": {
-            "type": "string",
-            "title": "Detail"
-          }
-        },
-        "type": "object",
-        "required": [
-          "detail"
-        ],
-        "title": "HTTPError"
       },
       "HTTPValidationError": {
         "properties": {

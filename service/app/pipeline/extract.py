@@ -1,29 +1,77 @@
 """SC3 — typed event extraction.
 
-Pure function: transcript -> list[Event]. Events are validated against the
-taxonomy at construction time (domain/events.py). The agent frameworks and MCP
-implementations are NOT required to satisfy this criterion.
+Pure function over (transcript, model seam) -> list[Event]. Every returned
+event is validated against the taxonomy at construction (domain/events.py); a
+malformed event raises and the runner records the job as failed rather than
+emitting an untyped event.
 """
+
 from __future__ import annotations
 
+import logging
+
 from ..domain.events import Event
+from ..llm.base import LLMClient
+
+logger = logging.getLogger(__name__)
+
+_SYSTEM = (
+    "You extract structured events from a video transcript. "
+    "Each event name MUST be lowercase and of the form <domain>.<entity>.<action> "
+    "(three dot-separated segments), e.g. youtube.video.captured. "
+    "Return only events that are clearly supported by the transcript."
+)
+
+_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "events": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "type": {"type": "string"},
+                    "payload": {"type": "object"},
+                },
+                "required": ["type"],
+            },
+        }
+    },
+    "required": ["events"],
+}
 
 
-async def extract_events(transcript: str) -> list[Event]:
-    """
-    Extract schema-validated events in the form `<domain>.<entity>.<action>` from a transcript.
-    
-    Each returned Event must validate against the event taxonomy's regex; as an acceptance test, a golden transcript should produce the expected event set with every event matching the taxonomy.
-    
-    Parameters:
-        transcript (str): Raw transcript text to extract events from.
-    
-    Returns:
-        list[Event]: A list of validated events extracted from the transcript.
-    
-    Raises:
-        NotImplementedError: Extraction is not implemented in this module (see docs/PORTING_PARAMETERS.md).
-    """
-    raise NotImplementedError(
-        "SC3 event extraction not yet ported — see docs/PORTING_PARAMETERS.md"
+def _prompt(transcript: str) -> str:
+    return f"Transcript:\n\n{transcript}\n\nExtract the events."
+
+
+async def extract_events(transcript: str, llm: LLMClient) -> list[Event]:
+    logger.info(
+        "extract_events: calling LLMClient",
+        extra={"transcript_length": len(transcript)},
     )
+    try:
+        data = await llm.generate_json(
+            system=_SYSTEM, prompt=_prompt(transcript), schema=_SCHEMA
+        )
+        raw = data.get("events", [])
+        events = [
+            Event(type=item["type"], payload=item.get("payload", {})) for item in raw
+        ]
+        event_types = [e.type for e in events]
+        logger.info(
+            "extract_events: events extracted",
+            extra={
+                "transcript_length": len(transcript),
+                "event_count": len(events),
+                "event_types": event_types,
+            },
+        )
+        return events
+    except Exception as exc:
+        logger.error(
+            "extract_events: failed",
+            extra={"transcript_length": len(transcript), "error": str(exc)},
+            exc_info=True,
+        )
+        raise

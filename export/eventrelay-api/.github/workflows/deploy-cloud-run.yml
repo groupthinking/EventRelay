@@ -1,0 +1,57 @@
+name: Deploy to Cloud Run
+
+# Builds the container from service/Dockerfile and deploys it to Cloud Run on
+# push to main. This is a template — set the repo/environment values below and
+# provide GCP auth before enabling.
+#
+# Required GitHub secrets / vars:
+#   secrets.GCP_WORKLOAD_IDENTITY_PROVIDER  – WIF provider resource name
+#   secrets.GCP_SERVICE_ACCOUNT             – deployer service account email
+#   secrets.EVENTRELAY_GEMINI_API_KEY       – model seam key (SC3/SC4)
+#   secrets.EVENTRELAY_DATABASE_URL         – Postgres async DSN (SC6)
+#   vars.GCP_PROJECT_ID, vars.GCP_REGION, vars.CLOUD_RUN_SERVICE, vars.ARTIFACT_REPO
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write   # for keyless Workload Identity Federation
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Build & push image
+        env:
+          IMAGE: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.ARTIFACT_REPO }}/${{ vars.CLOUD_RUN_SERVICE }}:${{ github.sha }}
+        run: |
+          gcloud auth configure-docker "${{ vars.GCP_REGION }}-docker.pkg.dev" --quiet
+          docker build -f service/Dockerfile -t "$IMAGE" .
+          docker push "$IMAGE"
+
+      - name: Deploy
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: ${{ vars.CLOUD_RUN_SERVICE }}
+          region: ${{ vars.GCP_REGION }}
+          image: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.ARTIFACT_REPO }}/${{ vars.CLOUD_RUN_SERVICE }}:${{ github.sha }}
+          # Secrets are injected as env vars with the EVENTRELAY_ prefix the app reads.
+          secrets: |
+            EVENTRELAY_GEMINI_API_KEY=${{ secrets.EVENTRELAY_GEMINI_API_KEY }}
+            EVENTRELAY_DATABASE_URL=${{ secrets.EVENTRELAY_DATABASE_URL }}
+          env_vars: |
+            EVENTRELAY_ENVIRONMENT=production

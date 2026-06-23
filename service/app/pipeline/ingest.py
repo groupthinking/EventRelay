@@ -3,6 +3,7 @@
 The one stage implemented in the skeleton, because it has no external
 dependency and its acceptance test (valid->id, invalid->error) is unambiguous.
 """
+
 from __future__ import annotations
 
 import re
@@ -13,24 +14,20 @@ class InvalidInput(ValueError):
     """Raised when a URL is not an acceptable YouTube video reference."""
 
 
-_HOST_ALLOW = {"youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be", "www.youtu.be"}
+_HOST_ALLOW = {
+    "youtube.com",
+    "www.youtube.com",
+    "m.youtube.com",
+    "youtu.be",
+    "www.youtu.be",
+}
 _ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
 
 
 def extract_video_id(video_url: str) -> str:
-    """
-    Extract the canonical 11-character YouTube video ID from a YouTube URL.
-    
-    Parameters:
-        video_url (str): YouTube URL to parse.
-    
-    Returns:
-        video_id (str): The validated 11-character YouTube video id.
-    
-    Raises:
-        InvalidInput: If `video_url` is missing or not a string, is not an http(s) URL,
-                      has an unsupported host, contains no video id, or the extracted
-                      id does not match the 11-character YouTube id pattern.
+    """Parse a YouTube URL and return its canonical 11-char video id.
+
+    Raises InvalidInput for anything that is not a supported YouTube video URL.
     """
     if not video_url or not isinstance(video_url, str):
         raise InvalidInput("video_url is required")
