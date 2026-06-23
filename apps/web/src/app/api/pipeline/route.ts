@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { waitUntil } from '@vercel/functions';
 import { publishEvent, EventTypes } from '@/lib/cloudevents';
 import { analyzeVideoWithGemini } from '@/lib/gemini-video-analyzer';
 import { hasGeminiKey } from '@/lib/gemini-client';
@@ -245,13 +246,7 @@ export async function POST(request: Request) {
     videoUrl = url;
 
     if (!url) {
-      return NextResponse.json(
-        {
-          error: 'Video URL is required',
-          accepted_fields: ['url', 'youtubeUrl', 'videoUrl', 'video_url'],
-        },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: 'Video URL is required' }, { status: 400 });
     }
 
     await publishEvent(EventTypes.VIDEO_RECEIVED, { url, pipeline: 'end-to-end' }, url);
@@ -308,6 +303,7 @@ export async function POST(request: Request) {
     // Check we have enough time left (backend timeout + response buffer)
     if (BACKEND_AVAILABLE && deadline.remainingMs() > PIPELINE_BACKEND_TIMEOUT_MS + PIPELINE_RESPONSE_BUFFER_MS) {
       try {
+        const HEADROOM_MS = 5000;
         const response = await fetch(`${BACKEND_URL}/api/v1/video-to-software`, {
           method: 'POST',
           headers: backendHeaders(),
@@ -323,13 +319,16 @@ export async function POST(request: Request) {
         if (response.ok) {
           const result = await response.json();
 
-          await publishEvent(EventTypes.PIPELINE_COMPLETED, {
-            strategy: 'backend-pipeline',
-            success: result.status === 'success',
-            live_url: result.live_url,
-            github_repo: result.github_repo,
-            build_status: result.build_status,
-          }, url);
+          // Direct waitUntil on publishEvent (CloudEvent) for completion — ancillary, non-blocking return to client
+          waitUntil(
+            publishEvent(EventTypes.PIPELINE_COMPLETED, {
+              strategy: 'backend-pipeline',
+              success: result.status === 'success',
+              live_url: result.live_url,
+              github_repo: result.github_repo,
+              build_status: result.build_status,
+            }, url).catch(() => {}),
+          );
 
           return NextResponse.json({
             id: `pipeline_${Date.now().toString(36)}`,
@@ -364,11 +363,14 @@ export async function POST(request: Request) {
         );
         const elapsed = Date.now() - startTime;
 
-        await publishEvent(EventTypes.PIPELINE_COMPLETED, {
-          strategy: 'gemini-analysis-only',
-          success: true,
-          note: 'Backend unavailable — analysis only, no deployment',
-        }, url);
+        // Direct waitUntil on publishEvent (CloudEvent) for completion — ancillary, non-blocking return to client
+        waitUntil(
+          publishEvent(EventTypes.PIPELINE_COMPLETED, {
+            strategy: 'gemini-analysis-only',
+            success: true,
+            note: 'Backend unavailable — analysis only, no deployment',
+          }, url).catch(() => {}),
+        );
 
         return NextResponse.json({
           id: `pipeline_${Date.now().toString(36)}`,
@@ -424,16 +426,18 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error('Pipeline error:', error);
-    await publishEvent(EventTypes.PIPELINE_FAILED, { error: String(error) }, videoUrl).catch(() => {});
+    // Direct waitUntil on publishEvent (ancillary CloudEvent) so it does not block error response
+    waitUntil(
+      publishEvent(EventTypes.PIPELINE_FAILED, { error: String(error) }, videoUrl).catch(() => {}),
+    );
     return NextResponse.json(
-      { error: 'Pipeline failed', details: String(error) },
+      { error: 'Pipeline failed' },
       { status: 500 },
     );
   }
 }
 
 export async function GET() {
-  const backend = await checkBackendHealth();
   return NextResponse.json({
     name: 'EventRelay End-to-End Pipeline',
     version: '1.0.0',
@@ -444,10 +448,7 @@ export async function GET() {
       '3. Transport: CloudEvents published at each stage',
       '4. Execute: Agents generate code, create repo, deploy to Vercel',
     ],
-    backend_configured: backend.configured,
-    backend_available: backend.available,
-    backend_host: backend.host,
-    backend_reason: backend.reason,
+    backend_available: BACKEND_AVAILABLE,
     gemini_available: hasGeminiKey(),
     endpoints: {
       pipeline: 'POST /api/pipeline - Full end-to-end pipeline',
