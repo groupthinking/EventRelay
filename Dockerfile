@@ -1,72 +1,36 @@
-# Dockerfile for EventRelay Backend - Cloud Run Optimized
-# Multi-stage build for smaller image size
+FROM python:3.11-slim
 
-# Stage 1: Builder
-FROM python:3.12-slim AS builder
-
-WORKDIR /app
-
-# Install build dependencies
+# Install system dependencies including those needed for Node.js
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
+    ffmpeg \
+    curl \
+    gnupg \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy dependency files
-COPY pyproject.toml ./
-COPY requirements.txt* ./
-
-# Copy source code for package installation (needed for editable installs)
-COPY src/ ./src/
-
-# Install dependencies
-RUN pip install --no-cache-dir --upgrade pip && \
-    if [ -f requirements.txt ]; then \
-        pip install --no-cache-dir -r requirements.txt; \
-    else \
-        pip install --no-cache-dir -e .; \
-    fi
-
-# Stage 2: Runtime
-FROM python:3.12-slim AS runtime
+# Install Node.js 20.x
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get update && apt-get install -y nodejs && \
+    rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Create non-root user for security
-RUN groupadd --gid 1000 uvai && \
-    useradd --uid 1000 --gid uvai --shell /bin/bash --create-home uvai
+# Copy dependency files
+COPY requirements.txt ./
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Install runtime dependencies only
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+# Copy package.json/package-lock.json and run npm ci
+COPY package.json package-lock.json ./
+RUN npm ci
 
-# Copy installed packages from builder
-COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
-COPY --from=builder /usr/local/bin /usr/local/bin
+# Copy the rest of the source code
+COPY . .
 
-# Copy application code
-COPY --chown=uvai:uvai src/ ./src/
-COPY --chown=uvai:uvai pyproject.toml ./
-
-# Create data directories
-RUN mkdir -p /app/data/enhanced_analysis /app/data/cache /app/logs /app/generated_projects /app/youtube_processed_videos /tmp/uvai_data && \
-    chown -R uvai:uvai /app/data /app/logs /app/generated_projects /app/youtube_processed_videos /tmp/uvai_data
-
-# Switch to non-root user
-USER uvai
-
-# Environment variables
-ENV PORT=8080
-ENV HOST=0.0.0.0
-ENV PYTHONUNBUFFERED=1
-ENV PYTHONDONTWRITEBYTECODE=1
+# Set PYTHONPATH so that youtube_extension can be imported
 ENV PYTHONPATH=/app/src
 
-EXPOSE ${PORT}
+EXPOSE 8080
 
-# Health check (uses PORT env var)
-HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-    CMD python -c "import os,urllib.request; urllib.request.urlopen(f'http://localhost:{os.environ.get(\"PORT\",8080)}/api/v1/health')" || exit 1
-
-# Run — use shell form so $PORT is expanded at runtime
-CMD python -m uvicorn youtube_extension.main:app --host 0.0.0.0 --port $PORT
+# Run
+CMD ["python", "-m", "uvicorn", "youtube_extension.main:app", "--host", "0.0.0.0", "--port", "8080"]
