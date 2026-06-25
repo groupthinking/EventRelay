@@ -15,6 +15,7 @@ on:
     types: [opened, synchronize, ready_for_review]
   issue_comment:
     types: [created]
+    if: "github.event.comment.author_association in ['OWNER', 'MEMBER', 'COLLABORATOR']"
   schedule:
     - cron: "0 */4 * * *"  # Every 4 hours: check for stale agent tasks
 
@@ -24,11 +25,9 @@ permissions:
   issues: write
 
 agent:
-  model: "claude-sonnet-4.6"
+  model: "claude-sonnet-4-6"
   tools:
     - github
-    - terminal
-    - browser
 
 steps:
   # ═══════════════════════════════════════════════════════════
@@ -37,7 +36,7 @@ steps:
   - name: "Gate 1: Docker Build"
     id: docker_build
     run: |
-      docker build -f Dockerfile -t eventrelay-test .
+      docker build --network=none -f Dockerfile -t eventrelay-test .
     success_condition: "exit_code == 0"
     on_failure:
       action: "comment"
@@ -70,7 +69,7 @@ steps:
     needs: [docker_build]
     run: |
       docker run --rm eventrelay-test bandit -r src/ -ll -f json
-    success_condition: "high_severity_count == 0"
+    success_condition: "exit_code == 0"
     on_failure:
       action: "comment"
       message: |
@@ -96,18 +95,25 @@ steps:
       4. Test coverage: Are the changes adequately tested?
       
       PASS threshold: All scores >= 7.
-      
-      If PASS: Comment "✅ Semantic Gate PASSED" and approve the PR.
+
+      If PASS: Comment "✅ Semantic Gate PASSED — awaiting human reviewer approval before merge."
       If FAIL: Comment with specific feedback and request changes.
 
+      Note: Do NOT approve or merge the PR. Human review is required for merge authorization.
+
   # ═══════════════════════════════════════════════════════════
-  # AUTO-MERGE (only if all gates pass)
+  # REQUEST HUMAN APPROVAL (only if all gates pass)
   # ═══════════════════════════════════════════════════════════
-  - name: "Auto-Merge on Full Pass"
-    id: auto_merge
+  - name: "Request Human Approval on Full Pass"
+    id: request_approval
     needs: [semantic_review]
     condition: "all_gates_passed"
-    action: "merge"
+    agent_action: |
+      All automated gates have passed. Post a comment on the PR:
+      "✅ All verification gates passed. This PR requires explicit human approval before merge.
+      A repository maintainer (OWNER or MEMBER) must approve this PR to authorize merging."
+      Enable GitHub's native auto-merge feature on the PR (do NOT directly merge).
+      The merge will only proceed after a human approves via GitHub's review system.
     merge_method: "squash"
     delete_branch: false  # Keep branch alive for remaining tasks
 
@@ -121,7 +127,7 @@ steps:
       Check all open issues with label "agent-task" on this repo.
       For any issue that has been open > 48 hours without a PR:
       1. Comment on the issue: "⚠️ This task is stale. Escalating."
-      2. Create a Slack message in #agent-alerts with:
+      2. Create a GitHub issue comment or open a new issue tagged "escalation-alert" with:
          - Issue title and URL
          - Assigned agent
          - Time elapsed
