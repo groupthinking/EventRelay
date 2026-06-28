@@ -1,3 +1,5 @@
+import 'server-only';
+
 /**
  * Shared Gemini/Google AI client factory.
  *

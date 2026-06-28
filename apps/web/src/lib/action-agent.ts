@@ -1,3 +1,5 @@
+import 'server-only';
+
 /**
  * Transcription-Driven Action Agent — server-side orchestrator.
  *

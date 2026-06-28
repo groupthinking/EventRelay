@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint src"
+    "lint": "eslint src",
+    "analyze": "next experimental-analyze --output"
   },
   "dependencies": {
     "@dataconnect/generated": "file:src/dataconnect-generated",
@@ -29,6 +30,7 @@
     "openai": "^6.43.0",
     "react": "^18",
     "react-dom": "^18",
+    "server-only": "^0.0.1",
     "stripe": "^22.2.2",
     "tailwind-merge": "^3.6.0",
     "use-sync-external-store": "^1.6.0",

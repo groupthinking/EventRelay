@@ -1,3 +1,5 @@
+import 'server-only';
+
 import OpenAI from 'openai';
 import { fetchYouTubeMetadata, formatMetadataAsContext } from '@/lib/youtube-metadata';
 import { getGeminiClient, hasGeminiKey } from '@/lib/gemini-client';
