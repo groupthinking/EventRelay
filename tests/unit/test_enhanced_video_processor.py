@@ -415,6 +415,7 @@ class TestInitSession:
     async def test_does_not_recreate_existing_session(self):
         proc = _make_processor()
         existing = MagicMock()
+        existing.closed = False  # an open session must not be recreated
         proc.session = existing
 
         with patch("aiohttp.ClientSession") as mock_cls:
@@ -432,6 +433,7 @@ class TestClose:
     async def test_close_calls_session_close(self):
         proc = _make_processor()
         mock_session = MagicMock()
+        mock_session.closed = False  # open session, so close() actually awaits .close()
         mock_session.close = AsyncMock()
         proc.session = mock_session
 
