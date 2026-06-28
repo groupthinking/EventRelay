@@ -12,70 +12,28 @@
  */
 
 import { create } from 'zustand';
+import { createJSONStorage, persist } from 'zustand/middleware';
 import type {
   ExtractedEvent,
   AgentExecution,
   AgentStatus,
 } from '@/lib/types';
+import type {
+  Action,
+  Activity,
+  PipelineMode,
+  PipelineResult,
+  SearchResult,
+  Video,
+} from '@/store/dashboard-types';
 
-// ── Types ──
-
-export interface PipelineResult {
-  live_url: string | null;
-  github_repo: string | null;
-  build_status: string;
-  code_generation: {
-    framework: string;
-    files_created: string[];
-    entry_point: string;
-  } | null;
-  deployment: {
-    status: string;
-    platforms: string[];
-    urls: Record<string, string>;
-  } | null;
-}
-
-export interface Action {
-  title: string;
-  description: string;
-  category: string;
-  estimatedMinutes?: number | null;
-}
-
-export interface Video {
-  id: string;
-  title: string;
-  url: string;
-  status: 'processing' | 'complete' | 'failed';
-  progress: number;
-  thumbnail?: string;
-  duration?: string;
-  processedAt?: string;
-  transcript?: string;
-  events?: ExtractedEvent[];
-  agents?: AgentExecution[];
-  pipelineResult?: PipelineResult;
-  insights?: {
-    summary: string;
-    actions: Action[];
-    sentiment: string;
-    topics: string[];
-  };
-}
-
-export interface Activity {
-  time: string;
-  event: string;
-  type: 'success' | 'info' | 'error';
-}
-
-export interface SearchResult {
-  start: number;
-  duration: number;
-  text: string;
-  score: number;
-}
+export type {
+  Action,
+  Activity,
+  PipelineResult,
+  SearchResult,
+  Video,
+} from '@/store/dashboard-types';
 
 interface DashboardState {
   // Data
@@ -264,6 +222,12 @@ function applyStreamEvent(
  * the video. Throws if the stream fails or never reaches a terminal state, so
  * the caller can fall back to the non-streaming path.
  */
+function mapPipelineModeHeader(header: string | null): PipelineMode | undefined {
+  if (header === 'backend-proxy') return 'live';
+  if (header === 'gemini-direct') return 'serverless';
+  return undefined;
+}
+
 async function streamPipeline(url: string, id: string, ctx: StreamCtx): Promise<void> {
   const res = await fetch('/api/pipeline/stream', {
     method: 'POST',
@@ -273,6 +237,13 @@ async function streamPipeline(url: string, id: string, ctx: StreamCtx): Promise<
 
   if (!res.ok || !res.body) {
     throw new Error(`Pipeline stream failed: ${res.status}`);
+  }
+
+  const pipelineMode = mapPipelineModeHeader(
+    typeof res.headers?.get === 'function' ? res.headers.get('X-Pipeline-Mode') : null,
+  );
+  if (pipelineMode) {
+    ctx.updateVideo(id, { pipelineMode });
   }
 
   const reader = res.body.getReader();
@@ -359,6 +330,7 @@ async function legacyAnalyze(url: string, id: string, ctx: StreamCtx & { getVide
     updateVideo(id, {
       status: result.status === 'complete' ? 'complete' : 'failed',
       progress: 100,
+      pipelineMode: 'fallback',
       title: videoTitle + (videoTitle.length >= 50 ? '…' : ''),
       processedAt: 'Just now',
       duration: `${result.result?.transcript_segments || 0} segments`,
@@ -440,12 +412,13 @@ function createLocalWorkflowPackage(
   const { updateVideo, addActivity } = ctx;
   const briefTitle = truncate(url, 40);
 
-  updateVideo(id, {
-    status: 'complete',
-    progress: 100,
-    title: `Workflow brief: ${briefTitle}`,
-    processedAt: 'Just now',
-    insights: {
+    updateVideo(id, {
+      status: 'complete',
+      progress: 100,
+      pipelineMode: 'handoff',
+      title: `Workflow brief: ${briefTitle}`,
+      processedAt: 'Just now',
+      insights: {
       summary: `Local fallback package — backend unavailable (${reason}). Review the brief and export when the pipeline is healthy.`,
       actions: [],
       sentiment: 'Neutral',
@@ -463,6 +436,7 @@ function createDeployHandoff(url: string, id: string, ctx: StreamCtx, reason: st
   updateVideo(id, {
     status: 'complete',
     progress: 100,
+    pipelineMode: 'handoff',
     title: `Deploy handoff: ${briefTitle}`,
     processedAt: 'Just now',
     pipelineResult: {
@@ -482,7 +456,15 @@ function createDeployHandoff(url: string, id: string, ctx: StreamCtx, reason: st
   addActivity('Deploy handoff prepared — connect BACKEND_URL for automatic deployment', 'info');
 }
 
-export const useDashboardStore = create<DashboardState>((set, get) => ({
+const noopStorage = {
+  getItem: () => null,
+  setItem: () => {},
+  removeItem: () => {},
+};
+
+export const useDashboardStore = create<DashboardState>()(
+  persist(
+    (set, get) => ({
   videos: [],
   activities: [],
   selectedVideoId: null,
@@ -614,6 +596,15 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     const video = get().videos.find((v) => v.id === id);
     if (video?.status === 'failed') {
       createLocalWorkflowPackage(url, id, ctx, 'analysis failed');
+    }
+
+    const finalVideo = get().videos.find((v) => v.id === id);
+    if (
+      finalVideo?.status === 'complete' &&
+      (!finalVideo.events || finalVideo.events.length === 0) &&
+      (finalVideo.insights?.actions?.length || finalVideo.insights?.topics?.length)
+    ) {
+      get().extractEvents(id);
     }
 
     return id;
@@ -807,4 +798,17 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     );
     updateVideo(videoId, { agents: merged });
   },
-}));
+}),
+    {
+      name: 'eventrelay-dashboard-v1',
+      partialize: (state) => ({
+        videos: state.videos,
+        activities: state.activities,
+      }),
+      storage: createJSONStorage(() =>
+        typeof window !== 'undefined' ? localStorage : noopStorage,
+      ),
+      skipHydration: true,
+    },
+  ),
+);
