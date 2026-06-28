@@ -24,7 +24,7 @@
   "devDependencies": {
     "@repo/typescript-config": "*",
     "tsup": "^8.0.0",
-    "typescript": "^5.3.0",
+    "typescript": "^6.0.3",
     "vitest": "^4.1.9"
   }
 }
