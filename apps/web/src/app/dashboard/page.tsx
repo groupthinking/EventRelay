@@ -1,15 +1,26 @@
 'use client';
 
 import { Suspense, useEffect, useState, useCallback } from 'react';
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useSearchParams } from 'next/navigation';
 import { clsx } from 'clsx';
 import Nav from '@/components/Nav';
 import Footer from '@/components/Footer';
-import TranscriptViewer from '@/components/TranscriptViewer';
 import EventList from '@/components/EventList';
-import AgentDashboard from '@/components/AgentDashboard';
+
+const TranscriptViewer = dynamic(() => import('@/components/TranscriptViewer'), {
+  loading: () => (
+    <div className="py-12 text-center text-sm text-white/40">Loading transcript viewer…</div>
+  ),
+});
+
+const AgentDashboard = dynamic(() => import('@/components/AgentDashboard'), {
+  loading: () => (
+    <div className="py-12 text-center text-sm text-white/40">Loading agent dashboard…</div>
+  ),
+});
 import type { ExtractedEvent } from '@/lib/types';
 import { useDashboardStore } from '@/store/dashboard-store';
 import type { PipelineResult, Video } from '@/store/dashboard-store';
@@ -317,7 +328,9 @@ function SplitView({
           {activeTab === 'transcript' && (
             hasTranscript ? (
               <div className="max-w-4xl mx-auto animate-fade-in-up">
-                 <TranscriptViewer transcript={video.transcript!} />
+                 <Suspense fallback={<div className="py-12 text-center text-sm text-white/40">Loading transcript viewer…</div>}>
+                   <TranscriptViewer transcript={video.transcript!} />
+                 </Suspense>
                  <FeedbackWidget videoId={video.id} tab="transcript" />
               </div>
             ) : (
@@ -371,10 +384,12 @@ function SplitView({
                   Backend agents offline — deploy FastAPI + set BACKEND_URL to dispatch real MCP agents.
                 </p>
               )}
-              <AgentDashboard
-                executions={video.agents || []}
-                loading={video.status === 'processing' && !(video.agents && video.agents.length > 0)}
-              />
+              <Suspense fallback={<div className="py-12 text-center text-sm text-white/40">Loading agent dashboard…</div>}>
+                <AgentDashboard
+                  executions={video.agents || []}
+                  loading={video.status === 'processing' && !(video.agents && video.agents.length > 0)}
+                />
+              </Suspense>
               {video.status !== 'processing' && !(video.agents && video.agents.length > 0) && (
                 <div className="flex flex-col items-center justify-center text-center py-16">
                   <div className="text-6xl mb-6 opacity-20">🤖</div>

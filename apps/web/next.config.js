@@ -38,6 +38,9 @@ const securityHeaders = [
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  experimental: {
+    optimizePackageImports: ['lucide-react'],
+  },
   turbopack: {
     // Monorepo root so Turbopack resolves hoisted/workspace deps outside apps/web.
     root: path.resolve(__dirname, '../..'),
