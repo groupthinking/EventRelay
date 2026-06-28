@@ -4,13 +4,14 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build --webpack",
+    "build": "prisma generate --schema=../../packages/database/prisma/schema.prisma && next build --webpack",
     "start": "next start",
     "lint": "eslint src middleware.ts",
     "test": "vitest run",
     "analyze": "next experimental-analyze --output"
   },
   "dependencies": {
+    "@auth/prisma-adapter": "^2.7.4",
     "@dataconnect/generated": "file:src/dataconnect-generated",
     "@google/genai": "^2.10.0",
     "@google/generative-ai": "^0.24.1",
@@ -20,6 +21,7 @@
     "@opentelemetry/resources": "^2.8.0",
     "@opentelemetry/sdk-trace-base": "^2.8.0",
     "@opentelemetry/semantic-conventions": "^1.41.0",
+    "@prisma/client": "^7.8.0",
     "@sentry/nextjs": "^10.62.0",
     "@stripe/stripe-js": "^9.8.0",
     "@supabase/supabase-js": "^2.39.0",
@@ -51,6 +53,7 @@
     "eslint": "^10",
     "eslint-config-next": "^16.2.7",
     "postcss": "^8.5.10",
+    "prisma": "^7.8.0",
     "tailwindcss": "^4.3.1",
     "typescript": "^6.0.3",
     "vite": "^6.4.3",

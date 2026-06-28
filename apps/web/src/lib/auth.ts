@@ -2,6 +2,10 @@ import 'server-only';
 
 import type { NextAuthOptions } from 'next-auth';
 import GoogleProvider from 'next-auth/providers/google';
+import { PrismaAdapter } from '@auth/prisma-adapter';
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
 
 const allowedDomain = process.env.AUTH_ALLOWED_EMAIL_DOMAIN?.trim().toLowerCase();
 
@@ -11,18 +15,20 @@ const allowedDomain = process.env.AUTH_ALLOWED_EMAIL_DOMAIN?.trim().toLowerCase(
  * Required env to activate login-gating: NEXTAUTH_SECRET, NEXTAUTH_URL,
  *   GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET.
  * Optional: AUTH_ALLOWED_EMAIL_DOMAIN restricts sign-in to a single domain.
+ * Optional: DATABASE_URL enables database-backed sessions via PrismaAdapter.
  *
  * To use a different identity provider, swap GoogleProvider here — the gating
  * in middleware.ts is provider-agnostic (it only checks for a valid session).
  */
 export const authOptions: NextAuthOptions = {
+  adapter: process.env.DATABASE_URL ? PrismaAdapter(prisma) : undefined,
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_OAUTH_CLIENT_ID ?? '',
       clientSecret: process.env.GOOGLE_OAUTH_CLIENT_SECRET ?? '',
     }),
   ],
-  session: { strategy: 'jwt' },
+  session: { strategy: process.env.DATABASE_URL ? 'database' : 'jwt' },
   secret: process.env.NEXTAUTH_SECRET,
   callbacks: {
     async signIn({ user }) {
