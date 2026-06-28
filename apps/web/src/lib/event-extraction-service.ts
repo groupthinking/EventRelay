@@ -1,3 +1,5 @@
+import 'server-only';
+
 import OpenAI from 'openai';
 import { Type } from '@google/genai';
 import { getGeminiClient, hasGeminiKey } from '@/lib/gemini-client';

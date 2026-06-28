@@ -8,8 +8,8 @@
   "scripts": {
     "build": "tsup src/index.ts --format cjs,esm --dts",
     "dev": "tsup src/index.ts --format cjs,esm --dts --watch",
-    "lint": "eslint src/",
-    "test": "vitest run"
+    "lint": "eslint \"src/**/*.{ts,tsx}\" --max-warnings 0",
+    "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "3.0.85",
@@ -22,7 +22,9 @@
     "openai": "^6.45.0"
   },
   "devDependencies": {
+    "@repo/eslint-config": "*",
     "@repo/typescript-config": "*",
+    "eslint": "^9",
     "tsup": "^8.0.0",
     "typescript": "^6.0.3",
     "vitest": "^4.1.9"
