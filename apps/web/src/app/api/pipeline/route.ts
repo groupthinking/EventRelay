@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { waitUntil } from '@vercel/functions';
 import { publishEvent, EventTypes } from '@/lib/cloudevents';
 import { analyzeVideoWithGemini } from '@/lib/gemini-video-analyzer';
 import { hasGeminiKey } from '@/lib/gemini-client';
@@ -31,9 +32,12 @@ export const MAX_DURATION_MS = maxDuration * 1000;
 /** Health probe budget for Cloud Run cold start + TLS. */
 export const PIPELINE_HEALTH_TIMEOUT_MS = 5_000;
 /** Backend video-to-software cap — clamped to remaining request budget. */
-export const PIPELINE_BACKEND_TIMEOUT_MS = 50_000;
+// Reduced from 50s to 25s to leave buffer for response serialization and overhead
+export const PIPELINE_BACKEND_TIMEOUT_MS = 25_000;
 /** Gemini fallback cap — only runs if backend left enough wall-clock time. */
 export const PIPELINE_GEMINI_TIMEOUT_MS = 15_000;
+/** Minimum time to reserve for response handling */
+export const PIPELINE_RESPONSE_BUFFER_MS = 2_000;
 
 /** Tracks elapsed time so sequential fallback steps stay within maxDuration. */
 export class PipelineDeadline {
@@ -242,19 +246,15 @@ export async function POST(request: Request) {
     videoUrl = url;
 
     if (!url) {
-      return NextResponse.json(
-        {
-          error: 'Video URL is required',
-          accepted_fields: ['url', 'youtubeUrl', 'videoUrl', 'video_url'],
-        },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: 'Video URL is required' }, { status: 400 });
     }
 
     await publishEvent(EventTypes.VIDEO_RECEIVED, { url, pipeline: 'end-to-end' }, url);
 
     const deadline = PipelineDeadline.fromMaxDuration();
-    const asyncMode = body.async === true || body.async === 'true';
+    // Default to async for long-running video-to-software (prevents 524 timeouts on Vercel/Cloud Run)
+    // Sync POST kept for backward compat but discouraged (see sync note from composer terminal)
+    const asyncMode = body.async !== false && body.async !== 'false';  // default true unless explicitly false
 
     // ── Strategy 0: Async kickoff (returns job_id immediately) ──
     if (asyncMode && BACKEND_AVAILABLE) {
@@ -302,8 +302,10 @@ export async function POST(request: Request) {
     }
 
     // ── Strategy 1: Full backend pipeline (FastAPI video-to-software) ──
-    if (BACKEND_AVAILABLE && deadline.remainingMs() > 1_000) {
+    // Check we have enough time left (backend timeout + response buffer)
+    if (BACKEND_AVAILABLE && deadline.remainingMs() > PIPELINE_BACKEND_TIMEOUT_MS + PIPELINE_RESPONSE_BUFFER_MS) {
       try {
+        const HEADROOM_MS = 5000;
         const response = await fetch(`${BACKEND_URL}/api/v1/video-to-software`, {
           method: 'POST',
           headers: backendHeaders(),
@@ -319,13 +321,16 @@ export async function POST(request: Request) {
         if (response.ok) {
           const result = await response.json();
 
-          await publishEvent(EventTypes.PIPELINE_COMPLETED, {
-            strategy: 'backend-pipeline',
-            success: result.status === 'success',
-            live_url: result.live_url,
-            github_repo: result.github_repo,
-            build_status: result.build_status,
-          }, url);
+          // Direct waitUntil on publishEvent (CloudEvent) for completion — ancillary, non-blocking return to client
+          waitUntil(
+            publishEvent(EventTypes.PIPELINE_COMPLETED, {
+              strategy: 'backend-pipeline',
+              success: result.status === 'success',
+              live_url: result.live_url,
+              github_repo: result.github_repo,
+              build_status: result.build_status,
+            }, url).catch(() => {}),
+          );
 
           return NextResponse.json({
             id: `pipeline_${Date.now().toString(36)}`,
@@ -360,11 +365,14 @@ export async function POST(request: Request) {
         );
         const elapsed = Date.now() - startTime;
 
-        await publishEvent(EventTypes.PIPELINE_COMPLETED, {
-          strategy: 'gemini-analysis-only',
-          success: true,
-          note: 'Backend unavailable — analysis only, no deployment',
-        }, url);
+        // Direct waitUntil on publishEvent (CloudEvent) for completion — ancillary, non-blocking return to client
+        waitUntil(
+          publishEvent(EventTypes.PIPELINE_COMPLETED, {
+            strategy: 'gemini-analysis-only',
+            success: true,
+            note: 'Backend unavailable — analysis only, no deployment',
+          }, url).catch(() => {}),
+        );
 
         return NextResponse.json({
           id: `pipeline_${Date.now().toString(36)}`,
@@ -420,16 +428,18 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error('Pipeline error:', error);
-    await publishEvent(EventTypes.PIPELINE_FAILED, { error: String(error) }, videoUrl).catch(() => {});
+    // Direct waitUntil on publishEvent (ancillary CloudEvent) so it does not block error response
+    waitUntil(
+      publishEvent(EventTypes.PIPELINE_FAILED, { error: String(error) }, videoUrl).catch(() => {}),
+    );
     return NextResponse.json(
-      { error: 'Pipeline failed', details: String(error) },
+      { error: 'Pipeline failed' },
       { status: 500 },
     );
   }
 }
 
 export async function GET() {
-  const backend = await checkBackendHealth();
   return NextResponse.json({
     name: 'EventRelay End-to-End Pipeline',
     version: '1.0.0',
@@ -440,10 +450,7 @@ export async function GET() {
       '3. Transport: CloudEvents published at each stage',
       '4. Execute: Agents generate code, create repo, deploy to Vercel',
     ],
-    backend_configured: backend.configured,
-    backend_available: backend.available,
-    backend_host: backend.host,
-    backend_reason: backend.reason,
+    backend_available: BACKEND_AVAILABLE,
     gemini_available: hasGeminiKey(),
     endpoints: {
       pipeline: 'POST /api/pipeline - Full end-to-end pipeline',

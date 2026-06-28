@@ -143,6 +143,62 @@ class TestGetVideosSummary:
         assert "markdown_path" in entry
         assert entry["markdown_path"].endswith(".md")
 
+    def test_pagination_limit(self, tmp_path):
+        """limit param returns at most that many entries."""
+        enhanced = tmp_path / "enhanced"
+        cat = enhanced / "cat"
+        cat.mkdir(parents=True)
+        for i in range(5):
+            (cat / f"vid{i:03d}_test_enhanced.md").write_text("x")
+        svc = DataService(str(enhanced), str(tmp_path / "feedback"))
+        result = svc.get_videos_summary(limit=3)
+        assert len(result) == 3
+
+    def test_pagination_offset(self, tmp_path):
+        """offset skips entries."""
+        enhanced = tmp_path / "enhanced"
+        cat = enhanced / "cat"
+        cat.mkdir(parents=True)
+        for i in range(5):
+            (cat / f"vid{i:03d}_test_enhanced.md").write_text("x")
+        svc = DataService(str(enhanced), str(tmp_path / "feedback"))
+        all_results = svc.get_videos_summary()
+        paged = svc.get_videos_summary(limit=5, offset=2)
+        assert len(paged) == 3
+        assert all_results[2]["video_id"] == paged[0]["video_id"]
+
+    def test_pagination_beyond_total_returns_empty(self, tmp_path):
+        """offset beyond total returns empty list."""
+        enhanced = tmp_path / "enhanced"
+        cat = enhanced / "cat"
+        cat.mkdir(parents=True)
+        (cat / "vid000_test_enhanced.md").write_text("x")
+        svc = DataService(str(enhanced), str(tmp_path / "feedback"))
+        result = svc.get_videos_summary(limit=10, offset=100)
+        assert result == []
+
+
+class TestCountVideos:
+    def test_missing_dir_returns_zero(self, svc):
+        assert svc.count_videos() == 0
+
+    def test_counts_enhanced_markdown_files(self, tmp_path):
+        enhanced = tmp_path / "enhanced"
+        cat = enhanced / "cat"
+        cat.mkdir(parents=True)
+        for i in range(3):
+            (cat / f"vid{i:03d}_test_enhanced.md").write_text("x")
+        svc = DataService(str(enhanced), str(tmp_path / "feedback"))
+        assert svc.count_videos() == 3
+
+    def test_does_not_count_non_enhanced_files(self, tmp_path):
+        enhanced = tmp_path / "enhanced"
+        enhanced.mkdir(parents=True)
+        (enhanced / "vid000_test_enhanced.md").write_text("x")
+        (enhanced / "other.md").write_text("y")
+        svc = DataService(str(enhanced), str(tmp_path / "feedback"))
+        assert svc.count_videos() == 1
+
 
 # ===========================================================================
 # get_video_detail

@@ -4,12 +4,12 @@
   "private": true,
   "main": "index.js",
   "devDependencies": {
-    "eslint": "^8",
+    "eslint": "^9",
     "eslint-config-next": "^16.0.6",
-    "eslint-config-prettier": "^9.0.0"
+    "eslint-config-prettier": "^10.1.8"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "2.0.53",
+    "@ai-sdk/anthropic": "3.0.85",
     "@ai-sdk/openai": "2.0.76",
     "@dataconnect/generated": "file:src/dataconnect-generated",
     "ai": "6.0.208",

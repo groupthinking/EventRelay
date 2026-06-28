@@ -48,7 +48,7 @@ sys.modules.setdefault("google.cloud", _google_cloud)
 sys.modules.setdefault("google.cloud.pubsub_v1", _google_cloud_pubsub)
 
 # httpx is a real package but we want to control it later via patch;
-# if it isn't installed, provide a minimal stub so the import doesn't break.
+# Provide a minimal stub when missing so the import does not break.
 try:
     import httpx as _httpx_real  # noqa: F401 – real httpx available, nothing to stub
 except ImportError:

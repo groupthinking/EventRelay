@@ -86,7 +86,10 @@ class EnhancedVideoProcessor:
     
     async def _init_session(self):
         """Initialize aiohttp session with proper headers and SSL context"""
-        if not self.session:
+        if os.getenv("SENTRY_DSN"):
+            import sentry_sdk
+            sentry_sdk.add_breadcrumb(category="video", message="Initializing HTTP session", level="info")
+        if not self.session or getattr(self.session, 'closed', False):
             # Create SSL context that handles certificate verification
             import ssl
             import certifi
@@ -845,7 +848,9 @@ Provide a structured JSON response with visual_elements array containing:
     async def close(self):
         """Clean up resources"""
         if self.session:
-            await self.session.close()
+            if not self.session.closed:
+                await self.session.close()
+            self.session = None  # Important: reset so next use recreates fresh session
 
 # Factory function for MCP integration
 def get_enhanced_video_processor() -> EnhancedVideoProcessor:
