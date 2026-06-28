@@ -33,6 +33,11 @@ function formatDuration(ms: number): string {
   return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
 }
 
+/**
+ * Renders a single pipeline stage row.
+ *
+ * @param stage - The stage to display
+ */
 function StageRow({ stage, index }: { stage: PipelineStage; index: number }) {
   const isRunning = stage.status === 'running';
   const isComplete = stage.status === 'complete';
@@ -154,6 +159,16 @@ function StageRow({ stage, index }: { stage: PipelineStage; index: number }) {
   );
 }
 
+/**
+ * Renders the pipeline progress panel.
+ *
+ * @param stages - The stages shown in the progress list
+ * @param overallProgress - The overall progress percentage
+ * @param status - The current pipeline status
+ * @param videoTitle - The title displayed above the stage list
+ * @param startedAt - The time used to measure elapsed processing time
+ * @param className - Additional classes applied to the wrapper
+ */
 export default function PipelineProgress({
   stages,
   overallProgress,

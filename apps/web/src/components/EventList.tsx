@@ -23,6 +23,15 @@ const TYPE_STYLES: Record<string, { bg: string; text: string; icon: LucideIcon }
   insight: { bg: 'bg-red-500/10 border-red-500/20', text: 'text-red-400', icon: AlertTriangle },
 };
 
+/**
+ * Displays a list of extracted events with loading and empty states.
+ *
+ * @param events - The events to display.
+ * @param loading - Whether the event extraction state is being shown.
+ * @param onExtract - Called when the extract events button is clicked.
+ * @param className - Additional classes for the container.
+ * @returns The rendered event list.
+ */
 export default function EventList({ events, loading, onExtract, className }: EventListProps) {
   if (loading) {
     return (

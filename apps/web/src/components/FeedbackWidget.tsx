@@ -11,9 +11,10 @@ interface FeedbackWidgetProps {
 }
 
 /**
- * Inline feedback widget with star rating + optional comment.
- * Appears at the bottom of each dashboard tab to collect user signals
- * that feed into the correction loop.
+ * Displays a star-based feedback form for a video tab and shows a success state after submission.
+ *
+ * @param videoId - The video identifier included with the feedback submission.
+ * @param tab - The current tab name included with the feedback submission.
  */
 export default function FeedbackWidget({ videoId, tab, compact = false }: FeedbackWidgetProps) {
   const [rating, setRating] = useState<number>(0);

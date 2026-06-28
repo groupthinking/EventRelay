@@ -45,6 +45,14 @@ function formatTimestamp(seconds: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
+/**
+ * Renders a transcript segment row that can be focused and used to jump to its start time.
+ *
+ * @param segment - The transcript segment to display.
+ * @param isActive - Whether this segment matches the current playback position.
+ * @param isPast - Whether this segment ends before the current playback position.
+ * @param onSeek - Called with the segment start time when the row is activated.
+ */
 function SegmentRow({
   segment,
   isActive,
@@ -132,6 +140,15 @@ function SegmentRow({
   );
 }
 
+/**
+ * Renders an interactive transcript with speaker filtering, search, and playback progress.
+ *
+ * @param segments - Transcript segments to display
+ * @param currentTime - Current playback time in seconds
+ * @param onSeek - Called with the start time of a segment when a row is activated
+ * @param isPlaying - Controls the playing-state indicator in the header
+ * @param className - Additional classes applied to the outer container
+ */
 export default function InteractiveTranscript({
   segments,
   currentTime,

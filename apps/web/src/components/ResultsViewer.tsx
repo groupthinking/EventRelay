@@ -10,6 +10,14 @@ interface ResultsViewerProps {
   className?: string;
 }
 
+/**
+ * Renders the results for completed executions with a result.
+ *
+ * @param executions - Agent executions to display.
+ * @param events - Events used to resolve execution titles.
+ * @param className - Additional CSS classes for the container.
+ * @returns The results section for completed executions with results, or `null` when none are available.
+ */
 export default function ResultsViewer({ executions, events, className }: ResultsViewerProps) {
   const completed = executions.filter((e) => e.status === 'complete' && e.result);
 

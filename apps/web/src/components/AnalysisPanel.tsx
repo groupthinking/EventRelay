@@ -17,6 +17,13 @@ interface AnalysisPanelProps {
   onClose?: () => void;
 }
 
+/**
+ * Renders a chat panel for asking questions about a video.
+ *
+ * @param videoId - Identifier included in chat requests.
+ * @param videoUrl - Video URL included in chat requests.
+ * @param onClose - Called when the close button is selected.
+ */
 export default function AnalysisPanel({
   videoId,
   videoUrl,

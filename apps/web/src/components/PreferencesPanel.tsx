@@ -18,11 +18,9 @@ interface PreferencesPanelProps {
 }
 
 /**
- * Collapsible preferences panel that sits above the video input.
- * Customizes agent behavior by injecting industry/complexity/tone
- * context into generation prompts.
+ * Provides a collapsible panel for editing and saving pipeline preferences.
  *
- * Styled to match EventRelay's dark theme (#0e0e13 bg, #6af2de accent).
+ * @param onPreferencesChange - Called whenever the preferences are updated in the UI.
  */
 export default function PreferencesPanel({ onPreferencesChange }: PreferencesPanelProps) {
   const [isOpen, setIsOpen] = useState(false);

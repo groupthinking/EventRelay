@@ -144,14 +144,9 @@ const OUTPUT_COPY: Record<OutcomeId, { noun: string; deliverables: string[]; nex
   },
 };
 
-function isValidYouTubeId(id: string) {
-  return /^[A-Za-z0-9_-]{11}$/.test(id);
-}
-
 function getYouTubeId(url: string) {
   const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/))([^&?/]+)/);
-  const candidate = match?.[1] || '';
-  return isValidYouTubeId(candidate) ? candidate : '';
+  return match?.[1] || '';
 }
 
 function currentVideoUrlForLink(videoUrl: string) {
@@ -296,6 +291,13 @@ function readSavedPackages() {
   }
 }
 
+/**
+ * Renders a selectable output category card.
+ *
+ * @param outcome - The outcome shown in the card.
+ * @param selected - Whether the card is currently selected.
+ * @param onSelect - Called when the card is clicked.
+ */
 function OutcomeCard({
   outcome,
   selected,
@@ -325,6 +327,9 @@ function OutcomeCard({
   );
 }
 
+/**
+ * Displays a placeholder panel prompting the user to paste a YouTube link.
+ */
 function EmptyFrame() {
   return (
     <div className="flex h-full min-h-[300px] flex-col items-center justify-center gap-4 rounded-lg border border-dashed border-slate-300 bg-slate-50 text-center">
@@ -341,6 +346,9 @@ function EmptyFrame() {
   );
 }
 
+/**
+ * Renders the Video Workflow Studio interface.
+ */
 export default function VideoWorkflowStudio() {
   const [videoUrl, setVideoUrl] = useState('');
   const [selectedOutcome, setSelectedOutcome] = useState<OutcomeId>('app');

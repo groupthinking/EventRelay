@@ -51,6 +51,16 @@ interface AgentFlowVisualizerProps {
   className?: string;
 }
 
+/**
+ * Visualizes agent nodes and their connections in an interactive SVG flow diagram.
+ *
+ * @param agents - Map of agent node ids to agent data.
+ * @param connections - Connections to render between agents.
+ * @param positions - Layout positions for each agent node.
+ * @param selectedAgentId - Id of the currently selected agent, or `null`.
+ * @param onSelectAgent - Called when an agent is selected or deselected.
+ * @param className - Additional classes to apply to the container.
+ */
 export default function AgentFlowVisualizer({
   agents,
   connections,

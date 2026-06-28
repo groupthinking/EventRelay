@@ -19,6 +19,11 @@ interface FooterProps {
   variant?: 'full' | 'compact';
 }
 
+/**
+ * Renders the site footer in a compact or full layout.
+ *
+ * @param variant - The footer layout to render.
+ */
 export default function Footer({ variant = 'compact' }: FooterProps) {
   if (variant === 'compact') {
     return (

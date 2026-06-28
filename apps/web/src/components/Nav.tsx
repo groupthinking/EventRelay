@@ -25,6 +25,13 @@ const NAV_LINKS = [
   { href: '/playground', label: 'API' },
 ];
 
+/**
+ * Renders the main site navigation bar.
+ *
+ * @param rightSlot - Optional content to display on the right side
+ * @param subtitle - Optional content displayed next to the logo
+ * @param fixed - Renders the navigation bar with fixed positioning when `true`
+ */
 export default function Nav({ rightSlot, subtitle, fixed = false }: NavProps) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);

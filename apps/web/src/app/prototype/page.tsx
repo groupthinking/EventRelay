@@ -381,6 +381,12 @@ function getActionLabel(screen: ScreenId): string {
   return 'Review launch package';
 }
 
+/**
+ * Returns the descriptive panel content for the current screen.
+ *
+ * @param screen - The current prototype screen
+ * @returns The title, summary, badge, and left/right content for the screen
+ */
 function getScreenContent(screen: ScreenId) {
   switch (screen) {
     case 'intake':
@@ -589,6 +595,9 @@ components/
   }
 }
 
+/**
+ * Renders the interactive video-to-software prototype page.
+ */
 export default function PrototypePage() {
   const [scenario, setScenario] = useState<ScenarioId>('happy');
   const [stepIndex, setStepIndex] = useState(0);

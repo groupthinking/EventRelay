@@ -9,6 +9,12 @@ interface TranscriptViewerProps {
   className?: string;
 }
 
+/**
+ * Displays a searchable transcript with optional line expansion.
+ *
+ * @param transcript - Full transcript text split into separate lines for display.
+ * @param className - Additional CSS classes for the outer container.
+ */
 export default function TranscriptViewer({ transcript, className }: TranscriptViewerProps) {
   const [expanded, setExpanded] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');

@@ -15,6 +15,12 @@ interface ConsensusIndicatorProps {
   className?: string;
 }
 
+/**
+ * Displays consensus results with agreement levels, per-vote details, and the final classification.
+ *
+ * @param consensus - The consensus result to display.
+ * @param className - Additional classes for the outer container.
+ */
 export default function ConsensusIndicator({
   consensus,
   className,

@@ -37,6 +37,12 @@ const ROLE_ICONS: Record<AgentRole, LucideIcon> = {
   quality_checker:    ShieldCheck,
 };
 
+/**
+ * Extracts a time string from an ISO-like timestamp.
+ *
+ * @param isoString - The timestamp to format
+ * @returns The extracted `HH:MM:SS` value, or `--:--:--` if no time can be read
+ */
 function formatTime(isoString: string): string {
   const match = isoString.match(/T(\d{2}:\d{2}:\d{2})/);
   return match?.[1] ?? '--:--:--';
@@ -51,6 +57,14 @@ interface TracePanelProps {
   className?: string;
 }
 
+/**
+ * Renders an execution trace timeline with selectable, expandable agent steps.
+ *
+ * @param steps - Trace steps to display.
+ * @param selectedAgentId - The agent id currently highlighted as selected.
+ * @param onSelectAgent - Called when a step is selected.
+ * @param className - Additional classes for the panel container.
+ */
 export default function TracePanel({
   steps,
   selectedAgentId,

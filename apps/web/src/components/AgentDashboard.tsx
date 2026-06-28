@@ -17,6 +17,13 @@ const STATUS_STYLES: Record<string, { bg: string; text: string; dot: string }> =
   failed:   { bg: 'bg-red-500/5', text: 'text-red-400', dot: 'bg-red-400' },
 };
 
+/**
+ * Renders the agent execution dashboard.
+ *
+ * @param executions - Agent execution records to display.
+ * @param className - Additional classes applied to the top-level container.
+ * @returns The dashboard content, or `null` when there are no executions and loading is disabled.
+ */
 export default function AgentDashboard({ executions, loading, className }: AgentDashboardProps) {
   if (loading) {
     return (
