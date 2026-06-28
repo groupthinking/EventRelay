@@ -13,6 +13,18 @@ vi.mock('@/lib/gemini-client', () => ({
   hasGeminiKey: vi.fn(() => false),
 }));
 
+vi.mock('@/lib/pipeline-backend-health', () => ({
+  PIPELINE_HEALTH_TIMEOUT_MS: 5_000,
+  getBackendConfig: vi.fn(() => ({ configured: false, url: '' })),
+  checkBackendHealth: vi.fn(async () => ({
+    configured: false,
+    available: false,
+    host: null,
+    reason: 'BACKEND_URL is not configured',
+  })),
+  parseBackendJson: vi.fn(),
+}));
+
 import {
   POST,
   MAX_DURATION_MS,
@@ -57,7 +69,66 @@ describe('POST /api/pipeline', () => {
     expect(body.error).toBe('Video URL is required');
   });
 
+  it('falls through to Gemini when async backend kickoff returns HTML/503', async () => {
+    const { getBackendConfig, checkBackendHealth, parseBackendJson } = await import(
+      '@/lib/pipeline-backend-health'
+    );
+    const { hasGeminiKey } = await import('@/lib/gemini-client');
+    const { analyzeVideoWithGemini } = await import('@/lib/gemini-video-analyzer');
+
+    vi.mocked(getBackendConfig).mockReturnValue({
+      configured: true,
+      url: 'https://api.uvai.io',
+    });
+    vi.mocked(checkBackendHealth).mockResolvedValue({
+      configured: true,
+      available: true,
+      host: 'api.uvai.io',
+    });
+    vi.mocked(hasGeminiKey).mockReturnValue(true);
+    vi.mocked(analyzeVideoWithGemini).mockResolvedValue({
+      title: 'Test video',
+      summary: 'Gemini fallback analysis',
+      events: [],
+      actions: [],
+      topics: ['test'],
+      architectureCode: 'ingest -> analyze',
+      transcript: [],
+    } as Awaited<ReturnType<typeof analyzeVideoWithGemini>>);
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 503,
+        text: async () => '<html>503</html>',
+      }),
+    );
+    vi.mocked(parseBackendJson).mockResolvedValue(null);
+
+    const res = await POST(postRequest({
+      url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+      async: true,
+    }));
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.pipeline).toBe('gemini-only');
+    expect(body.status).toBe('partial');
+    expect(body.result.video_analysis.summary).toBe('Gemini fallback analysis');
+  });
+
   it('returns a partial fallback handoff when automatic execution is unavailable', async () => {
+    const { checkBackendHealth } = await import('@/lib/pipeline-backend-health');
+    const { hasGeminiKey } = await import('@/lib/gemini-client');
+    vi.mocked(checkBackendHealth).mockResolvedValue({
+      configured: false,
+      available: false,
+      host: null,
+      reason: 'BACKEND_URL is not configured',
+    });
+    vi.mocked(hasGeminiKey).mockReturnValue(false);
+
     const res = await POST(postRequest({
       url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
       project_type: 'automation',

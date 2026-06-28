@@ -4,11 +4,18 @@ import { publishEvent, EventTypes } from '@/lib/cloudevents';
 import { analyzeVideoWithGemini } from '@/lib/gemini-video-analyzer';
 import { hasGeminiKey } from '@/lib/gemini-client';
 import { backendHeaders } from '@/lib/pipeline-backend';
+import {
+  checkBackendHealth,
+  getBackendConfig,
+  parseBackendJson,
+  PIPELINE_HEALTH_TIMEOUT_MS as HEALTH_PROBE_MS,
+} from '@/lib/pipeline-backend-health';
 import { resolveVideoUrl } from '@/lib/video-url-request';
 
-const rawBackendUrl = process.env.BACKEND_URL || '';
-const BACKEND_URL = rawBackendUrl.startsWith('http') ? rawBackendUrl : 'http://localhost:8000';
-const BACKEND_AVAILABLE = rawBackendUrl.startsWith('http');
+const { configured: BACKEND_CONFIGURED, url: CONFIGURED_BACKEND_URL } = getBackendConfig();
+const BACKEND_URL = CONFIGURED_BACKEND_URL || 'http://localhost:8000';
+/** @deprecated Use runtime `checkBackendHealth()` — URL configured ≠ reachable */
+const BACKEND_AVAILABLE = BACKEND_CONFIGURED;
 
 interface BackendApiResponse<T> {
   status?: string;
@@ -30,7 +37,7 @@ export const maxDuration = 60;
 export const MAX_DURATION_MS = maxDuration * 1000;
 
 /** Health probe budget for Cloud Run cold start + TLS. */
-export const PIPELINE_HEALTH_TIMEOUT_MS = 5_000;
+export const PIPELINE_HEALTH_TIMEOUT_MS = HEALTH_PROBE_MS;
 /** Backend video-to-software cap — clamped to remaining request budget. */
 // Reduced from 50s to 25s to leave buffer for response serialization and overhead
 export const PIPELINE_BACKEND_TIMEOUT_MS = 25_000;
@@ -76,15 +83,6 @@ export class PipelineDeadline {
   }
 }
 
-function backendHost(): string | null {
-  if (!BACKEND_AVAILABLE) return null;
-  try {
-    return new URL(BACKEND_URL).host;
-  } catch {
-    return null;
-  }
-}
-
 function timeoutSignal(ms: number): AbortSignal {
   return AbortSignal.timeout(ms);
 }
@@ -100,32 +98,6 @@ async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): P
     ]);
   } finally {
     if (timeout) clearTimeout(timeout);
-  }
-}
-
-async function checkBackendHealth(timeoutMs = PIPELINE_HEALTH_TIMEOUT_MS): Promise<{ configured: boolean; available: boolean; host: string | null; reason?: string }> {
-  if (!BACKEND_AVAILABLE) {
-    return { configured: false, available: false, host: null, reason: 'BACKEND_URL is not configured' };
-  }
-
-  try {
-    const response = await fetch(`${BACKEND_URL}/api/v1/health`, {
-      cache: 'no-store',
-      signal: timeoutSignal(timeoutMs),
-    });
-    return {
-      configured: true,
-      available: response.ok,
-      host: backendHost(),
-      reason: response.ok ? undefined : `Backend health returned ${response.status}`,
-    };
-  } catch (error) {
-    return {
-      configured: true,
-      available: false,
-      host: backendHost(),
-      reason: error instanceof Error ? error.message : String(error),
-    };
   }
 }
 
@@ -252,14 +224,20 @@ export async function POST(request: Request) {
     await publishEvent(EventTypes.VIDEO_RECEIVED, { url, pipeline: 'end-to-end' }, url);
 
     const deadline = PipelineDeadline.fromMaxDuration();
+    const backendHealth = await checkBackendHealth(
+      deadline.budgetMs(PIPELINE_HEALTH_TIMEOUT_MS) || PIPELINE_HEALTH_TIMEOUT_MS,
+    );
+    const useBackend = backendHealth.available;
+    const backendUrl = CONFIGURED_BACKEND_URL || BACKEND_URL;
+
     // Default to async for long-running video-to-software (prevents 524 timeouts on Vercel/Cloud Run)
     // Sync POST kept for backward compat but discouraged (see sync note from composer terminal)
     const asyncMode = body.async !== false && body.async !== 'false';  // default true unless explicitly false
 
     // ── Strategy 0: Async kickoff (returns job_id immediately) ──
-    if (asyncMode && BACKEND_AVAILABLE) {
+    if (asyncMode && useBackend) {
       try {
-        const response = await fetch(`${BACKEND_URL}/api/v1/videos/process`, {
+        const response = await fetch(`${backendUrl}/api/v1/videos/process`, {
           method: 'POST',
           headers: backendHeaders(),
           body: JSON.stringify({
@@ -269,8 +247,8 @@ export async function POST(request: Request) {
           signal: deadline.signalFor(10_000),
         });
 
-        const payload = (await response.json()) as BackendApiResponse<VideoProcessJobResponse>;
-        const jobId = payload.data?.job_id;
+        const payload = await parseBackendJson<BackendApiResponse<VideoProcessJobResponse>>(response);
+        const jobId = payload?.data?.job_id;
 
         if (response.ok && jobId) {
           return NextResponse.json({
@@ -283,30 +261,21 @@ export async function POST(request: Request) {
           });
         }
 
-        return NextResponse.json(
-          {
-            error: 'Async video job kickoff failed',
-            detail: payload.error || payload.detail || `HTTP ${response.status}`,
-          },
-          { status: response.ok ? 502 : response.status },
+        console.warn(
+          'Async backend kickoff failed, falling through to Gemini:',
+          payload?.error || payload?.detail || `HTTP ${response.status}`,
         );
       } catch (e) {
-        return NextResponse.json(
-          {
-            error: 'Async pipeline kickoff failed',
-            detail: e instanceof Error ? e.message : String(e),
-          },
-          { status: 502 },
-        );
+        console.warn('Async backend kickoff error, falling through to Gemini:', e);
       }
     }
 
     // ── Strategy 1: Full backend pipeline (FastAPI video-to-software) ──
     // Check we have enough time left (backend timeout + response buffer)
-    if (BACKEND_AVAILABLE && deadline.remainingMs() > PIPELINE_BACKEND_TIMEOUT_MS + PIPELINE_RESPONSE_BUFFER_MS) {
+    if (useBackend && deadline.remainingMs() > PIPELINE_BACKEND_TIMEOUT_MS + PIPELINE_RESPONSE_BUFFER_MS) {
       try {
         const HEADROOM_MS = 5000;
-        const response = await fetch(`${BACKEND_URL}/api/v1/video-to-software`, {
+        const response = await fetch(`${backendUrl}/api/v1/video-to-software`, {
           method: 'POST',
           headers: backendHeaders(),
           body: JSON.stringify({
@@ -401,19 +370,18 @@ export async function POST(request: Request) {
       }
     }
 
-    const backend = await checkBackendHealth(deadline.budgetMs(PIPELINE_HEALTH_TIMEOUT_MS) || PIPELINE_HEALTH_TIMEOUT_MS);
     const fallback = buildLocalFallbackPipeline({
       url,
       projectType: project_type,
       deploymentTarget: deployment_target,
       features,
-      backend,
+      backend: backendHealth,
     });
 
     await publishEvent(EventTypes.PIPELINE_COMPLETED, {
       strategy: 'local-fallback',
       success: false,
-      backend,
+      backend: backendHealth,
     }, url);
 
     return NextResponse.json({
@@ -421,7 +389,7 @@ export async function POST(request: Request) {
       status: 'partial',
       pipeline: 'local-fallback',
       degraded: true,
-      backend,
+      backend: backendHealth,
       gemini_configured: hasGeminiKey(),
       warning: 'No automatic pipeline is currently available. Returned a fallback handoff instead of blocking the user.',
       result: fallback,
@@ -440,6 +408,7 @@ export async function POST(request: Request) {
 }
 
 export async function GET() {
+  const backend = await checkBackendHealth();
   return NextResponse.json({
     name: 'EventRelay End-to-End Pipeline',
     version: '1.0.0',
@@ -450,11 +419,15 @@ export async function GET() {
       '3. Transport: CloudEvents published at each stage',
       '4. Execute: Agents generate code, create repo, deploy to Vercel',
     ],
-    backend_available: BACKEND_AVAILABLE,
+    backend_configured: backend.configured,
+    backend_available: backend.available,
+    backend_host: backend.host,
+    backend_reason: backend.reason,
     gemini_available: hasGeminiKey(),
     endpoints: {
       pipeline: 'POST /api/pipeline - Full end-to-end pipeline',
       video: 'POST /api/video - Video analysis only',
+      stream: 'POST /api/pipeline/stream - SSE agent visualization',
     },
   });
 }
