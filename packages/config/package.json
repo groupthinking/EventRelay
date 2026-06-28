@@ -9,7 +9,7 @@
     "./constants": "./src/constants.ts"
   },
   "scripts": {
-    "lint": "eslint . --max-warnings 0",
+    "lint": "eslint \"src/**/*.{ts,tsx}\" --max-warnings 0",
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
@@ -17,7 +17,9 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@repo/eslint-config": "*",
     "@types/node": "^20",
+    "eslint": "^9",
     "typescript": "^5"
   }
 }
