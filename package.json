@@ -24,7 +24,7 @@
   "devDependencies": {
     "@modelcontextprotocol/sdk": "^1.26.0",
     "brace-expansion": "^5.0.6",
-    "turbo": "^2.9.14",
+    "turbo": "^2.10.0",
     "vitest": "^4.1.9"
   },
   "overrides": {
@@ -52,9 +52,9 @@
   "dependencies": {
     "@dataconnect/generated": "file:src/dataconnect-generated",
     "@google-cloud/text-to-speech": "^6.4.0",
-    "@google/genai": "^2.7.0",
+    "@google/genai": "^2.10.0",
     "chrome-devtools-mcp": "^0.10.2",
-    "openai": "^6.43.0",
+    "openai": "^6.45.0",
     "react": "^19",
     "react-dom": "^19"
   }
