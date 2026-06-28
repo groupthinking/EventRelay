@@ -405,7 +405,7 @@ export default function VideoWorkflowStudio() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             url: currentVideoUrl,
-            async: true,  // prefer async to avoid 524 on long runs
+            async: true, // prefer async to avoid 524 on long runs
             outcome: selectedOutcome,
             prompt: currentPrompt,
             project_type: selectedOutcome === 'app' ? 'web' : selectedOutcome,

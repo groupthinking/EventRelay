@@ -12,7 +12,7 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
-    "lint": "eslint . --max-warnings 0"
+    "lint": "eslint \"src/**/*.{ts,tsx}\" --max-warnings 0"
   },
   "dependencies": {
     "@dataconnect/generated": "file:src/dataconnect-generated",
@@ -21,6 +21,7 @@
     "pg": "^8.11.0"
   },
   "devDependencies": {
+    "@repo/eslint-config": "*",
     "@types/node": "^20",
     "@types/pg": "^8.10.0",
     "eslint": "^9",

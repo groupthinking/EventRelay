@@ -24,13 +24,14 @@
   "devDependencies": {
     "@modelcontextprotocol/sdk": "^1.26.0",
     "brace-expansion": "^5.0.6",
-    "turbo": "^2.9.14",
+    "turbo": "^2.10.0",
+    "typescript": "^6.0.3",
     "vitest": "^4.1.9"
   },
   "overrides": {
     "react": "^19",
     "react-dom": "^19",
-    "next": ">=16.2.6",
+    "next": ">=16.2.9",
     "nth-check": "^2.0.1",
     "postcss": "^8.5.15",
     "undici": "^6.22.0",
@@ -39,7 +40,7 @@
     "@temporalio/client": {
       "uuid": "11.1.1"
     },
-    "vite": "^6.4.3",
+    "vite": ">=6.4.3",
     "picomatch": ">=2.3.2",
     "protobufjs": "^7.6.2",
     "minimatch@3.1.5": {
@@ -52,9 +53,9 @@
   "dependencies": {
     "@dataconnect/generated": "file:src/dataconnect-generated",
     "@google-cloud/text-to-speech": "^6.4.0",
-    "@google/genai": "^2.7.0",
+    "@google/genai": "^2.10.0",
     "chrome-devtools-mcp": "^0.10.2",
-    "openai": "^6.43.0",
+    "openai": "^6.45.0",
     "react": "^19",
     "react-dom": "^19"
   }

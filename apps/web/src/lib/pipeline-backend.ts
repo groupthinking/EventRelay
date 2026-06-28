@@ -1,3 +1,5 @@
+import 'server-only';
+
 /**
  * Shared headers for Next.js → FastAPI backend calls.
  * Trims EVENTRELAY_API_KEY to avoid Secret Manager newline mismatches.

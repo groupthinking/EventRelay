@@ -1,3 +1,5 @@
+import 'server-only';
+
 /**
  * Agentic Video Intelligence Engine — Gemini + Google Search grounding.
  *

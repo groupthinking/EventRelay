@@ -1,6 +1,6 @@
 import pino from 'pino';
 import { trace, context as otelContext } from '@opentelemetry/api';
-import type { LoggerConfig, LogContext, StructuredLogger, LogLevel } from './types';
+import type { LoggerConfig, LogContext, StructuredLogger } from './types';
 
 class Logger implements StructuredLogger {
   private logger: pino.Logger;

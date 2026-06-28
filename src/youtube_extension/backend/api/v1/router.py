@@ -1809,7 +1809,7 @@ async def dispatch_agents(request: AgentDispatchRequest):
     dispatch = AgentDispatchResponse()
     agent_types = request.agent_types or ["analyzer", "content_creator"]
 
-    for event in request.events:
+    for event in events:
         for agent_type in agent_types:
             execution = AgentExecution(
                 agent_type=agent_type,
@@ -1822,7 +1822,7 @@ async def dispatch_agents(request: AgentDispatchRequest):
     _dispatches[dispatch.dispatch_id] = dispatch
 
     for execution in dispatch.executions:
-        asyncio.create_task(_run_agent(execution, request.events))
+        asyncio.create_task(_run_agent(execution, events))
 
     return ApiResponse.success(dispatch.model_dump())
 
