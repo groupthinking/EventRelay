@@ -16,6 +16,7 @@ function getPrisma(): PrismaClient | undefined {
 }
 
 const allowedDomain = process.env.AUTH_ALLOWED_EMAIL_DOMAIN?.trim().toLowerCase();
+const prisma = getPrisma();
 
 /**
  * NextAuth configuration (Google OAuth by default).
@@ -29,14 +30,14 @@ const allowedDomain = process.env.AUTH_ALLOWED_EMAIL_DOMAIN?.trim().toLowerCase(
  * in middleware.ts is provider-agnostic (it only checks for a valid session).
  */
 export const authOptions: NextAuthOptions = {
-  adapter: getPrisma() ? PrismaAdapter(getPrisma()!) : undefined,
+  adapter: prisma ? PrismaAdapter(prisma) : undefined,
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_OAUTH_CLIENT_ID ?? '',
       clientSecret: process.env.GOOGLE_OAUTH_CLIENT_SECRET ?? '',
     }),
   ],
-  session: { strategy: process.env.DATABASE_URL ? 'database' : 'jwt' },
+  session: { strategy: prisma ? 'database' : 'jwt' },
   secret: process.env.NEXTAUTH_SECRET,
   callbacks: {
     async signIn({ user }) {
