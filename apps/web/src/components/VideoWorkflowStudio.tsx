@@ -642,17 +642,25 @@ export default function VideoWorkflowStudio() {
               <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
                 <button
                   type="button"
+                  aria-pressed={voiceEngaged}
+                  aria-label={voiceEngaged ? 'Disable voice input' : 'Enable voice input'}
                   onClick={voiceEngaged ? realtime.stop : realtime.start}
                   className={clsx(
                     'inline-flex items-center gap-2 rounded-md px-2 py-1 text-xs font-semibold transition',
                     voiceEngaged ? 'bg-blue-600 text-white' : 'bg-white text-slate-700 hover:bg-slate-100',
                   )}
                 >
-                  {voiceEngaged ? <Mic className="h-3.5 w-3.5" /> : <MicOff className="h-3.5 w-3.5" />}
+                  {voiceEngaged ? <Mic className="h-3.5 w-3.5" aria-hidden="true" /> : <MicOff className="h-3.5 w-3.5" aria-hidden="true" />}
                   {voiceLabel}
                 </button>
                 {realtime.isActive && (
-                  <button type="button" onClick={realtime.toggleMute} className="text-xs font-medium text-slate-500 hover:text-slate-900">
+                  <button
+                    type="button"
+                    aria-pressed={realtime.status === 'muted'}
+                    aria-label={realtime.status === 'muted' ? 'Resume voice session' : 'Mute voice session'}
+                    onClick={realtime.toggleMute}
+                    className="text-xs font-medium text-slate-500 hover:text-slate-900"
+                  >
                     {realtime.status === 'muted' ? 'Resume' : 'Mute'}
                   </button>
                 )}
@@ -850,18 +858,20 @@ export default function VideoWorkflowStudio() {
           <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
             <button
               type="button"
+              aria-expanded={developerOpen}
+              aria-controls="developer-details-panel"
               onClick={() => setDeveloperOpen((open) => !open)}
               className="flex w-full items-center justify-between text-left text-sm font-semibold text-slate-950"
             >
               <span className="inline-flex items-center gap-2">
-                <PanelRightOpen className="h-4 w-4 text-slate-500" />
+                <PanelRightOpen className="h-4 w-4 text-slate-500" aria-hidden="true" />
                 Developer details
               </span>
-              {developerOpen ? <X className="h-4 w-4 text-slate-400" /> : <ChevronRight className="h-4 w-4 text-slate-400" />}
+              {developerOpen ? <X className="h-4 w-4 text-slate-400" aria-hidden="true" /> : <ChevronRight className="h-4 w-4 text-slate-400" aria-hidden="true" />}
             </button>
 
             {developerOpen && (
-              <div className="mt-3 max-h-52 space-y-2 overflow-y-auto rounded-lg bg-slate-950 p-3 text-xs text-slate-200">
+              <div id="developer-details-panel" className="mt-3 max-h-52 space-y-2 overflow-y-auto rounded-lg bg-slate-950 p-3 text-xs text-slate-200">
                 {realtime.events.length ? (
                   realtime.events.map((event) => (
                     <div key={event.id} className="flex items-start gap-2 border-b border-white/10 pb-2 last:border-0 last:pb-0">

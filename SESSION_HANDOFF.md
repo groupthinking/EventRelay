@@ -48,20 +48,20 @@ The vision (from the owner's notes): *"You're building the first AI software fac
 
 | Component | Platform | URL | Tech Stack |
 |-----------|----------|-----|------------|
-| Frontend  | Vercel   | `event-relay-web.vercel.app` | Next.js 14, React, Zustand, TypeScript |
-| Backend   | Railway  | `eventrelay-production.up.railway.app` | FastAPI, Python 3.12, uvicorn |
-| Database  | SQLite (ephemeral) | `/tmp/uvai_data/app.db` | On Railway container |
+| Frontend  | Vercel   | `uvai.io` | Next.js 14, React, Zustand, TypeScript |
+| Backend   | Google Cloud Run | `api.uvai.io` (`uvai-backend`, us-central1) | FastAPI, Python 3.12, uvicorn |
+| Database  | SQLite (ephemeral) | `/tmp/uvai_data/app.db` | On Cloud Run container |
 | Repos     | GitHub   | `github.com/groupthinking/` | Auto-created by pipeline |
 
 ### Request Flow
 ```
 Browser → Vercel (Next.js)
-  ├── POST /api/pipeline        → Railway backend /api/v1/video-to-software
-  ├── POST /api/video           → Railway backend /api/v1/transcript-action (analysis only)
+  ├── POST /api/pipeline        → Cloud Run backend /api/v1/video-to-software
+  ├── POST /api/video           → Cloud Run backend /api/v1/transcript-action (analysis only)
   ├── POST /api/transcribe      → Gemini Google Search (direct)
   └── POST /api/extract-events  → Gemini structured output (direct)
 
-Railway Backend:
+Cloud Run Backend (api.uvai.io):
   /api/v1/video-to-software chains:
     Phase 1: EnhancedVideoProcessor.process_video(url)  → Gemini + YouTube analysis
     Phase 2: ProjectCodeGenerator.generate_project()     → HTML/JS/CSS in /tmp
@@ -73,12 +73,12 @@ Railway Backend:
 **Vercel (Frontend)**:
 | Key | Purpose |
 |-----|---------|
-| `BACKEND_URL` | Points to Railway backend (`https://eventrelay-production.up.railway.app`) |
+| `BACKEND_URL` | Points to Cloud Run backend (`https://api.uvai.io`) |
 | `GEMINI_API_KEY` | Gemini API (standard) |
 | `Vertex_AI_API_KEY` | Vertex AI Express Mode key (starts with `AQ.Ab8...`) |
 | `OPENAI_API_KEY` | OpenAI fallback for transcription |
 
-**Railway (Backend)**:
+**Cloud Run (Backend)**:
 | Key | Purpose |
 |-----|---------|
 | `GEMINI_API_KEY` | Video analysis via Gemini |
@@ -146,7 +146,7 @@ Returns pipeline metadata and available capabilities.
 2. Gemini agentic analysis (Google Search grounding + structured output)
 3. Transcript → Extract chain (transcribe + extract-events)
 
-### Backend Endpoints (Railway)
+### Backend Endpoints (Cloud Run / api.uvai.io)
 
 #### `GET /api/v1/health`
 ```json
@@ -166,7 +166,7 @@ Returns pipeline metadata and available capabilities.
 **Note:** Uses `video_url` (not `url`) — different from frontend.
 
 #### `GET /docs` — Swagger UI
-Full interactive API docs at `https://eventrelay-production.up.railway.app/docs`
+Full interactive API docs at `https://api.uvai.io/docs`
 
 #### `GET /openapi.json` — OpenAPI Spec
 37+ endpoints documented. Machine-readable spec for LLM integration.
@@ -208,7 +208,7 @@ Full interactive API docs at `https://eventrelay-production.up.railway.app/docs`
 | File | Purpose |
 |------|---------|
 | `Dockerfile` | Multi-stage Python 3.12, non-root user, healthcheck |
-| `railway.toml` | Railway config: Dockerfile builder, healthcheck, restart policy |
+| `Dockerfile.cloudrun` | Cloud Run-optimised build (used by `deploy-cloud-run.yml`) |
 | `pyproject.toml` | Python dependencies |
 | `apps/web/package.json` | Frontend dependencies |
 
@@ -300,7 +300,7 @@ Three independent agents tested the system as: (1) an end user, (2) an LLM integ
 2. **Full pipeline runs end-to-end** — YouTube URL → backend analysis → code generation → GitHub repo creation in ~30s
 3. **Strong API design** — OpenAPI spec with 37 endpoints, self-describing GET endpoints, Swagger UI at `/docs`
 4. **Professional frontend** — Clean landing page, Zustand state management, proper fallback strategies
-5. **Solid infrastructure** — Multi-stage Docker, non-root user, healthchecks, auto-deploy from GitHub on both Vercel and Railway
+5. **Solid infrastructure** — Multi-stage Docker, non-root user, healthchecks, auto-deploy from GitHub on Vercel (frontend) and Cloud Run (backend via `deploy-cloud-run.yml`)
 
 ### What Needs Fixing 🔴
 
@@ -314,8 +314,8 @@ Three independent agents tested the system as: (1) an end user, (2) an LLM integ
 | 🟡 **P1** | `url` vs `video_url` field inconsistency | Frontend uses `url`, backend uses `video_url` — breaks LLM integration |
 | 🟡 **P1** | 60+ deleted test files uncommitted | Test suite accidentally deleted, sitting in working tree |
 | 🟠 **P2** | Branding confusion | "EventRelay" vs "UVAI" vs "uvai.io" across UI, meta tags, and URLs |
-| 🟠 **P2** | No YouTube API key on Railway | Limits transcript extraction to Gemini Search only |
-| 🟠 **P2** | Cold start latency | Backend first request takes ~5-24s due to Railway cold start |
+| 🟠 **P2** | No YouTube API key on Cloud Run | Limits transcript extraction to Gemini Search only |
+| 🟠 **P2** | Cold start latency | Backend first request takes ~5-24s due to Cloud Run cold start |
 
 ---
 
@@ -331,25 +331,25 @@ Three independent agents tested the system as: (1) an end user, (2) an LLM integ
 ### To Use the API
 ```bash
 # Analyze a video (fast, ~30s)
-curl -X POST https://event-relay-web.vercel.app/api/video \
+curl -X POST https://uvai.io/api/video \
   -H 'Content-Type: application/json' \
   -d '{"url": "https://www.youtube.com/watch?v=VIDEO_ID"}'
 
 # Full pipeline — analyze + generate code + create repo (slow, ~30-60s)
-curl -X POST https://event-relay-web.vercel.app/api/pipeline \
+curl -X POST https://uvai.io/api/pipeline \
   -H 'Content-Type: application/json' \
   -d '{"url": "https://www.youtube.com/watch?v=VIDEO_ID"}'
 
 # Backend direct (uses video_url, not url)
-curl -X POST https://eventrelay-production.up.railway.app/api/v1/video-to-software \
+curl -X POST https://api.uvai.io/api/v1/video-to-software \
   -H 'Content-Type: application/json' \
   -d '{"video_url": "https://www.youtube.com/watch?v=VIDEO_ID"}'
 
 # Check backend health
-curl https://eventrelay-production.up.railway.app/api/v1/health
+curl https://api.uvai.io/api/v1/health
 
 # Full API docs
-open https://eventrelay-production.up.railway.app/docs
+open https://api.uvai.io/docs
 ```
 
 ### Key Gotchas
@@ -357,7 +357,7 @@ open https://eventrelay-production.up.railway.app/docs
 - Status values: Frontend returns `"success"` / `"complete"` → Backend returns `"success"` / `"failed"`
 - Pipeline timeout is 5 minutes (`AbortController` in `pipeline/route.ts`)
 - Generated repos go to `groupthinking/uvai-generated-project-XXXX`
-- Railway has cold starts (~5-24s on first request after idle)
+- Cloud Run has cold starts (~5-24s on first request after idle)
 
 ---
 
