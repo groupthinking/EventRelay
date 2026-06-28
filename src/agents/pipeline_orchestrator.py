@@ -208,6 +208,15 @@ class VideoPipelineOrchestrator:
             return await self._run_dag_pipeline(video_url, options)
         return await self._run_sequential_pipeline(video_url, options)
 
+        if os.getenv("SENTRY_DSN"):
+            import sentry_sdk
+            sentry_sdk.add_breadcrumb(
+                category="pipeline",
+                message=f"Starting pipeline {execution_mode}",
+                data={"video_url": video_url},
+                level="info"
+            )
+
     async def _run_sequential_pipeline(self, video_url: str, options: dict) -> dict:
         """Original sequential execution — preserved for backward compatibility."""
         run_id = datetime.now().strftime("%Y%m%d_%H%M%S")

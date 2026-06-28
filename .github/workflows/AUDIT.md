@@ -9,7 +9,7 @@ concrete reason, verified against the actual repository tree.
 | File | Verdict | Reason |
 |------|---------|--------|
 | `.yaml` → `stale.yml` | **FIX (rename)** | File had no basename (literally `.yaml`); renamed to `stale.yml`. Content (daily stale-bot) is sound. |
-| `auto-assign.yml` | KEEP | Clean; assigns new issues to the repo owner via `gh`. |
+| `auto-assign.yml` | **FIX** | Replaced `gh issue edit` with the REST assignees endpoint. The CLI command used GraphQL `replaceActorsForAssignable`, which fails for this repository's GitHub App token when assigning the issue owner. |
 | `auto-label.yml` | KEEP | Labels PRs by changed file type; guarded with try/catch. |
 | `autonomous-video-processing.yml` | KEEP | Manual matrix batch processor; well-formed, scoped permissions. |
 | `branch-cleanup.yml` | KEEP | Gated manual prune; `scripts/maintenance/branch-cleanup-delete.sh` exists; dry-run default. |
@@ -54,3 +54,6 @@ valid. Referenced paths were checked against the working tree:
   `tests/e2e/`, `tests/failure-log.md`, `apps/web` (with `build:web` script).
 - Absent (drove the deletes): `mcp-servers/mcp-profiling/`, `deployments/`,
   `frontend/`, `src/mcp-bridge.py`.
+- Recent run logs checked: `auto-assign.yml` failed on issue #392 because
+  `gh issue edit` used a GraphQL mutation unsupported by GitHub App
+  installation tokens; the workflow now calls the REST assignees endpoint.

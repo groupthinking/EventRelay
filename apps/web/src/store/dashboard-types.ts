@@ -40,6 +40,10 @@ export interface Video {
   events?: ExtractedEvent[];
   agents?: AgentExecution[];
   pipelineResult?: PipelineResult;
+  /** Async backend job id when pipeline runs in background. */
+  jobId?: string;
+  /** Poll URL for async job status. */
+  statusUrl?: string;
   insights?: {
     summary: string;
     actions: Action[];
