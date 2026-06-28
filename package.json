@@ -28,6 +28,8 @@
     "vitest": "^4.1.9"
   },
   "overrides": {
+    "react": "^19",
+    "react-dom": "^19",
     "next": ">=16.2.6",
     "nth-check": "^2.0.1",
     "postcss": "^8.5.15",
@@ -52,6 +54,8 @@
     "@google-cloud/text-to-speech": "^6.4.0",
     "@google/genai": "^2.7.0",
     "chrome-devtools-mcp": "^0.10.2",
-    "openai": "^6.43.0"
+    "openai": "^6.43.0",
+    "react": "^19",
+    "react-dom": "^19"
   }
 }
