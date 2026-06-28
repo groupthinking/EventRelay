@@ -437,16 +437,33 @@ Return ONLY the code."""
             "dashboard API route",
             architecture,
             video_analysis,
-            """Generate API route at app/api/dashboard/route.ts:
+            """Generate API route at app/api/dashboard/route.ts using EXACT Next.js 14 App Router format. CRITICAL: Use ONLY native code + deps declared in our generated package.json (dockerode for MCP, no undeclared pkgs).
+
+EXACT FORMAT (use this skeleton):
+import { NextResponse } from 'next/server';
+
+export async function GET() {
+  try {
+    // real data e.g. docker.listContainers() if MCP
+    return NextResponse.json({ ... });
+  } catch (e) { return NextResponse.json({error: String(e)}, {status:500}); }
+}
+
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+    // action
+    return NextResponse.json({success:true, ...});
+  } catch (e) { return NextResponse.json({error: String(e)}, {status:500}); }
+}
 
 Requirements:
-1. GET endpoint returning dashboard metrics/data
-2. POST endpoint for dashboard actions
-3. Real data sources (file system, Docker, processes, etc)
-4. TypeScript interfaces
-5. Error handling
+- Real sources (Docker, fs, processes).
+- TS interfaces.
+- NO "router" export.
+- NEVER import @material-ui/*, axios (unless added), etc. Only declared deps.
+- Use dockerode for MCP dashboards.
 
-For MCP Dashboard: Return Docker container list with status.
 Return ONLY the code."""
         )
         self._write_file(project_path / "src/app/api/dashboard/route.ts", dashboard_api)
@@ -457,9 +474,14 @@ Return ONLY the code."""
             "dashboard page",
             architecture,
             video_analysis,
-            """Generate a FUNCTIONAL Next.js dashboard at app/dashboard/page.tsx:
+            """Generate a FUNCTIONAL Next.js dashboard at app/dashboard/page.tsx using ONLY Tailwind + lucide-react (already declared in package.json from generator).
 
-PRIORITY: Working data flow over visual design.
+CRITICAL CONSTRAINTS (MUST FOLLOW EXACTLY):
+- Use ONLY Tailwind CSS classes + lucide-react icons. NO external UI libs whatsoever (@material-ui/*, @mui/*, chakra, antd, shadcn, framer-motion unless explicitly in deps, etc.).
+- All UI with plain <div>, <button>, <input>, Tailwind utilities (p-4, border, grid, flex, bg-white, rounded, shadow, etc.).
+- 'use client' for hooks.
+- Use native fetch ONLY (no axios unless we added it to package.json).
+- Import ONLY from 'lucide-react' for icons, 'react' for hooks.
 
 CRITICAL CONSTRAINTS (MUST FOLLOW):
 - Use ONLY Tailwind CSS classes + lucide-react icons (already in package.json). 
@@ -468,22 +490,21 @@ CRITICAL CONSTRAINTS (MUST FOLLOW):
 - Keep it simple and functional.
 
 Requirements:
-1. 'use client' directive (uses hooks)
-2. Fetch real data from /api/dashboard on mount
-3. Stats/metrics cards showing API response data (not mocks)
-4. Refresh button that re-fetches data
-5. Action buttons that POST to API and update UI
-6. Loading spinner during data fetch
-7. Error message display if API fails
-8. TypeScript interfaces for API responses
-9. Responsive grid with Tailwind
+1. Fetch real data from /api/dashboard on mount using fetch.
+2. Stats/metrics cards from API response (real data).
+3. Refresh button that re-fetches.
+4. Action buttons (e.g. start/stop) that POST and update UI.
+5. Loading states + error display.
+6. TypeScript interfaces.
+7. Responsive Tailwind grid.
 
-IMPLEMENTATION NOTES:
-- For MCP Dashboard: Include Docker container operations (start/stop/list)
-- API endpoints should return real system data (Docker SDK, process info, etc)
-- State updates after each action
+IMPLEMENTATION NOTES (from Gemini video best practices for related analysis UIs):
+- Keep simple and functional. Use timestamps if video-related data.
+- For MCP/Dashboard: real Docker ops via API.
+- State updates after actions.
+- Place text prompts after video parts if multimodal (not applicable here).
 
-VALIDATION: Clicking refresh must fetch new data from server.
+VALIDATION: Refresh must fetch fresh data. Build must succeed with declared deps only.
 Return ONLY the code."""
         )
         self._write_file(project_path / "src/app/dashboard/page.tsx", dashboard)
@@ -663,6 +684,7 @@ TASK: Generate {description}
         package["dependencies"]["clsx"] = "^2.1.0"  # Utility
         package["dependencies"]["tailwind-merge"] = "^2.2.0"  # Tailwind utility
         package["dependencies"]["class-variance-authority"] = "^0.7.0"  # Button variants
+        package["dependencies"]["axios"] = "^1.6.0"  # HTTP client (commonly used by AI generated code)
 
         # Add infrastructure packages for production-ready apps
         # State management
@@ -673,9 +695,11 @@ TASK: Generate {description}
         package["dependencies"]["@ai-sdk/openai"] = "^0.0.15"  # OpenAI provider
         package["dependencies"]["@ai-sdk/anthropic"] = "^0.0.15"  # Anthropic provider
 
-        # For agent/MCP apps: Add dockerode for container management
-        if architecture.get("type") == "agent" or "docker" in str(architecture.get("features", [])).lower():
-            package["dependencies"]["dockerode"] = "^4.0.2"  # Docker SDK
+        # For agent/MCP apps or dashboards with container features: Add dockerode
+        if (architecture.get("type") in ("agent", "fullstack_app") or 
+            "docker" in str(architecture.get("features", [])).lower() or
+            "dashboard" in str(architecture.get("features", [])).lower()):
+            package["dependencies"]["dockerode"] = "^4.0.2"
             package["devDependencies"]["@types/dockerode"] = "^3.3.0"
 
         return package
