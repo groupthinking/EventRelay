@@ -144,9 +144,14 @@ const OUTPUT_COPY: Record<OutcomeId, { noun: string; deliverables: string[]; nex
   },
 };
 
+function isValidYouTubeId(id: string) {
+  return /^[A-Za-z0-9_-]{11}$/.test(id);
+}
+
 function getYouTubeId(url: string) {
   const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/))([^&?/]+)/);
-  return match?.[1] || '';
+  const candidate = match?.[1] || '';
+  return isValidYouTubeId(candidate) ? candidate : '';
 }
 
 function currentVideoUrlForLink(videoUrl: string) {
