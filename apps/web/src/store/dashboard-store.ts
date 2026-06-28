@@ -62,6 +62,9 @@ export interface Video {
     sentiment: string;
     topics: string[];
   };
+  // Async pipeline job tracking (set when the backend returns a pending job)
+  jobId?: string;
+  statusUrl?: string;
 }
 
 export interface Activity {
