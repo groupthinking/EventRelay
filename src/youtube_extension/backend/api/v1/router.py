@@ -874,6 +874,14 @@ async def list_videos_v1(
     """Get paginated list of processed videos"""
     try:
         total = data_service.count_videos()
+        if offset >= total:
+            return {
+                "videos": [],
+                "total": total,
+                "limit": limit,
+                "offset": offset,
+                "has_more": False,
+            }
         paginated_videos = data_service.get_videos_summary(limit=limit, offset=offset)
 
         return {
