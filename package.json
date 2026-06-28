@@ -23,11 +23,13 @@
   },
   "devDependencies": {
     "@modelcontextprotocol/sdk": "^1.26.0",
-    "brace-expansion": "^1.1.12",
-    "turbo": "^2.9.14",
+    "brace-expansion": "^5.0.6",
+    "turbo": "^2.10.0",
     "vitest": "^4.1.9"
   },
   "overrides": {
+    "react": "^19",
+    "react-dom": "^19",
     "next": ">=16.2.6",
     "nth-check": "^2.0.1",
     "postcss": "^8.5.15",
@@ -50,8 +52,10 @@
   "dependencies": {
     "@dataconnect/generated": "file:src/dataconnect-generated",
     "@google-cloud/text-to-speech": "^6.4.0",
-    "@google/genai": "^2.7.0",
+    "@google/genai": "^2.10.0",
     "chrome-devtools-mcp": "^0.10.2",
-    "openai": "^6.43.0"
+    "openai": "^6.45.0",
+    "react": "^19",
+    "react-dom": "^19"
   }
 }

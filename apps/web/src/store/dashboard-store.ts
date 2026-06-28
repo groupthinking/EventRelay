@@ -653,33 +653,37 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       const res = await fetch('/api/pipeline', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url, project_type: 'web', deployment_target: 'vercel' }),
+        body: JSON.stringify({ url, project_type: 'web', deployment_target: 'vercel', async: true }),
       });
       clearInterval(interval);
 
       if (!res.ok) throw new Error(`Pipeline error: ${res.status}`);
 
       const result = await res.json();
+      // Support async kickoff response (job pending) vs full sync result
+      const isAsyncPending = result.async_processing || result.status === 'pending' || !!result.job_id;
       const pipelineResult: PipelineResult = {
-        live_url: result.result?.live_url || null,
-        github_repo: result.result?.github_repo || null,
-        build_status: result.result?.build_status || 'unknown',
-        code_generation: result.result?.code_generation || null,
-        deployment: result.result?.deployment || null,
+        live_url: (result.result || result).live_url || null,
+        github_repo: (result.result || result).github_repo || null,
+        build_status: (result.result || result).build_status || (isAsyncPending ? 'pending' : 'unknown'),
+        code_generation: (result.result || result).code_generation || null,
+        deployment: (result.result || result).deployment || null,
       };
 
       updateVideo(id, {
-        status: result.status === 'success' || result.status === 'complete' ? 'complete' : 'failed',
-        progress: 100,
+        status: isAsyncPending ? 'processing' : (result.status === 'success' || result.status === 'complete' ? 'complete' : 'failed'),
+        progress: isAsyncPending ? 20 : 100,
         title: `Deployed: ${url.length > 40 ? url.substring(0, 37) + '…' : url}`,
         processedAt: 'Just now',
         pipelineResult,
         insights: {
-          summary: result.result?.video_analysis?.extracted_info?.title || 'Pipeline complete',
-          actions: result.result?.features_implemented || [],
+          summary: (result.result?.video_analysis?.extracted_info?.title || result.video_analysis?.title) || (isAsyncPending ? 'Async processing started' : 'Pipeline complete'),
+          actions: (result.result?.features_implemented || result.features_implemented) || [],
           sentiment: 'Positive',
-          topics: result.result?.code_generation?.files_created || [],
+          topics: (result.result?.code_generation?.files_created || result.code_generation?.files) || [],
         },
+        jobId: result.job_id || result.id,
+        statusUrl: result.status_url,
       });
 
       if (pipelineResult.live_url) {
