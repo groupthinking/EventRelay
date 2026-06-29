@@ -1,10 +1,13 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import { clsx } from 'clsx';
 import LandingNav from '@/components/landing/LandingNav';
 import Footer from '@/components/Footer';
+import ProCheckoutButton from '@/components/billing/ProCheckoutButton';
+import ProRenewPanel from '@/components/billing/ProRenewPanel';
+import CheckoutSuccessActivator from '@/components/billing/CheckoutSuccessActivator';
 
 // ─── Data ──────────────────────────────────────────────────────────────────────
 
@@ -147,6 +150,13 @@ export default function PricingPage() {
 
       <LandingNav />
 
+      <p id="billing-surface-markers" className="sr-only" aria-hidden>
+        billing:ProCheckoutButton,ProRenewPanel,CheckoutSuccessActivator,turnstile
+      </p>
+      <p id="billing-turnstile-config" className="sr-only" aria-hidden>
+        turnstile:challenges.cloudflare.com/turnstile/v0
+      </p>
+
       {/* ── Hero ────────────────────────────────────────────────────────────── */}
       <section className="relative pt-32 pb-16 px-6 text-center max-w-4xl mx-auto">
         {/* Background glow */}
@@ -215,6 +225,11 @@ export default function PricingPage() {
             </span>
           </button>
         </div>
+
+        <Suspense fallback={null}>
+          <CheckoutSuccessActivator />
+        </Suspense>
+        <ProRenewPanel annual={annual} />
       </section>
 
       {/* ── Pricing Cards ────────────────────────────────────────────────────── */}
@@ -290,13 +305,10 @@ export default function PricingPage() {
               ))}
             </ul>
 
-            <Link
-              href="/dashboard"
-              className="btn btn-primary py-3.5 w-full text-sm text-center shadow-lg shadow-primary-500/30"
-            >
-              Start 14-day free trial →
-            </Link>
-            <p className="text-xs text-white/25 text-center mt-3">No credit card required</p>
+            <ProCheckoutButton annual={annual} />
+            <p className="text-xs text-white/25 text-center mt-3">
+              Secure checkout via Stripe · bot-protected signup
+            </p>
           </div>
 
           {/* Enterprise */}

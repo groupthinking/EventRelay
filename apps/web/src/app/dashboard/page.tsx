@@ -8,6 +8,7 @@ import { useSearchParams } from 'next/navigation';
 import { clsx } from 'clsx';
 import Nav from '@/components/Nav';
 import PreferencesPanel from '@/components/PreferencesPanel';
+import BillingStatusBanner from '@/components/billing/BillingStatusBanner';
 import { useDashboardStore } from '@/store/dashboard-store';
 import type { Video } from '@/store/dashboard-types';
 
@@ -169,6 +170,9 @@ function DashboardContent() {
 
   return (
     <div className="h-screen flex flex-col text-white overflow-hidden bg-surface-950">
+      <p id="billing-dashboard-markers" className="sr-only" aria-hidden>
+        billing:BillingStatusBanner
+      </p>
       <Nav
         subtitle="Dashboard"
         rightSlot={
@@ -206,6 +210,7 @@ function DashboardContent() {
       ) : (
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-10">
           <div className="max-w-6xl mx-auto space-y-10">
+            <BillingStatusBanner />
             <div className="p-6 sm:p-10 flex flex-col items-center justify-center text-center" style={{ background: 'rgba(25, 25, 31, 0.8)', border: '1px solid rgba(106, 242, 222, 0.08)' }}>
               <span className="text-[10px] tracking-[0.3em] uppercase mb-4 block" style={{ color: '#6af2de', fontFamily: 'var(--font-heading)' }}>Video Intelligence Engine</span>
               <h1 className="font-heading text-4xl font-bold tracking-tighter mb-3" style={{ color: '#f8f5fd' }}>Analyze New Video</h1>

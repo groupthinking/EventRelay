@@ -1,4 +1,7 @@
 import { NextResponse } from 'next/server';
+import { resolveTrustedBillingEmail } from '@/lib/billing/billing-context';
+import { isProSubscriber } from '@/lib/billing/entitlement-store';
+import { kaizenObserve } from '@/lib/billing/kaizen-trace';
 
 /** Resolve the FastAPI backend base URL, or null if not configured. */
 function backendBaseUrl(): string | null {
@@ -25,6 +28,28 @@ export async function GET() {
  * is configured rather than fabricating a result (REAL_MODE_ONLY).
  */
 export async function POST(request: Request) {
+  const body = await request.json();
+  const billingEmail = await resolveTrustedBillingEmail(request);
+  const isPro = await isProSubscriber(billingEmail);
+  if (!isPro) {
+    kaizenObserve('billing', 'dispatch_blocked', 'Agent dispatch requires Pro', {
+      decision: `email=${billingEmail ?? 'anonymous'}`,
+      fix: 'upgrade_to_pro',
+    });
+    return NextResponse.json(
+      {
+        error: 'Agent dispatch is a Pro feature. Upgrade at /pricing.',
+        upgradeRequired: true,
+        plan: 'free',
+      },
+      { status: 402 },
+    );
+  }
+
+  kaizenObserve('billing', 'dispatch_allowed', 'Pro agent dispatch', {
+    decision: `email=${billingEmail}`,
+  });
+
   const base = backendBaseUrl();
   if (!base) {
     return NextResponse.json(
@@ -34,7 +59,6 @@ export async function POST(request: Request) {
   }
 
   try {
-    const body = await request.json();
     const res = await fetch(`${base}/api/v1/agents/dispatch`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
