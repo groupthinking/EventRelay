@@ -4,6 +4,12 @@ import OpenAI from 'openai';
 import { Type } from '@google/genai';
 import { getGeminiClient, hasGeminiKey } from '@/lib/gemini-client';
 import { GEMINI_SEARCH_MODEL, GEMINI_STRUCTURED_MODEL } from '@/lib/gemini-models';
+import {
+  gatewayChat,
+  hasAiGatewayKey,
+  stripJsonCodeFence,
+  toGatewayModelId,
+} from '@/lib/vercel-ai-gateway';
 
 let _openai: OpenAI | null = null;
 function getOpenAI() {
@@ -132,10 +138,28 @@ async function extractWithOpenAI(trimmed: string, videoTitle?: string, videoUrl?
 }
 
 async function extractWithGemini(trimmed: string, videoTitle?: string, videoUrl?: string) {
+  const prompt = `${SYSTEM_PROMPT}\n\n${buildUserPrompt(trimmed, videoTitle, videoUrl)}`;
+
+  if (hasAiGatewayKey()) {
+    const result = await gatewayChat({
+      model: toGatewayModelId(GEMINI_STRUCTURED_MODEL),
+      messages: [
+        { role: 'system', content: SYSTEM_PROMPT },
+        {
+          role: 'user',
+          content: `${buildUserPrompt(trimmed, videoTitle, videoUrl)}\n\nReturn ONLY valid JSON.`,
+        },
+      ],
+      max_tokens: 4096,
+      temperature: 0.3,
+    });
+    return JSON.parse(stripJsonCodeFence(result.content));
+  }
+
   const ai = getGeminiClient();
   const response = await ai.models.generateContent({
     model: GEMINI_STRUCTURED_MODEL,
-    contents: `${SYSTEM_PROMPT}\n\n${buildUserPrompt(trimmed, videoTitle, videoUrl)}`,
+    contents: prompt,
     config: {
       temperature: 0.3,
       responseMimeType: 'application/json',
@@ -217,28 +241,40 @@ export async function extractEvents({ transcript, videoTitle, videoUrl }: Extrac
 
     // Path 2: no transcript but have videoUrl + Gemini → direct video analysis via Google Search
     if (!parsed && videoUrl && hasGeminiKey()) {
-      const ai = getGeminiClient();
-      const response = await ai.models.generateContent({
-        model: GEMINI_SEARCH_MODEL,
-        contents: `${SYSTEM_PROMPT}\n\nAnalyze this YouTube video and extract structured data.
-Use your Google Search tool to find the video's transcript, description, and chapter content.
+      const videoPrompt = `${SYSTEM_PROMPT}\n\nAnalyze this YouTube video and extract structured data.
+Find the video's transcript, description, and chapter content.
 
 Video URL: ${videoUrl}
 ${videoTitle ? `Video Title: ${videoTitle}` : ''}
 
-Extract events, actions, summary, and topics from the actual video content found via search.
-Respond with ONLY valid JSON matching the required structure.`,
-        config: {
+Extract events, actions, summary, and topics from the actual video content.
+Respond with ONLY valid JSON matching the required structure.`;
+
+      if (hasAiGatewayKey()) {
+        const result = await gatewayChat({
+          model: toGatewayModelId(GEMINI_SEARCH_MODEL),
+          messages: [{ role: 'user', content: videoPrompt }],
+          max_tokens: 4096,
           temperature: 0.3,
-          responseMimeType: 'application/json',
-          tools: [{ googleSearch: {} }],
-        },
-      });
-      const text = response.text ?? '';
-      if (!text) {
-        throw new Error('Gemini returned an empty response');
+        });
+        parsed = JSON.parse(stripJsonCodeFence(result.content));
+      } else {
+        const ai = getGeminiClient();
+        const response = await ai.models.generateContent({
+          model: GEMINI_SEARCH_MODEL,
+          contents: videoPrompt,
+          config: {
+            temperature: 0.3,
+            responseMimeType: 'application/json',
+            tools: [{ googleSearch: {} }],
+          },
+        });
+        const text = response.text ?? '';
+        if (!text) {
+          throw new Error('Gemini returned an empty response');
+        }
+        parsed = JSON.parse(text);
       }
-      parsed = JSON.parse(text);
       provider = 'gemini-search';
     }
   } catch (err) {

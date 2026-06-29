@@ -5,6 +5,7 @@ import { analyzeVideoWithGemini } from '@/lib/gemini-video-analyzer';
 import {
   classifyGeminiError,
   getGeminiConfig,
+  getGeminiRoutingLabel,
   hasGeminiKey,
   type ClassifiedGeminiError,
 } from '@/lib/gemini-client';
@@ -503,6 +504,7 @@ export async function GET() {
     backend_reason: backend.reason,
     gemini_available: gemini.configured,
     gemini_mode: gemini.mode,
+    gemini_routing: getGeminiRoutingLabel(),
     endpoints: {
       pipeline: 'POST /api/pipeline - Full end-to-end pipeline',
       video: 'POST /api/video - Video analysis only',

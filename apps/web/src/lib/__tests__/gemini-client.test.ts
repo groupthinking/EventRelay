@@ -4,6 +4,7 @@ import {
   classifyGeminiError,
   getGeminiAuthMode,
   getGeminiConfig,
+  hasGeminiKey,
   resolveGeminiApiKey,
 } from '@/lib/gemini-client';
 
@@ -24,7 +25,29 @@ afterEach(() => {
   clearGeminiEnv();
 });
 
+const GATEWAY_KEYS = [
+  'AI_GATEWAY_API_KEY',
+  'VERCEL_AI_GATEWAY_API_KEY',
+  'VERCEL_AI_GATEWAY_API',
+  'VERCEL_API_KEY',
+] as const;
+
+function clearGatewayEnv() {
+  for (const key of GATEWAY_KEYS) delete process.env[key];
+}
+
+afterEach(() => {
+  clearGatewayEnv();
+});
+
 describe('gemini-client auth resolution', () => {
+  it('prefers AI Gateway when gateway key is set', () => {
+    process.env.AI_GATEWAY_API_KEY = 'vck_test';
+    process.env.GEMINI_API_KEY = 'studio-key';
+    expect(getGeminiAuthMode()).toBe('gateway');
+    expect(hasGeminiKey()).toBe(true);
+  });
+
   it('prefers AI Studio keys over Vertex when both are set', () => {
     process.env.Vertex_AI_API_KEY = 'vertex-key';
     process.env.GEMINI_API_KEY = 'studio-key';

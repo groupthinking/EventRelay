@@ -13,8 +13,14 @@ import 'server-only';
  */
 
 import { Type } from '@google/genai';
+import { hasAiGatewayKey } from './vercel-ai-gateway';
 import { getGeminiClient } from './gemini-client';
 import { GEMINI_SEARCH_MODEL, GEMINI_STRUCTURED_MODEL } from './gemini-models';
+import {
+  gatewayChat,
+  stripJsonCodeFence,
+  toGatewayModelId,
+} from './vercel-ai-gateway';
 
 export interface VideoAnalysisResult {
   title: string;
@@ -165,11 +171,32 @@ const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
  * Executes a deep agentic analysis of a YouTube video using Gemini + Google Search.
  * Performs exponential backoff for 503 overload and 429 quota errors.
  */
+async function analyzeVideoWithGateway(
+  videoUrl: string,
+  systemInstruction: string,
+  model: string,
+): Promise<VideoAnalysisResult> {
+  const result = await gatewayChat({
+    model: toGatewayModelId(model),
+    messages: [
+      { role: 'system', content: systemInstruction },
+      {
+        role: 'user',
+        content:
+          `Perform Agentic Grounding for Video: ${videoUrl}. ` +
+          'Return ONLY a single JSON object matching the required schema. No markdown fences.',
+      },
+    ],
+    max_tokens: 8192,
+    temperature: 0.2,
+    timeoutMs: 55_000,
+  });
+  return JSON.parse(stripJsonCodeFence(result.content)) as VideoAnalysisResult;
+}
+
 export async function analyzeVideoWithGemini(
   videoUrl: string,
 ): Promise<VideoAnalysisResult> {
-  const ai = getGeminiClient();
-
   // 1. Fetch the absolute real transcript FIRST (bypasses Gemini hallucination)
   let actualTranscript = '';
   try {
@@ -195,6 +222,11 @@ export async function analyzeVideoWithGemini(
 
   while (attempt < MAX_RETRIES) {
     try {
+      if (hasAiGatewayKey()) {
+        return await analyzeVideoWithGateway(videoUrl, systemInstruction, model);
+      }
+
+      const ai = getGeminiClient();
       const response = await ai.models.generateContent({
         model,
         contents: `Perform Agentic Grounding for Video: ${videoUrl}`,
