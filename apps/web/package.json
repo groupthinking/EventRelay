@@ -50,6 +50,7 @@
     "autoprefixer": "^10.5.2",
     "eslint": "^10",
     "eslint-config-next": "^16.2.7",
+    "playwright": "^1.61.1",
     "postcss": "^8.5.10",
     "tailwindcss": "^4.3.1",
     "typescript": "^6.0.3",
