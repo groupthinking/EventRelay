@@ -2,6 +2,7 @@ import OpenAI from 'openai';
 import { Type } from '@google/genai';
 import { NextResponse } from 'next/server';
 import { getGeminiClient, hasGeminiKey } from '@/lib/gemini-client';
+import { GEMINI_SEARCH_MODEL, GEMINI_STRUCTURED_MODEL } from '@/lib/gemini-models';
 
 export const runtime = 'nodejs';
 export const maxDuration = 120;
@@ -131,13 +132,12 @@ async function extractWithOpenAI(trimmed: string, videoTitle?: string, videoUrl?
 async function extractWithGemini(trimmed: string, videoTitle?: string, videoUrl?: string) {
   const ai = getGeminiClient();
   const response = await ai.models.generateContent({
-    model: 'gemini-3-pro-preview',
+    model: GEMINI_STRUCTURED_MODEL,
     contents: `${SYSTEM_PROMPT}\n\n${buildUserPrompt(trimmed, videoTitle, videoUrl)}`,
     config: {
       temperature: 0.3,
       responseMimeType: 'application/json',
       responseSchema: geminiResponseSchema,
-      tools: [{ googleSearch: {} }],
     },
   });
   const text = response.text ?? '';
@@ -187,18 +187,18 @@ export async function POST(request: Request) {
       try {
         const ai = getGeminiClient();
         const response = await ai.models.generateContent({
-          model: 'gemini-3-pro-preview',
+          model: GEMINI_SEARCH_MODEL,
           contents: `${SYSTEM_PROMPT}\n\nAnalyze this YouTube video and extract structured data.
 Use your Google Search tool to find the video's transcript, description, and chapter content.
 
 Video URL: ${videoUrl}
 ${videoTitle ? `Video Title: ${videoTitle}` : ''}
 
-Extract events, actions, summary, and topics from the actual video content found via search.`,
+Extract events, actions, summary, and topics from the actual video content found via search.
+Respond with ONLY valid JSON matching the required structure.`,
           config: {
             temperature: 0.3,
             responseMimeType: 'application/json',
-            responseSchema: geminiResponseSchema,
             tools: [{ googleSearch: {} }],
           },
         });
