@@ -2,7 +2,12 @@ import { NextResponse } from 'next/server';
 import { waitUntil } from '@vercel/functions';
 import { publishEvent, EventTypes } from '@/lib/cloudevents';
 import { analyzeVideoWithGemini } from '@/lib/gemini-video-analyzer';
-import { hasGeminiKey } from '@/lib/gemini-client';
+import {
+  classifyGeminiError,
+  getGeminiConfig,
+  hasGeminiKey,
+  type ClassifiedGeminiError,
+} from '@/lib/gemini-client';
 import { backendHeaders } from '@/lib/pipeline-backend';
 import {
   checkBackendHealth,
@@ -324,6 +329,7 @@ export async function POST(request: Request) {
     }
 
     // ── Strategy 2: Gemini analysis (video intelligence only, no deployment) ──
+    let geminiError: ClassifiedGeminiError | undefined;
     if (hasGeminiKey() && deadline.remainingMs() > 1_000) {
       try {
         const startTime = Date.now();
@@ -366,7 +372,73 @@ export async function POST(request: Request) {
           },
         });
       } catch (e) {
-        console.error('Gemini analysis failed:', e);
+        geminiError = classifyGeminiError(e);
+        console.error('Gemini analysis failed:', geminiError.code, geminiError.message);
+      }
+    }
+
+    // ── Strategy 3: Transcript-only when Gemini is blocked but transcript fetch works ──
+    if (geminiError && deadline.remainingMs() > 2_000) {
+      try {
+        const { fetchTranscript } = await import('@/lib/transcription-service');
+        const transcriptResult = await deadline.runWithBudget(
+          fetchTranscript({ url }),
+          Math.min(10_000, deadline.remainingMs()),
+          'Transcript fallback',
+        );
+
+        if (transcriptResult.success && transcriptResult.transcript?.trim()) {
+          const wordCount = transcriptResult.wordCount ?? transcriptResult.transcript.split(/\s+/).length;
+
+          waitUntil(
+            publishEvent(EventTypes.PIPELINE_COMPLETED, {
+              strategy: 'transcript-only',
+              success: true,
+              gemini_error: geminiError.code,
+            }, url).catch(() => {}),
+          );
+
+          return NextResponse.json({
+            id: `pipeline_${Date.now().toString(36)}`,
+            status: 'partial',
+            pipeline: 'transcript-only',
+            degraded: true,
+            gemini_error: geminiError,
+            backend: backendHealth,
+            result: {
+              live_url: null,
+              github_repo: null,
+              build_status: 'analysis_blocked',
+              video_analysis: {
+                title: 'Transcript captured — AI analysis unavailable',
+                summary: `Fetched ${wordCount} words from the video source, but Gemini could not run structured analysis (${geminiError.code}).`,
+                events: [
+                  {
+                    type: 'source',
+                    title: 'Transcript captured',
+                    description: `${wordCount} words via ${transcriptResult.source || 'transcription-service'}`,
+                    confidence: 0.9,
+                  },
+                  {
+                    type: 'configuration',
+                    title: 'Gemini analysis blocked',
+                    description: geminiError.userMessage,
+                    confidence: 1,
+                  },
+                ],
+                actions: [],
+                topics: [],
+                architectureCode: '',
+                transcript_preview: transcriptResult.transcript.slice(0, 500),
+              },
+              code_generation: null,
+              deployment: null,
+              message: geminiError.userMessage,
+            },
+          });
+        }
+      } catch (e) {
+        console.warn('Transcript-only fallback failed:', e);
       }
     }
 
@@ -384,14 +456,19 @@ export async function POST(request: Request) {
       backend: backendHealth,
     }, url);
 
+    const geminiConfig = getGeminiConfig();
     return NextResponse.json({
       id: `pipeline_${Date.now().toString(36)}`,
       status: 'partial',
       pipeline: 'local-fallback',
       degraded: true,
       backend: backendHealth,
-      gemini_configured: hasGeminiKey(),
-      warning: 'No automatic pipeline is currently available. Returned a fallback handoff instead of blocking the user.',
+      gemini_configured: geminiConfig.configured,
+      gemini_mode: geminiConfig.mode,
+      gemini_error: geminiError,
+      warning: geminiError
+        ? geminiError.userMessage
+        : 'No automatic pipeline is currently available. Returned a fallback handoff instead of blocking the user.',
       result: fallback,
     });
   } catch (error) {
@@ -409,6 +486,7 @@ export async function POST(request: Request) {
 
 export async function GET() {
   const backend = await checkBackendHealth();
+  const gemini = getGeminiConfig();
   return NextResponse.json({
     name: 'EventRelay End-to-End Pipeline',
     version: '1.0.0',
@@ -423,7 +501,8 @@ export async function GET() {
     backend_available: backend.available,
     backend_host: backend.host,
     backend_reason: backend.reason,
-    gemini_available: hasGeminiKey(),
+    gemini_available: gemini.configured,
+    gemini_mode: gemini.mode,
     endpoints: {
       pipeline: 'POST /api/pipeline - Full end-to-end pipeline',
       video: 'POST /api/video - Video analysis only',
