@@ -53,11 +53,11 @@ jobs:
               const issue = context.payload.issue;
               const text = `${issue.title} ${issue.body || ''}`.toLowerCase();
 
-              if (/\b(mcp|agent|a2a|orchestrat|dispatch)\b/.test(text)) labels.add('mcp/agent');
+              if (/\b(mcp|agent|a2a|orchestrat|dispatch)/.test(text)) labels.add('mcp/agent');
               if (/\b(frontend|react|next\.?js|ui|component|page|css|tailwind)\b/.test(text)) labels.add('frontend');
               if (/\b(ci|cd|workflow|action|deploy|docker|cloud.?run|vercel)\b/.test(text)) labels.add('ci/cd');
               if (/\b(infra|infrastructure|terraform|kubernetes|k8s|gcp|gke)\b/.test(text)) labels.add('infrastructure');
-              if (/\b(transcript|youtube|video|pipeline|event.?extract)\b/.test(text)) labels.add('pipeline');
+              if (/\b(transcript|youtube|video|pipeline|event.?extract)/.test(text)) labels.add('pipeline');
               if (issue.assignees && issue.assignees.length === 0 && (!issue.labels || issue.labels.length === 0)) {
                 labels.add('needs-triage');
               }
