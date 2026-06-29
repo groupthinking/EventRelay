@@ -12,7 +12,7 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "3.0.85",
+    "@ai-sdk/anthropic": "4.0.1",
     "@ai-sdk/google": "3.0.83",
     "@ai-sdk/openai": "3.0.74",
     "@dataconnect/generated": "file:src/dataconnect-generated",
