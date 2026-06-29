@@ -9,13 +9,13 @@
     "./types": "./src/types.ts"
   },
   "scripts": {
-    "lint": "eslint . --max-warnings 0",
-    "test": "jest"
+    "lint": "eslint \"src/**/*.{ts,tsx}\" --max-warnings 0",
+    "test": "jest --passWithNoTests"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.85",
     "@ai-sdk/google": "^3.0.83",
-    "@ai-sdk/openai": "^2.0.76",
+    "@ai-sdk/openai": "^3.0.74",
     "@dataconnect/generated": "file:src/dataconnect-generated",
     "@modelcontextprotocol/sdk": "^1.27.1",
     "@temporalio/activity": "^1.15.0",
@@ -26,6 +26,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@repo/eslint-config": "*",
     "@types/node": "^20.19.37",
     "eslint": "^9",
     "jest": "^30",

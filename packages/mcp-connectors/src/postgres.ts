@@ -1,4 +1,4 @@
-import { Pool, PoolClient, QueryResult } from 'pg';
+import { Pool, QueryResult } from 'pg';
 
 /**
  * Postgres connector configuration

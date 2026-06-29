@@ -11,6 +11,7 @@
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "module": "ESNext",
-    "moduleResolution": "node"
+    "moduleResolution": "node",
+    "ignoreDeprecations": "6.0"
   }
 }

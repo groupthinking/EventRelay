@@ -1,8 +1,7 @@
-import { Tracer, Meter, trace, metrics, context, SpanStatusCode } from '@opentelemetry/api';
+import { Tracer, Meter, trace, metrics, SpanStatusCode } from '@opentelemetry/api';
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-grpc';
-import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-grpc';
-import { Resource } from '@opentelemetry/resources';
+import { resourceFromAttributes } from '@opentelemetry/resources';
 import { SemanticResourceAttributes } from '@opentelemetry/semantic-conventions';
 
 /**
@@ -39,7 +38,7 @@ export class Observability {
 
   private setupObservability(endpoint: string): void {
     // Configure resource with service name
-    const resource = new Resource({
+    const resource = resourceFromAttributes({
       [SemanticResourceAttributes.SERVICE_NAME]: this.serviceName,
     });
 
