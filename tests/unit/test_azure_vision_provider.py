@@ -1020,6 +1020,51 @@ class TestAzureVisionPerformOCRStream:
 
 
 # ===========================================================================
+# _await_ocr_call (wall-clock deadline enforcement)
+# ===========================================================================
+
+
+class TestAzureVisionAwaitOcrCall:
+    """Cover the timeout-enforcement branches of ``_await_ocr_call``.
+
+    These guard the OCR wall-clock budget: the ``remaining <= 0`` pre-check and
+    the ``asyncio.TimeoutError`` path are the core behaviour the deadline fix
+    introduced, so they get explicit coverage here.
+    """
+
+    async def test_await_ocr_call_returns_value_within_budget(self):
+        import asyncio
+        provider = _make_provider()
+        deadline = asyncio.get_running_loop().time() + 10
+        result = await provider._await_ocr_call(deadline, lambda x: x * 2, 21)
+        assert result == 42
+
+    async def test_await_ocr_call_past_deadline_raises(self):
+        import asyncio
+        provider = _make_provider()
+        # Deadline already in the past -> remaining <= 0 branch, never invokes func.
+        past_deadline = asyncio.get_running_loop().time() - 1
+
+        def _should_not_run():  # pragma: no cover - asserted never called
+            raise AssertionError("func must not run once the deadline has passed")
+
+        with pytest.raises(CloudAIError) as exc_info:
+            await provider._await_ocr_call(past_deadline, _should_not_run)
+        assert "timed out" in str(exc_info.value).lower()
+
+    async def test_await_ocr_call_slow_call_times_out(self):
+        import asyncio
+        import time
+        provider = _make_provider()
+        # Tiny remaining budget against a call that blocks well past it ->
+        # asyncio.wait_for raises TimeoutError, mapped to CloudAIError.
+        deadline = asyncio.get_running_loop().time() + 0.05
+        with pytest.raises(CloudAIError) as exc_info:
+            await provider._await_ocr_call(deadline, time.sleep, 0.5)
+        assert "timed out" in str(exc_info.value).lower()
+
+
+# ===========================================================================
 # _analyze_image_content
 # ===========================================================================
 
