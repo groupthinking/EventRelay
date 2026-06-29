@@ -7,7 +7,7 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
-    "lint": "eslint . --max-warnings 0"
+    "lint": "eslint \"src/**/*.{ts,tsx}\" --max-warnings 0"
   },
   "dependencies": {
     "@dataconnect/generated": "file:src/dataconnect-generated",
@@ -20,8 +20,9 @@
     "@opentelemetry/semantic-conventions": "^1.18.0"
   },
   "devDependencies": {
+    "@repo/eslint-config": "*",
     "@types/node": "^20",
     "eslint": "^9",
-    "typescript": "^5"
+    "typescript": "^6"
   }
 }
