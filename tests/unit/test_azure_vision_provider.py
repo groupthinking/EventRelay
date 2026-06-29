@@ -1000,6 +1000,24 @@ class TestAzureVisionPerformOCRStream:
 
         assert "read_result" in result
 
+    async def test_perform_ocr_stream_failed_status_raises(self):
+        import io
+        provider = _make_provider()
+        mock_client = MagicMock()
+        mock_read_resp = MagicMock()
+        mock_read_resp.headers = {"Operation-Location": "https://api/v1/operations/op-stream-fail"}
+        mock_client.read_in_stream.return_value = mock_read_resp
+        result_obj = MagicMock()
+        result_obj.status = "failed"
+        mock_client.get_read_result.return_value = result_obj
+        provider._vision_client = mock_client
+
+        mocks = _azure_sdk_mocks()
+        with patch.dict("sys.modules", mocks):
+            with pytest.raises(CloudAIError) as exc_info:
+                await provider._perform_ocr_stream(io.BytesIO(b"\xff\xd8\xff"))
+        assert "failed" in str(exc_info.value).lower()
+
 
 # ===========================================================================
 # _analyze_image_content
