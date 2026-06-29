@@ -54,7 +54,7 @@
     "@google-cloud/text-to-speech": "^6.4.0",
     "@google/genai": "^2.10.0",
     "@types/node": "^26.0.1",
-    "ai": "^7.0.0-canary.176",
+    "ai": "^7.0.6",
     "chrome-devtools-mcp": "^0.10.2",
     "dotenv": "^17.4.2",
     "openai": "^6.45.0",
