@@ -29,8 +29,8 @@ concrete reason, verified against the actual repository tree.
 | `real-processing.yml` | KEEP | Manual single-video processing; well-formed. |
 | `secret-scan.yml` | KEEP | gitleaks on the working tree; action pinned to SHA, checksum-verified install. |
 | `security.yml` | KEEP | npm audit, safety, bandit, trivy; uploads SARIF. |
-| `verify-litert-mcp.yml` | KEEP | Path-filtered smoke test; `mcp-servers/litert-mcp/server.py` exists. |
-| `vision-reasoning.yml` | KEEP | Path-filtered lint/type/test; `mcp-servers/shared-state/*` modules exist. |
+| `verify-litert-mcp.yml` | **DELETE** | Only smoke-tests `mcp-servers/litert-mcp/server.py`, which the cleanup pass removed. The path filter still matched the deletion, so the `verify` job triggered and then failed (`python3 mcp-servers/litert-mcp/server.py` → no such file). |
+| `vision-reasoning.yml` | **DELETE** | Only lints/tests the `mcp-servers/shared-state/*` modules, which the cleanup pass removed. Triggered on the deletion and failed (`pip install -r mcp-servers/requirements.txt`, `cd mcp-servers/shared-state`). |
 
 ## On "MERGE"
 
@@ -45,15 +45,16 @@ job rather than merging.
 
 ## Verification
 
-All 21 remaining workflow files were parsed with PyYAML after the changes — all
+All remaining workflow files were parsed with PyYAML after the changes — all
 valid. Referenced paths were checked against the working tree:
 
 - Present: `.github/codeql/codeql-config.yml`, `.gitleaks.toml`, `.trivyignore`,
   `Dockerfile`, `scripts/maintenance/branch-cleanup-delete.sh`,
-  `mcp-servers/litert-mcp/server.py`, `mcp-servers/shared-state/*`,
   `tests/e2e/`, `tests/failure-log.md`, `apps/web` (with `build:web` script).
-- Absent (drove the deletes): `mcp-servers/mcp-profiling/`, `deployments/`,
-  `frontend/`, `src/mcp-bridge.py`.
+- Absent (drove the deletes): `mcp-servers/` (entire tree, removed by the
+  cleanup pass — drove the `verify-litert-mcp.yml` and `vision-reasoning.yml`
+  deletes), `mcp-servers/mcp-profiling/`, `deployments/`, `frontend/`,
+  `src/mcp-bridge.py`.
 - Recent run logs checked: `auto-assign.yml` failed on issue #392 because
   `gh issue edit` used a GraphQL mutation unsupported by GitHub App
   installation tokens; the workflow now calls the REST assignees endpoint.
