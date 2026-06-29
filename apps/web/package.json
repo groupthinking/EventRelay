@@ -39,7 +39,7 @@
     "stripe": "^22.3.0",
     "tailwind-merge": "^3.6.0",
     "use-sync-external-store": "^1.6.0",
-    "zod": "^3.25.76",
+    "zod": "^4.4.3",
     "zustand": "^5.0.14"
   },
   "devDependencies": {
