@@ -1,4 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
+import { NextRequest } from 'next/server';
 import { POST } from '@/app/api/billing/checkout/route';
 import { resetKaizenTracesForTests } from '@/lib/billing/kaizen-trace';
 
@@ -24,7 +25,7 @@ afterEach(() => {
 describe('POST /api/billing/checkout', () => {
   it('returns 403 when Turnstile verification fails', async () => {
     vi.mocked(verifyTurnstileToken).mockResolvedValue({ ok: false, error: 'turnstile_verification_failed' });
-    const req = new Request('http://localhost/api/billing/checkout', {
+    const req = new NextRequest('http://localhost/api/billing/checkout', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ annual: false, turnstileToken: 'bad' }),
@@ -38,7 +39,7 @@ describe('POST /api/billing/checkout', () => {
 
   it('creates Stripe session on valid Turnstile token', async () => {
     vi.mocked(verifyTurnstileToken).mockResolvedValue({ ok: true });
-    const req = new Request('http://localhost/api/billing/checkout', {
+    const req = new NextRequest('http://localhost/api/billing/checkout', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ annual: true, turnstileToken: 'valid', email: 'pro@example.com' }),

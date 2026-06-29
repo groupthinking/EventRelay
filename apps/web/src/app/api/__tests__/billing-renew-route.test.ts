@@ -1,4 +1,5 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
+import { NextRequest } from 'next/server';
 import { POST } from '@/app/api/billing/renew/route';
 import { getKaizenTraces, resetKaizenTracesForTests } from '@/lib/billing/kaizen-trace';
 import { saveEntitlement, resetEntitlementStoreForTests } from '@/lib/billing/entitlement-store';
@@ -32,7 +33,7 @@ describe('POST /api/billing/renew', () => {
       updatedAt: new Date().toISOString(),
     });
 
-    const req = new Request('http://localhost/api/billing/renew', {
+    const req = new NextRequest('http://localhost/api/billing/renew', {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
