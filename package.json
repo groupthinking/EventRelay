@@ -51,12 +51,17 @@
     }
   },
   "dependencies": {
+    "@ai-sdk/gateway": "^4.0.0-canary.107",
     "@dataconnect/generated": "file:src/dataconnect-generated",
     "@google-cloud/text-to-speech": "^6.4.0",
     "@google/genai": "^2.10.0",
+    "@types/node": "^26.0.1",
+    "ai": "^7.0.0-canary.176",
     "chrome-devtools-mcp": "^0.10.2",
+    "dotenv": "^17.4.2",
     "openai": "^6.45.0",
     "react": "^19",
-    "react-dom": "^19"
+    "react-dom": "^19",
+    "tsx": "^4.22.4"
   }
 }

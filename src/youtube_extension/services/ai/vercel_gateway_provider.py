@@ -26,9 +26,20 @@ GATEWAY_URL = "https://ai-gateway.vercel.sh/v1/chat/completions"
 DEFAULT_MODEL = os.getenv("VERCEL_AI_MODEL", "google/gemini-2.0-flash")
 
 
+def _resolve_gateway_key() -> str:
+    """Resolve Vercel AI Gateway API key (vck_…)."""
+    return (
+        os.getenv("AI_GATEWAY_API_KEY")
+        or os.getenv("VERCEL_AI_GATEWAY_API_KEY")
+        or os.getenv("VERCEL_AI_GATEWAY_API")
+        or os.getenv("VERCEL_API_KEY")
+        or ""
+    ).strip()
+
+
 def gateway_available() -> bool:
     """True when a Vercel AI Gateway key is configured."""
-    return bool(os.getenv("VERCEL_API_KEY"))
+    return bool(_resolve_gateway_key())
 
 
 def chat(
@@ -43,9 +54,11 @@ def chat(
 
     Raises on transport/auth errors so callers can fall back deterministically.
     """
-    key = os.getenv("VERCEL_API_KEY")
+    key = _resolve_gateway_key()
     if not key:
-        raise RuntimeError("VERCEL_API_KEY environment variable is not set")
+        raise RuntimeError(
+            "AI Gateway API key is not set (AI_GATEWAY_API_KEY or VERCEL_API_KEY)"
+        )
     payload = {
         "model": model or DEFAULT_MODEL,
         "messages": messages,
