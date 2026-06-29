@@ -13,9 +13,7 @@
     "install:all": "npm install"
   },
   "workspaces": [
-    "apps/*",
-    "packages/*",
-    "mcp-servers/*"
+    "apps/*"
   ],
   "engines": {
     "node": ">=20.0.0",

@@ -197,3 +197,5 @@ dataconnect/.dataconnect/
 coverage.json
 # Saved Google AI Studio webpage dump (vendored HTML/JS/CSS, ~23M)
 docs/gemini_reference/
+# Runtime pipeline audit logs (written by pipeline_audit_store at runtime)
+data/audit/*.jsonl
