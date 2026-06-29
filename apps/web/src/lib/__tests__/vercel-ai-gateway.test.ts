@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
 import {
+  chunkTextForEmbedding,
   hasAiGatewayKey,
   resolveAiGatewayKey,
   stripJsonCodeFence,
@@ -33,5 +34,12 @@ describe('vercel-ai-gateway', () => {
 
   it('strips markdown json fences', () => {
     expect(stripJsonCodeFence('```json\n{"ok":true}\n```')).toBe('{"ok":true}');
+  });
+
+  it('chunks text using embeddings-demo sentence split', () => {
+    expect(chunkTextForEmbedding('First idea. Second idea.')).toEqual([
+      'First idea',
+      'Second idea',
+    ]);
   });
 });
