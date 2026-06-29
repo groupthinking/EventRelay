@@ -188,3 +188,13 @@ supabase/functions/**/index.js
 supabase/functions/**/index.js.map
 supabase/functions/**/index.d.ts
 apps/web/package-lock.json
+
+# --- Regenerable build/cache artifacts (never commit; recreated by tooling) ---
+# Firebase Data Connect local PGlite emulator data (firebase.json -> dataDir)
+dataconnect/.dataconnect/
+# TypeScript incremental build cache
+*.tsbuildinfo
+# Root coverage report (per-run output; coverage/ dir already ignored above)
+coverage.json
+# Stale full-tree snapshot
+full-tree.txt
