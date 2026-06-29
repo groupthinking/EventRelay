@@ -263,17 +263,21 @@ class AzureVision(BaseCloudAI):
             OperationStatusCodes,
         )
 
-        # Start OCR operation
+        # Start OCR operation (offload blocking SDK calls so the event loop is
+        # never stalled by a slow Azure response).
         if image_stream:
             # Use stream for local files
             import io
-            read_response = self._vision_client.read_in_stream(
+            read_response = await asyncio.to_thread(
+                self._vision_client.read_in_stream,
                 io.BytesIO(image_stream),
-                raw=True
+                raw=True,
             )
         else:
             # Use URL for remote images
-            read_response = self._vision_client.read(image_url, raw=True)
+            read_response = await asyncio.to_thread(
+                self._vision_client.read, image_url, raw=True
+            )
 
         # Get operation location
         operation_location = read_response.headers["Operation-Location"]
@@ -283,7 +287,7 @@ class AzureVision(BaseCloudAI):
         max_wait_time = 30  # seconds
         elapsed = 0
         while elapsed < max_wait_time:
-            result = self._vision_client.get_read_result(operation_id)
+            result = await asyncio.to_thread(self._vision_client.get_read_result, operation_id)
             if result.status not in [OperationStatusCodes.running, OperationStatusCodes.not_started]:
                 break
             await asyncio.sleep(1)
@@ -302,17 +306,25 @@ class AzureVision(BaseCloudAI):
             OperationStatusCodes,
         )
 
-        read_response = self._vision_client.read_in_stream(image_stream, raw=True)
+        read_response = await asyncio.to_thread(
+            self._vision_client.read_in_stream, image_stream, raw=True
+        )
 
         operation_location = read_response.headers["Operation-Location"]
         operation_id = operation_location.split("/")[-1]
 
-        # Wait for completion
-        while True:
-            result = self._vision_client.get_read_result(operation_id)
+        # Wait for completion (bounded so a stuck operation cannot hang forever)
+        max_wait_time = 30  # seconds
+        elapsed = 0
+        while elapsed < max_wait_time:
+            result = await asyncio.to_thread(self._vision_client.get_read_result, operation_id)
             if result.status not in [OperationStatusCodes.running, OperationStatusCodes.not_started]:
                 break
             await asyncio.sleep(1)
+            elapsed += 1
+
+        if result.status != OperationStatusCodes.succeeded:
+            raise CloudAIError(f"OCR stream operation failed with status: {result.status}")
 
         return {"read_result": result.analyze_result}
 
