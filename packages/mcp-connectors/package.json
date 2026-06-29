@@ -24,7 +24,7 @@
     "@repo/eslint-config": "*",
     "@types/node": "^20",
     "@types/pg": "^8.10.0",
-    "eslint": "^9",
+    "eslint": "^10",
     "typescript": "^6"
   }
 }

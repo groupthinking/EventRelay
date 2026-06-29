@@ -16,7 +16,7 @@
   "devDependencies": {
     "@repo/eslint-config": "*",
     "@types/react": "^18",
-    "eslint": "^9",
+    "eslint": "^10",
     "typescript": "^6"
   },
   "dependencies": {
