@@ -13,14 +13,18 @@ interface NavProps {
   fixed?: boolean;
 }
 
+/** Primary product navigation — dashboard-first journey. */
 const NAV_LINKS = [
-  { href: '/', label: 'Studio', hint: 'Local drafts' },
-  { href: '/dashboard', label: 'Dashboard', hint: 'Live pipeline' },
-  { href: '/dashboard/agents', label: 'Agents', hint: 'SSE graph' },
+  { href: '/dashboard', label: 'Dashboard', hint: 'Video library' },
+  { href: '/dashboard/agents', label: 'Agents', hint: 'Pipeline graph' },
   { href: '/features', label: 'Features' },
   { href: '/pricing', label: 'Pricing' },
-  { href: '/prototype', label: 'Prototype', hint: 'Design preview' },
-  { href: '/playground', label: 'API' },
+];
+
+/** Secondary / developer surfaces — not part of the default user path. */
+const DEV_LINKS = [
+  { href: '/studio', label: 'Studio', hint: 'Local drafts' },
+  { href: '/docs/api', label: 'API' },
 ];
 
 export default function Nav({ rightSlot, subtitle, fixed = false }: NavProps) {
@@ -36,7 +40,7 @@ export default function Nav({ rightSlot, subtitle, fixed = false }: NavProps) {
       )}
     >
       <div className="flex items-center gap-4">
-        <Link href="/" className="flex items-center gap-3 group">
+        <Link href="/dashboard" className="flex items-center gap-3 group">
           <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center font-black text-base shadow-lg shadow-primary-500/25 transition-transform group-hover:scale-105">
             U
           </div>
@@ -50,7 +54,6 @@ export default function Nav({ rightSlot, subtitle, fixed = false }: NavProps) {
           </>
         )}
 
-        {/* Desktop links */}
         <div className="hidden md:flex items-center gap-1 ml-4">
           {NAV_LINKS.map(({ href, label, hint }) => (
             <Link
@@ -59,7 +62,7 @@ export default function Nav({ rightSlot, subtitle, fixed = false }: NavProps) {
               title={hint}
               className={clsx(
                 'text-sm px-3 py-2 rounded-lg transition-colors',
-                pathname === href
+                pathname === href || pathname.startsWith(`${href}/`)
                   ? 'text-white/90 bg-white/[0.05]'
                   : 'text-white/40 hover:text-white/70 hover:bg-white/[0.03]'
               )}
@@ -72,13 +75,27 @@ export default function Nav({ rightSlot, subtitle, fixed = false }: NavProps) {
               )}
             </Link>
           ))}
+          <div className="h-5 w-px bg-white/[0.08] mx-1" />
+          {DEV_LINKS.map(({ href, label, hint }) => (
+            <Link
+              key={href}
+              href={href}
+              title={hint}
+              className={clsx(
+                'text-sm px-3 py-2 rounded-lg transition-colors text-white/30 hover:text-white/55 hover:bg-white/[0.03]',
+                pathname === href && 'text-white/60 bg-white/[0.04]'
+              )}
+            >
+              {label}
+            </Link>
+          ))}
         </div>
       </div>
 
       <div className="flex items-center gap-3">
         {rightSlot || (
           <Link href="/dashboard" className="btn btn-primary py-2 px-5 text-sm">
-            Dashboard
+            Open Dashboard
           </Link>
         )}
       </div>
