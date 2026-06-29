@@ -103,6 +103,8 @@ describe('POST /api/pipeline', () => {
       actions: [],
       topics: ['test'],
       architectureCode: 'ingest -> analyze',
+      ingestScript: 'print("ingest")',
+      e22Snippets: [],
       transcript: [],
     } as Awaited<ReturnType<typeof analyzeVideoWithGemini>>);
 
