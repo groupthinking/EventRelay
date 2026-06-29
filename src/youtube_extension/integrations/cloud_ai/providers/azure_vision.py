@@ -257,7 +257,7 @@ class AzureVision(BaseCloudAI):
 
     async def _perform_ocr(self, image_url: str, image_stream: Optional[bytes]) -> dict[str, Any]:
         """Perform OCR using Azure Read API."""
-        import time
+        import asyncio
 
         from azure.cognitiveservices.vision.computervision.models import (
             OperationStatusCodes,
@@ -286,7 +286,7 @@ class AzureVision(BaseCloudAI):
             result = self._vision_client.get_read_result(operation_id)
             if result.status not in [OperationStatusCodes.running, OperationStatusCodes.not_started]:
                 break
-            time.sleep(1)
+            await asyncio.sleep(1)
             elapsed += 1
 
         if result.status == OperationStatusCodes.succeeded:
@@ -296,7 +296,7 @@ class AzureVision(BaseCloudAI):
 
     async def _perform_ocr_stream(self, image_stream) -> dict[str, Any]:
         """Perform OCR on image stream."""
-        import time
+        import asyncio
 
         from azure.cognitiveservices.vision.computervision.models import (
             OperationStatusCodes,
@@ -312,7 +312,7 @@ class AzureVision(BaseCloudAI):
             result = self._vision_client.get_read_result(operation_id)
             if result.status not in [OperationStatusCodes.running, OperationStatusCodes.not_started]:
                 break
-            time.sleep(1)
+            await asyncio.sleep(1)
 
         return {"read_result": result.analyze_result}
 
