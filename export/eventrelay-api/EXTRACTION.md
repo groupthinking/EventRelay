@@ -24,7 +24,12 @@ git filter-repo --path service/ --path-rename service/:    # keeps commits, NOT 
 ## Steps (fresh, recommended)
 
 ```bash
-# 1. Assemble the tree (from the monorepo root)
+# 0. Get on the branch that HAS this bundle. It is NOT on main.
+git fetch origin
+git switch claude/repo-architecture-review-Aewa3
+
+# 1. Assemble the tree (from the monorepo root). The script aborts with a clear
+#    message if service/ is missing (i.e. you are on the wrong branch).
 bash export/eventrelay-api/assemble.sh ../eventrelay-api
 
 # 2. Verify it stands on its own — no DB, keys, or network needed

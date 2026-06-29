@@ -11,6 +11,15 @@ TARGET="${1:?usage: assemble.sh <target-dir>}"
 BUNDLE="$(cd "$(dirname "$0")" && pwd)"            # export/eventrelay-api
 ROOT="$(cd "$BUNDLE/../.." && pwd)"               # monorepo root
 
+# Preflight: the spine must be present. If you ran this on `main` (or any branch
+# without the SC7 work), service/ won't exist — check out the branch first.
+if [ ! -f "$ROOT/service/app/main.py" ]; then
+  echo "error: $ROOT/service/app/main.py not found." >&2
+  echo "       The spine lives on branch claude/repo-architecture-review-Aewa3." >&2
+  echo "       Run:  git fetch origin && git switch claude/repo-architecture-review-Aewa3" >&2
+  exit 1
+fi
+
 if [ -e "$TARGET" ] && [ -n "$(ls -A "$TARGET" 2>/dev/null || true)" ]; then
   echo "error: target '$TARGET' exists and is not empty" >&2
   exit 1
@@ -40,6 +49,9 @@ for d in PORTING_PARAMETERS.md SC7_CUTOVER.md; do
 done
 
 echo "Assembled standalone repo at: $TARGET"
-echo "Next:"
-echo "  cd $TARGET && make install-dev && make test"
-echo "  git init && git add -A && git commit -m 'chore: extract EventRelay API from monorepo spine'"
+echo "Next (run these INSIDE $TARGET, not the monorepo):"
+echo "  cd $TARGET"
+echo "  make install-dev && make test"
+echo "  git init"
+echo "  git status            # review what will be added — do NOT blind 'git add -A' the monorepo"
+echo "  git add -A && git commit -m 'chore: extract EventRelay API from monorepo spine'"
