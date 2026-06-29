@@ -13,8 +13,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from urllib.parse import parse_qs, urlparse
 
-from src.shared.youtube import RobustYouTubeMetadata, RobustYouTubeService
-from src.youtube_extension.utils.video_utils import extract_video_id
+from shared.youtube import RobustYouTubeMetadata, RobustYouTubeService
+from youtube_extension.utils.video_utils import extract_video_id
 from uvai.ml.client import UVAIMLClient, get_uvai_ml_client
 from youtube_extension.backend.services.metrics_service import MetricsService
 from youtube_extension.utils import parse_duration_to_seconds

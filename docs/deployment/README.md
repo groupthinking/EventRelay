@@ -12,6 +12,12 @@ This directory contains comprehensive guides for deploying and managing EventRel
   - Total time: 20 minutes + DNS propagation
 
 ### 📚 Complete Guides
+- **[VERCEL_PRODUCTION_RUNBOOK.md](./VERCEL_PRODUCTION_RUNBOOK.md)** - Current UVAI launch-readiness runbook
+  - Vercel project and production domains
+  - Incident response and rollback path
+  - Code-verified controls vs dashboard/provider gates
+  - Post-deploy smoke checks
+
 - **[DOMAIN_CONSOLIDATION.md](./DOMAIN_CONSOLIDATION.md)** - Full domain consolidation documentation
   - DNS configuration for uvai.io
   - Vercel project setup
@@ -28,6 +34,17 @@ This directory contains comprehensive guides for deploying and managing EventRel
   - CI/CD pipeline configuration
   - Rollback procedures
 
+- **[VERCEL_PRODUCTION_RUNBOOK.md](./VERCEL_PRODUCTION_RUNBOOK.md)** - Vercel launch and incident runbook
+  - Incident response and escalation
+  - Stage, promote, and rollback steps
+  - Vercel Pro launch checklist
+  - DNS and TLS verification
+
+- **[VERCEL_PRODUCTION_CHECKLIST_AUDIT.md](./VERCEL_PRODUCTION_CHECKLIST_AUDIT.md)** - Vercel checklist status matrix
+  - Operational excellence, security, reliability, performance, and cost status
+  - Confirmed repo changes and blocked dashboard items
+  - Residual dependency advisory notes
+
 ## Current Production URLs
 
 | Service | URL | Description |
@@ -36,6 +53,10 @@ This directory contains comprehensive guides for deploying and managing EventRel
 | API Backend | https://api.uvai.io | FastAPI backend (Cloud Run) |
 | API Docs | https://api.uvai.io/docs | Interactive Swagger UI |
 | Health Check | https://api.uvai.io/api/v1/health | Backend health endpoint |
+
+See `VERCEL_PRODUCTION_RUNBOOK.md` for the current launch-readiness gate. As
+of the latest Vercel audit, frontend TLS and headers pass, but the backend
+health endpoint is still failing upstream.
 
 ### Legacy URLs (Redirected)
 
@@ -50,8 +71,8 @@ All these URLs redirect to https://uvai.io:
 
 ### Frontend (Vercel)
 - **Platform**: Vercel
-- **Framework**: Next.js 14
-- **Build Command**: `npm run build`
+- **Framework**: Next.js 16
+- **Build Command**: `npm run build:web`
 - **Environment Variables**: See [DOMAIN_CONSOLIDATION.md](./DOMAIN_CONSOLIDATION.md#vercel-configuration)
 
 ### Backend (Google Cloud Run)

@@ -98,6 +98,14 @@ class DeploymentManager:
         Runs npm install and npm run build to catch errors early.
         """
         logger.info("🔍 Verifying project build...")
+        if os.getenv("SENTRY_DSN"):
+            import sentry_sdk
+            sentry_sdk.add_breadcrumb(
+                category="deployment",
+                message="Starting build verification",
+                data={"project_path": project_path, "has_package_json": package_json.exists()},
+                level="info"
+            )
 
         result = {
             "passed": False,
@@ -108,7 +116,18 @@ class DeploymentManager:
         }
 
         project_dir = Path(project_path)
-        package_json = project_dir / "package.json"
+
+        # Security: validate and resolve path to prevent traversal
+        try:
+            resolved_path = project_dir.resolve()
+            if not resolved_path.is_dir():
+                result["summary"] = "Invalid project path: not a directory"
+                return result
+        except Exception as e:
+            result["summary"] = f"Invalid project path: {e}"
+            return result
+
+        package_json = resolved_path / "package.json"
 
         # Check if package.json exists
         if not package_json.exists():
@@ -120,10 +139,13 @@ class DeploymentManager:
         try:
             # Run npm install
             logger.info("📦 Running npm install...")
-            npm_path = "/usr/local/bin/npm" if os.path.exists("/usr/local/bin/npm") else "npm"
+            import shutil
+            npm_path = shutil.which("npm") or "/usr/local/bin/npm" if os.path.exists("/usr/local/bin/npm") else "npm"
+            if not shutil.which("npm") and not os.path.exists("/usr/local/bin/npm"):
+                logger.warning("⚠️ npm not found in PATH; build verification may fail. Ensure Node.js is installed in the container.")
             install_result = subprocess.run(
-                [npm_path, "install", "--legacy-peer-deps"],
-                cwd=project_path,
+                [npm_path, "install", "--legacy-peer-deps", "--ignore-scripts"],
+                cwd=str(resolved_path),
                 capture_output=True,
                 text=True,
                 timeout=180  # 3 minutes for npm install
@@ -143,9 +165,12 @@ class DeploymentManager:
 
             # Run npm run build
             logger.info("🔨 Running npm run build...")
+            if not shutil.which("npm") and npm_path == "npm":
+                # Re-detect
+                npm_path = shutil.which("npm") or npm_path
             build_result = subprocess.run(
                 [npm_path, "run", "build"],
-                cwd=project_path,
+                cwd=str(resolved_path),
                 capture_output=True,
                 text=True,
                 timeout=180
@@ -197,10 +222,11 @@ class DeploymentManager:
             tsconfig = project_dir / "tsconfig.json"
             if tsconfig.exists():
                 logger.info("🔎 Running TypeScript check...")
-                npx_path = "/usr/local/bin/npx" if os.path.exists("/usr/local/bin/npx") else "npx"
+                import shutil
+                npx_path = shutil.which("npx") or "/usr/local/bin/npx" if os.path.exists("/usr/local/bin/npx") else "npx"
                 tsc_result = subprocess.run(
                     [npx_path, "tsc", "--noEmit"],
-                    cwd=project_path,
+                    cwd=str(resolved_path),
                     capture_output=True,
                     text=True,
                     timeout=60

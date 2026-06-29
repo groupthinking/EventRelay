@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { waitUntil } from '@vercel/functions';
 import { publishEvent, EventTypes } from '@/lib/cloudevents';
 import { analyzeVideoWithGemini } from '@/lib/gemini-video-analyzer';
 import { hasGeminiKey } from '@/lib/gemini-client';
@@ -9,6 +10,9 @@ const rawBackendUrl = process.env.BACKEND_URL || '';
 const BACKEND_URL = rawBackendUrl.startsWith('http') ? rawBackendUrl : 'http://localhost:8000';
 const BACKEND_AVAILABLE = rawBackendUrl.startsWith('http');
 
+export const runtime = 'nodejs';
+export const maxDuration = 120;
+
 /**
  * Get the absolute base URL for the current request.
  * Uses the request's origin or falls back to environment variables.
@@ -17,6 +21,20 @@ function getBaseUrl(request: Request): string {
   const url = new URL(request.url);
   return `${url.protocol}//${url.host}`;
 }
+async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timeout = setTimeout(() => reject(new Error(`${label} timed out`)), ms);
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
+
 
 /**
  * POST /api/video
@@ -30,6 +48,9 @@ export async function POST(request: Request) {
   let videoUrl: string | undefined;
   try {
     const body = await request.json();
+    if (!body || typeof body !== 'object') {
+      return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
+    }
     const { url } = body;
     videoUrl = url;
 
@@ -45,19 +66,19 @@ export async function POST(request: Request) {
     if (BACKEND_AVAILABLE) {
       try {
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 15_000);
+        const timeout = setTimeout(() => controller.abort(), 4_000);
 
-      let response: Response;
-      try {
-        response = await fetch(`${BACKEND_URL}/api/v1/transcript-action`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ video_url: url, language: 'en' }),
-          signal: controller.signal,
-        });
-      } finally {
-        clearTimeout(timeout);
-      }
+        let response: Response;
+        try {
+          response = await fetch(`${BACKEND_URL}/api/v1/transcript-action`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...(process.env.EVENTRELAY_API_KEY ? { 'X-API-Key': process.env.EVENTRELAY_API_KEY } : {}) },
+            body: JSON.stringify({ video_url: url, language: 'en' }),
+            signal: controller.signal,
+          });
+        } finally {
+          clearTimeout(timeout);
+        }
 
         if (response.ok) {
           const result = await response.json();
@@ -135,12 +156,17 @@ export async function POST(request: Request) {
           project_scaffold: transcriptAction.project_scaffold || null,
         };
 
-        await publishEvent(EventTypes.PIPELINE_COMPLETED, { strategy: 'backend', success: result.success, agents: result.orchestration_meta?.agents_used || [] }, url);
+        // Direct waitUntil on publishEvent (CloudEvent) for completion — ancillary, does not block response
+        waitUntil(
+          publishEvent(EventTypes.PIPELINE_COMPLETED, { strategy: 'backend', success: result.success, agents: result.orchestration_meta?.agents_used || [] }, url).catch(() => {}),
+        );
 
-        // Save as training example for Vertex AI fine-tuning
+        // Direct waitUntil on saveTrainingExample for Vertex AI fine-tuning (ancillary post-response)
         if (result.success) {
-          saveTrainingExample(url, result).catch((e) =>
-            console.warn('[Training] Failed to save example:', e),
+          waitUntil(
+            saveTrainingExample(url, result).catch((e) =>
+              console.warn('[Training] Failed to save example:', e),
+            ),
           );
         }
 
@@ -171,19 +197,28 @@ export async function POST(request: Request) {
       try {
         await publishEvent(EventTypes.TRANSCRIPT_STARTED, { url, strategy: 'gemini-agentic' }, url);
         const startTime = Date.now();
-        const analysis = await analyzeVideoWithGemini(url);
+        const analysis = await withTimeout(
+          analyzeVideoWithGemini(url),
+          5_000,
+          'Gemini agentic analysis',
+        );
         const elapsed = Date.now() - startTime;
 
-        await publishEvent(EventTypes.PIPELINE_COMPLETED, {
-          strategy: 'gemini-agentic',
-          success: true,
-          transcriptSegments: analysis.transcript?.length || 0,
-          events: analysis.events?.length || 0,
-        }, url);
+        // Direct waitUntil on publishEvent (CloudEvent) for completion — ancillary, does not block response
+        waitUntil(
+          publishEvent(EventTypes.PIPELINE_COMPLETED, {
+            strategy: 'gemini-agentic',
+            success: true,
+            transcriptSegments: analysis.transcript?.length || 0,
+            events: analysis.events?.length || 0,
+          }, url).catch(() => {}),
+        );
 
-        // Save as training example for Vertex AI fine-tuning
-        saveTrainingExample(url, analysis as unknown as Record<string, unknown>).catch((e) =>
-          console.warn('[Training] Failed to save example:', e),
+        // Direct waitUntil on saveTrainingExample for Vertex AI fine-tuning (ancillary post-response)
+        waitUntil(
+          saveTrainingExample(url, analysis as unknown as Record<string, unknown>).catch((e) =>
+            console.warn('[Training] Failed to save example:', e),
+          ),
         );
 
         return NextResponse.json({
@@ -227,6 +262,7 @@ export async function POST(request: Request) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url }),
+        signal: AbortSignal.timeout(15000),
       });
       const transcribeResult = await transcribeRes.json();
       if (transcribeResult.success && transcribeResult.transcript) {
@@ -247,6 +283,7 @@ export async function POST(request: Request) {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ transcript, videoUrl: url }),
+          signal: AbortSignal.timeout(15000),
         });
         const extractResult = await extractRes.json();
         if (extractResult.success && extractResult.data) {
@@ -260,10 +297,13 @@ export async function POST(request: Request) {
 
     const hasResults = transcript.length > 0;
 
-    await publishEvent(
-      hasResults ? EventTypes.PIPELINE_COMPLETED : EventTypes.PIPELINE_FAILED,
-      { strategy: 'frontend-chain', success: hasResults, transcriptSource },
-      url,
+    // Direct waitUntil on publishEvent for terminal pipeline event (CloudEvent) — ancillary, response should not wait
+    waitUntil(
+      publishEvent(
+        hasResults ? EventTypes.PIPELINE_COMPLETED : EventTypes.PIPELINE_FAILED,
+        { strategy: 'frontend-chain', success: hasResults, transcriptSource },
+        url,
+      ).catch(() => {}),
     );
 
     return NextResponse.json({
@@ -290,9 +330,12 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error('Video analysis error:', error);
-    await publishEvent(EventTypes.PIPELINE_FAILED, { error: String(error) }, videoUrl).catch(() => {});
+    // Direct waitUntil on publishEvent (ancillary CloudEvent) so it does not block error response
+    waitUntil(
+      publishEvent(EventTypes.PIPELINE_FAILED, { error: String(error) }, videoUrl).catch(() => {}),
+    );
     return NextResponse.json(
-      { error: 'Failed to analyze video', details: String(error) },
+      { error: 'Failed to analyze video' },
       { status: 500 },
     );
   }
@@ -302,7 +345,9 @@ export async function GET() {
   // If backend URL is configured and valid, check its health
   if (BACKEND_AVAILABLE) {
     try {
-      const response = await fetch(`${BACKEND_URL}/api/v1/health`);
+      const response = await fetch(`${BACKEND_URL}/api/v1/health`, {
+        signal: AbortSignal.timeout(5000),
+      });
       const health = await response.json();
 
       return NextResponse.json({

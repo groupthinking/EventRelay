@@ -10,6 +10,7 @@ Provides versioned API endpoints with proper OpenAPI documentation.
 import asyncio
 import logging
 import os
+import time
 import uuid as _uuid
 from dataclasses import asdict
 from datetime import datetime
@@ -18,15 +19,20 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 
-from src.shared.youtube import RobustYouTubeMetadata
+from shared.youtube import RobustYouTubeMetadata
 from uvai.ml.client import get_uvai_ml_client
-from youtube_extension.services.agents import AgentOrchestrator
+try:
+    from youtube_extension.services.agents import AgentOrchestrator
+except ImportError:
+    AgentOrchestrator = None
 from youtube_extension.services.ai import HybridProcessorService
 from youtube_extension.services.cloud.cloud_tasks_queue import (
     CloudTasksQueueService,
     TaskConfig,
     VideoProcessingTask,
 )
+from youtube_extension.services.pipeline_audit_store import get_audit_store
+from youtube_extension.services.pipeline_job_store import get_job_store
 from youtube_extension.services.workflows.transcript_action_workflow import (
     TranscriptActionWorkflow,
 )
@@ -79,6 +85,8 @@ from .models import (
     GeminiTokenResponse,
     HealthResponse,
     JobStatus,
+    KnowledgeIngestRequest,
+    KnowledgeIngestResponse,
     MarkdownRequest,
     MarkdownResponse,
     TranscriptActionRequest,
@@ -108,6 +116,23 @@ async def _emit_event(event_type: str, data: dict, subject: str | None = None) -
             )
         except Exception as exc:
             logger.debug("CloudEvent publish failed: %s", exc)
+
+
+def _normalize_tag_list(raw_tags: Any) -> list[str]:
+    """Normalize tags into a deduplicated list of non-empty strings."""
+    if not isinstance(raw_tags, list):
+        return []
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for value in raw_tags:
+        if not isinstance(value, str):
+            continue
+        tag = value.strip()
+        if not tag or tag in seen:
+            continue
+        seen.add(tag)
+        normalized.append(tag)
+    return normalized
 
 
 # Create API v1 router
@@ -162,6 +187,8 @@ def get_hybrid_processor_service() -> HybridProcessorService:
 
 def get_agent_orchestrator_service() -> AgentOrchestrator:
     """Dependency injection for agent orchestrator"""
+    if AgentOrchestrator is None:
+        raise HTTPException(status_code=503, detail="Agent orchestration service not available")
     return get_service("agent_orchestrator")
 
 
@@ -261,7 +288,9 @@ async def get_capabilities_v1(
     try:
         # Check Gemini availability via the hybrid processor service
         gemini_available = hybrid_processor is not None
-        gemini_model = "gemini-2.0-flash" if gemini_available else None
+        gemini_model = (
+            hybrid_processor.config.gemini.model_name if gemini_available else None
+        )
 
         # Check which video processors are available
         available_processors = []
@@ -474,8 +503,12 @@ async def run_transcript_action(
             "com.eventrelay.transcript.completed",
             {
                 "url": request.video_url,
-                "agents_used": result.get("orchestration_meta", {}).get("agents_used", []),
-                "processing_time": result.get("orchestration_meta", {}).get("processing_time"),
+                "agents_used": result.get("orchestration_meta", {}).get(
+                    "agents_used", []
+                ),
+                "processing_time": result.get("orchestration_meta", {}).get(
+                    "processing_time"
+                ),
             },
             request.video_url,
         )
@@ -610,12 +643,20 @@ async def process_video_v1(
     """Basic video processing endpoint"""
     try:
         logger.info(f"Video processing request: {request.video_url}")
-        await _emit_event("com.eventrelay.video.received", {"url": request.video_url}, request.video_url)
+        await _emit_event(
+            "com.eventrelay.video.received",
+            {"url": request.video_url},
+            request.video_url,
+        )
 
         result = await video_processing_service.process_video_basic(
             request.video_url, request.options
         )
-        await _emit_event("com.eventrelay.pipeline.completed", {"url": request.video_url, "strategy": "backend"}, request.video_url)
+        await _emit_event(
+            "com.eventrelay.pipeline.completed",
+            {"url": request.video_url, "strategy": "backend"},
+            request.video_url,
+        )
         # Persist summary for analytics/storage if repository is available
         try:
             from youtube_extension.backend.repositories.video_repository import (
@@ -638,7 +679,11 @@ async def process_video_v1(
 
     except Exception as e:
         logger.error(f"Error in video processing: {e}")
-        await _emit_event("com.eventrelay.pipeline.failed", {"url": request.video_url, "error": str(e)}, request.video_url)
+        await _emit_event(
+            "com.eventrelay.pipeline.failed",
+            {"url": request.video_url, "error": str(e)},
+            request.video_url,
+        )
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -828,19 +873,15 @@ async def list_videos_v1(
 ):
     """Get paginated list of processed videos"""
     try:
-        all_videos = data_service.get_videos_summary()
-
-        # Apply pagination
-        start = offset
-        end = offset + limit
-        paginated_videos = all_videos[start:end]
+        total = data_service.count_videos()
+        paginated_videos = data_service.get_videos_summary(limit=limit, offset=offset)
 
         return {
             "videos": paginated_videos,
-            "total": len(all_videos),
+            "total": total,
             "limit": limit,
             "offset": offset,
-            "has_more": end < len(all_videos),
+            "has_more": (offset + limit) < total,
         }
 
     except Exception as e:
@@ -888,6 +929,41 @@ async def get_learning_log_v1(data_service: DataService = Depends(get_data_servi
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post(
+    "/knowledge/ingest",
+    response_model=KnowledgeIngestResponse,
+    summary="Ingest transcript-derived knowledge",
+    description="Persist a durable transcript-derived insight into backend knowledge storage",
+)
+async def ingest_knowledge_v1(
+    request: KnowledgeIngestRequest, data_service: DataService = Depends(get_data_service)
+):
+    """Store transcript-derived knowledge with normalized tags."""
+    text = request.text.strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="text must be a non-empty string")
+
+    tags = _normalize_tag_list(request.tags)
+    try:
+        saved = data_service.save_knowledge_entry(
+            text=text, tags=tags, source=request.source
+        )
+        if not saved:
+            raise HTTPException(status_code=500, detail="Failed to store insight")
+        return KnowledgeIngestResponse(
+            stored=True,
+            id=saved["id"],
+            source=saved["source"],
+            tags=saved["tags"],
+            message="Stored insight in knowledge base",
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error(f"Error ingesting knowledge entry: {exc}")
+        raise HTTPException(status_code=500, detail="Failed to store insight")
+
+
 # Actions Endpoints (minimal implementation to integrate with repositories)
 @router.get(
     "/actions/{video_id}",
@@ -931,7 +1007,9 @@ async def update_action_v1(action_id: str, payload: dict[str, Any]):
                 time_to_complete = payload.get("time_to_complete_seconds")
                 try:
                     time_to_complete_seconds = (
-                        float(time_to_complete) if time_to_complete is not None else None
+                        float(time_to_complete)
+                        if time_to_complete is not None
+                        else None
                     )
                 except (TypeError, ValueError):
                     time_to_complete_seconds = None
@@ -973,7 +1051,9 @@ async def submit_feedback_v1(
                         clicked=bool((request.metadata or {}).get("clicked")),
                         completed=bool((request.metadata or {}).get("completed")),
                         time_to_complete_seconds=(
-                            float((request.metadata or {}).get("time_to_complete_seconds"))
+                            float(
+                                (request.metadata or {}).get("time_to_complete_seconds")
+                            )
                             if (request.metadata or {}).get("time_to_complete_seconds")
                             is not None
                             else None
@@ -1058,9 +1138,126 @@ async def ingest_performance_report_v1(report: dict[str, Any]):
 # (Replace with Redis/DB in production)
 # ============================================================
 
-_video_jobs: dict[str, VideoJobStatusResponse] = {}
-_agent_executions: dict[str, AgentExecution] = {}
-_dispatches: dict[str, AgentDispatchResponse] = {}
+
+class _TTLDict(dict[str, Any]):
+    """A dict subclass that evicts entries older than *ttl* seconds.
+
+    Eviction is lazy (on any mutation or `get`/`__getitem__`) plus an optional
+    periodic sweep via `evict_expired()`. A *max_size* cap prevents unbounded
+    growth: when the limit is reached the oldest (first-inserted) entry is
+    dropped. Python 3.7+ insertion-order guarantees make this O(1).
+    """
+
+    def __init__(
+        self,
+        ttl: float = 3600.0,
+        max_size: int = 2000,
+        *args: Any,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(*args, **kwargs)
+        self._ttl = ttl
+        self._max_size = max_size
+        # Timestamps stored separately to avoid serialization side-effects.
+        self._timestamps: dict[str, float] = {}
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _touch(self, key: str) -> None:
+        self._timestamps[key] = time.monotonic()
+
+    def _is_expired(self, key: str) -> bool:
+        ts = self._timestamps.get(key)
+        return ts is None or (time.monotonic() - ts) > self._ttl
+
+    def evict_expired(self) -> None:
+        """Remove all entries whose TTL has elapsed."""
+        # Iterate a snapshot so we can mutate during the loop.
+        expired = [k for k in self._timestamps if self._is_expired(k)]
+        for k in expired:
+            super().pop(k, None)
+            self._timestamps.pop(k, None)
+
+    def _enforce_max_size(self) -> None:
+        """Drop the first-inserted entry when the dict exceeds *max_size*.
+
+        Python 3.7+ dicts preserve insertion order, so ``next(iter(...))``
+        returns the oldest entry in O(1) without scanning all keys.
+        """
+        if len(self) > self._max_size:
+            oldest = next(iter(self._timestamps), None)
+            if oldest is not None:
+                super().pop(oldest, None)
+                self._timestamps.pop(oldest, None)
+
+    # ------------------------------------------------------------------
+    # Overridden dict methods
+    # ------------------------------------------------------------------
+
+    def __setitem__(self, key: str, value: Any) -> None:  # type: ignore[override]
+        self.evict_expired()
+        super().__setitem__(key, value)
+        self._touch(key)
+        self._enforce_max_size()
+
+    def __getitem__(self, key: str) -> Any:
+        if self._is_expired(key):
+            super().pop(key, None)
+            self._timestamps.pop(key, None)
+            raise KeyError(key)
+        return super().__getitem__(key)
+
+    def __delitem__(self, key: str) -> None:
+        super().__delitem__(key)
+        self._timestamps.pop(key, None)
+
+    def get(self, key: str, default: Any = None) -> Any:  # type: ignore[override]
+        try:
+            return self[key]
+        except KeyError:
+            return default
+
+    def pop(self, key: str, *args: Any) -> Any:  # type: ignore[override]
+        self._timestamps.pop(key, None)
+        return super().pop(key, *args)
+
+    def __contains__(self, key: object) -> bool:
+        if isinstance(key, str) and self._is_expired(key):
+            super().pop(key, None)
+            self._timestamps.pop(key, None)
+            return False
+        return super().__contains__(key)
+
+
+# Default TTL: 2 hours; max 2 000 entries per store.
+_JOB_TTL: float = float(os.getenv("JOB_STORE_TTL_SECONDS", "7200"))
+_JOB_MAX_SIZE: int = int(os.getenv("JOB_STORE_MAX_SIZE", "2000"))
+
+_video_jobs: _TTLDict = _TTLDict(ttl=_JOB_TTL, max_size=_JOB_MAX_SIZE)
+_agent_executions: _TTLDict = _TTLDict(ttl=_JOB_TTL, max_size=_JOB_MAX_SIZE)
+_dispatches: _TTLDict = _TTLDict(ttl=_JOB_TTL, max_size=_JOB_MAX_SIZE)
+
+
+def _persist_video_job(job: VideoJobStatusResponse) -> None:
+    _video_jobs[job.job_id] = job
+    try:
+        get_job_store().save(job.job_id, job.model_dump())
+    except Exception as exc:
+        logger.warning("Job persist failed for %s: %s", job.job_id, exc)
+
+
+def _load_video_job(job_id: str) -> Optional[VideoJobStatusResponse]:
+    cached = _video_jobs.get(job_id)
+    if cached is not None:
+        return cached
+    raw = get_job_store().load(job_id)
+    if not raw:
+        return None
+    job = VideoJobStatusResponse(**raw)
+    _video_jobs[job_id] = job
+    return job
 
 
 def _absolute_status_url(request: Request, job_id: str) -> str:
@@ -1087,7 +1284,7 @@ async def _queue_transcript_action_job(
             "duration_seconds": TranscriptActionWorkflow.get_duration_seconds(metadata),
         },
     )
-    _video_jobs[job_id] = job
+    _persist_video_job(job)
 
     video_request = VideoProcessJobRequest(
         video_url=request.video_url,
@@ -1131,7 +1328,11 @@ async def _queue_transcript_action_job(
         finally:
             queue_service.close()
     except Exception as exc:
-        logger.info("Cloud Tasks unavailable for %s, using local background task: %s", job_id, exc)
+        logger.info(
+            "Cloud Tasks unavailable for %s, using local background task: %s",
+            job_id,
+            exc,
+        )
         asyncio.create_task(
             _run_video_job(
                 job_id,
@@ -1142,7 +1343,9 @@ async def _queue_transcript_action_job(
         )
 
     metadata_payload = asdict(metadata)
-    metadata_payload["duration_seconds"] = TranscriptActionWorkflow.get_duration_seconds(metadata)
+    metadata_payload["duration_seconds"] = (
+        TranscriptActionWorkflow.get_duration_seconds(metadata)
+    )
     metadata_payload["async_processing"] = True
 
     return {
@@ -1170,6 +1373,17 @@ async def _queue_transcript_action_job(
 
 
 @router.post(
+    "/video/analyze",
+    response_model=ApiResponse,
+    summary="Analyze video (YouTube-to-Repo MVP alias)",
+    tags=["Jobs"],
+)
+async def video_analyze_alias(request: VideoProcessJobRequest):
+    """see-script-ship contract alias for /videos/process."""
+    return await start_video_processing(request)
+
+
+@router.post(
     "/videos/process",
     response_model=ApiResponse,
     summary="Start async video processing",
@@ -1184,7 +1398,7 @@ async def start_video_processing(request: VideoProcessJobRequest):
         progress=0.0,
         video_url=request.video_url,
     )
-    _video_jobs[job_id] = job
+    _persist_video_job(job)
 
     asyncio.create_task(_run_video_job(job_id, request))
 
@@ -1203,14 +1417,19 @@ async def _run_video_job(
     transcript_text: str | None = None,
 ):
     """Background coroutine that drives the transcript-action workflow."""
-    job = _video_jobs[job_id]
+    job = _load_video_job(job_id)
+    if job is None:
+        logger.error("Video job %s missing at run time", job_id)
+        return
     try:
         job.status = JobStatus.downloading
         job.progress = 10.0
+        _persist_video_job(job)
 
         workflow = TranscriptActionWorkflow()
         job.status = JobStatus.transcribing
         job.progress = 30.0
+        _persist_video_job(job)
 
         result = await workflow.run(
             video_url=request.video_url,
@@ -1241,9 +1460,11 @@ async def _run_video_job(
             job.error = "; ".join(str(error) for error in errors if error) or (
                 "Transcript-action workflow failed"
             )
+        _persist_video_job(job)
     except Exception as exc:
         job.status = JobStatus.failed
         job.error = str(exc)
+        _persist_video_job(job)
         logger.error(f"Video job {job_id} failed: {exc}")
 
 
@@ -1258,17 +1479,23 @@ async def process_video_task(
 ):
     """Process a queued transcript-action job dispatched by Cloud Tasks."""
     if not x_cloudtasks_taskname:
-        raise HTTPException(status_code=403, detail="Only Cloud Tasks can call this endpoint")
+        raise HTTPException(
+            status_code=403, detail="Only Cloud Tasks can call this endpoint"
+        )
 
     if not isinstance(payload, dict):
-        raise HTTPException(status_code=400, detail="Invalid task payload: expected JSON object")
+        raise HTTPException(
+            status_code=400, detail="Invalid task payload: expected JSON object"
+        )
 
     metadata = payload.get("metadata") or {}
     job_id = metadata.get("job_id")
     if not job_id:
         raise HTTPException(status_code=400, detail="Missing job_id in task payload")
     if job_id not in x_cloudtasks_taskname:
-        raise HTTPException(status_code=403, detail="Task name does not match queued job")
+        raise HTTPException(
+            status_code=403, detail="Task name does not match queued job"
+        )
 
     video_url = payload.get("video_url")
     if not isinstance(video_url, str) or not video_url.strip():
@@ -1277,16 +1504,17 @@ async def process_video_task(
             detail="Missing or invalid 'video_url' in task payload",
         )
 
-    job = _video_jobs.setdefault(
-        job_id,
-        VideoJobStatusResponse(
+    job = _load_video_job(job_id)
+    if job is None:
+        job = VideoJobStatusResponse(
             job_id=job_id,
             status=JobStatus.pending,
             progress=0.0,
             video_url=video_url,
-        ),
-    )
+        )
+        _persist_video_job(job)
     job.status = JobStatus.pending
+    _persist_video_job(job)
     await _run_video_job(
         job_id,
         VideoProcessJobRequest(
@@ -1312,10 +1540,45 @@ async def process_video_task(
 )
 async def get_video_job_status(job_id: str):
     """Return the current status of a video-processing job."""
-    job = _video_jobs.get(job_id)
+    job = _load_video_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
     return ApiResponse.success(job.model_dump())
+
+
+@router.get(
+    "/jobs/{job_id}",
+    response_model=ApiResponse,
+    summary="Poll job status (see-script-ship alias)",
+    tags=["Jobs"],
+)
+async def get_job_status_alias(job_id: str):
+    """Alias for /videos/{job_id}/status — YouTube-to-Repo MVP contract."""
+    return await get_video_job_status(job_id)
+
+
+@router.get(
+    "/audit/pipeline",
+    response_model=ApiResponse,
+    summary="List recent pipeline audit runs",
+    tags=["Audit"],
+)
+async def list_pipeline_audit_runs(limit: int = 20):
+    runs = get_audit_store().list_runs(limit=limit)
+    return ApiResponse.success({"runs": runs, "count": len(runs)})
+
+
+@router.get(
+    "/audit/pipeline/{run_id}",
+    response_model=ApiResponse,
+    summary="Get pipeline audit trail for a run",
+    tags=["Audit"],
+)
+async def get_pipeline_audit_run(run_id: str):
+    entries = get_audit_store().get_run(run_id)
+    if not entries:
+        raise HTTPException(status_code=404, detail=f"Audit run {run_id} not found")
+    return ApiResponse.success({"run_id": run_id, "entries": entries, "count": len(entries)})
 
 
 # ============================================================
@@ -1334,9 +1597,11 @@ async def extract_events(request: EventExtractRequest):
     transcript_text = request.transcript
 
     if request.job_id:
-        job = _video_jobs.get(request.job_id)
+        job = _load_video_job(request.job_id)
         if not job:
-            raise HTTPException(status_code=404, detail=f"Job {request.job_id} not found")
+            raise HTTPException(
+                status_code=404, detail=f"Job {request.job_id} not found"
+            )
         if job.status != JobStatus.complete:
             raise HTTPException(status_code=409, detail="Job not yet complete")
         transcript_text = transcript_text or job.transcript
@@ -1344,34 +1609,141 @@ async def extract_events(request: EventExtractRequest):
     if not transcript_text:
         raise HTTPException(status_code=400, detail="No transcript available")
 
-    events: list[ExtractedEvent] = []
-    try:
-        processor = HybridProcessorService()
-        ai_result = await processor.process(
-            prompt=(
-                "Extract key actionable events from this transcript. "
-                "For each event provide: type (action/mention/topic/insight), title, description, "
-                "and timestamp if mentioned.\n\nTranscript:\n"
-                + transcript_text[:8000]
-            ),
-        )
-        raw_text = ai_result if isinstance(ai_result, str) else str(ai_result.get("text", ai_result))
-        for line in raw_text.strip().split("\n"):
-            line = line.strip("- •*")
-            if len(line) > 5:
-                events.append(
-                    ExtractedEvent(
-                        type="action" if any(w in line.lower() for w in ["do", "create", "build", "implement", "add"]) else "topic",
-                        title=line[:120],
-                        description=line if len(line) > 120 else None,
-                    )
+    # Chunked AI extraction: process the transcript in overlapping windows so
+    # tail content is never silently dropped.  Each chunk is up to 24 000 chars
+    # with a 500-char overlap to preserve sentence context across boundaries.
+    _CHUNK_SIZE = 24_000
+    _CHUNK_OVERLAP = 500
+    _MAX_EVENTS = 50
+
+    def _build_chunks(text: str) -> list[str]:
+        if len(text) <= _CHUNK_SIZE:
+            return [text]
+        chunks = []
+        start = 0
+        while start < len(text):
+            end = start + _CHUNK_SIZE
+            if end < len(text):
+                # Find the nearest sentence boundary (. ! ?) before the hard
+                # cut by taking the rightmost (max) position across all three
+                # punctuation marks.  Fall back to the nearest space (word
+                # boundary) if no sentence end is found in the window.
+                boundary_pos = max(
+                    text.rfind(b, start, end) for b in ('.', '!', '?')
                 )
+                if boundary_pos != -1:
+                    end = boundary_pos + 1  # include the punctuation mark
+                else:
+                    space = text.rfind(' ', start, end)
+                    if space != -1:
+                        end = space + 1
+            chunks.append(text[start:end])
+            start = end - _CHUNK_OVERLAP
+        return chunks
+
+    transcript_chunks = _build_chunks(transcript_text)
+
+    events: list[ExtractedEvent] = []
+    seen_titles: set[str] = set()
+
+    async def _extract_chunk(chunk: str) -> list[ExtractedEvent]:
+        """Run AI extraction on one chunk; returns events, empty list on failure."""
+        chunk_events: list[ExtractedEvent] = []
+        try:
+            processor = HybridProcessorService()
+            ai_result = await processor.process(
+                input_data=chunk,
+                prompt=(
+                    "Extract key actionable events from this transcript. "
+                    "For each event provide: type (action/mention/topic/insight), title, description, "
+                    "and timestamp if mentioned."
+                ),
+            )
+            # REAL_MODE_ONLY: never synthesize events from a mocked or empty AI
+            # response -- fall through to the deterministic heuristic instead.
+            cloud_result = ai_result.cloud_result
+            backend = cloud_result.backend if cloud_result else None
+            raw_text = (ai_result.response or "") if ai_result.success else ""
+            if not raw_text.strip() or backend == "mock":
+                raise RuntimeError("AI extraction unavailable (no real Gemini response)")
+            for line in raw_text.strip().split("\n"):
+                line = line.strip("- •*")
+                if len(line) > 5:
+                    chunk_events.append(
+                        ExtractedEvent(
+                            type=(
+                                "action"
+                                if any(
+                                    w in line.lower()
+                                    for w in ["do", "create", "build", "implement", "add"]
+                                )
+                                else "topic"
+                            ),
+                            title=line[:120],
+                            description=line if len(line) > 120 else None,
+                        )
+                    )
+        except Exception as exc:
+            logger.warning(f"Direct Gemini extraction unavailable for chunk: {exc}")
+        return chunk_events
+
+    try:
+        for chunk in transcript_chunks:
+            if len(events) >= _MAX_EVENTS:
+                break
+            chunk_events = await _extract_chunk(chunk)
+            for ev in chunk_events:
+                if ev.title not in seen_titles and len(events) < _MAX_EVENTS:
+                    seen_titles.add(ev.title)
+                    events.append(ev)
     except Exception as exc:
-        logger.warning(f"AI event extraction failed, using heuristic extraction: {exc}")
+        logger.warning(f"Chunked extraction failed: {exc}")
+
+    # Real-AI fallback: if no events yet, try the Vercel AI Gateway (uses
+    # VERCEL_API_KEY, routes to Gemini/GPT/Claude). This keeps the AI path
+    # working when no direct provider key is configured. REAL_MODE_ONLY: this
+    # is a real billed call; on any failure we fall through to the heuristic.
+    if not events:
+        try:
+            from youtube_extension.services.ai import vercel_gateway_provider as _gw
+
+            if _gw.gateway_available():
+                gw_events = await asyncio.to_thread(_gw.extract_events, transcript_text)
+                for ev in gw_events:
+                    events.append(
+                        ExtractedEvent(
+                            type=ev["type"],
+                            title=ev["title"][:120],
+                            description=ev.get("description"),
+                            timestamp=ev.get("timestamp"),
+                        )
+                    )
+                if gw_events:
+                    logger.info(
+                        "Extracted %d events via Vercel AI Gateway", len(gw_events)
+                    )
+        except Exception as gw_exc:  # noqa: BLE001
+            logger.warning(f"Vercel AI Gateway extraction failed: {gw_exc}")
+
+    if not events:
+        logger.warning("Falling back to heuristic extraction")
         import re
 
         sentences = re.split(r"(?<=[.!?])\s+", transcript_text.replace("\n", " "))
-        action_words = {"build", "create", "implement", "add", "deploy", "configure", "install", "setup", "run", "write", "make", "use"}
+        action_words = {
+            "build",
+            "create",
+            "implement",
+            "add",
+            "deploy",
+            "configure",
+            "install",
+            "setup",
+            "run",
+            "write",
+            "make",
+            "use",
+        }
         for sent in sentences:
             sent = sent.strip()
             if len(sent) < 10:
@@ -1419,17 +1791,25 @@ async def dispatch_agents(request: AgentDispatchRequest):
         for sent in sentences:
             sent = sent.strip()
             if len(sent) >= 10:
-                events.append({"id": f"evt_{_uuid.uuid4().hex[:8]}", "type": "topic", "title": sent[:120]})
+                events.append(
+                    {
+                        "id": f"evt_{_uuid.uuid4().hex[:8]}",
+                        "type": "topic",
+                        "title": sent[:120],
+                    }
+                )
                 if len(events) >= 20:
                     break
 
     if not events:
-        raise HTTPException(status_code=400, detail="Provide events list or transcript text")
+        raise HTTPException(
+            status_code=400, detail="Provide events list or transcript text"
+        )
 
     dispatch = AgentDispatchResponse()
     agent_types = request.agent_types or ["analyzer", "content_creator"]
 
-    for event in request.events:
+    for event in events:
         for agent_type in agent_types:
             execution = AgentExecution(
                 agent_type=agent_type,
@@ -1442,7 +1822,7 @@ async def dispatch_agents(request: AgentDispatchRequest):
     _dispatches[dispatch.dispatch_id] = dispatch
 
     for execution in dispatch.executions:
-        asyncio.create_task(_run_agent(execution, request.events))
+        asyncio.create_task(_run_agent(execution, events))
 
     return ApiResponse.success(dispatch.model_dump())
 
@@ -1463,7 +1843,9 @@ async def _run_agent(execution: AgentExecution, events: list[dict[str, Any]]):
                 agent_type=execution.agent_type,
                 context=event_data,
             )
-            execution.result = result if isinstance(result, dict) else {"output": str(result)}
+            execution.result = (
+                result if isinstance(result, dict) else {"output": str(result)}
+            )
         except Exception:
             execution.result = {
                 "agent_type": execution.agent_type,
@@ -1525,6 +1907,8 @@ async def send_a2a_message(
     if not recipient:
         raise HTTPException(status_code=400, detail="recipient is required")
 
+    if AgentOrchestrator is None:
+        raise HTTPException(status_code=503, detail="AgentOrchestrator not available")
     orch = AgentOrchestrator()
     msg = await orch.send_a2a_message(
         sender=sender,
@@ -1532,10 +1916,12 @@ async def send_a2a_message(
         content=content,
         conversation_id=conversation_id,
     )
-    return ApiResponse.success({
-        "conversation_id": msg.conversation_id,
-        "timestamp": msg.timestamp,
-    })
+    return ApiResponse.success(
+        {
+            "conversation_id": msg.conversation_id,
+            "timestamp": msg.timestamp,
+        }
+    )
 
 
 @router.get(
@@ -1549,6 +1935,8 @@ async def get_a2a_log(
     limit: int = 50,
 ):
     """Return recent A2A inter-agent messages."""
+    if AgentOrchestrator is None:
+        raise HTTPException(status_code=503, detail="AgentOrchestrator not available")
     orch = AgentOrchestrator()
     log = orch.get_a2a_log(conversation_id=conversation_id, limit=limit)
     return ApiResponse.success({"messages": log, "count": len(log)})

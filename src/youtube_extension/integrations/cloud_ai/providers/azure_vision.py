@@ -366,6 +366,9 @@ class AzureVision(BaseCloudAI):
 
     async def _detect_faces(self, image_url: str, image_stream: Optional[bytes]) -> dict[str, Any]:
         """Detect faces in image."""
+        from azure.cognitiveservices.vision.computervision.models import (
+            VisualFeatureTypes,
+        )
         if image_stream:
             import io
             result = self._vision_client.analyze_image_in_stream(
@@ -373,9 +376,6 @@ class AzureVision(BaseCloudAI):
                 visual_features=[VisualFeatureTypes.faces]
             )
         else:
-            from azure.cognitiveservices.vision.computervision.models import (
-                VisualFeatureTypes,
-            )
             result = self._vision_client.analyze_image(
                 image_url,
                 visual_features=[VisualFeatureTypes.faces]

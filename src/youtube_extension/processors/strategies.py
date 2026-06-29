@@ -389,6 +389,7 @@ class EnhancedStrategy(ProcessorStrategy):
     ) -> dict[str, Any]:
         """Complete video processing pipeline"""
         start_time = time.time()
+        video_id = None
 
         try:
             # Extract video ID
@@ -562,7 +563,7 @@ class EnhancedStrategy(ProcessorStrategy):
 
         try:
             response = self.gemini_client.models.generate_content(
-                model="models/gemini-2.0-flash",
+                model=os.getenv("GEMINI_VIDEO_MODEL", "models/gemini-3.5-flash"),
                 contents=prompt,
             )
             return json.loads(response.text)

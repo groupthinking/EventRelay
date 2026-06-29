@@ -190,7 +190,7 @@ class ChatRequest(BaseModel):
         json_schema_extra = {
             "example": {
                 "query": "How can I process a YouTube video?",
-                "video_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+                "video_url": "https://www.youtube.com/watch?v=jNQXAC9IVRw",
                 "context": "tooltip-assistant",
                 "session_id": "user123",
             }
@@ -612,6 +612,28 @@ class TranscriptActionResponse(BaseModel):
     job_status: Optional[JobStatus] = None
     status_url: Optional[str] = None
     processing_transport: Optional[str] = None
+
+
+class KnowledgeIngestRequest(BaseModel):
+    """Request model for knowledge ingest."""
+
+    text: str = Field(..., description="Non-empty transcript-derived insight or durable fact")
+    tags: Optional[Any] = Field(
+        default=None, description="Optional topic tags; normalized server-side"
+    )
+    source: Optional[str] = Field(
+        default=None, description="Optional source identifier (job id, video id, etc.)"
+    )
+
+
+class KnowledgeIngestResponse(BaseModel):
+    """Response model for knowledge ingest."""
+
+    stored: bool = Field(..., description="True when persisted successfully")
+    id: str = Field(..., description="Stored knowledge entry identifier")
+    source: str = Field(..., description="Source identifier attached to this entry")
+    tags: list[str] = Field(default_factory=list, description="Normalized topic tags")
+    message: str = Field(..., description="Human-readable storage result")
 
 
 class FeedbackRequest(BaseModel):

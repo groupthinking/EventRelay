@@ -1,31 +1,46 @@
 import type { Metadata, Viewport } from 'next';
 import { Analytics } from '@vercel/analytics/next';
 import { SpeedInsights } from '@vercel/speed-insights/next';
+import { Inter, JetBrains_Mono, Space_Grotesk } from 'next/font/google';
 import './globals.css';
+import { StructuredData } from '@/components/StructuredData';
 
-// Fonts use the system stack declared in tailwind.config (Inter / JetBrains
-// Mono with system-ui fallbacks). We intentionally avoid next/font/google
-// because it hard-fails during build when the Google Fonts API is unreachable
-// (common in sandboxed CI and offline environments).
+const inter = Inter({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-body',
+});
+
+const jetBrainsMono = JetBrains_Mono({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-mono',
+});
+
+const spaceGrotesk = Space_Grotesk({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-heading',
+});
 
 export const metadata: Metadata = {
   title: {
-    default: 'UVAI — Video to Structured Intelligence',
+    default: 'UVAI — Video to Workflow',
     template: '%s | UVAI',
   },
-  description: 'UVAI turns YouTube videos into transcripts, typed events, action items, and AI-driven analysis using Gemini and OpenAI. Open source via the EventRelay project.',
-  keywords: ['UVAI', 'video intelligence', 'YouTube transcript', 'structured events', 'Gemini', 'OpenAI', 'EventRelay', 'agentic video'],
+  description: 'Paste a YouTube URL. UVAI turns video evidence into useful workflows, exports, and deployable next steps.',
+  keywords: ['video to software', 'AI video analysis', 'video to code', 'agentic video', 'code generation', 'video API', 'UVAI'],
   authors: [{ name: 'UVAI' }],
   creator: 'UVAI',
   publisher: 'UVAI',
-  metadataBase: new URL('https://v0-uvai.vercel.app'),
+  metadataBase: new URL('https://uvai.io'),
   openGraph: {
     type: 'website',
     locale: 'en_US',
-    url: 'https://v0-uvai.vercel.app',
+    url: 'https://uvai.io',
     siteName: 'UVAI',
-    title: 'UVAI — Video to Structured Intelligence',
-    description: 'Paste a YouTube URL. Get transcripts, typed events, action items, and multi-agent analysis from an open-source video intelligence platform.',
+    title: 'UVAI — Video to Workflow',
+    description: 'Paste a YouTube URL. UVAI turns video evidence into useful workflows, exports, and deployable next steps.',
     images: [
       {
         url: '/og-image.png',
@@ -37,8 +52,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'UVAI — Video to Structured Intelligence',
-    description: 'Paste a YouTube URL. Get transcripts, typed events, action items, and multi-agent analysis from an open-source video intelligence platform.',
+    title: 'UVAI — Video to Workflow',
+    description: 'Paste a YouTube URL. UVAI turns video evidence into useful workflows, exports, and deployable next steps.',
     images: ['/og-image.png'],
     creator: '@groupthinking',
   },
@@ -55,10 +70,8 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
-      { url: '/favicon.ico' },
       { url: '/icon.svg', type: 'image/svg+xml' },
     ],
-    apple: '/apple-touch-icon.png',
   },
   manifest: '/manifest.json',
 };
@@ -73,6 +86,8 @@ export const viewport: Viewport = {
   maximumScale: 5,
 };
 
+const shouldLoadAnalytics = process.env.VERCEL === '1';
+
 export default function RootLayout({
   children,
 }: {
@@ -80,7 +95,12 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="min-h-screen bg-surface-950 font-sans antialiased">
+      <head>
+        <StructuredData />
+      </head>
+      <body
+        className={`${inter.variable} ${jetBrainsMono.variable} ${spaceGrotesk.variable} min-h-screen bg-surface-950 font-sans antialiased`}
+      >
         {/* Global background effects */}
         <div className="fixed inset-0 bg-mesh pointer-events-none" />
         <div className="fixed inset-0 noise pointer-events-none" />
@@ -89,8 +109,8 @@ export default function RootLayout({
         <div className="relative z-10">
           {children}
         </div>
-        <Analytics />
-        <SpeedInsights />
+        {shouldLoadAnalytics && <Analytics />}
+        {shouldLoadAnalytics && <SpeedInsights />}
       </body>
     </html>
   );
