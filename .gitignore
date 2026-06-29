@@ -201,3 +201,5 @@ docs/gemini_reference/
 data/audit/*.jsonl
 # TypeScript incremental build cache
 *.tsbuildinfo
+# Stale full-tree snapshot
+full-tree.txt
