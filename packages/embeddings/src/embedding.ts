@@ -11,6 +11,7 @@
  * SDK for queries.
  */
 
+import { VertexAI } from "@google-cloud/vertexai";
 import { Pool } from "pg";
 import {
   listVideoEmbeddings,
@@ -65,10 +66,26 @@ const getPoolConfig = () => ({
   max: 5,
 });
 
+// =============================================================================
+// Vertex AI Embeddings
+// =============================================================================
+
+let vertexAI: VertexAI | null = null;
+
+function getVertexAI(): VertexAI {
+  if (!vertexAI) {
+    vertexAI = new VertexAI({ project: PROJECT_ID, location: LOCATION });
+  }
+  return vertexAI;
+}
+
 /**
  * Generate embedding for a single text using Vertex AI
  */
 export async function generateEmbedding(text: string): Promise<number[]> {
+  const vertexai = getVertexAI();
+  const model = vertexai.getGenerativeModel({ model: EMBEDDING_MODEL });
+
   // Vertex AI embedding via content generation
   // For actual embeddings, use the Embeddings API
   const response = await fetch(

@@ -26,8 +26,15 @@ const ROLE_ICONS: Record<AgentRole, string> = {
 };
 
 function formatTime(isoString: string): string {
-  const match = isoString.match(/T(\d{2}:\d{2}:\d{2})/);
-  return match?.[1] ?? '--:--:--';
+  try {
+    return new Date(isoString).toLocaleTimeString([], {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    });
+  } catch {
+    return '—';
+  }
 }
 
 // ── Component ──

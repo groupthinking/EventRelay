@@ -3,9 +3,6 @@ import { Type } from '@google/genai';
 import { NextResponse } from 'next/server';
 import { getGeminiClient, hasGeminiKey } from '@/lib/gemini-client';
 
-export const runtime = 'nodejs';
-export const maxDuration = 120;
-
 let _openai: OpenAI | null = null;
 function getOpenAI() {
   if (!_openai) _openai = new OpenAI();

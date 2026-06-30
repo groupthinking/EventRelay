@@ -6,19 +6,19 @@ callers from legacy modules (EventRelay, youtube_extension) can depend on a
 single implementation.
 """
 
-from youtube_extension.backend.services.youtube.adapters.innertube import (
+from src.youtube_extension.backend.services.youtube.adapters.innertube import (
     CaptionSegment,
     InnertubeTranscriptError,
     InnertubeTranscriptNotFound,
     fetch_innertube_transcript,
 )
-from youtube_extension.backend.services.youtube.adapters.official_api import (
+from src.youtube_extension.backend.services.youtube.adapters.official_api import (
     RealYouTubeAPIService,
     YouTubeSearchResult,
     YouTubeTranscriptSegment,
     YouTubeVideoMetadata,
 )
-from youtube_extension.backend.services.youtube.adapters.robust import (
+from src.youtube_extension.backend.services.youtube.adapters.robust import (
     RobustYouTubeMetadata,
     RobustYouTubeService,
     get_video_transcript_robust,

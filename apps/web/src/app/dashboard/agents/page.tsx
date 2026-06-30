@@ -311,9 +311,6 @@ export default function AgentPipelinePage() {
                 <p className="text-xs text-white/30 leading-relaxed max-w-[220px] mx-auto">
                   Enter a YouTube URL above to start the multi-agent video intelligence pipeline.
                 </p>
-                <p className="text-[10px] text-white/25 leading-relaxed max-w-[240px] mx-auto">
-                  Mode after start: Live (backend SSE), Serverless (Gemini SSE), or Demo (simulated) — watch the badge in the header.
-                </p>
                 <div className="flex flex-wrap gap-1.5 justify-center pt-2">
                   {['Orchestrator', 'Router', 'ParallelCrew', 'Analysts ×3', 'ActionGen', 'QA'].map((label) => (
                     <span

@@ -9,7 +9,7 @@ PLACEHOLDER_VALUES: List[str] = [
     'your-anthropic-key',
     'your-gemini-key',
     'your-assemblyai-key',
-    'REDACTED_GOOGLE_API_KEY_ROTATE',
+    'AIzaSyYourProductionKeyGoesHere',
     '${GEMINI_API_KEY}',
 ]
 

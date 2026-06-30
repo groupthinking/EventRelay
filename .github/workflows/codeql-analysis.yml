@@ -6,6 +6,7 @@ on:
   pull_request:
     branches: [ "main" ]
   schedule:
+    # Run at 6:00 AM UTC every Monday for comprehensive weekly analysis
     - cron: '0 6 * * 1'
 
 permissions:
@@ -15,7 +16,7 @@ permissions:
 
 jobs:
   analyze:
-    name: "Security Scan - ${{ matrix.language }}"
+    name: Analyze
     runs-on: ubuntu-latest
     timeout-minutes: 360
     
@@ -23,48 +24,28 @@ jobs:
       fail-fast: false
       matrix:
         language: [ 'javascript', 'python' ]
+        # CodeQL supports: 'cpp', 'csharp', 'go', 'java', 'javascript', 'python', 'ruby', 'swift'
+        # JavaScript analyzer automatically handles TypeScript (.ts, .tsx) files
+        # Use 'java' to analyze Java, 'javascript' for JavaScript/TypeScript, etc.
     
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v7
+      uses: actions/checkout@v4
       with:
         fetch-depth: 0
     
-    - name: Cache dependencies (Python)
-      if: matrix.language == 'python'
-      uses: actions/cache@v5
-      with:
-        path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt') }}
-    
-    - name: Cache dependencies (Node)
-      if: matrix.language == 'javascript'
-      uses: actions/cache@v5
-      with:
-        # Cache the npm download cache, not node_modules: this is an npm
-        # workspaces repo, so deps hoist to the root and apps/web/node_modules
-        # is mostly symlinks. ~/.npm matches the rest of CI (setup-node cache).
-        path: ~/.npm
-        key: ${{ runner.os }}-npm-${{ hashFiles('**/package-lock.json') }}
-    
     - name: Initialize CodeQL
-      uses: github/codeql-action/init@v4
+      uses: github/codeql-action/init@v3
       with:
         languages: ${{ matrix.language }}
         config-file: ./.github/codeql/codeql-config.yml
+        # If you want to specify custom queries, uncomment and modify:
+        # queries: security-extended,security-and-quality
     
     - name: Autobuild
-      uses: github/codeql-action/autobuild@v4
+      uses: github/codeql-action/autobuild@v3
     
     - name: Perform CodeQL Analysis
-      uses: github/codeql-action/analyze@v4
+      uses: github/codeql-action/analyze@v3
       with:
         category: "/language:${{matrix.language}}"
-        wait-for-processing: true
-
-# Dependency / supply-chain scanning is handled by dedicated workflows:
-#   - dependency-review.yml  (PR-time review of new dependencies)
-#   - security.yml           (npm audit, safety, bandit, trivy)
-# The previous OWASP dependency-check job was removed: it was pinned to an
-# unstable @main ref and pointed at paths that no longer exist (frontend/,
-# src/mcp-bridge.py), so it produced no usable SARIF.

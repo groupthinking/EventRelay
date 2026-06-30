@@ -15,7 +15,7 @@ import logging
 import mimetypes
 import os
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Dict, List, Optional, Union
@@ -25,12 +25,6 @@ from PIL import Image
 try:
     import google.generativeai as genai
     GEMINI_AVAILABLE = True
-    import warnings
-    warnings.filterwarnings(
-        "ignore",
-        category=FutureWarning,
-        message=".*google.generativeai.*"
-    )
 except ImportError:
     genai = None
     GEMINI_AVAILABLE = False
@@ -56,18 +50,6 @@ except ImportError:
     logging.warning("Vertex AI not available - install: pip install google-cloud-aiplatform")
 
 TRANSFORMERS_DISABLE_FLAG = os.getenv("YOUTUBE_EXTENSION_DISABLE_TRANSFORMERS", "0").lower() in {"1", "true", "yes"}
-
-DEFAULT_GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
-
-
-def get_gemini_api_key() -> Optional[str]:
-    """Prefer the dedicated Gemini key over a possibly stale shared Google key."""
-
-    return (
-        os.getenv("GEMINI_API_KEY")
-        or os.getenv("GOOGLE_API_KEY")
-        or os.getenv("GOOGLE_GENERATIVE_AI_API_KEY")
-    )
 
 try:
     if TRANSFORMERS_DISABLE_FLAG:
@@ -203,10 +185,6 @@ class GemmaTextClient:
         generated = outputs[0].get("generated_text", "") if outputs else ""
         return _TextOnlyResponse(text=generated)
 
-    def close(self) -> None:
-        """Explicit cleanup for Gemma pipeline (releases model weights if held)."""
-        self._pipeline = None
-
 
 class VeoVideoClient:
     """Wrapper for Google's Veo generative video endpoint."""
@@ -279,8 +257,8 @@ class VeoVideoClient:
 @dataclass
 class GeminiConfig:
     """Configuration for Gemini service"""
-    api_key: Optional[str] = field(default_factory=get_gemini_api_key)
-    model_name: str = field(default_factory=lambda: DEFAULT_GEMINI_MODEL)
+    api_key: Optional[str] = None
+    model_name: str = "gemini-2.5-flash"
     project_id: Optional[str] = None
     location: str = "us-central1"
     max_output_tokens: int = 8192
@@ -1790,12 +1768,3 @@ Keep the summary to 2-3 sentences.
         self._model = None
         self._is_initialized = False
         self.logger.info("Gemini service cleaned up")
-
-    def close(self) -> None:
-        """Synchronous explicit close hook (calls cleanup best-effort for LLM client hygiene)."""
-        try:
-            # If already in async context caller should await cleanup(); this is best-effort.
-            self._model = None
-            self._is_initialized = False
-        except Exception:
-            pass

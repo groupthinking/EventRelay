@@ -29,8 +29,7 @@ logger = logging.getLogger(__name__)
 
 # Optional Gemini Vision integration for frame analysis
 try:
-    # Use package import (works with PYTHONPATH=src and when the real MCP server on 8010 is exercised)
-    from youtube_extension.services.ai.gemini_service import GeminiService, GeminiConfig
+    from src.youtube_extension.services.ai.gemini_service import GeminiService, GeminiConfig
     GEMINI_VISION_AVAILABLE = True
 except ImportError:
     GeminiService = None
@@ -72,7 +71,7 @@ class EnhancedVideoProcessor:
             try:
                 config = GeminiConfig(
                     api_key=self.gemini_api_key,
-                    model_name=os.getenv("GEMINI_MODEL", "gemini-3.5-flash"),
+                    model_name="gemini-2.0-flash-exp",
                     temperature=0.2,
                     max_output_tokens=4096
                 )
@@ -86,10 +85,7 @@ class EnhancedVideoProcessor:
     
     async def _init_session(self):
         """Initialize aiohttp session with proper headers and SSL context"""
-        if os.getenv("SENTRY_DSN"):
-            import sentry_sdk
-            sentry_sdk.add_breadcrumb(category="video", message="Initializing HTTP session", level="info")
-        if not self.session or getattr(self.session, 'closed', False):
+        if not self.session:
             # Create SSL context that handles certificate verification
             import ssl
             import certifi
@@ -101,38 +97,8 @@ class EnhancedVideoProcessor:
                     'User-Agent': 'UVAI-Enhanced-Video-Processor/1.0',
                     'Content-Type': 'application/json'
                 },
-                timeout=aiohttp.ClientTimeout(total=30, connect=10, sock_read=20),
                 connector=aiohttp.TCPConnector(ssl=ssl_context)
             )
-
-    async def _generate_build_plan(self, video_url: str, metadata: dict, transcript: dict, ai_analysis: dict) -> dict:
-        """Minimal build plan generator to unblock pipeline.
-        (Quick & dirty — will evolve via specialized agents later.)
-        """
-        return {
-            "title": (ai_analysis.get("title") if isinstance(ai_analysis, dict) else None)
-                     or (metadata.get("title") if isinstance(metadata, dict) else None)
-                     or "Video Build Plan",
-            "overview": (ai_analysis.get("summary") if isinstance(ai_analysis, dict) else None)
-                        or "No summary available",
-            "key_moments": (ai_analysis.get("key_moments") if isinstance(ai_analysis, dict) else []) or [],
-            "suggested_structure": ["intro", "main_content", "conclusion"],
-            "assets_needed": ["thumbnails", "clips"],
-            "status": "handoff",
-            "handoff_only": True,
-            "generated_at": datetime.now().isoformat(),
-            "video_url": video_url
-        }
-
-    def _build_extracted_info(self, metadata: dict, ai_analysis: dict, build_plan: dict, transcript: dict) -> dict:
-        """Minimal extracted info builder to unblock the pipeline after build_plan."""
-        return {
-            "metadata": metadata or {},
-            "ai_analysis": ai_analysis or {},
-            "build_plan": build_plan or {},
-            "transcript": transcript or {},
-            "status": "extracted"
-        }
 
     async def process_video(self, video_url: str) -> Dict[str, Any]:
         """
@@ -154,14 +120,6 @@ class EnhancedVideoProcessor:
             # Step 3: If YouTube transcript failed, fall back to Gemini transcript
             if transcript.get("source") == "failed" or not transcript.get("text"):
                 transcript = await self._get_gemini_transcript(video_id, video_url)
-
-            # Step 3.5: Optional OpenAI Whisper fallback for better STT / avoid Gemini 403s
-            # (Sentry AI monitoring will capture these LLM calls too)
-            if (transcript.get("source") == "failed" or not transcript.get("text")) and os.getenv("OPENAI_API_KEY"):
-                try:
-                    transcript = await self._get_openai_whisper_transcript(video_id, video_url)
-                except Exception as e:
-                    logger.warning(f"OpenAI Whisper fallback failed: {e}")
 
             # Step 4: Enhanced AI analysis using Gemini
             ai_analysis = await self._analyze_with_gemini(video_url, transcript, metadata)
@@ -191,8 +149,6 @@ class EnhancedVideoProcessor:
                 'metadata': metadata,
                 'transcript': transcript,
                 'ai_analysis': ai_analysis,
-                'build_plan': build_plan,
-                'extracted_info': extracted_info,
                 'visual_context': visual_context,
                 'markdown_analysis': markdown_content,
                 'save_path': save_path,
@@ -204,12 +160,6 @@ class EnhancedVideoProcessor:
         except Exception as e:
             logger.error(f"❌ Enhanced processing failed: {e}")
             raise
-        finally:
-            # Ensure session is closed to prevent "Unclosed client session" at exit (LLM/ingest paths)
-            try:
-                await self.close()
-            except Exception:
-                pass
     
     async def _get_gemini_transcript(self, video_id: str, video_url: str) -> Dict[str, Any]:
         """
@@ -220,8 +170,7 @@ class EnhancedVideoProcessor:
                 raise ValueError("GEMINI_API_KEY not configured")
             
             # Use Gemini's OpenAI-compatible transcription endpoint
-            model = os.getenv("GEMINI_VIDEO_MODEL", "gemini-3.5-flash")
-            url = f"{self.gemini_base_url}/models/{model}:generateContent"
+            url = f"{self.gemini_base_url}/models/gemini-1.5-flash:generateContent"
             
             # Create prompt for video analysis
             prompt = f"""
@@ -275,42 +224,6 @@ class EnhancedVideoProcessor:
             logger.warning(f"Gemini transcript failed: {e}")
             # Fallback to YouTube transcript API
             return await self._get_youtube_transcript_fallback(video_id)
-
-    async def _get_openai_whisper_transcript(self, video_id: str, video_url: str) -> Dict[str, Any]:
-        """Fallback to OpenAI Whisper for transcription (avoids Gemini 403s, better STT)."""
-        try:
-            from openai import OpenAI
-            import tempfile
-            import os as os_mod
-
-            client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
-            # Download audio snippet using yt-dlp (already dep)
-            with tempfile.TemporaryDirectory() as tmpdir:
-                audio_path = os_mod.path.join(tmpdir, f"{video_id}.mp3")
-                # yt-dlp command for audio only
-                import subprocess
-                subprocess.run([
-                    "yt-dlp", "-x", "--audio-format", "mp3",
-                    "-o", audio_path, video_url
-                ], check=True, capture_output=True, timeout=60)
-
-                with open(audio_path, "rb") as audio_file:
-                    transcription = client.audio.transcriptions.create(
-                        model="whisper-1",
-                        file=audio_file,
-                        response_format="text"
-                    )
-
-            return {
-                'text': transcription,
-                'source': 'openai_whisper',
-                'confidence': 0.92,
-                'processing_time': datetime.now().isoformat()
-            }
-        except Exception as e:
-            logger.warning(f"OpenAI Whisper failed: {e}")
-            return {'text': '', 'source': 'failed', 'error': str(e)}
     
     async def _get_youtube_transcript_fallback(self, video_id: str) -> Dict[str, Any]:
         """Fallback to YouTube transcript API"""
@@ -366,8 +279,7 @@ class EnhancedVideoProcessor:
             if not self.gemini_api_key:
                 return {'error': 'GEMINI_API_KEY not configured'}
             
-            model = os.getenv("GEMINI_VIDEO_MODEL", "gemini-3.5-flash")
-            url = f"{self.gemini_base_url}/models/{model}:generateContent"
+            url = f"{self.gemini_base_url}/models/gemini-1.5-flash:generateContent"
             
             # Create comprehensive analysis prompt with strict JSON schema
             prompt = f"""
@@ -848,10 +760,8 @@ Provide a structured JSON response with visual_elements array containing:
     async def close(self):
         """Clean up resources"""
         if self.session:
-            if not self.session.closed:
-                await self.session.close()
-            self.session = None  # Important: reset so next use recreates fresh session
-
+            await self.session.close()
+            self.session = None
 # Factory function for MCP integration
 def get_enhanced_video_processor() -> EnhancedVideoProcessor:
     """Get enhanced video processor instance for MCP integration"""

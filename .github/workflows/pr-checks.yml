@@ -12,7 +12,7 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/github-script@v9
+      - uses: actions/github-script@v7
         with:
           script: |
             const pr = context.payload.pull_request;
@@ -45,16 +45,12 @@ jobs:
               const allIssues = [...errors, ...warnings];
               if (pr.head.repo.full_name === pr.base.repo.full_name) {
                 const comment = `## 🔍 PR Validation\n\n${allIssues.join('\n')}`;
-                try {
-                  await github.rest.issues.createComment({
-                    owner: context.repo.owner,
-                    repo: context.repo.repo,
-                    issue_number: pr.number,
-                    body: comment
-                  });
-                } catch (commentError) {
-                  core.warning(`Could not post validation comment: ${commentError.message}`);
-                }
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: pr.number,
+                  body: comment
+                });
               } else {
                 core.warning('Skipping PR comment for fork PR (read-only token)');
                 allIssues.forEach(issue => core.warning(issue));

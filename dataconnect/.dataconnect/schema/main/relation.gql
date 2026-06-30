@@ -81,7 +81,7 @@ extend type JobEvent {
   """
   A generated field that is used for caching results in SDKs.
   """
-  _id: ID! @fdc_generated(from: "JobEvent.id", purpose: ENTITY_ID)
+  _id: ID! @fdc_generated(from: "JobEvent.id", purpose: GLOBAL_ID)
 }
 extend type VideoEmbedding {
   """
@@ -201,7 +201,7 @@ extend type VideoEmbedding {
   """
   A generated field that is used for caching results in SDKs.
   """
-  _id: ID! @fdc_generated(from: "VideoEmbedding.id", purpose: ENTITY_ID)
+  _id: ID! @fdc_generated(from: "VideoEmbedding.id", purpose: GLOBAL_ID)
 }
 extend type VideoJob {
   """
@@ -468,5 +468,5 @@ extend type VideoJob {
   """
   A generated field that is used for caching results in SDKs.
   """
-  _id: ID! @fdc_generated(from: "VideoJob.id", purpose: ENTITY_ID)
+  _id: ID! @fdc_generated(from: "VideoJob.id", purpose: GLOBAL_ID)
 }

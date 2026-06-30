@@ -7,17 +7,16 @@
     "./card": "./src/card.tsx"
   },
   "scripts": {
-    "lint": "eslint \"src/**/*.{ts,tsx}\" --max-warnings 0",
+    "lint": "eslint . --max-warnings 0",
     "generate:component": "turbo gen react-component"
   },
   "peerDependencies": {
     "react": "^18"
   },
   "devDependencies": {
-    "@repo/eslint-config": "*",
     "@types/react": "^18",
-    "eslint": "^9",
-    "typescript": "^6"
+    "eslint": "^8",
+    "typescript": "^5"
   },
   "dependencies": {
     "@dataconnect/generated": "file:src/dataconnect-generated"

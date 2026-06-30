@@ -15,7 +15,7 @@ import {
   ShieldCheck,
   Sparkles,
   Workflow,
-  Video,
+  Youtube,
 } from 'lucide-react';
 import AgentFlowVisualizer from '@/components/AgentFlowVisualizer';
 import TracePanel from '@/components/TracePanel';
@@ -412,7 +412,7 @@ function getScreenContent(screen: ScreenId) {
         right: (
           <div className="rounded-2xl border border-primary-500/20 bg-primary-500/10 p-5">
             <div className="flex items-center gap-2 text-primary-300">
-              <Video className="h-4 w-4" />
+              <Youtube className="h-4 w-4" />
               <p className="text-sm font-semibold">Primary happy-path question</p>
             </div>
             <p className="mt-3 text-sm leading-7 text-white/75">
@@ -644,43 +644,27 @@ export default function PrototypePage() {
           </div>
 
           <div className="flex items-center gap-3">
-            <Badge variant="primary" size="lg">
-              Interactive prototype
+            <Badge variant="primary" size="lg" dot>
+              Based on notes
             </Badge>
+            <Link
+              href="https://www.notion.so/2823c2339c0480a5952ee3f7a156d3f4"
+              target="_blank"
+              className="hidden items-center gap-2 rounded-xl border border-white/[0.1] bg-white/[0.04] px-4 py-2 text-sm font-semibold text-white/85 transition hover:border-white/[0.2] hover:bg-white/[0.08] md:inline-flex"
+            >
+              Source note
+              <ExternalLink className="h-4 w-4" />
+            </Link>
           </div>
         </div>
       </nav>
 
       <main className="mx-auto flex w-full max-w-7xl flex-col gap-8 px-6 py-8 lg:px-8">
-        <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 px-5 py-4 text-sm text-amber-100/90">
-          <p>
-            <span className="font-semibold text-amber-50">Design preview only.</span>
-            {' '}
-            This page runs scripted happy-path, fallback, and schema scenarios — it does not call production
-            {' '}
-            <code className="rounded bg-black/20 px-1 py-0.5 text-xs">/api/pipeline</code>
-            {' '}
-            or
-            {' '}
-            <code className="rounded bg-black/20 px-1 py-0.5 text-xs">/api/pipeline/stream</code>.
-            {' '}
-            For live analysis use{' '}
-            <Link href="/dashboard" className="font-semibold text-amber-50 underline underline-offset-2">
-              Dashboard
-            </Link>
-            ; for local planning drafts use{' '}
-            <Link href="/" className="font-semibold text-amber-50 underline underline-offset-2">
-              Studio
-            </Link>
-            .
-          </p>
-        </div>
-
         <section className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
           <Card variant="gradient" padding="lg">
             <CardHeader
               title="Video-to-software prototype"
-              subtitle="The smallest end-to-end clickable flow: URL in, structured context out, agent pipeline runs, launch package ready."
+              subtitle="Derived from the 'Software-On Demand' note and modeled as the smallest end-to-end clickable flow."
             />
             <CardContent className="space-y-6">
               <div className="flex flex-wrap items-center gap-3">
@@ -707,7 +691,7 @@ export default function PrototypePage() {
                   value={videoUrl}
                   onChange={(event) => setVideoUrl(event.target.value)}
                   helperText="Assumption: this first prototype starts from a single tutorial or walkthrough URL."
-                  leftIcon={<Video className="h-4 w-4" />}
+                  leftIcon={<Youtube className="h-4 w-4" />}
                 />
                 <div className="flex flex-col justify-end gap-3 sm:flex-row md:flex-col">
                   <Button
@@ -806,7 +790,7 @@ export default function PrototypePage() {
           <Card variant="glass" padding="lg">
             <CardHeader
               title="Pipeline view"
-              subtitle="A clickable simulation of the orchestrated multi-agent flow."
+              subtitle="A clickable simulation of the orchestrated flow described in the source note."
             />
             <CardContent className="space-y-6">
               <div className="flex flex-wrap gap-2">

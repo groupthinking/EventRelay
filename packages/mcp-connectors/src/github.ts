@@ -30,8 +30,8 @@ export interface GitHubToolArguments {
   update_issue: { issue_number: number; title?: string; body?: string; state?: 'open' | 'closed' };
   list_prs: { state?: 'open' | 'closed' | 'all'; page?: number };
   create_pr: { title: string; body: string; head: string; base: string };
-  get_repo_info: Record<string, never>;
-  list_branches: Record<string, never>;
+  get_repo_info: {};
+  list_branches: {};
 }
 
 /**

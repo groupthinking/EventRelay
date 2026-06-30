@@ -719,27 +719,12 @@ def force_cleanup():
 @contextmanager
 def memory_limit(limit_mb: int):
     """Context manager for temporary memory limits"""
-    try:
-        old_limit = resource.getrlimit(resource.RLIMIT_AS)
-    except (OSError, ValueError) as exc:
-        logger.warning("Memory limits unsupported on this platform: %s", exc)
-        yield
-        return
-
+    old_limit = resource.getrlimit(resource.RLIMIT_AS)
     try:
         resource.setrlimit(resource.RLIMIT_AS, (limit_mb * 1024 * 1024, old_limit[1]))
-    except (OSError, ValueError) as exc:
-        logger.warning("Could not set memory limit to %sMB: %s", limit_mb, exc)
-        yield
-        return
-
-    try:
         yield
     finally:
-        try:
-            resource.setrlimit(resource.RLIMIT_AS, old_limit)
-        except (OSError, ValueError) as exc:
-            logger.warning("Could not restore memory limit: %s", exc)
+        resource.setrlimit(resource.RLIMIT_AS, old_limit)
 
 def memory_profiler(func):
     """Decorator to profile memory usage of functions"""

@@ -34,8 +34,7 @@ class TranscriptResource:
             :class:`TranscriptActionResponse` with transcript and actions.
         """
         payload = TranscriptActionRequest(
-            video_url=video_url,
-            video_options=options or None,
+            video_url=video_url, action=action, options=options or {}
         )
         response = self._client._post(
             "/api/v1/transcript-action",
@@ -59,8 +58,7 @@ class AsyncTranscriptResource:
     ) -> TranscriptActionResponse:
         """Async version of :meth:`TranscriptResource.action`."""
         payload = TranscriptActionRequest(
-            video_url=video_url,
-            video_options=options or None,
+            video_url=video_url, action=action, options=options or {}
         )
         response = await self._client._post(
             "/api/v1/transcript-action",

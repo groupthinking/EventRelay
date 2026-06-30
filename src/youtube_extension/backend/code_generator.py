@@ -1006,14 +1006,12 @@ body {{
 
         if "authentication" in features:
             auth_imports = '''
-import os
-import secrets
 from datetime import datetime, timedelta
 from jose import JWTError, jwt
 from passlib.context import CryptContext'''
             auth_code = '''
 # Authentication setup
-SECRET_KEY = os.getenv("SECRET_KEY", secrets.token_urlsafe(32))
+SECRET_KEY = "your-secret-key-here"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
@@ -1046,7 +1044,7 @@ app = FastAPI(
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:8000", "http://localhost:5173"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

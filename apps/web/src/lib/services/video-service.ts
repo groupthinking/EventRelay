@@ -32,6 +32,7 @@ export const videoService = {
   ): Promise<VideoJobStatusResponse> {
     const start = Date.now();
 
+    // eslint-disable-next-line no-constant-condition
     while (true) {
       const res = await this.getJobStatus(jobId);
 

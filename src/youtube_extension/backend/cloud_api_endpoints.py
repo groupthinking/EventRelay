@@ -256,8 +256,6 @@ def setup_cloud_api_endpoints(app: FastAPI):
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
-        except HTTPException:
-            raise
         except Exception as e:
             raise HTTPException(
                 status_code=500,

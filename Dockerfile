@@ -35,13 +35,9 @@ WORKDIR /app
 RUN groupadd --gid 1000 uvai && \
     useradd --uid 1000 --gid uvai --shell /bin/bash --create-home uvai
 
-# Install runtime dependencies only (including Node.js/npm for build verification of generated projects)
+# Install runtime dependencies only
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
-    curl \
-    gnupg \
-    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
-    && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy installed packages from builder

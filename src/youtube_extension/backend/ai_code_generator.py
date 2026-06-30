@@ -33,23 +33,27 @@ except ImportError:
     KNOWLEDGE_BASE_AVAILABLE = False
     logger.warning("Knowledge base not available - video technologies won't be persisted")
 
+# Import Gemini SDK
 try:
-    from youtube_extension.backend.llm_router import LLMRouter
-    _LLM_ROUTER_AVAILABLE = True
+    from google import genai
+    from google.genai import types as genai_types
+    GENAI_AVAILABLE = True
 except ImportError:
-    LLMRouter = None  # type: ignore[assignment,misc]
-    _LLM_ROUTER_AVAILABLE = False
-    logger.warning("LLMRouter not available - AI code generation disabled")
+    GENAI_AVAILABLE = False
+    logger.warning("google-genai SDK not available - AI code generation disabled")
 
 
 class AICodeGenerator:
     """
-    AI-powered code generator using a multi-provider LLM router.
-    Tries Gemini → Anthropic → OpenAI → Grok → Perplexity in order.
+    AI-powered code generator using Gemini for intelligent full-stack generation.
     Produces complete, deployable applications from video analysis.
     """
 
     def __init__(self, output_dir: Optional[str] = None):
+        self.gemini_api_key = os.environ.get("GEMINI_API_KEY")
+        if not self.gemini_api_key:
+            logger.warning("GEMINI_API_KEY not set - AI code generation disabled")
+
         # Configure output directory (cross-platform)
         if output_dir:
             self.output_dir = Path(output_dir)
@@ -61,18 +65,10 @@ class AICodeGenerator:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         logger.info(f"📁 Output directory: {self.output_dir}")
 
-        self.router: Optional[Any] = None
-        if _LLM_ROUTER_AVAILABLE:
-            try:
-                self.router = LLMRouter()
-                if self.router.has_provider():
-                    logger.info("✅ AI Code Generator initialised with LLM router")
-                else:
-                    logger.warning("LLMRouter: no API keys found — AI generation disabled")
-                    self.router = None
-            except Exception as exc:
-                logger.warning("Failed to initialise LLMRouter: %s", exc)
-                self.router = None
+        self.client = None
+        if GENAI_AVAILABLE and self.gemini_api_key:
+            self.client = genai.Client(api_key=self.gemini_api_key)
+            logger.info("✅ AI Code Generator initialized with Gemini")
 
     async def generate_fullstack_project(
         self,
@@ -89,9 +85,9 @@ class AICodeGenerator:
         Returns:
             Project generation results with path and metadata
         """
-        if not self.router:
-            logger.error("No AI provider available")
-            raise RuntimeError("AI code generation requires at least one LLM provider API key")
+        if not self.client:
+            logger.error("Gemini client not available")
+            raise RuntimeError("AI code generation requires Gemini API key")
 
         logger.info("🤖 Starting AI-powered full-stack generation")
 
@@ -224,11 +220,13 @@ CRITICAL: Prioritize functional MVP over polished product. Generated code must:
 Choose "fullstack_app" for most cases, "agent" for MCP/workflow systems, "infrastructure_platform" for Turborepo monorepo with multiple apps."""
 
         try:
-            text = await self.router.generate(prompt, max_tokens=4096) if self.router else None
+            response = self.client.models.generate_content(
+                model='gemini-3-pro-preview',
+                contents=prompt
+            )
 
-            if not text:
-                raise ValueError("No response from LLM router")
-
+            # Parse response
+            text = response.text
             # Extract JSON from potential markdown fences
             if '```json' in text:
                 text = text.split('```json')[1].split('```')[0]
@@ -437,33 +435,16 @@ Return ONLY the code."""
             "dashboard API route",
             architecture,
             video_analysis,
-            """Generate API route at app/api/dashboard/route.ts using EXACT Next.js 14 App Router format. CRITICAL: Use ONLY native code + deps declared in our generated package.json (dockerode for MCP, no undeclared pkgs).
-
-EXACT FORMAT (use this skeleton):
-import { NextResponse } from 'next/server';
-
-export async function GET() {
-  try {
-    // real data e.g. docker.listContainers() if MCP
-    return NextResponse.json({ ... });
-  } catch (e) { return NextResponse.json({error: String(e)}, {status:500}); }
-}
-
-export async function POST(request: Request) {
-  try {
-    const body = await request.json();
-    // action
-    return NextResponse.json({success:true, ...});
-  } catch (e) { return NextResponse.json({error: String(e)}, {status:500}); }
-}
+            """Generate API route at app/api/dashboard/route.ts:
 
 Requirements:
-- Real sources (Docker, fs, processes).
-- TS interfaces.
-- NO "router" export.
-- NEVER import @material-ui/*, axios (unless added), etc. Only declared deps.
-- Use dockerode for MCP dashboards.
+1. GET endpoint returning dashboard metrics/data
+2. POST endpoint for dashboard actions
+3. Real data sources (file system, Docker, processes, etc)
+4. TypeScript interfaces
+5. Error handling
 
+For MCP Dashboard: Return Docker container list with status.
 Return ONLY the code."""
         )
         self._write_file(project_path / "src/app/api/dashboard/route.ts", dashboard_api)
@@ -474,37 +455,27 @@ Return ONLY the code."""
             "dashboard page",
             architecture,
             video_analysis,
-            """Generate a FUNCTIONAL Next.js dashboard at app/dashboard/page.tsx using ONLY Tailwind + lucide-react (already declared in package.json from generator).
+            """Generate a FUNCTIONAL Next.js dashboard at app/dashboard/page.tsx:
 
-CRITICAL CONSTRAINTS (MUST FOLLOW EXACTLY):
-- Use ONLY Tailwind CSS classes + lucide-react icons. NO external UI libs whatsoever (@material-ui/*, @mui/*, chakra, antd, shadcn, framer-motion unless explicitly in deps, etc.).
-- All UI with plain <div>, <button>, <input>, Tailwind utilities (p-4, border, grid, flex, bg-white, rounded, shadow, etc.).
-- 'use client' for hooks.
-- Use native fetch ONLY (no axios unless we added it to package.json).
-- Import ONLY from 'lucide-react' for icons, 'react' for hooks.
-
-CRITICAL CONSTRAINTS (MUST FOLLOW):
-- Use ONLY Tailwind CSS classes + lucide-react icons (already in package.json). 
-- DO NOT import or use ANY external UI libraries: no @material-ui, no @mui/material, no Chakra, no AntD, no shadcn components.
-- All UI must be built with <div>, <button>, Tailwind (border, p-4, grid, flex, bg-white, shadow etc).
-- Keep it simple and functional.
+PRIORITY: Working data flow over visual design.
 
 Requirements:
-1. Fetch real data from /api/dashboard on mount using fetch.
-2. Stats/metrics cards from API response (real data).
-3. Refresh button that re-fetches.
-4. Action buttons (e.g. start/stop) that POST and update UI.
-5. Loading states + error display.
-6. TypeScript interfaces.
-7. Responsive Tailwind grid.
+1. 'use client' directive (uses hooks)
+2. Fetch real data from /api/dashboard on mount
+3. Stats/metrics cards showing API response data (not mocks)
+4. Refresh button that re-fetches data
+5. Action buttons that POST to API and update UI
+6. Loading spinner during data fetch
+7. Error message display if API fails
+8. TypeScript interfaces for API responses
+9. Responsive grid with Tailwind
 
-IMPLEMENTATION NOTES (from Gemini video best practices for related analysis UIs):
-- Keep simple and functional. Use timestamps if video-related data.
-- For MCP/Dashboard: real Docker ops via API.
-- State updates after actions.
-- Place text prompts after video parts if multimodal (not applicable here).
+IMPLEMENTATION NOTES:
+- For MCP Dashboard: Include Docker container operations (start/stop/list)
+- API endpoints should return real system data (Docker SDK, process info, etc)
+- State updates after each action
 
-VALIDATION: Refresh must fetch fresh data. Build must succeed with declared deps only.
+VALIDATION: Clicking refresh must fetch new data from server.
 Return ONLY the code."""
         )
         self._write_file(project_path / "src/app/dashboard/page.tsx", dashboard)
@@ -598,11 +569,26 @@ TASK: Generate {description}
 {specific_prompt}"""
 
         try:
-            code = await self.router.generate(prompt, max_tokens=8192) if self.router else None
+            response = self.client.models.generate_content(
+                model='gemini-3-pro-preview',
+                contents=prompt,
+                config=genai_types.GenerateContentConfig(
+                    temperature=1.0,  # Gemini 3 requires temp=1.0
+                    max_output_tokens=8192
+                    # Gemini 3 Pro uses HIGH thinking by default - cannot be disabled
+                )
+            )
+
+            # Handle Gemini 3 responses with thought_signature
+            code = response.text
+            if code is None:
+                # Try extracting from parts
+                if response.candidates and response.candidates[0].content.parts:
+                    text_parts = [p.text for p in response.candidates[0].content.parts if hasattr(p, 'text') and p.text]
+                    code = "\n".join(text_parts) if text_parts else None
 
             if not code:
-                return f"// Error: LLM router returned no code for {description}\n// Please implement manually"
-
+                return f"// Error: Gemini returned no code for {description}\n// Please implement manually"
             # Clean up code fences
             if '```typescript' in code:
                 code = code.split('```typescript')[1].split('```')[0]
@@ -663,11 +649,6 @@ TASK: Generate {description}
         if frontend.get("state") == "zustand":
             package["dependencies"]["zustand"] = "^4.5.0"
 
-        if frontend.get("styling") in ("material_ui", "material-ui", "mui"):
-            # Support legacy or explicit MUI (old v4 to match possible generated imports)
-            package["dependencies"]["@material-ui/core"] = "^4.12.4"
-            package["dependencies"]["@material-ui/icons"] = "^4.11.3"
-
         if backend.get("auth") == "nextauth":
             package["dependencies"]["next-auth"] = "^4.24.0"
 
@@ -684,7 +665,6 @@ TASK: Generate {description}
         package["dependencies"]["clsx"] = "^2.1.0"  # Utility
         package["dependencies"]["tailwind-merge"] = "^2.2.0"  # Tailwind utility
         package["dependencies"]["class-variance-authority"] = "^0.7.0"  # Button variants
-        package["dependencies"]["axios"] = "^1.6.0"  # HTTP client (commonly used by AI generated code)
 
         # Add infrastructure packages for production-ready apps
         # State management
@@ -695,11 +675,9 @@ TASK: Generate {description}
         package["dependencies"]["@ai-sdk/openai"] = "^0.0.15"  # OpenAI provider
         package["dependencies"]["@ai-sdk/anthropic"] = "^0.0.15"  # Anthropic provider
 
-        # For agent/MCP apps or dashboards with container features: Add dockerode
-        if (architecture.get("type") in ("agent", "fullstack_app") or 
-            "docker" in str(architecture.get("features", [])).lower() or
-            "dashboard" in str(architecture.get("features", [])).lower()):
-            package["dependencies"]["dockerode"] = "^4.0.2"
+        # For agent/MCP apps: Add dockerode for container management
+        if architecture.get("type") == "agent" or "docker" in str(architecture.get("features", [])).lower():
+            package["dependencies"]["dockerode"] = "^4.0.2"  # Docker SDK
             package["devDependencies"]["@types/dockerode"] = "^3.3.0"
 
         return package
@@ -1168,8 +1146,8 @@ jobs:
         Returns:
             Dict with fixed files and status
         """
-        if not self.router:
-            return {"success": False, "reason": "No AI provider available"}
+        if not self.client:
+            return {"success": False, "reason": "Gemini client not available"}
 
         logger.info(f"🔧 AI auto-fix: Attempting to fix {len(errors)} build errors")
 
@@ -1219,10 +1197,26 @@ Return ONLY the fixed code, no explanations. Ensure:
 5. Code compiles without errors"""
 
             try:
-                response_text = await self.router.generate(fix_prompt, max_tokens=4096) if self.router else None
+                response = self.client.models.generate_content(
+                    model="gemini-3-pro-preview",
+                    contents=fix_prompt,
+                    config=genai_types.GenerateContentConfig(
+                        temperature=1.0,  # Gemini 3 requires temp=1.0
+                        max_output_tokens=4096
+                        # Gemini 3 Pro uses HIGH thinking by default - cannot be disabled
+                    )
+                )
+
+                # Handle Gemini 3's thought_signature responses - extract text from parts if needed
+                response_text = response.text
+                if response_text is None:
+                    # Try extracting from parts directly
+                    if response.candidates and response.candidates[0].content.parts:
+                        text_parts = [p.text for p in response.candidates[0].content.parts if hasattr(p, 'text') and p.text]
+                        response_text = "\n".join(text_parts) if text_parts else None
 
                 if not response_text:
-                    logger.warning(f"⚠️ LLM router returned no text for {rel_path}, skipping")
+                    logger.warning(f"⚠️ Gemini returned no text for {rel_path}, skipping")
                     continue
 
                 fixed_code = response_text.strip()
@@ -3419,7 +3413,7 @@ export class ModelRegistry {
         break;
 
       case 'claude':
-        model = anthropic(config.model || 'claude-opus-4-8', {
+        model = anthropic(config.model || 'claude-3-5-sonnet-20241022', {
           apiKey: config.apiKey,
         });
         break;
@@ -3459,7 +3453,7 @@ export class ModelRegistry {
 // Default model configurations
 export const DEFAULT_MODELS: Record<AIProvider, string> = {
   grok: 'grok-beta',
-  claude: 'claude-opus-4-8',
+  claude: 'claude-3-5-sonnet-20241022',
   gemini: 'gemini-2.0-flash-exp',
   openai: 'gpt-4o',
 };
@@ -3684,7 +3678,7 @@ const gateway = new AIGateway([
   },
   {
     provider: 'claude',
-    model: 'claude-opus-4-8',
+    model: 'claude-3-5-sonnet-20241022',
     apiKey: process.env.ANTHROPIC_API_KEY!,
   },
   {
@@ -3722,7 +3716,7 @@ for await (const chunk of stream.textStream) {
 ```typescript
 const gateway = new AIGateway(
   [
-    { provider: 'claude', model: 'claude-opus-4-8', apiKey: '...' },
+    { provider: 'claude', model: 'claude-3-5-sonnet-20241022', apiKey: '...' },
     { provider: 'gemini', model: 'gemini-2.0-flash-exp', apiKey: '...' },
     { provider: 'grok', model: 'grok-beta', apiKey: '...' },
   ],
@@ -3754,7 +3748,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const gateway = new AIGateway([
   { provider: 'grok', model: 'grok-beta', apiKey: process.env.XAI_API_KEY! },
-  { provider: 'claude', model: 'claude-opus-4-8', apiKey: process.env.ANTHROPIC_API_KEY! },
+  { provider: 'claude', model: 'claude-3-5-sonnet-20241022', apiKey: process.env.ANTHROPIC_API_KEY! },
 ]);
 
 export async function POST(request: NextRequest) {
@@ -3874,7 +3868,7 @@ OPENAI_API_KEY=your_openai_api_key
 ## Model Defaults
 
 - **Grok**: `grok-beta`
-- **Claude**: `claude-opus-4-8`
+- **Claude**: `claude-3-5-sonnet-20241022`
 - **Gemini**: `gemini-2.0-flash-exp`
 - **OpenAI**: `gpt-4o`
 

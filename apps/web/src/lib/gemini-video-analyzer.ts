@@ -1,5 +1,3 @@
-import 'server-only';
-
 /**
  * Agentic Video Intelligence Engine — Gemini + Google Search grounding.
  *
@@ -7,7 +5,7 @@ import 'server-only';
  * transcripts, descriptions, chapters, and metadata from YouTube videos.
  * Based on the UVAI PK=998 implementation pattern.
  *
- * Uses gemini-3.1-pro-preview which supports responseSchema + googleSearch
+ * Uses gemini-3-pro-preview which supports responseSchema + googleSearch
  * together (older models like gemini-2.5-flash do not).
  */
 
@@ -161,7 +159,7 @@ const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 /**
  * Executes a deep agentic analysis of a YouTube video using Gemini + Google Search.
- * Uses gemini-3.1-pro-preview with responseSchema + googleSearch (PK=998 pattern).
+ * Uses gemini-3-pro-preview with responseSchema + googleSearch (PK=998 pattern).
  * Performs exponential backoff specifically handling 503 "high traffic" errors.
  */
 export async function analyzeVideoWithGemini(
@@ -193,7 +191,7 @@ export async function analyzeVideoWithGemini(
   while (attempt < MAX_RETRIES) {
     try {
       const response = await ai.models.generateContent({
-        model: 'gemini-3.1-pro-preview',
+        model: 'gemini-3-pro-preview',
         contents: `Perform Agentic Grounding for Video: ${videoUrl}`,
         config: {
           systemInstruction,

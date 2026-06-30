@@ -1080,7 +1080,7 @@ The issue is that `comprehensive_result` contains an [AIProvider](cci:2://file:/
 
 ### User Input
 
-REDACTED_GOOGLE_API_KEY_ROTATE 
+AIzaSyBPej_9JLHeC3IGCSi6eDSkU-zWT3Gy0rE
 
 ### Planner Response
 

@@ -1,5 +1,6 @@
-@import "tailwindcss";
-@config "../../tailwind.config.js";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 /* ============================================
    UVAI Premium Design System
@@ -13,10 +14,6 @@
 
   --color-accent: 34 211 238; /* cyan-400 */
   --color-accent-dark: 6 182 212; /* cyan-500 */
-
-  /* Semantic Landing Tokens */
-  --color-void: 5 5 8; /* near-black page bg */
-  --color-ink: 248 245 253; /* near-white text */
 
   /* Surface Colors */
   --color-surface-50: 248 250 252; /* slate-50 */
@@ -87,7 +84,7 @@ h5,
 h6 {
   font-family: var(--font-heading);
   font-weight: 700;
-  letter-spacing: 0;
+  letter-spacing: -0.025em;
   line-height: 1.2;
 }
 
@@ -572,66 +569,6 @@ pre {
   100% {
     background-position: 200% 0;
   }
-}
-
-@keyframes landing-marquee {
-  from {
-    transform: translateX(0);
-  }
-  to {
-    transform: translateX(-50%);
-  }
-}
-
-.animate-marquee {
-  animation: landing-marquee 22s linear infinite;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .animate-marquee {
-    animation: none;
-  }
-}
-
-.contact-form-input {
-  width: 100%;
-  padding: 0.7rem 0.9rem;
-  border-radius: 0.55rem;
-  background: rgba(14, 14, 19, 0.7);
-  border: 1px solid rgba(72, 71, 77, 0.18);
-  color: #f8f5fd;
-  font-size: 0.9rem;
-  transition:
-    border-color 0.2s,
-    box-shadow 0.2s;
-}
-
-.contact-form-input::placeholder {
-  color: rgba(248, 245, 253, 0.3);
-}
-
-.contact-form-input:focus {
-  outline: none;
-  border-color: #6af2de;
-  box-shadow: 0 0 0 3px rgba(106, 242, 222, 0.15);
-}
-
-select.contact-form-input {
-  appearance: none;
-  background-image:
-    linear-gradient(45deg, transparent 50%, #6af2de 50%),
-    linear-gradient(135deg, #6af2de 50%, transparent 50%);
-  background-position:
-    calc(100% - 18px) 50%,
-    calc(100% - 13px) 50%;
-  background-size: 5px 5px, 5px 5px;
-  background-repeat: no-repeat;
-  padding-right: 2.2rem;
-}
-
-textarea.contact-form-input {
-  resize: vertical;
-  min-height: 100px;
 }
 
 /* ============================================

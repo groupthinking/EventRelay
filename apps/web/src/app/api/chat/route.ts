@@ -17,14 +17,13 @@ export async function POST(request: Request) {
 
     const response = await fetch(`${BACKEND_URL}/api/v1/chat`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...(process.env.EVENTRELAY_API_KEY ? { 'X-API-Key': process.env.EVENTRELAY_API_KEY } : {}) },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         message: body.query,
         video_url: body.video_url || '',
         video_id: body.video_id || '',
         conversation_history: body.history || [],
       }),
-      signal: AbortSignal.timeout(30_000),
     });
 
     if (!response.ok) {

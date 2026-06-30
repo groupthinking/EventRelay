@@ -1,5 +1,3 @@
-import 'server-only';
-
 /**
  * CloudEvents v1.0 publisher for the Next.js frontend pipeline.
  *

@@ -176,7 +176,7 @@ EventRelay      : ❌ FAIL (NumPy conflict)
 
 **Solution:**
 ```bash
-export GEMINI_API_KEY="REDACTED_GOOGLE_API_KEY_ROTATE"
+export GEMINI_API_KEY="AIzaSyDu5GN_IxRFg3Ue8SYXSNWkZi-50pwDgS0"
 ```
 
 **User Action Required:** Set environment variable
@@ -193,7 +193,7 @@ export GEMINI_API_KEY="REDACTED_GOOGLE_API_KEY_ROTATE"
 
 ### Test Command (When API Key Set):
 ```bash
-export GEMINI_API_KEY="REDACTED_GOOGLE_API_KEY_ROTATE"
+export GEMINI_API_KEY="AIzaSyDu5GN_IxRFg3Ue8SYXSNWkZi-50pwDgS0"
 python3 universal_coordinator.py "https://youtu.be/SHORT_VIDEO" --mode gemini --no-deploy
 ```
 
@@ -205,7 +205,7 @@ python3 universal_coordinator.py "https://youtu.be/SHORT_VIDEO" --mode gemini --
 
 ```bash
 # Set API key
-export GEMINI_API_KEY="REDACTED_GOOGLE_API_KEY_ROTATE"
+export GEMINI_API_KEY="AIzaSyDu5GN_IxRFg3Ue8SYXSNWkZi-50pwDgS0"
 
 # Find a recent programming tutorial (last 5 days)
 # Avoid music videos (like dQw4w9WgXcQ - Rick Roll)
@@ -240,7 +240,7 @@ Once dependencies fixed:
 
 ```bash
 # Set both API keys
-export GEMINI_API_KEY="REDACTED_GOOGLE_API_KEY_ROTATE"
+export GEMINI_API_KEY="AIzaSyDu5GN_IxRFg3Ue8SYXSNWkZi-50pwDgS0"
 export GITHUB_TOKEN="your-github-token-here"
 
 # Test production mode (EventRelay + UVAI, no Gemini)
@@ -399,7 +399,7 @@ From your requirements:
 
 1. **Set Gemini API Key**
    ```bash
-   export GEMINI_API_KEY="REDACTED_GOOGLE_API_KEY_ROTATE"
+   export GEMINI_API_KEY="AIzaSyDu5GN_IxRFg3Ue8SYXSNWkZi-50pwDgS0"
    ```
 
 2. **Test Gemini Mode** (works now)
@@ -482,7 +482,7 @@ From your requirements:
 
 **Command to Test:**
 ```bash
-export GEMINI_API_KEY="REDACTED_GOOGLE_API_KEY_ROTATE"
+export GEMINI_API_KEY="AIzaSyDu5GN_IxRFg3Ue8SYXSNWkZi-50pwDgS0"
 python3 test_imports.py  # Check what works
 python3 universal_coordinator.py "https://youtu.be/SHORT_VIDEO" --mode gemini --no-deploy
 ```

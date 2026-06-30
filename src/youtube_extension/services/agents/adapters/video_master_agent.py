@@ -10,7 +10,6 @@ Provides comprehensive video processing using Google AI (Gemini) with clean serv
 import asyncio
 import json
 import logging
-import os
 from dataclasses import dataclass
 from typing import Any, Optional
 
@@ -205,7 +204,7 @@ class VideoMasterAgent(BaseAgent):
         def _sync_call():
             try:
                 response = self._gemini_client.models.generate_content(
-                    model=os.getenv("GEMINI_VIDEO_MODEL", "models/gemini-3.5-flash"),
+                    model="models/gemini-2.0-flash",
                     contents=prompt,
                 )
                 return response.text

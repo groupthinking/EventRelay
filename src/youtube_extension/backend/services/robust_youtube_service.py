@@ -7,14 +7,14 @@ legacy import paths functioning while ensuring all logic routes through the
 centralised adapters.
 """
 
-from shared.youtube import (
+from src.shared.youtube import (
     InnertubeTranscriptError,
     InnertubeTranscriptNotFound,
     RobustYouTubeMetadata,
     fetch_innertube_transcript,
     get_video_transcript_robust,
 )
-from shared.youtube import (
+from src.shared.youtube import (
     RobustYouTubeService as _RobustYouTubeService,
 )
 

@@ -2,7 +2,7 @@
  * EventRelay E2E Test Suite
  *
  * Tests the live deployment at BASE_URL (default: https://uvai.io) for:
- *   1. Homepage smoke check + Template Gallery (/features) rendering
+ *   1. Homepage / Template Gallery rendering
  *   2. SSE pipeline stream — full end-to-end with a real YouTube URL
  *   3. SSE stream closes properly (no 95% hang regression)
  *   4. CloudEvent schema compliance in SSE events
@@ -13,7 +13,7 @@
  * Environment:
  *   BASE_URL — deployment URL (default: https://uvai.io)
  *   TEST_YOUTUBE_URL — short video for pipeline test
- *     (default: https://www.youtube.com/watch?v=auJzb1D-fag)
+ *     (default: https://www.youtube.com/watch?v=dQw4w9WgXcQ — 3:33)
  *
  * Red/Green Signal:
  *   - GREEN: all tests pass → stdout: "✅ ALL TESTS PASSED"
@@ -25,28 +25,9 @@ import { describe, it, expect, beforeAll } from 'vitest';
 const BASE_URL = process.env.BASE_URL || 'https://uvai.io';
 const TEST_YOUTUBE_URL =
   process.env.TEST_YOUTUBE_URL ||
-  'https://www.youtube.com/watch?v=auJzb1D-fag';
-
-// To exercise a protected deployment (e.g. a Vercel preview, which returns 401
-// to anonymous requests), set VERCEL_AUTOMATION_BYPASS_SECRET to the project's
-// "Protection Bypass for Automation" secret. It is attached as a header on
-// every request so the preview is reachable. Unset (the default — e.g. when
-// BASE_URL is production) → no header is added and behaviour is unchanged.
-const VERCEL_BYPASS_SECRET = process.env.VERCEL_AUTOMATION_BYPASS_SECRET || '';
+  'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
 
 // ─── Helpers ────────────────────────────────────────────────────────
-
-/** Merge the Vercel protection-bypass header into a request init, when configured. */
-function withBypass(init?: RequestInit): RequestInit {
-  if (!VERCEL_BYPASS_SECRET) return init ?? {};
-  // Normalize via the Headers constructor so any HeadersInit shape (plain
-  // object, Headers instance, or [key, value][] array) is preserved — a bare
-  // spread would silently drop a Headers/array-typed init.headers.
-  const headers = new Headers(init?.headers);
-  headers.set('x-vercel-protection-bypass', VERCEL_BYPASS_SECRET);
-  headers.set('x-vercel-set-bypass-cookie', 'true');
-  return { ...init, headers };
-}
 
 /** Fetch with a hard timeout and automatic retry for transient network errors. */
 async function fetchWithTimeout(
@@ -60,7 +41,7 @@ async function fetchWithTimeout(
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const res = await fetch(url, { ...withBypass(init), signal: controller.signal });
+      const res = await fetch(url, { ...init, signal: controller.signal });
       clearTimeout(timer);
       return res;
     } catch (err) {
@@ -112,16 +93,9 @@ describe('EventRelay E2E — Live Deployment', () => {
     }
   });
 
-  // ── 1. Template Gallery / Feature Showcase ────────────────────────
-  // The homepage (BASE_URL) is the interactive Video Workflow Studio and
-  // intentionally does NOT render the template gallery. The workflow /
-  // template content lives on the /features page, so the content
-  // assertions below target /features (the homepage keeps a generic
-  // 200/HTML smoke check).
+  // ── 1. Template Gallery Homepage ──────────────────────────────────
 
   describe('Template Gallery', () => {
-    const FEATURES_URL = `${BASE_URL}/features`;
-
     it('homepage returns 200 with HTML', async () => {
       const res = await fetchWithTimeout(BASE_URL);
       expect(res.status).toBe(200);
@@ -129,11 +103,10 @@ describe('EventRelay E2E — Live Deployment', () => {
       expect(ct).toContain('text/html');
     });
 
-    it('features page contains template/workflow markup', async () => {
-      const res = await fetchWithTimeout(FEATURES_URL);
-      expect(res.status).toBe(200);
+    it('homepage contains template gallery markup', async () => {
+      const res = await fetchWithTimeout(BASE_URL);
       const html = await res.text();
-      // The features page should reference at least some of these workflow names
+      // The template gallery should have at least some of these workflow names
       const expectedTemplates = [
         'Tutorial',
         'Conference',
@@ -148,12 +121,12 @@ describe('EventRelay E2E — Live Deployment', () => {
       expect(found.length).toBeGreaterThanOrEqual(3);
     });
 
-    it('features page surfaces at least 5 workflow/template indicators', async () => {
-      const res = await fetchWithTimeout(FEATURES_URL);
-      expect(res.status).toBe(200);
+    it('homepage contains at least 5 template cards', async () => {
+      const res = await fetchWithTimeout(BASE_URL);
       const html = await res.text();
-      // Count distinct template-related content blocks across the feature
-      // sections and the shared footer use-case list.
+      // Count template card patterns — look for the workflow template structure
+      // Each template card has a "Run" or "Launch" or similar CTA
+      // We check for multiple distinct template-related content blocks
       const templateIndicators = [
         'youtube',
         'tutorial',
@@ -190,7 +163,7 @@ describe('EventRelay E2E — Live Deployment', () => {
       expect(ct).toContain('text/event-stream');
     });
 
-    it('SSE stream emits at least a pipeline_status:running event', async () => {
+    it('SSE stream emits pipeline_status:running then pipeline_status:complete', async () => {
       const res = await fetchWithTimeout(
         `${BASE_URL}/api/pipeline/stream`,
         {
@@ -204,21 +177,21 @@ describe('EventRelay E2E — Live Deployment', () => {
       const body = await res.text();
       const events = parseSSEEvents(body);
 
-      // Must have at least 1 event
-      expect(events.length).toBeGreaterThanOrEqual(1);
+      // Must have at least 2 events
+      expect(events.length).toBeGreaterThanOrEqual(2);
 
-      // Must start with pipeline_status:running
+      // First event should be pipeline_status:running
       const runningEvent = events.find(
         (e) => e.type === 'pipeline_status' && e.status === 'running',
       );
       expect(runningEvent).toBeDefined();
 
-      // When Gemini is configured the stream also emits a terminal status
-      // ('complete' or 'error'). Log it for observability but don't fail if
-      // the live server closes early (no-key / degraded mode).
-      const pipelineEvents = events.filter((e) => e.type === 'pipeline_status');
+      // Last pipeline_status event should be 'complete'
+      const pipelineEvents = events.filter(
+        (e) => e.type === 'pipeline_status',
+      );
       const lastPipeline = pipelineEvents[pipelineEvents.length - 1];
-      console.info(`[E2E] last pipeline_status: ${lastPipeline?.status ?? 'none'}`);
+      expect(lastPipeline?.status).toBe('complete');
     });
 
     it('SSE stream closes within 90 seconds (no 95% hang)', async () => {
@@ -305,7 +278,7 @@ describe('EventRelay E2E — Live Deployment', () => {
       }
     });
 
-    it('terminal pipeline_status includes duration and agent count when present', async () => {
+    it('pipeline_status:complete includes duration and agent count', async () => {
       const res = await fetchWithTimeout(
         `${BASE_URL}/api/pipeline/stream`,
         {
@@ -318,23 +291,19 @@ describe('EventRelay E2E — Live Deployment', () => {
 
       const body = await res.text();
       const events = parseSSEEvents(body);
-      const terminal = events.find(
-        (e) => e.type === 'pipeline_status' && (e.status === 'complete' || e.status === 'error'),
+      const complete = events.find(
+        (e) => e.type === 'pipeline_status' && e.status === 'complete',
       );
 
-      // Terminal event is only present when Gemini is configured on the server.
-      // Skip field checks if the live server closed early (degraded/no-key mode).
-      if (!terminal) {
-        console.info('[E2E] No terminal pipeline_status found — server may be in degraded mode');
-        return;
-      }
-
-      expect(terminal.duration).toBeDefined();
-      expect(typeof terminal.duration).toBe('number');
-      const data = terminal.data as Record<string, unknown> | undefined;
-      if (data) {
-        expect(data.totalAgents).toBeDefined();
-        expect(data.completedAgents).toBeDefined();
+      expect(complete).toBeDefined();
+      if (complete) {
+        expect(complete.duration).toBeDefined();
+        expect(typeof complete.duration).toBe('number');
+        const data = complete.data as Record<string, unknown> | undefined;
+        if (data) {
+          expect(data.totalAgents).toBeDefined();
+          expect(data.completedAgents).toBeDefined();
+        }
       }
     });
   });

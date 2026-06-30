@@ -19,7 +19,7 @@ from datetime import datetime, timedelta
 from enum import Enum
 from typing import Any, Optional, Union
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError
 
 from .context_manager import ContextPriority, ContextStatus, MCPContext
 
@@ -83,8 +83,6 @@ class ContextValidationError(Exception):
 
 class ValidationResult(BaseModel):
     """Result of a validation operation"""
-
-    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     is_valid: bool = Field(default=True)
     errors: list[ContextValidationError] = Field(default_factory=list)

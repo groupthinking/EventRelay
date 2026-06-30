@@ -170,22 +170,18 @@ def health():
     venv_active = "VIRTUAL_ENV" in os.environ
     checks.append(("Virtual Environment", "✅ Active" if venv_active else "❌ Not active"))
 
-    # Check package import. Catch any exception (not just ImportError) so a
-    # health diagnostic never crashes mid-run — it should report a failed
-    # check, not abort before printing results.
+    # Check package import
     try:
         import youtube_extension
         checks.append(("Package Import", "✅ Working"))
-    except Exception:
+    except ImportError:
         checks.append(("Package Import", "❌ Failed"))
 
-    # Check FastAPI app. Importing the app pulls in middleware and routers whose
-    # module-level code can raise errors other than ImportError; treat any
-    # failure as a failed check rather than letting it crash the command.
+    # Check FastAPI app
     try:
         from youtube_extension.main import app
         checks.append(("FastAPI App", "✅ Loaded"))
-    except Exception:
+    except ImportError:
         checks.append(("FastAPI App", "❌ Failed"))
 
     # Print results

@@ -140,6 +140,7 @@ def parse_provider(provider_str: Optional[str]) -> Optional[CloudAIProvider]:
         "google_cloud": CloudAIProvider.GOOGLE_CLOUD,
         "aws_rekognition": CloudAIProvider.AWS_REKOGNITION,
         "azure_vision": CloudAIProvider.AZURE_VISION,
+        "apple_fastvlm": CloudAIProvider.APPLE_FASTVLM
     }
 
     if provider_str in provider_mapping:
@@ -264,8 +265,6 @@ async def analyze_video(request: VideoAnalysisRequest):
     except ConfigurationError as e:
         logger.error(f"Configuration error: {e}")
         raise HTTPException(status_code=500, detail=f"Configuration error: {str(e)}")
-    except HTTPException:
-        raise
     except Exception as e:
         logger.error(f"Unexpected error during video analysis: {e}")
         raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
@@ -297,8 +296,6 @@ async def analyze_batch_videos(request: BatchAnalysisRequest, background_tasks: 
             "batch_size": request.batch_size
         }
 
-    except HTTPException:
-        raise
     except Exception as e:
         logger.error(f"Failed to start batch analysis: {e}")
         raise HTTPException(status_code=500, detail=f"Batch analysis failed: {str(e)}")
@@ -422,5 +419,6 @@ def _get_provider_description(provider: CloudAIProvider) -> str:
         CloudAIProvider.GOOGLE_CLOUD: "Google Cloud Video Intelligence & Vision API",
         CloudAIProvider.AWS_REKOGNITION: "Amazon Rekognition video and image analysis",
         CloudAIProvider.AZURE_VISION: "Microsoft Azure AI Vision services",
+        CloudAIProvider.APPLE_FASTVLM: "Apple FastVLM vision language model"
     }
     return descriptions.get(provider, "Unknown provider")

@@ -372,7 +372,7 @@ class ComparativeAnalysisService:
         response = await loop.run_in_executor(
             None,
             lambda: self._gemini_client.models.generate_content(
-                model=os.getenv("GEMINI_MODEL", "gemini-3.5-flash"),
+                model="gemini-2.0-flash",
                 contents=prompt,
                 config=genai_types.GenerateContentConfig(
                     max_output_tokens=max_tokens,
@@ -384,7 +384,7 @@ class ComparativeAnalysisService:
         latency = int((time.monotonic() - start) * 1000)
         return ProviderResult(
             provider="gemini",
-            model_name=os.getenv("GEMINI_MODEL", "gemini-3.5-flash"),
+            model_name="gemini-2.0-flash",
             response=text,
             latency_ms=latency,
             token_estimate=len(text.split()),
@@ -399,7 +399,7 @@ class ComparativeAnalysisService:
         response = await loop.run_in_executor(
             None,
             lambda: self._claude_client.messages.create(
-                model="claude-opus-4-8",
+                model="claude-3-5-sonnet-20241022",
                 max_tokens=max_tokens,
                 messages=[{"role": "user", "content": prompt}],
             ),
@@ -408,7 +408,7 @@ class ComparativeAnalysisService:
         latency = int((time.monotonic() - start) * 1000)
         return ProviderResult(
             provider="claude",
-            model_name="claude-opus-4-8",
+            model_name="claude-3-5-sonnet-20241022",
             response=text,
             latency_ms=latency,
             token_estimate=len(text.split()),

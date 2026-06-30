@@ -281,8 +281,6 @@ async def create_timeline(request: TimelineRequest):
             "granularity": request.granularity,
             "timeline": timeline
         }
-    except HTTPException:
-        raise
     except Exception as e:
         logger.error(f"Timeline creation failed: {e}", exc_info=True)
         raise HTTPException(500, str(e))

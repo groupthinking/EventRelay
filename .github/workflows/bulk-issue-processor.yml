@@ -49,7 +49,7 @@ jobs:
     name: Bulk process issues
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v4
 
       - name: Process issues
         env:

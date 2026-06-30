@@ -1,5 +1,3 @@
-import 'server-only';
-
 import { getGeminiClient } from './gemini-client';
 
 export interface TranscriptSegment {

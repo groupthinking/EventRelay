@@ -10,9 +10,10 @@ import requests
 from supabase import Client, create_client
 
 # ==== CONFIGURATION ====
-ABACUS_API_KEYS = [k.strip() for k in os.getenv('ABACUS_API_KEYS', '').split(',') if k.strip()]
-if not ABACUS_API_KEYS:
-    raise RuntimeError('ABACUS_API_KEYS environment variable is required (comma-separated)')
+ABACUS_API_KEYS = os.getenv('ABACUS_API_KEYS', '').split(',') or [
+    's2_b047b4e76b1e4b15920426bbd42eae5a',
+    's2_1ce25275e9774f4bab8ab10b511693a2'
+]
 ABACUS_API_URL = 'https://api.abacus.ai'
 AGENT_NAME = os.getenv('AGENT_NAME', 'abacus-agent')
 API_REF_URL = 'https://abacus.ai/help/api/ref'
@@ -130,9 +131,7 @@ def try_endpoints(api_key, mcp_context, endpoints):
     return None, None
 
 SUPABASE_URL = os.getenv('SUPABASE_URL', 'https://nsfrhirwsjqwhagtuaxx.supabase.co')
-SUPABASE_KEY = os.getenv('SUPABASE_KEY')
-if not SUPABASE_KEY:
-    raise RuntimeError('SUPABASE_KEY environment variable is required')
+SUPABASE_KEY = os.getenv('SUPABASE_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5zZnJoaXJ3c2pxd2hhZ3R1YXh4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDYyMTcwMTMsImV4cCI6MjA2MTc5MzAxM30.mvPT1ha9keOLFCxVPoUoAwWt2uKb-m_ii2bu2I-ziyk')
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
@@ -215,21 +214,20 @@ def main_agent():
     endpoints = discover_endpoints(mcp_context)
     print(f"🔎 Discovered endpoints: {endpoints}")
 
-    for idx, api_key in enumerate(ABACUS_API_KEYS, start=1):
+    for api_key in ABACUS_API_KEYS:
         if not api_key.strip():
             continue
-        # Never log key material (even a prefix); reference the key by index only.
-        print(f"\n🔑 Using API Key #{idx}")
+        print(f"\n🔑 Using API Key: {api_key[:8]}...")
         try:
             data, endpoint = try_endpoints(api_key, mcp_context, endpoints)
             if data is None:
-                print(f"⚠️ All endpoints failed for API Key #{idx}")
+                print(f"⚠️ All endpoints failed for API Key {api_key[:8]}...")
                 continue
             print(f"✅ Success with endpoint {endpoint}. Data: {json.dumps(data)[:200]}...")
             # Run multi-step workflow for demonstration
             run_multistep_workflow(api_key, mcp_context)
         except Exception as e:
-            print(f"❌ API Key #{idx} failed: {str(e)}")
+            print(f"❌ API Key {api_key[:8]}... failed: {str(e)}")
     print("\n🎯 Agent Cycle Complete!")
 
 if __name__ == "__main__":

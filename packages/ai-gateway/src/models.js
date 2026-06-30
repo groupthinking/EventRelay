@@ -22,7 +22,7 @@ class ModelRegistry {
                 });
                 break;
             case 'claude':
-                model = (0, anthropic_1.anthropic)(config.model || 'claude-opus-4-8', {
+                model = (0, anthropic_1.anthropic)(config.model || 'claude-3-5-sonnet-20241022', {
                     apiKey: config.apiKey,
                 });
                 break;
@@ -55,7 +55,7 @@ exports.ModelRegistry = ModelRegistry;
 // Default model configurations
 exports.DEFAULT_MODELS = {
     grok: 'grok-beta',
-    claude: 'claude-opus-4-8',
+    claude: 'claude-3-5-sonnet-20241022',
     gemini: 'gemini-2.0-flash-exp',
     openai: 'gpt-4o',
 };

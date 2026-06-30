@@ -16,7 +16,7 @@ The Gemini API key that was working in the previous session is now returning `40
 ```
 
 ### API Key Used
-`REDACTED_GOOGLE_API_KEY_ROTATE`
+`AIzaSyAdaiRnkCVDq_-ac-iDiTPt_KLvT-MW-JY`
 
 ### Possible Causes
 1. **API Key Expired** - Free tier keys may have short expiration
@@ -203,7 +203,7 @@ YouTube URL
 
 > **Status Update:** The Gemini integration code from our previous session is verified working! I can see successful transcript extraction in the previous results (Logan Kilpatrick video, 4,832 characters extracted).
 >
-> **Current Blocker:** The Gemini API key from the previous session (`REDACTED_GOOGLE_API_KEY_ROTATE`) is now returning 400 errors, likely expired or hit rate limits.
+> **Current Blocker:** The Gemini API key from the previous session (`AIzaSyAdaiRnkCVDq_-ac-iDiTPt_KLvT-MW-JY`) is now returning 400 errors, likely expired or hit rate limits.
 >
 > **Immediate Action Needed:** Please generate a fresh Gemini API key:
 > 1. Visit: https://aistudio.google.com/app/apikey
@@ -246,7 +246,7 @@ CURRENT_STATUS_UPDATE.md - This file
 
 ## 🔒 SECURITY NOTE
 
-**API Key in Documentation:** Multiple files contain the now-expired API key `REDACTED_GOOGLE_API_KEY_ROTATE`
+**API Key in Documentation:** Multiple files contain the now-expired API key `AIzaSyAdaiRnkCVDq_-ac-iDiTPt_KLvT-MW-JY`
 
 **Files to Update with Fresh Key:**
 1. `gemini_video_processor.py` (line 275) - Hardcoded fallback

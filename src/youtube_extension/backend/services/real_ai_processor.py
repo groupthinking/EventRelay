@@ -161,20 +161,20 @@ class RealAIProcessorService:
                 },
             },
             AIProvider.ANTHROPIC: {
-                "default": "claude-opus-4-8",
+                "default": "claude-3-5-sonnet-20241022",
                 "models": {
-                    "claude-opus-4-8": {
+                    "claude-3-5-sonnet-20241022": {
                         "max_tokens": 8192,
                         "cost_tier": "high",
                     },
-                    "claude-haiku-4-5": {"max_tokens": 4096, "cost_tier": "low"},
+                    "claude-3-haiku-20240307": {"max_tokens": 4096, "cost_tier": "low"},
                 },
             },
             AIProvider.GEMINI: {
-                "default": os.getenv("GEMINI_MODEL", "gemini-3.5-flash"),
+                "default": "gemini-1.5-flash",
                 "models": {
-                    "gemini-3.5-flash": {"max_tokens": 65536, "cost_tier": "low"},
-                    "gemini-2.5-flash": {"max_tokens": 65536, "cost_tier": "low"},
+                    "gemini-1.5-pro": {"max_tokens": 32768, "cost_tier": "high"},
+                    "gemini-1.5-flash": {"max_tokens": 32768, "cost_tier": "low"},
                 },
             },
         }
@@ -484,6 +484,7 @@ Focus on accurate classification for content discovery.
             response = await self.anthropic_client.messages.create(
                 model=model,
                 max_tokens=request.max_tokens or 2048,
+                temperature=request.temperature,
                 messages=[{"role": "user", "content": prompt}],
             )
 
@@ -540,7 +541,7 @@ Focus on accurate classification for content discovery.
 
             return AIProcessingResult(
                 provider="anthropic",
-                model=request.model or "claude-opus-4-8",
+                model=request.model or "claude-3-5-sonnet-20241022",
                 processing_type=request.processing_type.value,
                 result={},
                 tokens_used=0,
@@ -619,7 +620,7 @@ Focus on accurate classification for content discovery.
 
             return AIProcessingResult(
                 provider="gemini",
-                model=request.model or os.getenv("GEMINI_MODEL", "gemini-3.5-flash"),
+                model=request.model or "gemini-1.5-flash",
                 processing_type=request.processing_type.value,
                 result={},
                 tokens_used=0,

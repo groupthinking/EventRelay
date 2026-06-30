@@ -72,8 +72,6 @@ export function useAgentPipeline(): UseAgentPipelineReturn {
   const [state, setState] = useState<PipelineState>(makeInitialState);
   const [mode, setMode] = useState<PipelineMode>('idle');
   const abortRef = useRef<AbortController | null>(null);
-  const timeoutRef = useRef<number | null>(null);
-  const simulationRef = useRef<{ cancel: () => void } | null>(null);
 
   /** Apply an `agent_update` SSE event to the current PipelineState. */
   const applyAgentUpdate = useCallback(
@@ -212,25 +210,9 @@ export function useAgentPipeline(): UseAgentPipelineReturn {
     (url: string) => {
       // Abort any in-flight request
       if (abortRef.current) abortRef.current.abort();
-      if (timeoutRef.current) window.clearTimeout(timeoutRef.current);
-      if (simulationRef.current) simulationRef.current.cancel();
 
       const controller = new AbortController();
-      let timedOut = false;
       abortRef.current = controller;
-      // Match Vercel stream route budget (maxDuration 240s) — avoid demo fallback on slow backend jobs.
-      const STREAM_WAIT_MS = 210_000;
-      const resetStreamTimeout = () => {
-        if (timeoutRef.current) window.clearTimeout(timeoutRef.current);
-        timeoutRef.current = window.setTimeout(() => {
-          timedOut = true;
-          controller.abort();
-        }, STREAM_WAIT_MS);
-      };
-      timeoutRef.current = window.setTimeout(() => {
-        timedOut = true;
-        controller.abort();
-      }, STREAM_WAIT_MS);
 
       // Reset state to validating
       setState({
@@ -243,27 +225,6 @@ export function useAgentPipeline(): UseAgentPipelineReturn {
         connections: createDefaultConnections(),
         trace: [],
       });
-
-      const runDemoFallback = (reason: unknown) => {
-        console.warn('[AgentPipeline] SSE unavailable, falling back to demo:', reason);
-        setMode('demo');
-
-        const freshState: PipelineState = {
-          id: `pipeline_${Date.now()}`,
-          videoUrl: url,
-          videoTitle: url,
-          status: 'validating',
-          startedAt: new Date().toISOString(),
-          agents: createDefaultAgents(),
-          connections: createDefaultConnections(),
-          trace: [],
-        };
-        setState(freshState);
-
-        simulationRef.current = simulatePipeline(url, url, (newState) => {
-          setState(newState);
-        });
-      };
 
       // Try SSE endpoint
       fetch('/api/pipeline/stream', {
@@ -280,12 +241,11 @@ export function useAgentPipeline(): UseAgentPipelineReturn {
           const reader = response.body.getReader();
           const decoder = new TextDecoder();
           let buffer = '';
-          let completed = false;
 
+          // eslint-disable-next-line no-constant-condition
           while (true) {
             const { done, value } = await reader.read();
             if (done) break;
-            resetStreamTimeout();
 
             buffer += decoder.decode(value, { stream: true });
             const lines = buffer.split('\n');
@@ -305,7 +265,6 @@ export function useAgentPipeline(): UseAgentPipelineReturn {
                   applyConsensus(event);
                   break;
                 case 'pipeline_status':
-                  if (event.status === 'complete' || event.status === 'error') completed = true;
                   applyPipelineStatus(event);
                   break;
                 case 'workflow':
@@ -318,20 +277,30 @@ export function useAgentPipeline(): UseAgentPipelineReturn {
               }
             }
           }
-
-          if (!completed) {
-            throw new Error('Stream ended before the pipeline completed');
-          }
-        })
-        .finally(() => {
-          if (timeoutRef.current) {
-            window.clearTimeout(timeoutRef.current);
-            timeoutRef.current = null;
-          }
         })
         .catch((err) => {
-          if (controller.signal.aborted && !timedOut) return;
-          runDemoFallback(timedOut ? new Error('Pipeline stream timed out') : err);
+          if (controller.signal.aborted) return;
+
+          // SSE failed — fall back to demo simulation
+          console.warn('[AgentPipeline] SSE unavailable, falling back to demo:', err);
+          setMode('demo');
+
+          // Reset and run local simulation
+          const freshState: PipelineState = {
+            id: `pipeline_${Date.now()}`,
+            videoUrl: url,
+            videoTitle: url,
+            status: 'validating',
+            startedAt: new Date().toISOString(),
+            agents: createDefaultAgents(),
+            connections: createDefaultConnections(),
+            trace: [],
+          };
+          setState(freshState);
+
+          simulatePipeline(url, url, (newState) => {
+            setState(newState);
+          });
         });
     },
     [applyAgentUpdate, applyConsensus, applyPipelineStatus, applyWorkflow],
@@ -340,10 +309,6 @@ export function useAgentPipeline(): UseAgentPipelineReturn {
   /** Reset everything to idle. */
   const resetPipeline = useCallback(() => {
     if (abortRef.current) abortRef.current.abort();
-    if (timeoutRef.current) window.clearTimeout(timeoutRef.current);
-    if (simulationRef.current) simulationRef.current.cancel();
-    timeoutRef.current = null;
-    simulationRef.current = null;
     setState(makeInitialState());
     setMode('idle');
   }, []);

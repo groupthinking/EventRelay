@@ -14,7 +14,7 @@ tmp/
 .env
 .env.local
 infrastructure/
-/docs/
+docs/
 tests/
 scripts/
 mcp-servers/

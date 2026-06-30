@@ -8,7 +8,7 @@ module re-exports the public API so legacy imports keep functioning while the
 shared adapters remain the single source of truth.
 """
 
-from shared.youtube import (
+from src.shared.youtube import (
     CaptionSegment,
     InnertubeTranscriptError,
     InnertubeTranscriptNotFound,

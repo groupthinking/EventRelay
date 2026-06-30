@@ -30,7 +30,7 @@ class StrategyAgent(BaseAgent):
         cfg = config or {}
         gemini_cfg = cfg.get("gemini_config") or self._build_gemini_config()
         self._hybrid_processor = cfg.get("hybrid_processor") or HybridProcessorService(HybridConfig(gemini=gemini_cfg))
-        self._model = cfg.get("model") or gemini_cfg.model_name
+        self._model = cfg.get("model") or "gemini-2.0-flash"
 
     async def run(self, req: AgentRequest) -> AgentResult:
         start_time = asyncio.get_event_loop().time()

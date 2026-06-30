@@ -11,7 +11,7 @@ export default defineConfig({
       BASE_URL: process.env.BASE_URL || 'https://uvai.io',
       TEST_YOUTUBE_URL:
         process.env.TEST_YOUTUBE_URL ||
-        'https://www.youtube.com/watch?v=auJzb1D-fag',
+        'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
     },
   },
 });

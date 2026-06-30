@@ -9,17 +9,15 @@
     "./constants": "./src/constants.ts"
   },
   "scripts": {
-    "lint": "eslint \"src/**/*.{ts,tsx}\" --max-warnings 0",
+    "lint": "eslint . --max-warnings 0",
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
     "@dataconnect/generated": "file:src/dataconnect-generated",
-    "zod": "^4.4.3"
+    "zod": "^3.22.4"
   },
   "devDependencies": {
-    "@repo/eslint-config": "*",
     "@types/node": "^20",
-    "eslint": "^9",
-    "typescript": "^6"
+    "typescript": "^5"
   }
 }

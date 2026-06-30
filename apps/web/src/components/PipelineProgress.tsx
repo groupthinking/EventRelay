@@ -160,7 +160,7 @@ export default function PipelineProgress({
   className = '',
 }: PipelineProgressProps) {
   const [elapsed, setElapsed] = useState(0);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval>>();
 
   useEffect(() => {
     if (status === 'processing' || status === 'validating') {

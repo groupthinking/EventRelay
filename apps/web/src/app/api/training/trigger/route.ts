@@ -24,9 +24,6 @@ import {
   TUNING_THRESHOLD,
 } from '@/lib/training-store';
 
-export const runtime = 'nodejs';
-export const maxDuration = 300;
-
 const PROJECT_ID = process.env.GOOGLE_CLOUD_PROJECT || 'uvai-730bb';
 const REGION = process.env.VERTEX_AI_REGION || 'us-central1';
 const BUCKET = process.env.TRAINING_BUCKET || `${PROJECT_ID}-training`;
