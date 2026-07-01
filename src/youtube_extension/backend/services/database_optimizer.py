@@ -453,11 +453,14 @@ class QueryOptimizer:
                         f"Batch executed ({batch_time:.2f}ms): {len(group_queries)} {pattern} queries"
                     )
                 else:
-                    # Execute individually
-                    for original_index, query, params in group_queries:
-                        query_result = await self.execute_query(
-                            query, params, use_cache=True
-                        )
+                    # Execute individually concurrently
+                    coroutines = [
+                        self.execute_query(query, params, use_cache=True)
+                        for _, query, params in group_queries
+                    ]
+                    query_results = await asyncio.gather(*coroutines)
+
+                    for (original_index, _, _), query_result in zip(group_queries, query_results):
                         results[original_index] = query_result
 
             total_time = (time.time() - start_time) * 1000
