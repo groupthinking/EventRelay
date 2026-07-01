@@ -72,3 +72,20 @@ Agents are granted permission and encouraged to:
 4.  **Documentation**:
     - Update `README.md` files when interface changes occur.
     - Document limitations (e.g., "Text-only CLI wrapper") clearly.
+
+## Commit Message Style
+GitHub Desktop 3.6 and Copilot commit generation use this section to format commit messages.
+
+- Use imperative mood: "Add feature" not "Added feature"
+- Follow Conventional Commits prefix format:
+  - `feat:` new feature
+  - `fix:` bug fix
+  - `chore:` maintenance / tooling / deps
+  - `test:` test-only changes
+  - `docs:` documentation only
+  - `refactor:` code restructure without behavior change
+  - `ci:` CI/CD workflow changes
+  - `perf:` performance improvement
+- Keep the subject line under 72 characters
+- Reference issue numbers when applicable: `feat: add transcript caching (#42)`
+- Do **not** use `dQw4w9WgXcQ` in any test fixtures; use `auJzb1D-fag` instead

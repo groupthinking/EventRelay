@@ -29,7 +29,7 @@ jobs:
             apps/web/.next
           retention-days: 7
 
-  lint:
+  lint-python:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -40,6 +40,19 @@ jobs:
       - name: Lint Python (informational)
         continue-on-error: true
         run: ruff check src/youtube_extension/backend/ src/youtube_extension/main.py --ignore E402,F811,F401,F821,B904,B020,E701,E722
+
+  lint-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+      - run: npm install --legacy-peer-deps
+      - name: Lint Frontend (informational)
+        continue-on-error: true
+        run: cd apps/web && npm run lint
 
   test:
     runs-on: ubuntu-latest
