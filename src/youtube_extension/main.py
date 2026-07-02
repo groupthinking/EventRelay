@@ -6,6 +6,7 @@ Provides the core API endpoints and integrates all services including cloud AI
 
 import logging
 import os
+from urllib.parse import urlsplit
 
 import uvicorn
 from fastapi import FastAPI, HTTPException
@@ -76,6 +77,29 @@ _EXTRA_ORIGINS = [
     for origin in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",")
     if origin.strip()
 ]
+
+
+def _is_localhost_origin(origin: str) -> bool:
+    """True for loopback/localhost origins in any scheme or port."""
+    host = (urlsplit(origin).hostname or "").lower()
+    return (
+        host in {"localhost", "127.0.0.1", "::1", "0.0.0.0"}
+        or host.endswith(".localhost")
+    )
+
+
+# Defense in depth: even the operator-supplied ``CORS_ALLOWED_ORIGINS`` list is
+# stripped of localhost origins in production. Without this, setting
+# ``CORS_ALLOWED_ORIGINS=http://localhost:3000`` would silently re-introduce the
+# exact credentialed-localhost hole this block exists to close.
+if _IS_PRODUCTION:
+    _dropped_extra = [o for o in _EXTRA_ORIGINS if _is_localhost_origin(o)]
+    if _dropped_extra:
+        logger.warning(
+            "Ignoring localhost origins in CORS_ALLOWED_ORIGINS for production: %s",
+            _dropped_extra,
+        )
+    _EXTRA_ORIGINS = [o for o in _EXTRA_ORIGINS if not _is_localhost_origin(o)]
 
 _allowed_origins = list(dict.fromkeys(
     _PRODUCTION_ORIGINS + _EXTRA_ORIGINS + ([] if _IS_PRODUCTION else _DEV_ORIGINS)

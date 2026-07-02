@@ -37,10 +37,6 @@ let pricing = await page.evaluate(() => ({
 log(`render pricing checkout=${pricing.checkout} turnstile=${pricing.turnstile} renew=${pricing.renew}`);
 await page.screenshot({ path: resolve(SCRATCH, 'pricing-billing-ui.png'), fullPage: false });
 
-const billingEmail =
-  process.env.BILLING_UI_EMAIL ||
-  (process.env.BILLING_UI_COOKIE?.match(/er_billing_email=([^;]+)/)?.[1] ?? 'ui-proof@example.com');
-
 // The billing identity cookie is HMAC-signed server-side; mint a matching signed
 // value here so the local UI proof works against the hardened resolver. Requires
 // the same secret the app uses (BILLING_COOKIE_SECRET / NEXTAUTH_SECRET / STRIPE_WEBHOOK_SECRET).
@@ -57,7 +53,14 @@ function signBillingEmail(email) {
   return `${payload}.${sig}`;
 }
 
-const signedBillingCookie = signBillingEmail(billingEmail);
+// Two supported inputs for the billing identity cookie:
+//   - BILLING_UI_COOKIE: an ALREADY-signed value (or `er_billing_email=<value>`
+//     fragment) minted elsewhere with the same secret. Used verbatim — re-signing
+//     it would double-sign and the server would reject it.
+//   - BILLING_UI_EMAIL (or the default): a plaintext email we sign here.
+const preSignedCookie = process.env.BILLING_UI_COOKIE?.match(/er_billing_email=([^;]+)/)?.[1];
+const billingEmail = process.env.BILLING_UI_EMAIL || (preSignedCookie ? null : 'ui-proof@example.com');
+const signedBillingCookie = preSignedCookie ?? (billingEmail ? signBillingEmail(billingEmail) : null);
 if (!signedBillingCookie) {
   log('WARN: no billing cookie secret set; renew panel proof will be skipped');
 } else {
@@ -86,7 +89,7 @@ pricing = {
     () => !!document.querySelector('[data-testid="pro-renew-panel"]'),
   ),
 };
-log(`render pricing renew_with_cookie=${pricing.renew} email=${billingEmail}`);
+log(`render pricing renew_with_cookie=${pricing.renew} email=${billingEmail ?? '(pre-signed BILLING_UI_COOKIE)'}`);
 await page.screenshot({ path: resolve(SCRATCH, 'pricing-renew-ui.png'), fullPage: false });
 
 await page.goto(`${BASE}/dashboard`, { waitUntil: 'networkidle' });
