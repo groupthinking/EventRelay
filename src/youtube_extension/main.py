@@ -82,10 +82,30 @@ def _is_loopback_origin(origin: str) -> bool:
     return host in {"localhost", "127.0.0.1", "::1"}
 
 
+def _is_concrete_origin(origin: str) -> bool:
+    """True only for a concrete http(s)://host[:port] origin.
+
+    Because ``allow_credentials=True``, Starlette reflects the request origin when
+    the allowlist contains a wildcard (``*``) or the literal ``null``, which would
+    grant *any* origin credentialed access — the exact bypass this control closes.
+    Such values (and anything without an http(s) scheme + host) are rejected so a
+    stray ``CORS_ALLOWED_ORIGINS`` entry cannot silently open credentialed CORS.
+    """
+    parsed = urlparse(origin)
+    return parsed.scheme in {"http", "https"} and bool(parsed.hostname)
+
+
 _EXTRA_ORIGINS = []
 for _origin in os.getenv("CORS_ALLOWED_ORIGINS", "").split(","):
     _origin = _origin.strip()
     if not _origin:
+        continue
+    if not _is_concrete_origin(_origin):
+        logger.warning(
+            "Ignoring non-concrete origin %r from CORS_ALLOWED_ORIGINS "
+            "(wildcard/null/malformed origins are unsafe with allow_credentials=True)",
+            _origin,
+        )
         continue
     if _IS_PRODUCTION and _is_loopback_origin(_origin):
         logger.warning(
