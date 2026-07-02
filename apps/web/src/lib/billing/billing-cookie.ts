@@ -69,8 +69,11 @@ export function verifyBillingEmailCookie(value: string | undefined | null): stri
   const providedSig = value.slice(separator + 1);
   const expectedSig = computeSignature(payload, secret);
 
-  const providedBuf = Buffer.from(providedSig);
-  const expectedBuf = Buffer.from(expectedSig);
+  // Both signatures are base64url-encoded HMAC digests produced by
+  // computeSignature, so a constant-time comparison of their ASCII bytes is
+  // equivalent to comparing the decoded digest bytes (same charset, same length).
+  const providedBuf = Buffer.from(providedSig, 'utf8');
+  const expectedBuf = Buffer.from(expectedSig, 'utf8');
   if (providedBuf.length !== expectedBuf.length) return null;
   if (!timingSafeEqual(providedBuf, expectedBuf)) return null;
 

@@ -6,6 +6,7 @@ Provides the core API endpoints and integrates all services including cloud AI
 
 import logging
 import os
+from urllib.parse import urlparse
 
 import uvicorn
 from fastapi import FastAPI, HTTPException
@@ -56,7 +57,9 @@ app = FastAPI(
 # would let a page served from an attacker-controlled localhost app issue
 # credentialed calls against the production API, so localhost origins are only
 # enabled outside production. Production origins can be extended without a code
-# change via the ``CORS_ALLOWED_ORIGINS`` env var (comma-separated).
+# change via the ``CORS_ALLOWED_ORIGINS`` env var (comma-separated). In
+# production, any localhost/loopback origin supplied that way is rejected so a
+# stray env var cannot re-open the loopback bypass this control closes.
 _ENVIRONMENT = os.getenv("ENVIRONMENT", os.getenv("VERCEL_ENV", "development")).strip().lower()
 _IS_PRODUCTION = _ENVIRONMENT == "production"
 
@@ -71,11 +74,25 @@ _DEV_ORIGINS = [
     "http://localhost:8080",
     "http://localhost:3001",
 ]
-_EXTRA_ORIGINS = [
-    origin.strip()
-    for origin in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",")
-    if origin.strip()
-]
+
+
+def _is_loopback_origin(origin: str) -> bool:
+    """True for http(s)://localhost / 127.0.0.1 / [::1] (any port)."""
+    host = urlparse(origin).hostname or ""
+    return host in {"localhost", "127.0.0.1", "::1"}
+
+
+_EXTRA_ORIGINS = []
+for _origin in os.getenv("CORS_ALLOWED_ORIGINS", "").split(","):
+    _origin = _origin.strip()
+    if not _origin:
+        continue
+    if _IS_PRODUCTION and _is_loopback_origin(_origin):
+        logger.warning(
+            "Ignoring loopback origin %r from CORS_ALLOWED_ORIGINS in production", _origin
+        )
+        continue
+    _EXTRA_ORIGINS.append(_origin)
 
 _allowed_origins = list(dict.fromkeys(
     _PRODUCTION_ORIGINS + _EXTRA_ORIGINS + ([] if _IS_PRODUCTION else _DEV_ORIGINS)

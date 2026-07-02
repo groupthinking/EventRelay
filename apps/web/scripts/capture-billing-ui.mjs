@@ -37,10 +37,6 @@ let pricing = await page.evaluate(() => ({
 log(`render pricing checkout=${pricing.checkout} turnstile=${pricing.turnstile} renew=${pricing.renew}`);
 await page.screenshot({ path: resolve(SCRATCH, 'pricing-billing-ui.png'), fullPage: false });
 
-const billingEmail =
-  process.env.BILLING_UI_EMAIL ||
-  (process.env.BILLING_UI_COOKIE?.match(/er_billing_email=([^;]+)/)?.[1] ?? 'ui-proof@example.com');
-
 // The billing identity cookie is HMAC-signed server-side; mint a matching signed
 // value here so the local UI proof works against the hardened resolver. Requires
 // the same secret the app uses (BILLING_COOKIE_SECRET / NEXTAUTH_SECRET / STRIPE_WEBHOOK_SECRET).
@@ -57,7 +53,23 @@ function signBillingEmail(email) {
   return `${payload}.${sig}`;
 }
 
-const signedBillingCookie = signBillingEmail(billingEmail);
+// A signed cookie value is `base64url(payload).base64url(sig)`. Detect that shape
+// so a raw BILLING_UI_COOKIE that already contains a signed value is used as-is
+// instead of being signed a second time (which the server would reject).
+const SIGNED_COOKIE_RE = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
+const rawCookieValue = process.env.BILLING_UI_COOKIE?.match(/er_billing_email=([^;]+)/)?.[1];
+
+let signedBillingCookie;
+if (process.env.BILLING_UI_EMAIL) {
+  // Explicit plaintext email → sign it.
+  signedBillingCookie = signBillingEmail(process.env.BILLING_UI_EMAIL);
+} else if (rawCookieValue && SIGNED_COOKIE_RE.test(rawCookieValue)) {
+  // BILLING_UI_COOKIE already holds a signed value → use it directly.
+  signedBillingCookie = rawCookieValue;
+} else {
+  // BILLING_UI_COOKIE holds a plaintext email (legacy) or nothing → sign it.
+  signedBillingCookie = signBillingEmail(rawCookieValue ?? 'ui-proof@example.com');
+}
 if (!signedBillingCookie) {
   log('WARN: no billing cookie secret set; renew panel proof will be skipped');
 } else {
