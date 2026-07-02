@@ -28,28 +28,32 @@ billing/auth vars go in `apps/web/.env.local` (or your Vercel project settings),
 
 ## 1. Launch-gating blockers (must do)
 
-### 1.1 Stripe products & prices (test mode first)
-The checkout code requires two recurring Price IDs (`checkout-config.ts`).
-- Create a **Product** "EventRelay Pro" in Stripe (test mode).
-- Add two recurring **Prices**: **$19/mo** and **$180/yr**.
-- Set in `apps/web/.env.local`:
+### 1.1 Stripe products & prices — ✅ DONE (LIVE mode, 2026-07-02)
+Created via the Stripe API on the UVAI account (`acct_1ScN2hAmTgsI2zgN`):
+- Product **EventRelay Pro**: `prod_UoUsOjo63AUHAk`
+- **$19/mo** recurring Price: `price_1Tos02AmTgsI2zgNWx7onroJ`
+- **$180/yr** recurring Price: `price_1Tos0AAmTgsI2zgNSu5lwBv6`
+
+Set in the Vercel project env (Production):
   ```
-  STRIPE_SECRET_KEY=sk_test_...
-  NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_...
+  STRIPE_SECRET_KEY=sk_live_...          # Dashboard → Developers → API keys
+  NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_live_...
   STRIPE_WEBHOOK_SECRET=whsec_...        # from step 1.2
-  STRIPE_PRICE_PRO_MONTHLY=price_...     # the $19/mo Price ID
-  STRIPE_PRICE_PRO_ANNUAL=price_...      # the $180/yr Price ID
+  STRIPE_PRICE_PRO_MONTHLY=price_1Tos02AmTgsI2zgNWx7onroJ
+  STRIPE_PRICE_PRO_ANNUAL=price_1Tos0AAmTgsI2zgNSu5lwBv6
   ```
 - Without the two `STRIPE_PRICE_*` IDs, `requireStripePriceId()` throws and
-  checkout 500s.
+  checkout 500s. Price IDs are not secrets (they appear in checkout URLs);
+  the `sk_live_` key and `whsec_` secret are.
 
-### 1.2 Stripe webhook endpoint
-- In Stripe Dashboard → Developers → Webhooks, add an endpoint pointing at
-  `https://<your-domain>/api/billing/webhook`.
-- Subscribe to at least: `checkout.session.completed`,
+### 1.2 Stripe webhook endpoint (manual — 1 minute, live mode)
+- In Stripe Dashboard (live mode) → Developers → Webhooks, add an endpoint:
+  `https://uvai.io/api/billing/webhook`.
+- Subscribe to: `checkout.session.completed`,
   `customer.subscription.updated`, `customer.subscription.deleted`.
 - Copy the signing secret into `STRIPE_WEBHOOK_SECRET`.
 - The handler (`api/billing/webhook/route.ts`) returns 503 until this is set.
+- (Webhook creation isn't exposed via the Stripe MCP, hence manual.)
 
 ### 1.3 Cloudflare Turnstile (checkout bot-gate)
 `/api/billing/checkout` is gated by Turnstile; unset → **every new subscriber
@@ -64,15 +68,17 @@ gets 403**.
   `apps/web/.env.example`): site `1x00000000000000000000AA`,
   secret `1x0000000000000000000000000000000AA`.
 
-### 1.4 Upstash Redis (durable entitlements)
+### 1.4 Upstash Redis (durable entitlements) — use the Vercel integration
 Paid status must survive serverless cold starts / multiple instances. In
 production `assertEntitlementDurability()` **throws on boot** without Upstash.
-- Create an Upstash Redis DB → REST URL + token.
-- Set in `apps/web/.env.local`:
-  ```
-  UPSTASH_REDIS_REST_URL=https://...upstash.io
-  UPSTASH_REDIS_REST_TOKEN=...
-  ```
+- **Easiest path:** install the Upstash integration from the Vercel project's
+  Integrations settings (`vercel.com/<team>/<project>/settings/integrations`)
+  and create a Redis DB through it. Vercel **auto-injects**
+  `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` into the project env —
+  exactly the vars `entitlement-store.ts` reads, so no manual copying.
+  (This is an OAuth click-through; it can't be done via API/MCP.)
+- Manual alternative: create a DB at upstash.com and set the two vars yourself
+  in `apps/web/.env.local` / Vercel env.
 
 ### 1.5 Google OAuth + NextAuth (sign-in)
 Auth is Google-only and stays **off until `NEXTAUTH_SECRET` is set**.
@@ -93,6 +99,18 @@ Auth is Google-only and stays **off until `NEXTAUTH_SECRET` is set**.
 - `XAI_API_KEY` for Pro Grok chat.
 - Set the relevant keys in `apps/web/.env.local` (frontend pipeline) and `.env`
   (backend), per `.env.example`.
+
+### 1.7 Vercel AI Gateway (recommended)
+The frontend already prefers the Gateway when configured
+(`apps/web/src/lib/vercel-ai-gateway.ts`; e.g. `extract-events/route.ts` calls
+`gatewayChat()` when `hasAiGatewayKey()`), falling back to direct
+Gemini/OpenAI otherwise. Enabling it buys unified billing, one key for many
+providers, failover, spend caps, and request observability — zero code changes.
+- Set `AI_GATEWAY_API_KEY` (or `VERCEL_AI_GATEWAY_API_KEY`) in the Vercel env.
+- Optional overrides: `VERCEL_AI_GATEWAY_MODEL` (default
+  `google/gemini-2.5-flash`) and `VERCEL_AI_GATEWAY_EMBEDDING_MODEL` (default
+  `openai/text-embedding-3-small`).
+- Leave unset to keep direct-provider behavior.
 
 ---
 
