@@ -41,17 +41,38 @@ const billingEmail =
   process.env.BILLING_UI_EMAIL ||
   (process.env.BILLING_UI_COOKIE?.match(/er_billing_email=([^;]+)/)?.[1] ?? 'ui-proof@example.com');
 
-await context.addCookies([
-  {
-    name: 'er_billing_email',
-    value: billingEmail,
-    domain: 'localhost',
-    path: '/',
-    httpOnly: true,
-    secure: false,
-    sameSite: 'Lax',
-  },
-]);
+// The billing identity cookie is HMAC-signed server-side; mint a matching signed
+// value here so the local UI proof works against the hardened resolver. Requires
+// the same secret the app uses (BILLING_COOKIE_SECRET / NEXTAUTH_SECRET / STRIPE_WEBHOOK_SECRET).
+const { createHmac } = await import('node:crypto');
+const cookieSecret =
+  process.env.BILLING_COOKIE_SECRET?.trim() ||
+  process.env.NEXTAUTH_SECRET?.trim() ||
+  process.env.STRIPE_WEBHOOK_SECRET?.trim();
+
+function signBillingEmail(email) {
+  if (!cookieSecret) return null;
+  const payload = Buffer.from(email, 'utf8').toString('base64url');
+  const sig = createHmac('sha256', cookieSecret).update(payload).digest('base64url');
+  return `${payload}.${sig}`;
+}
+
+const signedBillingCookie = signBillingEmail(billingEmail);
+if (!signedBillingCookie) {
+  log('WARN: no billing cookie secret set; renew panel proof will be skipped');
+} else {
+  await context.addCookies([
+    {
+      name: 'er_billing_email',
+      value: signedBillingCookie,
+      domain: 'localhost',
+      path: '/',
+      httpOnly: true,
+      secure: false,
+      sameSite: 'Lax',
+    },
+  ]);
+}
 
 await page.goto(`${BASE}/pricing`, { waitUntil: 'networkidle' });
 try {

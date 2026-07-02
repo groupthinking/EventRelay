@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { saveEntitlement, resetEntitlementStoreForTests } from '@/lib/billing/entitlement-store';
+import { signBillingEmail } from '@/lib/billing/billing-cookie';
 import { resetChatQuotaForTests } from '@/lib/billing/chat-quota';
 
 vi.mock('@/lib/billing/grok-client', () => ({
@@ -38,7 +39,7 @@ describe('billing identity spoofing', () => {
     expect(body.routing?.runtime).toBe('standard');
   });
 
-  it('grants Pro only with trusted billing cookie', async () => {
+  it('does not grant Pro when a forged (unsigned) cookie is supplied', async () => {
     await saveEntitlement({
       email: 'cookie-pro@example.com',
       plan: 'pro',
@@ -47,11 +48,37 @@ describe('billing identity spoofing', () => {
       updatedAt: new Date().toISOString(),
     });
 
+    // Attacker forges the cookie with a plaintext victim email (the old vuln).
     const req = new Request('http://localhost/api/chat', {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
         cookie: 'er_billing_email=cookie-pro@example.com',
+      },
+      body: JSON.stringify({ query: 'hi' }),
+    });
+
+    const res = await chatPOST(req);
+    const body = await res.json();
+    expect(body.plan).toBe('free');
+    expect(body.routing?.runtime).toBe('standard');
+  });
+
+  it('grants Pro only with a valid HMAC-signed billing cookie', async () => {
+    await saveEntitlement({
+      email: 'cookie-pro@example.com',
+      plan: 'pro',
+      status: 'active',
+      leadModel: 'grok-4-1-fast',
+      updatedAt: new Date().toISOString(),
+    });
+
+    const signed = signBillingEmail('cookie-pro@example.com') as string;
+    const req = new Request('http://localhost/api/chat', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        cookie: `er_billing_email=${encodeURIComponent(signed)}`,
       },
       body: JSON.stringify({ query: 'hi' }),
     });

@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { GET as dispatchGET, POST as dispatchPOST } from '@/app/api/agents/dispatch/route';
 import { GET as statusGET } from '@/app/api/agents/status/route';
 import { saveEntitlement, resetEntitlementStoreForTests } from '@/lib/billing/entitlement-store';
+import { signBillingEmail } from '@/lib/billing/billing-cookie';
 
 const ORIGINAL_BACKEND = process.env.BACKEND_URL;
 
@@ -23,7 +24,7 @@ function dispatchReq(body: unknown, email = 'pro@example.com') {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
-      cookie: `er_billing_email=${encodeURIComponent(email)}`,
+      cookie: `er_billing_email=${encodeURIComponent(signBillingEmail(email) as string)}`,
     },
     body: JSON.stringify(body),
   });

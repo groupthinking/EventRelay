@@ -3,6 +3,7 @@ import { NextRequest } from 'next/server';
 import { POST } from '@/app/api/billing/renew/route';
 import { getKaizenTraces, resetKaizenTracesForTests } from '@/lib/billing/kaizen-trace';
 import { saveEntitlement, resetEntitlementStoreForTests } from '@/lib/billing/entitlement-store';
+import { signBillingEmail } from '@/lib/billing/billing-cookie';
 
 vi.mock('@/lib/billing/stripe-checkout', () => ({
   createProCheckoutSession: vi.fn().mockResolvedValue({
@@ -37,7 +38,7 @@ describe('POST /api/billing/renew', () => {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
-        cookie: 'er_billing_email=returning@example.com',
+        cookie: `er_billing_email=${encodeURIComponent(signBillingEmail('returning@example.com') as string)}`,
       },
       body: JSON.stringify({ annual: false }),
     });

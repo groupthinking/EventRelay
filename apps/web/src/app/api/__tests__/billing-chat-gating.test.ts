@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { saveEntitlement, resetEntitlementStoreForTests } from '@/lib/billing/entitlement-store';
+import { signBillingEmail } from '@/lib/billing/billing-cookie';
 import { resetChatQuotaForTests } from '@/lib/billing/chat-quota';
 import { resetKaizenTracesForTests, getKaizenTraces } from '@/lib/billing/kaizen-trace';
 
@@ -18,7 +19,7 @@ function cookieReq(email: string, query: string) {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
-      cookie: `er_billing_email=${encodeURIComponent(email)}`,
+      cookie: `er_billing_email=${encodeURIComponent(signBillingEmail(email) as string)}`,
     },
     body: JSON.stringify({ query }),
   });
