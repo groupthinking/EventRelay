@@ -48,18 +48,43 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
-# Configure CORS
+# Configure CORS.
+#
+# Security (OWASP A05 — Security Misconfiguration): because we send
+# ``allow_credentials=True``, every allowed origin can make *credentialed*
+# cross-origin requests. Shipping ``http://localhost:*`` origins to production
+# would let a page served from an attacker-controlled localhost app issue
+# credentialed calls against the production API, so localhost origins are only
+# enabled outside production. Production origins can be extended without a code
+# change via the ``CORS_ALLOWED_ORIGINS`` env var (comma-separated).
+_ENVIRONMENT = os.getenv("ENVIRONMENT", os.getenv("VERCEL_ENV", "development")).strip().lower()
+_IS_PRODUCTION = _ENVIRONMENT == "production"
+
+_PRODUCTION_ORIGINS = [
+    "https://uvai.io",
+    "https://www.uvai.io",
+    "https://uvaiio.vercel.app",
+]
+_DEV_ORIGINS = [
+    "http://localhost:3000",
+    "http://localhost:5173",
+    "http://localhost:8080",
+    "http://localhost:3001",
+]
+_EXTRA_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",")
+    if origin.strip()
+]
+
+_allowed_origins = list(dict.fromkeys(
+    _PRODUCTION_ORIGINS + _EXTRA_ORIGINS + ([] if _IS_PRODUCTION else _DEV_ORIGINS)
+))
+logger.info("CORS allow_origins configured for %s: %s", _ENVIRONMENT, _allowed_origins)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://localhost:5173",
-        "http://localhost:8080",
-        "http://localhost:3001",
-        "https://uvai.io",
-        "https://www.uvai.io",
-        "https://uvaiio.vercel.app",
-    ],
+    allow_origins=_allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
