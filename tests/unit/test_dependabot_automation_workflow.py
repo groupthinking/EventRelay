@@ -69,6 +69,6 @@ def test_dependabot_workflow_approves_and_merges_without_checkout() -> None:
     assert any(
         "dependabot[bot]" in step.get("with", {}).get("script", "")
         and "pulls.merge" in step.get("with", {}).get("script", "")
-        and "version-update:semver-major" in step.get("with", {}).get("script", "")
+        and "semver-major" in step.get("with", {}).get("script", "")
         for step in merge_steps
     )

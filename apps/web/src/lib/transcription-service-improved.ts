@@ -1,6 +1,9 @@
+import 'server-only';
+
 import OpenAI from 'openai';
 import { fetchYouTubeMetadata, formatMetadataAsContext } from '@/lib/youtube-metadata';
 import { getGeminiClient, hasGeminiKey } from '@/lib/gemini-client';
+import { GEMINI_SEARCH_MODEL } from '@/lib/gemini-models';
 import { assertPublicHttpUrl } from '@/lib/ssrf-guard';
 import { CircuitBreaker, retryWithBackoff, withTimeout } from '@/lib/error-handling';
 
@@ -158,7 +161,7 @@ export async function fetchTranscript({
 
               const result = await withTimeout(
                 ai.models.generateContent({
-                  model: 'gemini-3.1-pro-preview',
+                  model: GEMINI_SEARCH_MODEL,
                   contents: `You are a video transcription assistant with access to Google Search.
 
 For the following YouTube video, use your googleSearch tool to find the ACTUAL transcript,
@@ -226,17 +229,17 @@ INSTRUCTIONS:
               const openai = getOpenAI();
 
               const response = await withTimeout(
-                openai.beta.messages.create({
+                openai.responses.create({
                   model: 'gpt-4o',
-                  max_tokens: 4096,
-                  messages: [
-                    {
-                      role: 'user',
-                      content: `Extract the complete transcript or full content summary of this video: ${url}\n\nBe comprehensive and include all spoken content, descriptions, and key points.`,
-                    },
-                  ],
-                  betas: ['interop-2024-12-06'],
-                } as any),
+                  instructions: `You are a video content transcription assistant.
+Given a YouTube URL, use web search to find the video's ACTUAL transcript or detailed content.
+Return the full transcript text if available. If not, provide a comprehensive content summary
+based on the video's description, chapters, and any available reviews or summaries.
+Do NOT return instructions on how to find a transcript — return the actual content.
+Be thorough — capture all key points, quotes, technical details, and chapter breakdowns.`,
+                  tools: [{ type: 'web_search' as const }],
+                  input: `Find and return the full transcript or detailed content of this video: ${url}`,
+                }),
                 30_000,
                 'OpenAI transcription timeout'
               );
@@ -249,8 +252,7 @@ INSTRUCTIONS:
         }
       );
 
-      const text =
-        result.content?.[0]?.type === 'text' ? result.content[0].text : '';
+      const text = result.output_text || '';
       if (text && text.length > 100) {
         return {
           success: true,

@@ -198,8 +198,8 @@ class VideoPipelineOrchestrator:
             import sentry_sdk
             conversation_id = f"video-to-software-{video_url.split('=')[-1]}-{datetime.now().strftime('%Y%m%d%H%M%S')}"
             sentry_sdk.ai.set_conversation_id(conversation_id)
-        except Exception:
-            pass  # Sentry not configured or ai not available
+        except Exception as e:
+            logger.debug("Sentry not configured or ai not available: %s", e)
         options = options or {}
         self.results = {}
         execution_mode = options.get("execution_mode", "sequential")
@@ -207,6 +207,15 @@ class VideoPipelineOrchestrator:
         if execution_mode == "dag":
             return await self._run_dag_pipeline(video_url, options)
         return await self._run_sequential_pipeline(video_url, options)
+
+        if os.getenv("SENTRY_DSN"):
+            import sentry_sdk
+            sentry_sdk.add_breadcrumb(
+                category="pipeline",
+                message=f"Starting pipeline {execution_mode}",
+                data={"video_url": video_url},
+                level="info"
+            )
 
     async def _run_sequential_pipeline(self, video_url: str, options: dict) -> dict:
         """Original sequential execution — preserved for backward compatibility."""

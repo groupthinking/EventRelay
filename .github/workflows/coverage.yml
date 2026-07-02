@@ -1,3 +1,5 @@
+name: Coverage
+
 on:
   push:
     branches: [main, develop]
@@ -9,6 +11,7 @@ on:
     paths-ignore:
       - "**/*.md"
       - "**/*.txt"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -30,7 +33,7 @@ jobs:
           fetch-depth: 0 # set to 1 if full history not needed
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: "pip"

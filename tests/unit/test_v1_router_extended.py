@@ -167,9 +167,13 @@ def _make_cache_svc():
 
 def _make_data_svc():
     svc = MagicMock()
-    svc.get_videos_summary.return_value = [
-        {"video_id": "auJzb1D-fag", "title": "Test"}
-    ]
+    _videos_summary = [{"video_id": "auJzb1D-fag", "title": "Test"}]
+    # Honor limit/offset so pagination behaves like the real data service
+    # (the /videos endpoint delegates slicing to get_videos_summary).
+    svc.get_videos_summary.side_effect = (
+        lambda limit=50, offset=0, **_: _videos_summary[offset : offset + limit]
+    )
+    svc.count_videos.return_value = 1
     svc.get_video_detail.return_value = {
         "video_id": "auJzb1D-fag",
         "metadata": {"title": "Test", "transcript_text": "hello world"},

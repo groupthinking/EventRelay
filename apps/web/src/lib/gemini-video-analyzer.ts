@@ -1,3 +1,5 @@
+import 'server-only';
+
 /**
  * Agentic Video Intelligence Engine — Gemini + Google Search grounding.
  *
@@ -5,12 +7,20 @@
  * transcripts, descriptions, chapters, and metadata from YouTube videos.
  * Based on the UVAI PK=998 implementation pattern.
  *
- * Uses gemini-3.1-pro-preview which supports responseSchema + googleSearch
- * together (older models like gemini-2.5-flash do not).
+ * Uses gemini-2.5-flash with responseSchema when a real transcript is available.
+ * When no transcript exists, falls back to googleSearch grounding without schema
+ * (gemini-2.5-flash cannot combine responseSchema + googleSearch).
  */
 
 import { Type } from '@google/genai';
+import { hasAiGatewayKey } from './vercel-ai-gateway';
 import { getGeminiClient } from './gemini-client';
+import { GEMINI_SEARCH_MODEL, GEMINI_STRUCTURED_MODEL } from './gemini-models';
+import {
+  gatewayChat,
+  stripJsonCodeFence,
+  toGatewayModelId,
+} from './vercel-ai-gateway';
 
 export interface VideoAnalysisResult {
   title: string;
@@ -159,14 +169,34 @@ const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 /**
  * Executes a deep agentic analysis of a YouTube video using Gemini + Google Search.
- * Uses gemini-3.1-pro-preview with responseSchema + googleSearch (PK=998 pattern).
- * Performs exponential backoff specifically handling 503 "high traffic" errors.
+ * Performs exponential backoff for 503 overload and 429 quota errors.
  */
+async function analyzeVideoWithGateway(
+  videoUrl: string,
+  systemInstruction: string,
+  model: string,
+): Promise<VideoAnalysisResult> {
+  const result = await gatewayChat({
+    model: toGatewayModelId(model),
+    messages: [
+      { role: 'system', content: systemInstruction },
+      {
+        role: 'user',
+        content:
+          `Perform Agentic Grounding for Video: ${videoUrl}. ` +
+          'Return ONLY a single JSON object matching the required schema. No markdown fences.',
+      },
+    ],
+    max_tokens: 8192,
+    temperature: 0.2,
+    timeoutMs: 55_000,
+  });
+  return JSON.parse(stripJsonCodeFence(result.content)) as VideoAnalysisResult;
+}
+
 export async function analyzeVideoWithGemini(
   videoUrl: string,
 ): Promise<VideoAnalysisResult> {
-  const ai = getGeminiClient();
-
   // 1. Fetch the absolute real transcript FIRST (bypasses Gemini hallucination)
   let actualTranscript = '';
   try {
@@ -182,48 +212,66 @@ export async function analyzeVideoWithGemini(
     console.error(`[Video Analyzer] Error fetching real transcript:`, err);
   }
 
+  const hasTranscript = actualTranscript.trim().length > 50;
   const systemInstruction = buildSystemInstruction(videoUrl, actualTranscript);
+  const model = hasTranscript ? GEMINI_STRUCTURED_MODEL : GEMINI_SEARCH_MODEL;
 
   // 2. Wrap the API call in an exponential backoff retry loop (max 3 retries)
   const MAX_RETRIES = 3;
   let attempt = 0;
-  
+
   while (attempt < MAX_RETRIES) {
     try {
+      if (hasAiGatewayKey()) {
+        return await analyzeVideoWithGateway(videoUrl, systemInstruction, model);
+      }
+
+      const ai = getGeminiClient();
       const response = await ai.models.generateContent({
-        model: 'gemini-3.1-pro-preview',
+        model,
         contents: `Perform Agentic Grounding for Video: ${videoUrl}`,
-        config: {
-          systemInstruction,
-          responseMimeType: 'application/json',
-          responseSchema,
-          tools: [{ googleSearch: {} }],
-        },
+        config: hasTranscript
+          ? {
+              systemInstruction,
+              responseMimeType: 'application/json',
+              responseSchema,
+            }
+          : {
+              systemInstruction,
+              responseMimeType: 'application/json',
+              tools: [{ googleSearch: {} }],
+            },
       });
 
       const resultText = response.text || '{}';
       return JSON.parse(resultText) as VideoAnalysisResult;
-      
-    } catch (error: any) {
+    } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      
-      // Check if this is a 503 Service Unavailable / High Traffic error
-      if (errorMessage.includes('503') || errorMessage.toLowerCase().includes('high traffic') || errorMessage.includes('overloaded')) {
+      const retryable =
+        errorMessage.includes('503') ||
+        errorMessage.toLowerCase().includes('high traffic') ||
+        errorMessage.includes('overloaded') ||
+        errorMessage.includes('429') ||
+        errorMessage.includes('RESOURCE_EXHAUSTED');
+
+      if (retryable) {
         attempt++;
         if (attempt >= MAX_RETRIES) {
-          throw new Error(`Gemini API overloaded after ${MAX_RETRIES} attempts. Please try again later. Original error: ${errorMessage}`);
+          throw new Error(
+            `Gemini API unavailable after ${MAX_RETRIES} attempts. Original error: ${errorMessage}`,
+          );
         }
-        
-        // Exponential backoff: 2s, 4s, 8s
+
         const backoffTime = Math.pow(2, attempt) * 1000;
-        console.warn(`[Video Analyzer] Gemini 503 error. Retrying attempt ${attempt}/${MAX_RETRIES} in ${backoffTime}ms...`);
+        console.warn(
+          `[Video Analyzer] Gemini retryable error (${model}). Attempt ${attempt}/${MAX_RETRIES} in ${backoffTime}ms...`,
+        );
         await delay(backoffTime);
       } else {
-        // Unhandled error (e.g. 400 Bad Request), throw immediately
         throw error;
       }
     }
   }
 
-  throw new Error("Failed to generate content due to an unknown error.");
+  throw new Error('Failed to generate content due to an unknown error.');
 }

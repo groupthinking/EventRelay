@@ -15,15 +15,30 @@ Key Responsibilities:
 
 import logging
 from abc import ABC, abstractmethod
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Callable, Optional
+from urllib.parse import urlparse
 
 from .context_manager import MCPContext, get_context_manager
 from .server_registry import ServerCapability
 
 # Configure logging
 logger = logging.getLogger(__name__)
+
+
+def _summarize_request(request: dict[str, Any]) -> dict[str, Any]:
+    """Build a non-sensitive summary of a request for history/logging.
+
+    The raw request may carry API keys, tokens, prompts, or PII. Persisting it
+    verbatim would leak those into context history (which is serialized and
+    logged), so we record only structural metadata, never values.
+    """
+    try:
+        keys = sorted(str(k) for k in request.keys())
+    except AttributeError:
+        keys = []
+    return {"keys": keys, "size": len(str(request))}
 
 
 class ProtocolType(Enum):
@@ -87,11 +102,12 @@ class MCPProtocolBridge:
     communicating with external AI services through different protocols.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the MCP Protocol Bridge"""
         self.adapters: dict[ProtocolType, ProtocolAdapter] = {}
         self.bridge_status: dict[ProtocolType, BridgeStatus] = {}
         self.request_handlers: dict[str, Callable] = {}
+        self.protocol_stats: dict[ProtocolType, dict[str, int]] = {}
 
         # Register built-in protocol handlers
         self._register_builtin_handlers()
@@ -173,35 +189,51 @@ class MCPProtocolBridge:
                 intent=f"Send {protocol_type.value} protocol request"
             )
 
+        stats = self.protocol_stats.setdefault(
+            protocol_type, {"in_flight": 0, "success": 0, "failure": 0}
+        )
+        # Ensure every counter exists before incrementing so a pre-existing
+        # partial stats dict (from a caller or future refactor) can't raise
+        # KeyError and leave the counters in an inconsistent state.
+        for _counter in ("in_flight", "success", "failure"):
+            stats.setdefault(_counter, 0)
+        stats["in_flight"] += 1
+
         try:
             # Add protocol metadata to context
             context.metadata["protocol"] = protocol_type.value
-            context.metadata["request_timestamp"] = datetime.utcnow().isoformat()
+            context.metadata["request_timestamp"] = datetime.now(timezone.utc).isoformat()
 
             # Send request through adapter
             response = await self.adapters[protocol_type].send_request(request, context)
 
-            # Update context with response
+            # Update context with response. Store only a non-sensitive summary of
+            # the request — the raw dict may contain API keys/tokens/PII.
             context.add_history_entry("protocol_request", {
                 "protocol": protocol_type.value,
-                "request": request,
+                "request_summary": _summarize_request(request),
                 "response": response,
                 "success": True
             })
 
+            stats["success"] += 1
             return response
 
         except Exception as e:
             # Update context with error
             context.add_history_entry("protocol_request", {
                 "protocol": protocol_type.value,
-                "request": request,
+                "request_summary": _summarize_request(request),
                 "error": str(e),
                 "success": False
             })
 
+            stats["failure"] += 1
             logger.error(f"Protocol request failed for {protocol_type.value}: {e}")
             raise
+
+        finally:
+            stats["in_flight"] -= 1
 
     async def route_request(
         self,
@@ -211,6 +243,11 @@ class MCPProtocolBridge:
     ) -> dict[str, Any]:
         """
         Route a request to the best available protocol
+
+        Candidates are filtered by the capabilities listed in
+        request["required_capabilities"] (if present), then the least-loaded
+        protocol is selected, with error rate and preference order as
+        tiebreakers.
 
         Args:
             request: Request data
@@ -238,13 +275,96 @@ class MCPProtocolBridge:
         if not candidate_protocols:
             raise RuntimeError("No matching connected protocol adapters available")
 
-        # For now, use the first available protocol
-        # TODO: Implement intelligent routing based on capabilities, load, etc.
-        selected_protocol = candidate_protocols[0]
+        selected_protocol = await self._select_protocol(candidate_protocols, request)
 
         logger.info(f"Routing request to protocol: {selected_protocol.value}")
 
         return await self.send_protocol_request(selected_protocol, request, context)
+
+    async def _select_protocol(
+        self,
+        candidates: list[ProtocolType],
+        request: dict[str, Any]
+    ) -> ProtocolType:
+        """
+        Select the best protocol from connected candidates
+
+        Filters candidates to those whose adapters support every capability in
+        request["required_capabilities"], then picks the candidate with the
+        fewest in-flight requests, breaking ties by lowest historical error
+        rate and finally by candidate order (preference order).
+
+        Args:
+            candidates: Connected protocols to choose from, in preference order
+            request: Request data, optionally containing "required_capabilities"
+
+        Returns:
+            The selected protocol
+
+        Raises:
+            TypeError: If "required_capabilities" is not a list/tuple/set
+            ValueError: If a capability string is not a known ServerCapability
+            RuntimeError: If no candidate supports the required capabilities
+        """
+        raw_capabilities = request.get("required_capabilities", [])
+        # A bare string is iterable: without this guard the loop below would
+        # iterate over its characters, raising a confusing cascade of
+        # ValueErrors. Reject non-collection inputs up front.
+        if isinstance(raw_capabilities, (str, bytes)) or not isinstance(
+            raw_capabilities, (list, tuple, set, frozenset)
+        ):
+            raise TypeError(
+                "'required_capabilities' must be a list/tuple/set of "
+                f"ServerCapability or str, got {type(raw_capabilities).__name__}"
+            )
+
+        required_capabilities: set[ServerCapability] = set()
+        for capability in raw_capabilities:
+            if isinstance(capability, ServerCapability):
+                required_capabilities.add(capability)
+                continue
+            try:
+                required_capabilities.add(ServerCapability(capability))
+            except ValueError as exc:
+                valid = [c.value for c in ServerCapability]
+                raise ValueError(
+                    f"Unknown capability {capability!r}. Valid values: {valid}"
+                ) from exc
+
+        if required_capabilities:
+            capable_protocols = []
+            for protocol in candidates:
+                try:
+                    capabilities = set(await self.adapters[protocol].get_capabilities())
+                except Exception as e:
+                    logger.warning(f"Could not get capabilities for {protocol.value}: {e}")
+                    continue
+                if required_capabilities <= capabilities:
+                    capable_protocols.append(protocol)
+
+            if not capable_protocols:
+                required_names = sorted(c.value for c in required_capabilities)
+                # Log specifics internally for debugging, but keep the raised
+                # message generic so it doesn't disclose which capabilities the
+                # system knows about if it propagates to an API response.
+                logger.error(
+                    "No connected protocol adapter supports required "
+                    f"capabilities: {required_names}"
+                )
+                raise RuntimeError(
+                    "No connected protocol adapter supports the required capabilities"
+                )
+
+            candidates = capable_protocols
+
+        def routing_score(item: tuple[int, ProtocolType]) -> tuple[int, float, int]:
+            preference_index, protocol = item
+            stats = self.protocol_stats.get(protocol, {})
+            completed = stats.get("success", 0) + stats.get("failure", 0)
+            error_rate = stats.get("failure", 0) / completed if completed else 0.0
+            return (stats.get("in_flight", 0), error_rate, preference_index)
+
+        return min(enumerate(candidates), key=routing_score)[1]
 
     async def health_check_all(self) -> dict[ProtocolType, bool]:
         """
@@ -323,12 +443,21 @@ class OpenAIAdapter(ProtocolAdapter):
     async def initialize(self, config: dict[str, Any]) -> bool:
         """Initialize OpenAI adapter"""
         self.api_key = config.get("api_key")
-        self.base_url = config.get("base_url", "https://api.openai.com/v1")
+        base_url = config.get("base_url", "https://api.openai.com/v1")
         self.model = config.get("model", "gpt-4")
 
         if not self.api_key:
             logger.error("OpenAI API key not provided")
             return False
+
+        # Reject non-HTTPS or hostless base URLs. An attacker-influenced config
+        # could otherwise point requests at internal targets such as the cloud
+        # metadata endpoint (http://169.254.169.254) or file:// URIs (SSRF).
+        parsed = urlparse(base_url)
+        if parsed.scheme != "https" or not parsed.netloc:
+            logger.error("Unsafe OpenAI base_url rejected (must be HTTPS with a host)")
+            return False
+        self.base_url = base_url
 
         return True
 

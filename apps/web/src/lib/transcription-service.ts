@@ -1,6 +1,10 @@
+import 'server-only';
+
 import OpenAI from 'openai';
 import { fetchYouTubeMetadata, formatMetadataAsContext } from '@/lib/youtube-metadata';
 import { getGeminiClient, hasGeminiKey } from '@/lib/gemini-client';
+import { GEMINI_SEARCH_MODEL } from '@/lib/gemini-models';
+import { gatewayChat, hasAiGatewayKey, toGatewayModelId } from '@/lib/vercel-ai-gateway';
 import { assertPublicHttpUrl } from '@/lib/ssrf-guard';
 
 let _openai: OpenAI | null = null;
@@ -12,6 +16,12 @@ function getOpenAI() {
 const rawBackendUrl = process.env.BACKEND_URL || '';
 const BACKEND_URL = rawBackendUrl.startsWith('http') ? rawBackendUrl : 'http://localhost:8000';
 const BACKEND_AVAILABLE = rawBackendUrl.startsWith('http');
+
+// A never-resolving promise used to skip null candidates in Promise.race():
+// when a candidate resolves to null we swap it for this so the race ignores it
+// and waits for a real result from another candidate.
+// eslint-disable-next-line @typescript-eslint/no-empty-function
+const PENDING_FOREVER = new Promise<never>(() => {});
 
 export interface TranscriptionOptions {
   url?: string;
@@ -99,7 +109,7 @@ export async function fetchTranscript({
     }
   }
 
-  // Fetch YouTube metadata (description, chapters, title) — used by strategies below
+  // Fetch YouTube metadata (description, chapters, title) — shared by both fallback strategies
   let metadata: Awaited<ReturnType<typeof fetchYouTubeMetadata>> = null;
   if (url) {
     try {
@@ -109,95 +119,132 @@ export async function fetchTranscript({
     }
   }
 
-  // Strategy 2: Gemini with Google Search grounding (PRIMARY for YouTube fallback)
-  if (url && !audioUrl && hasGeminiKey()) {
-    try {
-      const ai = getGeminiClient();
+  // Strategies 2 & 3: Run Gemini and OpenAI in parallel — first successful result wins.
+  // This eliminates the worst-case sequential 30s+30s wait when both providers
+  // are available, cutting latency to the faster of the two.
+  if (url && !audioUrl) {
+    const candidates: Promise<TranscriptionResult | null>[] = [];
+
+    // Strategy 2: Gemini with Google Search grounding
+    if (hasGeminiKey()) {
       const metadataContext = metadata ? formatMetadataAsContext(metadata) : '';
+      const geminiPrompt = `You are a video transcription assistant.
 
-      const result = await ai.models.generateContent({
-        model: 'gemini-3.1-pro-preview',
-        contents: `You are a video transcription assistant with access to Google Search.
-
-For the following YouTube video, use your googleSearch tool to find the ACTUAL transcript,
-description, and chapter content. The video creator often provides detailed descriptions
-with chapter breakdowns — USE that metadata as high-quality structured content.
+For the following YouTube video, find the ACTUAL transcript, description, and chapter content.
+The video creator often provides detailed descriptions with chapter breakdowns — USE that
+metadata as high-quality structured content.
 
 ${metadataContext ? `KNOWN VIDEO METADATA:\n${metadataContext}\n` : ''}
 Video URL: ${url}
 
 INSTRUCTIONS:
-1. Search for the video's transcript using Google Search.
-2. If a spoken transcript is available, return it verbatim.
-3. If not, reconstruct detailed content from the description, chapters, comments,
-   and related articles found via search.
-4. Be thorough — capture ALL key points, technical details, quotes, and actionable insights.
-5. Include timestamps in [MM:SS] format where possible.
-6. Do NOT return generic advice like "click Show Transcript" — return actual content.`,
-        config: {
-          temperature: 0.2,
-          tools: [{ googleSearch: {} }],
-        },
-      });
-      const text = result.text ?? '';
+1. Return the video's spoken transcript if available.
+2. If not, reconstruct detailed content from description, chapters, and related material.
+3. Be thorough — capture ALL key points, technical details, quotes, and actionable insights.
+4. Include timestamps in [MM:SS] format where possible.
+5. Do NOT return generic advice like "click Show Transcript" — return actual content.`;
 
-      if (text.length > 100) {
-        return {
-          success: true,
-          transcript: text,
-          source: 'gemini-search',
-          wordCount: text.split(/\s+/).length,
-          metadata: metadata
-            ? {
-                title: metadata.title,
-                channel: metadata.channel,
-                chapters: metadata.chapters,
-              }
-            : undefined,
-        };
-      }
-    } catch (e) {
-      console.warn('Gemini Google Search transcript failed:', e);
+      const geminiPromise: Promise<TranscriptionResult | null> = (async () => {
+        try {
+          const text = hasAiGatewayKey()
+            ? (
+                await gatewayChat({
+                  model: toGatewayModelId(GEMINI_SEARCH_MODEL),
+                  messages: [{ role: 'user', content: geminiPrompt }],
+                  max_tokens: 4096,
+                  temperature: 0.2,
+                })
+              ).content
+            : (
+                await getGeminiClient().models.generateContent({
+                  model: GEMINI_SEARCH_MODEL,
+                  contents: geminiPrompt,
+                  config: {
+                    temperature: 0.2,
+                    tools: [{ googleSearch: {} }],
+                  },
+                })
+              ).text ?? '';
+          if (text.length > 100) {
+            return {
+              success: true,
+              transcript: text,
+              source: 'gemini-search',
+              wordCount: text.split(/\s+/).length,
+              metadata: metadata
+                ? {
+                    title: metadata.title,
+                    channel: metadata.channel,
+                    chapters: metadata.chapters,
+                  }
+                : undefined,
+            } satisfies TranscriptionResult;
+          }
+          return null;
+        } catch (e) {
+          console.warn('Gemini Google Search transcript failed:', e);
+          return null;
+        }
+      })();
+      candidates.push(geminiPromise);
     }
-  }
 
-  // Strategy 3: OpenAI Responses API with web_search (fallback)
-  if (url && !audioUrl && process.env.OPENAI_API_KEY) {
-    try {
+    // Strategy 3: OpenAI Responses API with web_search
+    if (process.env.OPENAI_API_KEY) {
       const metadataContext = metadata ? formatMetadataAsContext(metadata) : '';
-
-      const response = await getOpenAI().responses.create({
-        model: 'gpt-4o-mini',
-        instructions: `You are a video content transcription assistant.
+      const openaiPromise: Promise<TranscriptionResult | null> = (async () => {
+        try {
+          const response = await getOpenAI().responses.create({
+            model: 'gpt-4o-mini',
+            instructions: `You are a video content transcription assistant.
 Given a YouTube URL, use web search to find the video's ACTUAL transcript or detailed content.
 Return the full transcript text if available. If not, provide a comprehensive content summary
 based on the video's description, chapters, and any available reviews or summaries.
 Do NOT return instructions on how to find a transcript — return the actual content.
 Be thorough — capture all key points, quotes, technical details, and chapter breakdowns.`,
-        tools: [{ type: 'web_search' as const }],
-        input: `Find and return the full transcript or detailed content of this video: ${url}
+            tools: [{ type: 'web_search' as const }],
+            input: `Find and return the full transcript or detailed content of this video: ${url}
 ${metadataContext ? `\nKNOWN METADATA:\n${metadataContext}` : ''}`,
-      });
+          });
+          const text = response.output_text || '';
+          // Reject results that are just instructions rather than actual content
+          const isGarbage =
+            text.toLowerCase().includes('click show transcript') ||
+            text.toLowerCase().includes('click on the three dots') ||
+            text.toLowerCase().includes('steps to find') ||
+            (text.length < 300 && text.includes('transcript'));
+          if (text.length > 100 && !isGarbage) {
+            return {
+              success: true,
+              transcript: text,
+              source: 'openai-web-search',
+              wordCount: text.split(/\s+/).length,
+            } satisfies TranscriptionResult;
+          }
+          return null;
+        } catch (e) {
+          console.warn('OpenAI web_search transcript failed:', e);
+          return null;
+        }
+      })();
+      candidates.push(openaiPromise);
+    }
 
-      const text = response.output_text || '';
-
-      // Reject results that are just instructions rather than actual content
-      const isGarbage =
-        text.toLowerCase().includes('click show transcript') ||
-        text.toLowerCase().includes('click on the three dots') ||
-        text.toLowerCase().includes('steps to find') ||
-        (text.length < 300 && text.includes('transcript'));
-
-      if (text.length > 100 && !isGarbage) {
-        return {
-          success: true,
-          transcript: text,
-          source: 'openai-web-search',
-          wordCount: text.split(/\s+/).length,
-        };
+    if (candidates.length > 0) {
+      // Run all candidates concurrently and return the first non-null result.
+      // When a candidate resolves to null (no usable transcript found), we
+      // replace it with PENDING_FOREVER so Promise.race() skips it and waits
+      // for a successful result from another candidate.
+      const winner = await Promise.race(
+        candidates.map(p => p.then(r => r ?? PENDING_FOREVER))
+      ).catch(() => null);
+      if (winner) return winner;
+      // If the race produced no winner (all candidates resolved to null),
+      // wait for all results and return the first usable one.
+      const results = await Promise.allSettled(candidates);
+      for (const r of results) {
+        if (r.status === 'fulfilled' && r.value) return r.value;
       }
-    } catch (e) {
-      console.warn('OpenAI web_search transcript failed:', e);
     }
   }
 

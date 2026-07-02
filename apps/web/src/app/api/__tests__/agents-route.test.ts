@@ -1,6 +1,7 @@
-import { describe, it, expect, afterEach, vi } from 'vitest';
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { GET as dispatchGET, POST as dispatchPOST } from '@/app/api/agents/dispatch/route';
 import { GET as statusGET } from '@/app/api/agents/status/route';
+import { saveEntitlement, resetEntitlementStoreForTests } from '@/lib/billing/entitlement-store';
 
 const ORIGINAL_BACKEND = process.env.BACKEND_URL;
 
@@ -17,13 +18,20 @@ function jsonResponse(data: unknown, ok = true, status = 200): Response {
   } as unknown as Response;
 }
 
-function dispatchReq(body: unknown) {
+function dispatchReq(body: unknown, email = 'pro@example.com') {
   return new Request('http://localhost/api/agents/dispatch', {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: {
+      'content-type': 'application/json',
+      cookie: `er_billing_email=${encodeURIComponent(email)}`,
+    },
     body: JSON.stringify(body),
   });
 }
+
+beforeEach(() => {
+  resetEntitlementStoreForTests();
+});
 
 afterEach(() => {
   process.env.BACKEND_URL = ORIGINAL_BACKEND ?? '';
@@ -46,14 +54,36 @@ describe('GET /api/agents/dispatch (availability probe)', () => {
 });
 
 describe('POST /api/agents/dispatch', () => {
+  it('returns 402 when user is not Pro', async () => {
+    setBackend('http://backend');
+    const res = await dispatchPOST(dispatchReq({ events: [] }, 'free@example.com'));
+    expect(res.status).toBe(402);
+    const body = await res.json();
+    expect(body.upgradeRequired).toBe(true);
+  });
+
   it('returns 503 when the backend is not configured', async () => {
     setBackend('');
+    await saveEntitlement({
+      email: 'pro@example.com',
+      plan: 'pro',
+      status: 'active',
+      leadModel: 'grok-4-1-fast',
+      updatedAt: new Date().toISOString(),
+    });
     const res = await dispatchPOST(dispatchReq({ events: [] }));
     expect(res.status).toBe(503);
   });
 
   it('proxies executions from the backend on success', async () => {
     setBackend('http://backend');
+    await saveEntitlement({
+      email: 'pro@example.com',
+      plan: 'pro',
+      status: 'active',
+      leadModel: 'grok-4-1-fast',
+      updatedAt: new Date().toISOString(),
+    });
     const fetchMock = vi.fn().mockResolvedValue(
       jsonResponse({
         dispatch_id: 'dsp_1',
@@ -75,6 +105,13 @@ describe('POST /api/agents/dispatch', () => {
 
   it('returns 502 when the backend errors', async () => {
     setBackend('http://backend');
+    await saveEntitlement({
+      email: 'pro@example.com',
+      plan: 'pro',
+      status: 'active',
+      leadModel: 'grok-4-1-fast',
+      updatedAt: new Date().toISOString(),
+    });
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse('boom', false, 500)));
     const res = await dispatchPOST(dispatchReq({ events: [] }));
     expect(res.status).toBe(502);
