@@ -398,6 +398,7 @@ export default function VideoWorkflowStudio() {
 
   const runWorkflow = async (event?: FormEvent) => {
     event?.preventDefault();
+    if (isWorking) return;
     if (timerRef.current) clearTimeout(timerRef.current);
 
     const currentVideoUrl = videoUrlRef.current || videoUrl;
@@ -548,7 +549,8 @@ export default function VideoWorkflowStudio() {
             type="button"
             onClick={() => runWorkflow()}
             aria-busy={isWorking || undefined}
-            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm shadow-blue-600/20 transition-colors hover:bg-blue-700"
+            disabled={isWorking}
+            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm shadow-blue-600/20 transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
             <Sparkles className="h-4 w-4" aria-hidden="true" />
             Run workflow
@@ -599,7 +601,8 @@ export default function VideoWorkflowStudio() {
               <button
                 type="submit"
                 aria-busy={isWorking || undefined}
-                className="inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-slate-950 px-5 text-sm font-semibold text-white transition-colors hover:bg-slate-800"
+                disabled={isWorking}
+                className="inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-slate-950 px-5 text-sm font-semibold text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <Play className="h-4 w-4" aria-hidden="true" />
                 Run
@@ -717,7 +720,8 @@ export default function VideoWorkflowStudio() {
               <button
                 type="submit"
                 aria-busy={isWorking || undefined}
-                className="inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-blue-600 px-5 text-sm font-semibold text-white shadow-sm shadow-blue-600/20 transition-colors hover:bg-blue-700"
+                disabled={isWorking}
+                className="inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-blue-600 px-5 text-sm font-semibold text-white shadow-sm shadow-blue-600/20 transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Build result
                 <ChevronRight className="h-4 w-4" aria-hidden="true" />
