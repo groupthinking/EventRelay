@@ -70,8 +70,14 @@ function loadYouTubeApi(): Promise<YTNamespace> {
 }
 
 export interface UseYouTubePlayerResult {
-  /** Attach to the element that should be replaced by the player iframe. */
-  containerRef: React.RefObject<HTMLDivElement | null>;
+  /**
+   * Callback ref — attach to the element that should be replaced by the player
+   * iframe. Implemented as a callback (not a RefObject) so the player is torn
+   * down and re-created when the container element itself changes — e.g. when
+   * the stage is remounted into a different subtree while crossing a responsive
+   * breakpoint, which leaves a RefObject-based player bound to a removed node.
+   */
+  containerRef: (node: HTMLDivElement | null) => void;
   currentTime: number;
   duration: number;
   isPlaying: boolean;
@@ -91,7 +97,13 @@ export interface UseYouTubePlayerResult {
  * active transcript line / timeline marker as the video plays.
  */
 export function useYouTubePlayer(videoId: string | null): UseYouTubePlayerResult {
-  const containerRef = useRef<HTMLDivElement | null>(null);
+  // Track the container as state (via a callback ref) rather than a RefObject
+  // so the init effect re-runs when the element is swapped, not only when
+  // `videoId` changes.
+  const [container, setContainer] = useState<HTMLDivElement | null>(null);
+  const containerRef = useCallback((node: HTMLDivElement | null) => {
+    setContainer(node);
+  }, []);
   const playerRef = useRef<YTPlayer | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const readyRef = useRef(false);
@@ -131,7 +143,7 @@ export function useYouTubePlayer(videoId: string | null): UseYouTubePlayerResult
     setDuration(0);
     setIsPlaying(false);
 
-    if (!videoId || !containerRef.current) return;
+    if (!videoId || !container) return;
 
     // If the API never initializes (blocked script, offline, CSP), surface a
     // failure after a grace period so the UI can fall back to a plain embed.
@@ -141,8 +153,8 @@ export function useYouTubePlayer(videoId: string | null): UseYouTubePlayerResult
 
     loadYouTubeApi()
       .then((YT) => {
-        if (cancelled || !containerRef.current) return;
-        playerRef.current = new YT.Player(containerRef.current, {
+        if (cancelled || !container) return;
+        playerRef.current = new YT.Player(container, {
           videoId,
           playerVars: {
             rel: 0,
@@ -200,7 +212,7 @@ export function useYouTubePlayer(videoId: string | null): UseYouTubePlayerResult
       }
       playerRef.current = null;
     };
-  }, [videoId, startPolling, stopPolling]);
+  }, [videoId, container, startPolling, stopPolling]);
 
   const seekTo = useCallback((seconds: number) => {
     const p = playerRef.current;

@@ -70,7 +70,11 @@ export function extractYouTubeId(url: string | null | undefined): string | null 
   return null;
 }
 
-/** Build a standard privacy-friendly embed URL with the JS API enabled. */
+/**
+ * Build a privacy-friendly embed URL with the JS API enabled. Uses the
+ * `youtube-nocookie.com` domain so no tracking cookies are set until the
+ * viewer actually plays the video.
+ */
 export function buildEmbedUrl(videoId: string, origin?: string): string {
   const params = new URLSearchParams({
     enablejsapi: '1',
@@ -79,7 +83,7 @@ export function buildEmbedUrl(videoId: string, origin?: string): string {
     playsinline: '1',
   });
   if (origin) params.set('origin', origin);
-  return `https://www.youtube.com/embed/${videoId}?${params.toString()}`;
+  return `https://www.youtube-nocookie.com/embed/${videoId}?${params.toString()}`;
 }
 
 export interface ParsedTranscript {
