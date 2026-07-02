@@ -1,13 +1,15 @@
 import { cookies } from 'next/headers';
 import { getToken } from 'next-auth/jwt';
 import { normalizeBillingEmail } from './entitlement-store';
+import { verifyBillingEmailCookie } from './billing-cookie';
 
 export const BILLING_EMAIL_COOKIE = 'er_billing_email';
 
 /**
  * Trusted billing identity for entitlement checks.
- * Order: NextAuth session email → httpOnly billing cookie.
- * Never accepts client-supplied body/header email (prevents Pro spoofing).
+ * Order: NextAuth session email → HMAC-signed httpOnly billing cookie.
+ * Never accepts client-supplied body/header email, and never trusts an
+ * unsigned/forged billing cookie (prevents Pro spoofing + Stripe ID disclosure).
  */
 export async function resolveTrustedBillingEmail(
   request: Request,
@@ -28,13 +30,15 @@ export async function resolveTrustedBillingEmail(
   try {
     const jar = await cookies();
     const fromCookie = jar.get(BILLING_EMAIL_COOKIE)?.value;
-    if (fromCookie?.trim()) return normalizeBillingEmail(fromCookie);
+    const verified = verifyBillingEmailCookie(fromCookie);
+    if (verified) return normalizeBillingEmail(verified);
   } catch {
     // cookies() unavailable in some unit tests — allow Cookie header fallback
     const raw = request.headers.get('cookie') ?? '';
     const match = raw.match(new RegExp(`${BILLING_EMAIL_COOKIE}=([^;]+)`));
     if (match?.[1]) {
-      return normalizeBillingEmail(decodeURIComponent(match[1]));
+      const verified = verifyBillingEmailCookie(decodeURIComponent(match[1]));
+      if (verified) return normalizeBillingEmail(verified);
     }
   }
 

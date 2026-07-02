@@ -4,6 +4,7 @@ import { getCheckoutActivation } from '@/lib/billing/checkout-session-store';
 import { activateFromCheckoutSession } from '@/lib/billing/subscription-events';
 import type { EntitlementRecord } from '@/lib/billing/entitlement-store';
 import { BILLING_EMAIL_COOKIE } from '@/lib/billing/billing-context';
+import { signBillingEmail } from '@/lib/billing/billing-cookie';
 import { kaizenObserve } from '@/lib/billing/kaizen-trace';
 
 function entitlementFromLink(link: NonNullable<Awaited<ReturnType<typeof getCheckoutActivation>>>): EntitlementRecord {
@@ -66,13 +67,26 @@ export async function POST(req: NextRequest) {
         leadModel: entitlement.leadModel,
       },
     });
-    res.cookies.set(BILLING_EMAIL_COOKIE, entitlement.email, {
-      httpOnly: true,
-      sameSite: 'lax',
-      path: '/',
-      maxAge: 60 * 60 * 24 * 365,
-      secure: process.env.NODE_ENV === 'production',
-    });
+    // Set an HMAC-signed identity cookie so it cannot be forged client-side.
+    // If no signing secret is configured we intentionally do NOT set a cookie
+    // rather than fall back to a forgeable plaintext value.
+    const signedEmail = signBillingEmail(entitlement.email);
+    if (signedEmail) {
+      res.cookies.set(BILLING_EMAIL_COOKIE, signedEmail, {
+        httpOnly: true,
+        sameSite: 'lax',
+        path: '/',
+        maxAge: 60 * 60 * 24 * 365,
+        secure: process.env.NODE_ENV === 'production',
+      });
+    } else {
+      kaizenObserve(
+        'billing',
+        'activate_cookie_skipped',
+        'No billing cookie secret configured; identity cookie not set',
+        { fix: 'set_BILLING_COOKIE_SECRET_or_STRIPE_WEBHOOK_SECRET' },
+      );
+    }
     return res;
   } catch (err) {
     const message = err instanceof Error ? err.message : 'activation_failed';
