@@ -790,7 +790,7 @@ TASK: Generate {description}
 
         return {"valid": len(errors) == 0, "errors": errors}
 
-    def _write_file(self, path: Path, content: str):
+    def _write_file(self, path: Path, content: str) -> None:
         """Write content to file, validating syntax for known code types."""
         suffix = path.suffix.lower()
 
