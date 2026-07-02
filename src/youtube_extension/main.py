@@ -60,7 +60,13 @@ app = FastAPI(
 # change via the ``CORS_ALLOWED_ORIGINS`` env var (comma-separated). In
 # production, any localhost/loopback origin supplied that way is rejected so a
 # stray env var cannot re-open the loopback bypass this control closes.
-_ENVIRONMENT = os.getenv("ENVIRONMENT", os.getenv("VERCEL_ENV", "development")).strip().lower()
+# Coalesce empty/whitespace values so an explicitly-empty ENVIRONMENT="" in a
+# production deploy cannot silently fall through to the permissive dev origins.
+_ENVIRONMENT = (
+    (os.getenv("ENVIRONMENT") or "").strip()
+    or (os.getenv("VERCEL_ENV") or "").strip()
+    or "development"
+).lower()
 _IS_PRODUCTION = _ENVIRONMENT == "production"
 
 _PRODUCTION_ORIGINS = [
@@ -82,10 +88,23 @@ def _is_loopback_origin(origin: str) -> bool:
     return host in {"localhost", "127.0.0.1", "::1"}
 
 
+# Wildcard/credentialed CORS is invalid and dangerous: the CORS spec forbids
+# `Access-Control-Allow-Origin: *` together with credentials, and Starlette
+# would happily echo a literal "*" or "null" origin, effectively allowing
+# credentialed cross-origin requests from any/opaque origin. Reject these
+# values outright so a stray env var cannot open that hole.
+_FORBIDDEN_ORIGINS = {"*", "null"}
 _EXTRA_ORIGINS = []
 for _origin in os.getenv("CORS_ALLOWED_ORIGINS", "").split(","):
     _origin = _origin.strip()
     if not _origin:
+        continue
+    if _origin in _FORBIDDEN_ORIGINS:
+        logger.warning(
+            "Ignoring forbidden wildcard origin %r from CORS_ALLOWED_ORIGINS "
+            "(incompatible with allow_credentials=True)",
+            _origin,
+        )
         continue
     if _IS_PRODUCTION and _is_loopback_origin(_origin):
         logger.warning(
