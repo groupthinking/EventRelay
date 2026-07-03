@@ -98,7 +98,12 @@ pricing = {
     () => !!document.querySelector('[data-testid="pro-renew-panel"]'),
   ),
 };
-log(`render pricing renew_with_cookie=${pricing.renew} email=${billingEmail}`);
+// `billingEmail` was removed when signing moved to `signedBillingCookie`; a
+// signed BILLING_UI_COOKIE hides the plaintext email, so fall back to the
+// resolved source (explicit email → raw cookie value → default) for the log.
+const billingEmailForLog =
+  process.env.BILLING_UI_EMAIL || rawCookieValue || 'ui-proof@example.com';
+log(`render pricing renew_with_cookie=${pricing.renew} email=${billingEmailForLog}`);
 await page.screenshot({ path: resolve(SCRATCH, 'pricing-renew-ui.png'), fullPage: false });
 
 await page.goto(`${BASE}/dashboard`, { waitUntil: 'networkidle' });

@@ -874,6 +874,14 @@ async def list_videos_v1(
     """Get paginated list of processed videos"""
     try:
         total = data_service.count_videos()
+        if offset >= total:
+            return {
+                "videos": [],
+                "total": total,
+                "limit": limit,
+                "offset": offset,
+                "has_more": False,
+            }
         paginated_videos = data_service.get_videos_summary(limit=limit, offset=offset)
 
         return {
@@ -1243,7 +1251,7 @@ _dispatches: _TTLDict = _TTLDict(ttl=_JOB_TTL, max_size=_JOB_MAX_SIZE)
 def _persist_video_job(job: VideoJobStatusResponse) -> None:
     _video_jobs[job.job_id] = job
     try:
-        get_job_store().save(job.job_id, job.model_dump())
+        get_job_store().save(job.job_id, job.model_dump(mode="json"))
     except Exception as exc:
         logger.warning("Job persist failed for %s: %s", job.job_id, exc)
 

@@ -13,6 +13,7 @@
  */
 
 import type { FunctionDeclaration } from '@google/genai';
+import { backendHeaders } from '@/lib/pipeline-backend';
 
 // ── JSON Schema (shared by OpenAI strict tools + Gemini declarations) ──
 
@@ -209,7 +210,7 @@ const dispatchAgent: ActionTool = {
     try {
       const res = await doFetch(`${ctx.backendBaseUrl}/api/v1/agents/dispatch`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: backendHeaders(),
         body: JSON.stringify({
           job_id: ctx.jobId,
           agent_types: [agentType],
@@ -256,7 +257,7 @@ const addToKnowledgeBase: ActionTool = {
     try {
       const res = await doFetch(`${ctx.backendBaseUrl}/api/v1/knowledge/ingest`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: backendHeaders(),
         body: JSON.stringify({ text: insight, tags: strArray(input, 'tags'), source: ctx.jobId }),
         signal: AbortSignal.timeout(30_000),
       });
