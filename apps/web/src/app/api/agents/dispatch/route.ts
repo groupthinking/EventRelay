@@ -61,7 +61,10 @@ export async function POST(request: Request) {
   try {
     const res = await fetch(`${base}/api/v1/agents/dispatch`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(process.env.EVENTRELAY_API_KEY ? { 'X-API-Key': process.env.EVENTRELAY_API_KEY } : {}),
+      },
       body: JSON.stringify({
         job_id: body.job_id,
         events: body.events ?? [],
