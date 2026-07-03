@@ -29,6 +29,7 @@ try:
         CouldNotRetrieveTranscript,
         NoTranscriptFound,
     )
+    from youtube_transcript_api.proxies import GenericProxyConfig
     YOUTUBE_DEPS_AVAILABLE = True
 except ImportError as e:
     YOUTUBE_DEPS_AVAILABLE = False
@@ -49,6 +50,14 @@ def _get_webshare_proxy_url() -> str | None:
         )
         return None
     return url
+
+
+def _get_transcript_proxy_config() -> GenericProxyConfig | None:
+    """Build a youtube-transcript-api (>=1.0) proxy config, or None for direct."""
+    url = _get_webshare_proxy_url()
+    if not url or not YOUTUBE_DEPS_AVAILABLE:
+        return None
+    return GenericProxyConfig(http_url=url, https_url=url)
 
 
 def _redact_proxy_credentials(text: str) -> str:
@@ -345,11 +354,12 @@ class YouTubeAPIProxy:
         async def _transcript_operation():
             transcript_data = []
             proxy_url = _get_webshare_proxy_url()
-            proxies = {"http": proxy_url, "https": proxy_url} if proxy_url else None
+            proxy_config = _get_transcript_proxy_config()
 
-            # Method 1: Direct transcript API
+            # Method 1: Direct transcript API (youtube-transcript-api >=1.0)
             try:
-                transcript = YouTubeTranscriptApi.get_transcript(video_id, proxies=proxies)
+                yt_api = YouTubeTranscriptApi(proxy_config=proxy_config)
+                transcript = yt_api.fetch(video_id).to_raw_data()
                 if transcript:
                     logger.info(f"✅ Direct transcript extraction: {len(transcript)} segments")
                     return transcript
@@ -358,9 +368,10 @@ class YouTubeAPIProxy:
 
             # Method 2: Alternative language codes
             try:
-                transcript_list = YouTubeTranscriptApi.list_transcripts(video_id, proxies=proxies)
+                yt_api = YouTubeTranscriptApi(proxy_config=proxy_config)
+                transcript_list = yt_api.list(video_id)
                 for transcript_item in transcript_list:
-                    transcript = transcript_item.fetch()
+                    transcript = transcript_item.fetch().to_raw_data()
                     if transcript:
                         logger.info(f"✅ Alternative language transcript: {len(transcript)} segments")
                         return transcript
