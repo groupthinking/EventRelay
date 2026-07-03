@@ -1,11 +1,17 @@
-cd ~/dev/EventRelay
-git checkout main && git pull
-cat > .github/workflows/anthropic-wif-test.yml <<'EOF'
 name: anthropic-wif-test
-on: push
+
+# This auth smoke-test exercises GitHub OIDC -> Anthropic WIF federation.
+# Scoped to main + manual dispatch so it does not run on (and redden) every
+# feature/dependabot branch. Change to `on: push` for all-branch coverage.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
 permissions:
   id-token: write
   contents: read
+
 jobs:
   call-claude:
     runs-on: ubuntu-latest
@@ -31,7 +37,3 @@ jobs:
             "workspace_id": "wrkspc_01ADvvQXic1etGMwF8SSqRm7"
           }
           JSON
-EOF
-git add .github/workflows/anthropic-wif-test.yml
-git commit -m "Add valid Anthropic WIF test workflow"
-git push origin main
