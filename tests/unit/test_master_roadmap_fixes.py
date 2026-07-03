@@ -39,6 +39,100 @@ def test_audit_store_append_and_read(tmp_path):
     assert entries[0]["agent_id"] == "video-ingest"
 
 
+def test_audit_store_records_token_counts(tmp_path):
+    """append() should persist input_tokens and output_tokens when supplied."""
+    store = PipelineAuditStore(tmp_path)
+    store.append(
+        "run_token_test",
+        agent_id="gemini-agent",
+        action="analyze",
+        success=True,
+        duration_ms=150.0,
+        input_tokens=500,
+        output_tokens=250,
+    )
+    entries = store.get_run("run_token_test")
+    assert len(entries) == 1
+    assert entries[0]["input_tokens"] == 500
+    assert entries[0]["output_tokens"] == 250
+
+
+def test_audit_store_token_counts_default_to_none(tmp_path):
+    """Token counts should be None when not supplied (backward-compatible)."""
+    store = PipelineAuditStore(tmp_path)
+    store.append(
+        "run_no_tokens",
+        agent_id="video-ingest",
+        action="ingest",
+        success=True,
+        duration_ms=20.0,
+    )
+    entries = store.get_run("run_no_tokens")
+    assert entries[0]["input_tokens"] is None
+    assert entries[0]["output_tokens"] is None
+
+
+def test_job_store_expire_before_removes_old_jobs(tmp_path):
+    """expire_before() should delete jobs whose created_at is before the cutoff."""
+    from datetime import datetime, timedelta, timezone
+
+    store = PipelineJobStore(tmp_path)
+    old_ts = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
+    new_ts = datetime.now(timezone.utc).isoformat()
+    store.save("old_job", {"job_id": "old_job", "status": "complete", "created_at": old_ts})
+    store.save("new_job", {"job_id": "new_job", "status": "pending", "created_at": new_ts})
+
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=1)
+    removed = store.expire_before(cutoff)
+
+    assert removed == 1
+    assert store.load("old_job") is None
+    assert store.load("new_job") is not None
+
+
+def test_job_store_expire_before_skips_missing_created_at(tmp_path):
+    """Jobs without a created_at field are left untouched by expire_before()."""
+    from datetime import datetime, timezone
+
+    store = PipelineJobStore(tmp_path)
+    store.save("no_ts_job", {"job_id": "no_ts_job", "status": "pending"})
+
+    removed = store.expire_before(datetime.now(timezone.utc))
+
+    assert removed == 0
+    assert store.load("no_ts_job") is not None
+
+
+def test_persisted_video_job_is_expirable(tmp_path):
+    """A real VideoJobStatusResponse persisted like production must be expirable.
+
+    Regression for the CodeRabbit/Copilot finding on #479: expire_before() was a
+    no-op because VideoJobStatusResponse carried no created_at, so its persisted
+    model_dump() never matched. The model now supplies a UTC created_at at
+    construction, and persistence uses model_dump(mode="json") so it serialises to
+    an ISO string that expire_before() can parse.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    from youtube_extension.backend.api.v1.models import (
+        JobStatus,
+        VideoJobStatusResponse,
+    )
+
+    job = VideoJobStatusResponse(job_id="real_job", status=JobStatus.pending)
+    assert job.created_at.tzinfo is not None  # tz-aware UTC by default
+
+    payload = job.model_dump(mode="json")
+    assert isinstance(payload["created_at"], str)  # JSON-serialisable
+
+    store = PipelineJobStore(tmp_path)
+    store.save("real_job", payload)
+
+    cutoff = datetime.now(timezone.utc) + timedelta(hours=1)
+    assert store.expire_before(cutoff) == 1
+    assert store.load("real_job") is None
+
+
 def test_vera_pre_check_gateway_exception_does_not_crash():
     from agents.pipeline_orchestrator import VideoPipelineOrchestrator
 
