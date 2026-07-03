@@ -1,6 +1,12 @@
 import 'server-only';
 
 import { getGeminiClient } from './gemini-client';
+import {
+  gatewayEmbed,
+  gatewayEmbedOne,
+  hasAiGatewayKey,
+  VERCEL_AI_GATEWAY_EMBEDDING_MODEL,
+} from './vercel-ai-gateway';
 
 export interface TranscriptSegment {
   start: number;
@@ -8,8 +14,14 @@ export interface TranscriptSegment {
   text: string;
 }
 
-// Model to use for embeddings
-const EMBEDDING_MODEL = 'text-embedding-004';
+// Direct Gemini API embedding model (bypassed when AI Gateway key is set)
+const DIRECT_EMBEDDING_MODEL = 'text-embedding-004';
+
+export function resolveEmbeddingModel(): string {
+  return hasAiGatewayKey()
+    ? VERCEL_AI_GATEWAY_EMBEDDING_MODEL
+    : DIRECT_EMBEDDING_MODEL;
+}
 
 /**
  * Conceptually chunks the transcript into larger blocks (approx 30-60 seconds)
@@ -58,12 +70,16 @@ export function chunkTranscript(segments: TranscriptSegment[], targetDurationSec
  * Generates an embedding for a single text string.
  */
 export async function generateEmbedding(text: string): Promise<number[]> {
+  if (hasAiGatewayKey()) {
+    return gatewayEmbedOne(text, resolveEmbeddingModel());
+  }
+
   const ai = getGeminiClient();
   const response = await ai.models.embedContent({
-    model: EMBEDDING_MODEL,
+    model: DIRECT_EMBEDDING_MODEL,
     contents: text,
   });
-  
+
   if (!response.embeddings || response.embeddings.length === 0 || !response.embeddings[0].values) {
     throw new Error('Failed to generate embedding: Empty response from Gemini API.');
   }
@@ -76,15 +92,24 @@ export async function generateEmbedding(text: string): Promise<number[]> {
  * Note: Uses sequential requests or batched promises.
  */
 export async function generateEmbeddingsForChunks(chunks: TranscriptSegment[]): Promise<Array<TranscriptSegment & { embedding: number[] }>> {
+  const texts = chunks.map((c) => c.text);
+
+  if (hasAiGatewayKey()) {
+    const { embeddings } = await gatewayEmbed({
+      model: resolveEmbeddingModel(),
+      input: texts,
+    });
+    return chunks.map((chunk, index) => ({
+      ...chunk,
+      embedding: embeddings[index],
+    }));
+  }
+
   const ai = getGeminiClient();
-  
-  // Create an array of requests for batch embedding
-  // The SDK allows passing an array of strings directly to generate batch embeddings
-  const texts = chunks.map(c => c.text);
-  
+
   try {
     const response = await ai.models.embedContent({
-      model: EMBEDDING_MODEL,
+      model: DIRECT_EMBEDDING_MODEL,
       contents: texts,
     });
     

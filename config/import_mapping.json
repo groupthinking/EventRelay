@@ -245,7 +245,6 @@
     "youtube_innovation_mcp_server": "youtube_innovation_mcp_server.py",
     "production_deployment": "production_deployment.py",
     "scripts.script": "scripts/script.py",
-    "agents.orchestrator_minimal": "agents/orchestrator_minimal.py",
     "factory.tasks": "factory/tasks.py",
     "scripts.check_credentials": "scripts/check_credentials.py",
     "agents.__init__": "agents/__init__.py",

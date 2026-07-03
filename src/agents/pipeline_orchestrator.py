@@ -198,8 +198,8 @@ class VideoPipelineOrchestrator:
             import sentry_sdk
             conversation_id = f"video-to-software-{video_url.split('=')[-1]}-{datetime.now().strftime('%Y%m%d%H%M%S')}"
             sentry_sdk.ai.set_conversation_id(conversation_id)
-        except Exception:
-            pass  # Sentry not configured or ai not available
+        except Exception as e:
+            logger.debug("Sentry not configured or ai not available: %s", e)
         options = options or {}
         self.results = {}
         execution_mode = options.get("execution_mode", "sequential")

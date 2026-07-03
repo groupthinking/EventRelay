@@ -23,8 +23,6 @@ workflow; this README is the index.
 | Close stale issues | `stale.yml` | daily (00:00 UTC) | Mark and close stale issues and PRs |
 | Branch Cleanup | `branch-cleanup.yml` | manual | Gated archive-then-delete of branches (dry-run by default) |
 | E2E Tests | `e2e-tests.yml` | push / PR to `main` | Run Vitest E2E pipeline tests and report results on the PR |
-| Verify LiteRT-LM MCP | `verify-litert-mcp.yml` | push / PR touching `mcp-servers/litert-mcp/**` | Smoke-test the LiteRT MCP server (initialize, tools/list) |
-| Vision-Reasoning Stack | `vision-reasoning.yml` | push / PR touching `mcp-servers/shared-state/**` | Lint, type-check, and test the shared-state vision/reasoning modules |
 | Autonomous Video Processing | `autonomous-video-processing.yml` | manual | Batch-process YouTube videos by category (matrix) |
 | Real Video Processing (Cloud) | `real-processing.yml` | manual | Process a single video: transcript and/or AI analysis |
 | Deploy to Google Cloud Run | `deploy-cloud-run.yml` | manual | Build, push, and deploy the API image to Cloud Run |
@@ -96,6 +94,9 @@ A full audit of this directory was performed (see
   `deploy-cloud-run.yml`.
 - **Removed** `mcp-optimization.yml` — targeted the non-existent
   `mcp-servers/mcp-profiling/` directory, so every run failed.
+- **Removed** `verify-litert-mcp.yml` and `vision-reasoning.yml` — both only
+  exercised the `mcp-servers/` tree, which was deleted in the dead-code cleanup;
+  with the target modules gone every run failed, so the workflows were removed.
 - **Renamed** `.yaml` → `stale.yml` — the file had no basename.
 - **Fixed** `codeql-analysis.yml` — removed the fragile OWASP dependency-check
   job (`@main`, dead paths) and switched the Node cache from a dead

@@ -30,7 +30,7 @@ const INTERNAL_TOKEN = process.env.INTERNAL_REQUEST_TOKEN;
 const AUTH_SECRET = process.env.NEXTAUTH_SECRET;
 const AUTH_ENABLED = !!AUTH_SECRET;
 // API paths that stay public even when auth is enabled (auth flow + health).
-const PUBLIC_API_PREFIXES = ['/api/auth', '/api/health'];
+const PUBLIC_API_PREFIXES = ['/api/auth', '/api/health', '/api/billing'];
 
 type RateLimitResult = {
   allowed: boolean;

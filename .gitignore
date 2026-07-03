@@ -192,9 +192,14 @@ apps/web/package-lock.json
 # --- Regenerable build/cache artifacts (never commit; recreated by tooling) ---
 # Firebase Data Connect local PGlite emulator data (firebase.json -> dataDir)
 dataconnect/.dataconnect/
+**/.dataconnect/pgliteData/
 # TypeScript incremental build cache
 *.tsbuildinfo
 # Root coverage report (per-run output; coverage/ dir already ignored above)
 coverage.json
 # Stale full-tree snapshot
 full-tree.txt
+# Saved Google AI Studio webpage dump (vendored HTML/JS/CSS, ~23M)
+docs/gemini_reference/
+# Runtime pipeline audit logs (written by pipeline_audit_store at runtime)
+data/audit/*.jsonl

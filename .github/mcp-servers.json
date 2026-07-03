@@ -24,15 +24,6 @@
         "X-Goog-User-Project": "uvai-730bb"
       }
     },
-    "shared-state": {
-      "command": "python",
-      "args": [
-        "${workspaceFolder}/mcp-servers/shared-state/state_coordinator.py"
-      ],
-      "env": {
-        "PYTHONPATH": "${workspaceFolder}/mcp-servers/shared-state:${workspaceFolder}"
-      }
-    },
     "git-workflow": {
       "command": "node",
       "args": [
