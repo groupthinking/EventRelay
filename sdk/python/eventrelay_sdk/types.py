@@ -67,6 +67,7 @@ class VideoJobStatusResponse(BaseModel):
     transcript: Optional[str] = None
     metadata: Optional[dict[str, Any]] = None
     error: Optional[str] = None
+    error_reason: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------

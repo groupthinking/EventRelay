@@ -26,6 +26,8 @@ class PipelineAuditStore:
         success: bool,
         duration_ms: float,
         details: Optional[dict[str, Any]] = None,
+        input_tokens: Optional[int] = None,
+        output_tokens: Optional[int] = None,
     ) -> None:
         entry = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -35,6 +37,8 @@ class PipelineAuditStore:
             "success": success,
             "duration_ms": duration_ms,
             "details": details or {},
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
         }
         self._buffer.setdefault(run_id, []).append(entry)
         path = self.root / f"{run_id}.jsonl"
