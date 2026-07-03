@@ -630,6 +630,18 @@ export async function POST(request: Request) {
                 console.warn(`[CloudEvent] Background task failed (non-fatal):`, err);
               }),
             );
+
+            // Durable cross-video search index (Upstash) — unlike the local-disk
+            // stores above, this persists on Vercel's read-only filesystem.
+            // Skips honestly when UPSTASH_SEARCH_* env is absent.
+            waitUntil(
+              (async () => {
+                const { indexVideoAnalysis } = await import('@/lib/search-indexer');
+                await indexVideoAnalysis(videoUrl, analysis);
+              })().catch((err) => {
+                console.warn(`[SearchIndex] Background task failed (non-fatal):`, err);
+              }),
+            );
           };
 
           if (useBackend && backendUrl) {

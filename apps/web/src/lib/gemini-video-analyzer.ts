@@ -168,6 +168,52 @@ ${actualTranscript ? actualTranscript : "(No transcript available, you MUST use 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 /**
+ * Raised when the model's response cannot be parsed as the analysis JSON.
+ * Distinct from API errors so the retry loop can treat malformed output as
+ * retryable — production logs show Gemini intermittently emitting invalid or
+ * truncated JSON that a fresh attempt resolves.
+ */
+export class AnalysisParseError extends Error {
+  constructor(
+    message: string,
+    readonly rawSnippet: string,
+  ) {
+    super(message);
+    this.name = 'AnalysisParseError';
+  }
+}
+
+/**
+ * Parses a model response into a VideoAnalysisResult. Strips markdown fences,
+ * and on failure salvages the outermost {...} span (models occasionally wrap
+ * the object in prose or emit trailing garbage). Throws AnalysisParseError
+ * when no valid JSON object can be recovered.
+ */
+export function parseAnalysisResult(raw: string): VideoAnalysisResult {
+  const cleaned = stripJsonCodeFence(raw);
+  try {
+    return JSON.parse(cleaned) as VideoAnalysisResult;
+  } catch (parseError) {
+    const start = cleaned.indexOf('{');
+    const end = cleaned.lastIndexOf('}');
+    if (start !== -1 && end > start) {
+      try {
+        const salvaged = JSON.parse(cleaned.slice(start, end + 1)) as VideoAnalysisResult;
+        console.warn('[Video Analyzer] Salvaged analysis JSON from a noisy model response.');
+        return salvaged;
+      } catch {
+        // fall through to the typed error below
+      }
+    }
+    const message = parseError instanceof Error ? parseError.message : String(parseError);
+    throw new AnalysisParseError(
+      `Model returned unparseable analysis JSON: ${message}`,
+      cleaned.slice(0, 200),
+    );
+  }
+}
+
+/**
  * Executes a deep agentic analysis of a YouTube video using Gemini + Google Search.
  * Performs exponential backoff for 503 overload and 429 quota errors.
  */
@@ -187,11 +233,13 @@ async function analyzeVideoWithGateway(
           'Return ONLY a single JSON object matching the required schema. No markdown fences.',
       },
     ],
-    max_tokens: 8192,
+    // 16k cap: production logs showed 8k truncating long analyses mid-string,
+    // which surfaced as "Unterminated string in JSON" parse failures.
+    max_tokens: 16_384,
     temperature: 0.2,
     timeoutMs: 55_000,
   });
-  return JSON.parse(stripJsonCodeFence(result.content)) as VideoAnalysisResult;
+  return parseAnalysisResult(result.content);
 }
 
 export async function analyzeVideoWithGemini(
@@ -244,10 +292,11 @@ export async function analyzeVideoWithGemini(
       });
 
       const resultText = response.text || '{}';
-      return JSON.parse(resultText) as VideoAnalysisResult;
+      return parseAnalysisResult(resultText);
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       const retryable =
+        error instanceof AnalysisParseError ||
         errorMessage.includes('503') ||
         errorMessage.toLowerCase().includes('high traffic') ||
         errorMessage.includes('overloaded') ||
@@ -258,7 +307,7 @@ export async function analyzeVideoWithGemini(
         attempt++;
         if (attempt >= MAX_RETRIES) {
           throw new Error(
-            `Gemini API unavailable after ${MAX_RETRIES} attempts. Original error: ${errorMessage}`,
+            `Gemini analysis failed after ${MAX_RETRIES} attempts. Original error: ${errorMessage}`,
           );
         }
 
