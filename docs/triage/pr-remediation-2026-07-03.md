@@ -75,3 +75,46 @@ active deliverable (video-canvas dashboard, #459) is merged and aligned with int
 remaining PR requires the maintainer: a rebase authorized on its own branch, an `automerge`
 label / merge sign-off on protected `main`, or a close decision (#433, #461). The loop
 terminates here rather than re-polling owner-gated state.
+
+---
+
+## Addendum — later run 2026-07-03 (`main` @ `03f5aec`)
+
+Re-ran the entry scan on a fresh session. **Delta since the run above:**
+
+- **Prior close recommendations landed.** #430, #439, #461 are now **closed** — the queue no
+  longer carries them. Good.
+- **Four new PRs opened today** (#471, #472, #474, #476) postdate the scan above and are added
+  below.
+- **Terminal answer is unchanged: No.** 15 open PRs, **0 auto-mergeable**. 5 `DEFERRED(draft)`
+  (#412, #415, #434, #442, #456), **10 `HALTED`** (all owner-gated). Nothing could be driven to
+  `MERGED` autonomously and safely; no branch outside this session's push scope was rebased, and
+  no PR was closed without a human decision.
+
+### New PRs — disposition
+
+| PR | Author | Type | `mergeable_state` | Terminal | Note / staged next command |
+|----|--------|------|-------------------|----------|----------------------------|
+| #471 | groupthinking | Firebase AI Logic docs | `unstable`, **inverted** | HALTED(inverted_base) | **head=`main`, base=`v0/ultrathinking-588aba59`** → 2877 files / 169 commits of reverse-merge noise. Not a forward PR. **Recommend close.** |
+| #472 | groupthinking (Claude) | Mermaid arch diagram | `blocked` | HALTED(awaiting_merge_approval) | Clean single-file docs, no conflict — only the protected-`main` gate. Closest-to-ready of the queue; needs human merge sign-off (or `automerge` label). |
+| #474 | groupthinking | docstrings / arch overview | `dirty` | HALTED(merge_conflict) | `git checkout agent-lock-architecture-overview && git rebase origin/main` → resolve → `git push --force-with-lease` |
+| #476 | groupthinking | GCP secrets / X-API-Key | `unstable`, **inverted** | HALTED(inverted_base) | **head=`main`, base=`v0/ultrathinking-789d2ffd`** — same reverse-merge shape as #471. Its substantive `X-API-Key` work already appears on `main` via #470/#473. **Recommend close.** |
+
+### CI signal clarification
+
+The near-universal red on the queue is the **non-required `Vercel` preview deploy** context
+(the repo-wide `react`/`react-dom` v19 mismatch whose fix sits unmerged in draft **#412**), not
+per-PR test failures. The required `Vercel Deployments – garv_projects` context is green
+everywhere ("No required projects to validate"). **#436** even shows the Vercel deploy fully
+green — it is blocked *only* by its merge conflict + the human gate. Highest-leverage single
+action for the whole queue: get #412 ready and merged so preview CI stops reddening every branch.
+
+### Owner actions to unblock (nothing here is autonomously safe)
+
+1. **Close the two inverted/junk PRs:** #471, #476 (and #433, still corrupted).
+2. **Merge the one clean, ready PR** behind the protected gate: #472 (docs-only) — or label it
+   `automerge`.
+3. **Land the react19 build fix** (#412, draft) to un-red preview CI across the queue.
+4. **Authorize rebases** on the conflicted branches (#327, #328, #414, #436, #474; #365 is on a
+   fork) — each needs a `rebase origin/main` + force-push to *its own* branch, outside this
+   session's push scope.
