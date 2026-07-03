@@ -52,9 +52,14 @@ def _get_webshare_proxy_url() -> str | None:
     return url
 
 
-def _get_transcript_proxy_config() -> GenericProxyConfig | None:
-    """Build a youtube-transcript-api (>=1.0) proxy config, or None for direct."""
-    url = _get_webshare_proxy_url()
+def _get_transcript_proxy_config(url: str | None = None) -> GenericProxyConfig | None:
+    """Build a youtube-transcript-api (>=1.0) proxy config, or None for direct.
+
+    Accepts an already-resolved ``url`` to avoid re-reading the environment when
+    the caller has one; falls back to resolving it when called with no argument.
+    """
+    if url is None:
+        url = _get_webshare_proxy_url()
     if not url or not YOUTUBE_DEPS_AVAILABLE:
         return None
     return GenericProxyConfig(http_url=url, https_url=url)
@@ -354,7 +359,7 @@ class YouTubeAPIProxy:
         async def _transcript_operation():
             transcript_data = []
             proxy_url = _get_webshare_proxy_url()
-            proxy_config = _get_transcript_proxy_config()
+            proxy_config = _get_transcript_proxy_config(proxy_url)
 
             # Method 1: Direct transcript API (youtube-transcript-api >=1.0)
             try:
