@@ -121,7 +121,11 @@ await page.screenshot({ path: resolve(SCRATCH, 'dashboard-billing-ui.png'), full
 
 await browser.close();
 
-const summary = { pricing, dashboard, screenshots: ['pricing-billing-ui.png', 'dashboard-billing-ui.png'] };
+const summary = {
+  pricing,
+  dashboard,
+  screenshots: ['pricing-billing-ui.png', 'pricing-renew-ui.png', 'dashboard-billing-ui.png'],
+};
 writeFileSync(resolve(SCRATCH, 'ui-render-proof.json'), JSON.stringify(summary, null, 2));
 
 if (!pricing.checkout || !pricing.turnstile || !pricing.renew) {
