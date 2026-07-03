@@ -46,17 +46,17 @@ describe('formatSeconds', () => {
 
 describe('extractYouTubeId', () => {
   it('handles watch URLs', () => {
-    expect(extractYouTubeId('https://www.youtube.com/watch?v=dQw4w9WgXcQ')).toBe('dQw4w9WgXcQ');
-    expect(extractYouTubeId('https://youtube.com/watch?list=x&v=dQw4w9WgXcQ')).toBe('dQw4w9WgXcQ');
+    expect(extractYouTubeId('https://www.youtube.com/watch?v=auJzb1D-fag')).toBe('auJzb1D-fag');
+    expect(extractYouTubeId('https://youtube.com/watch?list=x&v=auJzb1D-fag')).toBe('auJzb1D-fag');
   });
   it('handles short, embed, shorts and live URLs', () => {
-    expect(extractYouTubeId('https://youtu.be/dQw4w9WgXcQ')).toBe('dQw4w9WgXcQ');
-    expect(extractYouTubeId('https://www.youtube.com/embed/dQw4w9WgXcQ')).toBe('dQw4w9WgXcQ');
-    expect(extractYouTubeId('https://www.youtube.com/shorts/dQw4w9WgXcQ')).toBe('dQw4w9WgXcQ');
-    expect(extractYouTubeId('https://www.youtube.com/live/dQw4w9WgXcQ')).toBe('dQw4w9WgXcQ');
+    expect(extractYouTubeId('https://youtu.be/auJzb1D-fag')).toBe('auJzb1D-fag');
+    expect(extractYouTubeId('https://www.youtube.com/embed/auJzb1D-fag')).toBe('auJzb1D-fag');
+    expect(extractYouTubeId('https://www.youtube.com/shorts/auJzb1D-fag')).toBe('auJzb1D-fag');
+    expect(extractYouTubeId('https://www.youtube.com/live/auJzb1D-fag')).toBe('auJzb1D-fag');
   });
   it('accepts a raw id and rejects junk', () => {
-    expect(extractYouTubeId('dQw4w9WgXcQ')).toBe('dQw4w9WgXcQ');
+    expect(extractYouTubeId('auJzb1D-fag')).toBe('auJzb1D-fag');
     expect(extractYouTubeId('not a url')).toBeNull();
     expect(extractYouTubeId('')).toBeNull();
   });

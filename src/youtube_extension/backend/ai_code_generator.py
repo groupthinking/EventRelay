@@ -7,6 +7,7 @@ Uses Gemini 3 Pro Preview to generate complete full-stack applications
 based on video analysis. Produces monetizable products, not templates.
 """
 
+import ast
 import json
 import logging
 import os
@@ -704,10 +705,114 @@ TASK: Generate {description}
 
         return package
 
-    def _write_file(self, path: Path, content: str):
-        """Write content to file"""
+    @staticmethod
+    def validate_python_syntax(code: str) -> dict[str, Any]:
+        """Validate Python code syntax using AST parsing.
+
+        Returns a dict with:
+          - ``valid``: bool indicating whether the code parses without errors.
+          - ``errors``: list of error dicts (keys: ``message``, ``line``, ``offset``).
+        """
+        try:
+            ast.parse(code)
+            return {"valid": True, "errors": []}
+        except SyntaxError as exc:
+            return {
+                "valid": False,
+                "errors": [
+                    {
+                        "message": exc.msg,
+                        "line": exc.lineno,
+                        "offset": exc.offset,
+                    }
+                ],
+            }
+        except ValueError as exc:
+            return {
+                "valid": False,
+                "errors": [{"message": str(exc), "line": None, "offset": None}],
+            }
+
+    @staticmethod
+    def validate_typescript_syntax(code: str) -> dict[str, Any]:
+        """Basic syntax validation for TypeScript/JavaScript code.
+
+        Checks that the code is non-empty and has balanced curly braces.
+        Note: brace counting is a heuristic — string literals containing
+        ``{`` or ``}`` may cause false positives, which are logged as
+        warnings rather than hard errors.
+
+        Returns a dict with:
+          - ``valid``: bool.
+          - ``errors``: list of error dicts (keys: ``message``, ``line``, ``offset``).
+        """
+        errors: list[dict[str, Any]] = []
+
+        stripped = (code or "").strip()
+        if not stripped:
+            errors.append({"message": "Empty code", "line": None, "offset": None})
+            return {"valid": False, "errors": errors}
+
+        if stripped.startswith("// Error") or stripped.startswith("/* Error"):
+            errors.append(
+                {
+                    "message": "Code generation error marker detected",
+                    "line": 1,
+                    "offset": None,
+                }
+            )
+            return {"valid": False, "errors": errors}
+
+        # Heuristic brace balance check
+        depth = 0
+        for ch in stripped:
+            if ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth < 0:
+                    errors.append(
+                        {
+                            "message": "Unexpected closing brace '}'",
+                            "line": None,
+                            "offset": None,
+                        }
+                    )
+                    break
+        if depth > 0:
+            errors.append(
+                {
+                    "message": f"Unbalanced braces: {depth} unclosed brace(s)",
+                    "line": None,
+                    "offset": None,
+                }
+            )
+
+        return {"valid": len(errors) == 0, "errors": errors}
+
+    def _write_file(self, path: Path, content: str) -> None:
+        """Write content to file, validating syntax for known code types."""
+        suffix = path.suffix.lower()
+
+        if suffix == ".py":
+            validation = self.validate_python_syntax(content)
+            if not validation["valid"]:
+                logger.warning(
+                    "Python file '%s' failed AST validation: %s",
+                    path.name,
+                    validation["errors"],
+                )
+        elif suffix in (".ts", ".tsx", ".js", ".jsx"):
+            validation = self.validate_typescript_syntax(content)
+            if not validation["valid"]:
+                logger.warning(
+                    "TypeScript/JavaScript file '%s' failed syntax check: %s",
+                    path.name,
+                    validation["errors"],
+                )
+
         path.parent.mkdir(parents=True, exist_ok=True)
-        with open(path, 'w') as f:
+        with open(path, "w", encoding="utf-8") as f:
             f.write(content)
 
     def _tailwind_config(self) -> str:

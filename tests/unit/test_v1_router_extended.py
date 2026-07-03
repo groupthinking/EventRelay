@@ -39,6 +39,8 @@ _STUBS = [
     "youtube_extension.services.ai.gemini_service",
     "youtube_extension.services.cloud",
     "youtube_extension.services.cloud.cloud_tasks_queue",
+    "youtube_extension.services.pipeline_audit_store",
+    "youtube_extension.services.pipeline_job_store",
     "youtube_extension.services.workflows",
     "youtube_extension.services.workflows.transcript_action_workflow",
     "youtube_extension.integration",

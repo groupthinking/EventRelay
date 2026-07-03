@@ -21,8 +21,8 @@ const MARKER_COLORS: Record<TimelineMarker['type'], string> = {
 };
 
 interface VideoCanvasStageProps {
-  /** Ref attached to the element the IFrame API replaces with the player. */
-  containerRef: React.RefObject<HTMLDivElement | null>;
+  /** Callback ref attached to the element the IFrame API replaces with the player. */
+  containerRef: (node: HTMLDivElement | null) => void;
   videoId: string | null;
   title: string;
   currentTime: number;
@@ -55,6 +55,10 @@ export default function VideoCanvasStage({
   const hasVideoId = !!videoId;
   const trackRef = useRef<HTMLDivElement>(null);
   const progress = duration > 0 ? Math.min(100, (currentTime / duration) * 100) : 0;
+  // Seeking only works once the IFrame API is ready and a duration is known.
+  // Until then the slider is a non-functional control, so keep it out of the
+  // tab order and mark it disabled for assistive tech.
+  const seekable = duration > 0;
 
   const positionedMarkers = useMemo(() => {
     if (duration <= 0) return [];
@@ -152,15 +156,16 @@ export default function VideoCanvasStage({
         <div
           ref={trackRef}
           role="slider"
-          tabIndex={hasVideoId ? 0 : -1}
+          tabIndex={seekable ? 0 : -1}
           aria-label="Seek video"
+          aria-disabled={!seekable}
           aria-valuemin={0}
           aria-valuemax={Math.floor(duration) || 0}
           aria-valuenow={Math.floor(currentTime) || 0}
           aria-valuetext={`${formatSeconds(currentTime)} of ${formatSeconds(duration)}`}
           onClick={(e) => seekFromClientX(e.clientX)}
           onKeyDown={onTrackKeyDown}
-          className="group relative flex-1 h-9 flex items-center cursor-pointer focus:outline-none"
+          className={`group relative flex-1 h-9 flex items-center rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-[#6af2de] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0e0e13] ${seekable ? 'cursor-pointer' : 'cursor-default'}`}
         >
           {/* Track */}
           <div

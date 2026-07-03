@@ -199,3 +199,5 @@ coverage.json
 docs/gemini_reference/
 # Runtime pipeline audit logs (written by pipeline_audit_store at runtime)
 data/audit/*.jsonl
+# TypeScript incremental build cache
+*.tsbuildinfo
