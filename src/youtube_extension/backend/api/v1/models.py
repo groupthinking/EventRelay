@@ -9,7 +9,7 @@ Provides data validation and serialization for all API endpoints.
 
 import re
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Generic, Optional, TypeVar, Union
 
@@ -100,6 +100,10 @@ class VideoJobStatusResponse(BaseModel):
     error_reason: Optional[str] = Field(
         None,
         description="Machine-readable slug describing why a job failed (e.g. 'gemini_api_timeout')",
+    )
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        description="UTC creation timestamp; used by job-store retention (expire_before).",
     )
 
 
