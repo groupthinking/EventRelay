@@ -1251,7 +1251,7 @@ _dispatches: _TTLDict = _TTLDict(ttl=_JOB_TTL, max_size=_JOB_MAX_SIZE)
 def _persist_video_job(job: VideoJobStatusResponse) -> None:
     _video_jobs[job.job_id] = job
     try:
-        get_job_store().save(job.job_id, job.model_dump())
+        get_job_store().save(job.job_id, job.model_dump(mode="json"))
     except Exception as exc:
         logger.warning("Job persist failed for %s: %s", job.job_id, exc)
 

@@ -55,6 +55,11 @@ class PipelineJobStore:
         Jobs that lack a ``created_at`` field are left untouched so that legacy
         records created before this field existed are not inadvertently removed.
 
+        Naive (timezone-unaware) values — both the *cutoff* argument and any
+        stored ``created_at`` — are interpreted as UTC. Records persisted by the
+        current codebase are timezone-aware (``datetime.now(timezone.utc)``), so
+        the naive fallback only applies to legacy data.
+
         Returns the number of files deleted.
         """
         if cutoff.tzinfo is None:
