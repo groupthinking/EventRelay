@@ -169,7 +169,10 @@ export async function gatewayEmbedOne(text: string, model?: string): Promise<num
 export function stripJsonCodeFence(text: string): string {
   const trimmed = text.trim();
   if (!trimmed.startsWith('```')) return trimmed;
-  const withoutOpening = trimmed.split('\n', 2)[1] ?? trimmed;
+  // Keep everything after the opening fence line — split('\n', 2)[1] here
+  // would keep only the first content line and mangle pretty-printed JSON.
+  const firstNewline = trimmed.indexOf('\n');
+  const withoutOpening = firstNewline === -1 ? '' : trimmed.slice(firstNewline + 1);
   return withoutOpening.replace(/```\s*$/u, '').trim();
 }
 
