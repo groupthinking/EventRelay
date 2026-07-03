@@ -209,7 +209,12 @@ const dispatchAgent: ActionTool = {
     try {
       const res = await doFetch(`${ctx.backendBaseUrl}/api/v1/agents/dispatch`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(process.env.EVENTRELAY_API_KEY?.trim()
+            ? { 'X-API-Key': process.env.EVENTRELAY_API_KEY.trim() }
+            : {}),
+        },
         body: JSON.stringify({
           job_id: ctx.jobId,
           agent_types: [agentType],
@@ -256,7 +261,12 @@ const addToKnowledgeBase: ActionTool = {
     try {
       const res = await doFetch(`${ctx.backendBaseUrl}/api/v1/knowledge/ingest`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(process.env.EVENTRELAY_API_KEY?.trim()
+            ? { 'X-API-Key': process.env.EVENTRELAY_API_KEY.trim() }
+            : {}),
+        },
         body: JSON.stringify({ text: insight, tags: strArray(input, 'tags'), source: ctx.jobId }),
         signal: AbortSignal.timeout(30_000),
       });
