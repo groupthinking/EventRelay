@@ -36,6 +36,12 @@ describe('vercel-ai-gateway', () => {
     expect(stripJsonCodeFence('```json\n{"ok":true}\n```')).toBe('{"ok":true}');
   });
 
+  it('keeps every line of multi-line (pretty-printed) fenced JSON', () => {
+    const pretty = '{\n  "ok": true,\n  "n": 1\n}';
+    expect(stripJsonCodeFence('```json\n' + pretty + '\n```')).toBe(pretty);
+    expect(JSON.parse(stripJsonCodeFence('```json\n' + pretty + '\n```'))).toEqual({ ok: true, n: 1 });
+  });
+
   it('chunks text using embeddings-demo sentence split', () => {
     expect(chunkTextForEmbedding('First idea. Second idea.')).toEqual([
       'First idea',

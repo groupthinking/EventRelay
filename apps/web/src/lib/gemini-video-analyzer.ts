@@ -194,15 +194,18 @@ export function parseAnalysisResult(raw: string): VideoAnalysisResult {
   try {
     return JSON.parse(cleaned) as VideoAnalysisResult;
   } catch (parseError) {
-    const start = cleaned.indexOf('{');
-    const end = cleaned.lastIndexOf('}');
-    if (start !== -1 && end > start) {
+    // Salvage the outermost {...} span — from the fence-stripped string first,
+    // then from the raw response in case fence stripping mangled the payload.
+    for (const source of [cleaned, raw]) {
+      const start = source.indexOf('{');
+      const end = source.lastIndexOf('}');
+      if (start === -1 || end <= start) continue;
       try {
-        const salvaged = JSON.parse(cleaned.slice(start, end + 1)) as VideoAnalysisResult;
+        const salvaged = JSON.parse(source.slice(start, end + 1)) as VideoAnalysisResult;
         console.warn('[Video Analyzer] Salvaged analysis JSON from a noisy model response.');
         return salvaged;
       } catch {
-        // fall through to the typed error below
+        // try the next source, then fall through to the typed error below
       }
     }
     const message = parseError instanceof Error ? parseError.message : String(parseError);

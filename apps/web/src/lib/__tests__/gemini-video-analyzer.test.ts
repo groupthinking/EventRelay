@@ -48,6 +48,11 @@ describe('parseAnalysisResult', () => {
     expect(parseAnalysisResult('```json\n' + VALID_JSON + '\n```').title).toBe('T');
   });
 
+  it('parses pretty-printed multi-line fenced JSON', () => {
+    const pretty = JSON.stringify(VALID_ANALYSIS, null, 2);
+    expect(parseAnalysisResult('```json\n' + pretty + '\n```').title).toBe('T');
+  });
+
   it('salvages a JSON object wrapped in prose', () => {
     const noisy = `Here is the analysis you asked for:\n${VALID_JSON}\nLet me know if you need more.`;
     expect(parseAnalysisResult(noisy).summary).toBe('S');
