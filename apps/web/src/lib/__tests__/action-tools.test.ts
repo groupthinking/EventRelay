@@ -162,3 +162,53 @@ describe('resolveBackendBaseUrl', () => {
     expect(resolveBackendBaseUrl()).toBe('http://localhost:8000');
   });
 });
+
+describe('backend auth headers on tool calls', () => {
+  // Regression coverage for the #470 401 gap: the transcript action agent's
+  // dispatch/ingest tools call non-public FastAPI endpoints, so they must send
+  // X-API-Key (via backendHeaders) once EVENTRELAY_API_KEY is configured.
+  const original = process.env.EVENTRELAY_API_KEY;
+  afterEach(() => {
+    if (original === undefined) delete process.env.EVENTRELAY_API_KEY;
+    else process.env.EVENTRELAY_API_KEY = original;
+  });
+
+  it('dispatch_agent sends a trimmed X-API-Key when EVENTRELAY_API_KEY is set', async () => {
+    process.env.EVENTRELAY_API_KEY = '  secret-key  '; // padded to prove trimming
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ agent_id: 'a1' })));
+    await getTool('dispatch_agent')!.execute(
+      { agentType: 'researcher', instruction: 'x' },
+      { backendBaseUrl: 'http://backend', fetchImpl, jobId: 'job1' },
+    );
+    const headers = (fetchImpl.mock.calls[0][1] as RequestInit).headers as Record<string, string>;
+    expect(headers['X-API-Key']).toBe('secret-key');
+    expect(headers['Content-Type']).toBe('application/json');
+  });
+
+  it('add_to_knowledge_base sends X-API-Key when EVENTRELAY_API_KEY is set', async () => {
+    process.env.EVENTRELAY_API_KEY = 'secret-key';
+    const fetchImpl = vi.fn().mockResolvedValue(new Response(JSON.stringify({ stored: true })));
+    await getTool('add_to_knowledge_base')!.execute(
+      { insight: 'x', tags: ['a'] },
+      { backendBaseUrl: 'http://backend', fetchImpl },
+    );
+    const headers = (fetchImpl.mock.calls[0][1] as RequestInit).headers as Record<string, string>;
+    expect(headers['X-API-Key']).toBe('secret-key');
+  });
+
+  it('omits X-API-Key when EVENTRELAY_API_KEY is unset', async () => {
+    delete process.env.EVENTRELAY_API_KEY;
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ agent_id: 'a1' })));
+    await getTool('dispatch_agent')!.execute(
+      { agentType: 'researcher', instruction: 'x' },
+      { backendBaseUrl: 'http://backend', fetchImpl, jobId: 'job1' },
+    );
+    const headers = (fetchImpl.mock.calls[0][1] as RequestInit).headers as Record<string, string>;
+    expect(headers['X-API-Key']).toBeUndefined();
+    expect(headers['Content-Type']).toBe('application/json');
+  });
+});
