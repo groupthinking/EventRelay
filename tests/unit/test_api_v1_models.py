@@ -51,9 +51,9 @@ class TestApiResponseModel:
 class TestVideoProcessJobRequest:
     def test_valid_url(self):
         req = VideoProcessJobRequest(
-            video_url="https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+            video_url="https://www.youtube.com/watch?v=auJzb1D-fag"
         )
-        assert req.video_url == "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+        assert req.video_url == "https://www.youtube.com/watch?v=auJzb1D-fag"
         assert req.language == "en"
 
     def test_invalid_url(self):
@@ -62,7 +62,7 @@ class TestVideoProcessJobRequest:
 
     def test_short_url(self):
         req = VideoProcessJobRequest(
-            video_url="https://youtu.be/dQw4w9WgXcQ"
+            video_url="https://youtu.be/auJzb1D-fag"
         )
         assert "youtu.be" in req.video_url
 
@@ -84,6 +84,51 @@ class TestVideoJobStatusResponse:
         )
         assert status.status == JobStatus.complete
         assert status.transcript == "Hello world"
+
+    def test_error_reason_field_present(self):
+        """Failed jobs should be able to carry a structured error_reason slug."""
+        status = VideoJobStatusResponse(
+            job_id="job_fail",
+            status=JobStatus.failed,
+            error="Processing failed",
+            error_reason="gemini_api_timeout",
+        )
+        assert status.error_reason == "gemini_api_timeout"
+
+    def test_error_reason_defaults_to_none(self):
+        """error_reason is optional and defaults to None (backward-compatible)."""
+        status = VideoJobStatusResponse(job_id="job_ok", status=JobStatus.complete)
+        assert status.error_reason is None
+
+    def test_error_reason_independent_of_error_message(self):
+        """error_reason is a separate machine-readable slug from the free-text error."""
+        status = VideoJobStatusResponse(
+            job_id="job_fail_2",
+            status=JobStatus.failed,
+            error="Could not download video from YouTube",
+        )
+        assert status.error is not None
+        assert status.error_reason is None
+
+    def test_error_reason_round_trips_through_model_dump(self):
+        """error_reason should survive a model_dump()/model_validate() round trip."""
+        status = VideoJobStatusResponse(
+            job_id="job_fail_3",
+            status=JobStatus.failed,
+            error="Transcript extraction failed",
+            error_reason="transcript_not_found",
+        )
+        rehydrated = VideoJobStatusResponse.model_validate(status.model_dump())
+        assert rehydrated.error_reason == "transcript_not_found"
+
+    def test_error_reason_rejects_non_string_value(self):
+        """error_reason must be a string slug; non-string values should fail validation."""
+        with pytest.raises(Exception):
+            VideoJobStatusResponse(
+                job_id="job_fail_4",
+                status=JobStatus.failed,
+                error_reason=12345,
+            )
 
 
 class TestExtractedEvent:
