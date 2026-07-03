@@ -14,6 +14,8 @@ import time
 from datetime import datetime
 from typing import Any, Optional
 
+from youtube_extension.utils.proxy import get_proxy_url
+
 DEPLOYMENT_TARGET_ALIASES: dict[str, str] = {
     "vercel": "vercel",
     "claude": "vercel",
@@ -252,7 +254,11 @@ class VideoProcessingService:
             # If yt-dlp is available, prefer it for tests (mocked in tests)
             try:
                 import yt_dlp  # type: ignore
-                with yt_dlp.YoutubeDL({"quiet": True}) as ydl:
+                ydl_opts: dict[str, Any] = {"quiet": True}
+                proxy_url = get_proxy_url()
+                if proxy_url:
+                    ydl_opts["proxy"] = proxy_url
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     info = ydl.extract_info(video_url, download=False)
                     video_data = info or {}
             except Exception:

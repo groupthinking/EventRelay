@@ -5,11 +5,15 @@ Prevents timeout errors and handles rate limiting for YouTube API calls
 Integrates sophisticated retry and rate limiting infrastructure
 """
 
+from __future__ import annotations
+
 import asyncio
 import json
 import logging
+import os
 import random
 import time
+import urllib.parse
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
@@ -31,6 +35,36 @@ except ImportError as e:
     logging.warning(f"YouTube dependencies not available: {e}")
 
 logger = logging.getLogger("youtube_api_proxy")
+
+
+def _get_webshare_proxy_url() -> str | None:
+    """Return the validated WEBSHARE_PROXY_URL, or None for direct connection."""
+    url = os.getenv("WEBSHARE_PROXY_URL", "").strip()
+    if not url:
+        return None
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme not in ("http", "https", "socks5") or not parsed.hostname:
+        logger.warning(
+            "WEBSHARE_PROXY_URL is set but malformed — falling back to direct connection"
+        )
+        return None
+    return url
+
+
+def _redact_proxy_credentials(text: str) -> str:
+    """Strip user:pass credentials of the configured proxy URL from text."""
+    url = os.getenv("WEBSHARE_PROXY_URL", "").strip()
+    if not url or url not in text:
+        return text
+    try:
+        parsed = urllib.parse.urlparse(url)
+        netloc = parsed.hostname or ""
+        if parsed.port:
+            netloc = f"{netloc}:{parsed.port}"
+        redacted = parsed._replace(netloc=netloc).geturl()
+    except (ValueError, AttributeError):
+        redacted = "<proxy-url>"
+    return text.replace(url, redacted)
 
 class YouTubeErrorType(Enum):
     """YouTube API specific error types"""
@@ -282,20 +316,20 @@ class YouTubeAPIProxy:
 
                 # Check if we should retry
                 if attempt > self.retry_config.max_retries:
-                    logger.error(f"❌ {operation_name} failed after {attempt-1} retries: {error}")
+                    logger.error(f"❌ {operation_name} failed after {attempt-1} retries: {_redact_proxy_credentials(str(error))}")
                     self.circuit_breaker.record_failure()
                     self.consecutive_errors += 1
                     break
 
                 # Non-retryable errors
                 if error_type in [YouTubeErrorType.VIDEO_NOT_FOUND, YouTubeErrorType.PRIVATE_VIDEO]:
-                    logger.warning(f"⚠️ {operation_name} non-retryable error: {error}")
+                    logger.warning(f"⚠️ {operation_name} non-retryable error: {_redact_proxy_credentials(str(error))}")
                     break
 
                 # Calculate retry delay
                 retry_delay = self._calculate_retry_delay(attempt, error_type)
 
-                logger.warning(f"⚠️ {operation_name} attempt {attempt} failed ({error_type.value}), retrying in {retry_delay:.2f}s: {error}")
+                logger.warning(f"⚠️ {operation_name} attempt {attempt} failed ({error_type.value}), retrying in {retry_delay:.2f}s: {_redact_proxy_credentials(str(error))}")
 
                 self.stats["retries_executed"] += 1
                 await asyncio.sleep(retry_delay)
@@ -310,10 +344,12 @@ class YouTubeAPIProxy:
 
         async def _transcript_operation():
             transcript_data = []
+            proxy_url = _get_webshare_proxy_url()
+            proxies = {"http": proxy_url, "https": proxy_url} if proxy_url else None
 
             # Method 1: Direct transcript API
             try:
-                transcript = YouTubeTranscriptApi.get_transcript(video_id)
+                transcript = YouTubeTranscriptApi.get_transcript(video_id, proxies=proxies)
                 if transcript:
                     logger.info(f"✅ Direct transcript extraction: {len(transcript)} segments")
                     return transcript
@@ -322,7 +358,7 @@ class YouTubeAPIProxy:
 
             # Method 2: Alternative language codes
             try:
-                transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+                transcript_list = YouTubeTranscriptApi.list_transcripts(video_id, proxies=proxies)
                 for transcript_item in transcript_list:
                     transcript = transcript_item.fetch()
                     if transcript:
@@ -340,6 +376,8 @@ class YouTubeAPIProxy:
                     'quiet': True,
                     'socket_timeout': 30
                 }
+                if proxy_url:
+                    ydl_opts['proxy'] = proxy_url
 
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     info = ydl.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=False)
