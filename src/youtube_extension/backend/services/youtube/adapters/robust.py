@@ -20,6 +20,8 @@ from typing import Any, Optional
 
 import httpx
 
+from youtube_extension.utils.proxy import get_proxy_url, get_transcript_proxy_config
+
 # Import our cost monitor
 try:
     from .api_cost_monitor import (
@@ -150,8 +152,13 @@ class RobustYouTubeService:
         import subprocess
 
         def _get_ytdlp_metadata():
+            cmd = ["yt-dlp", "--dump-json", "--skip-download"]
+            proxy_url = get_proxy_url()
+            if proxy_url:
+                cmd.extend(["--proxy", proxy_url])
+            cmd.append(video_url)
             result = subprocess.run(
-                ["yt-dlp", "--dump-json", "--skip-download", video_url],
+                cmd,
                 capture_output=True,
                 text=True,
                 timeout=30,
@@ -439,7 +446,9 @@ class RobustYouTubeService:
             if HAS_TRANSCRIPT_API:
                 # Use high-level API to list and fetch transcripts
                 try:
-                    yt_api = YouTubeTranscriptApi()
+                    yt_api = YouTubeTranscriptApi(
+                        proxy_config=get_transcript_proxy_config()
+                    )
                     transcript = yt_api.fetch(video_id)
                 except Exception:
                     # If object API fails, try module-level list() as fallback pattern
@@ -476,7 +485,9 @@ class RobustYouTubeService:
 
                 # Try instance-based fetch first
                 try:
-                    yt_api = YouTubeTranscriptApi()
+                    yt_api = YouTubeTranscriptApi(
+                        proxy_config=get_transcript_proxy_config()
+                    )
                     transcript = yt_api.fetch(video_id, languages=[language, "en"])
                     logger.info(
                         f"YouTubeTranscriptApi.fetch() returned {len(transcript) if transcript else 0} segments"
