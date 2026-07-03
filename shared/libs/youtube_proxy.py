@@ -403,7 +403,9 @@ class YouTubeAPIProxy:
             except Exception as e:
                 logger.debug(f"yt-dlp extraction failed: {e}")
 
-            raise CouldNotRetrieveTranscript(f"All transcript extraction methods failed for {video_id}")
+            # CouldNotRetrieveTranscript(>=1.0) takes a bare video_id and builds its
+            # own message/URL; passing a sentence would corrupt e.video_id.
+            raise CouldNotRetrieveTranscript(video_id)
 
         return await self._execute_with_retry(_transcript_operation, "transcript")
 
