@@ -66,7 +66,7 @@ const Badge = forwardRef<HTMLSpanElement, BadgeProps>(
             {dotPulse && (
               <span
                 className={clsx(
-                  'animate-ping absolute inline-flex h-full w-full rounded-full opacity-75',
+                  'animate-ping motion-reduce:animate-none absolute inline-flex h-full w-full rounded-full opacity-75',
                   dotColors[variant]
                 )}
               />

@@ -29,8 +29,8 @@ concrete reason, verified against the actual repository tree.
 | `real-processing.yml` | KEEP | Manual single-video processing; well-formed. |
 | `secret-scan.yml` | KEEP | gitleaks on the working tree; action pinned to SHA, checksum-verified install. |
 | `security.yml` | KEEP | npm audit, safety, bandit, trivy; uploads SARIF. |
-| `verify-litert-mcp.yml` | KEEP | Path-filtered smoke test; `mcp-servers/litert-mcp/server.py` exists. |
-| `vision-reasoning.yml` | KEEP | Path-filtered lint/type/test; `mcp-servers/shared-state/*` modules exist. |
+| `verify-litert-mcp.yml` | **DELETE** | Path-filtered smoke test of `mcp-servers/litert-mcp/server.py`; the `mcp-servers/` tree was removed in the dead-code cleanup, so the target no longer exists and every run fails. |
+| `vision-reasoning.yml` | **DELETE** | Path-filtered lint/type/test of `mcp-servers/shared-state/*`; those modules were removed in the dead-code cleanup, so the workflow has nothing to run. |
 
 ## On "MERGE"
 
@@ -50,10 +50,11 @@ valid. Referenced paths were checked against the working tree:
 
 - Present: `.github/codeql/codeql-config.yml`, `.gitleaks.toml`, `.trivyignore`,
   `Dockerfile`, `scripts/maintenance/branch-cleanup-delete.sh`,
-  `mcp-servers/litert-mcp/server.py`, `mcp-servers/shared-state/*`,
   `tests/e2e/`, `tests/failure-log.md`, `apps/web` (with `build:web` script).
 - Absent (drove the deletes): `mcp-servers/mcp-profiling/`, `deployments/`,
-  `frontend/`, `src/mcp-bridge.py`.
+  `frontend/`, `src/mcp-bridge.py`. The entire `mcp-servers/` tree was
+  subsequently removed in the dead-code cleanup, which is why
+  `verify-litert-mcp.yml` and `vision-reasoning.yml` were also deleted.
 - Recent run logs checked: `auto-assign.yml` failed on issue #392 because
   `gh issue edit` used a GraphQL mutation unsupported by GitHub App
   installation tokens; the workflow now calls the REST assignees endpoint.

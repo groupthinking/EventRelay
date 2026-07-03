@@ -874,6 +874,14 @@ async def list_videos_v1(
     """Get paginated list of processed videos"""
     try:
         total = data_service.count_videos()
+        if offset >= total:
+            return {
+                "videos": [],
+                "total": total,
+                "limit": limit,
+                "offset": offset,
+                "has_more": False,
+            }
         paginated_videos = data_service.get_videos_summary(limit=limit, offset=offset)
 
         return {
@@ -1809,7 +1817,7 @@ async def dispatch_agents(request: AgentDispatchRequest):
     dispatch = AgentDispatchResponse()
     agent_types = request.agent_types or ["analyzer", "content_creator"]
 
-    for event in request.events:
+    for event in events:
         for agent_type in agent_types:
             execution = AgentExecution(
                 agent_type=agent_type,
@@ -1822,7 +1830,7 @@ async def dispatch_agents(request: AgentDispatchRequest):
     _dispatches[dispatch.dispatch_id] = dispatch
 
     for execution in dispatch.executions:
-        asyncio.create_task(_run_agent(execution, request.events))
+        asyncio.create_task(_run_agent(execution, events))
 
     return ApiResponse.success(dispatch.model_dump())
 
@@ -1833,25 +1841,18 @@ async def _run_agent(execution: AgentExecution, events: list[dict[str, Any]]):
         execution.status = AgentStatus.running
         execution.progress = 10.0
 
-        try:
-            orchestrator = AgentOrchestrator()
-            event_data = next(
-                (e for e in events if e.get("id") == execution.event_id),
-                events[0] if events else {},
-            )
-            result = await orchestrator.execute_single(
-                agent_type=execution.agent_type,
-                context=event_data,
-            )
-            execution.result = (
-                result if isinstance(result, dict) else {"output": str(result)}
-            )
-        except Exception:
-            execution.result = {
-                "agent_type": execution.agent_type,
-                "summary": f"Processed event {execution.event_id}",
-                "status": "completed",
-            }
+        orchestrator = AgentOrchestrator()
+        event_data = next(
+            (e for e in events if e.get("id") == execution.event_id),
+            events[0] if events else {},
+        )
+        result = await orchestrator.execute_single(
+            agent_type=execution.agent_type,
+            context=event_data,
+        )
+        execution.result = (
+            result if isinstance(result, dict) else {"output": str(result)}
+        )
 
         execution.status = AgentStatus.complete
         execution.progress = 100.0

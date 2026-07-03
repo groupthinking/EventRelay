@@ -1,6 +1,10 @@
+import 'server-only';
+
 import OpenAI from 'openai';
 import { fetchYouTubeMetadata, formatMetadataAsContext } from '@/lib/youtube-metadata';
 import { getGeminiClient, hasGeminiKey } from '@/lib/gemini-client';
+import { GEMINI_SEARCH_MODEL } from '@/lib/gemini-models';
+import { gatewayChat, hasAiGatewayKey, toGatewayModelId } from '@/lib/vercel-ai-gateway';
 import { assertPublicHttpUrl } from '@/lib/ssrf-guard';
 
 let _openai: OpenAI | null = null;
@@ -124,34 +128,43 @@ export async function fetchTranscript({
     // Strategy 2: Gemini with Google Search grounding
     if (hasGeminiKey()) {
       const metadataContext = metadata ? formatMetadataAsContext(metadata) : '';
-      const geminiPromise: Promise<TranscriptionResult | null> = (async () => {
-        try {
-          const ai = getGeminiClient();
-          const result = await ai.models.generateContent({
-            model: 'gemini-3.1-pro-preview',
-            contents: `You are a video transcription assistant with access to Google Search.
+      const geminiPrompt = `You are a video transcription assistant.
 
-For the following YouTube video, use your googleSearch tool to find the ACTUAL transcript,
-description, and chapter content. The video creator often provides detailed descriptions
-with chapter breakdowns — USE that metadata as high-quality structured content.
+For the following YouTube video, find the ACTUAL transcript, description, and chapter content.
+The video creator often provides detailed descriptions with chapter breakdowns — USE that
+metadata as high-quality structured content.
 
 ${metadataContext ? `KNOWN VIDEO METADATA:\n${metadataContext}\n` : ''}
 Video URL: ${url}
 
 INSTRUCTIONS:
-1. Search for the video's transcript using Google Search.
-2. If a spoken transcript is available, return it verbatim.
-3. If not, reconstruct detailed content from the description, chapters, comments,
-   and related articles found via search.
-4. Be thorough — capture ALL key points, technical details, quotes, and actionable insights.
-5. Include timestamps in [MM:SS] format where possible.
-6. Do NOT return generic advice like "click Show Transcript" — return actual content.`,
-            config: {
-              temperature: 0.2,
-              tools: [{ googleSearch: {} }],
-            },
-          });
-          const text = result.text ?? '';
+1. Return the video's spoken transcript if available.
+2. If not, reconstruct detailed content from description, chapters, and related material.
+3. Be thorough — capture ALL key points, technical details, quotes, and actionable insights.
+4. Include timestamps in [MM:SS] format where possible.
+5. Do NOT return generic advice like "click Show Transcript" — return actual content.`;
+
+      const geminiPromise: Promise<TranscriptionResult | null> = (async () => {
+        try {
+          const text = hasAiGatewayKey()
+            ? (
+                await gatewayChat({
+                  model: toGatewayModelId(GEMINI_SEARCH_MODEL),
+                  messages: [{ role: 'user', content: geminiPrompt }],
+                  max_tokens: 4096,
+                  temperature: 0.2,
+                })
+              ).content
+            : (
+                await getGeminiClient().models.generateContent({
+                  model: GEMINI_SEARCH_MODEL,
+                  contents: geminiPrompt,
+                  config: {
+                    temperature: 0.2,
+                    tools: [{ googleSearch: {} }],
+                  },
+                })
+              ).text ?? '';
           if (text.length > 100) {
             return {
               success: true,

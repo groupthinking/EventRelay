@@ -19,11 +19,13 @@ export default defineConfig({
     include: ['src/**/*.{test,spec}.{ts,tsx}'],
     // Force frontend-only behaviour in route handlers (BACKEND_AVAILABLE=false)
     // so tests are deterministic regardless of the developer's shell env.
-    env: { BACKEND_URL: '' },
+    // BILLING_COOKIE_SECRET lets billing tests mint/verify signed identity cookies.
+    env: { BACKEND_URL: '', BILLING_COOKIE_SECRET: 'test-billing-cookie-secret' },
   },
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
+      'server-only': fileURLToPath(new URL('./src/test/server-only.ts', import.meta.url)),
     },
   },
 });
