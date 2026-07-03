@@ -8,8 +8,10 @@ Integrates sophisticated retry and rate limiting infrastructure
 import asyncio
 import json
 import logging
+import os
 import random
 import time
+import urllib.parse
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
@@ -32,6 +34,7 @@ except ImportError as e:
 
 logger = logging.getLogger("youtube_api_proxy")
 
+
 class YouTubeErrorType(Enum):
     """YouTube API specific error types"""
     QUOTA_EXCEEDED = "quota_exceeded"
@@ -44,6 +47,7 @@ class YouTubeErrorType(Enum):
     SERVER_ERROR = "server_error"
     NETWORK = "network"
     UNKNOWN = "unknown"
+
 
 @dataclass
 class YouTubeRetryConfig:
@@ -60,6 +64,7 @@ class YouTubeRetryConfig:
     region_retry_delay: float = 30.0  # Delay for region blocks
     ip_rotation_enabled: bool = True
 
+
 @dataclass
 class YouTubeRateLimit:
     """YouTube API rate limits"""
@@ -71,6 +76,7 @@ class YouTubeRateLimit:
     # Adaptive limits
     adaptive_reduction_factor: float = 0.5  # Reduce by 50% on errors
     recovery_factor: float = 1.1  # Increase by 10% on success
+
 
 class CircuitBreaker:
     """Circuit breaker for YouTube API calls"""
@@ -106,6 +112,7 @@ class CircuitBreaker:
 
         if self.failure_count >= self.failure_threshold:
             self.state = "OPEN"
+
 
 class YouTubeAPIProxy:
     """MCP YouTube API Proxy with intelligent retry and rate limiting"""
@@ -175,6 +182,46 @@ class YouTubeAPIProxy:
             return YouTubeErrorType.NETWORK
 
         return YouTubeErrorType.UNKNOWN
+
+    def _get_proxy_url(self) -> str | None:
+        """Read and validate Webshare proxy configuration."""
+        proxy_url = os.getenv("WEBSHARE_PROXY_URL", "").strip()
+        if not proxy_url:
+            return None
+
+        try:
+            parsed = urllib.parse.urlparse(proxy_url)
+        except Exception:
+            logger.warning("WEBSHARE_PROXY_URL is set but could not be parsed — falling back to direct")
+            return None
+
+        if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+            logger.warning("WEBSHARE_PROXY_URL is set but malformed — falling back to direct")
+            return None
+
+        return proxy_url
+
+    def _redact_proxy_url(self, proxy_url: str) -> str:
+        """Strip credentials from a proxy URL before logging it."""
+        try:
+            parsed = urllib.parse.urlparse(proxy_url)
+            if not parsed.hostname:
+                return "<proxy-url>"
+
+            netloc = parsed.hostname
+            if parsed.port:
+                netloc = f"{netloc}:{parsed.port}"
+
+            return parsed._replace(netloc=netloc).geturl()
+        except Exception:
+            return "<proxy-url>"
+
+    def _redact_error(self, error: Exception, proxy_url: str | None) -> str:
+        """Remove raw proxy credentials from error messages before logging."""
+        message = str(error)
+        if proxy_url:
+            message = message.replace(proxy_url, self._redact_proxy_url(proxy_url))
+        return message
 
     def _calculate_retry_delay(self, attempt: int, error_type: YouTubeErrorType) -> float:
         """Calculate intelligent retry delay based on error type"""
@@ -274,6 +321,8 @@ class YouTubeAPIProxy:
             except Exception as error:
                 last_error = error
                 error_type = self._classify_error(error)
+                proxy_url = self._get_proxy_url()
+                safe_error = self._redact_error(error, proxy_url)
 
                 # Update statistics
                 self.stats["failed_requests"] += 1
@@ -282,20 +331,23 @@ class YouTubeAPIProxy:
 
                 # Check if we should retry
                 if attempt > self.retry_config.max_retries:
-                    logger.error(f"❌ {operation_name} failed after {attempt-1} retries: {error}")
+                    logger.error(f"❌ {operation_name} failed after {attempt-1} retries: {safe_error}")
                     self.circuit_breaker.record_failure()
                     self.consecutive_errors += 1
                     break
 
                 # Non-retryable errors
                 if error_type in [YouTubeErrorType.VIDEO_NOT_FOUND, YouTubeErrorType.PRIVATE_VIDEO]:
-                    logger.warning(f"⚠️ {operation_name} non-retryable error: {error}")
+                    logger.warning(f"⚠️ {operation_name} non-retryable error: {safe_error}")
                     break
 
                 # Calculate retry delay
                 retry_delay = self._calculate_retry_delay(attempt, error_type)
 
-                logger.warning(f"⚠️ {operation_name} attempt {attempt} failed ({error_type.value}), retrying in {retry_delay:.2f}s: {error}")
+                logger.warning(
+                    f"⚠️ {operation_name} attempt {attempt} failed ({error_type.value}), "
+                    f"retrying in {retry_delay:.2f}s: {safe_error}"
+                )
 
                 self.stats["retries_executed"] += 1
                 await asyncio.sleep(retry_delay)
@@ -309,50 +361,52 @@ class YouTubeAPIProxy:
         """Get video transcript with retry logic and fallback methods"""
 
         async def _transcript_operation():
-            transcript_data = []
+            proxy_url = self._get_proxy_url()
+            proxies = {"http": proxy_url, "https": proxy_url} if proxy_url else None
 
             # Method 1: Direct transcript API
             try:
-                transcript = YouTubeTranscriptApi.get_transcript(video_id)
+                transcript = YouTubeTranscriptApi.get_transcript(video_id, proxies=proxies)
                 if transcript:
                     logger.info(f"✅ Direct transcript extraction: {len(transcript)} segments")
                     return transcript
             except Exception as e:
-                logger.debug(f"Direct transcript failed: {e}")
+                logger.debug(f"Direct transcript failed: {self._redact_error(e, proxy_url)}")
 
             # Method 2: Alternative language codes
             try:
-                transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+                transcript_list = YouTubeTranscriptApi.list_transcripts(video_id, proxies=proxies)
                 for transcript_item in transcript_list:
                     transcript = transcript_item.fetch()
                     if transcript:
                         logger.info(f"✅ Alternative language transcript: {len(transcript)} segments")
                         return transcript
             except Exception as e:
-                logger.debug(f"Alternative transcript failed: {e}")
+                logger.debug(f"Alternative transcript failed: {self._redact_error(e, proxy_url)}")
 
             # Method 3: yt-dlp fallback
             try:
                 ydl_opts = {
-                    'writesubtitles': True,
-                    'writeautomaticsub': True,
-                    'skip_download': True,
-                    'quiet': True,
-                    'socket_timeout': 30
+                    "writesubtitles": True,
+                    "writeautomaticsub": True,
+                    "skip_download": True,
+                    "quiet": True,
+                    "socket_timeout": 30,
+                    "proxy": proxy_url,
                 }
 
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     info = ydl.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=False)
 
-                    subtitles = info.get('subtitles', {})
-                    auto_captions = info.get('automatic_captions', {})
+                    subtitles = info.get("subtitles", {})
+                    auto_captions = info.get("automatic_captions", {})
 
                     if subtitles or auto_captions:
                         logger.info("✅ Found subtitle data via yt-dlp")
                         # Convert to transcript format
-                        return [{'text': 'Transcript extracted via yt-dlp', 'start': 0, 'duration': 1}]
+                        return [{"text": "Transcript extracted via yt-dlp", "start": 0, "duration": 1}]
             except Exception as e:
-                logger.debug(f"yt-dlp extraction failed: {e}")
+                logger.debug(f"yt-dlp extraction failed: {self._redact_error(e, proxy_url)}")
 
             raise CouldNotRetrieveTranscript(f"All transcript extraction methods failed for {video_id}")
 
@@ -362,17 +416,17 @@ class YouTubeAPIProxy:
         """Get video information with retry logic"""
 
         async def _video_info_operation():
-            youtube = build('youtube', 'v3', developerKey=self.api_key)
+            youtube = build("youtube", "v3", developerKey=self.api_key)
             request = youtube.videos().list(
-                part='snippet,contentDetails,statistics',
-                id=video_id
+                part="snippet,contentDetails,statistics",
+                id=video_id,
             )
             response = request.execute()
 
-            if not response['items']:
+            if not response["items"]:
                 raise Exception(f"Video {video_id} not found")
 
-            return response['items'][0]
+            return response["items"][0]
 
         return await self._execute_with_retry(_video_info_operation, "video_info")
 
@@ -388,32 +442,33 @@ class YouTubeAPIProxy:
             "circuit_breaker_state": self.circuit_breaker.state,
             "consecutive_errors": self.consecutive_errors,
             "current_rpm": len([req for req in self.request_history if req > time.time() - 60]),
-            "uptime": time.time() - (self.request_history[0] if self.request_history else time.time())
+            "uptime": time.time() - (self.request_history[0] if self.request_history else time.time()),
         }
 
     async def health_check(self) -> Dict[str, Any]:
         """Health check for the proxy"""
 
         try:
-            # Simple API test
-            youtube = build('youtube', 'v3', developerKey=self.api_key)
-            request = youtube.channels().list(part='snippet', mine=True)
+            # Simple API test against a public video ID
+            youtube = build("youtube", "v3", developerKey=self.api_key)
+            request = youtube.videos().list(part="id", id="aircAruvnKk")
             response = request.execute()
 
             return {
                 "status": "healthy",
                 "api_accessible": True,
+                "video_lookup_ok": bool(response.get("items")),
                 "circuit_breaker": self.circuit_breaker.state,
                 "error_rate": self.consecutive_errors,
-                "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.now().isoformat(),
             }
         except Exception as e:
             return {
                 "status": "unhealthy",
                 "api_accessible": False,
-                "error": str(e),
+                "error": self._redact_error(e, self._get_proxy_url()),
                 "circuit_breaker": self.circuit_breaker.state,
-                "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.now().isoformat(),
             }
 
 
@@ -424,7 +479,7 @@ def create_youtube_proxy(api_key: str) -> YouTubeAPIProxy:
     if not YOUTUBE_DEPS_AVAILABLE:
         raise RuntimeError("YouTube dependencies not available - install youtube-transcript-api, google-api-python-client, yt-dlp")
 
-    if not api_key or len(api_key) != 39 or not api_key.startswith('AIzaSy'):
+    if not api_key or len(api_key) != 39 or not api_key.startswith("AIzaSy"):
         raise ValueError("Invalid YouTube API key format")
 
     return YouTubeAPIProxy(api_key)
@@ -434,12 +489,10 @@ def create_youtube_proxy(api_key: str) -> YouTubeAPIProxy:
 async def main():
     """Test the YouTube API proxy"""
 
-    import os
-
     from dotenv import load_dotenv
     load_dotenv()
 
-    api_key = os.getenv('YOUTUBE_API_KEY')
+    api_key = os.getenv("YOUTUBE_API_KEY")
     if not api_key:
         logger.error("YOUTUBE_API_KEY environment variable required")
         return
@@ -466,7 +519,7 @@ async def main():
         logger.info(f"📊 Proxy Statistics: {json.dumps(stats, indent=2)}")
 
     except Exception as e:
-        logger.error(f"❌ Test failed: {e}")
+        logger.error(f"❌ Test failed: {proxy._redact_error(e, proxy._get_proxy_url())}")
         stats = proxy.get_stats()
         logger.info(f"📊 Proxy Statistics: {json.dumps(stats, indent=2)}")
 
