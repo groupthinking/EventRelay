@@ -89,7 +89,7 @@ jobs:
             --max-instances 10 \
             --port 8080 \
             --set-env-vars "ENVIRONMENT=production,DEBUG=false,LOG_LEVEL=INFO,LOG_FORMAT=json,PYTHONPATH=/app/src" \
-            --set-secrets "GEMINI_API_KEY=gemini-api-key:latest,OPENAI_API_KEY=openai-api-key:latest"
+            --set-secrets "GEMINI_API_KEY=GEMINI_API_KEY:latest,OPENAI_API_KEY=OPENAI_API_KEY:latest,YOUTUBE_API_KEY=YOUTUBE_API_KEY:latest,EVENTRELAY_API_KEY=EVENTRELAY_API_KEY:latest"
 
       - name: Get service URL
         id: url
