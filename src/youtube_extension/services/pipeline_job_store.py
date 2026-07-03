@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
@@ -47,6 +48,39 @@ class PipelineJobStore:
             except json.JSONDecodeError:
                 continue
         return records
+
+    def expire_before(self, cutoff: datetime) -> int:
+        """Delete job files whose ``created_at`` timestamp is before *cutoff*.
+
+        Jobs that lack a ``created_at`` field are left untouched so that legacy
+        records created before this field existed are not inadvertently removed.
+
+        Returns the number of files deleted.
+        """
+        if cutoff.tzinfo is None:
+            cutoff = cutoff.replace(tzinfo=timezone.utc)
+        removed = 0
+        for path in list(self.root.glob("*.json")):
+            try:
+                record = json.loads(path.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError):
+                continue
+            created_at_raw = record.get("created_at")
+            if not created_at_raw:
+                continue
+            try:
+                created_at = datetime.fromisoformat(str(created_at_raw))
+            except ValueError:
+                continue
+            if created_at.tzinfo is None:
+                created_at = created_at.replace(tzinfo=timezone.utc)
+            if created_at < cutoff:
+                try:
+                    path.unlink()
+                    removed += 1
+                except OSError:
+                    logger.warning("Could not delete expired job file %s", path)
+        return removed
 
 
 _job_store: Optional[PipelineJobStore] = None

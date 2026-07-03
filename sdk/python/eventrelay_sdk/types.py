@@ -67,6 +67,10 @@ class VideoJobStatusResponse(BaseModel):
     transcript: Optional[str] = None
     metadata: Optional[dict[str, Any]] = None
     error: Optional[str] = None
+    error_reason: Optional[str] = Field(
+        None,
+        description="Machine-readable slug describing why a job failed (e.g. 'gemini_api_timeout')",
+    )
 
 
 # ---------------------------------------------------------------------------

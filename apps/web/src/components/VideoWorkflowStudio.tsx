@@ -678,8 +678,9 @@ export default function VideoWorkflowStudio() {
               <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
                 <button
                   type="button"
-                  onClick={voiceEngaged ? realtime.stop : realtime.start}
                   aria-pressed={voiceEngaged}
+                  aria-label={voiceEngaged ? 'Disable voice input' : 'Enable voice input'}
+                  onClick={voiceEngaged ? realtime.stop : realtime.start}
                   className={clsx(
                     'inline-flex items-center gap-2 rounded-md px-2 py-1 text-xs font-semibold transition-colors',
                     voiceEngaged ? 'bg-blue-600 text-white' : 'bg-white text-slate-700 hover:bg-slate-100',
@@ -689,7 +690,13 @@ export default function VideoWorkflowStudio() {
                   {voiceLabel}
                 </button>
                 {realtime.isActive && (
-                  <button type="button" onClick={realtime.toggleMute} className="text-xs font-medium text-slate-500 hover:text-slate-900">
+                  <button
+                    type="button"
+                    aria-pressed={realtime.status === 'muted'}
+                    aria-label={realtime.status === 'muted' ? 'Resume voice session' : 'Mute voice session'}
+                    onClick={realtime.toggleMute}
+                    className="text-xs font-medium text-slate-500 hover:text-slate-900"
+                  >
                     {realtime.status === 'muted' ? 'Resume' : 'Mute'}
                   </button>
                 )}
@@ -895,8 +902,9 @@ export default function VideoWorkflowStudio() {
           <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
             <button
               type="button"
-              onClick={() => setDeveloperOpen((open) => !open)}
               aria-expanded={developerOpen}
+              aria-controls="developer-details-panel"
+              onClick={() => setDeveloperOpen((open) => !open)}
               className="flex w-full items-center justify-between text-left text-sm font-semibold text-slate-950"
             >
               <span className="inline-flex items-center gap-2">
@@ -907,7 +915,7 @@ export default function VideoWorkflowStudio() {
             </button>
 
             {developerOpen && (
-              <div className="mt-3 max-h-52 space-y-2 overflow-y-auto rounded-lg bg-slate-950 p-3 text-xs text-slate-200">
+              <div id="developer-details-panel" className="mt-3 max-h-52 space-y-2 overflow-y-auto rounded-lg bg-slate-950 p-3 text-xs text-slate-200">
                 {realtime.events.length ? (
                   realtime.events.map((event) => (
                     <div key={event.id} className="flex items-start gap-2 border-b border-white/10 pb-2 last:border-0 last:pb-0">
