@@ -471,6 +471,11 @@ class RobustYouTubeService:
                         )
                     except Exception:
                         transcript = []
+                # Both the primary fetch and the list() fallback failed if
+                # transcript is empty — report unavailable rather than a
+                # contradictory (available, 0 segments).
+                if not transcript:
+                    return False, 0
                 return True, len(transcript)
             elif HAS_YOUTUBE_SEARCH:
                 transcript_data = await asyncio.get_event_loop().run_in_executor(

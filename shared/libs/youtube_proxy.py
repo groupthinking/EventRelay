@@ -364,12 +364,12 @@ class YouTubeAPIProxy:
         """Get video transcript with retry logic and fallback methods"""
 
         async def _transcript_operation():
-            transcript_data = []
             proxy_url = _get_webshare_proxy_url()
             proxy_config = _get_transcript_proxy_config()
             # youtube-transcript-api is synchronous/blocking network I/O; run it
-            # in an executor so it doesn't stall the event loop.
-            loop = asyncio.get_running_loop()
+            # in an executor so it doesn't stall the event loop. (get_event_loop
+            # matches the convention used across the rest of this codebase.)
+            loop = asyncio.get_event_loop()
 
             # Method 1: Direct transcript API
             # youtube-transcript-api >=1.0 replaced the ``get_transcript`` class

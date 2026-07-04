@@ -922,8 +922,10 @@ class TestCheckTranscriptAvailability:
         assert available is True
         assert count == 2
 
-    async def test_all_inner_fail_still_returns_true_with_empty_list(self):
-        """When both inner tries fail, list() returns [], so returns (True, 0)."""
+    async def test_all_inner_fail_returns_false_zero(self):
+        """When both the fetch and the list() fallback fail, no transcript was
+        obtained, so the method reports (False, 0) — not a contradictory
+        (True, 0)."""
         svc = RobustYouTubeService()
         mock_api_instance = MagicMock()
         mock_api_instance.fetch.side_effect = Exception("boom")
@@ -932,19 +934,14 @@ class TestCheckTranscriptAvailability:
         # the "both inner tries fail" path is actually exercised.
         mock_api_instance.list.side_effect = Exception("boom2")
 
-        # When both fetch and list() fail, transcript = [] and returns (True, 0)
-        # OR the outer exception fires and returns (False, 0).
-        # The actual behavior: the except catches at the inner level and sets transcript=[],
-        # then returns (True, 0).
         with (
             patch(f"{_ROBUST_MODULE}.HAS_TRANSCRIPT_API", True),
             patch(f"{_ROBUST_MODULE}.YouTubeTranscriptApi", mock_api_cls, create=True),
         ):
             available, count = await svc._check_transcript_availability(VIDEO_ID)
 
-        # Verifying the function returns without raising regardless of outcome
-        assert isinstance(available, bool)
-        assert isinstance(count, int)
+        assert available is False
+        assert count == 0
 
     async def test_outer_exception_returns_false_zero(self):
         """Outer try/except around the whole body catches unexpected errors."""
