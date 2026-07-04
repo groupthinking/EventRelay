@@ -135,6 +135,14 @@ jobs:
 
       - name: Log failure to the job summary
         if: steps.results.outputs.status == 'red'
+        env:
+          # Passed via env, not interpolated inline: github.head_ref is the PR
+          # source branch name and is attacker-controlled on pull_request events.
+          # Expanding it directly in the run: script would allow shell injection
+          # (flagged by actionlint/zizmor). The shell receives these as data only.
+          TRIGGER_EVENT: ${{ github.event_name }}
+          TRIGGER_REF: ${{ github.head_ref || github.ref_name }}
+          COMMIT_SHA: ${{ github.sha }}
         run: |
           DATE=$(date -u '+%Y-%m-%d %H:%M:%S UTC')
           FAILURES=$(grep -A 2 'FAIL\|AssertionError\|Error:' test-output.txt | head -30 || echo "See test-output.txt")
@@ -142,8 +150,8 @@ jobs:
           {
             echo "### 🔴 E2E Failure — $DATE"
             echo ""
-            echo "**Trigger:** ${{ github.event_name }} on \`${{ github.head_ref || github.ref_name }}\`"
-            echo "**Commit:** \`${{ github.sha }}\`"
+            echo "**Trigger:** ${TRIGGER_EVENT} on \`${TRIGGER_REF}\`"
+            echo "**Commit:** \`${COMMIT_SHA}\`"
             echo "**Deployment:** $BASE_URL"
             echo ""
             echo "**Failed tests:**"
