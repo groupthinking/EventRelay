@@ -213,7 +213,8 @@ class RealVideoProcessor:
         # 1) Direct transcript
         try:
             if YouTubeTranscriptApi is not None:
-                transcript = YouTubeTranscriptApi.get_transcript(video_id)
+                # youtube-transcript-api >=1.0 instance API
+                transcript = YouTubeTranscriptApi().fetch(video_id).to_raw_data()
                 if transcript:
                     return transcript
         except Exception:
@@ -222,9 +223,9 @@ class RealVideoProcessor:
         # 2) List transcripts and fetch
         try:
             if YouTubeTranscriptApi is not None:
-                for t in YouTubeTranscriptApi.list_transcripts(video_id):  # type: ignore[union-attr]
+                for t in YouTubeTranscriptApi().list(video_id):  # type: ignore[union-attr]
                     try:
-                        data = t.fetch()
+                        data = t.fetch().to_raw_data()
                         if data:
                             return data
                     except Exception:

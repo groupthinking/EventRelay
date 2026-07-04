@@ -498,17 +498,15 @@ class RobustYouTubeService:
                     transcript_errors.append(api_error)
                     # Try module-level list() as fallback
                     try:
-                        transcript_list = YouTubeTranscriptApi.list_transcripts(
-                            video_id
-                        )
+                        transcript_list = YouTubeTranscriptApi().list(video_id)
                         transcript = transcript_list.find_transcript(
                             [language, "en"]
                         ).fetch()
                         logger.info(
-                            f"YouTubeTranscriptApi.list_transcripts() returned {len(transcript) if transcript else 0} segments"
+                            f"YouTubeTranscriptApi.list() returned {len(transcript) if transcript else 0} segments"
                         )
                     except Exception as list_err:
-                        api_error = f"YouTubeTranscriptApi.list_transcripts failed: {type(list_err).__name__}: {list_err}"
+                        api_error = f"YouTubeTranscriptApi.list() fallback failed: {type(list_err).__name__}: {list_err}"
                         logger.warning(api_error)
                         transcript_errors.append(api_error)
                         transcript = []

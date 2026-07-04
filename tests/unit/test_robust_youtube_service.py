@@ -1030,7 +1030,8 @@ class TestGetTranscript:
         mock_transcript_list.find_transcript.return_value = mock_transcript_obj
 
         mock_api_cls = MagicMock(return_value=mock_api_instance)
-        mock_api_cls.list_transcripts = MagicMock(return_value=mock_transcript_list)
+        # youtube-transcript-api >=1.0: fallback uses the instance ``list``
+        mock_api_instance.list = MagicMock(return_value=mock_transcript_list)
 
         with (
             patch(f"{_ROBUST_MODULE}.HAS_TRANSCRIPT_API", True),
@@ -1272,7 +1273,8 @@ class TestGetTranscript:
         mock_api_instance = MagicMock()
         mock_api_instance.fetch.side_effect = Exception("fetch fail")
         mock_api_cls = MagicMock(return_value=mock_api_instance)
-        mock_api_cls.list_transcripts.side_effect = Exception("list fail")
+        # youtube-transcript-api >=1.0: fallback uses the instance ``list``
+        mock_api_instance.list.side_effect = Exception("list fail")
 
         innertube_segs = [CaptionSegment(text="Hi", start=0.0, duration=1.0)]
 
