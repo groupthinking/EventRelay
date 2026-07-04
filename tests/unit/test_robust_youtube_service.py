@@ -887,8 +887,10 @@ class TestCheckTranscriptAvailability:
         mock_transcript = [{"text": "seg"}] * 3
         mock_api_instance = MagicMock()
         mock_api_instance.fetch.side_effect = Exception("fetch failed")
+        # youtube-transcript-api >=1.0 exposes ``list`` on the instance, not the
+        # class; the fallback builds a proxied instance and calls ``.list()``.
+        mock_api_instance.list.return_value = mock_transcript
         mock_api_cls = MagicMock(return_value=mock_api_instance)
-        mock_api_cls.list.return_value = mock_transcript
 
         with (
             patch(f"{_ROBUST_MODULE}.HAS_TRANSCRIPT_API", True),

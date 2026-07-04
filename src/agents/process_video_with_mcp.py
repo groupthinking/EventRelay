@@ -210,11 +210,17 @@ class RealVideoProcessor:
 
     # ---------- Core async ops ----------
     async def _extract_transcript_with_rotation(self, video_id: str) -> list[dict[str, Any]]:
+        loop = asyncio.get_event_loop()
         # 1) Direct transcript
         try:
             if YouTubeTranscriptApi is not None:
-                # youtube-transcript-api >=1.0 instance API
-                transcript = YouTubeTranscriptApi().fetch(video_id).to_raw_data()
+                # youtube-transcript-api >=1.0 instance API. The call is
+                # synchronous network I/O, so run it off the event loop to
+                # avoid blocking other coroutines on this thread.
+                transcript = await loop.run_in_executor(
+                    None,
+                    lambda: YouTubeTranscriptApi().fetch(video_id).to_raw_data(),
+                )
                 if transcript:
                     return transcript
         except Exception:
@@ -223,9 +229,14 @@ class RealVideoProcessor:
         # 2) List transcripts and fetch
         try:
             if YouTubeTranscriptApi is not None:
-                for t in YouTubeTranscriptApi().list(video_id):  # type: ignore[union-attr]
+                transcript_list = await loop.run_in_executor(
+                    None, lambda: YouTubeTranscriptApi().list(video_id)  # type: ignore[union-attr]
+                )
+                for t in transcript_list:
                     try:
-                        data = t.fetch().to_raw_data()
+                        data = await loop.run_in_executor(
+                            None, lambda t=t: t.fetch().to_raw_data()
+                        )
                         if data:
                             return data
                     except Exception:
