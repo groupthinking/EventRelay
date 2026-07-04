@@ -53,7 +53,7 @@ def _get_webshare_proxy_url() -> str | None:
     return url
 
 
-def _get_transcript_proxy_config():
+def _get_transcript_proxy_config() -> GenericProxyConfig | None:
     """Return a youtube-transcript-api proxy config object, or None.
 
     youtube-transcript-api >=1.0 replaced the ``proxies=`` keyword with a
@@ -367,6 +367,9 @@ class YouTubeAPIProxy:
             transcript_data = []
             proxy_url = _get_webshare_proxy_url()
             proxy_config = _get_transcript_proxy_config()
+            # youtube-transcript-api is synchronous/blocking network I/O; run it
+            # in an executor so it doesn't stall the event loop.
+            loop = asyncio.get_running_loop()
 
             # Method 1: Direct transcript API
             # youtube-transcript-api >=1.0 replaced the ``get_transcript`` class
@@ -376,7 +379,9 @@ class YouTubeAPIProxy:
             # ``proxy_config`` constructor argument.
             try:
                 yt_api = YouTubeTranscriptApi(proxy_config=proxy_config)
-                transcript = yt_api.fetch(video_id).to_raw_data()
+                transcript = await loop.run_in_executor(
+                    None, lambda: yt_api.fetch(video_id).to_raw_data()
+                )
                 if transcript:
                     logger.info(f"✅ Direct transcript extraction: {len(transcript)} segments")
                     return transcript
@@ -389,9 +394,20 @@ class YouTubeAPIProxy:
             # ``to_raw_data`` restores the list-of-dicts.
             try:
                 yt_api = YouTubeTranscriptApi(proxy_config=proxy_config)
-                transcript_list = yt_api.list(video_id)
+                transcript_list = await loop.run_in_executor(
+                    None, lambda: yt_api.list(video_id)
+                )
                 for transcript_item in transcript_list:
-                    transcript = transcript_item.fetch().to_raw_data()
+                    # A single language failing (disabled/blocked) must not abort
+                    # the whole loop — try the next available transcript.
+                    try:
+                        transcript = await loop.run_in_executor(
+                            None,
+                            lambda item=transcript_item: item.fetch().to_raw_data(),
+                        )
+                    except Exception as item_e:
+                        logger.debug(f"Alternative language item failed: {item_e}")
+                        continue
                     if transcript:
                         logger.info(f"✅ Alternative language transcript: {len(transcript)} segments")
                         return transcript
