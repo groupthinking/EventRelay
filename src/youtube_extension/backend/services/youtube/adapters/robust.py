@@ -451,9 +451,14 @@ class RobustYouTubeService:
                     )
                     transcript = yt_api.fetch(video_id)
                 except Exception:
-                    # If object API fails, try module-level list() as fallback pattern
+                    # If object API fails, try the instance list() as fallback.
+                    # youtube-transcript-api >=1.0: ``list`` is an instance
+                    # method, and it must reuse the same proxy config as the
+                    # primary fetch above.
                     try:
-                        list_api = YouTubeTranscriptApi.list(video_id)
+                        list_api = YouTubeTranscriptApi(
+                            proxy_config=get_transcript_proxy_config()
+                        ).list(video_id)
                         transcript = list_api
                     except Exception:
                         transcript = []
@@ -496,9 +501,13 @@ class RobustYouTubeService:
                     api_error = f"YouTubeTranscriptApi.fetch failed: {type(fetch_err).__name__}: {fetch_err}"
                     logger.warning(api_error)
                     transcript_errors.append(api_error)
-                    # Try module-level list() as fallback
+                    # Try instance list() as fallback — reuse the same proxy
+                    # config as the primary fetch so a proxy-required environment
+                    # doesn't bypass the proxy (or leak the origin IP).
                     try:
-                        transcript_list = YouTubeTranscriptApi().list(video_id)
+                        transcript_list = YouTubeTranscriptApi(
+                            proxy_config=get_transcript_proxy_config()
+                        ).list(video_id)
                         transcript = transcript_list.find_transcript(
                             [language, "en"]
                         ).fetch()
