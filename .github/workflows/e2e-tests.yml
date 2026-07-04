@@ -142,7 +142,7 @@ jobs:
           {
             echo "### 🔴 E2E Failure — $DATE"
             echo ""
-            echo "**Trigger:** ${{ github.event_name }} on \`${{ github.ref_name }}\`"
+            echo "**Trigger:** ${{ github.event_name }} on \`${{ github.head_ref || github.ref_name }}\`"
             echo "**Commit:** \`${{ github.sha }}\`"
             echo "**Deployment:** $BASE_URL"
             echo ""
