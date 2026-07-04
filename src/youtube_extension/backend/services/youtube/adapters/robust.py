@@ -444,22 +444,31 @@ class RobustYouTubeService:
         """Check if transcript is available and count segments"""
         try:
             if HAS_TRANSCRIPT_API:
-                # Use high-level API to list and fetch transcripts
+                # youtube-transcript-api is synchronous/blocking network I/O; run
+                # it in an executor so it doesn't stall the event loop.
+                loop = asyncio.get_event_loop()
                 try:
                     yt_api = YouTubeTranscriptApi(
                         proxy_config=get_transcript_proxy_config()
                     )
-                    transcript = yt_api.fetch(video_id)
+                    transcript = await loop.run_in_executor(
+                        None, lambda: yt_api.fetch(video_id)
+                    )
                 except Exception:
-                    # If object API fails, try the instance list() as fallback.
-                    # youtube-transcript-api >=1.0: ``list`` is an instance
-                    # method, and it must reuse the same proxy config as the
-                    # primary fetch above.
-                    try:
-                        list_api = YouTubeTranscriptApi(
+                    # Fallback: list() returns per-language metadata, not
+                    # segments, so fetch an actual transcript to keep the count
+                    # meaningful (segments, not language count). Reuse the same
+                    # proxy config as the primary fetch.
+                    def _list_and_fetch() -> Any:
+                        transcript_list = YouTubeTranscriptApi(
                             proxy_config=get_transcript_proxy_config()
                         ).list(video_id)
-                        transcript = list_api
+                        return transcript_list.find_transcript(["en"]).fetch()
+
+                    try:
+                        transcript = await loop.run_in_executor(
+                            None, _list_and_fetch
+                        )
                     except Exception:
                         transcript = []
                 return True, len(transcript)
@@ -488,12 +497,18 @@ class RobustYouTubeService:
                 transcript = None
                 api_error = None
 
+                # youtube-transcript-api is synchronous/blocking network I/O; run
+                # it in an executor so it doesn't stall the event loop.
+                loop = asyncio.get_event_loop()
+
                 # Try instance-based fetch first
                 try:
                     yt_api = YouTubeTranscriptApi(
                         proxy_config=get_transcript_proxy_config()
                     )
-                    transcript = yt_api.fetch(video_id, languages=[language, "en"])
+                    transcript = await loop.run_in_executor(
+                        None, lambda: yt_api.fetch(video_id, languages=[language, "en"])
+                    )
                     logger.info(
                         f"YouTubeTranscriptApi.fetch() returned {len(transcript) if transcript else 0} segments"
                     )
@@ -504,13 +519,18 @@ class RobustYouTubeService:
                     # Try instance list() as fallback — reuse the same proxy
                     # config as the primary fetch so a proxy-required environment
                     # doesn't bypass the proxy (or leak the origin IP).
-                    try:
+                    def _list_fallback() -> Any:
                         transcript_list = YouTubeTranscriptApi(
                             proxy_config=get_transcript_proxy_config()
                         ).list(video_id)
-                        transcript = transcript_list.find_transcript(
+                        return transcript_list.find_transcript(
                             [language, "en"]
                         ).fetch()
+
+                    try:
+                        transcript = await loop.run_in_executor(
+                            None, _list_fallback
+                        )
                         logger.info(
                             f"YouTubeTranscriptApi.list() returned {len(transcript) if transcript else 0} segments"
                         )

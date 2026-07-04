@@ -79,8 +79,13 @@ class InteractiveMetadataExtractor:
 
         try:
             # Try YouTube's auto-generated captions (youtube-transcript-api >=1.0
-            # instance API; to_raw_data restores the list-of-dicts shape).
-            transcript = YouTubeTranscriptApi().fetch(video_id).to_raw_data()
+            # instance API; to_raw_data restores the list-of-dicts shape). The
+            # call is blocking network I/O, so run it in an executor to keep the
+            # event loop free.
+            loop = asyncio.get_event_loop()
+            transcript = await loop.run_in_executor(
+                None, lambda: YouTubeTranscriptApi().fetch(video_id).to_raw_data()
+            )
 
             for i, entry in enumerate(transcript):
                 transcript_lines.append({
