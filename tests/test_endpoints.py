@@ -1,8 +1,24 @@
 import json
 
+import pytest
 import requests
 
 BASE_URL = "http://localhost:8001"
+
+
+def _server_available() -> bool:
+    try:
+        requests.get(f"{BASE_URL}/docs", timeout=2)
+        return True
+    except requests.exceptions.RequestException:
+        return False
+
+
+if not _server_available():
+    pytest.skip(
+        f"Live API server is not running at {BASE_URL}",
+        allow_module_level=True,
+    )
 
 def test_api():
     print("Checking base API connection...")
