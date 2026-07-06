@@ -16,10 +16,18 @@ the owner clears a gate"* — has been met: the owner executed run-3's recommend
 The owner cleared run-3's staged commands:
 
 - **#513** (npm minor/patch group + postcss security override) — **MERGED** (`a86c1fe`).
-- **#509** (npm minor/patch group, superseded by #513) — **CLOSED**.
-- **#512** (run-2 triage doc, superseded) — **CLOSED**.
-- **#441** (cleanup twin of #442, without the CI fix) — **CLOSED**, leaving #442 the sole
-  survivor of that pair.
+- **#512** (run-2 triage doc) — **MERGED** (2026-07-06T23:34Z, by owner).
+- **#509** (npm minor/patch group, superseded by #513) — **CLOSED** (2026-07-06T23:34Z).
+
+**Correction to the run 2 / run 3 records:** **#441** (the "cleanup pass 2" that removed
+`mcp-servers/*` and ~365 other unreferenced files) was in fact **MERGED on 2026-06-29** —
+weeks before run 3, *not* a change since it. Runs 2–3 (and this doc's first draft)
+mischaracterized #441 as an open "twin" of #442 awaiting a redundancy decision. It is not:
+its cleanup already landed. Consequently **#442 is not one of a redundant pair to choose
+between** — its only residual value is deleting the two now-dead `mcp-servers/` workflow
+files (`verify-litert-mcp.yml`, `vision-reasoning.yml`). #442's 384-file / −71.7k diff is
+orphaned-history noise from the `main` force-push, not real content (per CLAUDE.md: trust
+PR state + staleness, not raw diffs).
 
 New drift observed this run:
 
@@ -39,7 +47,7 @@ production fixes; CI-only Dependabot action pins) are **empty** again this run.
 | #365 | owner | 06-21 | CI fail (Vercel preview); AI Gateway feature | — | Left for owner review | HALTED(needs_review) |
 | #414 | jules[bot] | 06-25 | CI fail (Vercel preview); Dockerfile rewrite | — | Left for owner review | HALTED(needs_review) |
 | #433 | jules[bot] | 06-28 | CI fail (Vercel canceled); orphaned-history artifact | inflated diff | Recommend close + re-cut clean test branch | HALTED(orphaned_history) |
-| #442 | owner | 06-29 | CI fail (Vercel preview); orphaned-history, 384 files/-71.7k | `unknown` (inflated diff) | #441 now closed → #442 is sole survivor; owner decision to merge or close | HALTED(needs_owner_decision) |
+| #442 | owner | 06-29 | CI fail (Vercel preview); orphaned-history, 384-file inflated diff | `unknown` | Verified on `origin/main`: **both** target workflows (`verify-litert-mcp.yml`, `vision-reasoning.yml`) are **already absent** → #442 has nothing left to deliver. **Recommend close.** | HALTED(recommend_close) |
 | #474 | owner | 07-03 | CI fail (Vercel preview); docstrings | — | Left for owner review | HALTED(needs_review) |
 | #494 | owner | 07-03 | draft; implements #487's tests | — | High-value draft — recommend un-draft | DEFERRED(draft) |
 | #495 | Copilot | 07-04 | draft; removes committed API keys, fixes imports | — | High-value draft — recommend un-draft + rotate leaked keys | DEFERRED(draft) |
@@ -62,7 +70,9 @@ gh pr merge 510 --squash
 **Cleanup / drafts:**
 ```
 gh pr close 433            # orphaned-history bot artifact; re-cut a clean unit-test branch if wanted
-gh pr merge 442 --squash   # OR: gh pr close 442  — #441 is closed, so decide #442's fate directly
+gh pr close 442            # verified: both workflows it deletes (verify-litert-mcp.yml,
+                           # vision-reasoning.yml) are ALREADY absent from origin/main, so the
+                           # PR has nothing left to deliver; its 384-file diff is orphan noise
 # un-draft #494, #495 (rotate any leaked keys #495 removes), #511 when ready
 ```
 
@@ -84,4 +94,4 @@ rebase, or a major-version Dependabot bump with app/install blast radius — non
 routine's conservative auto-merge policy.
 
 The loop's automatable work has converged again. Re-run when the owner clears a gate (reviews
-#508/#510, decides #442, un-drafts #494/#495/#511, or rebases/closes the stale set).
+#508/#510, closes #442/#433, un-drafts #494/#495/#511, or rebases/closes the stale set).
