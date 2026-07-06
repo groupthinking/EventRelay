@@ -4,6 +4,7 @@ import {
   writeEntitlementToFile,
   resetEntitlementFileStoreForTests,
 } from './entitlement-file-store';
+import { resolveUpstashRedisCredentials } from './redis-credentials';
 
 export type PlanTier = 'free' | 'pro';
 
@@ -23,25 +24,26 @@ let redisPromise: Promise<Redis | null> | null = null;
 
 export function assertEntitlementDurability(): void {
   if (process.env.NODE_ENV !== 'production') return;
-  if (process.env.UPSTASH_REDIS_REST_URL?.trim() && process.env.UPSTASH_REDIS_REST_TOKEN?.trim()) {
+  if (resolveUpstashRedisCredentials()) {
     return;
   }
   throw new Error(
-    'UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN are required in production for cross-instance entitlement durability',
+    'Durable entitlement storage is not configured in production. Set UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN (or the KV_REST_API_URL + KV_REST_API_TOKEN provided by the Vercel Upstash integration) for cross-instance entitlement durability',
   );
 }
 
 async function getRedis(): Promise<Redis | null> {
   if (redisPromise) return redisPromise;
   redisPromise = (async () => {
-    if (!process.env.UPSTASH_REDIS_REST_URL || !process.env.UPSTASH_REDIS_REST_TOKEN) {
+    const creds = resolveUpstashRedisCredentials();
+    if (!creds) {
       return null;
     }
     try {
       const { Redis } = await import('@upstash/redis');
       return new Redis({
-        url: process.env.UPSTASH_REDIS_REST_URL,
-        token: process.env.UPSTASH_REDIS_REST_TOKEN,
+        url: creds.url,
+        token: creds.token,
       });
     } catch {
       return null;
