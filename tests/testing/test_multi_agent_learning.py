@@ -3,16 +3,21 @@
 Test Multi-Agent Collective Learning
 Demonstrates skills being shared across agent network
 """
-import sys
-import time
 import sqlite3
+import time
 from pathlib import Path
 
 print("🌐 Multi-Agent Collective Learning Test")
 print("=" * 70)
 
-# Import the connector
-from skill_bridge_connector import CollectiveSkillBuilder
+# Import the connector (archived legacy script; skip if unavailable)
+import pytest
+
+skill_bridge_connector = pytest.importorskip(
+    "skill_bridge_connector",
+    reason="legacy skill_bridge_connector script is not on the path (see scripts/archive/)",
+)
+CollectiveSkillBuilder = skill_bridge_connector.CollectiveSkillBuilder
 
 print("\n📋 Test Scenario:")
 print("  1. Agent A learns new error→resolution skill")
