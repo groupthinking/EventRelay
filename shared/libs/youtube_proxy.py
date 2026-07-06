@@ -29,9 +29,11 @@ try:
         CouldNotRetrieveTranscript,
         NoTranscriptFound,
     )
+    from youtube_transcript_api.proxies import GenericProxyConfig
     YOUTUBE_DEPS_AVAILABLE = True
 except ImportError as e:
     YOUTUBE_DEPS_AVAILABLE = False
+    GenericProxyConfig = None  # type: ignore[assignment,misc]
     logging.warning(f"YouTube dependencies not available: {e}")
 
 logger = logging.getLogger("youtube_api_proxy")
@@ -49,6 +51,25 @@ def _get_webshare_proxy_url() -> str | None:
         )
         return None
     return url
+
+
+def _get_transcript_proxy_config() -> GenericProxyConfig | None:
+    """Return a youtube-transcript-api proxy config object, or None.
+
+    youtube-transcript-api >=1.0 replaced the ``proxies=`` keyword with a
+    ``proxy_config`` constructor argument accepting a proxy config object.
+    """
+    url = _get_webshare_proxy_url()
+    if not url:
+        return None
+    if GenericProxyConfig is None:
+        logger.warning(
+            "WEBSHARE_PROXY_URL is set but youtube-transcript-api proxy support "
+            "is unavailable (requires youtube-transcript-api>=1.0) — falling back "
+            "to direct connection"
+        )
+        return None
+    return GenericProxyConfig(http_url=url, https_url=url)
 
 
 def _redact_proxy_credentials(text: str) -> str:
@@ -343,13 +364,24 @@ class YouTubeAPIProxy:
         """Get video transcript with retry logic and fallback methods"""
 
         async def _transcript_operation():
-            transcript_data = []
             proxy_url = _get_webshare_proxy_url()
-            proxies = {"http": proxy_url, "https": proxy_url} if proxy_url else None
+            proxy_config = _get_transcript_proxy_config()
+            # youtube-transcript-api is synchronous/blocking network I/O; run it
+            # in an executor so it doesn't stall the event loop. (get_event_loop
+            # matches the convention used across the rest of this codebase.)
+            loop = asyncio.get_event_loop()
 
             # Method 1: Direct transcript API
+            # youtube-transcript-api >=1.0 replaced the ``get_transcript`` class
+            # method with an instance ``fetch`` that returns a FetchedTranscript;
+            # ``to_raw_data`` yields the list-of-dicts shape the rest of the
+            # pipeline expects. The ``proxies=`` kwarg was replaced by a
+            # ``proxy_config`` constructor argument.
             try:
-                transcript = YouTubeTranscriptApi.get_transcript(video_id, proxies=proxies)
+                yt_api = YouTubeTranscriptApi(proxy_config=proxy_config)
+                transcript = await loop.run_in_executor(
+                    None, lambda: yt_api.fetch(video_id).to_raw_data()
+                )
                 if transcript:
                     logger.info(f"✅ Direct transcript extraction: {len(transcript)} segments")
                     return transcript
@@ -357,10 +389,25 @@ class YouTubeAPIProxy:
                 logger.debug(f"Direct transcript failed: {e}")
 
             # Method 2: Alternative language codes
+            # ``list_transcripts`` class method is now the instance ``list``;
+            # each Transcript's ``fetch`` returns a FetchedTranscript, so
+            # ``to_raw_data`` restores the list-of-dicts.
             try:
-                transcript_list = YouTubeTranscriptApi.list_transcripts(video_id, proxies=proxies)
+                yt_api = YouTubeTranscriptApi(proxy_config=proxy_config)
+                transcript_list = await loop.run_in_executor(
+                    None, lambda: yt_api.list(video_id)
+                )
                 for transcript_item in transcript_list:
-                    transcript = transcript_item.fetch()
+                    # A single language failing (disabled/blocked) must not abort
+                    # the whole loop — try the next available transcript.
+                    try:
+                        transcript = await loop.run_in_executor(
+                            None,
+                            lambda item=transcript_item: item.fetch().to_raw_data(),
+                        )
+                    except Exception as item_e:
+                        logger.debug(f"Alternative language item failed: {item_e}")
+                        continue
                     if transcript:
                         logger.info(f"✅ Alternative language transcript: {len(transcript)} segments")
                         return transcript
@@ -392,7 +439,9 @@ class YouTubeAPIProxy:
             except Exception as e:
                 logger.debug(f"yt-dlp extraction failed: {e}")
 
-            raise CouldNotRetrieveTranscript(f"All transcript extraction methods failed for {video_id}")
+            # CouldNotRetrieveTranscript(>=1.0) takes a bare video_id and builds
+            # its own message/URL; passing a sentence corrupts the generated URL.
+            raise CouldNotRetrieveTranscript(video_id)
 
         return await self._execute_with_retry(_transcript_operation, "transcript")
 
