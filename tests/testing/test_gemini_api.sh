@@ -1,7 +1,15 @@
 #!/bin/bash
 # Test Gemini API connection
+#
+# The API key must come from the environment — never hardcode credentials.
+# Export it before running, e.g.:
+#   export GEMINI_API_KEY="<your key>"
+set -euo pipefail
 
-export GEMINI_API_KEY="AIzaSyDtYn1Sg9QnvrNm8P4AdazfhiqtzV9FL8k"
+if [ -z "${GEMINI_API_KEY:-}" ]; then
+  echo "GEMINI_API_KEY is not set. Export it before running this script." >&2
+  exit 1
+fi
 
 echo "Testing Gemini API..."
 echo "API Key: ${GEMINI_API_KEY:0:15}..."
