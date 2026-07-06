@@ -76,5 +76,5 @@ class TestVideoJobStatusResponseErrorReason:
             VideoJobStatusResponse(
                 job_id="job_7",
                 status=JobStatus.failed,
-                error_reason=12345,
+                error_reason={"not": "a string"},
             )
