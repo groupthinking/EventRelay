@@ -176,7 +176,7 @@ class TranscriptActionRequest(BaseModel):
         description="Raw transcript text to process",
     )
     video_options: Optional[dict[str, Any]] = Field(
-        default_factory=dict,
+        None,
         description="Additional options for video/transcript processing",
     )
 
