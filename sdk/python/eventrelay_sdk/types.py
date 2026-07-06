@@ -68,6 +68,7 @@ class VideoJobStatusResponse(BaseModel):
     metadata: Optional[dict[str, Any]] = None
     error: Optional[str] = None
     error_reason: Optional[str] = None
+    created_at: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
