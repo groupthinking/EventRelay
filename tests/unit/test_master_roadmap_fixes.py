@@ -282,3 +282,29 @@ def test_sentry_smoke_endpoint_gated(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("ALLOW_SENTRY_SMOKE", "1")
     response = client.post("/test-sentry")
     assert response.status_code == 500
+
+
+def test_persist_video_job_stamps_stable_created_at(tmp_path, monkeypatch):
+    """Persisted job records carry a created_at (so expire_before() works on real
+    data), and it stays stable across the many status-transition re-persists."""
+    from youtube_extension.backend.api.v1 import router as router_module
+    from youtube_extension.backend.api.v1.models import (
+        JobStatus,
+        VideoJobStatusResponse,
+    )
+    from youtube_extension.services.pipeline_job_store import PipelineJobStore
+
+    store = PipelineJobStore(tmp_path)
+    monkeypatch.setattr(router_module, "get_job_store", lambda: store)
+
+    job = VideoJobStatusResponse(job_id="job_persist_1", status=JobStatus.pending)
+    router_module._persist_video_job(job)
+    first = store.load("job_persist_1")
+    assert isinstance(first, dict)
+    assert isinstance(first.get("created_at"), str) and first["created_at"]
+
+    # A later status update must not overwrite the original created_at.
+    job.status = JobStatus.complete
+    router_module._persist_video_job(job)
+    second = store.load("job_persist_1")
+    assert second["created_at"] == first["created_at"]

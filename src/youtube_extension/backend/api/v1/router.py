@@ -13,7 +13,7 @@ import os
 import time
 import uuid as _uuid
 from dataclasses import asdict
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
@@ -1251,7 +1251,16 @@ _dispatches: _TTLDict = _TTLDict(ttl=_JOB_TTL, max_size=_JOB_MAX_SIZE)
 def _persist_video_job(job: VideoJobStatusResponse) -> None:
     _video_jobs[job.job_id] = job
     try:
-        get_job_store().save(job.job_id, job.model_dump())
+        payload = job.model_dump()
+        # Stamp a stable creation timestamp so PipelineJobStore.expire_before()
+        # can age out old records. VideoJobStatusResponse has no created_at
+        # field, and _persist_video_job runs on every status transition, so we
+        # preserve the first-seen value instead of overwriting it each save.
+        store = get_job_store()
+        existing = store.load(job.job_id)
+        created_at = existing.get("created_at") if isinstance(existing, dict) else None
+        payload["created_at"] = created_at or datetime.now(timezone.utc).isoformat()
+        store.save(job.job_id, payload)
     except Exception as exc:
         logger.warning("Job persist failed for %s: %s", job.job_id, exc)
 
