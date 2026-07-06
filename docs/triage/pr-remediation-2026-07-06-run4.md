@@ -3,7 +3,8 @@
 Entry-scan + terminal-state disposition of **all open PRs** under the PR Remediation &
 Publish Runbook. Follows run 3 (#514, 2026-07-06), whose exit condition —
 *"re-run when the owner clears a gate (lands #513, reviews #508/#510, or rebases/closes
-the stale set)"* — was met: the owner landed #513 and cleared #509 / #511 / #512.
+the stale set)"* — was met, and then some: during this run the owner cleared **every open
+Dependabot PR**.
 
 - **Surface:** GitHub MCP (PR read + comment + merge), authed as repo owner.
 - **Auto-merge policy applied (unchanged):** merge only demonstrably-safe, auto-approved,
@@ -11,22 +12,32 @@ the stale set)"* — was met: the owner landed #513 and cleared #509 / #511 / #5
   change, deploy/runtime blast radius, a branch-protection block, or a merge conflict for
   owner sign-off.
 
+> **Live-state note (updated after CodeRabbit review of this doc):** the owner acted on the
+> two staged Dependabot PRs *while this run was in flight* (between the 23:35Z scan and the
+> 23:38Z commit). The table and commands below reflect the **live** state; the "current
+> open set" no longer contains any Dependabot PR.
+
 ## What changed since run 3
 
-The owner cleared the run-3 gate:
+The owner cleared the run-3 gate **and** the newly-staged Dependabot set:
 
 - **#513** npm minor/patch group + postcss security override — **MERGED** (supersedes #509)
 - **#509** superseded npm group bump — **CLOSED**
 - **#511** ci(e2e) prod-noise cleanup — **MERGED**
 - **#512** run-2 triage doc — **CLOSED/MERGED**
+- **#508** `vite` 6.4.3 → 8.1.3 (two-major bundler bump) — **CLOSED unmerged** at 23:37Z
+  (owner declined the major)
+- **#510** `chrome-devtools-mcp` 0.10.2 → 1.5.0 — **MERGED** at 23:37Z (owner resolved the
+  conflict + accepted the install-script/`prepare` change)
 
-**No new PRs were opened.** The open set only shrank. The two Dependabot bumps that run 3
-staged for owner review are still open and still owner-gated — and **#510 has _degraded_**:
-it was `mergeable_state: none` in run 3 and is now `dirty` (merge conflict), and its
-0.10.2 → 1.5.0 release notes flag an install-script (`prepare`) change — an extra
-supply-chain reason to keep it under owner review rather than auto-merge.
+**No new PRs were opened.** Both auto-mergeable categories this routine watches
+(owner-cleared production fixes; CI-only Dependabot action pins) are **empty** — the owner
+handled the two npm-major PRs directly, exactly as the runbook's PUBLISH GATE intends
+(human sign-off on the irreversible step).
 
 ## Oldest-first disposition (current open set)
+
+Excludes this triage-doc PR (#521) itself.
 
 | PR | Author | Age | Review/CI | Conflicts | Action taken | Terminal state |
 |----|--------|-----|-----------|-----------|--------------|----------------|
@@ -38,16 +49,15 @@ supply-chain reason to keep it under owner review rather than auto-merge.
 | #474 | owner | 07-03 | CI fail (Vercel preview); docstrings | — | Left for owner review | HALTED(needs_review) |
 | #494 | owner | 07-03 | draft; implements #487's tests | — | High-value draft — recommend un-draft | DEFERRED(draft) |
 | #495 | Copilot | 07-04 | draft; removes committed API keys, fixes imports | — | High-value draft — recommend un-draft + rotate leaked keys | DEFERRED(draft) |
-| #508 | dependabot | 07-04 | green (required); `unstable` (Vercel non-required); owner is requested reviewer | none | **Held — `vite` 6→8, two-major bundler bump; smoke-test web build** | HALTED(awaiting_review) |
-| #510 | dependabot | 07-04 | `dirty` (newly conflicted); pre-1.0→1.x major; install-script change | conflict | **Held — needs `@dependabot rebase` + owner review of the `prepare` script change** | HALTED(merge_conflict) |
+
+**Resolved by owner during this run** (no longer open): #508 (closed unmerged), #510 (merged).
 
 ## Staged commands (owner sign-off required)
 
-```
-# Dependabot majors — review each breaking note, then:
-gh pr merge 508 --squash        # vite 6.4.3 → 8.1.3: TWO major versions. Smoke-test apps/web build first.
-gh pr comment 510 --body "@dependabot rebase"   # clear the new conflict, THEN review the install-script
-                                                # (prepare) change before any merge; pre-1.0 → 1.x major.
+```bash
+# Dependabot majors — RESOLVED this run, no action needed:
+#   #508 vite 6→8  → closed unmerged (major declined)
+#   #510 chrome-devtools-mcp 0.10.2→1.5.0 → merged
 
 # Stale / orphaned-history — owner review or close:
 gh pr close 433                 # orphaned-history artifact; re-cut a clean unit-test branch if wanted
@@ -55,7 +65,7 @@ gh pr close 433                 # orphaned-history artifact; re-cut a clean unit
 # rebase #327 to clear its conflict; review #365, #414, #474
 
 # Drafts — un-draft when ready:
-# #494 (implements #487's tests), #495 (rotate any leaked keys it removes)
+#   #494 (implements #487's tests), #495 (rotate any leaked keys it removes)
 ```
 
 ## Systemic note — Vercel preview check (unchanged from run 3)
@@ -67,13 +77,11 @@ per-PR code defect.
 
 ## Is more work needed?
 
-**No — nothing safely automatable unattended.** This run's re-scan after the owner cleared
-the run-3 gate confirms both auto-mergeable categories (owner-cleared production fixes;
-CI-only Dependabot action pins) are **empty**. The only two non-draft Dependabot PRs are
-npm bumps with app blast radius: #508 (two-major bundler) and #510 (pre-1.0→1.x major, now
-conflicted, install-script change). Everything else is a draft, an orphaned-history
-artifact, or a stale/large/conflicted PR requiring owner review or a rebase outside this
-session's safe scope.
+**No — nothing safely automatable unattended.** After this run's activity, the entire open
+Dependabot set is resolved (owner closed #508, merged #510) and both of the routine's
+auto-mergeable categories are empty. Every remaining open PR is a draft (#494, #495), an
+orphaned-history artifact (#433, #442), or a stale/large/conflicted PR requiring owner
+review or a rebase outside this session's safe scope (#327, #365, #414, #474).
 
 The loop's automatable work has converged. **Stopping the loop.** Re-run when the owner
-clears the next gate (reviews #508, rebases/reviews #510, or rebases/closes the stale set).
+clears the next gate (un-drafts #494/#495, rebases #327, or reviews/closes the stale set).
