@@ -118,6 +118,88 @@ describe('action tool registry', () => {
     expect(body2.tags).toEqual(['a', 'b']);
   });
 
+  it('dispatch_subagents reports honestly when no backend is configured', async () => {
+    const tool = getTool('dispatch_subagents')!;
+    const res = await tool.execute(
+      { parentTask: 'ship it', subagents: [{ agentType: 'researcher', instruction: 'y' }] },
+      NO_BACKEND,
+    );
+    expect(res.isError).toBe(true);
+    expect(res.summary).toMatch(/no backend configured/i);
+  });
+
+  it('dispatch_subagents dispatches one call per subagent, pairing agentType with its own instruction', async () => {
+    // Fresh Response per call (bodies are single-use) and one call per subagent
+    // proves there is no cartesian fan-out mispairing.
+    const fetchImpl = vi
+      .fn()
+      .mockImplementation(async () => new Response(JSON.stringify({ data: { executions: [{}] } })));
+
+    const tool = getTool('dispatch_subagents')!;
+    const res = await tool.execute(
+      {
+        parentTask: 'ship the feature',
+        subagents: [
+          { agentType: 'code_generator', instruction: 'write the code' },
+          { agentType: 'researcher', instruction: 'research the API' },
+        ],
+      },
+      { backendBaseUrl: 'http://backend', fetchImpl, jobId: 'job1' },
+    );
+
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    const bodies = fetchImpl.mock.calls.map(
+      (c) => JSON.parse((c[1] as RequestInit).body as string),
+    );
+    expect(fetchImpl.mock.calls[0][0]).toBe('http://backend/api/v1/agents/dispatch');
+    expect(bodies[0].agent_types).toEqual(['code_generator']);
+    expect(bodies[0].events).toHaveLength(1);
+    expect(bodies[0].events[0].title).toBe('write the code');
+    expect(bodies[1].agent_types).toEqual(['researcher']);
+    expect(bodies[1].events[0].title).toBe('research the API');
+    expect(res.isError).toBeFalsy();
+  });
+
+  it('dispatch_subagents rejects malformed subagent entries before any dispatch', async () => {
+    const fetchImpl = vi.fn();
+    const tool = getTool('dispatch_subagents')!;
+    const res = await tool.execute(
+      { parentTask: 'x', subagents: [{ agentType: 'code_generator' }] }, // missing instruction
+      { backendBaseUrl: 'http://backend', fetchImpl, jobId: 'job1' },
+    );
+    expect(res.isError).toBe(true);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('get_agent_session_logs GETs the sessions endpoint with agent_type and limit filters', async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ data: { sessions: [{ agent_type: 'researcher' }] } })),
+      );
+    const tool = getTool('get_agent_session_logs')!;
+    const res = await tool.execute(
+      { agentType: 'researcher', limit: 5 },
+      { backendBaseUrl: 'http://backend', fetchImpl },
+    );
+
+    expect(fetchImpl).toHaveBeenCalledOnce();
+    const url = fetchImpl.mock.calls[0][0] as string;
+    expect(url).toContain('/api/v1/agents/sessions');
+    expect(url).toContain('agent_type=researcher');
+    expect(url).toContain('limit=5');
+    expect(res.isError).toBeFalsy();
+    expect(res.data).toMatchObject({ count: 1 });
+  });
+
+  it('get_agent_session_logs surfaces a non-ok backend response as an error', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(new Response('nope', { status: 503 }));
+    const tool = getTool('get_agent_session_logs')!;
+    const res = await tool.execute({}, { backendBaseUrl: 'http://backend', fetchImpl });
+    expect(res.isError).toBe(true);
+    expect(res.summary).toContain('503');
+  });
+
   it('adapts tools to OpenAI function-tool format', () => {
     const openai = toOpenAITools();
     expect(openai).toHaveLength(ACTION_TOOLS.length);
