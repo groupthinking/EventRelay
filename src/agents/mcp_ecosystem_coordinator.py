@@ -6,20 +6,20 @@ Unified hub for coordinating all MCP servers in the YouTube extension ecosystem
 
 import abc
 import asyncio
+import importlib
 import json
 import logging
 import os
+import sys
 from dataclasses import asdict
-
-from youtube_extension.processors.enhanced_extractor import (
-    EnhancedVideoExtractor,
-    VideoContent,
-)
+from pathlib import Path
+from typing import Any
 
 # Add src/mcp to path for imports
 # REMOVED: sys.path.append removed
 
 logger = logging.getLogger(__name__)
+SKILLS_LOCK_FILE = Path(__file__).resolve().parents[2] / "skills-lock.json"
 
 class BaseMCPServer(abc.ABC):
     """Abstract base class for all MCP servers."""
@@ -50,8 +50,15 @@ class MCPVideoProcessorServer(BaseMCPServer):
     def __init__(self):
         super().__init__("video_processor", "video_processing")
         self.supported_formats = ["mp4", "webm", "avi"]
-        # Initialize the Unified Pipeline Extractor
-        self.extractor = EnhancedVideoExtractor()
+        self.extractor = None
+        try:
+            module = importlib.import_module(
+                "youtube_extension.processors.enhanced_extractor"
+            )
+            EnhancedVideoExtractor = module.EnhancedVideoExtractor
+            self.extractor = EnhancedVideoExtractor()
+        except Exception as e:
+            logger.warning(f"Enhanced extractor unavailable: {e}")
 
     async def handle_request(self, request: dict) -> dict:
         """Process video processing requests."""
@@ -61,11 +68,13 @@ class MCPVideoProcessorServer(BaseMCPServer):
         if action == "process_video":
             logger.info(f"Processing video: {video_id}")
             try:
+                if self.extractor is None:
+                    return {"status": "error", "message": "Video extractor unavailable"}
                 # Use the Unified Pipeline (Gemini + Scoring)
                 # Note: process_video expects a URL usually, but if ID is passed, we might need to construct URL
                 # or ensure process_video handles IDs (it extracts ID from URL, so URL is safer)
                 video_url = f"https://www.youtube.com/watch?v={video_id}"
-                content: VideoContent = await self.extractor.process_video(video_url)
+                content: Any = await self.extractor.process_video(video_url)
 
                 return {
                     "status": "success",
@@ -151,13 +160,57 @@ class MCPYouTubeAPIProxyServer(BaseMCPServer):
     async def health_check(self) -> dict:
         return {"status": "healthy", "server": self.name}
 
+
+class SkillRegistry:
+    """Registry for EventRelay GTM skills defined in skills-lock.json."""
+
+    def __init__(self, lock_file: Path = SKILLS_LOCK_FILE):
+        self.lock_file = Path(lock_file)
+        self._skills: list[dict[str, Any]] = []
+        self._load()
+
+    def _load(self) -> None:
+        if not self.lock_file.exists():
+            self._skills = []
+            return
+
+        data = json.loads(self.lock_file.read_text())
+        if isinstance(data.get("eventrelay_skills"), list):
+            self._skills = data["eventrelay_skills"]
+            return
+
+        skills_data = data.get("skills", [])
+        if isinstance(skills_data, dict) and isinstance(
+            skills_data.get("eventrelay_skills"), list
+        ):
+            self._skills = skills_data["eventrelay_skills"]
+            return
+
+        if isinstance(skills_data, list):
+            self._skills = skills_data
+            return
+
+        self._skills = []
+
+    def list_skills(self, trigger: str | None = None) -> list[dict[str, Any]]:
+        if not trigger:
+            return list(self._skills)
+        return [s for s in self._skills if trigger in s.get("triggers", [])]
+
+    def get_skill(self, skill_id: str) -> dict[str, Any] | None:
+        for skill in self._skills:
+            if skill.get("id") == skill_id:
+                return skill
+        return None
+
 class MCPEcosystemCoordinator:
     """Coordinates multiple MCP servers, routing requests and managing capabilities."""
 
-    def __init__(self):
+    def __init__(self, skill_registry: SkillRegistry | None = None):
         self.servers: dict[str, BaseMCPServer] = {}
         self.capabilities_map: dict[str, dict] = {}
         self.workflow_history: list[dict] = []
+        self.skill_registry = skill_registry or SkillRegistry()
 
     def register_server(self, server: BaseMCPServer) -> bool:
         """Registers an MCP server with the coordinator."""
@@ -178,7 +231,8 @@ class MCPEcosystemCoordinator:
         all_capabilities = {
             "total_servers": len(self.servers),
             "servers": {},
-            "available_tools": []
+            "available_tools": [],
+            "skills": self.skill_registry.list_skills(),
         }
 
         for name, caps in self.capabilities_map.items():
@@ -187,6 +241,59 @@ class MCPEcosystemCoordinator:
                 all_capabilities["available_tools"].extend(caps["tools"])
 
         return all_capabilities
+
+    async def invoke_skill(
+        self,
+        skill_id: str,
+        payload: dict[str, Any],
+        env_vars: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
+        """Invoke a configured skill as a subprocess with explicit env pass-through."""
+        skill = self.skill_registry.get_skill(skill_id)
+        if not skill:
+            return {"status": "error", "message": f"Skill '{skill_id}' not found"}
+
+        entry_point = skill.get("entry_point")
+        if not entry_point:
+            return {"status": "error", "message": f"Skill '{skill_id}' has no entry_point"}
+        entry_path = Path(entry_point)
+        if not entry_path.is_absolute():
+            entry_path = Path(__file__).resolve().parents[2] / entry_path
+
+        required_env_vars = skill.get("required_env_vars", [])
+        explicit_env = self._build_skill_env(required_env_vars, env_vars or {})
+
+        process = await asyncio.create_subprocess_exec(
+            sys.executable,
+            str(entry_path),
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            env=explicit_env,
+        )
+        stdout, stderr = await process.communicate(json.dumps(payload).encode("utf-8"))
+
+        if process.returncode != 0:
+            return {
+                "status": "error",
+                "message": stderr.decode("utf-8").strip() or "Skill execution failed",
+            }
+
+        output = stdout.decode("utf-8").strip()
+        if not output:
+            return {"status": "success"}
+        return json.loads(output)
+
+    def _build_skill_env(
+        self, required_env_vars: list[str], env_vars: dict[str, str]
+    ) -> dict[str, str]:
+        explicit_env = {"PATH": os.getenv("PATH", "")}
+        for var_name in required_env_vars:
+            if var_name in env_vars:
+                explicit_env[var_name] = env_vars[var_name]
+            elif os.getenv(var_name):
+                explicit_env[var_name] = os.getenv(var_name, "")
+        return explicit_env
 
     async def dispatch_request(self, server_name: str, request: dict) -> dict:
         """Dispatches a request to the specified MCP server."""
