@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint src middleware.ts",
     "test": "vitest run",
+    "type-check": "tsc --noEmit",
     "analyze": "next experimental-analyze --output"
   },
   "dependencies": {
