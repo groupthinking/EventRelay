@@ -17,6 +17,7 @@ import json
 import logging
 import os
 import uuid
+from copy import deepcopy
 from datetime import datetime, timedelta
 from enum import Enum
 from typing import Any, Optional
@@ -370,9 +371,9 @@ class MCPContextManager:
             logger.warning(f"Context not found for state delta: {context_id}")
             return None
 
-        previous_state = dict(context.code_state)
+        previous_state = deepcopy(context.code_state)
         diff = self._compute_state_diff(previous_state, next_state)
-        context.code_state = dict(next_state)
+        context.code_state = deepcopy(next_state)
         context.vector_clock[device_id] = context.vector_clock.get(device_id, 0) + 1
         context.updated_at = datetime.utcnow()
         context.add_history_entry(
@@ -415,7 +416,10 @@ class MCPContextManager:
                 filenames = os.listdir(self.storage_path)
             except OSError as exc:
                 logger.error(
-                    "Failed to list context storage path %s: %s",
+                    (
+                        "Failed to list context storage path %s: %s. "
+                        "Check that the directory exists and permissions allow reads."
+                    ),
                     self.storage_path,
                     exc,
                 )
@@ -437,7 +441,7 @@ class MCPContextManager:
         if not matches:
             return None
 
-        latest = max(matches, key=lambda c: c.updated_at)
+        latest = max(matches, key=lambda c: c.updated_at or c.created_at)
         self.context_cache[latest.id] = latest
         return latest
 

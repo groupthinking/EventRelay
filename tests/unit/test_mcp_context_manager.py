@@ -514,8 +514,6 @@ class TestContinuityLayerFoundations:
             metadata={"agent_id": "agent-restore"},
         )
         mgr1.apply_state_delta(ctx.id, {"state": "updated"}, device_id="device-a")
-        mgr1.active_contexts.clear()
-        mgr1.context_cache.clear()
 
         mgr2 = MCPContextManager(storage_path=str(storage))
         restored = mgr2.get_latest_context_for_agent("agent-restore")
