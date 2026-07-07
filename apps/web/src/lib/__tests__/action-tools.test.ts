@@ -19,6 +19,8 @@ describe('action tool registry', () => {
         'add_to_knowledge_base',
         'create_workflow_task',
         'dispatch_agent',
+        'dispatch_subagents',
+        'get_agent_session_logs',
         'save_resource',
         'schedule_followup',
       ].sort(),

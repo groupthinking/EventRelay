@@ -622,6 +622,15 @@ class TestExecuteSingle:
         assert "error" in result
         assert "not found" in result["error"]
 
+    async def test_unknown_agent_dispatch_is_logged(self):
+        orch = AgentOrchestrator()
+        await orch.execute_single(agent_type="nonexistent", context={"job": "x"})
+        # Failed "agent not found" dispatches must appear in the session audit trail
+        logs = orch.get_session_logs()
+        assert len(logs) == 1
+        assert logs[0]["agent_type"] == "nonexistent"
+        assert logs[0]["status"] == "error"
+
     async def test_returns_error_on_agent_failure(self):
         orch = AgentOrchestrator()
         agent = _make_error_agent("bad_analyzer")

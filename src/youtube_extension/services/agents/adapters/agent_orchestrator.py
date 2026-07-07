@@ -327,6 +327,21 @@ class AgentOrchestrator:
             self.logger.warning(
                 "Agent type %s not found for execute_single", agent_type
             )
+            # Record the failed dispatch so the session/audit trail is complete
+            # (matches the success, agent-failure, and exception paths below).
+            self._a2a_log.append(
+                A2AContextMessage(
+                    sender="orchestrator",
+                    recipient=agent_type,
+                    content={
+                        "type": "agent_dispatch",
+                        "agent_type": agent_type,
+                        "context": context,
+                        "status": "error",
+                        "error": "agent_not_found",
+                    },
+                )
+            )
             return {"error": f"Agent type '{agent_type}' not found"}
 
         try:

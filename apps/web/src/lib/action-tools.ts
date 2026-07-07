@@ -317,6 +317,24 @@ const dispatchSubagents: ActionTool = {
       return { summary: 'No subagents specified', isError: true };
     }
 
+    // Validate each entry's shape at runtime; a bare `as` cast would let a
+    // malformed entry (missing/non-string agentType or instruction) through and
+    // silently produce `undefined` in the request body.
+    const isValidSubagent = (
+      s: unknown,
+    ): s is { agentType: string; instruction: string } =>
+      typeof s === 'object' &&
+      s !== null &&
+      typeof (s as { agentType?: unknown }).agentType === 'string' &&
+      typeof (s as { instruction?: unknown }).instruction === 'string';
+
+    if (!(subagents as unknown[]).every(isValidSubagent)) {
+      return {
+        summary: 'Invalid subagent: each entry needs a string agentType and instruction',
+        isError: true,
+      };
+    }
+
     const typed = subagents as Array<{ agentType: string; instruction: string }>;
     const doFetch = ctx.fetchImpl ?? fetch;
 
@@ -361,6 +379,13 @@ const dispatchSubagents: ActionTool = {
     const failures = settled
       .filter((r): r is PromiseRejectedResult => r.status === 'rejected')
       .map((r) => String(r.reason));
+
+    if (failures.length) {
+      console.error(
+        `dispatch_subagents: ${failures.length} subagent dispatch(es) failed:`,
+        failures,
+      );
+    }
 
     if (dispatches.length === 0) {
       return { summary: `Subagent dispatch failed: ${failures.join('; ')}`, isError: true };
@@ -429,6 +454,7 @@ const getAgentSessionLogs: ActionTool = {
         data: { sessions, count: sessions.length },
       };
     } catch (err) {
+      console.error('get_agent_session_logs failed:', err);
       return { summary: `Session logs error: ${String(err)}`, isError: true };
     }
   },

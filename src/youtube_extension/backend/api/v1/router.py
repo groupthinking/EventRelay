@@ -1870,6 +1870,8 @@ async def _run_agent(execution: AgentExecution, events: list[dict[str, Any]]):
         execution.status = AgentStatus.running
         execution.progress = 10.0
 
+        if _shared_orchestrator is None and AgentOrchestrator is None:
+            raise RuntimeError("AgentOrchestrator not available")
         orch = _shared_orchestrator or AgentOrchestrator()
         event_data = next(
             (e for e in events if e.get("id") == execution.event_id),
