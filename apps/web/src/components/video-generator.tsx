@@ -59,19 +59,20 @@ export default function VideoGenerator({ className = '' }: VideoGeneratorProps) 
       setElapsed(Math.floor((Date.now() - t0) / 1000));
     }, 1000);
 
+    // Combine the mandated request timeout (AbortSignal.timeout) with the
+    // component's own controller so an unmount still aborts the in-flight
+    // fetch. Either signal firing aborts the request.
     const controller = new AbortController();
     abortRef.current = controller;
-    const timeoutId = setTimeout(() => controller.abort(), CLIENT_TIMEOUT_MS);
 
     try {
       const res = await fetch('/api/video/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt: prompt.trim(), aspectRatio, duration }),
-        signal: controller.signal,
+        signal: AbortSignal.any([AbortSignal.timeout(CLIENT_TIMEOUT_MS), controller.signal]),
       });
 
-      clearTimeout(timeoutId);
       clearTimer();
       const data = await res.json();
 
@@ -83,7 +84,7 @@ export default function VideoGenerator({ className = '' }: VideoGeneratorProps) 
       setVideoBase64(data.videoBase64 ?? null);
       setState('done');
     } catch (err) {
-      clearTimeout(timeoutId);
+      console.error('[video-generator] Error:', err);
       clearTimer();
       setError(err instanceof Error ? err.message : 'Unknown error');
       setState('error');
