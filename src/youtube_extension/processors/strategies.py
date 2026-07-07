@@ -377,7 +377,7 @@ class EnhancedStrategy(ProcessorStrategy):
         if HAS_VIDEO_DEPS:
             try:
                 self.video_client = videointelligence.VideoIntelligenceServiceClient()
-            except Exception as e:
+            except Exception as e:  # broad catch: covers DefaultCredentialsError, TransportError, etc.
                 logger.warning(
                     f"Could not initialize VideoIntelligenceServiceClient: "
                     f"{type(e).__name__}: {e}"
