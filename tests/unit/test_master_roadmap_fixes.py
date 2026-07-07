@@ -266,12 +266,17 @@ def test_persist_video_job_stamps_stable_created_at(tmp_path, monkeypatch):
 
     store = PipelineJobStore(tmp_path)
     monkeypatch.setattr(router_module, "get_job_store", lambda: store)
+    # Isolate the module-level in-memory job cache: _persist_video_job also writes
+    # into router._video_jobs, so patch it to a throwaway dict (auto-restored by
+    # monkeypatch) to avoid leaking this job into other tests.
+    monkeypatch.setattr(router_module, "_video_jobs", {})
 
     job = VideoJobStatusResponse(job_id="job_persist_1", status=JobStatus.pending)
     router_module._persist_video_job(job)
     first = store.load("job_persist_1")
     assert isinstance(first, dict)
-    assert isinstance(first.get("created_at"), str) and first["created_at"]
+    assert isinstance(first.get("created_at"), str)
+    assert first["created_at"]
 
     # A later status update must not overwrite the original created_at.
     job.status = JobStatus.complete
