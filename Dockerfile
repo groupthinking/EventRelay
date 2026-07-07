@@ -28,8 +28,17 @@ RUN pip install --no-cache-dir --upgrade pip && \
     fi
 
 # Node deps (production only)
-COPY apps/web/package.json apps/web/package-lock.json apps/web/
-RUN cd apps/web && npm ci --production --ignore-scripts
+# Glob on the lockfile so the COPY tolerates its absence (a literal path would
+# fail the build with "file not found in build context").
+COPY apps/web/package.json apps/web/package-lock.json* apps/web/
+# Use `npm ci` when a lockfile is present (reproducible), otherwise fall back to
+# `npm install`. `npm ci` hard-fails without a package-lock.json / npm-shrinkwrap.json.
+RUN cd apps/web && \
+    if [ -f package-lock.json ] || [ -f npm-shrinkwrap.json ]; then \
+        npm ci --omit=dev --ignore-scripts; \
+    else \
+        npm install --omit=dev --ignore-scripts --no-audit --no-fund; \
+    fi
 
 # ── Stage 2: runtime ──────────────────────────────────────────────────────────
 FROM python:3.11-slim AS runtime
