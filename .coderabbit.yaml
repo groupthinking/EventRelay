@@ -165,6 +165,10 @@ reviews:
   auto_apply_labels: true
 chat:
   auto_reply: true
+  instructions: >-
+    When users ask "@coderabbitai plan", respond with an execution-focused plan:
+    summarize completed findings, list pending tasks, and provide a concrete
+    checklist to implement fixes and validate with tests.
 knowledge_base:
   learnings:
     scope: auto
