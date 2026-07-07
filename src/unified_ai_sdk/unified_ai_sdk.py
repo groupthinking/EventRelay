@@ -62,7 +62,7 @@ _PROVIDER_ENDPOINTS = {
     ModelProvider.CLAUDE: "https://api.anthropic.com/v1/messages",
     ModelProvider.OPENAI: "https://api.openai.com/v1/chat/completions",
     ModelProvider.GROK: "https://api.x.ai/v1/chat/completions",
-    ModelProvider.GEMINI: "https://generativelanguage.googleapis.com/v1beta/models",
+    ModelProvider.GEMINI: "https://generativelanguage.googleapis.com/v1beta",
 }
 
 # Environment variable keys for provider API keys
@@ -382,7 +382,7 @@ class UnifiedAISDK:
                 elif provider == ModelProvider.GEMINI:
                     # Gemini: list models endpoint
                     resp = await client.get(
-                        f"{_PROVIDER_ENDPOINTS[ModelProvider.GEMINI]}?key={api_key}",
+                        f"{_PROVIDER_ENDPOINTS[ModelProvider.GEMINI]}/models?key={api_key}",
                         timeout=10.0,
                     )
                     if resp.status_code in (200, 400, 401, 403, 429):
