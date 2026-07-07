@@ -9,6 +9,11 @@ WORKDIR /app
 # Install build dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
+    ca-certificates \
+    curl \
+    gnupg \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy dependency files
@@ -25,6 +30,12 @@ RUN pip install --no-cache-dir --upgrade pip && \
     else \
         pip install --no-cache-dir -e .; \
     fi
+
+# Install the apps/web production workspace dependencies using the root lockfile
+COPY package.json package-lock.json .npmrc ./
+COPY apps/web/package.json ./apps/web/package.json
+COPY apps/web/src/dataconnect-generated ./apps/web/src/dataconnect-generated
+RUN npm ci --workspace apps/web --omit=dev --ignore-scripts
 
 # Stage 2: Runtime
 FROM python:3.12-slim AS runtime
@@ -51,6 +62,9 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 # Copy application code
 COPY --chown=uvai:uvai src/ ./src/
 COPY --chown=uvai:uvai pyproject.toml ./
+COPY --chown=uvai:uvai apps/web/package.json ./apps/web/package.json
+COPY --chown=uvai:uvai apps/web/src/dataconnect-generated ./apps/web/src/dataconnect-generated
+COPY --chown=uvai:uvai --from=builder /app/apps/web/node_modules ./apps/web/node_modules
 
 # Create data directories
 RUN mkdir -p /app/data/enhanced_analysis /app/data/cache /app/logs /app/generated_projects /app/youtube_processed_videos /tmp/uvai_data && \
