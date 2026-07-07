@@ -4,8 +4,12 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
+def _normalized(text: str) -> str:
+    return " ".join(text.split())
+
+
 def test_dockerfile_installs_apps_web_from_root_workspace_lockfile() -> None:
-    dockerfile = (PROJECT_ROOT / "Dockerfile").read_text()
+    dockerfile = _normalized((PROJECT_ROOT / "Dockerfile").read_text())
 
     assert "COPY package.json package-lock.json .npmrc ./" in dockerfile
     assert "COPY apps/web/package.json ./apps/web/package.json" in dockerfile
