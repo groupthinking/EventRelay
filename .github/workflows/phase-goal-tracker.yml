@@ -58,10 +58,10 @@ jobs:
               return;
             }
 
-            const CHECKLIST_ITEM_PATTERN = /^\s*-\s+\[\s*([xX]?)\s*\]\s+(.+)$/;
+            const checklistItemPattern = /^\s*-\s+\[\s*([xX]?)\s*\]\s+(.+)$/;
             const taskMatches = body
               .split('\n')
-              .map((line) => line.match(CHECKLIST_ITEM_PATTERN))
+              .map((line) => line.match(checklistItemPattern))
               .filter(Boolean);
             const total = taskMatches.length;
 
@@ -70,7 +70,7 @@ jobs:
               return;
             }
 
-            const isCompleted = (match) => /[xX]/.test(match[1]);
+            const isCompleted = (match) => match[1].toLowerCase() === 'x';
             const completedTasks = taskMatches.filter(isCompleted);
             const maxOpenTasksToShow = 10;
             const completed = completedTasks.length;
