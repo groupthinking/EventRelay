@@ -23,9 +23,14 @@ RUN pip install --no-cache-dir --user .[youtube,cloud,postgres]
 # Production stage
 FROM python:3.11-slim
 
-# Install runtime dependencies
+# Install runtime dependencies (including Node.js for generated Next.js project verification)
 RUN apt-get update && apt-get install -y \
     libgomp1 \
+    curl \
+    ca-certificates \
+    gnupg \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user

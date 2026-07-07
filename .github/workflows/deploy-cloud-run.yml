@@ -89,7 +89,7 @@ jobs:
             --max-instances 10 \
             --port 8080 \
             --set-env-vars "ENVIRONMENT=production,DEBUG=false,LOG_LEVEL=INFO,LOG_FORMAT=json,PYTHONPATH=/app/src" \
-            --set-secrets "GEMINI_API_KEY=gemini-api-key:latest,OPENAI_API_KEY=openai-api-key:latest"
+            --set-secrets "GEMINI_API_KEY=GEMINI_API_KEY:latest,OPENAI_API_KEY=OPENAI_API_KEY:latest,YOUTUBE_API_KEY=YOUTUBE_API_KEY:latest,EVENTRELAY_API_KEY=EVENTRELAY_API_KEY:latest"
 
       - name: Get service URL
         id: url
@@ -102,13 +102,23 @@ jobs:
 
       - name: Test deployment
         run: |
-          # Wait a few seconds for service to be ready
-          sleep 10
-          
-          # Test health endpoint
-          curl -f ${{ steps.url.outputs.url }}/api/v1/health || \
-          curl -f ${{ steps.url.outputs.url }}/health || \
-          echo "Health check endpoint not responding"
+          # Authoritatively verify the API is actually up. /api/v1/health only
+          # returns 200 when the v1 router (health + agent dispatch) loaded — a
+          # broken import silently 404s it, so a passing check here is the real
+          # signal that the deploy is usable. Retry to absorb cold start, then
+          # FAIL the job if it never comes healthy (do not swallow the error).
+          URL="${{ steps.url.outputs.url }}/api/v1/health"
+          for i in $(seq 1 12); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "$URL" || echo 000)
+            echo "attempt $i: GET /api/v1/health -> $code"
+            if [ "$code" = "200" ]; then
+              echo "✅ Backend healthy"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::Backend never returned 200 from /api/v1/health after ~2m — deploy is not usable."
+          exit 1
 
       - name: Create deployment summary
         run: |
@@ -144,7 +154,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
           cache: 'pip'

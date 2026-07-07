@@ -255,39 +255,65 @@ class AzureVision(BaseCloudAI):
             with open(image_url, 'rb') as image_file:
                 return image_file.read()
 
+    async def _await_ocr_call(self, deadline: float, func: Any, *args: Any, **kwargs: Any) -> Any:
+        """Run a blocking Azure SDK call in a worker thread, bounded by a
+        monotonic wall-clock ``deadline`` (seconds, ``loop.time()`` scale).
+
+        Offloading via ``asyncio.to_thread`` keeps the event loop responsive, and
+        ``asyncio.wait_for`` enforces the remaining budget so neither a slow read
+        nor a slow poll can run past the OCR timeout. Raises ``CloudAIError`` on
+        expiry."""
+        import asyncio
+
+        remaining = deadline - asyncio.get_running_loop().time()
+        if remaining <= 0:
+            raise CloudAIError("Azure OCR operation timed out")
+        try:
+            return await asyncio.wait_for(
+                asyncio.to_thread(func, *args, **kwargs), timeout=remaining
+            )
+        except asyncio.TimeoutError as exc:
+            raise CloudAIError("Azure OCR operation timed out") from exc
+
     async def _perform_ocr(self, image_url: str, image_stream: Optional[bytes]) -> dict[str, Any]:
         """Perform OCR using Azure Read API."""
-        import time
+        import asyncio
 
         from azure.cognitiveservices.vision.computervision.models import (
             OperationStatusCodes,
         )
 
-        # Start OCR operation
+        # Bound the whole operation by a monotonic wall-clock deadline so neither
+        # the blocking SDK calls nor the poll loop can exceed the timeout budget.
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + 30  # seconds
+
+        # Start OCR operation (blocking SDK calls offloaded to a worker thread).
         if image_stream:
             # Use stream for local files
             import io
-            read_response = self._vision_client.read_in_stream(
-                io.BytesIO(image_stream),
-                raw=True
+            read_response = await self._await_ocr_call(
+                deadline, self._vision_client.read_in_stream,
+                io.BytesIO(image_stream), raw=True,
             )
         else:
             # Use URL for remote images
-            read_response = self._vision_client.read(image_url, raw=True)
+            read_response = await self._await_ocr_call(
+                deadline, self._vision_client.read, image_url, raw=True,
+            )
 
         # Get operation location
         operation_location = read_response.headers["Operation-Location"]
         operation_id = operation_location.split("/")[-1]
 
-        # Wait for operation completion
-        max_wait_time = 30  # seconds
-        elapsed = 0
-        while elapsed < max_wait_time:
-            result = self._vision_client.get_read_result(operation_id)
+        # Poll for completion within the remaining time budget.
+        while True:
+            result = await self._await_ocr_call(
+                deadline, self._vision_client.get_read_result, operation_id,
+            )
             if result.status not in [OperationStatusCodes.running, OperationStatusCodes.not_started]:
                 break
-            time.sleep(1)
-            elapsed += 1
+            await asyncio.sleep(min(1, max(0, deadline - loop.time())))
 
         if result.status == OperationStatusCodes.succeeded:
             return {"read_result": result.analyze_result}
@@ -296,23 +322,35 @@ class AzureVision(BaseCloudAI):
 
     async def _perform_ocr_stream(self, image_stream) -> dict[str, Any]:
         """Perform OCR on image stream."""
-        import time
+        import asyncio
 
         from azure.cognitiveservices.vision.computervision.models import (
             OperationStatusCodes,
         )
 
-        read_response = self._vision_client.read_in_stream(image_stream, raw=True)
+        # Bound the whole operation by a monotonic wall-clock deadline so a stuck
+        # operation cannot hang the coroutine forever.
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + 30  # seconds
+
+        read_response = await self._await_ocr_call(
+            deadline, self._vision_client.read_in_stream, image_stream, raw=True,
+        )
 
         operation_location = read_response.headers["Operation-Location"]
         operation_id = operation_location.split("/")[-1]
 
-        # Wait for completion
+        # Poll for completion within the remaining time budget.
         while True:
-            result = self._vision_client.get_read_result(operation_id)
+            result = await self._await_ocr_call(
+                deadline, self._vision_client.get_read_result, operation_id,
+            )
             if result.status not in [OperationStatusCodes.running, OperationStatusCodes.not_started]:
                 break
-            time.sleep(1)
+            await asyncio.sleep(min(1, max(0, deadline - loop.time())))
+
+        if result.status != OperationStatusCodes.succeeded:
+            raise CloudAIError(f"OCR stream operation failed with status: {result.status}")
 
         return {"read_result": result.analyze_result}
 

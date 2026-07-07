@@ -10,6 +10,7 @@ Provides versioned API endpoints with proper OpenAPI documentation.
 import asyncio
 import logging
 import os
+import time
 import uuid as _uuid
 from dataclasses import asdict
 from datetime import datetime
@@ -84,6 +85,8 @@ from .models import (
     GeminiTokenResponse,
     HealthResponse,
     JobStatus,
+    KnowledgeIngestRequest,
+    KnowledgeIngestResponse,
     MarkdownRequest,
     MarkdownResponse,
     TranscriptActionRequest,
@@ -113,6 +116,23 @@ async def _emit_event(event_type: str, data: dict, subject: str | None = None) -
             )
         except Exception as exc:
             logger.debug("CloudEvent publish failed: %s", exc)
+
+
+def _normalize_tag_list(raw_tags: Any) -> list[str]:
+    """Normalize tags into a deduplicated list of non-empty strings."""
+    if not isinstance(raw_tags, list):
+        return []
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for value in raw_tags:
+        if not isinstance(value, str):
+            continue
+        tag = value.strip()
+        if not tag or tag in seen:
+            continue
+        seen.add(tag)
+        normalized.append(tag)
+    return normalized
 
 
 # Create API v1 router
@@ -853,19 +873,23 @@ async def list_videos_v1(
 ):
     """Get paginated list of processed videos"""
     try:
-        all_videos = data_service.get_videos_summary()
-
-        # Apply pagination
-        start = offset
-        end = offset + limit
-        paginated_videos = all_videos[start:end]
+        total = data_service.count_videos()
+        if offset >= total:
+            return {
+                "videos": [],
+                "total": total,
+                "limit": limit,
+                "offset": offset,
+                "has_more": False,
+            }
+        paginated_videos = data_service.get_videos_summary(limit=limit, offset=offset)
 
         return {
             "videos": paginated_videos,
-            "total": len(all_videos),
+            "total": total,
             "limit": limit,
             "offset": offset,
-            "has_more": end < len(all_videos),
+            "has_more": (offset + limit) < total,
         }
 
     except Exception as e:
@@ -911,6 +935,41 @@ async def get_learning_log_v1(data_service: DataService = Depends(get_data_servi
     except Exception as e:
         logger.error(f"Error getting learning log: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post(
+    "/knowledge/ingest",
+    response_model=KnowledgeIngestResponse,
+    summary="Ingest transcript-derived knowledge",
+    description="Persist a durable transcript-derived insight into backend knowledge storage",
+)
+async def ingest_knowledge_v1(
+    request: KnowledgeIngestRequest, data_service: DataService = Depends(get_data_service)
+):
+    """Store transcript-derived knowledge with normalized tags."""
+    text = request.text.strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="text must be a non-empty string")
+
+    tags = _normalize_tag_list(request.tags)
+    try:
+        saved = data_service.save_knowledge_entry(
+            text=text, tags=tags, source=request.source
+        )
+        if not saved:
+            raise HTTPException(status_code=500, detail="Failed to store insight")
+        return KnowledgeIngestResponse(
+            stored=True,
+            id=saved["id"],
+            source=saved["source"],
+            tags=saved["tags"],
+            message="Stored insight in knowledge base",
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error(f"Error ingesting knowledge entry: {exc}")
+        raise HTTPException(status_code=500, detail="Failed to store insight")
 
 
 # Actions Endpoints (minimal implementation to integrate with repositories)
@@ -1087,15 +1146,112 @@ async def ingest_performance_report_v1(report: dict[str, Any]):
 # (Replace with Redis/DB in production)
 # ============================================================
 
-_video_jobs: dict[str, VideoJobStatusResponse] = {}
-_agent_executions: dict[str, AgentExecution] = {}
-_dispatches: dict[str, AgentDispatchResponse] = {}
+
+class _TTLDict(dict[str, Any]):
+    """A dict subclass that evicts entries older than *ttl* seconds.
+
+    Eviction is lazy (on any mutation or `get`/`__getitem__`) plus an optional
+    periodic sweep via `evict_expired()`. A *max_size* cap prevents unbounded
+    growth: when the limit is reached the oldest (first-inserted) entry is
+    dropped. Python 3.7+ insertion-order guarantees make this O(1).
+    """
+
+    def __init__(
+        self,
+        ttl: float = 3600.0,
+        max_size: int = 2000,
+        *args: Any,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(*args, **kwargs)
+        self._ttl = ttl
+        self._max_size = max_size
+        # Timestamps stored separately to avoid serialization side-effects.
+        self._timestamps: dict[str, float] = {}
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _touch(self, key: str) -> None:
+        self._timestamps[key] = time.monotonic()
+
+    def _is_expired(self, key: str) -> bool:
+        ts = self._timestamps.get(key)
+        return ts is None or (time.monotonic() - ts) > self._ttl
+
+    def evict_expired(self) -> None:
+        """Remove all entries whose TTL has elapsed."""
+        # Iterate a snapshot so we can mutate during the loop.
+        expired = [k for k in self._timestamps if self._is_expired(k)]
+        for k in expired:
+            super().pop(k, None)
+            self._timestamps.pop(k, None)
+
+    def _enforce_max_size(self) -> None:
+        """Drop the first-inserted entry when the dict exceeds *max_size*.
+
+        Python 3.7+ dicts preserve insertion order, so ``next(iter(...))``
+        returns the oldest entry in O(1) without scanning all keys.
+        """
+        if len(self) > self._max_size:
+            oldest = next(iter(self._timestamps), None)
+            if oldest is not None:
+                super().pop(oldest, None)
+                self._timestamps.pop(oldest, None)
+
+    # ------------------------------------------------------------------
+    # Overridden dict methods
+    # ------------------------------------------------------------------
+
+    def __setitem__(self, key: str, value: Any) -> None:  # type: ignore[override]
+        self.evict_expired()
+        super().__setitem__(key, value)
+        self._touch(key)
+        self._enforce_max_size()
+
+    def __getitem__(self, key: str) -> Any:
+        if self._is_expired(key):
+            super().pop(key, None)
+            self._timestamps.pop(key, None)
+            raise KeyError(key)
+        return super().__getitem__(key)
+
+    def __delitem__(self, key: str) -> None:
+        super().__delitem__(key)
+        self._timestamps.pop(key, None)
+
+    def get(self, key: str, default: Any = None) -> Any:  # type: ignore[override]
+        try:
+            return self[key]
+        except KeyError:
+            return default
+
+    def pop(self, key: str, *args: Any) -> Any:  # type: ignore[override]
+        self._timestamps.pop(key, None)
+        return super().pop(key, *args)
+
+    def __contains__(self, key: object) -> bool:
+        if isinstance(key, str) and self._is_expired(key):
+            super().pop(key, None)
+            self._timestamps.pop(key, None)
+            return False
+        return super().__contains__(key)
+
+
+# Default TTL: 2 hours; max 2 000 entries per store.
+_JOB_TTL: float = float(os.getenv("JOB_STORE_TTL_SECONDS", "7200"))
+_JOB_MAX_SIZE: int = int(os.getenv("JOB_STORE_MAX_SIZE", "2000"))
+
+_video_jobs: _TTLDict = _TTLDict(ttl=_JOB_TTL, max_size=_JOB_MAX_SIZE)
+_agent_executions: _TTLDict = _TTLDict(ttl=_JOB_TTL, max_size=_JOB_MAX_SIZE)
+_dispatches: _TTLDict = _TTLDict(ttl=_JOB_TTL, max_size=_JOB_MAX_SIZE)
 
 
 def _persist_video_job(job: VideoJobStatusResponse) -> None:
     _video_jobs[job.job_id] = job
     try:
-        get_job_store().save(job.job_id, job.model_dump())
+        get_job_store().save(job.job_id, job.model_dump(mode="json"))
     except Exception as exc:
         logger.warning("Job persist failed for %s: %s", job.job_id, exc)
 
@@ -1461,44 +1617,95 @@ async def extract_events(request: EventExtractRequest):
     if not transcript_text:
         raise HTTPException(status_code=400, detail="No transcript available")
 
-    events: list[ExtractedEvent] = []
-    try:
-        processor = HybridProcessorService()
-        ai_result = await processor.process(
-            input_data=transcript_text[:8000],
-            prompt=(
-                "Extract key actionable events from this transcript. "
-                "For each event provide: type (action/mention/topic/insight), title, description, "
-                "and timestamp if mentioned."
-            ),
-        )
-        # process() returns a HybridResult dataclass whose payload is `.response`.
-        # REAL_MODE_ONLY: never synthesize events from a mocked or empty AI
-        # response -- fall through to the deterministic heuristic instead.
-        cloud_result = ai_result.cloud_result
-        backend = cloud_result.backend if cloud_result else None
-        raw_text = (ai_result.response or "") if ai_result.success else ""
-        if not raw_text.strip() or backend == "mock":
-            raise RuntimeError("AI extraction unavailable (no real Gemini response)")
-        for line in raw_text.strip().split("\n"):
-            line = line.strip("- •*")
-            if len(line) > 5:
-                events.append(
-                    ExtractedEvent(
-                        type=(
-                            "action"
-                            if any(
-                                w in line.lower()
-                                for w in ["do", "create", "build", "implement", "add"]
-                            )
-                            else "topic"
-                        ),
-                        title=line[:120],
-                        description=line if len(line) > 120 else None,
-                    )
+    # Chunked AI extraction: process the transcript in overlapping windows so
+    # tail content is never silently dropped.  Each chunk is up to 24 000 chars
+    # with a 500-char overlap to preserve sentence context across boundaries.
+    _CHUNK_SIZE = 24_000
+    _CHUNK_OVERLAP = 500
+    _MAX_EVENTS = 50
+
+    def _build_chunks(text: str) -> list[str]:
+        if len(text) <= _CHUNK_SIZE:
+            return [text]
+        chunks = []
+        start = 0
+        while start < len(text):
+            end = start + _CHUNK_SIZE
+            if end < len(text):
+                # Find the nearest sentence boundary (. ! ?) before the hard
+                # cut by taking the rightmost (max) position across all three
+                # punctuation marks.  Fall back to the nearest space (word
+                # boundary) if no sentence end is found in the window.
+                boundary_pos = max(
+                    text.rfind(b, start, end) for b in ('.', '!', '?')
                 )
+                if boundary_pos != -1:
+                    end = boundary_pos + 1  # include the punctuation mark
+                else:
+                    space = text.rfind(' ', start, end)
+                    if space != -1:
+                        end = space + 1
+            chunks.append(text[start:end])
+            start = end - _CHUNK_OVERLAP
+        return chunks
+
+    transcript_chunks = _build_chunks(transcript_text)
+
+    events: list[ExtractedEvent] = []
+    seen_titles: set[str] = set()
+
+    async def _extract_chunk(chunk: str) -> list[ExtractedEvent]:
+        """Run AI extraction on one chunk; returns events, empty list on failure."""
+        chunk_events: list[ExtractedEvent] = []
+        try:
+            processor = HybridProcessorService()
+            ai_result = await processor.process(
+                input_data=chunk,
+                prompt=(
+                    "Extract key actionable events from this transcript. "
+                    "For each event provide: type (action/mention/topic/insight), title, description, "
+                    "and timestamp if mentioned."
+                ),
+            )
+            # REAL_MODE_ONLY: never synthesize events from a mocked or empty AI
+            # response -- fall through to the deterministic heuristic instead.
+            cloud_result = ai_result.cloud_result
+            backend = cloud_result.backend if cloud_result else None
+            raw_text = (ai_result.response or "") if ai_result.success else ""
+            if not raw_text.strip() or backend == "mock":
+                raise RuntimeError("AI extraction unavailable (no real Gemini response)")
+            for line in raw_text.strip().split("\n"):
+                line = line.strip("- •*")
+                if len(line) > 5:
+                    chunk_events.append(
+                        ExtractedEvent(
+                            type=(
+                                "action"
+                                if any(
+                                    w in line.lower()
+                                    for w in ["do", "create", "build", "implement", "add"]
+                                )
+                                else "topic"
+                            ),
+                            title=line[:120],
+                            description=line if len(line) > 120 else None,
+                        )
+                    )
+        except Exception as exc:
+            logger.warning(f"Direct Gemini extraction unavailable for chunk: {exc}")
+        return chunk_events
+
+    try:
+        for chunk in transcript_chunks:
+            if len(events) >= _MAX_EVENTS:
+                break
+            chunk_events = await _extract_chunk(chunk)
+            for ev in chunk_events:
+                if ev.title not in seen_titles and len(events) < _MAX_EVENTS:
+                    seen_titles.add(ev.title)
+                    events.append(ev)
     except Exception as exc:
-        logger.warning(f"Direct Gemini extraction unavailable: {exc}")
+        logger.warning(f"Chunked extraction failed: {exc}")
 
     # Real-AI fallback: if no events yet, try the Vercel AI Gateway (uses
     # VERCEL_API_KEY, routes to Gemini/GPT/Claude). This keeps the AI path
@@ -1610,7 +1817,7 @@ async def dispatch_agents(request: AgentDispatchRequest):
     dispatch = AgentDispatchResponse()
     agent_types = request.agent_types or ["analyzer", "content_creator"]
 
-    for event in request.events:
+    for event in events:
         for agent_type in agent_types:
             execution = AgentExecution(
                 agent_type=agent_type,
@@ -1623,7 +1830,7 @@ async def dispatch_agents(request: AgentDispatchRequest):
     _dispatches[dispatch.dispatch_id] = dispatch
 
     for execution in dispatch.executions:
-        asyncio.create_task(_run_agent(execution, request.events))
+        asyncio.create_task(_run_agent(execution, events))
 
     return ApiResponse.success(dispatch.model_dump())
 
@@ -1634,25 +1841,18 @@ async def _run_agent(execution: AgentExecution, events: list[dict[str, Any]]):
         execution.status = AgentStatus.running
         execution.progress = 10.0
 
-        try:
-            orchestrator = AgentOrchestrator()
-            event_data = next(
-                (e for e in events if e.get("id") == execution.event_id),
-                events[0] if events else {},
-            )
-            result = await orchestrator.execute_single(
-                agent_type=execution.agent_type,
-                context=event_data,
-            )
-            execution.result = (
-                result if isinstance(result, dict) else {"output": str(result)}
-            )
-        except Exception:
-            execution.result = {
-                "agent_type": execution.agent_type,
-                "summary": f"Processed event {execution.event_id}",
-                "status": "completed",
-            }
+        orchestrator = AgentOrchestrator()
+        event_data = next(
+            (e for e in events if e.get("id") == execution.event_id),
+            events[0] if events else {},
+        )
+        result = await orchestrator.execute_single(
+            agent_type=execution.agent_type,
+            context=event_data,
+        )
+        execution.result = (
+            result if isinstance(result, dict) else {"output": str(result)}
+        )
 
         execution.status = AgentStatus.complete
         execution.progress = 100.0

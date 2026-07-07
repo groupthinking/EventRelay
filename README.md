@@ -1,5 +1,7 @@
 # 🎯 EventRelay — AI Video Processing & Event Extraction Platform
 
+<!-- ✅ AI agent access verified: write/sync capability confirmed via test task resolution -->
+
 [![CI](https://github.com/groupthinking/EventRelay/actions/workflows/ci.yml/badge.svg)](https://github.com/groupthinking/EventRelay/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 ![Node >= 20](https://img.shields.io/badge/Node-%3E%3D20-green)

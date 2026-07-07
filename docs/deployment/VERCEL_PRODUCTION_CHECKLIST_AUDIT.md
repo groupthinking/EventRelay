@@ -32,7 +32,7 @@ The app is close to production-ready from the repository side. Build, lint, high
 | SSL certificate issues | Done | `curl -I https://uvai.io` returned valid HTTPS from Vercel. | Recheck after DNS or domain changes. |
 | Preview Deployment Suffix | Needs dashboard verification | Not exposed by available MCP tools. | Configure if branded previews are required. |
 | Lockfiles committed | Done | Root lockfile updated for workspace install. | Keep root `package-lock.json` as the Vercel source of truth. |
-| Rate limiting | Partial | `apps/web/src/proxy.ts`; local `/api` smoke showed `X-RateLimit-*`. Vercel env list does not show `UPSTASH_REDIS_REST_URL` or `UPSTASH_REDIS_REST_TOKEN`. | Add Upstash env vars in Vercel for distributed production limits. |
+| Rate limiting | Done (wiring) / Partial (enforcement) | `apps/web/middleware.ts` delegates to hardened `apps/web/src/proxy.ts` (active for /api/*); memory dev-only + prod fail-open+warn; local bursts produce correct 429 + X-RateLimit-* headers. Vercel env list does not show `UPSTASH_REDIS_REST_URL` or `UPSTASH_REDIS_REST_TOKEN`. | Add Upstash env vars in Vercel for distributed production limits (currently fail-open in prod without them). |
 | Access roles | Needs dashboard verification | Not exposed by available MCP tools. | Confirm least-privilege team roles and 2FA. |
 | Enterprise-only controls | Not applicable | Plan is Pro. | SAML, SCIM, Audit Logs, cookie policy, function failover, and Secure Compute failover require Enterprise. |
 | Block unwanted bots | Partial | Dashboard shows Firewall active; app has API rate limit fallback. | Add explicit Vercel Firewall bot/challenge/block rules. |

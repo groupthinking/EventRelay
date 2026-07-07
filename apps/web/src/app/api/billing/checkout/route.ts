@@ -1,0 +1,40 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { createProCheckoutSession } from '@/lib/billing/stripe-checkout';
+import { verifyTurnstileToken } from '@/lib/billing/turnstile';
+import { kaizenObserve } from '@/lib/billing/kaizen-trace';
+
+export async function POST(req: NextRequest) {
+  let body: { annual?: boolean; email?: string; turnstileToken?: string }; // email → Stripe customer_email only
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: 'invalid_json' }, { status: 400 });
+  }
+
+  const turnstile = await verifyTurnstileToken(
+    body.turnstileToken ?? '',
+    req.headers.get('x-forwarded-for')?.split(',')[0]?.trim(),
+  );
+
+  if (!turnstile.ok) {
+    kaizenObserve('billing', 'acquisition_blocked', 'Turnstile rejected acquisition checkout', {
+      decision: turnstile.error ?? 'unknown',
+    });
+    return NextResponse.json({ error: turnstile.error }, { status: 403 });
+  }
+
+  kaizenObserve('billing', 'acquisition_allowed', 'Turnstile passed for new Pro checkout');
+
+  try {
+    const result = await createProCheckoutSession({
+      annual: Boolean(body.annual),
+      customerEmail: body.email,
+      flow: 'acquisition',
+    });
+    return NextResponse.json(result);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'checkout_failed';
+    kaizenObserve('billing', 'checkout_error', message, { fix: 'verify_stripe_env' });
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
