@@ -16,7 +16,7 @@
     "apps/*"
   ],
   "engines": {
-    "node": ">=20.0.0",
+    "node": ">=20.6.0",
     "npm": ">=8.0.0"
   },
   "devDependencies": {
