@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 
+export const runtime = 'nodejs'; // needs Buffer to inline the signed video URL
 export const maxDuration = 300; // 5 minutes — video generation takes time
 
 /** Simple in-memory rate limiter: max 3 requests per IP per 10 minutes */
@@ -130,10 +131,10 @@ export async function POST(request: Request) {
 
     // AI Gateway returns video as a signed URL or base64 depending on the response.
     // Validate the shape so we never send a 200 with no usable video payload.
-    const videoUrl: string | null = data?.data?.[0]?.url ?? data?.url ?? null;
-    const videoBase64: string | null = data?.data?.[0]?.b64_json ?? null;
+    const remoteUrl: string | null = data?.data?.[0]?.url ?? data?.url ?? null;
+    let videoBase64: string | null = data?.data?.[0]?.b64_json ?? null;
 
-    if (!videoUrl && !videoBase64) {
+    if (!remoteUrl && !videoBase64) {
       console.error(
         '[video/generate] Unexpected gateway response shape:',
         JSON.stringify(data)?.slice(0, 500)
@@ -144,8 +145,36 @@ export async function POST(request: Request) {
       );
     }
 
+    // The app's CSP is `media-src 'self' blob: data:`, so a cross-origin signed
+    // URL would be blocked by the browser and the <video> would never load. The
+    // URL here comes from the trusted gateway response (NOT client input), so we
+    // can safely fetch it server-side and inline it as base64 — a `data:` source
+    // the CSP permits — without exposing a client-controllable proxy (no SSRF).
+    if (!videoBase64 && remoteUrl) {
+      try {
+        const videoResp = await fetch(remoteUrl, { signal: AbortSignal.timeout(45_000) });
+        if (videoResp.ok) {
+          const buf = Buffer.from(await videoResp.arrayBuffer());
+          videoBase64 = buf.toString('base64');
+        } else {
+          console.error('[video/generate] Failed to fetch signed video URL:', videoResp.status);
+        }
+      } catch (fetchErr) {
+        console.error('[video/generate] Error inlining signed video URL:', fetchErr);
+      }
+    }
+
+    if (!videoBase64) {
+      return NextResponse.json(
+        { error: 'Video was generated but could not be retrieved for playback.' },
+        { status: 502 }
+      );
+    }
+
     return NextResponse.json({
-      video: videoUrl,
+      // `video` is intentionally null: the client renders the base64 `data:` URL,
+      // which is the only cross-origin-safe source under the app's media-src CSP.
+      video: null,
       videoBase64,
       model: 'google/veo-3.1-generate-001',
       prompt: prompt.trim(),
