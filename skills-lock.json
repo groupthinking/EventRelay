@@ -115,20 +115,6 @@
       "skillPath": "skills/xcode-project-setup/SKILL.md",
       "computedHash": "65fc8ef640574e34cd315cef3a2e8ea6eb2d3b29d38eba18e1e749d812215161",
       "subscribed_triggers": []
-    },
-    "branch-cleanup": {
-      "source": "obra/superpowers",
-      "sourceType": "github",
-      "skillPath": "skills/branch-cleanup/SKILL.md",
-      "computedHash": "",
-      "subscribed_triggers": []
-    },
-    "customize-cloud-agent": {
-      "source": "github/agent-skills",
-      "sourceType": "github",
-      "skillPath": "skills/customize-cloud-agent/SKILL.md",
-      "computedHash": "",
-      "subscribed_triggers": []
     }
   }
 }
