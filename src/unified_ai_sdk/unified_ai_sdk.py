@@ -85,7 +85,7 @@ class UnifiedAISDK:
     """Unified AI client with provider-specific routing and retries."""
 
     def __init__(self, config: dict[str, Any] | None = None):
-        self.config = config if config is not None else {}
+        self.config = dict(config or {})
         self.retry_attempts = max(1, int(self.config.get("retry_attempts", 3)))
         self.retry_base_delay = float(self.config.get("retry_base_delay", 1.0))
         self.retry_max_delay = float(self.config.get("retry_max_delay", 8.0))
@@ -107,6 +107,12 @@ class UnifiedAISDK:
         self._gemini_client: object | None = None
         self._anthropic_client: object | None = None
         self._openai_client: object | None = None
+
+        self._handlers: dict[str, Callable[[AIRequest], tuple[str, int]]] = {
+            "openai": self._generate_openai,
+            "claude": self._generate_anthropic,
+            "gemini": self._generate_gemini,
+        }
 
         self._init_clients()
 
@@ -229,12 +235,7 @@ class UnifiedAISDK:
         return ModelProvider.GEMINI
 
     def _dispatch_sync(self, provider_name: str, request: AIRequest) -> tuple[str, int]:
-        handlers: dict[str, Callable[[AIRequest], tuple[str, int]]] = {
-            "openai": self._generate_openai,
-            "claude": self._generate_anthropic,
-            "gemini": self._generate_gemini,
-        }
-        handler = handlers[provider_name]
+        handler = self._handlers[provider_name]
         content, tokens_used = handler(request)
         if not content:
             raise RuntimeError(f"{provider_name} returned empty content")
@@ -249,6 +250,8 @@ class UnifiedAISDK:
             max_tokens=request.max_tokens,
             temperature=request.temperature,
         )
+        if not getattr(response, "choices", None):
+            raise RuntimeError("OpenAI returned no choices")
         content = response.choices[0].message.content or ""
         usage = getattr(response, "usage", None)
         tokens_used = int(getattr(usage, "total_tokens", 0) or 0)
@@ -264,7 +267,11 @@ class UnifiedAISDK:
             thinking={"type": "adaptive"},
             messages=[{"role": "user", "content": request.prompt}],
         )
-        text_blocks = [block.text for block in response.content if block.type == "text"]
+        text_blocks = [
+            getattr(block, "text", "")
+            for block in response.content
+            if block.type == "text"
+        ]
         usage = getattr(response, "usage", None)
         input_tokens = int(getattr(usage, "input_tokens", 0) or 0)
         output_tokens = int(getattr(usage, "output_tokens", 0) or 0)
@@ -281,7 +288,9 @@ class UnifiedAISDK:
             )
         response = self._gemini_client.models.generate_content(**kwargs)  # type: ignore[attr-defined]
         text = response.text
-        if text is None and response.candidates:
+        if text is None and not getattr(response, "candidates", None):
+            raise RuntimeError("Gemini returned no candidates")
+        if text is None:
             parts = response.candidates[0].content.parts
             text_parts = [part.text for part in parts if getattr(part, "text", None)]
             text = "\n".join(text_parts) if text_parts else ""
