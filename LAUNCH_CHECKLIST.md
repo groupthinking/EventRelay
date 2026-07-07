@@ -149,10 +149,8 @@ Vercel has none by default, so `/api/agents/dispatch` returns 503.
 - **Webhook robustness:** add idempotency keys and handle
   `invoice.payment_failed` (dunning) for recurring-revenue reliability
   (`api/billing/webhook/route.ts`).
-- **Dead code:** `src/integration/routes.py` (the "monetize generated apps"
-  feature, unrelated to subscriptions) imports a non-existent `src.integrations`
-  package and is not mounted anywhere. Fix its imports + package exports, or
-  remove it, before wiring it up.
+- **Dead code (resolved):** `src/integration/routes.py` was deleted — it imported a
+  non-existent `src.integrations` package and was never mounted via `include_router`.
 - **Backend install hygiene:** `pip install -e .[dev]` against a system Python
   with Debian's `packaging` can fail (`RECORD file not found`); always use a
   clean venv for the backend.

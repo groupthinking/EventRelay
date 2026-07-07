@@ -20,6 +20,8 @@ from enum import Enum
 from typing import Any, Callable, Optional
 from urllib.parse import urlparse
 
+import httpx
+
 from .context_manager import MCPContext, get_context_manager
 from .server_registry import ServerCapability
 
@@ -462,19 +464,63 @@ class OpenAIAdapter(ProtocolAdapter):
         return True
 
     async def send_request(self, request: dict[str, Any], context: MCPContext) -> dict[str, Any]:
-        """Send request to OpenAI API"""
-        # Implementation would go here
-        # This is a placeholder for the actual OpenAI API integration
-        return {
-            "protocol": "openai",
-            "response": "OpenAI response placeholder",
-            "context_id": context.id
-        }
+        """Send request to OpenAI chat completions API."""
+        api_key = getattr(self, "api_key", None)
+        if not api_key:
+            return {
+                "protocol": "openai",
+                "success": False,
+                "error": "Adapter not initialized — call initialize() first",
+                "context_id": context.id,
+            }
+        prompt = request.get("prompt") or request.get("content") or str(request)
+        model = request.get("model", getattr(self, "model", "gpt-4"))
+        base_url = getattr(self, "base_url", "https://api.openai.com/v1")
+        try:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.post(
+                    f"{base_url}/chat/completions",
+                    headers={"Authorization": "Bearer " + api_key, "Content-Type": "application/json"},
+                    json={
+                        "model": model,
+                        "messages": [{"role": "user", "content": prompt}],
+                        "max_tokens": request.get("max_tokens", 1000),
+                        "temperature": request.get("temperature", 0.7),
+                    },
+                )
+                response.raise_for_status()
+            data = response.json()
+            return {
+                "protocol": "openai",
+                "success": True,
+                "response": data["choices"][0]["message"]["content"],
+                "context_id": context.id,
+            }
+        except Exception as exc:
+            logger.error("OpenAIAdapter.send_request failed: %s", exc)
+            return {
+                "protocol": "openai",
+                "success": False,
+                "error": str(exc),
+                "context_id": context.id,
+            }
 
     async def health_check(self) -> bool:
-        """Check OpenAI API health"""
-        # Implementation would check API availability
-        return True
+        """Check OpenAI API availability."""
+        api_key = getattr(self, "api_key", None)
+        if not api_key:
+            return False
+        base_url = getattr(self, "base_url", "https://api.openai.com/v1")
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.get(
+                    f"{base_url}/models",
+                    headers={"Authorization": "Bearer " + api_key},
+                )
+                response.raise_for_status()
+            return True
+        except Exception:
+            return False
 
     async def get_capabilities(self) -> list[ServerCapability]:
         """Get OpenAI capabilities"""
@@ -492,25 +538,86 @@ class AnthropicAdapter(ProtocolAdapter):
         """Initialize Anthropic adapter"""
         self.api_key = config.get("api_key")
         self.model = config.get("model", "claude-opus-4-8")
+        base_url = config.get("base_url", "https://api.anthropic.com")
 
         if not self.api_key:
             logger.error("Anthropic API key not provided")
             return False
 
+        parsed = urlparse(base_url)
+        if parsed.scheme != "https" or not parsed.netloc:
+            logger.error("Unsafe Anthropic base_url rejected (must be HTTPS with a host)")
+            return False
+        self.base_url = base_url
+
         return True
 
     async def send_request(self, request: dict[str, Any], context: MCPContext) -> dict[str, Any]:
-        """Send request to Anthropic API"""
-        # Implementation would go here
-        return {
-            "protocol": "anthropic",
-            "response": "Anthropic response placeholder",
-            "context_id": context.id
-        }
+        """Send request to Anthropic messages API."""
+        api_key = getattr(self, "api_key", None)
+        if not api_key:
+            return {
+                "protocol": "anthropic",
+                "success": False,
+                "error": "Adapter not initialized — call initialize() first",
+                "context_id": context.id,
+            }
+        prompt = request.get("prompt") or request.get("content") or str(request)
+        model = request.get("model", getattr(self, "model", "claude-opus-4-8"))
+        base_url = getattr(self, "base_url", "https://api.anthropic.com")
+        try:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.post(
+                    f"{base_url}/v1/messages",
+                    headers={
+                        "x-api-key": api_key,
+                        "anthropic-version": "2023-06-01",
+                        "content-type": "application/json",
+                    },
+                    json={
+                        "model": model,
+                        "max_tokens": request.get("max_tokens", 1000),
+                        "messages": [{"role": "user", "content": prompt}],
+                    },
+                )
+                response.raise_for_status()
+            data = response.json()
+            return {
+                "protocol": "anthropic",
+                "success": True,
+                "response": data["content"][0]["text"],
+                "context_id": context.id,
+            }
+        except Exception as exc:
+            logger.error("AnthropicAdapter.send_request failed: %s", exc)
+            return {
+                "protocol": "anthropic",
+                "success": False,
+                "error": str(exc),
+                "context_id": context.id,
+            }
 
     async def health_check(self) -> bool:
-        """Check Anthropic API health"""
-        return True
+        """Check Anthropic API availability."""
+        api_key = getattr(self, "api_key", None)
+        if not api_key:
+            return False
+        base_url = getattr(self, "base_url", "https://api.anthropic.com")
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.post(
+                    f"{base_url}/v1/messages",
+                    headers={
+                        "x-api-key": api_key,
+                        "anthropic-version": "2023-06-01",
+                        "content-type": "application/json",
+                    },
+                    json={"model": "claude-haiku-4-5", "max_tokens": 1, "messages": [{"role": "user", "content": "hi"}]},
+                )
+                response.raise_for_status()
+            return True
+        except Exception:
+            return False
 
     async def get_capabilities(self) -> list[ServerCapability]:
         """Get Anthropic capabilities"""
@@ -528,25 +635,79 @@ class GoogleAIAdapter(ProtocolAdapter):
         """Initialize Google AI adapter"""
         self.api_key = config.get("api_key")
         self.model = config.get("model", "gemini-pro")
+        base_url = config.get("base_url", "https://generativelanguage.googleapis.com/v1beta")
 
         if not self.api_key:
             logger.error("Google AI API key not provided")
             return False
 
+        parsed = urlparse(base_url)
+        if parsed.scheme != "https" or not parsed.netloc:
+            logger.error("Unsafe Google AI base_url rejected (must be HTTPS with a host)")
+            return False
+        self.base_url = base_url
+
         return True
 
     async def send_request(self, request: dict[str, Any], context: MCPContext) -> dict[str, Any]:
-        """Send request to Google AI API"""
-        # Implementation would go here
-        return {
-            "protocol": "google_ai",
-            "response": "Google AI response placeholder",
-            "context_id": context.id
-        }
+        """Send request to Google Generative Language API."""
+        api_key = getattr(self, "api_key", None)
+        if not api_key:
+            return {
+                "protocol": "google_ai",
+                "success": False,
+                "error": "Adapter not initialized — call initialize() first",
+                "context_id": context.id,
+            }
+        prompt = request.get("prompt") or request.get("content") or str(request)
+        model = request.get("model", getattr(self, "model", "gemini-pro"))
+        base_url = getattr(self, "base_url", "https://generativelanguage.googleapis.com/v1beta")
+        try:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.post(
+                    f"{base_url}/models/{model}:generateContent",
+                    params={"key": api_key},
+                    json={
+                        "contents": [{"parts": [{"text": prompt}]}],
+                        "generationConfig": {
+                            "temperature": request.get("temperature", 0.7),
+                            "maxOutputTokens": request.get("max_tokens", 1000),
+                        },
+                    },
+                )
+                response.raise_for_status()
+            data = response.json()
+            return {
+                "protocol": "google_ai",
+                "success": True,
+                "response": data["candidates"][0]["content"]["parts"][0]["text"],
+                "context_id": context.id,
+            }
+        except Exception as exc:
+            logger.error("GoogleAIAdapter.send_request failed: %s", exc)
+            return {
+                "protocol": "google_ai",
+                "success": False,
+                "error": str(exc),
+                "context_id": context.id,
+            }
 
     async def health_check(self) -> bool:
-        """Check Google AI API health"""
-        return True
+        """Check Google AI API availability."""
+        api_key = getattr(self, "api_key", None)
+        if not api_key:
+            return False
+        base_url = getattr(self, "base_url", "https://generativelanguage.googleapis.com/v1beta")
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.get(
+                    f"{base_url}/models",
+                    params={"key": api_key},
+                )
+                response.raise_for_status()
+            return True
+        except Exception:
+            return False
 
     async def get_capabilities(self) -> list[ServerCapability]:
         """Get Google AI capabilities"""

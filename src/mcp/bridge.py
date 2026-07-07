@@ -584,13 +584,13 @@ class MCPBridge:
         self, agents: list, request: MCPBridgeRequest, primary_result: AIResponse
     ) -> dict[str, Any]:
         """Orchestrate agent collaboration"""
-        return {"status": "simulated", "agents": len(agents)}
+        return {"status": "unavailable", "agents": len(agents)}
 
     async def _execute_mcp_tool(
         self, tool_name: str, request: MCPBridgeRequest
     ) -> dict[str, Any]:
         """Execute MCP tool"""
-        return {"tool": tool_name, "status": "executed", "result": "simulated"}
+        return {"tool": tool_name, "status": "unavailable", "result": None}
 
     async def _attempt_fallback_processing(self, request: MCPBridgeRequest) -> bool:
         """Attempt fallback processing on failure"""

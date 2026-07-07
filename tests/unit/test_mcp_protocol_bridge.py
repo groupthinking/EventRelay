@@ -728,9 +728,9 @@ class TestOpenAIAdapter:
         )
         assert result is False
 
-    async def test_health_check_returns_true(self):
+    async def test_health_check_returns_false_when_not_initialized(self):
         adapter = OpenAIAdapter()
-        assert await adapter.health_check() is True
+        assert await adapter.health_check() is False
 
     async def test_get_capabilities_returns_ai_inference(self):
         adapter = OpenAIAdapter()
@@ -744,6 +744,14 @@ class TestOpenAIAdapter:
         resp = await adapter.send_request({"prompt": "hello"}, context)
         assert resp["protocol"] == "openai"
         assert resp["context_id"] == context.id
+
+    async def test_send_request_returns_failure_when_not_initialized(self):
+        adapter = OpenAIAdapter()
+        ctx_manager = _ctx_mod.get_context_manager()
+        context = ctx_manager.create_context(user="u", task="t", intent="i")
+        resp = await adapter.send_request({"prompt": "hello"}, context)
+        assert resp["success"] is False
+        assert "not initialized" in resp["error"].lower()
 
 
 # ===========================================================================
@@ -776,9 +784,9 @@ class TestAnthropicAdapter:
         await adapter.initialize({"api_key": "sk-ant"})
         assert adapter.model == "claude-opus-4-8"
 
-    async def test_health_check_returns_true(self):
+    async def test_health_check_returns_false_when_not_initialized(self):
         adapter = AnthropicAdapter()
-        assert await adapter.health_check() is True
+        assert await adapter.health_check() is False
 
     async def test_get_capabilities_returns_ai_inference(self):
         adapter = AnthropicAdapter()
@@ -792,6 +800,30 @@ class TestAnthropicAdapter:
         resp = await adapter.send_request({"prompt": "hello"}, context)
         assert resp["protocol"] == "anthropic"
         assert resp["context_id"] == context.id
+
+    async def test_send_request_returns_failure_when_not_initialized(self):
+        adapter = AnthropicAdapter()
+        ctx_manager = _ctx_mod.get_context_manager()
+        context = ctx_manager.create_context(user="u", task="t", intent="i")
+        resp = await adapter.send_request({"prompt": "hello"}, context)
+        assert resp["success"] is False
+        assert "not initialized" in resp["error"].lower()
+
+    async def test_initialize_rejects_non_https_base_url(self):
+        adapter = AnthropicAdapter()
+        result = await adapter.initialize({"api_key": "sk-ant", "base_url": "http://evil.example.com"})
+        assert result is False
+
+    async def test_initialize_rejects_hostless_base_url(self):
+        adapter = AnthropicAdapter()
+        result = await adapter.initialize({"api_key": "sk-ant", "base_url": "https:///no-host"})
+        assert result is False
+
+    async def test_initialize_accepts_custom_https_base_url(self):
+        adapter = AnthropicAdapter()
+        result = await adapter.initialize({"api_key": "sk-ant", "base_url": "https://proxy.example.com"})
+        assert result is True
+        assert adapter.base_url == "https://proxy.example.com"
 
 
 # ===========================================================================
@@ -824,9 +856,9 @@ class TestGoogleAIAdapter:
         await adapter.initialize({"api_key": "key"})
         assert adapter.model == "gemini-pro"
 
-    async def test_health_check_returns_true(self):
+    async def test_health_check_returns_false_when_not_initialized(self):
         adapter = GoogleAIAdapter()
-        assert await adapter.health_check() is True
+        assert await adapter.health_check() is False
 
     async def test_get_capabilities_returns_ai_inference(self):
         adapter = GoogleAIAdapter()
@@ -840,6 +872,30 @@ class TestGoogleAIAdapter:
         resp = await adapter.send_request({"prompt": "hello"}, context)
         assert resp["protocol"] == "google_ai"
         assert resp["context_id"] == context.id
+
+    async def test_send_request_returns_failure_when_not_initialized(self):
+        adapter = GoogleAIAdapter()
+        ctx_manager = _ctx_mod.get_context_manager()
+        context = ctx_manager.create_context(user="u", task="t", intent="i")
+        resp = await adapter.send_request({"prompt": "hello"}, context)
+        assert resp["success"] is False
+        assert "not initialized" in resp["error"].lower()
+
+    async def test_initialize_rejects_non_https_base_url(self):
+        adapter = GoogleAIAdapter()
+        result = await adapter.initialize({"api_key": "gkey", "base_url": "http://evil.example.com"})
+        assert result is False
+
+    async def test_initialize_rejects_hostless_base_url(self):
+        adapter = GoogleAIAdapter()
+        result = await adapter.initialize({"api_key": "gkey", "base_url": "https:///no-host"})
+        assert result is False
+
+    async def test_initialize_accepts_custom_https_base_url(self):
+        adapter = GoogleAIAdapter()
+        result = await adapter.initialize({"api_key": "gkey", "base_url": "https://my-proxy.example.com/v1beta"})
+        assert result is True
+        assert adapter.base_url == "https://my-proxy.example.com/v1beta"
 
 
 # ===========================================================================
