@@ -51,7 +51,7 @@ jobs:
             const body = issue.body || '';
 
             const phaseIssue =
-              labels.some((label) => /^phase-\d+$/.test(label)) ||
+              labels.some((label) => /^phase-.+/.test(label)) ||
               title.includes('[phase');
 
             if (!phaseIssue) {
@@ -83,7 +83,18 @@ jobs:
             const progressPercent = Math.round((completed / total) * 100);
             const done = completed === total;
 
+            // A maintainer who reopens a finished phase issue (to add follow-up
+            // tasks or fix a prematurely-checked box) must be able to edit it
+            // before it is auto-closed again, so never auto-close on `reopened`.
+            const isReopen =
+              context.eventName === 'issues' &&
+              context.payload.action === 'reopened';
+            const willClose = done && !isReopen;
+
             const trackerMarker = '<!-- phase-goal-tracker -->';
+            const doneMessage = willClose
+              ? 'All checklist goals are complete. Closing this issue now.'
+              : 'All checklist goals are complete. Auto-close is skipped because the issue was just reopened — edit the checklist or close it manually.';
             const summaryBody = [
               trackerMarker,
               '## 🎯 Phase Goal Tracker',
@@ -92,7 +103,7 @@ jobs:
               `- Status: ${done ? '✅ All goals complete' : '⏳ In progress'}`,
               '',
               done
-                ? 'All checklist goals are complete. Closing this issue now.'
+                ? doneMessage
                 : `### Next goals\n${openTasks.join('\n')}${
                     openTaskCount > maxOpenTasksToShow
                       ? `\n\n_Showing first ${maxOpenTasksToShow} of ${openTaskCount} remaining tasks._`
@@ -130,7 +141,7 @@ jobs:
               });
             }
 
-            if (done) {
+            if (willClose) {
               if (issue.state === 'open') {
                 await github.rest.issues.update({
                   owner: context.repo.owner,
@@ -141,4 +152,8 @@ jobs:
               } else {
                 core.info(`Issue #${issue.number} is already closed.`);
               }
+            } else if (done && isReopen) {
+              core.info(
+                `Issue #${issue.number} is complete but was just reopened; leaving it open for edits.`
+              );
             }
