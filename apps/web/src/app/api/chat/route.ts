@@ -5,6 +5,8 @@ import { checkFreeChatQuota } from '@/lib/billing/chat-quota';
 import { grokChatCompletion } from '@/lib/billing/grok-client';
 import { FREE_CHAT_DAILY_LIMIT, resolvePaidTierRouting } from '@/lib/billing/paid-tier-model';
 import { kaizenObserve } from '@/lib/billing/kaizen-trace';
+import { hasAiGatewayKey, getGateway, GATEWAY_MODELS } from '@/lib/ai-gateway';
+import { streamText } from 'ai';
 
 const rawBackendUrl = process.env.BACKEND_URL || '';
 const BACKEND_URL = rawBackendUrl.startsWith('http') ? rawBackendUrl : 'http://localhost:8000';
@@ -67,9 +69,27 @@ export async function POST(request: Request) {
     }
 
     if (!BACKEND_AVAILABLE) {
+      // AI Gateway fallback: when no backend is configured, route through Vercel AI Gateway
+      if (hasAiGatewayKey()) {
+        const messages = [
+          ...(body.history || []).map((m: { role: string; content: string }) => ({
+            role: m.role as 'user' | 'assistant',
+            content: m.content,
+          })),
+          { role: 'user' as const, content: body.query || '' },
+        ];
+
+        const result = streamText({
+          model: getGateway()(GATEWAY_MODELS.chat),
+          messages,
+        });
+
+        return result.toTextStreamResponse();
+      }
+
       return NextResponse.json(
         {
-          answer: 'Chat requires a backend connection. Configure BACKEND_URL to enable the AI assistant.',
+          answer: 'Chat requires a backend connection. Configure BACKEND_URL or AI_GATEWAY_API_KEY to enable the AI assistant.',
           routing,
           plan: routing.plan,
         },

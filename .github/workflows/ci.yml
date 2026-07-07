@@ -11,8 +11,21 @@ permissions:
   actions: read
 
 jobs:
+  type-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: "npm"
+      - run: npm install --legacy-peer-deps
+      - name: Type-check web app
+        run: cd apps/web && npm run type-check
+
   build:
     runs-on: ubuntu-latest
+    needs: [type-check]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v6
@@ -50,7 +63,7 @@ jobs:
           node-version: "22"
           cache: "npm"
       - run: npm install --legacy-peer-deps
-      - name: Lint Frontend (informational)
+      - name: Lint Frontend
         continue-on-error: true
         run: cd apps/web && npm run lint
 

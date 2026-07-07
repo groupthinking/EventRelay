@@ -8,6 +8,15 @@
       },
       "trust": false
     },
+    "vercel": {
+      "command": "npx",
+      "args": ["-y", "@vercel/mcp@latest"],
+      "env": {
+        "VERCEL_TOKEN": "$VERCEL_TOKEN",
+        "VERCEL_TEAM_ID": "$VERCEL_TEAM_ID"
+      },
+      "trust": false
+    },
     "shared-state": {
       "command": "python",
       "args": ["mcp-servers/shared-state/state_coordinator.py"],
