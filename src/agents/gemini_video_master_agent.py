@@ -688,12 +688,17 @@ class GeminiVideoMasterAgent:
     def _extract_youtube_metadata_with_ytdlp(video_url: str) -> dict[str, Any]:
         import yt_dlp
 
-        options = {
+        from youtube_extension.utils.proxy import get_proxy_url
+
+        options: dict[str, Any] = {
             "quiet": True,
             "skip_download": True,
             "extract_flat": False,
             "noplaylist": True,
         }
+        proxy_url = get_proxy_url()
+        if proxy_url:
+            options["proxy"] = proxy_url
         with yt_dlp.YoutubeDL(options) as ydl:
             info = ydl.extract_info(video_url, download=False)
 
