@@ -57,7 +57,7 @@ except ImportError:
 try:
     from youtube_extension.utils.proxy import get_proxy_url, redact_proxy_credentials
 except ImportError:  # pragma: no cover - optional when running outside the package
-    def get_proxy_url():  # type: ignore[misc]
+    def get_proxy_url() -> "str | None":  # type: ignore[misc]
         return None
     def redact_proxy_credentials(text: str) -> str:  # type: ignore[misc]
         return text
