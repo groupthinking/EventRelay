@@ -14,6 +14,13 @@ permissions:
   issues: write
   pull-requests: read
 
+# Serialize runs per issue so rapid checklist edits can't race: without this,
+# concurrent runs each fail to find the single tracker comment and post
+# duplicates. Keyed on the issue number for both `issues` and dispatch events.
+concurrency:
+  group: phase-goal-tracker-${{ github.event.issue.number || github.event.inputs.issue_number }}
+  cancel-in-progress: true
+
 jobs:
   track:
     name: Track phase checklist progress
