@@ -6,6 +6,7 @@ import importlib.util
 import sys
 import types as _types
 from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -675,6 +676,13 @@ class TestOpenAIAdapter:
         result = await adapter.initialize({})
         assert result is False
 
+    async def test_initialize_uses_env_api_key(self, monkeypatch):
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-env")
+        adapter = OpenAIAdapter()
+        result = await adapter.initialize({})
+        assert result is True
+        assert adapter.api_key == "sk-env"
+
     async def test_initialize_returns_true_with_api_key(self):
         adapter = OpenAIAdapter()
         result = await adapter.initialize({"api_key": "sk-test-key"})
@@ -737,13 +745,40 @@ class TestOpenAIAdapter:
         caps = await adapter.get_capabilities()
         assert ServerCapability.AI_INFERENCE in caps
 
-    async def test_send_request_returns_dict_with_protocol(self):
+    async def test_send_request_calls_openai_sdk(self, monkeypatch):
+        client = MagicMock()
+        response = MagicMock()
+        response.id = "chatcmpl-123"
+        response.model = "gpt-4"
+        response.choices = [MagicMock(message=MagicMock(content="real answer"))]
+        response.usage = MagicMock(
+            total_tokens=15,
+            prompt_tokens=10,
+            completion_tokens=5,
+        )
+        client.chat.completions.create = AsyncMock(return_value=response)
+
+        openai_mod = _types.ModuleType("openai")
+        openai_mod.AsyncOpenAI = MagicMock(return_value=client)
+        monkeypatch.setitem(sys.modules, "openai", openai_mod)
+
         adapter = OpenAIAdapter()
+        await adapter.initialize({"api_key": "sk-test"})
         ctx_manager = _ctx_mod.get_context_manager()
         context = ctx_manager.create_context(user="u", task="t", intent="i")
-        resp = await adapter.send_request({"prompt": "hello"}, context)
+        resp = await adapter.send_request(
+            {"prompt": "hello", "temperature": 0.2, "max_tokens": 77},
+            context,
+        )
+
+        openai_mod.AsyncOpenAI.assert_called_once_with(
+            api_key="sk-test", base_url="https://api.openai.com/v1"
+        )
+        client.chat.completions.create.assert_awaited_once()
         assert resp["protocol"] == "openai"
         assert resp["context_id"] == context.id
+        assert resp["response"] == "real answer"
+        assert resp["usage"]["total_tokens"] == 15
 
 
 # ===========================================================================
@@ -760,6 +795,13 @@ class TestAnthropicAdapter:
         adapter = AnthropicAdapter()
         result = await adapter.initialize({})
         assert result is False
+
+    async def test_initialize_uses_env_api_key(self, monkeypatch):
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-env")
+        adapter = AnthropicAdapter()
+        result = await adapter.initialize({})
+        assert result is True
+        assert adapter.api_key == "sk-ant-env"
 
     async def test_initialize_returns_true_with_api_key(self):
         adapter = AnthropicAdapter()
@@ -785,13 +827,34 @@ class TestAnthropicAdapter:
         caps = await adapter.get_capabilities()
         assert ServerCapability.AI_INFERENCE in caps
 
-    async def test_send_request_returns_dict_with_protocol(self):
+    async def test_send_request_calls_anthropic_sdk(self, monkeypatch):
+        client = MagicMock()
+        response = MagicMock()
+        response.id = "msg_123"
+        response.model = "claude-opus-4-8"
+        response.content = [
+            MagicMock(type="thinking", thinking="..."),
+            MagicMock(type="text", text="claude answer"),
+        ]
+        response.usage = MagicMock(input_tokens=12, output_tokens=7)
+        client.messages.create = AsyncMock(return_value=response)
+
+        anthropic_mod = _types.ModuleType("anthropic")
+        anthropic_mod.AsyncAnthropic = MagicMock(return_value=client)
+        monkeypatch.setitem(sys.modules, "anthropic", anthropic_mod)
+
         adapter = AnthropicAdapter()
+        await adapter.initialize({"api_key": "sk-ant-test"})
         ctx_manager = _ctx_mod.get_context_manager()
         context = ctx_manager.create_context(user="u", task="t", intent="i")
-        resp = await adapter.send_request({"prompt": "hello"}, context)
+        resp = await adapter.send_request({"prompt": "hello", "timeout": 12}, context)
+
+        anthropic_mod.AsyncAnthropic.assert_called_once_with(api_key="sk-ant-test")
+        client.messages.create.assert_awaited_once()
         assert resp["protocol"] == "anthropic"
         assert resp["context_id"] == context.id
+        assert resp["response"] == "claude answer"
+        assert resp["usage"]["input_tokens"] == 12
 
 
 # ===========================================================================
@@ -808,6 +871,13 @@ class TestGoogleAIAdapter:
         adapter = GoogleAIAdapter()
         result = await adapter.initialize({})
         assert result is False
+
+    async def test_initialize_uses_env_api_key(self, monkeypatch):
+        monkeypatch.setenv("GEMINI_API_KEY", "google-env")
+        adapter = GoogleAIAdapter()
+        result = await adapter.initialize({})
+        assert result is True
+        assert adapter.api_key == "google-env"
 
     async def test_initialize_returns_true_with_api_key(self):
         adapter = GoogleAIAdapter()
@@ -833,13 +903,31 @@ class TestGoogleAIAdapter:
         caps = await adapter.get_capabilities()
         assert ServerCapability.AI_INFERENCE in caps
 
-    async def test_send_request_returns_dict_with_protocol(self):
+    async def test_send_request_calls_google_sdk(self, monkeypatch):
+        client = MagicMock()
+        response = MagicMock()
+        response.text = "gemini answer"
+        response.candidates = []
+        client.models.generate_content = MagicMock(return_value=response)
+
+        google_mod = _types.ModuleType("google")
+        genai_mod = _types.ModuleType("google.genai")
+        genai_mod.Client = MagicMock(return_value=client)
+        google_mod.genai = genai_mod
+        monkeypatch.setitem(sys.modules, "google", google_mod)
+        monkeypatch.setitem(sys.modules, "google.genai", genai_mod)
+
         adapter = GoogleAIAdapter()
+        await adapter.initialize({"api_key": "google-key"})
         ctx_manager = _ctx_mod.get_context_manager()
         context = ctx_manager.create_context(user="u", task="t", intent="i")
         resp = await adapter.send_request({"prompt": "hello"}, context)
+
+        genai_mod.Client.assert_called_once_with(api_key="google-key")
+        client.models.generate_content.assert_called_once()
         assert resp["protocol"] == "google_ai"
         assert resp["context_id"] == context.id
+        assert resp["response"] == "gemini answer"
 
 
 # ===========================================================================
@@ -900,5 +988,8 @@ class TestSendAiRequest:
         bridge = get_protocol_bridge()
         # Manually mark OPENAI as connected for the test
         bridge.bridge_status[ProtocolType.OPENAI] = BridgeStatus.CONNECTED
+        bridge.adapters[ProtocolType.OPENAI].send_request = AsyncMock(  # type: ignore[method-assign]
+            return_value={"protocol": "openai"}
+        )
         resp = await send_ai_request({"cmd": "test"}, protocol=ProtocolType.OPENAI)
         assert resp["protocol"] == "openai"

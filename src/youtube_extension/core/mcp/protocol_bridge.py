@@ -13,7 +13,9 @@ Key Responsibilities:
 - Protocol capability negotiation
 """
 
+import asyncio
 import logging
+import os
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 from enum import Enum
@@ -39,6 +41,28 @@ def _summarize_request(request: dict[str, Any]) -> dict[str, Any]:
     except AttributeError:
         keys = []
     return {"keys": keys, "size": len(str(request))}
+
+
+def _get_request_prompt(request: dict[str, Any]) -> str:
+    """Extract a prompt string from a protocol request."""
+    prompt = request.get("prompt") or request.get("content") or request.get("input")
+    if prompt is None:
+        messages = request.get("messages") or []
+        for message in reversed(messages):
+            if message.get("role") == "user" and message.get("content"):
+                prompt = message["content"]
+                break
+    if prompt is None:
+        raise ValueError("Request must include 'prompt', 'content', 'input', or 'messages'")
+    return str(prompt)
+
+
+def _get_request_messages(request: dict[str, Any]) -> list[dict[str, Any]]:
+    """Extract provider-ready chat messages from a protocol request."""
+    messages = request.get("messages")
+    if messages:
+        return messages
+    return [{"role": "user", "content": _get_request_prompt(request)}]
 
 
 class ProtocolType(Enum):
@@ -442,9 +466,10 @@ class OpenAIAdapter(ProtocolAdapter):
 
     async def initialize(self, config: dict[str, Any]) -> bool:
         """Initialize OpenAI adapter"""
-        self.api_key = config.get("api_key")
+        self.api_key = config.get("api_key") or os.getenv("OPENAI_API_KEY")
         base_url = config.get("base_url", "https://api.openai.com/v1")
         self.model = config.get("model", "gpt-4")
+        self._client = None
 
         if not self.api_key:
             logger.error("OpenAI API key not provided")
@@ -463,12 +488,41 @@ class OpenAIAdapter(ProtocolAdapter):
 
     async def send_request(self, request: dict[str, Any], context: MCPContext) -> dict[str, Any]:
         """Send request to OpenAI API"""
-        # Implementation would go here
-        # This is a placeholder for the actual OpenAI API integration
+        if not self.api_key:
+            raise RuntimeError("OpenAI adapter is not initialized")
+
+        try:
+            if self._client is None:
+                import openai
+
+                self._client = openai.AsyncOpenAI(
+                    api_key=self.api_key, base_url=self.base_url
+                )
+
+            response = await asyncio.wait_for(
+                self._client.chat.completions.create(
+                    model=request.get("model", self.model),
+                    messages=_get_request_messages(request),
+                    max_tokens=request.get("max_tokens", 2048),
+                    temperature=request.get("temperature", 0.0),
+                ),
+                timeout=float(request.get("timeout", 60)),
+            )
+        except Exception:
+            logger.exception("OpenAI protocol request failed for context %s", context.id)
+            raise
+
         return {
             "protocol": "openai",
-            "response": "OpenAI response placeholder",
-            "context_id": context.id
+            "context_id": context.id,
+            "id": getattr(response, "id", None),
+            "model": getattr(response, "model", request.get("model", self.model)),
+            "response": response.choices[0].message.content,
+            "usage": {
+                "total_tokens": getattr(response.usage, "total_tokens", None),
+                "prompt_tokens": getattr(response.usage, "prompt_tokens", None),
+                "completion_tokens": getattr(response.usage, "completion_tokens", None),
+            },
         }
 
     async def health_check(self) -> bool:
@@ -490,8 +544,9 @@ class AnthropicAdapter(ProtocolAdapter):
 
     async def initialize(self, config: dict[str, Any]) -> bool:
         """Initialize Anthropic adapter"""
-        self.api_key = config.get("api_key")
+        self.api_key = config.get("api_key") or os.getenv("ANTHROPIC_API_KEY")
         self.model = config.get("model", "claude-opus-4-8")
+        self._client = None
 
         if not self.api_key:
             logger.error("Anthropic API key not provided")
@@ -501,11 +556,40 @@ class AnthropicAdapter(ProtocolAdapter):
 
     async def send_request(self, request: dict[str, Any], context: MCPContext) -> dict[str, Any]:
         """Send request to Anthropic API"""
-        # Implementation would go here
+        if not self.api_key:
+            raise RuntimeError("Anthropic adapter is not initialized")
+
+        try:
+            if self._client is None:
+                import anthropic
+
+                self._client = anthropic.AsyncAnthropic(api_key=self.api_key)
+
+            response = await asyncio.wait_for(
+                self._client.messages.create(
+                    model=request.get("model", self.model),
+                    max_tokens=request.get("max_tokens", 2048),
+                    thinking={"type": "adaptive"},
+                    output_config={"effort": request.get("effort", "medium")},
+                    messages=_get_request_messages(request),
+                ),
+                timeout=float(request.get("timeout", 60)),
+            )
+        except Exception:
+            logger.exception("Anthropic protocol request failed for context %s", context.id)
+            raise
+
+        text_blocks = [block.text for block in response.content if block.type == "text"]
         return {
             "protocol": "anthropic",
-            "response": "Anthropic response placeholder",
-            "context_id": context.id
+            "context_id": context.id,
+            "id": getattr(response, "id", None),
+            "model": getattr(response, "model", request.get("model", self.model)),
+            "response": "\n".join(text_blocks),
+            "usage": {
+                "input_tokens": getattr(response.usage, "input_tokens", None),
+                "output_tokens": getattr(response.usage, "output_tokens", None),
+            },
         }
 
     async def health_check(self) -> bool:
@@ -526,8 +610,13 @@ class GoogleAIAdapter(ProtocolAdapter):
 
     async def initialize(self, config: dict[str, Any]) -> bool:
         """Initialize Google AI adapter"""
-        self.api_key = config.get("api_key")
+        self.api_key = (
+            config.get("api_key")
+            or os.getenv("GEMINI_API_KEY")
+            or os.getenv("GOOGLE_AI_API_KEY")
+        )
         self.model = config.get("model", "gemini-pro")
+        self._client = None
 
         if not self.api_key:
             logger.error("Google AI API key not provided")
@@ -537,11 +626,39 @@ class GoogleAIAdapter(ProtocolAdapter):
 
     async def send_request(self, request: dict[str, Any], context: MCPContext) -> dict[str, Any]:
         """Send request to Google AI API"""
-        # Implementation would go here
+        if not self.api_key:
+            raise RuntimeError("Google AI adapter is not initialized")
+
+        try:
+            if self._client is None:
+                from google import genai
+
+                self._client = genai.Client(api_key=self.api_key)
+
+            config: dict[str, Any] = {}
+            if "temperature" in request:
+                config["temperature"] = request["temperature"]
+            if "max_tokens" in request:
+                config["max_output_tokens"] = request["max_tokens"]
+
+            response = await asyncio.wait_for(
+                asyncio.to_thread(
+                    self._client.models.generate_content,
+                    model=request.get("model", self.model),
+                    contents=request.get("contents", _get_request_prompt(request)),
+                    config=config or None,
+                ),
+                timeout=float(request.get("timeout", 60)),
+            )
+        except Exception:
+            logger.exception("Google AI protocol request failed for context %s", context.id)
+            raise
+
         return {
             "protocol": "google_ai",
-            "response": "Google AI response placeholder",
-            "context_id": context.id
+            "context_id": context.id,
+            "model": request.get("model", self.model),
+            "response": response.text,
         }
 
     async def health_check(self) -> bool:
