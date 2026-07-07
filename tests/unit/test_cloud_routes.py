@@ -48,21 +48,22 @@ sys.modules.setdefault("google.cloud", _google_cloud)
 sys.modules.setdefault("google.cloud.pubsub_v1", _google_cloud_pubsub)
 
 # httpx is a real package but we want to control it later via patch;
-# if it isn't installed, provide a minimal stub so the import doesn't break.
+# Provide a minimal stub when missing so the import does not break.
 try:
     import httpx as _httpx_real  # noqa: F401 – real httpx available, nothing to stub
 except ImportError:
     sys.modules.setdefault("httpx", MagicMock())
 
-# src.integration stubs (needed by advanced_video_routes and reporting_routes)
-_src_pkg = _make_pkg("src")
-_src_integration = _make_pkg("src.integration")
+# src.integration LEAF-module stubs (needed by advanced_video_routes and
+# reporting_routes so their heavy transitive imports don't run here). The `src`
+# and `src.integration` packages themselves are real and empty (__init__.py has
+# no code), so we let them import normally — stubbing them as fake packages
+# would leave a __path__-less package in sys.modules and break other test
+# modules (e.g. test_temporal_video_analysis) that import the real leaf modules.
 _ce_publisher_mod = MagicMock()
 _temporal_mod = MagicMock()
 _looker_embedded_mod = MagicMock()
 
-sys.modules.setdefault("src", _src_pkg)
-sys.modules.setdefault("src.integration", _src_integration)
 sys.modules.setdefault("src.integration.cloudevents_publisher", _ce_publisher_mod)
 sys.modules.setdefault("src.integration.temporal_video_analysis", _temporal_mod)
 sys.modules.setdefault("src.integration.looker_embedded", _looker_embedded_mod)
@@ -95,6 +96,21 @@ with warnings.catch_warnings():
     from youtube_extension.backend.api.advanced_video_routes import router as advanced_router
     from youtube_extension.backend.api.event_routes import router as event_router, process_event, EventPayload
     from youtube_extension.backend.api.reporting_routes import router as reporting_router
+
+# The modules under test are now imported and hold their own references to the
+# leaf stubs above. Remove those import-time stubs from sys.modules so they do
+# NOT shadow the real leaf modules for other test files that run later in the
+# same session (e.g. test_temporal_video_analysis.py, which imports the real
+# dataclasses). Only entries that are still exactly the stubs we installed are
+# removed — if a real module was already loaded, setdefault never installed our
+# fake and this is a no-op.
+for _stub_name, _stub_obj in (
+    ("src.integration.temporal_video_analysis", _temporal_mod),
+    ("src.integration.cloudevents_publisher", _ce_publisher_mod),
+    ("src.integration.looker_embedded", _looker_embedded_mod),
+):
+    if sys.modules.get(_stub_name) is _stub_obj:
+        del sys.modules[_stub_name]
 
 from youtube_extension.integrations.cloud_ai.base import DetectionResult
 
@@ -1304,8 +1320,13 @@ class TestReportingRoutes:
 
     def test_generate_dashboard_url_missing_fields(self):
         """Missing required fields return 422."""
-        response = self._client().post("/api/v1/reporting/embed/dashboard", json={
-            "dashboard_id": "events_overview",
-            # missing tenant_id, user_id, user_email
-        })
+        # Override the Looker dependency so this test is order-independent:
+        # if another test imported the real backend first, the leaf-module
+        # stub above never installed and the real service would raise before
+        # request validation could return 422.
+        response = self._client_with_looker(MagicMock()).post(
+            "/api/v1/reporting/embed/dashboard", json={
+                "dashboard_id": "events_overview",
+                # missing tenant_id, user_id, user_email
+            })
         assert response.status_code == 422

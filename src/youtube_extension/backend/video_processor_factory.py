@@ -10,6 +10,8 @@ import logging
 import os
 from typing import Union
 
+from youtube_extension.utils.proxy import get_proxy_url
+
 logger = logging.getLogger(__name__)
 
 def get_video_processor(processor_type: str = "auto") -> Union['EnhancedVideoProcessor', 'RealVideoProcessor', 'DeepMCPAgentProcessor']:
@@ -97,6 +99,9 @@ def get_video_processor(processor_type: str = "auto") -> Union['EnhancedVideoPro
                             "noplaylist": True,
                             "outtmpl": os.path.join(tmpdir, "%(id)s.%(ext)s"),
                         }
+                        proxy_url = get_proxy_url()
+                        if proxy_url:
+                            ydl_opts["proxy"] = proxy_url
                         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                             info = ydl.extract_info(video_url, download=True)
                         video_id = info.get("id") or "unknown"

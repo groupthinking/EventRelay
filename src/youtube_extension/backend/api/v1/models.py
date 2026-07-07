@@ -9,7 +9,7 @@ Provides data validation and serialization for all API endpoints.
 
 import re
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Generic, Optional, TypeVar, Union
 
@@ -97,6 +97,14 @@ class VideoJobStatusResponse(BaseModel):
     transcript: Optional[str] = None
     metadata: Optional[dict[str, Any]] = None
     error: Optional[str] = None
+    error_reason: Optional[str] = Field(
+        None,
+        description="Machine-readable slug describing why a job failed (e.g. 'gemini_api_timeout')",
+    )
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        description="UTC creation timestamp; used by job-store retention (expire_before).",
+    )
 
 
 # ============ Event Extraction ============
@@ -612,6 +620,28 @@ class TranscriptActionResponse(BaseModel):
     job_status: Optional[JobStatus] = None
     status_url: Optional[str] = None
     processing_transport: Optional[str] = None
+
+
+class KnowledgeIngestRequest(BaseModel):
+    """Request model for knowledge ingest."""
+
+    text: str = Field(..., description="Non-empty transcript-derived insight or durable fact")
+    tags: Optional[Any] = Field(
+        default=None, description="Optional topic tags; normalized server-side"
+    )
+    source: Optional[str] = Field(
+        default=None, description="Optional source identifier (job id, video id, etc.)"
+    )
+
+
+class KnowledgeIngestResponse(BaseModel):
+    """Response model for knowledge ingest."""
+
+    stored: bool = Field(..., description="True when persisted successfully")
+    id: str = Field(..., description="Stored knowledge entry identifier")
+    source: str = Field(..., description="Source identifier attached to this entry")
+    tags: list[str] = Field(default_factory=list, description="Normalized topic tags")
+    message: str = Field(..., description="Human-readable storage result")
 
 
 class FeedbackRequest(BaseModel):
