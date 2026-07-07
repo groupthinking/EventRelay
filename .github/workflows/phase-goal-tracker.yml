@@ -52,8 +52,7 @@ jobs:
 
             const phaseIssue =
               labels.some((label) => /^phase-\d+$/.test(label)) ||
-              title.includes('[phase') ||
-              title.includes('testing & production launch');
+              title.includes('[phase');
 
             if (!phaseIssue) {
               core.info(`Skipping non-phase issue #${issue.number}.`);
@@ -132,7 +131,7 @@ jobs:
             }
 
             if (done) {
-              if (issue.state !== 'closed') {
+              if (issue.state === 'open') {
                 await github.rest.issues.update({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
