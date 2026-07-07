@@ -22,6 +22,7 @@ COPY package.json package-lock.json ./
 COPY apps/web/package.json ./apps/web/
 
 # Copy local file: dependencies for npm
+COPY src/dataconnect-generated ./src/dataconnect-generated
 COPY apps/web/src/dataconnect-generated ./apps/web/src/dataconnect-generated
 
 # Install dependencies
@@ -55,6 +56,10 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 # Copy installed Node.js packages (hoisted)
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/apps/web/node_modules ./apps/web/node_modules
+
+# Copy local file: dependencies to avoid dangling symlinks
+COPY --from=builder /app/src/dataconnect-generated ./src/dataconnect-generated
+COPY --from=builder /app/apps/web/src/dataconnect-generated ./apps/web/src/dataconnect-generated
 
 # Copy application code
 COPY . .
