@@ -356,6 +356,19 @@ class AgentOrchestrator:
                 return {"error": error_msg, "output": result.output}
         except Exception as e:
             self.logger.error("execute_single failed for %s: %s", agent_type, e)
+            self._a2a_log.append(
+                A2AContextMessage(
+                    sender="orchestrator",
+                    recipient=agent_type,
+                    content={
+                        "type": "agent_dispatch",
+                        "agent_type": agent_type,
+                        "context": context,
+                        "status": "error",
+                        "error": str(e),
+                    },
+                )
+            )
             return {"error": str(e)}
 
     def get_session_logs(

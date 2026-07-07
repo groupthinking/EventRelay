@@ -16,15 +16,19 @@ from dataclasses import asdict
 from datetime import datetime
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse
 
 from shared.youtube import RobustYouTubeMetadata
 from uvai.ml.client import get_uvai_ml_client
 try:
     from youtube_extension.services.agents import AgentOrchestrator
+    from youtube_extension.services.agents.adapters.agent_orchestrator import (
+        orchestrator as _shared_orchestrator,
+    )
 except ImportError:
     AgentOrchestrator = None
+    _shared_orchestrator = None
 from youtube_extension.services.ai import HybridProcessorService
 from youtube_extension.services.cloud.cloud_tasks_queue import (
     CloudTasksQueueService,
@@ -1841,12 +1845,12 @@ async def _run_agent(execution: AgentExecution, events: list[dict[str, Any]]):
         execution.status = AgentStatus.running
         execution.progress = 10.0
 
-        orchestrator = AgentOrchestrator()
+        orch = _shared_orchestrator or AgentOrchestrator()
         event_data = next(
             (e for e in events if e.get("id") == execution.event_id),
             events[0] if events else {},
         )
-        result = await orchestrator.execute_single(
+        result = await orch.execute_single(
             agent_type=execution.agent_type,
             context=event_data,
         )
@@ -1933,7 +1937,7 @@ async def send_a2a_message(
 )
 async def get_agent_session_logs(
     agent_type: Optional[str] = None,
-    limit: int = 50,
+    limit: int = Query(default=50, ge=1, le=1000),
 ):
     """Return agent dispatch session logs.
 
@@ -1941,10 +1945,13 @@ async def get_agent_session_logs(
     and their execution outcomes. This enables a recursive feedback loop where
     agent findings can be reviewed and re-dispatched as new actions.
     """
-    if AgentOrchestrator is None:
-        raise HTTPException(status_code=503, detail="AgentOrchestrator not available")
-    orch = AgentOrchestrator()
-    logs = orch.get_session_logs(agent_type=agent_type, limit=limit)
+    if _shared_orchestrator is None:
+        raise HTTPException(
+            status_code=503, detail="AgentOrchestrator not available"
+        )
+    logs = _shared_orchestrator.get_session_logs(
+        agent_type=agent_type, limit=limit
+    )
     return ApiResponse.success({"sessions": logs, "count": len(logs)})
 
 
