@@ -326,7 +326,8 @@ class SkillRegistry:
         """Build a normalized metadata dict for a skill entry."""
         return {
             "id": skill_id,
-            "name": meta.get("className", skill_id),
+            "name": skill_id.replace("-", " ").title(),
+            "class_name": meta.get("className", ""),
             "version": meta.get("version", "0.0.0"),
             "triggers": meta.get("triggers", []),
             "dependencies": meta.get("dependencies", []),

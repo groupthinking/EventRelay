@@ -9,13 +9,11 @@ Tests verify:
 
 from __future__ import annotations
 
-import importlib
 import json
 import os
 import sys
 import types
 from pathlib import Path
-from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -110,7 +108,8 @@ class TestSkillDiscovery:
         skill = registry.get_skill("content-generation")
         assert skill is not None
         assert skill["id"] == "content-generation"
-        assert skill["name"] == "ContentGenerationSkill"
+        assert skill["name"] == "Content Generation"
+        assert skill["class_name"] == "ContentGenerationSkill"
         assert skill["version"] == "1.0.0"
         assert "video_published" in skill["triggers"]
 
