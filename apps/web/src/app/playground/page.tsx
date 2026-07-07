@@ -342,8 +342,9 @@ response = requests.post(
           </div>
         </div>
 
+        {/* Experimental: AI Video Generator */}
         <div className="mt-10">
-          <h2 className="mb-4 text-sm font-medium uppercase tracking-widest text-white/60">
+          <h2 className="text-sm font-medium text-white/60 mb-4 uppercase tracking-widest">
             Experimental Features
           </h2>
           <VideoGenerator />

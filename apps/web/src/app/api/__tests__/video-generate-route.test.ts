@@ -1,121 +1,136 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
-const { experimentalGenerateVideo, videoModel } = vi.hoisted(() => ({
-  experimentalGenerateVideo: vi.fn(),
-  videoModel: vi.fn(() => 'mock-video-model'),
-}));
-
-vi.mock('ai', () => ({
-  experimental_generateVideo: experimentalGenerateVideo,
-}));
-
-vi.mock('@/lib/ai-gateway', () => ({
-  aiGateway: {
-    video: videoModel,
-  },
-  GATEWAY_VIDEO_MODEL: 'google/veo-3.1-generate-001',
-}));
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 
 import { POST } from '@/app/api/video/generate/route';
 
-function postRequest(
-  body: unknown,
-  headers: Record<string, string> = {},
-) {
+const GATEWAY_URL = 'https://ai-gateway.vercel.sh/v1/video/generations';
+
+/** Build a POST request with a per-test client IP so the module-scoped rate
+ *  limiter doesn't bleed between tests. Pass `raw` to send a non-JSON body. */
+function postReq(body: unknown, ip = '10.0.0.1', raw = false) {
   return new Request('http://localhost:3000/api/video/generate', {
     method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      ...headers,
-    },
-    body: JSON.stringify(body),
+    headers: { 'content-type': 'application/json', 'x-forwarded-for': ip },
+    body: raw ? (body as string) : JSON.stringify(body),
   });
 }
 
+function gatewayOk(json: unknown) {
+  return { ok: true, status: 200, json: async () => json, text: async () => JSON.stringify(json) };
+}
+function gatewayErr(status: number) {
+  return { ok: false, status, json: async () => ({}), text: async () => 'gateway error' };
+}
+function videoBytesOk() {
+  return { ok: true, status: 200, arrayBuffer: async () => new TextEncoder().encode('FAKEVIDEO').buffer };
+}
+
+const validBody = { prompt: 'a calm ocean at sunset', aspectRatio: '16:9', duration: 5 };
+
+beforeEach(() => {
+  process.env.AI_GATEWAY_API_KEY = 'test-key';
+  global.fetch = vi.fn();
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  delete process.env.AI_GATEWAY_API_KEY;
+});
+
 describe('POST /api/video/generate', () => {
-  beforeEach(() => {
-    process.env.AI_GATEWAY_API_KEY = 'vck_test';
-    experimentalGenerateVideo.mockResolvedValue({
-      videos: [
-        {
-          base64: 'ZmFrZQ==',
-          mediaType: 'video/mp4',
-          uint8Array: new Uint8Array([1, 2, 3]),
-        },
-      ],
-    });
-  });
-
-  afterEach(() => {
+  it('returns 503 when AI_GATEWAY_API_KEY is not configured', async () => {
     delete process.env.AI_GATEWAY_API_KEY;
-    vi.clearAllMocks();
+    const res = await POST(postReq(validBody, '10.0.0.2'));
+    expect(res.status).toBe(503);
   });
 
-  it('rejects requests without a prompt', async () => {
-    const response = await POST(postRequest({}));
-    const body = await response.json();
-
-    expect(response.status).toBe(400);
-    expect(body.error).toMatch(/prompt/i);
+  it('returns 400 on invalid JSON body', async () => {
+    const res = await POST(postReq('{not json', '10.0.0.3', true));
+    expect(res.status).toBe(400);
   });
 
-  it('returns generated video data for a valid prompt', async () => {
-    const response = await POST(
-      postRequest(
-        { prompt: 'A sunrise over snowy mountains', aspectRatio: '16:9', duration: 5 },
-        { 'x-forwarded-for': '198.51.100.10' },
-      ),
+  it('returns 400 when prompt is missing/empty', async () => {
+    const res = await POST(postReq({ prompt: '   ' }, '10.0.0.4'));
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 400 when prompt exceeds 1000 chars', async () => {
+    const res = await POST(postReq({ prompt: 'x'.repeat(1001) }, '10.0.0.5'));
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 400 on invalid aspectRatio', async () => {
+    const res = await POST(postReq({ ...validBody, aspectRatio: '3:2' }, '10.0.0.6'));
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 400 on out-of-range duration', async () => {
+    const res = await POST(postReq({ ...validBody, duration: 999 }, '10.0.0.7'));
+    expect(res.status).toBe(400);
+  });
+
+  it('enforces the per-IP rate limit (4th request within window → 429)', async () => {
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(
+      gatewayOk({ data: [{ b64_json: 'AAAA' }] }) as unknown as Response
     );
-    const body = await response.json();
-
-    expect(response.status).toBe(200);
-    expect(videoModel).toHaveBeenCalledWith('google/veo-3.1-generate-001');
-    expect(experimentalGenerateVideo).toHaveBeenCalledWith(
-      expect.objectContaining({
-        model: 'mock-video-model',
-        prompt: 'A sunrise over snowy mountains',
-        aspectRatio: '16:9',
-        duration: 5,
-      }),
-    );
-    expect(body.videoBase64).toBe('ZmFrZQ==');
-  });
-
-  it('rate limits repeated requests from the same IP', async () => {
-    const headers = { 'x-forwarded-for': '198.51.100.44' };
-
-    for (let attempt = 0; attempt < 3; attempt++) {
-      const response = await POST(postRequest({ prompt: `clip ${attempt}` }, headers));
-      expect(response.status).toBe(200);
+    const ip = '10.9.9.9';
+    for (let i = 0; i < 3; i++) {
+      const ok = await POST(postReq(validBody, ip));
+      expect(ok.status).toBe(200);
     }
-
-    const limited = await POST(postRequest({ prompt: 'clip 4' }, headers));
-    const body = await limited.json();
-
+    const limited = await POST(postReq(validBody, ip));
     expect(limited.status).toBe(429);
-    expect(body.error).toMatch(/rate limit/i);
   });
 
-  it('rejects oversized generated video payloads instead of returning huge inline data', async () => {
-    experimentalGenerateVideo.mockResolvedValueOnce({
-      videos: [
-        {
-          base64: 'a'.repeat(2_000_001),
-          mediaType: 'video/mp4',
-          uint8Array: new Uint8Array([1, 2, 3]),
-        },
-      ],
-    });
+  it('propagates a gateway error status', async () => {
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(gatewayErr(500) as unknown as Response);
+    const res = await POST(postReq(validBody, '10.0.0.8'));
+    expect(res.status).toBe(500);
+  });
 
-    const response = await POST(
-      postRequest(
-        { prompt: 'A very long cinematic flyover' },
-        { 'x-forwarded-for': '198.51.100.77' },
-      ),
+  it('returns 502 when the gateway response has no video', async () => {
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(
+      gatewayOk({ data: [{}] }) as unknown as Response
     );
-    const body = await response.json();
+    const res = await POST(postReq(validBody, '10.0.0.9'));
+    expect(res.status).toBe(502);
+  });
 
-    expect(response.status).toBe(413);
-    expect(body.error).toMatch(/too large/i);
+  it('returns base64 directly when the gateway provides it', async () => {
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(
+      gatewayOk({ data: [{ b64_json: 'QkFTRTY0' }] }) as unknown as Response
+    );
+    const res = await POST(postReq(validBody, '10.0.0.10'));
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.videoBase64).toBe('QkFTRTY0');
+    expect(json.video).toBeNull();
+  });
+
+  it('inlines a remote signed URL as base64 (CSP-safe, no client-controlled proxy)', async () => {
+    const fetchMock = global.fetch as ReturnType<typeof vi.fn>;
+    fetchMock
+      .mockResolvedValueOnce(gatewayOk({ data: [{ url: 'https://cdn.example/signed.mp4' }] }) as unknown as Response)
+      .mockResolvedValueOnce(videoBytesOk() as unknown as Response);
+
+    const res = await POST(postReq(validBody, '10.0.0.11'));
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.video).toBeNull();
+    // 'FAKEVIDEO' base64-encoded
+    expect(json.videoBase64).toBe(Buffer.from('FAKEVIDEO').toString('base64'));
+    // second fetch was the server-side inline of the gateway-provided URL
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[0][0]).toBe(GATEWAY_URL);
+    expect(fetchMock.mock.calls[1][0]).toBe('https://cdn.example/signed.mp4');
+  });
+
+  it('returns 502 when the signed URL cannot be retrieved', async () => {
+    const fetchMock = global.fetch as ReturnType<typeof vi.fn>;
+    fetchMock
+      .mockResolvedValueOnce(gatewayOk({ data: [{ url: 'https://cdn.example/signed.mp4' }] }) as unknown as Response)
+      .mockResolvedValueOnce({ ok: false, status: 404 } as unknown as Response);
+
+    const res = await POST(postReq(validBody, '10.0.0.12'));
+    expect(res.status).toBe(502);
   });
 });
