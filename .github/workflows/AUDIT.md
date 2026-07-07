@@ -46,7 +46,7 @@ job rather than merging.
 
 ## Verification
 
-All 21 remaining workflow files were parsed with PyYAML after the changes — all
+All 22 remaining workflow files were parsed with PyYAML after the changes — all
 valid. Referenced paths were checked against the working tree:
 
 - Present: `.github/codeql/codeql-config.yml`, `.gitleaks.toml`, `.trivyignore`,
