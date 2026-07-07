@@ -28,6 +28,13 @@ jobs:
                 ? Number(context.payload.inputs.issue_number)
                 : context.payload.issue.number;
 
+            // A maintainer may reopen a completed phase issue to add follow-up
+            // tasks or correct a prematurely-checked box. Don't auto-close on the
+            // reopen itself, or the reopen is reverted before they can edit.
+            const isReopenEvent =
+              context.eventName === 'issues' &&
+              context.payload.action === 'reopened';
+
             if (!Number.isInteger(issueNumber)) {
               core.setFailed(
                 `Invalid issue number input: ${JSON.stringify(context.payload?.inputs?.issue_number)}`
@@ -50,8 +57,10 @@ jobs:
             const title = (issue.title || '').toLowerCase();
             const body = issue.body || '';
 
+            // Match the documented `phase-*` label convention: any label prefixed
+            // with `phase-` (e.g. `phase-3`, `phase-cleanup`, `phase-hardening`).
             const phaseIssue =
-              labels.some((label) => /^phase-\d+$/.test(label)) ||
+              labels.some((label) => /^phase-.+/.test(label)) ||
               title.includes('[phase');
 
             if (!phaseIssue) {
@@ -92,7 +101,9 @@ jobs:
               `- Status: ${done ? '✅ All goals complete' : '⏳ In progress'}`,
               '',
               done
-                ? 'All checklist goals are complete. Closing this issue now.'
+                ? isReopenEvent
+                  ? 'All checklist goals are complete. This issue was just reopened, so it will stay open for further edits.'
+                  : 'All checklist goals are complete. Closing this issue now.'
                 : `### Next goals\n${openTasks.join('\n')}${
                     openTaskCount > maxOpenTasksToShow
                       ? `\n\n_Showing first ${maxOpenTasksToShow} of ${openTaskCount} remaining tasks._`
@@ -130,7 +141,12 @@ jobs:
               });
             }
 
-            if (done) {
+            if (done && isReopenEvent) {
+              core.info(
+                `Issue #${issue.number} is complete but was just reopened; ` +
+                  'leaving it open for further edits.'
+              );
+            } else if (done) {
               if (issue.state === 'open') {
                 await github.rest.issues.update({
                   owner: context.repo.owner,
