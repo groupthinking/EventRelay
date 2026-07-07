@@ -15,6 +15,7 @@ Key Responsibilities:
 import hashlib
 import json
 import logging
+import os
 import uuid
 from datetime import datetime, timedelta
 from enum import Enum
@@ -410,9 +411,17 @@ class MCPContextManager:
         ]
 
         if not matches:
-            import os
+            try:
+                filenames = os.listdir(self.storage_path)
+            except OSError as exc:
+                logger.error(
+                    "Failed to list context storage path %s: %s",
+                    self.storage_path,
+                    exc,
+                )
+                return None
 
-            for filename in os.listdir(self.storage_path):
+            for filename in filenames:
                 if not filename.endswith(".json"):
                     continue
                 context_id = filename[:-5]
@@ -436,7 +445,16 @@ class MCPContextManager:
     def _compute_state_diff(
         previous_state: dict[str, Any], next_state: dict[str, Any]
     ) -> dict[str, Any]:
-        """Compute a simple differential state payload."""
+        """
+        Compute a simple differential state payload.
+
+        Args:
+            previous_state: Existing state snapshot.
+            next_state: Incoming full state snapshot.
+
+        Returns:
+            Dict with `added`, `updated`, and `removed` keys describing changes.
+        """
         added = {k: v for k, v in next_state.items() if k not in previous_state}
         updated = {
             k: {"from": previous_state[k], "to": next_state[k]}
