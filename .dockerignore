@@ -1,16 +1,18 @@
-# Node & Frontend (not needed for Python backend container)
+# .dockerignore — Exclude unnecessary files from Docker build context
+
+# Version Control
+.git/
+.gitignore
+
+# Node dependencies (rebuilt in container)
 node_modules/
-apps/
-.next/
+apps/web/node_modules/
+apps/web/.next/
 
-# Chrome / NotebookLM browser profiles (~1GB)
-notebooklm_chrome_profile/
-src/utils/notebooklm_profile/
-src/utils/notebooklm_profile_v2/
-
-# Python
+# Python artifacts
 __pycache__/
 *.pyc
+*.pyo
 .venv/
 venv/
 *.egg-info/
@@ -18,7 +20,6 @@ dist/
 build/
 
 # IDE & System
-.git/
 .idea/
 .vscode/
 .DS_Store
@@ -32,11 +33,17 @@ logs/
 
 # Config & Secrets
 .env*
+!.env.example
 *.pem
 *.key
 *.cert
 *secret*.json
 gha-creds-*.json
+
+# Chrome / NotebookLM browser profiles
+notebooklm_chrome_profile/
+src/utils/notebooklm_profile/
+src/utils/notebooklm_profile_v2/
 
 # Research & Archives
 research/
@@ -61,3 +68,11 @@ htmlcov/
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
+
+# Infrastructure (not needed in app image)
+infrastructure/
+supabase/
+mcp-servers/
+
+# CI/CD
+.github/
