@@ -182,6 +182,9 @@ def test_job_store_expire_before_boundary_not_removed(tmp_path):
 
     removed = store.expire_before(cutoff)
 
+    # NOTE: this strict less-than boundary relies on isoformat()/fromisoformat()
+    # round-tripping the exact microsecond precision. If the serialisation path
+    # ever truncates below microseconds, this boundary assertion must be revisited.
     assert removed == 0
     assert store.load("boundary_job") is not None
 
