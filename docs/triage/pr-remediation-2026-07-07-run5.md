@@ -63,9 +63,12 @@ remedy for each is **re-cut the intended diff off current `main`**, not rebase 8
 ## WIP drafts — DEFERRED(draft) (20)
 
 All opened 2026-07-07, mostly paired Copilot + Claude attempts at the same issue (owner
-comparing two implementations). Unchanged from run 4's inventory plus **#563** (docs: align
-`CLAUDE.md` anthropic SDK floor with `pyproject.toml`, `0.105.0`). Un-draft the winner of
-each pair; close the loser. No action this run — deferred by definition.
+comparing two implementations). The count moved **21 → 20** since run 4: the owner **closed
+the SQL-injection-hardening draft pair #547 (Copilot) and #550 (owner)** — both redundant
+with the already-merged #548 (exactly the reconciliation run 4 flagged) — and opened one new
+draft **#563** (docs: align `CLAUDE.md` anthropic SDK floor with `pyproject.toml`, `0.105.0`).
+Net: 21 − 2 + 1 = 20. The rest of the inventory is unchanged from run 4. Un-draft the winner
+of each remaining pair; close the loser. No action this run — deferred by definition.
 
 ## Auto-mergeable this run
 
