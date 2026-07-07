@@ -1951,6 +1951,29 @@ async def send_a2a_message(
 
 
 @router.get(
+    "/agents/sessions",
+    response_model=ApiResponse,
+    summary="Get agent session logs",
+    tags=["Agents"],
+)
+async def get_agent_session_logs(
+    agent_type: Optional[str] = None,
+    limit: int = 50,
+):
+    """Return agent dispatch session logs.
+
+    Session logs track which agents were dispatched, what context they received,
+    and their execution outcomes. This enables a recursive feedback loop where
+    agent findings can be reviewed and re-dispatched as new actions.
+    """
+    if AgentOrchestrator is None:
+        raise HTTPException(status_code=503, detail="AgentOrchestrator not available")
+    orch = AgentOrchestrator()
+    logs = orch.get_session_logs(agent_type=agent_type, limit=limit)
+    return ApiResponse.success({"sessions": logs, "count": len(logs)})
+
+
+@router.get(
     "/agents/a2a/log",
     response_model=ApiResponse,
     summary="Get A2A message log",

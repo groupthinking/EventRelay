@@ -272,6 +272,147 @@ const addToKnowledgeBase: ActionTool = {
   },
 };
 
+const dispatchSubagents: ActionTool = {
+  name: 'dispatch_subagents',
+  description:
+    'Spawn multiple specialized subagents in parallel for a complex task. ' +
+    'Each subagent receives its own instruction and runs independently. ' +
+    'Use this when a task needs analysis from multiple perspectives (e.g. code review + testing + deployment).',
+  parameters: {
+    type: 'object',
+    properties: {
+      parentTask: { type: 'string', description: 'Description of the overall goal the subagents serve' },
+      subagents: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            agentType: {
+              type: 'string',
+              enum: ['code_generator', 'researcher', 'deployer', 'summarizer', 'analyzer'],
+            },
+            instruction: { type: 'string', description: 'Concrete instruction for this subagent' },
+          },
+          required: ['agentType', 'instruction'],
+          additionalProperties: false,
+        },
+        description: 'List of subagents to dispatch',
+      },
+    },
+    required: ['parentTask', 'subagents'],
+    additionalProperties: false,
+  },
+  async execute(input, ctx) {
+    const parentTask = str(input, 'parentTask');
+    const subagents = input.subagents;
+
+    if (!ctx.backendBaseUrl) {
+      return {
+        summary: `Cannot dispatch subagents — no backend configured (set BACKEND_URL).`,
+        isError: true,
+      };
+    }
+
+    if (!Array.isArray(subagents) || subagents.length === 0) {
+      return { summary: 'No subagents specified', isError: true };
+    }
+
+    const events = (subagents as Array<{ agentType: string; instruction: string }>).map((s) => ({
+      id: `sub_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      type: 'action',
+      title: s.instruction,
+      description: `Subagent task for: ${parentTask}`,
+    }));
+
+    const agentTypes = [
+      ...new Set((subagents as Array<{ agentType: string }>).map((s) => s.agentType)),
+    ];
+
+    const doFetch = ctx.fetchImpl ?? fetch;
+    try {
+      const res = await doFetch(`${ctx.backendBaseUrl}/api/v1/agents/dispatch`, {
+        method: 'POST',
+        headers: backendHeaders(),
+        body: JSON.stringify({
+          job_id: ctx.jobId,
+          agent_types: agentTypes,
+          events,
+        }),
+        signal: AbortSignal.timeout(30_000),
+      });
+      if (!res.ok) {
+        const detail = await res.text();
+        return { summary: `Subagent dispatch failed: ${res.status} ${detail}`, isError: true };
+      }
+      const body = await res.json();
+      const count = body?.data?.executions?.length ?? agentTypes.length;
+      return {
+        summary: `Dispatched ${count} subagent(s) for: ${parentTask}`,
+        data: body,
+      };
+    } catch (err) {
+      return { summary: `Subagent dispatch error: ${String(err)}`, isError: true };
+    }
+  },
+};
+
+const getAgentSessionLogs: ActionTool = {
+  name: 'get_agent_session_logs',
+  description:
+    'Retrieve session logs from previously dispatched agents to review their findings, ' +
+    'identify pending tasks, and decide follow-up actions. Use this to implement a feedback loop.',
+  parameters: {
+    type: 'object',
+    properties: {
+      agentType: {
+        type: 'string',
+        description: 'Filter logs to a specific agent type, or omit for all agents',
+      },
+      limit: { type: 'number', description: 'Maximum number of log entries to return (default 20)' },
+    },
+    required: [],
+    additionalProperties: false,
+  },
+  async execute(input, ctx) {
+    if (!ctx.backendBaseUrl) {
+      return {
+        summary: 'Cannot retrieve session logs — no backend configured (set BACKEND_URL).',
+        isError: true,
+      };
+    }
+
+    const agentType = str(input, 'agentType');
+    const limit = typeof input.limit === 'number' ? input.limit : 20;
+
+    const params = new URLSearchParams();
+    if (agentType) params.set('agent_type', agentType);
+    params.set('limit', String(limit));
+
+    const doFetch = ctx.fetchImpl ?? fetch;
+    try {
+      const res = await doFetch(
+        `${ctx.backendBaseUrl}/api/v1/agents/sessions?${params.toString()}`,
+        {
+          headers: backendHeaders(),
+          signal: AbortSignal.timeout(10_000),
+        },
+      );
+      if (!res.ok) {
+        const detail = await res.text();
+        return { summary: `Session logs retrieval failed: ${res.status} ${detail}`, isError: true };
+      }
+      const body = await res.json();
+      const sessions = body?.data?.sessions ?? [];
+      return {
+        summary: `Retrieved ${sessions.length} agent session log(s)`,
+        data: { sessions, count: sessions.length },
+      };
+    } catch (err) {
+      return { summary: `Session logs error: ${String(err)}`, isError: true };
+    }
+  },
+};
+
 // ── Registry ──
 
 export const ACTION_TOOLS: readonly ActionTool[] = [
@@ -279,6 +420,8 @@ export const ACTION_TOOLS: readonly ActionTool[] = [
   saveResource,
   scheduleFollowup,
   dispatchAgent,
+  dispatchSubagents,
+  getAgentSessionLogs,
   addToKnowledgeBase,
 ];
 
