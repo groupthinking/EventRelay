@@ -379,7 +379,8 @@ class EnhancedStrategy(ProcessorStrategy):
                 self.video_client = videointelligence.VideoIntelligenceServiceClient()
             except Exception as e:
                 logger.warning(
-                    f"Could not initialize VideoIntelligenceServiceClient: {e}"
+                    f"Could not initialize VideoIntelligenceServiceClient: "
+                    f"{type(e).__name__}: {e}"
                 )
                 self.video_client = None
         if HAS_AI_DEPS and genai:
@@ -461,7 +462,7 @@ class EnhancedStrategy(ProcessorStrategy):
 
     async def extract_video_metadata(self, video_id: str) -> VideoMetadata:
         """Extract comprehensive video metadata using Vertex AI"""
-        if not HAS_VIDEO_DEPS or not getattr(self, "video_client", None):
+        if not HAS_VIDEO_DEPS or self.video_client is None:
             raise ValueError("Video dependencies not available")
 
         video_uri = f"gs://youtube_videos/{video_id}.mp4"  # Assuming videos are in GCS
@@ -511,7 +512,7 @@ class EnhancedStrategy(ProcessorStrategy):
         self, video_id: str, languages: list[str] = None
     ) -> list[TranscriptSegment]:
         """Extract transcript using Vertex AI Video Intelligence"""
-        if not HAS_VIDEO_DEPS or not getattr(self, "video_client", None):
+        if not HAS_VIDEO_DEPS or self.video_client is None:
             raise ValueError("Video dependencies not available")
 
         video_uri = f"gs://youtube_videos/{video_id}.mp4"  # Assuming videos are in GCS
