@@ -292,12 +292,12 @@ class DatabaseCleanupService:
 
                 # Quote the column identifier. time_col is one of the hardcoded
                 # candidates ("timestamp", "created_at", "createdAt", "ts") so it
-                # contains only safe characters; quoting is an extra defence layer.
-                safe_time_col = f'"{time_col}"'
+                # contains only safe characters; quoting adds a second defence layer.
+                quoted_time_col = f'"{time_col}"'
 
                 # Delete old records in batches (SQLite-compatible; DELETE ... LIMIT is not portable).
                 # See _CLEANUP_BATCH_SQL for the security rationale on identifier substitution.
-                delete_sql = _CLEANUP_BATCH_SQL.format(table=safe_table_name, col=safe_time_col)
+                delete_sql = _CLEANUP_BATCH_SQL.format(table=safe_table_name, col=quoted_time_col)
                 while True:
                     cursor.execute(delete_sql, (cutoff_date.isoformat(), policy.batch_size))
 

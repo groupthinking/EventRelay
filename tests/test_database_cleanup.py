@@ -28,7 +28,18 @@ from youtube_extension.backend.services.database_cleanup_service import (
 # ---------------------------------------------------------------------------
 
 def _make_db(tmp_path, table: str, col: str) -> str:
-    """Return path to a temp SQLite DB with one table and two rows (old + new)."""
+    """Create a temporary SQLite database for testing.
+
+    Args:
+        tmp_path: pytest ``tmp_path`` fixture directory.
+        table: Name of the table to create.
+        col: Name of the timestamp-like column to add to the table.
+
+    Returns:
+        Absolute path to the created ``.db`` file, which contains two rows:
+        one with a timestamp 60 days in the past ("old") and one with the
+        current timestamp ("new").
+    """
     db = str(tmp_path / f"{table}.db")
     conn = sqlite3.connect(db)
     conn.execute(
@@ -48,6 +59,15 @@ def _make_db(tmp_path, table: str, col: str) -> str:
 
 
 def _row_count(db: str, table: str) -> int:
+    """Return the number of rows in *table* within the SQLite database at *db*.
+
+    Args:
+        db: Absolute path to the SQLite database file.
+        table: Name of the table to count rows in.
+
+    Returns:
+        Integer row count.
+    """
     conn = sqlite3.connect(db)
     cur = conn.execute(f'SELECT COUNT(*) FROM "{table}"')
     count = cur.fetchone()[0]
