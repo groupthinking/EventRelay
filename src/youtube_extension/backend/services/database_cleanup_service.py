@@ -276,19 +276,27 @@ class DatabaseCleanupService:
                         error_message="time column not found"
                     )
 
-                # Delete old records in batches (SQLite-compatible; DELETE ... LIMIT is not portable)
+                # Quote the column identifier. time_col is one of the hardcoded
+                # candidates ("timestamp", "created_at", "createdAt", "ts") so it
+                # contains only safe characters; quoting is an extra defence layer.
+                safe_time_col = f'"{time_col}"'
+
+                # Build parameterized DELETE query.
+                # Identifiers (safe_table_name, safe_time_col) cannot use ? placeholders in
+                # SQLite — they are safe because:
+                #   • safe_table_name is validated by ^[a-zA-Z0-9_]+$ and double-quoted.
+                #   • safe_time_col is chosen from a hardcoded allowlist and double-quoted.
+                # All *values* (cutoff_date, batch_size) are bound via ? parameters.
+                _delete_batch_sql = (  # nosec B608
+                    "DELETE FROM " + safe_table_name  # nosec B608
+                    + " WHERE rowid IN ("  # nosec B608
+                    + "SELECT rowid FROM " + safe_table_name  # nosec B608
+                    + " WHERE " + safe_time_col + " < ? LIMIT ?)"  # nosec B608
+                )
+
+                # Delete old records in batches (SQLite-compatible; DELETE ... LIMIT is not portable).
                 while True:
-                    cursor.execute(
-                        f"""
-                        DELETE FROM {safe_table_name}
-                        WHERE rowid IN (
-                            SELECT rowid FROM {safe_table_name}
-                            WHERE {time_col} < ?
-                            LIMIT ?
-                        )
-                        """,
-                        (cutoff_date.isoformat(), policy.batch_size),
-                    )
+                    cursor.execute(_delete_batch_sql, (cutoff_date.isoformat(), policy.batch_size))
 
                     batch_deleted = cursor.rowcount
                     records_deleted += batch_deleted

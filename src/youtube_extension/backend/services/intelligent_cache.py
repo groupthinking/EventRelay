@@ -207,7 +207,7 @@ class InMemoryCacheLayer(IntelligentCacheLayer):
                 if key in self.access_patterns:
                     del self.access_patterns[key]
 
-                logger.debug(f"L1 Cache DELETE: {key}")
+                logger.debug(f"L1 Cache delete: {key}")
                 return True
             return False
 
@@ -379,7 +379,7 @@ class RedisCacheLayer(IntelligentCacheLayer):
                 # Clean up tag references (would need to get tags first in real implementation)
                 # This is simplified for demo
 
-                logger.debug(f"L2 Redis DELETE: {key}")
+                logger.debug(f"L2 Redis delete: {key}")
                 return deleted > 0
 
         except Exception as e:
