@@ -2,7 +2,7 @@
 # Optimized for Cloud Run and npm workspaces
 
 # Stage 1: Builder
-FROM python:3.11-slim AS builder
+FROM python:3.12-slim AS builder
 
 WORKDIR /app
 
@@ -31,7 +31,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
 RUN npm ci --workspace=apps/web --legacy-peer-deps
 
 # Stage 2: Runtime
-FROM python:3.11-slim AS runtime
+FROM python:3.12-slim AS runtime
 
 WORKDIR /app
 
@@ -49,7 +49,7 @@ RUN groupadd --gid 1000 appuser && \
     useradd --uid 1000 --gid appuser --shell /bin/bash --create-home appuser
 
 # Copy installed Python packages
-COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
 
 # Copy installed Node.js packages (hoisted)
@@ -79,4 +79,5 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
     CMD curl -f http://localhost:${PORT:-8080}/health || exit 1
 
 # Default command (starts backend)
-CMD ["python", "-m", "uvicorn", "youtube_extension.main:app", "--host", "0.0.0.0", "--port", "8080"]
+# Use shell-form to support $PORT expansion at runtime
+CMD python -m uvicorn youtube_extension.main:app --host 0.0.0.0 --port ${PORT:-8080}
