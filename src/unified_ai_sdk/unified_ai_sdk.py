@@ -86,7 +86,10 @@ class UnifiedAISDK:
 
     def __init__(self, config: dict[str, Any] | None = None):
         self.config = dict(config or {})
-        self.retry_attempts = max(1, int(self.config.get("retry_attempts", 3)))
+        retry_attempts = int(self.config.get("retry_attempts", 3))
+        if retry_attempts < 1:
+            raise ValueError("retry_attempts must be at least 1")
+        self.retry_attempts = retry_attempts
         self.retry_base_delay = float(self.config.get("retry_base_delay", 1.0))
         self.retry_max_delay = float(self.config.get("retry_max_delay", 8.0))
         self.rate_limiter = RateLimiter(self.config.get("rate_limits"))
@@ -252,9 +255,10 @@ class UnifiedAISDK:
             max_tokens=request.max_tokens,
             temperature=request.temperature,
         )
-        if not getattr(response, "choices", None):
+        choices = getattr(response, "choices", None)
+        if not choices or len(choices) == 0:
             raise RuntimeError(f"OpenAI ({request.model}) returned no choices")
-        content = response.choices[0].message.content or ""
+        content = choices[0].message.content or ""
         usage = getattr(response, "usage", None)
         tokens_used = int(getattr(usage, "total_tokens", 0) or 0)
         return content, tokens_used
@@ -275,7 +279,7 @@ class UnifiedAISDK:
         text_blocks = [
             getattr(block, "text", "")
             for block in response.content
-            if block.type == "text"
+            if getattr(block, "type", None) == "text"
         ]
         usage = getattr(response, "usage", None)
         input_tokens = int(getattr(usage, "input_tokens", 0) or 0)

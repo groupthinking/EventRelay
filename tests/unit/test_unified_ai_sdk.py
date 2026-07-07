@@ -60,15 +60,12 @@ class TestUnifiedAISDK:
 
     async def test_unified_request_uses_gemini_client(self, monkeypatch):
         sdk = UnifiedAISDK({"retry_attempts": 1})
-        config_calls: list[dict[str, float | int]] = []
+        config_factory = MagicMock(side_effect=lambda **kwargs: kwargs)
         monkeypatch.setattr(sdk_mod, "_GENAI_AVAILABLE", True)
         monkeypatch.setattr(
             sdk_mod,
             "_genai_types",
-            SimpleNamespace(
-                GenerateContentConfig=lambda **kwargs: config_calls.append(kwargs)
-                or kwargs
-            ),
+            SimpleNamespace(GenerateContentConfig=config_factory),
             raising=False,
         )
         sdk._gemini_client = MagicMock()
@@ -100,7 +97,10 @@ class TestUnifiedAISDK:
         assert result.content == "part one\npart two"
         assert result.provider == "gemini"
         assert result.tokens_used == 88
-        assert config_calls == [{"temperature": 0.7, "max_output_tokens": 4000}]
+        assert config_factory.call_args.kwargs == {
+            "temperature": 0.7,
+            "max_output_tokens": 4000,
+        }
 
     async def test_unified_request_retries_before_succeeding(self):
         sdk = UnifiedAISDK({"retry_attempts": 2, "retry_base_delay": 0})
