@@ -66,6 +66,10 @@ class MCPContext(BaseModel):
     subtask: Optional[str] = None
     history: list[dict[str, Any]] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
+    vector_clock: dict[str, int] = Field(
+        default_factory=dict,
+        description="Per-device/session version counters for continuity sync",
+    )
 
     # System fields
     status: ContextStatus = Field(default=ContextStatus.ACTIVE)
@@ -345,6 +349,102 @@ class MCPContextManager:
         logger.info(f"Cleaned up {len(expired_ids)} expired contexts")
 
         return len(expired_ids)
+
+    def apply_state_delta(
+        self, context_id: str, next_state: dict[str, Any], device_id: str = "local"
+    ) -> Optional[dict[str, Any]]:
+        """
+        Apply a differential state update and persist continuity metadata.
+
+        Args:
+            context_id: Context identifier
+            next_state: Full next state snapshot
+            device_id: Device/session id used for vector clock advancement
+
+        Returns:
+            Differential update payload, or None when context doesn't exist.
+        """
+        context = self.get_context(context_id)
+        if not context:
+            logger.warning(f"Context not found for state delta: {context_id}")
+            return None
+
+        previous_state = dict(context.code_state)
+        diff = self._compute_state_diff(previous_state, next_state)
+        context.code_state = dict(next_state)
+        context.vector_clock[device_id] = context.vector_clock.get(device_id, 0) + 1
+        context.updated_at = datetime.utcnow()
+        context.add_history_entry(
+            "state_delta_applied",
+            {
+                "device_id": device_id,
+                "diff": diff,
+                "vector_clock": dict(context.vector_clock),
+            },
+        )
+
+        if context_id in self.active_contexts:
+            self.active_contexts[context_id] = context
+
+        self._persist_context(context)
+        return diff
+
+    def get_latest_context_for_agent(
+        self, agent_id: str, task: Optional[str] = None
+    ) -> Optional[MCPContext]:
+        """
+        Fetch the latest context for an agent across active and persisted sessions.
+
+        Args:
+            agent_id: Agent identifier stored in context metadata["agent_id"]
+            task: Optional task filter
+
+        Returns:
+            Latest matching context if found, otherwise None.
+        """
+        matches = [
+            context
+            for context in self.active_contexts.values()
+            if context.metadata.get("agent_id") == agent_id
+            and (task is None or context.task == task)
+        ]
+
+        if not matches:
+            import os
+
+            for filename in os.listdir(self.storage_path):
+                if not filename.endswith(".json"):
+                    continue
+                context_id = filename[:-5]
+                context = self._load_context(context_id)
+                if not context:
+                    continue
+                if context.metadata.get("agent_id") != agent_id:
+                    continue
+                if task is not None and context.task != task:
+                    continue
+                matches.append(context)
+
+        if not matches:
+            return None
+
+        latest = max(matches, key=lambda c: c.updated_at)
+        self.context_cache[latest.id] = latest
+        return latest
+
+    @staticmethod
+    def _compute_state_diff(
+        previous_state: dict[str, Any], next_state: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Compute a simple differential state payload."""
+        added = {k: v for k, v in next_state.items() if k not in previous_state}
+        updated = {
+            k: {"from": previous_state[k], "to": next_state[k]}
+            for k in next_state
+            if k in previous_state and previous_state[k] != next_state[k]
+        }
+        removed = [k for k in previous_state if k not in next_state]
+        return {"added": added, "updated": updated, "removed": removed}
 
     def _persist_context(self, context: MCPContext) -> None:
         """Persist context to storage"""
