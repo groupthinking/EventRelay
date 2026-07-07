@@ -23,10 +23,11 @@ COPY requirements.txt ./
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
-# Install Node.js production dependencies (workspace monorepo)
+# Install Node.js production dependencies (workspace: apps/web is the only workspace)
+# Uses npm install because workspace package versions may drift from lockfile
 COPY package.json package-lock.json ./
 COPY apps/web/package.json apps/web/
-RUN npm ci --omit=dev --ignore-scripts || npm install --omit=dev --ignore-scripts
+RUN npm install --omit=dev --ignore-scripts
 
 # ============================================================
 # Stage 2: Runtime — lean production image (< 1 GB)
