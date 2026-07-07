@@ -84,7 +84,13 @@ export default function VideoGenerator({ className = '' }: VideoGeneratorProps) 
       setVideoBase64(data.videoBase64 ?? null);
       setState('done');
     } catch (err) {
-      console.error('[video-generator] Error:', err);
+      // An unmount aborts the in-flight fetch (abortRef), which rejects with an
+      // AbortError. That's expected teardown, not a failure — don't log it (it
+      // would pollute logs and can trip console-based alerting). Real timeouts
+      // reject with TimeoutError and still get logged.
+      if (!(err instanceof DOMException && err.name === 'AbortError')) {
+        console.error('[video-generator] Error:', err);
+      }
       clearTimer();
       setError(err instanceof Error ? err.message : 'Unknown error');
       setState('error');
