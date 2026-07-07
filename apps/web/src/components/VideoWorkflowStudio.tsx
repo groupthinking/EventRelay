@@ -681,7 +681,6 @@ export default function VideoWorkflowStudio() {
                   aria-pressed={voiceEngaged}
                   aria-label={voiceEngaged ? 'Disable voice input' : 'Enable voice input'}
                   onClick={voiceEngaged ? realtime.stop : realtime.start}
-                  aria-pressed={voiceEngaged}
                   className={clsx(
                     'inline-flex items-center gap-2 rounded-md px-2 py-1 text-xs font-semibold transition-colors',
                     voiceEngaged ? 'bg-blue-600 text-white' : 'bg-white text-slate-700 hover:bg-slate-100',
@@ -906,7 +905,6 @@ export default function VideoWorkflowStudio() {
               aria-expanded={developerOpen}
               aria-controls="developer-details-panel"
               onClick={() => setDeveloperOpen((open) => !open)}
-              aria-expanded={developerOpen}
               className="flex w-full items-center justify-between text-left text-sm font-semibold text-slate-950"
             >
               <span className="inline-flex items-center gap-2">
