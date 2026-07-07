@@ -1,7 +1,13 @@
-# Node & Frontend (not needed for Python backend container)
+# Node artifacts — exclude all node_modules and build output
 node_modules/
-apps/
 .next/
+
+# Include only apps/web from the apps/ directory (needed for npm ci in builder stage)
+# Subsequent lines re-exclude artifacts inside apps/web
+apps/
+!apps/web/
+apps/web/node_modules/
+apps/web/.next/
 
 # Chrome / NotebookLM browser profiles (~1GB)
 notebooklm_chrome_profile/
