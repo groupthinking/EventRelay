@@ -22,7 +22,7 @@
     "@opentelemetry/resources": "^2.9.0",
     "@opentelemetry/sdk-trace-base": "^2.9.0",
     "@opentelemetry/semantic-conventions": "^1.41.0",
-    "@sentry/nextjs": "^10.63.0",
+    "@sentry/nextjs": "^11.0.0",
     "@stripe/stripe-js": "^9.9.0",
     "@supabase/supabase-js": "^2.110.0",
     "@upstash/redis": "^1.38.0",
