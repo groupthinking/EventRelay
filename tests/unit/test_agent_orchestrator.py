@@ -638,6 +638,9 @@ class TestExecuteSingle:
         result = await orch.execute_single(agent_type="crash_analyzer", context={})
         assert "error" in result
         assert "agent exploded" in result["error"]
+        # Exception dispatches are also logged for session tracking
+        assert len(orch._a2a_log) == 1
+        assert orch._a2a_log[0].content["status"] == "error"
 
     async def test_logs_dispatch_to_a2a_log(self):
         orch = AgentOrchestrator()
