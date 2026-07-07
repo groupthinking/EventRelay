@@ -12,10 +12,16 @@ if [ -z "${GEMINI_API_KEY:-}" ]; then
 fi
 
 echo "Testing Gemini API..."
-echo "API Key: ${GEMINI_API_KEY:0:15}..."
+# Report only that the key loaded (and its length) — never echo key material,
+# since this script may run in CI where stdout is captured.
+echo "API key loaded (${#GEMINI_API_KEY} chars)."
 echo ""
 
-curl -s "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent" \
+# Capture the full response first, then truncate for display. Piping
+# `... | python3 -m json.tool | head -30` directly would let `head` close the
+# pipe after 30 lines, sending SIGPIPE (exit 141) to python3; under `pipefail`
+# + `set -e` that aborts the script even on a successful API response.
+response=$(curl -s "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent" \
   -H "x-goog-api-key: ${GEMINI_API_KEY}" \
   -H 'Content-Type: application/json' \
   -X POST \
@@ -23,4 +29,6 @@ curl -s "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flas
     "contents": [{
       "parts": [{"text": "Respond with just SUCCESS if you receive this."}]
     }]
-  }' | python3 -m json.tool | head -30
+  }' | python3 -m json.tool)
+
+head -30 <<< "$response"
