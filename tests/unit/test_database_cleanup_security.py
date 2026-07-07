@@ -71,3 +71,51 @@ def test_table_intact_after_rejected_injection(temp_db):
     count = cursor.fetchone()[0]
     conn.close()
     assert count == 2
+
+
+class TestSQLInjectionVectors:
+    """Parametrized SQL injection tests for table name validation."""
+
+    @pytest.mark.parametrize(
+        "malicious_name",
+        [
+            "users; DROP TABLE users;--",
+            "users OR 1=1",
+            "users' OR '1'='1",
+            "users\"; DROP TABLE users;--",
+            "1_starts_with_digit",
+            "123",
+            "",
+            "a" * 200,  # exceeds 128 char limit
+            "table name with spaces",
+            "table\ttab",
+            "table\nnewline",
+            "../etc/passwd",
+            "users;--",
+        ],
+    )
+    def test_malicious_table_name_rejected(self, temp_db, malicious_name):
+        service = DatabaseCleanupService()
+        policy = RetentionPolicy(table_name=malicious_name, retention_days=5)
+        result = service.cleanup_table(temp_db, policy)
+        assert result.success is False
+        assert "Invalid table name format" in result.error_message
+
+    @pytest.mark.parametrize(
+        "valid_name",
+        [
+            "my_table",
+            "Users",
+            "_private",
+            "table_123",
+            "a",
+        ],
+    )
+    def test_valid_table_names_accepted(self, temp_db, valid_name):
+        """Valid identifiers pass validation (even if table doesn't exist, no 'Invalid' error)."""
+        service = DatabaseCleanupService()
+        policy = RetentionPolicy(table_name=valid_name, retention_days=5)
+        result = service.cleanup_table(temp_db, policy)
+        # Should not fail with "Invalid table name format" even if table doesn't exist
+        if not result.success:
+            assert "Invalid table name format" not in (result.error_message or "")

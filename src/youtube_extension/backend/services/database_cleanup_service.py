@@ -203,7 +203,7 @@ class DatabaseCleanupService:
         initial_size = self.get_database_size_mb(db_path)
 
         # Validate table name to prevent SQL injection
-        if not re.match(r"^[a-zA-Z0-9_]+$", policy.table_name):
+        if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_]{0,127}$", policy.table_name):
             return CleanupResult(
                 database_path=db_path,
                 table_name=policy.table_name,
@@ -277,13 +277,14 @@ class DatabaseCleanupService:
                     )
 
                 # Delete old records in batches (SQLite-compatible; DELETE ... LIMIT is not portable)
+                safe_time_col = f'"{time_col}"'
                 while True:
                     cursor.execute(
                         f"""
                         DELETE FROM {safe_table_name}
                         WHERE rowid IN (
                             SELECT rowid FROM {safe_table_name}
-                            WHERE {time_col} < ?
+                            WHERE {safe_time_col} < ?
                             LIMIT ?
                         )
                         """,
