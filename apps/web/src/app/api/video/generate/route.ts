@@ -155,12 +155,20 @@ export async function POST(request: Request) {
       'X-Video-Model': 'google/veo-3.1-generate-001',
     };
 
-    // Case 1: gateway already returned the bytes inline as base64. Decode once
-    // and stream them back as binary — small enough to hold, but sent outside a
-    // JSON envelope so the response never trips the buffered-body size limit.
+    // Case 1: gateway already returned the bytes inline as base64. Decode, then
+    // stream them back. A buffered `Response(buf)` — like base64-in-JSON — is
+    // still subject to Vercel's ~4.5 MB response-body limit and would fail with
+    // FUNCTION_PAYLOAD_TOO_LARGE for large clips; only STREAMED responses bypass
+    // that limit, so wrap the buffer in a ReadableStream and return that.
     if (inlineBase64) {
       const buf = Buffer.from(inlineBase64, 'base64');
-      return new Response(buf, {
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new Uint8Array(buf));
+          controller.close();
+        },
+      });
+      return new Response(stream, {
         status: 200,
         headers: {
           ...baseHeaders,
