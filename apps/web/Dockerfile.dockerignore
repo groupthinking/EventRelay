@@ -1,0 +1,72 @@
+# Dockerfile-specific ignore file for the Next.js web app.
+#
+# The frontend image is built from the repository root context
+# (see infrastructure/docker/docker-compose.full.yml: context ../.., dockerfile apps/web/Dockerfile).
+# The repo-root .dockerignore excludes apps/, node_modules/ and .next/ because it was
+# written for the Python backend container. Those rules would strip the frontend source
+# out of the build context and break every `COPY apps/web/...` step.
+#
+# BuildKit prefers "<dockerfile path>.dockerignore" over the context-root .dockerignore,
+# so this file overrides the root one for the web build: it keeps apps/ in context while
+# still excluding heavy, generated, or irrelevant paths.
+
+# Dependencies & build output (reinstalled/rebuilt inside the image)
+node_modules/
+apps/web/node_modules/
+apps/web/.next/
+.next/
+
+# Python backend (not needed for the frontend image)
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+
+# Chrome / NotebookLM browser profiles (~1GB)
+notebooklm_chrome_profile/
+src/utils/notebooklm_profile/
+src/utils/notebooklm_profile_v2/
+
+# IDE & System
+.git/
+.idea/
+.vscode/
+.DS_Store
+*.swp
+
+# Logs & local data
+*.log
+logs/
+*.db
+*.sqlite3
+
+# Config & Secrets
+.env*
+*.pem
+*.key
+*.cert
+*secret*.json
+gha-creds-*.json
+
+# Research & Archives
+research/
+docs/
+_archive/
+.gemini/
+ai-edge-torch/
+external/
+google-cloud-sdk/
+chrome_build/
+safari_build/
+generated_projects/
+youtube_processed_videos/
+terraform_export/
+
+# Test & Coverage
+tests/
+coverage/
+htmlcov/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
