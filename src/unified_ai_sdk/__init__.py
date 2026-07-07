@@ -1,12 +1,9 @@
 """
-Unified AI SDK - Placeholder Module
-====================================
+Unified AI SDK
+==============
 
-This module provides placeholder implementations for the unified AI SDK classes.
-These are temporary stubs until the actual unified_ai_sdk package is implemented
-or added as a dependency.
-
-TODO: Replace with actual unified_ai_sdk implementation or add as external dependency.
+Provides a unified interface for multiple AI providers (OpenAI, Anthropic,
+Gemini, Grok). Dispatches requests to real provider APIs when configured.
 """
 
 from .rate_limiter import ModelProvider, RateLimiter
