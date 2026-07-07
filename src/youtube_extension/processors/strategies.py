@@ -375,14 +375,22 @@ class EnhancedStrategy(ProcessorStrategy):
     def __init__(self, config: Optional[dict[str, Any]] = None):
         self.config = config or {}
         if HAS_VIDEO_DEPS:
-            self.video_client = videointelligence.VideoIntelligenceServiceClient()
+            try:
+                self.video_client = videointelligence.VideoIntelligenceServiceClient()
+            except Exception as e:
+                logger.warning(
+                    f"Could not initialize VideoIntelligenceServiceClient: {e}"
+                )
         if HAS_AI_DEPS and genai:
             gemini_api_key = self.config.get("gemini_api_key") or os.getenv(
                 "GEMINI_API_KEY"
             )
-            if not gemini_api_key:
-                raise ValueError("Gemini API key is not configured.")
-            self.gemini_client = genai.Client(api_key=gemini_api_key)
+            if gemini_api_key:
+                self.gemini_client = genai.Client(api_key=gemini_api_key)
+            else:
+                logger.warning(
+                    "Gemini API key not configured; AI analysis will be unavailable."
+                )
 
     async def process_video(
         self, video_url: str, options: dict[str, Any] = None
