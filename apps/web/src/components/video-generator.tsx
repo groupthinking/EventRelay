@@ -90,8 +90,9 @@ export default function VideoGenerator({ className = '' }: VideoGeneratorProps) 
         try {
           const data = await res.json();
           message = data.error ?? message;
-        } catch {
+        } catch (parseErr) {
           // Non-JSON error body; keep the status-based message.
+          console.error('[video-generator] Non-JSON error body:', parseErr);
         }
         throw new Error(message);
       }
