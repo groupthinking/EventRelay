@@ -9,13 +9,37 @@ We welcome contributions to EventRelay! Please follow these guidelines to ensure
     ```bash
     python -m venv .venv
     source .venv/bin/activate
-    pip install -e .[dev]
-    npm install --prefix frontend
+    pip install -e .[dev,youtube,ml]
+    npm install                        # installs all monorepo workspaces
     ```
-3.  **Create a branch** for your feature or fix:
+3.  **Start the services**:
+    ```bash
+    # Terminal 1 — backend
+    uvicorn src.youtube_extension.main:app --reload --port 8000
+    # Terminal 2 — frontend
+    turbo run dev
+    ```
+4.  **Create a branch** for your feature or fix:
     ```bash
     git checkout -b feature/my-feature
     ```
+
+## Parallel Development with Git Worktrees
+
+EventRelay uses multi-agent workflows extensively. When working on multiple branches simultaneously (e.g., testing a new MCP server while fixing a pipeline bug), use **git worktrees** instead of repeated stash/switch cycles:
+
+```bash
+# Create a linked worktree for a second branch — no stashing needed
+git worktree add ../EventRelay-mcp-dev feature/mcp-enhancement
+
+# List active worktrees
+git worktree list
+
+# Remove when done (branch is preserved)
+git worktree remove ../EventRelay-mcp-dev
+```
+
+GitHub Desktop 3.6+ has a built-in worktree switcher in the top toolbar. Copilot coding agents also spin up worktrees automatically for isolated parallel sessions — the same model applies to manual development.
 
 ## Development Standards
 
@@ -27,7 +51,7 @@ We welcome contributions to EventRelay! Please follow these guidelines to ensure
     *   Use `subprocess` carefully with sanitized inputs.
 *   **Testing**:
     *   Run backend tests: `pytest tests/`
-    *   Run frontend tests: `npm test --prefix frontend`
+    *   Run frontend tests: `turbo run test`
     *   Ensure all tests pass before submitting a PR.
 
 ## Pull Request Process

@@ -144,9 +144,14 @@ const OUTPUT_COPY: Record<OutcomeId, { noun: string; deliverables: string[]; nex
   },
 };
 
+function isValidYouTubeId(id: string) {
+  return /^[A-Za-z0-9_-]{11}$/.test(id);
+}
+
 function getYouTubeId(url: string) {
   const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/))([^&?/]+)/);
-  return match?.[1] || '';
+  const candidate = match?.[1] || '';
+  return isValidYouTubeId(candidate) ? candidate : '';
 }
 
 function currentVideoUrlForLink(videoUrl: string) {
@@ -398,6 +403,7 @@ export default function VideoWorkflowStudio() {
 
   const runWorkflow = async (event?: FormEvent) => {
     event?.preventDefault();
+    if (isWorking) return;
     if (timerRef.current) clearTimeout(timerRef.current);
 
     const currentVideoUrl = videoUrlRef.current || videoUrl;
@@ -419,7 +425,7 @@ export default function VideoWorkflowStudio() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             url: currentVideoUrl,
-            async: true,
+            async: true, // prefer async to avoid 524 on long runs
             outcome: selectedOutcome,
             prompt: currentPrompt,
             project_type: selectedOutcome === 'app' ? 'web' : selectedOutcome,
@@ -548,7 +554,8 @@ export default function VideoWorkflowStudio() {
             type="button"
             onClick={() => runWorkflow()}
             aria-busy={isWorking || undefined}
-            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm shadow-blue-600/20 transition-colors hover:bg-blue-700"
+            disabled={isWorking}
+            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm shadow-blue-600/20 transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
             <Sparkles className="h-4 w-4" aria-hidden="true" />
             Run workflow
@@ -599,7 +606,8 @@ export default function VideoWorkflowStudio() {
               <button
                 type="submit"
                 aria-busy={isWorking || undefined}
-                className="inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-slate-950 px-5 text-sm font-semibold text-white transition-colors hover:bg-slate-800"
+                disabled={isWorking}
+                className="inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-slate-950 px-5 text-sm font-semibold text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <Play className="h-4 w-4" aria-hidden="true" />
                 Run
@@ -670,6 +678,8 @@ export default function VideoWorkflowStudio() {
               <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
                 <button
                   type="button"
+                  aria-pressed={voiceEngaged}
+                  aria-label={voiceEngaged ? 'Disable voice input' : 'Enable voice input'}
                   onClick={voiceEngaged ? realtime.stop : realtime.start}
                   aria-pressed={voiceEngaged}
                   className={clsx(
@@ -681,7 +691,13 @@ export default function VideoWorkflowStudio() {
                   {voiceLabel}
                 </button>
                 {realtime.isActive && (
-                  <button type="button" onClick={realtime.toggleMute} className="text-xs font-medium text-slate-500 hover:text-slate-900">
+                  <button
+                    type="button"
+                    aria-pressed={realtime.status === 'muted'}
+                    aria-label={realtime.status === 'muted' ? 'Resume voice session' : 'Mute voice session'}
+                    onClick={realtime.toggleMute}
+                    className="text-xs font-medium text-slate-500 hover:text-slate-900"
+                  >
                     {realtime.status === 'muted' ? 'Resume' : 'Mute'}
                   </button>
                 )}
@@ -717,7 +733,8 @@ export default function VideoWorkflowStudio() {
               <button
                 type="submit"
                 aria-busy={isWorking || undefined}
-                className="inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-blue-600 px-5 text-sm font-semibold text-white shadow-sm shadow-blue-600/20 transition-colors hover:bg-blue-700"
+                disabled={isWorking}
+                className="inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-blue-600 px-5 text-sm font-semibold text-white shadow-sm shadow-blue-600/20 transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Build result
                 <ChevronRight className="h-4 w-4" aria-hidden="true" />
@@ -886,6 +903,8 @@ export default function VideoWorkflowStudio() {
           <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
             <button
               type="button"
+              aria-expanded={developerOpen}
+              aria-controls="developer-details-panel"
               onClick={() => setDeveloperOpen((open) => !open)}
               aria-expanded={developerOpen}
               className="flex w-full items-center justify-between text-left text-sm font-semibold text-slate-950"
@@ -898,7 +917,7 @@ export default function VideoWorkflowStudio() {
             </button>
 
             {developerOpen && (
-              <div className="mt-3 max-h-52 space-y-2 overflow-y-auto rounded-lg bg-slate-950 p-3 text-xs text-slate-200">
+              <div id="developer-details-panel" className="mt-3 max-h-52 space-y-2 overflow-y-auto rounded-lg bg-slate-950 p-3 text-xs text-slate-200">
                 {realtime.events.length ? (
                   realtime.events.map((event) => (
                     <div key={event.id} className="flex items-start gap-2 border-b border-white/10 pb-2 last:border-0 last:pb-0">

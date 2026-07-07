@@ -47,6 +47,7 @@ class ServiceContainer:
                 "ENHANCED_ANALYSIS_DIR", "/tmp/uvai_cache/enhanced_analysis"
             ),
             "feedback_dir": os.getenv("FEEDBACK_DIR", "/tmp/uvai_cache/feedback"),
+            "knowledge_dir": os.getenv("KNOWLEDGE_DIR", "/tmp/uvai_cache/knowledge"),
             # Rate limiting
             "rate_limit_rps": int(os.getenv("RATE_LIMIT_RPS", "5")),
             "max_recent_requests": int(os.getenv("MAX_RECENT_REQUESTS", "1000")),
@@ -219,6 +220,7 @@ class ServiceContainer:
         return DataService(
             enhanced_analysis_dir=self._config["enhanced_analysis_dir"],
             feedback_dir=self._config["feedback_dir"],
+            knowledge_dir=self._config["knowledge_dir"],
         )
 
     def _create_video_processor_factory(self):

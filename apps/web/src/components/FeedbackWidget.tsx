@@ -78,18 +78,19 @@ export default function FeedbackWidget({ videoId, tab, compact = false }: Feedba
         </span>
 
         {/* Star rating */}
-        <div className="flex gap-1">
+        <div className="flex gap-1" role="radiogroup" aria-label={`Rate this ${tab}`}>
           {[1, 2, 3, 4, 5].map((star) => (
             <button
               key={star}
               type="button"
+              role="radio"
               onClick={() => {
                 setRating(star);
                 if (!expanded) setExpanded(true);
               }}
               onMouseEnter={() => setHoveredStar(star)}
               onMouseLeave={() => setHoveredStar(0)}
-              aria-pressed={star <= rating}
+              aria-checked={star === rating}
               className="text-lg transition-transform duration-150 motion-reduce:transition-none hover:scale-110 active:scale-95 motion-reduce:hover:scale-100 motion-reduce:active:scale-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#6af2de]/40 rounded"
               style={{
                 color:

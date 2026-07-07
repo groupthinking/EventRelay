@@ -118,6 +118,7 @@ export default function AnalysisPanel({
         </div>
         {onClose && (
           <button
+            type="button"
             onClick={onClose}
             aria-label="Close video assistant"
             className="p-2 hover:bg-white/5 rounded-lg text-white/40 hover:text-white transition-colors"
