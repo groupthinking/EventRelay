@@ -238,12 +238,14 @@ class UnifiedAISDK:
         handler = self._handlers[provider_name]
         content, tokens_used = handler(request)
         if not content:
-            raise RuntimeError(f"{provider_name} returned empty content")
+            raise RuntimeError(
+                f"{provider_name} (model={request.model}) returned empty content"
+            )
         return content, tokens_used
 
     def _generate_openai(self, request: AIRequest) -> tuple[str, int]:
         if self._openai_client is None:
-            raise RuntimeError("OpenAI client is not configured")
+            raise RuntimeError(f"OpenAI client is not configured for {request.model}")
         response = self._openai_client.chat.completions.create(  # type: ignore[attr-defined]
             model=request.model,
             messages=[{"role": "user", "content": request.prompt}],
@@ -251,7 +253,7 @@ class UnifiedAISDK:
             temperature=request.temperature,
         )
         if not getattr(response, "choices", None):
-            raise RuntimeError("OpenAI returned no choices")
+            raise RuntimeError(f"OpenAI ({request.model}) returned no choices")
         content = response.choices[0].message.content or ""
         usage = getattr(response, "usage", None)
         tokens_used = int(getattr(usage, "total_tokens", 0) or 0)
@@ -259,11 +261,14 @@ class UnifiedAISDK:
 
     def _generate_anthropic(self, request: AIRequest) -> tuple[str, int]:
         if self._anthropic_client is None:
-            raise RuntimeError("Anthropic client is not configured")
+            raise RuntimeError(
+                f"Anthropic client is not configured for {request.model}"
+            )
         response = self._anthropic_client.messages.create(  # type: ignore[attr-defined]
             model=request.model,
             max_tokens=request.max_tokens,
             temperature=request.temperature,
+            # The repo requires anthropic>=0.78.0, which supports adaptive thinking.
             thinking={"type": "adaptive"},
             messages=[{"role": "user", "content": request.prompt}],
         )
@@ -279,7 +284,7 @@ class UnifiedAISDK:
 
     def _generate_gemini(self, request: AIRequest) -> tuple[str, int]:
         if self._gemini_client is None:
-            raise RuntimeError("Gemini client is not configured")
+            raise RuntimeError(f"Gemini client is not configured for {request.model}")
         kwargs: dict[str, Any] = {"model": request.model, "contents": request.prompt}
         if _GENAI_AVAILABLE and _genai_types is not None:
             kwargs["config"] = _genai_types.GenerateContentConfig(
@@ -289,7 +294,7 @@ class UnifiedAISDK:
         response = self._gemini_client.models.generate_content(**kwargs)  # type: ignore[attr-defined]
         text = response.text
         if text is None and not getattr(response, "candidates", None):
-            raise RuntimeError("Gemini returned no candidates")
+            raise RuntimeError(f"Gemini ({request.model}) returned no candidates")
         if text is None:
             parts = response.candidates[0].content.parts
             text_parts = [part.text for part in parts if getattr(part, "text", None)]

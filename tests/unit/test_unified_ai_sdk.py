@@ -145,3 +145,18 @@ class TestUnifiedAISDK:
         assert result.content == ""
         assert "provider unavailable" in (result.error or "")
         assert result.metadata["attempts"] == 2
+
+    async def test_unified_request_reports_model_when_gemini_client_missing(self):
+        sdk = UnifiedAISDK({"retry_attempts": 1})
+
+        result = await sdk.unified_request(
+            AIRequest(
+                prompt="Fail cleanly",
+                model="gemini-2.5-flash",
+                provider=ModelProvider.GEMINI,
+                task_type=TaskType.GENERIC,
+            )
+        )
+
+        assert result.success is False
+        assert "gemini-2.5-flash" in (result.error or "")
