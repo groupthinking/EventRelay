@@ -25,7 +25,7 @@ jobs:
           script: |
             const issueNumber =
               context.eventName === 'workflow_dispatch'
-                ? Number(context.payload?.inputs?.issue_number)
+                ? Number(context.payload.inputs.issue_number)
                 : context.payload.issue.number;
 
             if (!Number.isInteger(issueNumber)) {
@@ -58,8 +58,11 @@ jobs:
               return;
             }
 
-            const CHECKLIST_ITEM_PATTERN = /^\s*-\s+\[\s*([xX]?)\s*\]\s+(.+)$/gm;
-            const taskMatches = [...body.matchAll(CHECKLIST_ITEM_PATTERN)];
+            const CHECKLIST_ITEM_PATTERN = /^\s*-\s+\[\s*([xX]?)\s*\]\s+(.+)$/;
+            const taskMatches = body
+              .split('\n')
+              .map((line) => line.match(CHECKLIST_ITEM_PATTERN))
+              .filter(Boolean);
             const total = taskMatches.length;
 
             if (total === 0) {
@@ -67,7 +70,7 @@ jobs:
               return;
             }
 
-            const isCompleted = (match) => match[1].toLowerCase() === 'x';
+            const isCompleted = (match) => /[xX]/.test(match[1]);
             const completedTasks = taskMatches.filter(isCompleted);
             const maxOpenTasksToShow = 10;
             const completed = completedTasks.length;
@@ -126,13 +129,15 @@ jobs:
               });
             }
 
-            if (done && issue.state !== 'closed') {
-              await github.rest.issues.update({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: issue.number,
-                state: 'closed',
-              });
-            } else if (done) {
-              core.info(`Issue #${issue.number} is already closed.`);
+            if (done) {
+              if (issue.state !== 'closed') {
+                await github.rest.issues.update({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  state: 'closed',
+                });
+              } else {
+                core.info(`Issue #${issue.number} is already closed.`);
+              }
             }
