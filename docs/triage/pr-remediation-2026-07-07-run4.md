@@ -39,26 +39,39 @@ and several are **mutually redundant**.
 | #552 | owner | 07-07 | "Merge branch main into chore/docs-audit-reports" | `dirty` | Merge-commit PR, no net content — recommend close | HALTED(merge_conflict) |
 | #553 | owner | 07-07 | vite 8.0.16 + vitest bump (+3.5k/-10.7k) | `dirty` | Successor to run-3's held #508 (vite 6→8). Rebase + smoke-test web build | HALTED(merge_conflict) |
 | #555 | owner | 07-07 | remove obsolete prisma `earlyAccess` flag | `dirty` | Small, safe once rebased | HALTED(merge_conflict) |
-| #556 | owner | 07-07 | revert tailwindcss → v3 | `dirty` | **REDUNDANT with #559** (same intent) — keep one, close the other | HALTED(merge_conflict) |
-| #557 | owner | 07-07 | add `@sentry/node-core` OTel peer deps | `dirty` | **Overlaps #558** (same Sentry/OTel dep set) | HALTED(merge_conflict) |
-| #558 | owner | 07-07 | align `@opentelemetry` 0.x pins to Sentry range | `dirty` | **Overlaps #557** — consolidate the two into one | HALTED(merge_conflict) |
-| #559 | owner | 07-07 | pin tailwindcss → v3 (PostCSS build) | `dirty` | **REDUNDANT with #556** | HALTED(merge_conflict) |
+| #556 | owner | 07-07 | revert tailwindcss → v3 | `dirty` (orphaned 121) | **Superseded** — main on tailwind v4. Recommend close | HALTED(orphaned_history) |
+| #557 | owner | 07-07 | add `@sentry/node-core` OTel peer deps | `dirty` (orphaned 122) | **Superseded** by main's newer Sentry/OTel set. Recommend close | HALTED(orphaned_history) |
+| #558 | owner | 07-07 | align `@opentelemetry` 0.x pins to Sentry range | `dirty` (orphaned 122) | **Superseded** — merge would regress instrumentation 0.220→0.214. Commented + recommend close | HALTED(orphaned_history) |
+| #559 | owner | 07-07 | pin tailwindcss → v3 (PostCSS build) | `dirty` (orphaned 121) | **Superseded** — main on tailwind v4. Recommend close | HALTED(orphaned_history) |
 
-### The web-build fix cluster (#553, #556–#559) — needs owner dedup
+### The `dazzling-edison` cluster (#556–#559) — orphaned history, superseded by `main`: CLOSE all four
 
-Six PRs opened minutes apart all target the same failing `apps/web` build via the same
-files (`apps/web/package.json` + `package-lock.json`):
+Triggered by `pull_request.opened` on **#558**, verified concretely. All four
+`claude/dazzling-edison-*` branches are **121–122 commits behind current `main`**
+(merge-bases `870daf8` / `874f022`, dated ~Jun 21). That — not a small dep conflict —
+is why every one is `mergeable_state: dirty`: a merge would revert ~1,800 files, not
+just adjust pins.
 
-- **Tailwind v3 downgrade:** #556 *and* #559 — duplicates.
-- **Sentry / OpenTelemetry peer-dep pins:** #557 *and* #558 — overlapping.
-- **Vite/vitest bump:** #553 — separate concern, but same lockfile.
+They target a **pre-upgrade** `apps/web/package.json`; `main` has since moved every dep
+they touch *forward*, so merging any of them is a **regression**:
 
-Because they all rewrite the lockfile against the same base, they conflict with each
-other and with `main`. Merging them one-by-one is not viable (a second tailwind-v3 PR is
-a no-op-or-conflict after the first). **This is an owner decision — pick one canonical
-fix per concern, close the redundant PRs, and rebase the survivor.** It is out of this
-routine's autonomous scope: resolving it means choosing between competing owner PRs, and
-the branches are not this session's to force-push.
+| dep | cluster PR wants | current `main` |
+|-----|------------------|----------------|
+| `@opentelemetry/instrumentation` | `^0.214.0` (#558, pins down) | `^0.220.0` |
+| `@opentelemetry/exporter-trace-otlp-http` | `^0.214.0` (#558) | *removed from main* |
+| `@opentelemetry/core` / `sdk-trace-base` | `^2.8.0` (#558) | `^2.9.0` |
+| `@sentry/nextjs` | `^10.57.0` (#557/#558) | `^10.63.0` |
+| `tailwindcss` | v3 revert/pin (#556/#559) | `^4.3.1` (v4) + `@tailwindcss/postcss ^4.3.2` |
+
+The concern each addressed (OTel/Sentry pin alignment off `GHSA-8988-4f7v-96qf`; Tailwind
+PostCSS build) is already resolved on `main` with **newer** versions. **Disposition:
+close #556, #557, #558, #559** — no rebase, no dedup-and-keep-one. If any real gap
+remains, re-cut a single fix from current `main` rather than reviving orphaned history.
+A summary of this was posted on #558. Closing is left to the owner (their own PRs; not
+auto-closed).
+
+**#553** (vite 8 + vitest) is a *separate* concern on its own branch and is not part of
+this orphaned cluster — it still needs an independent rebase + web-build smoke-test.
 
 ## WIP drafts — DEFERRED(draft)
 
@@ -91,13 +104,15 @@ unattended without choosing between the owner's own competing PRs.
 
 ## Staged commands (owner sign-off required)
 
-**Web-build cluster — dedup then rebase (pick one per concern):**
+**`dazzling-edison` cluster — orphaned + superseded by main, close all four:**
 ```
-# Tailwind v3 — keep ONE, close the other:
-gh pr close 556   # (or 559) — duplicates
-# Sentry / OpenTelemetry — consolidate #557 + #558 into one, close the other
-# Vite/vitest:
-git fetch origin chore/security/upgrade-vitest-vite && git rebase origin/main   # #553, then smoke-test apps/web build
+gh pr close 556 557 558 559   # 121-122 commits orphaned; main already has newer
+                              # tailwind v4 / OTel 0.220 / sentry 10.63. Merging any regresses.
+```
+
+**Vite/vitest (#553) — separate concern, rebase + smoke-test (owner):**
+```
+git fetch origin chore/security/upgrade-vitest-vite && git rebase origin/main   # then verify apps/web build
 ```
 
 **Superseded / obsolete:**
@@ -117,11 +132,13 @@ gh pr close 552          # merge-commit PR with no net content
 ## Is more work needed?
 
 **Yes — but none of it is safely automatable unattended, so this routine is at a HALT
-that requires the owner.** The blocker is not code the routine can write; it is a series
-of *decisions between the owner's own competing PRs* (which tailwind fix, which Sentry
-fix, which Dockerfile, which of each Copilot/Claude draft pair) plus rebases on branches
-outside this session's push scope. Merging into protected `main` past those decisions is
-the publish-gate human step the runbook holds by default.
+that requires the owner.** The clearest item: the entire `dazzling-edison` cluster
+(#556–#559) is orphaned history that `main` has already superseded — **close all four**
+(this run verified it and commented on the trigger PR #558; closing an owner's own PRs is
+left to the owner). Beyond that, the blocker is *decisions between the owner's own PRs*
+(which Dockerfile #414 vs #539/#540, which of each Copilot/Claude draft pair) plus the
+#553 rebase — all outside this session's push scope. Merging into protected `main` past
+those decisions is the publish-gate human step the runbook holds by default.
 
 The loop's automatable work has converged again. **Re-run when the owner clears a gate** —
 picks winners in the web-build cluster and the draft pairs, or rebases/closes the stale
