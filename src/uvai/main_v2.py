@@ -8,4 +8,4 @@ from __future__ import annotations
 try:
     from youtube_extension.backend.main import app as app  # noqa: F401
 except Exception as import_error:
-    raise RuntimeError(f"Failed to import canonical app: {import_error}")
+    raise RuntimeError(f"Failed to import canonical app: {import_error}") from import_error

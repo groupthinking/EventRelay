@@ -728,9 +728,9 @@ class TestOpenAIAdapter:
         )
         assert result is False
 
-    async def test_health_check_returns_true(self):
+    async def test_health_check_returns_false_without_api_key(self):
         adapter = OpenAIAdapter()
-        assert await adapter.health_check() is True
+        assert await adapter.health_check() is False
 
     async def test_get_capabilities_returns_ai_inference(self):
         adapter = OpenAIAdapter()
@@ -776,9 +776,9 @@ class TestAnthropicAdapter:
         await adapter.initialize({"api_key": "sk-ant"})
         assert adapter.model == "claude-opus-4-8"
 
-    async def test_health_check_returns_true(self):
+    async def test_health_check_returns_false_without_api_key(self):
         adapter = AnthropicAdapter()
-        assert await adapter.health_check() is True
+        assert await adapter.health_check() is False
 
     async def test_get_capabilities_returns_ai_inference(self):
         adapter = AnthropicAdapter()
@@ -824,9 +824,9 @@ class TestGoogleAIAdapter:
         await adapter.initialize({"api_key": "key"})
         assert adapter.model == "gemini-pro"
 
-    async def test_health_check_returns_true(self):
+    async def test_health_check_returns_false_without_api_key(self):
         adapter = GoogleAIAdapter()
-        assert await adapter.health_check() is True
+        assert await adapter.health_check() is False
 
     async def test_get_capabilities_returns_ai_inference(self):
         adapter = GoogleAIAdapter()
