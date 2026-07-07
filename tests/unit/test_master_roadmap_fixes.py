@@ -194,7 +194,11 @@ def test_job_store_expire_before_accepts_naive_cutoff(tmp_path):
     old_ts = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
     store.save("old_job_naive_cutoff", {"job_id": "old_job_naive_cutoff", "status": "complete", "created_at": old_ts})
 
-    naive_cutoff = datetime.now() - timedelta(hours=1)  # no tzinfo
+    # Naive (tzinfo-less) cutoff, but anchored to UTC so the assertion is
+    # independent of the test runner's local timezone. expire_before() coerces
+    # the naive value to UTC, so this must be built from a UTC base — a local
+    # datetime.now() would drift by the offset and fail west of UTC.
+    naive_cutoff = (datetime.now(timezone.utc) - timedelta(hours=1)).replace(tzinfo=None)
     removed = store.expire_before(naive_cutoff)
 
     assert removed == 1
