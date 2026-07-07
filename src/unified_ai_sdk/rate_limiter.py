@@ -1,12 +1,4 @@
-"""
-Rate Limiter - Placeholder Implementation
-=========================================
-
-Provides basic rate limiting functionality for AI providers.
-This is a placeholder implementation.
-
-TODO: Replace with production-grade rate limiter implementation.
-"""
+"""Lightweight in-process rate limiting helpers for AI providers."""
 
 import asyncio
 import time
@@ -16,7 +8,7 @@ from typing import Any, Optional
 
 
 class ModelProvider(Enum):
-    """AI Model Providers"""
+    """AI model providers."""
     CLAUDE = "claude"
     GROK = "grok"
     OPENAI = "openai"
@@ -27,8 +19,7 @@ class RateLimiter:
     """
     Basic rate limiter for AI API requests.
 
-    This is a placeholder implementation that provides basic
-    request throttling per provider.
+    Provides simple request throttling per provider.
     """
 
     def __init__(self, config: Optional[dict[str, Any]] = None):
