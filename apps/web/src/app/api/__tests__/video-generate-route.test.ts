@@ -20,8 +20,21 @@ function gatewayOk(json: unknown) {
 function gatewayErr(status: number) {
   return { ok: false, status, json: async () => ({}), text: async () => 'gateway error' };
 }
-function videoBytesOk() {
-  return { ok: true, status: 200, arrayBuffer: async () => new TextEncoder().encode('FAKEVIDEO').buffer };
+function streamOf(text: string) {
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode(text));
+      controller.close();
+    },
+  });
+}
+function videoBytesOk(text = 'FAKEVIDEO') {
+  return {
+    ok: true,
+    status: 200,
+    body: streamOf(text),
+    headers: new Headers({ 'content-type': 'video/mp4', 'content-length': String(text.length) }),
+  };
 }
 
 const validBody = { prompt: 'a calm ocean at sunset', aspectRatio: '16:9', duration: 5 };
@@ -95,18 +108,19 @@ describe('POST /api/video/generate', () => {
     expect(res.status).toBe(502);
   });
 
-  it('returns base64 directly when the gateway provides it', async () => {
+  it('streams the decoded bytes when the gateway provides base64 inline', async () => {
+    // 'QkFTRTY0' is base64 for 'BASE64'
     (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(
       gatewayOk({ data: [{ b64_json: 'QkFTRTY0' }] }) as unknown as Response
     );
     const res = await POST(postReq(validBody, '10.0.0.10'));
     expect(res.status).toBe(200);
-    const json = await res.json();
-    expect(json.videoBase64).toBe('QkFTRTY0');
-    expect(json.video).toBeNull();
+    expect(res.headers.get('content-type')).toBe('video/mp4');
+    const buf = Buffer.from(await res.arrayBuffer());
+    expect(buf.toString()).toBe('BASE64');
   });
 
-  it('inlines a remote signed URL as base64 (CSP-safe, no client-controlled proxy)', async () => {
+  it('streams a remote signed URL through without base64-in-JSON (CSP-safe, no client proxy)', async () => {
     const fetchMock = global.fetch as ReturnType<typeof vi.fn>;
     fetchMock
       .mockResolvedValueOnce(gatewayOk({ data: [{ url: 'https://cdn.example/signed.mp4' }] }) as unknown as Response)
@@ -114,11 +128,10 @@ describe('POST /api/video/generate', () => {
 
     const res = await POST(postReq(validBody, '10.0.0.11'));
     expect(res.status).toBe(200);
-    const json = await res.json();
-    expect(json.video).toBeNull();
-    // 'FAKEVIDEO' base64-encoded
-    expect(json.videoBase64).toBe(Buffer.from('FAKEVIDEO').toString('base64'));
-    // second fetch was the server-side inline of the gateway-provided URL
+    expect(res.headers.get('content-type')).toBe('video/mp4');
+    const buf = Buffer.from(await res.arrayBuffer());
+    expect(buf.toString()).toBe('FAKEVIDEO');
+    // second fetch was the server-side retrieval of the gateway-provided URL
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(fetchMock.mock.calls[0][0]).toBe(GATEWAY_URL);
     expect(fetchMock.mock.calls[1][0]).toBe('https://cdn.example/signed.mp4');
@@ -128,7 +141,7 @@ describe('POST /api/video/generate', () => {
     const fetchMock = global.fetch as ReturnType<typeof vi.fn>;
     fetchMock
       .mockResolvedValueOnce(gatewayOk({ data: [{ url: 'https://cdn.example/signed.mp4' }] }) as unknown as Response)
-      .mockResolvedValueOnce({ ok: false, status: 404 } as unknown as Response);
+      .mockResolvedValueOnce({ ok: false, status: 404, body: null, headers: new Headers() } as unknown as Response);
 
     const res = await POST(postReq(validBody, '10.0.0.12'));
     expect(res.status).toBe(502);

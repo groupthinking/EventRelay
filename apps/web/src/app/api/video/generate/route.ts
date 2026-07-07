@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-export const runtime = 'nodejs'; // needs Buffer to inline the signed video URL
+export const runtime = 'nodejs'; // streams/buffers the gateway video bytes through
 export const maxDuration = 300; // 5 minutes — video generation takes time
 
 /** Simple in-memory rate limiter: max 3 requests per IP per 10 minutes */
@@ -132,9 +132,9 @@ export async function POST(request: Request) {
     // AI Gateway returns video as a signed URL or base64 depending on the response.
     // Validate the shape so we never send a 200 with no usable video payload.
     const remoteUrl: string | null = data?.data?.[0]?.url ?? data?.url ?? null;
-    let videoBase64: string | null = data?.data?.[0]?.b64_json ?? null;
+    const inlineBase64: string | null = data?.data?.[0]?.b64_json ?? null;
 
-    if (!remoteUrl && !videoBase64) {
+    if (!remoteUrl && !inlineBase64) {
       console.error(
         '[video/generate] Unexpected gateway response shape:',
         JSON.stringify(data)?.slice(0, 500)
@@ -145,39 +145,63 @@ export async function POST(request: Request) {
       );
     }
 
-    // The app's CSP is `media-src 'self' blob: data:`, so a cross-origin signed
-    // URL would be blocked by the browser and the <video> would never load. The
-    // URL here comes from the trusted gateway response (NOT client input), so we
-    // can safely fetch it server-side and inline it as base64 — a `data:` source
-    // the CSP permits — without exposing a client-controllable proxy (no SSRF).
-    if (!videoBase64 && remoteUrl) {
-      try {
-        const videoResp = await fetch(remoteUrl, { signal: AbortSignal.timeout(45_000) });
-        if (videoResp.ok) {
-          const buf = Buffer.from(await videoResp.arrayBuffer());
-          videoBase64 = buf.toString('base64');
-        } else {
-          console.error('[video/generate] Failed to fetch signed video URL:', videoResp.status);
-        }
-      } catch (fetchErr) {
-        console.error('[video/generate] Error inlining signed video URL:', fetchErr);
-      }
+    // Return the raw video bytes as the response body (never base64-in-JSON): a
+    // realistically-sized Veo clip base64-encoded inside NextResponse.json would
+    // exceed Vercel's ~4.5 MB serverless response limit and fail with
+    // FUNCTION_PAYLOAD_TOO_LARGE. The client wraps the bytes in a `blob:` URL,
+    // which the app's `media-src 'self' blob: data:` CSP permits.
+    const baseHeaders: Record<string, string> = {
+      'Cache-Control': 'no-store',
+      'X-Video-Model': 'google/veo-3.1-generate-001',
+    };
+
+    // Case 1: gateway already returned the bytes inline as base64. Decode once
+    // and stream them back as binary — small enough to hold, but sent outside a
+    // JSON envelope so the response never trips the buffered-body size limit.
+    if (inlineBase64) {
+      const buf = Buffer.from(inlineBase64, 'base64');
+      return new Response(buf, {
+        status: 200,
+        headers: {
+          ...baseHeaders,
+          'Content-Type': 'video/mp4',
+          'Content-Length': String(buf.byteLength),
+        },
+      });
     }
 
-    if (!videoBase64) {
+    // Case 2: gateway returned a signed URL. The URL comes from the trusted
+    // gateway response (NOT client input — no SSRF), so we fetch it server-side
+    // and STREAM the body straight through to the client. Streaming means we
+    // never buffer the whole file in memory (no OOM on large clips) and never
+    // hit the buffered-response size limit.
+    let videoResp: Response;
+    try {
+      videoResp = await fetch(remoteUrl as string, { signal: AbortSignal.timeout(120_000) });
+    } catch (fetchErr) {
+      console.error('[video/generate] Error fetching signed video URL:', fetchErr);
       return NextResponse.json(
         { error: 'Video was generated but could not be retrieved for playback.' },
         { status: 502 }
       );
     }
 
-    return NextResponse.json({
-      // `video` is intentionally null: the client renders the base64 `data:` URL,
-      // which is the only cross-origin-safe source under the app's media-src CSP.
-      video: null,
-      videoBase64,
-      model: 'google/veo-3.1-generate-001',
-      prompt: prompt.trim(),
+    if (!videoResp.ok || !videoResp.body) {
+      console.error('[video/generate] Failed to fetch signed video URL:', videoResp.status);
+      return NextResponse.json(
+        { error: 'Video was generated but could not be retrieved for playback.' },
+        { status: 502 }
+      );
+    }
+
+    const upstreamLength = videoResp.headers.get('content-length');
+    return new Response(videoResp.body, {
+      status: 200,
+      headers: {
+        ...baseHeaders,
+        'Content-Type': videoResp.headers.get('content-type') ?? 'video/mp4',
+        ...(upstreamLength ? { 'Content-Length': upstreamLength } : {}),
+      },
     });
   } catch (error) {
     console.error('[video/generate] Error:', error);
