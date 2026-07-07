@@ -125,9 +125,13 @@ jobs:
               per_page: 100,
             });
 
+            // Identify the tracker comment by its unique marker alone. Filtering
+            // on comment.user?.type === 'Bot' would couple dedup to the current
+            // token identity: switching to a PAT or GitHub App token (whose author
+            // reports a different type) would make this return undefined and post a
+            // fresh comment every run instead of updating the existing one.
             const existing = comments.find(
               (comment) =>
-                comment.user?.type === 'Bot' &&
                 typeof comment.body === 'string' &&
                 comment.body.includes(trackerMarker)
             );
