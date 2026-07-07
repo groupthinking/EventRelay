@@ -25,8 +25,13 @@ jobs:
           script: |
             const issueNumber =
               context.eventName === 'workflow_dispatch'
-                ? Number(context.payload.inputs?.issue_number)
+                ? Number(context.payload?.inputs?.issue_number)
                 : context.payload.issue.number;
+
+            if (!Number.isInteger(issueNumber)) {
+              core.setFailed('Invalid issue number input.');
+              return;
+            }
 
             const { data: issue } = await github.rest.issues.get({
               owner: context.repo.owner,
@@ -53,7 +58,7 @@ jobs:
               return;
             }
 
-            const CHECKLIST_ITEM_PATTERN = /^\s*-\s+\[( |x|X)\]\s+(.+)$/gm;
+            const CHECKLIST_ITEM_PATTERN = /^\s*-\s+\[\s*([xX]?)\s*\]\s+(.+)$/gm;
             const taskMatches = [...body.matchAll(CHECKLIST_ITEM_PATTERN)];
             const total = taskMatches.length;
 
@@ -64,11 +69,12 @@ jobs:
 
             const isCompleted = (match) => match[1].toLowerCase() === 'x';
             const completedTasks = taskMatches.filter(isCompleted);
-            const MAX_OPEN_TASKS_TO_SHOW = 10;
+            const maxOpenTasksToShow = 10;
+            const openTaskCount = taskMatches.length - completedTasks.length;
             const openTasks = taskMatches
               .filter((match) => !isCompleted(match))
               .map((match) => `- [ ] ${match[2]}`)
-              .slice(0, MAX_OPEN_TASKS_TO_SHOW);
+              .slice(0, maxOpenTasksToShow);
             const completed = completedTasks.length;
             const progressPercent = Math.round((completed / total) * 100);
             const done = completed === total;
@@ -83,7 +89,11 @@ jobs:
               '',
               done
                 ? 'All checklist goals are complete. Closing this issue now.'
-                : `### Next goals\n${openTasks.join('\n')}`,
+                : `### Next goals\n${openTasks.join('\n')}${
+                    openTaskCount > maxOpenTasksToShow
+                      ? `\n\n_Showing first ${maxOpenTasksToShow} of ${openTaskCount} remaining tasks._`
+                      : ''
+                  }`,
             ].join('\n');
 
             const comments = await github.paginate(github.rest.issues.listComments, {
