@@ -8,9 +8,10 @@ interface VideoGeneratorProps {
   className?: string;
 }
 
-// Client-side ceiling for the request. The server route allows up to 290s; give
-// the client a little extra headroom so the server-side timeout wins first.
-const CLIENT_TIMEOUT_MS = 300_000;
+// Client-side ceiling for the request. Kept above the server's maxDuration
+// (300s) so the server-side timeout wins first and the user sees the server's
+// more informative 504 rather than a generic client-side abort.
+const CLIENT_TIMEOUT_MS = 310_000;
 
 export default function VideoGenerator({ className = '' }: VideoGeneratorProps) {
   const [prompt, setPrompt] = useState('');
@@ -23,6 +24,7 @@ export default function VideoGenerator({ className = '' }: VideoGeneratorProps) 
   const [elapsed, setElapsed] = useState(0);
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   const clearTimer = () => {
     if (timerRef.current !== null) {
@@ -31,9 +33,15 @@ export default function VideoGenerator({ className = '' }: VideoGeneratorProps) 
     }
   };
 
-  // Ensure the elapsed-time interval is torn down if the component unmounts
-  // mid-generation, preventing state updates on an unmounted component.
-  useEffect(() => clearTimer, []);
+  // On unmount, tear down the elapsed-time interval and abort any in-flight
+  // request so it doesn't keep running (up to 5 min) or set state on an
+  // unmounted component.
+  useEffect(() => {
+    return () => {
+      clearTimer();
+      abortRef.current?.abort();
+    };
+  }, []);
 
   const handleGenerate = async () => {
     if (!prompt.trim() || state === 'generating') return;
@@ -51,14 +59,19 @@ export default function VideoGenerator({ className = '' }: VideoGeneratorProps) 
       setElapsed(Math.floor((Date.now() - t0) / 1000));
     }, 1000);
 
+    const controller = new AbortController();
+    abortRef.current = controller;
+    const timeoutId = setTimeout(() => controller.abort(), CLIENT_TIMEOUT_MS);
+
     try {
       const res = await fetch('/api/video/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt: prompt.trim(), aspectRatio, duration }),
-        signal: AbortSignal.timeout(CLIENT_TIMEOUT_MS),
+        signal: controller.signal,
       });
 
+      clearTimeout(timeoutId);
       clearTimer();
       const data = await res.json();
 
@@ -70,6 +83,7 @@ export default function VideoGenerator({ className = '' }: VideoGeneratorProps) 
       setVideoBase64(data.videoBase64 ?? null);
       setState('done');
     } catch (err) {
+      clearTimeout(timeoutId);
       clearTimer();
       setError(err instanceof Error ? err.message : 'Unknown error');
       setState('error');
@@ -91,8 +105,9 @@ export default function VideoGenerator({ className = '' }: VideoGeneratorProps) 
       <div className="space-y-4">
         {/* Prompt input */}
         <div>
-          <label className="block text-sm text-white/60 mb-2">Prompt</label>
+          <label htmlFor="video-prompt" className="block text-sm text-white/60 mb-2">Prompt</label>
           <textarea
+            id="video-prompt"
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             placeholder="A cinematic shot of a futuristic city at golden hour, time-lapse clouds..."
@@ -106,8 +121,9 @@ export default function VideoGenerator({ className = '' }: VideoGeneratorProps) 
         {/* Controls */}
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm text-white/60 mb-2">Aspect Ratio</label>
+            <label htmlFor="video-aspect-ratio" className="block text-sm text-white/60 mb-2">Aspect Ratio</label>
             <select
+              id="video-aspect-ratio"
               value={aspectRatio}
               onChange={(e) => setAspectRatio(e.target.value)}
               className="w-full px-3 py-2 bg-slate-900 rounded-lg border border-white/10 text-sm text-white/80 focus:outline-none focus:border-purple-500/50"
@@ -119,8 +135,9 @@ export default function VideoGenerator({ className = '' }: VideoGeneratorProps) 
             </select>
           </div>
           <div>
-            <label className="block text-sm text-white/60 mb-2">Duration (seconds)</label>
+            <label htmlFor="video-duration" className="block text-sm text-white/60 mb-2">Duration (seconds)</label>
             <select
+              id="video-duration"
               value={duration}
               onChange={(e) => setDuration(Number(e.target.value))}
               className="w-full px-3 py-2 bg-slate-900 rounded-lg border border-white/10 text-sm text-white/80 focus:outline-none focus:border-purple-500/50"
@@ -168,7 +185,6 @@ export default function VideoGenerator({ className = '' }: VideoGeneratorProps) 
               <a
                 href={videoSrc}
                 download="generated-video.mp4"
-                role="button"
                 aria-label="Download the generated video as an MP4 file"
                 className="text-xs text-white/50 hover:text-white transition"
               >
