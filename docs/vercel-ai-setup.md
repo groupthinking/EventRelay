@@ -94,9 +94,10 @@ Add this URL to your AI assistant's context files (`.cursorrules`,
 
 The `/api/video/generate` endpoint requires:
 - `AI_GATEWAY_API_KEY` set with access to Google Veo 3.1
-- A function `maxDuration` of 300s for the video route (declared in
+- A function `maxDuration` of 300s for the video route (declared in‑code in
   `apps/web/src/app/api/video/generate/route.ts` via `export const maxDuration = 300`).
-  Note: `vercel.json` separately raises the `pipeline/stream` route to 240s;
-  Fluid Compute is recommended for these long-running functions.
+  Fluid Compute is recommended for these long‑running functions. Note: the
+  Vercel project's Root Directory is `apps/web`, so any deploy‑level overrides
+  belong in `apps/web/vercel.json`, not the repository‑root `vercel.json`.
 
 Model: `google/veo-3.1-generate-001`
