@@ -50,6 +50,7 @@
   },
   "dependencies": {
     "@ai-sdk/gateway": "^4.0.12",
+    "@opentelemetry/core": "^2.9.0",
     "@dataconnect/generated": "file:src/dataconnect-generated",
     "@google-cloud/text-to-speech": "^6.4.0",
     "@google/genai": "^2.10.0",
