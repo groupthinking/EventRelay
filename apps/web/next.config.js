@@ -53,26 +53,6 @@ const nextConfig = {
       { protocol: 'https', hostname: 'i.ytimg.com' },
     ],
   },
-  async redirects() {
-    const legacyHosts = [
-      'event-relay-web.vercel.app',
-      'v0-uvai.vercel.app',
-      'youtube-extension.vercel.app',
-      'uvai-io.pages.dev',
-      'sell.solutions',
-      'www.sell.solutions',
-      'myai.directory',
-      'www.myai.directory',
-      'www.uvai.io',
-    ];
-
-    return legacyHosts.map((host) => ({
-      source: '/:path*',
-      has: [{ type: 'host', value: host }],
-      destination: 'https://uvai.io/:path*',
-      permanent: true,
-    }));
-  },
   async headers() {
     return [
       {

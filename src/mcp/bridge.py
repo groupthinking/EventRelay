@@ -16,6 +16,8 @@ The brain of your production system that unifies:
 
 import asyncio
 import logging
+import os
+import re
 import time
 from dataclasses import dataclass
 from datetime import datetime
@@ -161,6 +163,13 @@ class MCPBridge:
             "consensus_building",
         ]
         logger.info("✅ A2A Communication Hub initialized")
+        self.VERCEL_MCP_TOOLS = [
+            "vercel_search_docs",
+            "vercel_list_projects",
+            "vercel_list_deployments",
+            "vercel_get_deployment_logs",
+            "vercel_check_domain_availability",
+        ]
 
     async def process_request(self, request: MCPBridgeRequest) -> dict[str, Any]:
         """
@@ -320,6 +329,10 @@ class MCPBridge:
                 ModelProvider.GROK
             )  # Grok is better for real-time trends
             enhanced_plan["use_a2a"] = True  # Use multiple agents for trend analysis
+
+        request_text = str(request.content).lower()
+        if re.search(r"\b(vercel|deployment|preview)\b", request_text):
+            enhanced_plan["tools_used"].extend(self.VERCEL_MCP_TOOLS)
 
         return enhanced_plan
 

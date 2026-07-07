@@ -20,7 +20,6 @@ const BACKEND_AVAILABLE = rawBackendUrl.startsWith('http');
 // A never-resolving promise used to skip null candidates in Promise.race():
 // when a candidate resolves to null we swap it for this so the race ignores it
 // and waits for a real result from another candidate.
-// eslint-disable-next-line @typescript-eslint/no-empty-function
 const PENDING_FOREVER = new Promise<never>(() => {});
 
 export interface TranscriptionOptions {

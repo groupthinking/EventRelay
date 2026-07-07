@@ -1,0 +1,11 @@
+# EventRelay Cursor Rules
+
+## Vercel context
+- Prefer Vercel AI Gateway for web-side AI fallbacks when `AI_GATEWAY_API_KEY` is configured.
+- Reference the full Vercel docs context at https://vercel.com/docs/llms-full.txt when generating or reviewing Vercel-specific code.
+- Preview deployments may require `VERCEL_AUTOMATION_BYPASS_SECRET` for E2E access.
+
+## Critical paths
+- `apps/web/src/app/api/chat/route.ts` preserves the backend proxy path and only falls back to AI Gateway when `BACKEND_URL` is unset.
+- `apps/web/src/app/api/video/generate/route.ts` is rate-limited and intended for experimental Veo generation only.
+- `apps/web/src/app/api/pipeline/stream/route.ts` is the long-running SSE route with elevated Vercel max duration.

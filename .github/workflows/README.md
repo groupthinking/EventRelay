@@ -8,7 +8,7 @@ workflow; this README is the index.
 
 | Workflow | File | Trigger | Purpose |
 |----------|------|---------|---------|
-| CI | `ci.yml` | push / PR to `main` | Build web app, lint Python (informational), run unit tests |
+| CI | `ci.yml` | push / PR to `main` | Type-check + lint `apps/web`, build the web app, lint Python (informational), run unit tests |
 | Coverage | `coverage.yml` | push / PR to `main`,`develop`; manual | Generate pytest coverage and upload lcov to Qlty |
 | CodeQL Analysis | `codeql-analysis.yml` | push / PR to `main`; weekly (Mon 06:00 UTC) | Static security analysis for JavaScript/TypeScript and Python |
 | Security Scan | `security.yml` | push / PR to `main`; weekly (Sun 00:00 UTC) | npm audit, Python safety, bandit, Trivy image scan |
@@ -22,7 +22,7 @@ workflow; this README is the index.
 | Bulk Issue Processor | `bulk-issue-processor.yml` | manual | Bulk label / summarize / close-stale across many issues |
 | Close stale issues | `stale.yml` | daily (00:00 UTC) | Mark and close stale issues and PRs |
 | Branch Cleanup | `branch-cleanup.yml` | manual | Gated archive-then-delete of branches (dry-run by default) |
-| E2E Tests | `e2e-tests.yml` | push / PR to `main` | Run Vitest E2E pipeline tests and report results on the PR |
+| E2E Tests | `e2e-tests.yml` | push / PR to `main` | Run Vitest E2E pipeline tests against production or the PR's Vercel preview deployment and report results on the PR |
 | Autonomous Video Processing | `autonomous-video-processing.yml` | manual | Batch-process YouTube videos by category (matrix) |
 | Real Video Processing (Cloud) | `real-processing.yml` | manual | Process a single video: transcript and/or AI analysis |
 | Deploy to Google Cloud Run | `deploy-cloud-run.yml` | manual | Build, push, and deploy the API image to Cloud Run |
