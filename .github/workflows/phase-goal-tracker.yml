@@ -12,12 +12,18 @@ on:
 
 permissions:
   issues: write
-  pull-requests: read
 
 jobs:
   track:
     name: Track phase checklist progress
     runs-on: ubuntu-latest
+    # Serialize runs per issue: opened/edited/reopened/workflow_dispatch can fire
+    # in rapid succession, and the comment-sync flow is a check-then-act (find the
+    # tracker comment, else create one). Without this, two overlapping runs could
+    # both miss the not-yet-created comment and post duplicate tracker comments.
+    concurrency:
+      group: phase-goal-tracker-${{ github.event.issue.number || inputs.issue_number }}
+      cancel-in-progress: false
     steps:
       - name: Evaluate checklist and update tracker comment
         uses: actions/github-script@v9
