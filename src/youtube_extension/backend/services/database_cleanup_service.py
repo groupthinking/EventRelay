@@ -60,6 +60,25 @@ class CleanupResult:
     success: bool
     error_message: Optional[str] = None
 
+_ALLOWED_TIME_COLUMNS = frozenset({"timestamp", "created_at", "createdAt", "ts"})
+"""Allowlist of timestamp column names that cleanup_table may reference."""
+
+_TABLE_NAME_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]{0,127}$")
+"""Regex for safe SQLite identifier: starts with letter/underscore, alphanumeric+underscore only, max 128 chars."""
+
+
+def _validate_identifier(name: str) -> str:
+    """Validate and quote a SQL identifier (table/column name).
+
+    Only alphanumeric characters and underscores are allowed.
+    Returns the name quoted with double-quotes for safe interpolation.
+    Raises ValueError if the name is invalid.
+    """
+    if not _TABLE_NAME_RE.match(name):
+        raise ValueError(f"Invalid SQL identifier: {name!r}")
+    return f'"{name}"'
+
+
 class DatabaseCleanupService:
     """
     Automated cleanup service for SQLite monitoring databases
@@ -202,8 +221,12 @@ class DatabaseCleanupService:
         records_deleted = 0
         initial_size = self.get_database_size_mb(db_path)
 
-        # Validate table name to prevent SQL injection
-        if not re.match(r"^[a-zA-Z0-9_]+$", policy.table_name):
+        # Validate table name to prevent SQL injection.
+        # SQLite does not support parameterized identifiers (table/column names),
+        # so we validate against a strict allowlist regex and quote the identifier.
+        try:
+            safe_table_name = _validate_identifier(policy.table_name)
+        except ValueError:
             return CleanupResult(
                 database_path=db_path,
                 table_name=policy.table_name,
@@ -214,8 +237,6 @@ class DatabaseCleanupService:
                 success=False,
                 error_message=f"Invalid table name format: {policy.table_name}"
             )
-
-        safe_table_name = f'"{policy.table_name}"'
 
         try:
             if not os.path.exists(db_path):
@@ -233,9 +254,11 @@ class DatabaseCleanupService:
             with sqlite3.connect(db_path) as conn:
                 cursor = conn.cursor()
 
-                # Verify table exists
-                cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?",
-                             (policy.table_name,))
+                # Verify table exists using parameterized query
+                cursor.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+                    (policy.table_name,),
+                )
                 if not cursor.fetchone():
                     return CleanupResult(
                         database_path=db_path,
@@ -251,11 +274,15 @@ class DatabaseCleanupService:
                 # Calculate cutoff date
                 cutoff_date = datetime.now(timezone.utc) - timedelta(days=policy.retention_days)
 
-                # Determine a valid timestamp column for retention checks
-                cursor.execute(f"PRAGMA table_info({safe_table_name})")
+                # Determine a valid timestamp column for retention checks.
+                # PRAGMA table_info requires an identifier, not a parameter —
+                # safe_table_name is validated above via _validate_identifier.
+                cursor.execute(  # nosec B608 — identifier validated via _validate_identifier
+                    f"PRAGMA table_info({safe_table_name})"
+                )
                 columns = [row[1] for row in cursor.fetchall()]
                 time_col = None
-                for candidate in ("timestamp", "created_at", "createdAt", "ts"):
+                for candidate in _ALLOWED_TIME_COLUMNS:
                     if candidate in columns:
                         time_col = candidate
                         break
@@ -263,7 +290,8 @@ class DatabaseCleanupService:
                 if not time_col:
                     # No recognizable time column; skip with a warning
                     logger.warning(
-                        f"Skipping cleanup for {db_path}.{policy.table_name}: no timestamp-like column found"
+                        f"Skipping cleanup for {db_path}.{policy.table_name}: "
+                        "no timestamp-like column found"
                     )
                     return CleanupResult(
                         database_path=db_path,
@@ -276,17 +304,27 @@ class DatabaseCleanupService:
                         error_message="time column not found"
                     )
 
-                # Delete old records in batches (SQLite-compatible; DELETE ... LIMIT is not portable)
+                # Validate time_col against the allowlist (defense-in-depth).
+                # This assertion should never fail because time_col comes from
+                # _ALLOWED_TIME_COLUMNS, but guards against future code changes.
+                assert time_col in _ALLOWED_TIME_COLUMNS, (
+                    f"time_col {time_col!r} not in allowlist"
+                )
+                safe_time_col = _validate_identifier(time_col)
+
+                # Delete old records in batches using parameterized values.
+                # Table/column identifiers are validated above; only values use ? placeholders.
+                # (SQLite does not support parameterized identifiers.)
+                delete_sql = (
+                    f"DELETE FROM {safe_table_name} "  # nosec B608
+                    f"WHERE rowid IN ("
+                    f"SELECT rowid FROM {safe_table_name} "  # nosec B608
+                    f"WHERE {safe_time_col} < ? LIMIT ?"
+                    f")"
+                )
                 while True:
                     cursor.execute(
-                        f"""
-                        DELETE FROM {safe_table_name}
-                        WHERE rowid IN (
-                            SELECT rowid FROM {safe_table_name}
-                            WHERE {time_col} < ?
-                            LIMIT ?
-                        )
-                        """,
+                        delete_sql,
                         (cutoff_date.isoformat(), policy.batch_size),
                     )
 
