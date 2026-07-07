@@ -678,9 +678,9 @@ export default function VideoWorkflowStudio() {
               <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
                 <button
                   type="button"
-                  onClick={voiceEngaged ? realtime.stop : realtime.start}
                   aria-pressed={voiceEngaged}
                   aria-label={voiceEngaged ? 'Disable voice input' : 'Enable voice input'}
+                  onClick={voiceEngaged ? realtime.stop : realtime.start}
                   className={clsx(
                     'inline-flex items-center gap-2 rounded-md px-2 py-1 text-xs font-semibold transition-colors',
                     voiceEngaged ? 'bg-blue-600 text-white' : 'bg-white text-slate-700 hover:bg-slate-100',
@@ -692,9 +692,9 @@ export default function VideoWorkflowStudio() {
                 {realtime.isActive && (
                   <button
                     type="button"
-                    onClick={realtime.toggleMute}
                     aria-pressed={realtime.status === 'muted'}
                     aria-label={realtime.status === 'muted' ? 'Resume voice session' : 'Mute voice session'}
+                    onClick={realtime.toggleMute}
                     className="text-xs font-medium text-slate-500 hover:text-slate-900"
                   >
                     {realtime.status === 'muted' ? 'Resume' : 'Mute'}
@@ -902,9 +902,9 @@ export default function VideoWorkflowStudio() {
           <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
             <button
               type="button"
-              onClick={() => setDeveloperOpen((open) => !open)}
               aria-expanded={developerOpen}
               aria-controls="developer-details-panel"
+              onClick={() => setDeveloperOpen((open) => !open)}
               className="flex w-full items-center justify-between text-left text-sm font-semibold text-slate-950"
             >
               <span className="inline-flex items-center gap-2">

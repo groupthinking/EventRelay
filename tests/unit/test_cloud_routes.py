@@ -1320,8 +1320,13 @@ class TestReportingRoutes:
 
     def test_generate_dashboard_url_missing_fields(self):
         """Missing required fields return 422."""
-        response = self._client().post("/api/v1/reporting/embed/dashboard", json={
-            "dashboard_id": "events_overview",
-            # missing tenant_id, user_id, user_email
-        })
+        # Override the Looker dependency so this test is order-independent:
+        # if another test imported the real backend first, the leaf-module
+        # stub above never installed and the real service would raise before
+        # request validation could return 422.
+        response = self._client_with_looker(MagicMock()).post(
+            "/api/v1/reporting/embed/dashboard", json={
+                "dashboard_id": "events_overview",
+                # missing tenant_id, user_id, user_email
+            })
         assert response.status_code == 422

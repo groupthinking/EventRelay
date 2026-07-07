@@ -223,6 +223,34 @@ def test_job_store_expire_before_removes_multiple_matching_jobs(tmp_path):
     for job_id in ("old_a", "old_b", "old_c"):
         assert store.load(job_id) is None
     assert store.load("new_job") is not None
+def test_persisted_video_job_is_expirable(tmp_path):
+    """A real VideoJobStatusResponse persisted like production must be expirable.
+
+    Regression for the CodeRabbit/Copilot finding on #479: expire_before() was a
+    no-op because VideoJobStatusResponse carried no created_at, so its persisted
+    model_dump() never matched. The model now supplies a UTC created_at at
+    construction, and persistence uses model_dump(mode="json") so it serialises to
+    an ISO string that expire_before() can parse.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    from youtube_extension.backend.api.v1.models import (
+        JobStatus,
+        VideoJobStatusResponse,
+    )
+
+    job = VideoJobStatusResponse(job_id="real_job", status=JobStatus.pending)
+    assert job.created_at.tzinfo is not None  # tz-aware UTC by default
+
+    payload = job.model_dump(mode="json")
+    assert isinstance(payload["created_at"], str)  # JSON-serialisable
+
+    store = PipelineJobStore(tmp_path)
+    store.save("real_job", payload)
+
+    cutoff = datetime.now(timezone.utc) + timedelta(hours=1)
+    assert store.expire_before(cutoff) == 1
+    assert store.load("real_job") is None
 
 
 def test_vera_pre_check_gateway_exception_does_not_crash():

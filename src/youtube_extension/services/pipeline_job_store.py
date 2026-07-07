@@ -50,40 +50,41 @@ class PipelineJobStore:
         return records
 
     def expire_before(self, cutoff: datetime) -> int:
-        """Delete job records whose ``created_at`` is strictly before ``cutoff``.
+        """Delete job files whose ``created_at`` timestamp is before *cutoff*.
 
-        Records without a parseable ``created_at`` (missing, empty, or malformed)
-        and files with corrupt JSON are left untouched. A naive ``cutoff`` is
-        interpreted as UTC. Returns the number of records removed.
+        Jobs that lack a ``created_at`` field are left untouched so that legacy
+        records created before this field existed are not inadvertently removed.
+
+        Naive (timezone-unaware) values — both the *cutoff* argument and any
+        stored ``created_at`` — are interpreted as UTC. Records persisted by the
+        current codebase are timezone-aware (``datetime.now(timezone.utc)``), so
+        the naive fallback only applies to legacy data.
+
+        Returns the number of files deleted.
         """
         if cutoff.tzinfo is None:
             cutoff = cutoff.replace(tzinfo=timezone.utc)
-
         removed = 0
-        for path in self.root.glob("*.json"):
+        for path in list(self.root.glob("*.json")):
             try:
                 record = json.loads(path.read_text(encoding="utf-8"))
             except (json.JSONDecodeError, OSError):
                 continue
-            if not isinstance(record, dict):
-                continue
-
-            created_raw = record.get("created_at")
-            if not isinstance(created_raw, str) or not created_raw:
+            created_at_raw = record.get("created_at")
+            if not created_at_raw:
                 continue
             try:
-                created = datetime.fromisoformat(created_raw)
+                created_at = datetime.fromisoformat(str(created_at_raw))
             except ValueError:
                 continue
-            if created.tzinfo is None:
-                created = created.replace(tzinfo=timezone.utc)
-
-            if created < cutoff:
+            if created_at.tzinfo is None:
+                created_at = created_at.replace(tzinfo=timezone.utc)
+            if created_at < cutoff:
                 try:
                     path.unlink()
+                    removed += 1
                 except OSError:
-                    continue
-                removed += 1
+                    logger.warning("Could not delete expired job file %s", path)
         return removed
 
 

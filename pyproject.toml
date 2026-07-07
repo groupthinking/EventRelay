@@ -103,7 +103,7 @@ deploy = [
 ]
 # Video and external API tooling (YouTube processing, downloads, etc.)
 youtube = [
-    "youtube-transcript-api>=0.6.0",
+    "youtube-transcript-api>=1.0.0",
     "google-api-python-client>=2.100.0",
     "google-cloud-speech>=2.26.0",
     "yt-dlp>=2023.7.6",

@@ -20,6 +20,8 @@ from typing import Any, Optional
 
 import httpx
 
+from youtube_extension.utils.proxy import get_proxy_url, get_transcript_proxy_config
+
 # Import our cost monitor
 try:
     from .api_cost_monitor import (
@@ -150,8 +152,13 @@ class RobustYouTubeService:
         import subprocess
 
         def _get_ytdlp_metadata():
+            cmd = ["yt-dlp", "--dump-json", "--skip-download"]
+            proxy_url = get_proxy_url()
+            if proxy_url:
+                cmd.extend(["--proxy", proxy_url])
+            cmd.append(video_url)
             result = subprocess.run(
-                ["yt-dlp", "--dump-json", "--skip-download", video_url],
+                cmd,
                 capture_output=True,
                 text=True,
                 timeout=30,
@@ -437,17 +444,38 @@ class RobustYouTubeService:
         """Check if transcript is available and count segments"""
         try:
             if HAS_TRANSCRIPT_API:
-                # Use high-level API to list and fetch transcripts
+                # youtube-transcript-api is synchronous/blocking network I/O; run
+                # it in an executor so it doesn't stall the event loop.
+                loop = asyncio.get_event_loop()
                 try:
-                    yt_api = YouTubeTranscriptApi()
-                    transcript = yt_api.fetch(video_id)
+                    yt_api = YouTubeTranscriptApi(
+                        proxy_config=get_transcript_proxy_config()
+                    )
+                    transcript = await loop.run_in_executor(
+                        None, lambda: yt_api.fetch(video_id)
+                    )
                 except Exception:
-                    # If object API fails, try module-level list() as fallback pattern
+                    # Fallback: list() returns per-language metadata, not
+                    # segments, so fetch an actual transcript to keep the count
+                    # meaningful (segments, not language count). Reuse the same
+                    # proxy config as the primary fetch.
+                    def _list_and_fetch() -> Any:
+                        transcript_list = YouTubeTranscriptApi(
+                            proxy_config=get_transcript_proxy_config()
+                        ).list(video_id)
+                        return transcript_list.find_transcript(["en"]).fetch()
+
                     try:
-                        list_api = YouTubeTranscriptApi.list(video_id)
-                        transcript = list_api
+                        transcript = await loop.run_in_executor(
+                            None, _list_and_fetch
+                        )
                     except Exception:
                         transcript = []
+                # Both the primary fetch and the list() fallback failed if
+                # transcript is empty — report unavailable rather than a
+                # contradictory (available, 0 segments).
+                if not transcript:
+                    return False, 0
                 return True, len(transcript)
             elif HAS_YOUTUBE_SEARCH:
                 transcript_data = await asyncio.get_event_loop().run_in_executor(
@@ -474,10 +502,18 @@ class RobustYouTubeService:
                 transcript = None
                 api_error = None
 
+                # youtube-transcript-api is synchronous/blocking network I/O; run
+                # it in an executor so it doesn't stall the event loop.
+                loop = asyncio.get_event_loop()
+
                 # Try instance-based fetch first
                 try:
-                    yt_api = YouTubeTranscriptApi()
-                    transcript = yt_api.fetch(video_id, languages=[language, "en"])
+                    yt_api = YouTubeTranscriptApi(
+                        proxy_config=get_transcript_proxy_config()
+                    )
+                    transcript = await loop.run_in_executor(
+                        None, lambda: yt_api.fetch(video_id, languages=[language, "en"])
+                    )
                     logger.info(
                         f"YouTubeTranscriptApi.fetch() returned {len(transcript) if transcript else 0} segments"
                     )
@@ -485,19 +521,26 @@ class RobustYouTubeService:
                     api_error = f"YouTubeTranscriptApi.fetch failed: {type(fetch_err).__name__}: {fetch_err}"
                     logger.warning(api_error)
                     transcript_errors.append(api_error)
-                    # Try module-level list() as fallback
-                    try:
-                        transcript_list = YouTubeTranscriptApi.list_transcripts(
-                            video_id
-                        )
-                        transcript = transcript_list.find_transcript(
+                    # Try instance list() as fallback — reuse the same proxy
+                    # config as the primary fetch so a proxy-required environment
+                    # doesn't bypass the proxy (or leak the origin IP).
+                    def _list_fallback() -> Any:
+                        transcript_list = YouTubeTranscriptApi(
+                            proxy_config=get_transcript_proxy_config()
+                        ).list(video_id)
+                        return transcript_list.find_transcript(
                             [language, "en"]
                         ).fetch()
+
+                    try:
+                        transcript = await loop.run_in_executor(
+                            None, _list_fallback
+                        )
                         logger.info(
-                            f"YouTubeTranscriptApi.list_transcripts() returned {len(transcript) if transcript else 0} segments"
+                            f"YouTubeTranscriptApi.list() returned {len(transcript) if transcript else 0} segments"
                         )
                     except Exception as list_err:
-                        api_error = f"YouTubeTranscriptApi.list_transcripts failed: {type(list_err).__name__}: {list_err}"
+                        api_error = f"YouTubeTranscriptApi.list() fallback failed: {type(list_err).__name__}: {list_err}"
                         logger.warning(api_error)
                         transcript_errors.append(api_error)
                         transcript = []

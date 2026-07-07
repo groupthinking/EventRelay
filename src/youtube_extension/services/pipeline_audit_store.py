@@ -36,6 +36,8 @@ class PipelineAuditStore:
             "action": action,
             "success": success,
             "duration_ms": duration_ms,
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
             "details": details or {},
             "input_tokens": input_tokens,
             "output_tokens": output_tokens,

@@ -1257,7 +1257,7 @@ def _persist_video_job(job: VideoJobStatusResponse) -> None:
         job.created_at = datetime.now(timezone.utc).isoformat()
     _video_jobs[job.job_id] = job
     try:
-        get_job_store().save(job.job_id, job.model_dump())
+        get_job_store().save(job.job_id, job.model_dump(mode="json"))
     except Exception as exc:
         logger.warning("Job persist failed for %s: %s", job.job_id, exc)
 

@@ -8,7 +8,7 @@ with the backend models defined in:
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Optional
 
@@ -67,8 +67,14 @@ class VideoJobStatusResponse(BaseModel):
     transcript: Optional[str] = None
     metadata: Optional[dict[str, Any]] = None
     error: Optional[str] = None
-    error_reason: Optional[str] = None
-    created_at: Optional[str] = None
+    error_reason: Optional[str] = Field(
+        None,
+        description="Machine-readable slug describing why a job failed (e.g. 'gemini_api_timeout')",
+    )
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        description="UTC creation timestamp; used by job-store retention (expire_before).",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -162,7 +168,7 @@ class TranscriptActionRequest(BaseModel):
 
     video_url: str = Field(..., description="YouTube video URL to process")
     language: Optional[str] = Field(
-        None,
+        "en",
         description="Optional language code for transcript processing",
     )
     transcript_text: Optional[str] = Field(
@@ -170,7 +176,7 @@ class TranscriptActionRequest(BaseModel):
         description="Raw transcript text to process",
     )
     video_options: Optional[dict[str, Any]] = Field(
-        default_factory=dict,
+        None,
         description="Additional options for video/transcript processing",
     )
 
