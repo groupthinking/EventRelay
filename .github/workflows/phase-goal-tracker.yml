@@ -53,7 +53,8 @@ jobs:
               return;
             }
 
-            const taskMatches = [...body.matchAll(/^\s*-\s+\[( |x|X)\]\s+(.+)$/gm)];
+            const CHECKLIST_ITEM_PATTERN = /^\s*-\s+\[( |x|X)\]\s+(.+)$/gm;
+            const taskMatches = [...body.matchAll(CHECKLIST_ITEM_PATTERN)];
             const total = taskMatches.length;
 
             if (total === 0) {
@@ -61,14 +62,15 @@ jobs:
               return;
             }
 
-            const completedTasks = taskMatches.filter((match) => /x/i.test(match[1]));
+            const isCompleted = (match) => match[1].toLowerCase() === 'x';
+            const completedTasks = taskMatches.filter(isCompleted);
             const MAX_OPEN_TASKS_TO_SHOW = 10;
             const openTasks = taskMatches
-              .filter((match) => !/x/i.test(match[1]))
+              .filter((match) => !isCompleted(match))
               .map((match) => `- [ ] ${match[2]}`)
               .slice(0, MAX_OPEN_TASKS_TO_SHOW);
             const completed = completedTasks.length;
-            const percent = Math.round((completed / total) * 100);
+            const progressPercent = Math.round((completed / total) * 100);
             const done = completed === total;
 
             const trackerMarker = '<!-- phase-goal-tracker -->';
@@ -76,7 +78,7 @@ jobs:
               trackerMarker,
               '## 🎯 Phase Goal Tracker',
               '',
-              `- Progress: **${completed}/${total}** tasks complete (**${percent}%**)`,
+              `- Progress: **${completed}/${total}** tasks complete (**${progressPercent}%**)`,
               `- Status: ${done ? '✅ All goals complete' : '⏳ In progress'}`,
               '',
               done
