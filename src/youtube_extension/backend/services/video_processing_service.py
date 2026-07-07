@@ -12,6 +12,7 @@ import logging
 import os
 import time
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Optional
 
 from youtube_extension.utils.proxy import get_proxy_url
@@ -475,8 +476,24 @@ class VideoProcessingService:
 
             # SAFE: Payload is passed via stdin, not command line arguments.
             # video_url is contained in the JSON payload.
+            server_path = os.getenv(
+                "LANGEXTRACT_MCP_SERVER",
+                str(
+                    Path(__file__).resolve().parents[4]
+                    / "mcp-servers"
+                    / "langextract"
+                    / "langextract_mcp_server.py"
+                ),
+            )
+            if not Path(server_path).is_file():
+                logger.warning(
+                    f"LangExtract MCP server not found at {server_path}; "
+                    "set LANGEXTRACT_MCP_SERVER to override"
+                )
+                return None
+
             proc = subprocess.run(
-                ["python3", "mcp_servers/langextract_mcp_server.py"],
+                ["python3", server_path],
                 input=payload.encode(),
                 capture_output=True,
                 timeout=60

@@ -1,8 +1,0 @@
-# Full recursive tree for groupthinking/EventRelay at commit 2e331451a376fe7b6f65150f6dffe11bb1b1b3f6
-
-This file contains the authoritative recursive `git tree` JSON returned by the GitHub REST API at the requested commit SHA. Use this as the canonical source to verify the repository layout used to generate ARCHITECTURE.md.
-
-NOTE: The content below is the raw `tree` array as returned by the API (each entry has at least `path`, `mode`, `type`, `sha`, and `size` for blobs). If you need a different encoding (plain `ls -R` style, CSV, or other), tell me and I'll add it.
-
----
-
