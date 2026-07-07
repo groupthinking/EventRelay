@@ -6,6 +6,7 @@ import importlib.util
 import sys
 import types as _types
 from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -742,27 +743,93 @@ class TestOpenAIAdapter:
         )
         assert result is False
 
-    async def test_health_check_returns_true(self):
+    async def test_health_check_returns_false_when_not_initialized(self):
         adapter = OpenAIAdapter()
-        assert await adapter.health_check() is True
+        assert await adapter.health_check() is False
 
     async def test_get_capabilities_returns_ai_inference(self):
         adapter = OpenAIAdapter()
         caps = await adapter.get_capabilities()
         assert ServerCapability.AI_INFERENCE in caps
 
-    async def test_send_request_returns_dict_with_protocol(self):
+    async def test_send_request_raises_when_not_initialized(self):
         adapter = OpenAIAdapter()
         ctx_manager = _ctx_mod.get_context_manager()
         context = ctx_manager.create_context(user="u", task="t", intent="i")
+        with pytest.raises(RuntimeError, match="not initialized"):
+            await adapter.send_request({"prompt": "hello"}, context)
+
+    async def test_send_request_calls_openai_api(self):
+        adapter = OpenAIAdapter()
+        await adapter.initialize({"api_key": "sk-test"})
+
+        # Mock the client at the SDK boundary
+        mock_usage = MagicMock()
+        mock_usage.prompt_tokens = 10
+        mock_usage.completion_tokens = 20
+        mock_usage.total_tokens = 30
+
+        mock_message = MagicMock()
+        mock_message.content = "Hello from GPT"
+
+        mock_choice = MagicMock()
+        mock_choice.message = mock_message
+        mock_choice.finish_reason = "stop"
+
+        mock_response = MagicMock()
+        mock_response.model = "gpt-4"
+        mock_response.choices = [mock_choice]
+        mock_response.usage = mock_usage
+
+        adapter._client.chat.completions.create = AsyncMock(return_value=mock_response)
+
+        ctx_manager = _ctx_mod.get_context_manager()
+        context = ctx_manager.create_context(user="u", task="t", intent="i")
         resp = await adapter.send_request({"prompt": "hello"}, context)
+
         assert resp["protocol"] == "openai"
+        assert resp["content"] == "Hello from GPT"
+        assert resp["model"] == "gpt-4"
+        assert resp["finish_reason"] == "stop"
+        assert resp["usage"]["total_tokens"] == 30
         assert resp["context_id"] == context.id
 
+    async def test_send_request_uses_messages_field(self):
+        adapter = OpenAIAdapter()
+        await adapter.initialize({"api_key": "sk-test"})
 
-# ===========================================================================
-# Built-in adapter: AnthropicAdapter
-# ===========================================================================
+        mock_message = MagicMock()
+        mock_message.content = "response"
+        mock_choice = MagicMock()
+        mock_choice.message = mock_message
+        mock_choice.finish_reason = "stop"
+        mock_response = MagicMock()
+        mock_response.model = "gpt-4"
+        mock_response.choices = [mock_choice]
+        mock_response.usage = None
+
+        adapter._client.chat.completions.create = AsyncMock(return_value=mock_response)
+
+        ctx_manager = _ctx_mod.get_context_manager()
+        context = ctx_manager.create_context(user="u", task="t", intent="i")
+        messages = [{"role": "user", "content": "test message"}]
+        resp = await adapter.send_request({"messages": messages}, context)
+
+        call_kwargs = adapter._client.chat.completions.create.call_args[1]
+        assert call_kwargs["messages"] == messages
+        assert resp["usage"] is None
+
+    async def test_health_check_returns_true_when_api_reachable(self):
+        adapter = OpenAIAdapter()
+        await adapter.initialize({"api_key": "sk-test"})
+        adapter._client.models.retrieve = AsyncMock(return_value=MagicMock())
+        assert await adapter.health_check() is True
+
+    async def test_health_check_returns_false_on_api_error(self):
+        adapter = OpenAIAdapter()
+        await adapter.initialize({"api_key": "sk-test"})
+        adapter._client.models.retrieve = AsyncMock(side_effect=Exception("API error"))
+        assert await adapter.health_check() is False
 
 
 class TestAnthropicAdapter:
@@ -790,22 +857,96 @@ class TestAnthropicAdapter:
         await adapter.initialize({"api_key": "sk-ant"})
         assert adapter.model == "claude-opus-4-8"
 
-    async def test_health_check_returns_true(self):
+    async def test_health_check_returns_false_when_not_initialized(self):
         adapter = AnthropicAdapter()
-        assert await adapter.health_check() is True
+        assert await adapter.health_check() is False
 
     async def test_get_capabilities_returns_ai_inference(self):
         adapter = AnthropicAdapter()
         caps = await adapter.get_capabilities()
         assert ServerCapability.AI_INFERENCE in caps
 
-    async def test_send_request_returns_dict_with_protocol(self):
+    async def test_send_request_raises_when_not_initialized(self):
         adapter = AnthropicAdapter()
         ctx_manager = _ctx_mod.get_context_manager()
         context = ctx_manager.create_context(user="u", task="t", intent="i")
+        with pytest.raises(RuntimeError, match="not initialized"):
+            await adapter.send_request({"prompt": "hello"}, context)
+
+    async def test_send_request_calls_anthropic_api(self):
+        adapter = AnthropicAdapter()
+        await adapter.initialize({"api_key": "sk-ant-test"})
+
+        # Mock the client at the SDK boundary
+        mock_text_block = MagicMock()
+        mock_text_block.type = "text"
+        mock_text_block.text = "Hello from Claude"
+
+        mock_usage = MagicMock()
+        mock_usage.input_tokens = 15
+        mock_usage.output_tokens = 25
+
+        mock_response = MagicMock()
+        mock_response.model = "claude-opus-4-8"
+        mock_response.content = [mock_text_block]
+        mock_response.stop_reason = "end_turn"
+        mock_response.usage = mock_usage
+
+        adapter._client.messages.create = AsyncMock(return_value=mock_response)
+
+        ctx_manager = _ctx_mod.get_context_manager()
+        context = ctx_manager.create_context(user="u", task="t", intent="i")
         resp = await adapter.send_request({"prompt": "hello"}, context)
+
         assert resp["protocol"] == "anthropic"
+        assert resp["content"] == "Hello from Claude"
+        assert resp["model"] == "claude-opus-4-8"
+        assert resp["stop_reason"] == "end_turn"
+        assert resp["usage"]["input_tokens"] == 15
+        assert resp["usage"]["output_tokens"] == 25
         assert resp["context_id"] == context.id
+
+        # Verify adaptive thinking is passed
+        call_kwargs = adapter._client.messages.create.call_args[1]
+        assert call_kwargs["thinking"] == {"type": "adaptive"}
+
+    async def test_send_request_uses_messages_field(self):
+        adapter = AnthropicAdapter()
+        await adapter.initialize({"api_key": "sk-ant-test"})
+
+        mock_text_block = MagicMock()
+        mock_text_block.type = "text"
+        mock_text_block.text = "response"
+        mock_usage = MagicMock()
+        mock_usage.input_tokens = 5
+        mock_usage.output_tokens = 10
+        mock_response = MagicMock()
+        mock_response.model = "claude-opus-4-8"
+        mock_response.content = [mock_text_block]
+        mock_response.stop_reason = "end_turn"
+        mock_response.usage = mock_usage
+
+        adapter._client.messages.create = AsyncMock(return_value=mock_response)
+
+        ctx_manager = _ctx_mod.get_context_manager()
+        context = ctx_manager.create_context(user="u", task="t", intent="i")
+        messages = [{"role": "user", "content": "test"}]
+        await adapter.send_request({"messages": messages}, context)
+
+        call_kwargs = adapter._client.messages.create.call_args[1]
+        assert call_kwargs["messages"] == messages
+
+    async def test_health_check_returns_true_when_api_reachable(self):
+        adapter = AnthropicAdapter()
+        await adapter.initialize({"api_key": "sk-ant-test"})
+        adapter._client.messages.count_tokens = AsyncMock(return_value=MagicMock())
+        assert await adapter.health_check() is True
+
+    async def test_health_check_returns_false_on_api_error(self):
+        adapter = AnthropicAdapter()
+        await adapter.initialize({"api_key": "sk-ant-test"})
+        adapter._client.messages.count_tokens = AsyncMock(side_effect=Exception("API error"))
+        assert await adapter.health_check() is False
 
 
 # ===========================================================================
@@ -838,22 +979,109 @@ class TestGoogleAIAdapter:
         await adapter.initialize({"api_key": "key"})
         assert adapter.model == "gemini-pro"
 
-    async def test_health_check_returns_true(self):
+    async def test_health_check_returns_false_when_not_initialized(self):
         adapter = GoogleAIAdapter()
-        assert await adapter.health_check() is True
+        assert await adapter.health_check() is False
 
     async def test_get_capabilities_returns_ai_inference(self):
         adapter = GoogleAIAdapter()
         caps = await adapter.get_capabilities()
         assert ServerCapability.AI_INFERENCE in caps
 
-    async def test_send_request_returns_dict_with_protocol(self):
+    async def test_send_request_raises_when_not_initialized(self):
         adapter = GoogleAIAdapter()
         ctx_manager = _ctx_mod.get_context_manager()
         context = ctx_manager.create_context(user="u", task="t", intent="i")
+        with pytest.raises(RuntimeError, match="not initialized"):
+            await adapter.send_request({"prompt": "hello"}, context)
+
+    async def test_send_request_calls_google_ai_api(self):
+        adapter = GoogleAIAdapter()
+        await adapter.initialize({"api_key": "google-key"})
+
+        # Mock the client at the SDK boundary
+        mock_response = MagicMock()
+        mock_response.text = "Hello from Gemini"
+        mock_response.candidates = []
+        mock_response.usage_metadata = MagicMock()
+        mock_response.usage_metadata.prompt_token_count = 8
+        mock_response.usage_metadata.candidates_token_count = 12
+        mock_response.usage_metadata.total_token_count = 20
+
+        adapter._client.models.generate_content = MagicMock(return_value=mock_response)
+
+        ctx_manager = _ctx_mod.get_context_manager()
+        context = ctx_manager.create_context(user="u", task="t", intent="i")
         resp = await adapter.send_request({"prompt": "hello"}, context)
+
         assert resp["protocol"] == "google_ai"
+        assert resp["content"] == "Hello from Gemini"
+        assert resp["model"] == "gemini-pro"
+        assert resp["usage"]["prompt_tokens"] == 8
+        assert resp["usage"]["completion_tokens"] == 12
+        assert resp["usage"]["total_tokens"] == 20
         assert resp["context_id"] == context.id
+
+    async def test_send_request_flattens_messages_to_prompt(self):
+        adapter = GoogleAIAdapter()
+        await adapter.initialize({"api_key": "google-key"})
+
+        mock_response = MagicMock()
+        mock_response.text = "response"
+        mock_response.candidates = []
+        mock_response.usage_metadata = None
+
+        adapter._client.models.generate_content = MagicMock(return_value=mock_response)
+
+        ctx_manager = _ctx_mod.get_context_manager()
+        context = ctx_manager.create_context(user="u", task="t", intent="i")
+        messages = [
+            {"role": "user", "content": "line one"},
+            {"role": "assistant", "content": "line two"},
+        ]
+        resp = await adapter.send_request({"messages": messages}, context)
+
+        call_kwargs = adapter._client.models.generate_content.call_args[1]
+        assert "line one" in call_kwargs["contents"]
+        assert "line two" in call_kwargs["contents"]
+        assert resp["usage"] is None
+
+    async def test_send_request_extracts_text_from_candidates_when_text_is_none(self):
+        adapter = GoogleAIAdapter()
+        await adapter.initialize({"api_key": "google-key"})
+
+        # Simulate response.text being None but candidates having content
+        mock_part = MagicMock()
+        mock_part.text = "Extracted from candidate"
+        mock_content = MagicMock()
+        mock_content.parts = [mock_part]
+        mock_candidate = MagicMock()
+        mock_candidate.content = mock_content
+
+        mock_response = MagicMock()
+        mock_response.text = None
+        mock_response.candidates = [mock_candidate]
+        mock_response.usage_metadata = None
+
+        adapter._client.models.generate_content = MagicMock(return_value=mock_response)
+
+        ctx_manager = _ctx_mod.get_context_manager()
+        context = ctx_manager.create_context(user="u", task="t", intent="i")
+        resp = await adapter.send_request({"prompt": "hello"}, context)
+
+        assert resp["content"] == "Extracted from candidate"
+
+    async def test_health_check_returns_true_when_api_reachable(self):
+        adapter = GoogleAIAdapter()
+        await adapter.initialize({"api_key": "google-key"})
+        adapter._client.models.list = MagicMock(return_value=[])
+        assert await adapter.health_check() is True
+
+    async def test_health_check_returns_false_on_api_error(self):
+        adapter = GoogleAIAdapter()
+        await adapter.initialize({"api_key": "google-key"})
+        adapter._client.models.list = MagicMock(side_effect=Exception("API error"))
+        assert await adapter.health_check() is False
 
 
 # ===========================================================================
@@ -912,7 +1140,22 @@ class TestSendAiRequest:
 
     async def test_sends_when_protocol_specified_and_connected(self):
         bridge = get_protocol_bridge()
-        # Manually mark OPENAI as connected for the test
+        # Initialize OPENAI adapter with a key and mock the client
+        adapter = bridge.adapters[ProtocolType.OPENAI]
+        await adapter.initialize({"api_key": "sk-test"})
         bridge.bridge_status[ProtocolType.OPENAI] = BridgeStatus.CONNECTED
+
+        # Mock the SDK client response
+        mock_message = MagicMock()
+        mock_message.content = "mocked"
+        mock_choice = MagicMock()
+        mock_choice.message = mock_message
+        mock_choice.finish_reason = "stop"
+        mock_response = MagicMock()
+        mock_response.model = "gpt-4"
+        mock_response.choices = [mock_choice]
+        mock_response.usage = None
+        adapter._client.chat.completions.create = AsyncMock(return_value=mock_response)
+
         resp = await send_ai_request({"cmd": "test"}, protocol=ProtocolType.OPENAI)
         assert resp["protocol"] == "openai"
