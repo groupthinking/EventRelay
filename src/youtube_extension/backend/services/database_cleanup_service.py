@@ -63,6 +63,9 @@ class CleanupResult:
 _ALLOWED_TIME_COLUMNS = frozenset({"timestamp", "created_at", "createdAt", "ts"})
 """Allowlist of timestamp column names that cleanup_table may reference."""
 
+_TIME_COLUMN_PRIORITY = ("timestamp", "created_at", "createdAt", "ts")
+"""Ordered sequence defining preference when multiple time columns exist."""
+
 _TABLE_NAME_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]{0,127}$")
 """Regex for safe SQLite identifier: starts with letter/underscore, alphanumeric+underscore only, max 128 chars."""
 
@@ -282,7 +285,7 @@ class DatabaseCleanupService:
                 )
                 columns = [row[1] for row in cursor.fetchall()]
                 time_col = None
-                for candidate in _ALLOWED_TIME_COLUMNS:
+                for candidate in _TIME_COLUMN_PRIORITY:
                     if candidate in columns:
                         time_col = candidate
                         break
@@ -305,11 +308,12 @@ class DatabaseCleanupService:
                     )
 
                 # Validate time_col against the allowlist (defense-in-depth).
-                # This assertion should never fail because time_col comes from
-                # _ALLOWED_TIME_COLUMNS, but guards against future code changes.
-                assert time_col in _ALLOWED_TIME_COLUMNS, (
-                    f"time_col {time_col!r} not in allowlist"
-                )
+                # This check should never fail because time_col comes from
+                # _TIME_COLUMN_PRIORITY, but guards against future code changes.
+                if time_col not in _ALLOWED_TIME_COLUMNS:
+                    raise ValueError(
+                        f"time_col {time_col!r} not in allowlist"
+                    )
                 safe_time_col = _validate_identifier(time_col)
 
                 # Delete old records in batches using parameterized values.

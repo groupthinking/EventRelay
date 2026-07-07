@@ -11,6 +11,7 @@ from youtube_extension.backend.services.database_cleanup_service import (
     RetentionPolicy,
     _ALLOWED_TIME_COLUMNS,
     _TABLE_NAME_RE,
+    _TIME_COLUMN_PRIORITY,
     _validate_identifier,
 )
 
@@ -239,6 +240,14 @@ class TestAllowedTimeColumns:
             # Should not raise
             result = _validate_identifier(col)
             assert result == f'"{col}"'
+
+    def test_priority_tuple_matches_allowlist(self):
+        """Ensure the ordered priority tuple has the same elements as the frozenset."""
+        assert set(_TIME_COLUMN_PRIORITY) == _ALLOWED_TIME_COLUMNS
+
+    def test_priority_has_deterministic_order(self):
+        """Verify timestamp is preferred over other time columns."""
+        assert _TIME_COLUMN_PRIORITY[0] == "timestamp"
 
 
 # ===========================================================================
