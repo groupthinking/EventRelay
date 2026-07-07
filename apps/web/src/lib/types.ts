@@ -48,6 +48,8 @@ export interface VideoJobStatusResponse {
   transcript?: string;
   metadata?: Record<string, unknown>;
   error?: string;
+  error_reason?: string;
+  created_at?: string;
 }
 
 // ── Event Extraction ──

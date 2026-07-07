@@ -48,6 +48,10 @@ export interface VideoJobStatusResponse {
   transcript?: string;
   metadata?: Record<string, unknown>;
   error?: string;
+  /** Machine-readable error slug, distinct from the free-text `error`. */
+  error_reason?: string;
+  /** ISO-8601 timestamp of when the job was created. */
+  created_at?: string;
 }
 
 // ---------------------------------------------------------------------------
