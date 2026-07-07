@@ -26,7 +26,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # Install Node.js production dependencies (workspace monorepo)
 COPY package.json package-lock.json ./
 COPY apps/web/package.json apps/web/
-RUN npm ci --omit=dev --ignore-scripts 2>/dev/null || npm install --omit=dev --ignore-scripts
+RUN npm ci --omit=dev --ignore-scripts || npm install --omit=dev --ignore-scripts
 
 # ============================================================
 # Stage 2: Runtime — lean production image (< 1 GB)
@@ -83,5 +83,5 @@ EXPOSE ${PORT}
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
     CMD curl -f http://localhost:${PORT}/health || exit 1
 
-# Run application
-CMD ["python", "-m", "uvicorn", "youtube_extension.main:app", "--host", "0.0.0.0", "--port", "8080"]
+# Run application — shell form so $PORT is expanded at runtime
+CMD python -m uvicorn youtube_extension.main:app --host 0.0.0.0 --port $PORT
