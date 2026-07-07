@@ -550,7 +550,7 @@ class OpenAIAdapter(ProtocolAdapter):
         if self._client is None:
             return False
         try:
-            await self._client.models.list()
+            await self._client.models.retrieve(self.model)
             return True
         except Exception as e:
             logger.warning("OpenAI health check failed: %s", e)

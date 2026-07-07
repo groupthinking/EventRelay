@@ -819,10 +819,17 @@ class TestOpenAIAdapter:
         assert call_kwargs["messages"] == messages
         assert resp["usage"] is None
 
+    async def test_health_check_returns_true_when_api_reachable(self):
+        adapter = OpenAIAdapter()
+        await adapter.initialize({"api_key": "sk-test"})
+        adapter._client.models.retrieve = AsyncMock(return_value=MagicMock())
+        assert await adapter.health_check() is True
 
-# ===========================================================================
-# Built-in adapter: AnthropicAdapter
-# ===========================================================================
+    async def test_health_check_returns_false_on_api_error(self):
+        adapter = OpenAIAdapter()
+        await adapter.initialize({"api_key": "sk-test"})
+        adapter._client.models.retrieve = AsyncMock(side_effect=Exception("API error"))
+        assert await adapter.health_check() is False
 
 
 class TestAnthropicAdapter:
@@ -929,6 +936,18 @@ class TestAnthropicAdapter:
         call_kwargs = adapter._client.messages.create.call_args[1]
         assert call_kwargs["messages"] == messages
 
+    async def test_health_check_returns_true_when_api_reachable(self):
+        adapter = AnthropicAdapter()
+        await adapter.initialize({"api_key": "sk-ant-test"})
+        adapter._client.messages.count_tokens = AsyncMock(return_value=MagicMock())
+        assert await adapter.health_check() is True
+
+    async def test_health_check_returns_false_on_api_error(self):
+        adapter = AnthropicAdapter()
+        await adapter.initialize({"api_key": "sk-ant-test"})
+        adapter._client.messages.count_tokens = AsyncMock(side_effect=Exception("API error"))
+        assert await adapter.health_check() is False
+
 
 # ===========================================================================
 # Built-in adapter: GoogleAIAdapter
@@ -1026,6 +1045,43 @@ class TestGoogleAIAdapter:
         assert "line one" in call_kwargs["contents"]
         assert "line two" in call_kwargs["contents"]
         assert resp["usage"] is None
+
+    async def test_send_request_extracts_text_from_candidates_when_text_is_none(self):
+        adapter = GoogleAIAdapter()
+        await adapter.initialize({"api_key": "google-key"})
+
+        # Simulate response.text being None but candidates having content
+        mock_part = MagicMock()
+        mock_part.text = "Extracted from candidate"
+        mock_content = MagicMock()
+        mock_content.parts = [mock_part]
+        mock_candidate = MagicMock()
+        mock_candidate.content = mock_content
+
+        mock_response = MagicMock()
+        mock_response.text = None
+        mock_response.candidates = [mock_candidate]
+        mock_response.usage_metadata = None
+
+        adapter._client.models.generate_content = MagicMock(return_value=mock_response)
+
+        ctx_manager = _ctx_mod.get_context_manager()
+        context = ctx_manager.create_context(user="u", task="t", intent="i")
+        resp = await adapter.send_request({"prompt": "hello"}, context)
+
+        assert resp["content"] == "Extracted from candidate"
+
+    async def test_health_check_returns_true_when_api_reachable(self):
+        adapter = GoogleAIAdapter()
+        await adapter.initialize({"api_key": "google-key"})
+        adapter._client.models.list = MagicMock(return_value=[])
+        assert await adapter.health_check() is True
+
+    async def test_health_check_returns_false_on_api_error(self):
+        adapter = GoogleAIAdapter()
+        await adapter.initialize({"api_key": "google-key"})
+        adapter._client.models.list = MagicMock(side_effect=Exception("API error"))
+        assert await adapter.health_check() is False
 
 
 # ===========================================================================
