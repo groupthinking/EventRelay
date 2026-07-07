@@ -476,6 +476,10 @@ class VideoProcessingService:
 
             # SAFE: Payload is passed via stdin, not command line arguments.
             # video_url is contained in the JSON payload.
+            # parents[4]: services -> backend -> youtube_extension -> src -> repo root.
+            # If the layout changes or the file is missing (e.g. slim Docker
+            # image), the existence check below degrades gracefully and
+            # LANGEXTRACT_MCP_SERVER can override the location explicitly.
             server_path = os.getenv(
                 "LANGEXTRACT_MCP_SERVER",
                 str(
