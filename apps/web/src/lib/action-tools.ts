@@ -317,42 +317,63 @@ const dispatchSubagents: ActionTool = {
       return { summary: 'No subagents specified', isError: true };
     }
 
-    const events = (subagents as Array<{ agentType: string; instruction: string }>).map((s) => ({
-      id: `sub_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-      type: 'action',
-      title: s.instruction,
-      description: `Subagent task for: ${parentTask}`,
-    }));
-
-    const agentTypes = [
-      ...new Set((subagents as Array<{ agentType: string }>).map((s) => s.agentType)),
-    ];
-
+    const typed = subagents as Array<{ agentType: string; instruction: string }>;
     const doFetch = ctx.fetchImpl ?? fetch;
-    try {
+
+    // Dispatch each subagent independently. The backend /agents/dispatch endpoint
+    // runs the cartesian product of agent_types × events, so batching all
+    // subagents into a single call (a de-duplicated agent_types list plus a
+    // parallel events list) would pair every agentType with every instruction —
+    // mispairing each subagent's agentType with the wrong instruction. Sending
+    // one (agent_type, event) pair per call keeps each agentType bound to its
+    // own instruction.
+    const dispatchOne = async (
+      sub: { agentType: string; instruction: string },
+      idx: number,
+    ): Promise<unknown> => {
+      const event = {
+        id: `sub_${Date.now()}_${idx}_${Math.random().toString(36).slice(2, 8)}`,
+        type: 'action',
+        title: sub.instruction,
+        description: `Subagent task for: ${parentTask}`,
+      };
       const res = await doFetch(`${ctx.backendBaseUrl}/api/v1/agents/dispatch`, {
         method: 'POST',
         headers: backendHeaders(),
         body: JSON.stringify({
           job_id: ctx.jobId,
-          agent_types: agentTypes,
-          events,
+          agent_types: [sub.agentType],
+          events: [event],
         }),
         signal: AbortSignal.timeout(30_000),
       });
       if (!res.ok) {
         const detail = await res.text();
-        return { summary: `Subagent dispatch failed: ${res.status} ${detail}`, isError: true };
+        throw new Error(`${sub.agentType}: ${res.status} ${detail}`);
       }
-      const body = await res.json();
-      const count = body?.data?.executions?.length ?? agentTypes.length;
-      return {
-        summary: `Dispatched ${count} subagent(s) for: ${parentTask}`,
-        data: body,
-      };
-    } catch (err) {
-      return { summary: `Subagent dispatch error: ${String(err)}`, isError: true };
+      return res.json();
+    };
+
+    const settled = await Promise.allSettled(typed.map(dispatchOne));
+    const dispatches = settled
+      .filter((r): r is PromiseFulfilledResult<unknown> => r.status === 'fulfilled')
+      .map((r) => r.value);
+    const failures = settled
+      .filter((r): r is PromiseRejectedResult => r.status === 'rejected')
+      .map((r) => String(r.reason));
+
+    if (dispatches.length === 0) {
+      return { summary: `Subagent dispatch failed: ${failures.join('; ')}`, isError: true };
     }
+
+    const count = dispatches.reduce<number>((n, body) => {
+      const execs = (body as { data?: { executions?: unknown[] } })?.data?.executions;
+      return n + (Array.isArray(execs) ? execs.length : 1);
+    }, 0);
+    const summary = failures.length
+      ? `Dispatched ${count} subagent(s) for: ${parentTask} (${failures.length} failed: ${failures.join('; ')})`
+      : `Dispatched ${count} subagent(s) for: ${parentTask}`;
+    return { summary, data: { dispatches }, isError: failures.length > 0 };
   },
 };
 
