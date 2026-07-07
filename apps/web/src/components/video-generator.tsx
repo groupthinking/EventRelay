@@ -52,6 +52,7 @@ export function VideoGenerator() {
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
           placeholder="Describe the video you want to generate..."
+          aria-label="Video generation prompt"
           className="flex-1 px-4 py-3 bg-surface-900 rounded-xl border border-white/10 text-white/80 placeholder:text-white/30 focus:outline-none focus:border-primary-500/50"
           maxLength={1000}
           disabled={state === 'generating'}

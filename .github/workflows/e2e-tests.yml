@@ -85,7 +85,7 @@ jobs:
           echo "Timed out waiting for deployment. Falling back to default BASE_URL."
           echo "skip=true" >> $GITHUB_OUTPUT
 
-      - name: Set E2E_BASE_URL from preview
+      - name: Override BASE_URL with preview deployment
         if: steps.preview.outputs.skip == 'false'
         run: echo "BASE_URL=${{ steps.preview.outputs.url }}" >> $GITHUB_ENV
 
