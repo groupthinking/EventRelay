@@ -318,6 +318,9 @@ def test_chat_instructions_cover_plan_command(config):
     instructions = chat.get("instructions", "")
     assert "@coderabbitai plan" in instructions
     assert "checklist" in instructions.lower()
+    assert "completed findings" in instructions.lower()
+    assert "pending tasks" in instructions.lower()
+    assert "tests" in instructions.lower()
 
 
 # ---------------------------------------------------------------------------
