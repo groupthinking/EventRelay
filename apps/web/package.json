@@ -12,6 +12,7 @@
     "analyze": "next experimental-analyze --output"
   },
   "dependencies": {
+    "@ai-sdk/gateway": "^4.0.12",
     "@dataconnect/generated": "file:src/dataconnect-generated",
     "@google/genai": "^2.10.0",
     "@google/generative-ai": "^0.24.1",
@@ -29,6 +30,7 @@
     "@vercel/analytics": "^2.0.1",
     "@vercel/functions": "^3.7.5",
     "@vercel/speed-insights": "^2.0.0",
+    "ai": "^7.0.15",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
     "lucide-react": "^1.23.0",
@@ -50,7 +52,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "autoprefixer": "^10.5.2",
-    "eslint": "^10.6.0",
+    "eslint": "^9.39.0",
     "eslint-config-next": "^16.2.10",
     "playwright": "^1.61.1",
     "postcss": "^8.5.16",

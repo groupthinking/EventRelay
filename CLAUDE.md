@@ -114,6 +114,7 @@ turbo run test
 - **No secrets in code**: All keys/credentials go in `.env` (gitignored)
 - **Security**: Validate inputs via Pydantic; no `dangerouslySetInnerHTML` in React; sanitize subprocess args
 - **Type safety enforced**: mypy strict (Python), TypeScript strict (frontend)
+- **Vercel docs context**: Use `https://vercel.com/docs/llms-full.txt` when you need complete Vercel platform context for AI Gateway, Hosting, or MCP-related work.
 
 ## SDK ↔ Backend Contract Alignment
 
