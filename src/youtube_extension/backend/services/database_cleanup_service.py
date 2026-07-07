@@ -39,6 +39,20 @@ API_COST_DB_NAME = API_COST_DB_PATH.name
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# SQL template for batch-delete cleanup.
+# Identifiers are double-quoted and substituted with str.format() at call time;
+# they cannot use ? placeholders because SQLite does not support parameterised
+# identifiers.  Safety is enforced upstream:
+#   • {table} comes from safe_table_name — validated by ^[a-zA-Z0-9_]+$ + double-quoted.
+#   • {col}   comes from safe_time_col — chosen from a hardcoded allowlist + double-quoted.
+# All *values* (cutoff_date, batch_size) are bound through ? parameters.
+_CLEANUP_BATCH_SQL = (  # nosec B608
+    "DELETE FROM {table}"
+    " WHERE rowid IN ("
+    "SELECT rowid FROM {table}"
+    " WHERE {col} < ? LIMIT ?)"
+)
+
 @dataclass
 class RetentionPolicy:
     """Retention policy for a specific table/data type"""
@@ -281,22 +295,11 @@ class DatabaseCleanupService:
                 # contains only safe characters; quoting is an extra defence layer.
                 safe_time_col = f'"{time_col}"'
 
-                # Build parameterized DELETE query.
-                # Identifiers (safe_table_name, safe_time_col) cannot use ? placeholders in
-                # SQLite — they are safe because:
-                #   • safe_table_name is validated by ^[a-zA-Z0-9_]+$ and double-quoted.
-                #   • safe_time_col is chosen from a hardcoded allowlist and double-quoted.
-                # All *values* (cutoff_date, batch_size) are bound via ? parameters.
-                _delete_batch_sql = (  # nosec B608
-                    "DELETE FROM " + safe_table_name  # nosec B608
-                    + " WHERE rowid IN ("  # nosec B608
-                    + "SELECT rowid FROM " + safe_table_name  # nosec B608
-                    + " WHERE " + safe_time_col + " < ? LIMIT ?)"  # nosec B608
-                )
-
                 # Delete old records in batches (SQLite-compatible; DELETE ... LIMIT is not portable).
+                # See _CLEANUP_BATCH_SQL for the security rationale on identifier substitution.
+                delete_sql = _CLEANUP_BATCH_SQL.format(table=safe_table_name, col=safe_time_col)
                 while True:
-                    cursor.execute(_delete_batch_sql, (cutoff_date.isoformat(), policy.batch_size))
+                    cursor.execute(delete_sql, (cutoff_date.isoformat(), policy.batch_size))
 
                     batch_deleted = cursor.rowcount
                     records_deleted += batch_deleted
