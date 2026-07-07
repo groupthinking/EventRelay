@@ -1,0 +1,130 @@
+name: Phase Goal Tracker
+
+on:
+  issues:
+    types: [opened, edited, reopened]
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: "Issue number to evaluate"
+        required: true
+        type: number
+
+permissions:
+  issues: write
+  pull-requests: read
+
+jobs:
+  track:
+    name: Track phase checklist progress
+    runs-on: ubuntu-latest
+    steps:
+      - name: Evaluate checklist and update tracker comment
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const issueNumber =
+              context.eventName === 'workflow_dispatch'
+                ? Number(core.getInput('issue_number'))
+                : context.payload.issue.number;
+
+            const { data: issue } = await github.rest.issues.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issueNumber,
+            });
+
+            if (issue.pull_request) {
+              core.info(`Skipping PR #${issue.number}.`);
+              return;
+            }
+
+            const labels = issue.labels.map((label) => label.name.toLowerCase());
+            const title = (issue.title || '').toLowerCase();
+            const body = issue.body || '';
+
+            const phaseIssue =
+              labels.some((label) => /^phase-\d+$/.test(label)) ||
+              title.includes('[phase') ||
+              title.includes('testing & production launch');
+
+            if (!phaseIssue) {
+              core.info(`Skipping non-phase issue #${issue.number}.`);
+              return;
+            }
+
+            const taskMatches = [...body.matchAll(/^\s*-\s+\[( |x|X)\]\s+(.+)$/gm)];
+            const total = taskMatches.length;
+
+            if (total === 0) {
+              core.info(`No checklist found on issue #${issue.number}.`);
+              return;
+            }
+
+            const completedTasks = taskMatches.filter((match) => /x/i.test(match[1]));
+            const openTasks = taskMatches
+              .filter((match) => !/x/i.test(match[1]))
+              .map((match) => `- [ ] ${match[2]}`)
+              .slice(0, 10);
+            const completed = completedTasks.length;
+            const percent = Math.round((completed / total) * 100);
+            const done = completed === total;
+
+            const trackerMarker = '<!-- phase-goal-tracker -->';
+            const summaryBody = [
+              trackerMarker,
+              '## 🎯 Phase Goal Tracker',
+              '',
+              `- Progress: **${completed}/${total}** tasks complete (**${percent}%**)`,
+              `- Status: ${done ? '✅ All goals complete' : '⏳ In progress'}`,
+              '',
+              done
+                ? 'All checklist goals are complete. Closing this issue now.'
+                : `### Next goals\n${openTasks.join('\n')}`,
+            ].join('\n');
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issue.number,
+              per_page: 100,
+            });
+
+            const existing = comments.find(
+              (comment) =>
+                comment.user?.type === 'Bot' &&
+                typeof comment.body === 'string' &&
+                comment.body.includes(trackerMarker)
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body: summaryBody,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                body: summaryBody,
+              });
+            }
+
+            if (done && issue.state !== 'closed') {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                body: '✅ All tracked goals are complete. Auto-closing this issue.',
+              });
+
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                state: 'closed',
+              });
+            }
