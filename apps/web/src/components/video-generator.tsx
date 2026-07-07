@@ -19,12 +19,14 @@ export default function VideoGenerator({ className = '' }: VideoGeneratorProps) 
   const [duration, setDuration] = useState(5);
   const [state, setState] = useState<GenerationState>('idle');
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
-  const [videoBase64, setVideoBase64] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState(0);
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  // Tracks the current `blob:` object URL so we can revoke it (freeing the
+  // buffered video) before creating a new one or on unmount.
+  const objectUrlRef = useRef<string | null>(null);
 
   const clearTimer = () => {
     if (timerRef.current !== null) {
@@ -33,13 +35,21 @@ export default function VideoGenerator({ className = '' }: VideoGeneratorProps) 
     }
   };
 
-  // On unmount, tear down the elapsed-time interval and abort any in-flight
+  const revokeObjectUrl = () => {
+    if (objectUrlRef.current !== null) {
+      URL.revokeObjectURL(objectUrlRef.current);
+      objectUrlRef.current = null;
+    }
+  };
+
+  // On unmount, tear down the elapsed-time interval, abort any in-flight
   // request so it doesn't keep running (up to 5 min) or set state on an
-  // unmounted component.
+  // unmounted component, and revoke any outstanding object URL.
   useEffect(() => {
     return () => {
       clearTimer();
       abortRef.current?.abort();
+      revokeObjectUrl();
     };
   }, []);
 
@@ -48,8 +58,8 @@ export default function VideoGenerator({ className = '' }: VideoGeneratorProps) 
 
     setState('generating');
     setError(null);
+    revokeObjectUrl();
     setVideoUrl(null);
-    setVideoBase64(null);
     setElapsed(0);
     const t0 = Date.now();
 
@@ -59,38 +69,49 @@ export default function VideoGenerator({ className = '' }: VideoGeneratorProps) 
       setElapsed(Math.floor((Date.now() - t0) / 1000));
     }, 1000);
 
+    // Combine the mandated request timeout (AbortSignal.timeout) with the
+    // component's own controller so an unmount still aborts the in-flight
+    // fetch. Either signal firing aborts the request.
     const controller = new AbortController();
     abortRef.current = controller;
-    const timeoutId = setTimeout(() => controller.abort(), CLIENT_TIMEOUT_MS);
 
     try {
       const res = await fetch('/api/video/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt: prompt.trim(), aspectRatio, duration }),
-        signal: controller.signal,
+        signal: AbortSignal.any([AbortSignal.timeout(CLIENT_TIMEOUT_MS), controller.signal]),
       });
 
-      clearTimeout(timeoutId);
       clearTimer();
-      const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data.error ?? `HTTP ${res.status}`);
+        let message = `HTTP ${res.status}`;
+        try {
+          const data = await res.json();
+          message = data.error ?? message;
+        } catch {
+          // Non-JSON error body; keep the status-based message.
+        }
+        throw new Error(message);
       }
 
-      setVideoUrl(data.video ?? null);
-      setVideoBase64(data.videoBase64 ?? null);
+      // The route streams the raw video bytes; wrap them in a same-origin
+      // `blob:` URL, which the app's `media-src 'self' blob: data:` CSP permits.
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      objectUrlRef.current = url;
+      setVideoUrl(url);
       setState('done');
     } catch (err) {
-      clearTimeout(timeoutId);
+      console.error('[video-generator] Error:', err);
       clearTimer();
       setError(err instanceof Error ? err.message : 'Unknown error');
       setState('error');
     }
   };
 
-  const videoSrc = videoUrl ?? (videoBase64 ? `data:video/mp4;base64,${videoBase64}` : null);
+  const videoSrc = videoUrl;
 
   return (
     <div className={`bg-white/5 rounded-2xl border border-white/10 p-6 ${className}`}>
