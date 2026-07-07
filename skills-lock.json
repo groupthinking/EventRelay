@@ -97,7 +97,7 @@
       "skillPath": "src/skills/content_generation/main.py",
       "className": "ContentGenerationSkill",
       "version": "1.0.0",
-      "triggers": ["video_published", "manual"],
+      "triggers": ["video_published"],
       "dependencies": ["gemini_service"]
     },
     "seo-optimizer": {

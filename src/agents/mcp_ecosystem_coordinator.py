@@ -322,25 +322,8 @@ class SkillRegistry:
 
         logger.info("Loaded %d GTM skills from %s", len(self._skills), self._lock_path)
 
-    def list_skills(self) -> list[dict[str, Any]]:
-        """Return metadata for all registered GTM skills."""
-        result = []
-        for skill_id, meta in self._skills.items():
-            result.append({
-                "id": skill_id,
-                "name": meta.get("className", skill_id),
-                "version": meta.get("version", "0.0.0"),
-                "triggers": meta.get("triggers", []),
-                "dependencies": meta.get("dependencies", []),
-                "entry_point": meta.get("skillPath", ""),
-            })
-        return result
-
-    def get_skill(self, skill_id: str) -> Optional[dict[str, Any]]:
-        """Get metadata for a specific skill."""
-        meta = self._skills.get(skill_id)
-        if meta is None:
-            return None
+    def _build_skill_metadata(self, skill_id: str, meta: dict[str, Any]) -> dict[str, Any]:
+        """Build a normalized metadata dict for a skill entry."""
         return {
             "id": skill_id,
             "name": meta.get("className", skill_id),
@@ -350,20 +333,27 @@ class SkillRegistry:
             "entry_point": meta.get("skillPath", ""),
         }
 
+    def list_skills(self) -> list[dict[str, Any]]:
+        """Return metadata for all registered GTM skills."""
+        return [
+            self._build_skill_metadata(skill_id, meta)
+            for skill_id, meta in self._skills.items()
+        ]
+
+    def get_skill(self, skill_id: str) -> Optional[dict[str, Any]]:
+        """Get metadata for a specific skill."""
+        meta = self._skills.get(skill_id)
+        if meta is None:
+            return None
+        return self._build_skill_metadata(skill_id, meta)
+
     def get_skills_for_trigger(self, event_type: str) -> list[dict[str, Any]]:
         """Return all skills that match a given trigger event."""
-        matching = []
-        for skill_id, meta in self._skills.items():
-            if event_type in meta.get("triggers", []):
-                matching.append({
-                    "id": skill_id,
-                    "name": meta.get("className", skill_id),
-                    "version": meta.get("version", "0.0.0"),
-                    "triggers": meta.get("triggers", []),
-                    "dependencies": meta.get("dependencies", []),
-                    "entry_point": meta.get("skillPath", ""),
-                })
-        return matching
+        return [
+            self._build_skill_metadata(skill_id, meta)
+            for skill_id, meta in self._skills.items()
+            if event_type in meta.get("triggers", [])
+        ]
 
     def _load_skill_instance(self, skill_id: str) -> Any:
         """Dynamically import and instantiate a skill class."""
@@ -378,7 +368,7 @@ class SkillRegistry:
         class_name = meta["className"]  # e.g. "ContentGenerationSkill"
 
         # Convert file path to module path
-        module_path = skill_path.replace("/", ".").replace(".py", "")
+        module_path = skill_path.replace("/", ".").removesuffix(".py")
         # Strip leading "src." if present since src is on sys.path
         if module_path.startswith("src."):
             module_path = module_path[4:]
