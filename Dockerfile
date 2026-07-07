@@ -38,6 +38,8 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # Install the apps/web production workspace dependencies using the root lockfile
 COPY package.json package-lock.json .npmrc ./
 COPY apps/web/package.json ./apps/web/package.json
+# apps/web depends on @dataconnect/generated via a local file: reference, so the
+# generated source must exist before npm resolves the workspace dependency tree.
 COPY apps/web/src/dataconnect-generated ./apps/web/src/dataconnect-generated
 RUN npm ci --workspace apps/web --omit=dev --ignore-scripts
 

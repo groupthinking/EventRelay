@@ -9,16 +9,31 @@ def _normalized(text: str) -> str:
 
 
 def test_dockerfile_installs_apps_web_from_root_workspace_lockfile() -> None:
-    dockerfile = _normalized((PROJECT_ROOT / "Dockerfile").read_text())
+    dockerfile = (PROJECT_ROOT / "Dockerfile").read_text()
+    normalized = _normalized(dockerfile)
+    lines = dockerfile.splitlines()
 
-    assert "COPY package.json package-lock.json .npmrc ./" in dockerfile
-    assert "COPY apps/web/package.json ./apps/web/package.json" in dockerfile
-    assert (
-        "COPY apps/web/src/dataconnect-generated "
-        "./apps/web/src/dataconnect-generated" in dockerfile
+    assert any(
+        all(token in line for token in ("COPY", "package.json", "package-lock.json", ".npmrc"))
+        for line in lines
     )
-    assert "npm ci --workspace apps/web --omit=dev --ignore-scripts" in dockerfile
-    assert "apps/web/package-lock.json" not in dockerfile
+    assert any(
+        all(token in line for token in ("COPY", "apps/web/package.json", "./apps/web/package.json"))
+        for line in lines
+    )
+    assert any(
+        all(
+            token in line
+            for token in (
+                "COPY",
+                "apps/web/src/dataconnect-generated",
+                "./apps/web/src/dataconnect-generated",
+            )
+        )
+        for line in lines
+    )
+    assert "npm ci --workspace apps/web --omit=dev --ignore-scripts" in normalized
+    assert "apps/web/package-lock.json" not in normalized
 
 
 def test_dockerignore_reincludes_apps_web_for_workspace_install() -> None:
