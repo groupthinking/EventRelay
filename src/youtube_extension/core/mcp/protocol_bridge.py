@@ -597,12 +597,14 @@ class AnthropicAdapter(ProtocolAdapter):
             }
 
     async def health_check(self) -> bool:
-        """Check Anthropic API reachability."""
+        """Check Anthropic API reachability without consuming tokens."""
         if not getattr(self, "api_key", None):
             return False
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
-                # Use a minimal request to check reachability
+                # Send intentionally invalid payload (empty messages) to test
+                # reachability without generating tokens. A 400 confirms the
+                # API is reachable; only network errors indicate unavailability.
                 resp = await client.post(
                     f"{self.base_url}/v1/messages",
                     headers={
@@ -610,9 +612,10 @@ class AnthropicAdapter(ProtocolAdapter):
                         "anthropic-version": "2023-06-01",
                         "content-type": "application/json",
                     },
-                    json={"model": self.model, "max_tokens": 1, "messages": [{"role": "user", "content": "hi"}]},
+                    json={"model": self.model, "max_tokens": 1, "messages": []},
                 )
-                return resp.status_code in (200, 400)  # 400 = reachable but bad request shape
+                # 400 = reachable (invalid request rejected), 401 = bad key but reachable
+                return resp.status_code in (200, 400, 401)
         except Exception:
             return False
 
@@ -661,7 +664,7 @@ class GoogleAIAdapter(ProtocolAdapter):
             async with httpx.AsyncClient(timeout=60.0) as client:
                 model = request.get("model", getattr(self, "model", "gemini-pro"))
                 prompt = request.get("prompt", "")
-                url = f"{self.base_url}/v1beta/models/{model}:generateContent?key={self.api_key}"
+                url = f"{self.base_url}/v1beta/models/{model}:generateContent"
                 payload = {
                     "contents": [{"parts": [{"text": prompt}]}],
                     "generationConfig": {
@@ -669,7 +672,11 @@ class GoogleAIAdapter(ProtocolAdapter):
                         "maxOutputTokens": request.get("max_tokens", 4000),
                     },
                 }
-                resp = await client.post(url, json=payload)
+                resp = await client.post(
+                    url,
+                    headers={"x-goog-api-key": self.api_key},
+                    json=payload,
+                )
                 resp.raise_for_status()
                 data = resp.json()
                 candidates = data.get("candidates", [])
@@ -700,7 +707,8 @@ class GoogleAIAdapter(ProtocolAdapter):
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 resp = await client.get(
-                    f"{self.base_url}/v1beta/models?key={self.api_key}"
+                    f"{self.base_url}/v1beta/models",
+                    headers={"x-goog-api-key": self.api_key},
                 )
                 return resp.status_code == 200
         except Exception:

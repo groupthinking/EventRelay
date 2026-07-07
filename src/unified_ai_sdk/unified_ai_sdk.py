@@ -227,7 +227,7 @@ class UnifiedAISDK:
         """Call Google Gemini generateContent API."""
         client = self._get_client()
         model = request.model or "gemini-pro"
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
         payload = {
             "contents": [{"parts": [{"text": request.prompt}]}],
             "generationConfig": {
@@ -235,7 +235,11 @@ class UnifiedAISDK:
                 "maxOutputTokens": request.max_tokens,
             },
         }
-        resp = await client.post(url, json=payload)
+        resp = await client.post(
+            url,
+            headers={"x-goog-api-key": api_key},
+            json=payload,
+        )
         resp.raise_for_status()
         data = resp.json()
         candidates = data.get("candidates", [])
