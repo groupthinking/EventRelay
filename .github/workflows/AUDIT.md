@@ -21,7 +21,7 @@ concrete reason, verified against the actual repository tree.
 | `dependency-review.yml` | KEEP | PR dependency review with documented allow-lists. |
 | `deploy-cloud-run.yml` | KEEP | The real deployment path (GCP Cloud Run); manual dispatch. |
 | `deploy.yml` | **DELETE** | References a non-existent `deployments/` tree (manifests/terraform); actual infra is `infrastructure/`. The validate job hard-`exit 1`s on missing manifests. Generic multi-cloud (AWS+Azure+Slack) scaffold that duplicates `deploy-cloud-run.yml`. |
-| `e2e-tests.yml` | KEEP | Vitest E2E with PR reporting; `tests/e2e/` and `tests/failure-log.md` exist. |
+| `e2e-tests.yml` | **FIX** | Skip the PR-comment step for forked `pull_request` runs. The E2E suite itself passed, but `actions/github-script` failed with `Resource not accessible by integration` because fork PRs receive a read-only `GITHUB_TOKEN`. Same-repo PRs still get the comment. |
 | `emergency-stop.yml` | KEEP | Manual operational kill-switch with typed confirmation. |
 | `issue-triage.yml` | KEEP | Keyword auto-labeling + triage comment on new issues. |
 | `mcp-optimization.yml` | **DELETE** | Entire workflow targets `mcp-servers/mcp-profiling/` (requirements.txt, investigator_client.py, profiling_server.py) which does not exist — every run fails. |
