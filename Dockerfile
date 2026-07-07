@@ -28,7 +28,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
     fi
 
 # Node deps (production only)
-COPY apps/web/package.json apps/web/package-lock.json* apps/web/
+COPY apps/web/package.json apps/web/package-lock.json apps/web/
 RUN cd apps/web && npm ci --production --ignore-scripts
 
 # ── Stage 2: runtime ──────────────────────────────────────────────────────────
@@ -81,7 +81,7 @@ EXPOSE ${PORT}
 
 # Health check using curl (installed above)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
-    CMD curl -f http://localhost:8080/health || exit 1
+    CMD curl -f http://localhost:${PORT:-8080}/health || exit 1
 
 # Run — shell form so $PORT is expanded at runtime
 CMD python -m uvicorn youtube_extension.main:app --host 0.0.0.0 --port $PORT
