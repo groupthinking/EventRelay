@@ -476,7 +476,7 @@ class EnterpriseMCPServer:
                     )
 
                 # Check cache first
-                cache_key = f"video_content_{hashlib.md5(video_url.encode()).hexdigest()}"
+                cache_key = f"video_content_{hashlib.md5(video_url.encode(), usedforsecurity=False).hexdigest()}"
                 if cache_key in self.processing_cache and self.cache_ttl.get(cache_key, 0) > time.time():
                     self.metrics.record_counter("video_extraction.cache_hit")
                     cached_result = self.processing_cache[cache_key]

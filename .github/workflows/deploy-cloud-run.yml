@@ -15,6 +15,7 @@ on:
         default: 'staging'
 
 env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
   REGION: us-central1
   SERVICE_NAME: eventrelay-api

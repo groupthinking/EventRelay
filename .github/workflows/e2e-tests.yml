@@ -12,6 +12,7 @@ permissions:
   issues: write
 
 env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   # By default the E2E suite runs against production. To validate a PR's own
   # Vercel preview instead, two things are needed:
   #   1. Point BASE_URL at the preview — set the `E2E_BASE_URL` repository

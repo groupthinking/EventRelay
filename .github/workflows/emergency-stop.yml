@@ -12,6 +12,9 @@ concurrency:
   group: emergency-stop
   cancel-in-progress: true
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   emergency-stop:
     if: github.event.inputs.confirm_stop == 'EMERGENCY_STOP'

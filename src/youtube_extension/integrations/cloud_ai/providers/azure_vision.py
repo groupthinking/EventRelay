@@ -1,3 +1,4 @@
+import asyncio
 """
 Microsoft Azure AI Vision Integration
 
@@ -286,7 +287,7 @@ class AzureVision(BaseCloudAI):
             result = self._vision_client.get_read_result(operation_id)
             if result.status not in [OperationStatusCodes.running, OperationStatusCodes.not_started]:
                 break
-            time.sleep(1)
+            await asyncio.sleep(1)
             elapsed += 1
 
         if result.status == OperationStatusCodes.succeeded:
@@ -312,7 +313,7 @@ class AzureVision(BaseCloudAI):
             result = self._vision_client.get_read_result(operation_id)
             if result.status not in [OperationStatusCodes.running, OperationStatusCodes.not_started]:
                 break
-            time.sleep(1)
+            await asyncio.sleep(1)
 
         return {"read_result": result.analyze_result}
 

@@ -204,7 +204,7 @@ class OptimizedStrategy(ProcessorStrategy):
         Process video with all optimizations enabled
         """
         start_time = time.time()
-        processing_id = hashlib.md5(f"{video_url}_{time.time()}".encode()).hexdigest()[
+        processing_id = hashlib.md5(f"{video_url}_{time.time()}".encode(), usedforsecurity=False).hexdigest()[
             :8
         ]
 
@@ -214,7 +214,7 @@ class OptimizedStrategy(ProcessorStrategy):
 
         try:
             # Check cache first
-            cache_key = f"optimized_video:{hashlib.md5(video_url.encode()).hexdigest()}"
+            cache_key = f"optimized_video:{hashlib.md5(video_url.encode(), usedforsecurity=False).hexdigest()}"
             cached_result = await cache_get(cache_key)
 
             if cached_result and self.config.get("enable_intelligent_caching", True):
@@ -288,7 +288,7 @@ class ParallelStrategy(ProcessorStrategy):
 
             start_time = time.time()
             processing_id = hashlib.md5(
-                f"{video_url}_{time.time()}".encode()
+                f"{video_url}_{time.time()}".encode(), usedforsecurity=False
             ).hexdigest()[:8]
 
             logger.info(
