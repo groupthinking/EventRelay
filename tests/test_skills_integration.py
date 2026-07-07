@@ -1,23 +1,12 @@
-import importlib
 import json
-import sys
-import types
 from pathlib import Path
 
 import pytest
 
-
-def _load_coordinator_types():
-    stub = types.ModuleType("youtube_extension.processors.enhanced_extractor")
-    stub.EnhancedVideoExtractor = object
-    stub.VideoContent = object
-    sys.modules["youtube_extension.processors.enhanced_extractor"] = stub
-    module = importlib.import_module("src.agents.mcp_ecosystem_coordinator")
-    return module.MCPEcosystemCoordinator, module.SkillRegistry
+from src.agents.mcp_ecosystem_coordinator import MCPEcosystemCoordinator, SkillRegistry
 
 
 def test_skill_registry_discovers_gtm_skills() -> None:
-    _, SkillRegistry = _load_coordinator_types()
     repo_root = Path(__file__).resolve().parents[1]
     registry = SkillRegistry(lock_file=repo_root / "skills-lock.json")
 
@@ -34,7 +23,6 @@ def test_skill_registry_discovers_gtm_skills() -> None:
 
 
 def test_skill_registry_filters_by_trigger() -> None:
-    _, SkillRegistry = _load_coordinator_types()
     repo_root = Path(__file__).resolve().parents[1]
     registry = SkillRegistry(lock_file=repo_root / "skills-lock.json")
 
@@ -44,12 +32,12 @@ def test_skill_registry_filters_by_trigger() -> None:
 
 @pytest.mark.asyncio
 async def test_skill_invocation_passes_explicit_env(tmp_path: Path) -> None:
-    MCPEcosystemCoordinator, SkillRegistry = _load_coordinator_types()
     skill_script = tmp_path / "skill_main.py"
     skill_script.write_text(
-        "import json, os, sys\n"
-        "payload = json.loads(sys.stdin.read() or '{}')\n"
-        "print(json.dumps({'status': 'success', 'payload': payload, 'env': os.getenv('GEMINI_API_KEY')}))\n"
+        """import json, os, sys
+payload = json.loads(sys.stdin.read() or "{}")
+print(json.dumps({"status": "success", "payload": payload, "env": os.getenv("GEMINI_API_KEY")}))
+"""
     )
 
     lock_file = tmp_path / "skills-lock.json"

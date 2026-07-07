@@ -13,7 +13,10 @@ import os
 import sys
 from dataclasses import asdict
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from youtube_extension.processors.enhanced_extractor import VideoContent
 
 # Add src/mcp to path for imports
 # REMOVED: sys.path.append removed
@@ -74,7 +77,7 @@ class MCPVideoProcessorServer(BaseMCPServer):
                 # Note: process_video expects a URL usually, but if ID is passed, we might need to construct URL
                 # or ensure process_video handles IDs (it extracts ID from URL, so URL is safer)
                 video_url = f"https://www.youtube.com/watch?v={video_id}"
-                content: Any = await self.extractor.process_video(video_url)
+                content: VideoContent = await self.extractor.process_video(video_url)
 
                 return {
                     "status": "success",
@@ -175,21 +178,17 @@ class SkillRegistry:
             return
 
         data = json.loads(self.lock_file.read_text())
-        if isinstance(data.get("eventrelay_skills"), list):
-            self._skills = data["eventrelay_skills"]
-            return
-
-        skills_data = data.get("skills", [])
-        if isinstance(skills_data, dict) and isinstance(
-            skills_data.get("eventrelay_skills"), list
-        ):
-            self._skills = skills_data["eventrelay_skills"]
-            return
-
-        if isinstance(skills_data, list):
-            self._skills = skills_data
-            return
-
+        candidates = [
+            data.get("eventrelay_skills"),
+            data.get("skills"),
+            data.get("skills", {}).get("eventrelay_skills")
+            if isinstance(data.get("skills"), dict)
+            else None,
+        ]
+        for candidate in candidates:
+            if isinstance(candidate, list):
+                self._skills = candidate
+                return
         self._skills = []
 
     def list_skills(self, trigger: str | None = None) -> list[dict[str, Any]]:
@@ -262,6 +261,19 @@ class MCPEcosystemCoordinator:
 
         required_env_vars = skill.get("required_env_vars", [])
         explicit_env = self._build_skill_env(required_env_vars, env_vars or {})
+        missing_env_vars = [
+            var_name for var_name in required_env_vars if var_name not in explicit_env
+        ]
+        if missing_env_vars:
+            return {
+                "status": "error",
+                "message": f"Missing required env vars for skill '{skill_id}': {missing_env_vars}",
+            }
+
+        try:
+            encoded_payload = json.dumps(payload).encode("utf-8")
+        except TypeError as e:
+            return {"status": "error", "message": f"Failed to serialize skill payload to JSON: {e}"}
 
         process = await asyncio.create_subprocess_exec(
             sys.executable,
@@ -271,7 +283,7 @@ class MCPEcosystemCoordinator:
             stderr=asyncio.subprocess.PIPE,
             env=explicit_env,
         )
-        stdout, stderr = await process.communicate(json.dumps(payload).encode("utf-8"))
+        stdout, stderr = await process.communicate(encoded_payload)
 
         if process.returncode != 0:
             return {
@@ -287,12 +299,19 @@ class MCPEcosystemCoordinator:
     def _build_skill_env(
         self, required_env_vars: list[str], env_vars: dict[str, str]
     ) -> dict[str, str]:
-        explicit_env = {"PATH": os.getenv("PATH", "")}
+        explicit_env = {}
+        # Essential system variables needed by Python subprocesses.
+        for var_name in ("PATH", "HOME", "USER", "PYTHONPATH"):
+            var_value = os.getenv(var_name)
+            if var_value:
+                explicit_env[var_name] = var_value
         for var_name in required_env_vars:
             if var_name in env_vars:
                 explicit_env[var_name] = env_vars[var_name]
-            elif os.getenv(var_name):
-                explicit_env[var_name] = os.getenv(var_name, "")
+            else:
+                var_value = os.getenv(var_name)
+                if var_value:
+                    explicit_env[var_name] = var_value
         return explicit_env
 
     async def dispatch_request(self, server_name: str, request: dict) -> dict:

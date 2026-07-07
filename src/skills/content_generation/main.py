@@ -5,11 +5,14 @@ import json
 import sys
 from typing import Any
 
+SKILL_ID = "content-generation"
+
 
 def run(payload: dict[str, Any]) -> dict[str, Any]:
+    """Execute the skill wrapper with a JSON-serializable payload."""
     return {
         "status": "success",
-        "skill": __name__.split(".")[-2],
+        "skill": SKILL_ID,
         "payload": payload,
     }
 
