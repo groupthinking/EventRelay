@@ -70,12 +70,12 @@ jobs:
             const isCompleted = (match) => match[1].toLowerCase() === 'x';
             const completedTasks = taskMatches.filter(isCompleted);
             const maxOpenTasksToShow = 10;
-            const openTaskCount = taskMatches.length - completedTasks.length;
+            const completed = completedTasks.length;
+            const openTaskCount = total - completed;
             const openTasks = taskMatches
               .filter((match) => !isCompleted(match))
               .map((match) => `- [ ] ${match[2]}`)
               .slice(0, maxOpenTasksToShow);
-            const completed = completedTasks.length;
             const progressPercent = Math.round((completed / total) * 100);
             const done = completed === total;
 
@@ -133,4 +133,6 @@ jobs:
                 issue_number: issue.number,
                 state: 'closed',
               });
+            } else if (done) {
+              core.info(`Issue #${issue.number} is already closed.`);
             }
