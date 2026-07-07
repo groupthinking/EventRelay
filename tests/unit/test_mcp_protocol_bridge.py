@@ -676,7 +676,10 @@ class TestOpenAIAdapter:
         adapter = OpenAIAdapter()
         assert adapter.protocol_type == ProtocolType.OPENAI
 
-    async def test_initialize_returns_false_without_api_key(self):
+    async def test_initialize_returns_false_without_api_key(self, monkeypatch):
+        # Ensure no key leaks in from the CI/runner environment so this asserts
+        # the "no key provided anywhere" path deterministically.
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
         adapter = OpenAIAdapter()
         result = await adapter.initialize({})
         assert result is False
@@ -837,7 +840,10 @@ class TestAnthropicAdapter:
         adapter = AnthropicAdapter()
         assert adapter.protocol_type == ProtocolType.ANTHROPIC
 
-    async def test_initialize_returns_false_without_api_key(self):
+    async def test_initialize_returns_false_without_api_key(self, monkeypatch):
+        # Ensure no key leaks in from the CI/runner environment so this asserts
+        # the "no key provided anywhere" path deterministically.
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
         adapter = AnthropicAdapter()
         result = await adapter.initialize({})
         assert result is False
@@ -959,7 +965,10 @@ class TestGoogleAIAdapter:
         adapter = GoogleAIAdapter()
         assert adapter.protocol_type == ProtocolType.GOOGLE_AI
 
-    async def test_initialize_returns_false_without_api_key(self):
+    async def test_initialize_returns_false_without_api_key(self, monkeypatch):
+        # Ensure no key leaks in from the CI/runner environment so this asserts
+        # the "no key provided anywhere" path deterministically.
+        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
         adapter = GoogleAIAdapter()
         result = await adapter.initialize({})
         assert result is False
