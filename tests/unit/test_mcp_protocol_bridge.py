@@ -760,6 +760,7 @@ class TestOpenAIAdapter:
 
         openai_mod = _types.ModuleType("openai")
         openai_mod.AsyncOpenAI = MagicMock(return_value=client)
+        openai_mod.APIError = RuntimeError
         monkeypatch.setitem(sys.modules, "openai", openai_mod)
 
         adapter = OpenAIAdapter()
@@ -841,6 +842,7 @@ class TestAnthropicAdapter:
 
         anthropic_mod = _types.ModuleType("anthropic")
         anthropic_mod.AsyncAnthropic = MagicMock(return_value=client)
+        anthropic_mod.APIError = RuntimeError
         monkeypatch.setitem(sys.modules, "anthropic", anthropic_mod)
 
         adapter = AnthropicAdapter()
@@ -912,10 +914,16 @@ class TestGoogleAIAdapter:
 
         google_mod = _types.ModuleType("google")
         genai_mod = _types.ModuleType("google.genai")
+        api_core_mod = _types.ModuleType("google.api_core")
+        exceptions_mod = _types.ModuleType("google.api_core.exceptions")
+        exceptions_mod.GoogleAPIError = RuntimeError
+        api_core_mod.exceptions = exceptions_mod
         genai_mod.Client = MagicMock(return_value=client)
         google_mod.genai = genai_mod
         monkeypatch.setitem(sys.modules, "google", google_mod)
         monkeypatch.setitem(sys.modules, "google.genai", genai_mod)
+        monkeypatch.setitem(sys.modules, "google.api_core", api_core_mod)
+        monkeypatch.setitem(sys.modules, "google.api_core.exceptions", exceptions_mod)
 
         adapter = GoogleAIAdapter()
         await adapter.initialize({"api_key": "google-key"})

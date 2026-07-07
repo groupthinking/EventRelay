@@ -53,7 +53,10 @@ def _get_request_prompt(request: dict[str, Any]) -> str:
                 prompt = message["content"]
                 break
     if prompt is None:
-        raise ValueError("Request must include 'prompt', 'content', 'input', or 'messages'")
+        raise ValueError(
+            "Request missing required prompt field: must include one of "
+            "prompt, content, input, or messages with user role"
+        )
     return str(prompt)
 
 
@@ -492,13 +495,16 @@ class OpenAIAdapter(ProtocolAdapter):
             raise RuntimeError("OpenAI adapter is not initialized")
 
         try:
+            import openai
+        except ImportError as exc:
+            logger.exception("OpenAI SDK is not available for context %s", context.id)
+            raise RuntimeError(
+                "OpenAI SDK is not installed. Install with: pip install openai"
+            ) from exc
+
+        try:
             if self._client is None:
-                import openai
-
-                self._client = openai.AsyncOpenAI(
-                    api_key=self.api_key, base_url=self.base_url
-                )
-
+                self._client = openai.AsyncOpenAI(api_key=self.api_key, base_url=self.base_url)
             response = await asyncio.wait_for(
                 self._client.chat.completions.create(
                     model=request.get("model", self.model),
@@ -508,7 +514,7 @@ class OpenAIAdapter(ProtocolAdapter):
                 ),
                 timeout=float(request.get("timeout", 60)),
             )
-        except Exception:
+        except (asyncio.TimeoutError, openai.APIError):
             logger.exception("OpenAI protocol request failed for context %s", context.id)
             raise
 
@@ -560,11 +566,16 @@ class AnthropicAdapter(ProtocolAdapter):
             raise RuntimeError("Anthropic adapter is not initialized")
 
         try:
+            import anthropic
+        except ImportError as exc:
+            logger.exception("Anthropic SDK is not available for context %s", context.id)
+            raise RuntimeError(
+                "Anthropic SDK is not installed. Install with: pip install anthropic"
+            ) from exc
+
+        try:
             if self._client is None:
-                import anthropic
-
                 self._client = anthropic.AsyncAnthropic(api_key=self.api_key)
-
             response = await asyncio.wait_for(
                 self._client.messages.create(
                     model=request.get("model", self.model),
@@ -575,17 +586,17 @@ class AnthropicAdapter(ProtocolAdapter):
                 ),
                 timeout=float(request.get("timeout", 60)),
             )
-        except Exception:
+        except (asyncio.TimeoutError, anthropic.APIError):
             logger.exception("Anthropic protocol request failed for context %s", context.id)
             raise
 
-        text_blocks = [block.text for block in response.content if block.type == "text"]
+        text_contents = [block.text for block in response.content if block.type == "text"]
         return {
             "protocol": "anthropic",
             "context_id": context.id,
             "id": getattr(response, "id", None),
             "model": getattr(response, "model", request.get("model", self.model)),
-            "response": "\n".join(text_blocks),
+            "response": "\n".join(text_contents),
             "usage": {
                 "input_tokens": getattr(response.usage, "input_tokens", None),
                 "output_tokens": getattr(response.usage, "output_tokens", None),
@@ -630,27 +641,34 @@ class GoogleAIAdapter(ProtocolAdapter):
             raise RuntimeError("Google AI adapter is not initialized")
 
         try:
-            if self._client is None:
-                from google import genai
+            from google import genai
+            from google.api_core import exceptions as google_api_exceptions
+        except ImportError as exc:
+            logger.exception("Google AI SDK is not available for context %s", context.id)
+            raise RuntimeError(
+                "Google AI SDK is not installed. Install with: pip install google-genai"
+            ) from exc
 
+        try:
+            if self._client is None:
                 self._client = genai.Client(api_key=self.api_key)
 
-            config: dict[str, Any] = {}
+            generation_config: dict[str, Any] = {}
             if "temperature" in request:
-                config["temperature"] = request["temperature"]
+                generation_config["temperature"] = request["temperature"]
             if "max_tokens" in request:
-                config["max_output_tokens"] = request["max_tokens"]
+                generation_config["max_output_tokens"] = request["max_tokens"]
 
             response = await asyncio.wait_for(
                 asyncio.to_thread(
                     self._client.models.generate_content,
                     model=request.get("model", self.model),
                     contents=request.get("contents", _get_request_prompt(request)),
-                    config=config or None,
+                    config=generation_config or None,
                 ),
                 timeout=float(request.get("timeout", 60)),
             )
-        except Exception:
+        except (asyncio.TimeoutError, google_api_exceptions.GoogleAPIError):
             logger.exception("Google AI protocol request failed for context %s", context.id)
             raise
 
