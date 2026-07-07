@@ -19,6 +19,7 @@ workflow; this README is the index.
 | Auto Label | `auto-label.yml` | PR opened/reopened/synchronize | Label PRs by changed file type (docs, tests, python, etc.) |
 | Auto-Assign Issues | `auto-assign.yml` | issue opened | Assign new issues to the repository owner |
 | Issue Triage | `issue-triage.yml` | issue opened | Auto-label new issues by keyword and post a triage comment |
+| Phase Goal Tracker | `phase-goal-tracker.yml` | issue opened/edited/reopened; manual | Track phase checklist progress, comment status, auto-close when complete |
 | Bulk Issue Processor | `bulk-issue-processor.yml` | manual | Bulk label / summarize / close-stale across many issues |
 | Close stale issues | `stale.yml` | daily (00:00 UTC) | Mark and close stale issues and PRs |
 | Branch Cleanup | `branch-cleanup.yml` | manual | Gated archive-then-delete of branches (dry-run by default) |
