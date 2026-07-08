@@ -22,8 +22,15 @@ T = TypeVar("T")
 # or a leading-dash token (--config-locations=...) must NOT reach the yt-dlp /
 # pytube fetch layer. See adversarial audit: unvalidated video_url → SSRF + CWE-88
 # argument injection.
+#
+# The optional (?:www|m|music)\. subdomain group admits the mobile (m.youtube.com)
+# and music (music.youtube.com) hosts — both serve the canonical /watch?v= path —
+# while re.IGNORECASE tolerates uppercase schemes/hosts. The pattern stays anchored
+# to the youtube.com/youtu.be family + an 11-char id, so this only broadens which
+# *legitimate* YouTube URLs pass; non-YouTube hosts are still rejected.
 _YOUTUBE_URL_REGEX = re.compile(
-    r"^(https?://)?(www\.)?(youtube\.com/watch\?v=|youtu\.be/|youtube\.com/embed/|youtube\.com/shorts/)[a-zA-Z0-9_-]{11}"
+    r"^(https?://)?(?:www\.|m\.|music\.)?(youtube\.com/watch\?v=|youtu\.be/|youtube\.com/embed/|youtube\.com/shorts/)[a-zA-Z0-9_-]{11}",
+    re.IGNORECASE,
 )
 
 
@@ -82,10 +89,7 @@ class VideoProcessJobRequest(BaseModel):
 
     @validator("video_url")
     def validate_video_url(cls, value: str) -> str:
-        youtube_regex = re.compile(
-            r"^(https?://)?(www\.)?(youtube\.com/watch\?v=|youtu\.be/|youtube\.com/embed/)[a-zA-Z0-9_-]{11}"
-        )
-        if not youtube_regex.match(value):
+        if not _YOUTUBE_URL_REGEX.match(value):
             raise ValueError("Invalid YouTube URL format")
         return value
 
@@ -257,10 +261,7 @@ class VideoProcessingRequest(BaseModel):
     @validator("video_url")
     def validate_video_url(cls, value: str) -> str:
         """Validate YouTube URL format"""
-        youtube_regex = re.compile(
-            r"^(https?://)?(www\.)?(youtube\.com/watch\?v=|youtu\.be/|youtube\.com/embed/)[a-zA-Z0-9_-]{11}"
-        )
-        if not youtube_regex.match(value):
+        if not _YOUTUBE_URL_REGEX.match(value):
             raise ValueError("Invalid YouTube URL format")
         return value
 
@@ -309,10 +310,7 @@ class MarkdownRequest(BaseModel):
     @validator("video_url")
     def validate_video_url(cls, value: str) -> str:
         """Validate YouTube URL format"""
-        youtube_regex = re.compile(
-            r"^(https?://)?(www\.)?(youtube\.com/watch\?v=|youtu\.be/|youtube\.com/embed/)[a-zA-Z0-9_-]{11}"
-        )
-        if not youtube_regex.match(value):
+        if not _YOUTUBE_URL_REGEX.match(value):
             raise ValueError("Invalid YouTube URL format")
         return value
 
@@ -377,10 +375,7 @@ class VideoToSoftwareRequest(BaseModel):
     @validator("video_url", pre=True)
     def validate_video_url(cls, value: str) -> str:
         """Validate YouTube URL format"""
-        youtube_regex = re.compile(
-            r"^(https?://)?(www\.)?(youtube\.com/watch\?v=|youtu\.be/|youtube\.com/embed/)[a-zA-Z0-9_-]{11}"
-        )
-        if not youtube_regex.match(value):
+        if not _YOUTUBE_URL_REGEX.match(value):
             raise ValueError("Invalid YouTube URL format")
         return value
 
