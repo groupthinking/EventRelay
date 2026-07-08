@@ -431,10 +431,17 @@ class MCPBridge:
                 agents, request, primary_result
             )
 
+            # Reflect the real collaboration outcome instead of a blanket
+            # "success". Orchestration is currently unimplemented (returns
+            # "unavailable"), and reporting success here would earn an
+            # undeserved quality-score bonus in _calculate_quality_score for a
+            # collaboration that never ran (REAL_MODE_ONLY policy).
+            collaboration_status = collaboration_result.get("status", "unavailable")
+
             return {
                 "agents_involved": [agent.agent_id for agent in agents],
                 "collaboration_result": collaboration_result,
-                "status": "success",
+                "status": collaboration_status,
             }
 
         except Exception as e:
