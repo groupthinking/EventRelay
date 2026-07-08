@@ -23,13 +23,15 @@ T = TypeVar("T")
 # pytube fetch layer. See adversarial audit: unvalidated video_url → SSRF + CWE-88
 # argument injection.
 #
-# The optional (?:www|m|music)\. subdomain group admits the mobile (m.youtube.com)
-# and music (music.youtube.com) hosts — both serve the canonical /watch?v= path —
-# while re.IGNORECASE tolerates uppercase schemes/hosts. The pattern stays anchored
-# to the youtube.com/youtu.be family + an 11-char id, so this only broadens which
-# *legitimate* YouTube URLs pass; non-YouTube hosts are still rejected.
+# The (?:www|m|music)\. subdomain group is scoped to the youtube.com host so the
+# mobile (m.youtube.com) and music (music.youtube.com) front-ends — both serve the
+# canonical /watch?v= path — are admitted, while youtu.be (which only has an
+# optional www) does NOT gain fabricated m./music. subdomains. re.IGNORECASE
+# tolerates uppercase schemes/hosts. The pattern stays anchored to the
+# youtube.com/youtu.be family + an 11-char id, so only *legitimate* YouTube URLs
+# pass; non-YouTube hosts are still rejected.
 _YOUTUBE_URL_REGEX = re.compile(
-    r"^(https?://)?(?:www\.|m\.|music\.)?(youtube\.com/watch\?v=|youtu\.be/|youtube\.com/embed/|youtube\.com/shorts/)[a-zA-Z0-9_-]{11}",
+    r"^(https?://)?((?:www\.|m\.|music\.)?youtube\.com/(?:watch\?v=|embed/|shorts/)|(?:www\.)?youtu\.be/)[a-zA-Z0-9_-]{11}",
     re.IGNORECASE,
 )
 

@@ -318,6 +318,8 @@ class TestTranscriptActionRequest:
             "--config-locations=/etc/passwd",  # CWE-88: arg injection
             "https://vimeo.com/123456789",  # non-YouTube host
             "https://not-youtube.com/watch?v=12345678901",
+            "https://m.youtu.be/auJzb1D-fag",  # fabricated youtu.be subdomain
+            "https://music.youtu.be/auJzb1D-fag",  # fabricated youtu.be subdomain
         ],
     )
     def test_non_youtube_and_injection_urls_rejected(self, url):
