@@ -375,7 +375,11 @@ class VideoToSoftwareRequest(BaseModel):
     @validator("video_url", pre=True)
     def validate_video_url(cls, value: str) -> str:
         """Validate YouTube URL format"""
-        if not _YOUTUBE_URL_REGEX.match(value):
+        # pre=True runs on the raw payload before coercion, so a non-str value
+        # (e.g. {"url": 123}) would raise TypeError inside re.match and, under
+        # Pydantic v2, propagate as a 500. Reject it as a normal validation
+        # error (422) instead.
+        if not isinstance(value, str) or not _YOUTUBE_URL_REGEX.match(value):
             raise ValueError("Invalid YouTube URL format")
         return value
 

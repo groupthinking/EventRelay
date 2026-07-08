@@ -214,6 +214,12 @@ class TestVideoToSoftwareRequest:
         with pytest.raises(ValidationError):
             VideoToSoftwareRequest(url="https://not-youtube.com/video/123")
 
+    def test_non_string_url_is_validation_error_not_500(self):
+        # pre=True validator sees the raw payload; a non-str must surface as a
+        # ValidationError (422), never a bare TypeError (500).
+        with pytest.raises(ValidationError, match="Invalid YouTube URL"):
+            VideoToSoftwareRequest(url=123)
+
     def test_features_default_to_empty_list(self):
         req = VideoToSoftwareRequest(url=self._VALID_URL)
         assert req.features == []
