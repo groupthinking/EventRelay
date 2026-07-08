@@ -128,7 +128,7 @@ gh pr close 560   # dazzling-edison orphan — regresses sentry/otel/tailwind/ty
 gh pr close 562   # dazzling-edison orphan — regresses sentry/otel/types-node/zustand
 
 # 4. Rebase the small survivor
-git fetch origin <#555 branch> && git rebase origin/main   # then it becomes CI-checkable
+gh pr checkout 555 && git rebase origin/main && git push --force-with-lease   # then it becomes CI-checkable
 
 # 5. Older set — owner review: #327 (rebase), #365 (fork), #414 (vs draft #539/#540)
 ```
