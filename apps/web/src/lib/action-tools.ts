@@ -398,6 +398,11 @@ const dispatchSubagents: ActionTool = {
     const summary = failures.length
       ? `Dispatched ${count} subagent(s) for: ${parentTask} (${failures.length} failed: ${failures.join('; ')})`
       : `Dispatched ${count} subagent(s) for: ${parentTask}`;
+    // Partial-success semantics: on a mix of successes and failures we still
+    // return the successful `dispatches` in `data`, but set `isError: true` so
+    // the failures aren't silently swallowed. Callers that care about partial
+    // success should inspect `data.dispatches`/`summary` rather than `isError`
+    // alone.
     return { summary, data: { dispatches }, isError: failures.length > 0 };
   },
 };

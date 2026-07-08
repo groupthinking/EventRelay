@@ -2245,3 +2245,36 @@ class TestAdditionalErrorPaths:
             resp = client.post("/api/v1/feedback", json=payload)
         # Should succeed even if ml client fails
         assert resp.status_code == 200
+
+
+class TestRunAgentStatus:
+    """_run_agent must reflect execute_single's outcome in the execution status.
+
+    execute_single reports agent-level failures by returning an {"error": ...}
+    dict rather than raising, so the status must be derived from the result —
+    not unconditionally set to complete.
+    """
+
+    @staticmethod
+    def _execution():
+        return AgentExecution(
+            agent_type="analyzer", status=AgentStatus.queued, event_id="e1"
+        )
+
+    def test_error_dict_marks_execution_failed(self):
+        execution = self._execution()
+        orch = MagicMock()
+        orch.execute_single = AsyncMock(return_value={"error": "agent boom"})
+        with patch.object(router_module, "_shared_orchestrator", orch):
+            asyncio.run(router_module._run_agent(execution, [{"id": "e1"}]))
+        assert execution.status == AgentStatus.failed
+        assert "agent boom" in (execution.error or "")
+
+    def test_success_dict_marks_execution_complete(self):
+        execution = self._execution()
+        orch = MagicMock()
+        orch.execute_single = AsyncMock(return_value={"output": "done"})
+        with patch.object(router_module, "_shared_orchestrator", orch):
+            asyncio.run(router_module._run_agent(execution, [{"id": "e1"}]))
+        assert execution.status == AgentStatus.complete
+        assert execution.result == {"output": "done"}
