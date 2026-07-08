@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+import { resolveTrustedBillingEmail } from '@/lib/billing/billing-context';
+import { isProSubscriber } from '@/lib/billing/entitlement-store';
 
 export const runtime = 'nodejs'; // streams/buffers the gateway video bytes through
 export const maxDuration = 300; // 5 minutes — video generation takes time
@@ -41,6 +43,24 @@ function checkRateLimit(ip: string): boolean {
 }
 
 export async function POST(request: Request) {
+  // Veo-3.1 is the most expensive AI operation in the app. Gate it behind the
+  // Pro entitlement like the other paid routes (agents/dispatch), so an
+  // unauthenticated caller cannot run up video-generation spend — the per-IP
+  // in-memory limiter below is per-instance and defeated by autoscaling + IP
+  // rotation, so it is a secondary control, not the paywall.
+  const billingEmail = await resolveTrustedBillingEmail(request);
+  const isPro = await isProSubscriber(billingEmail);
+  if (!isPro) {
+    return NextResponse.json(
+      {
+        error: 'Video generation is a Pro feature. Upgrade at /pricing.',
+        upgradeRequired: true,
+        plan: 'free',
+      },
+      { status: 402 }
+    );
+  }
+
   const apiKey = process.env.AI_GATEWAY_API_KEY;
   if (!apiKey) {
     return NextResponse.json(
