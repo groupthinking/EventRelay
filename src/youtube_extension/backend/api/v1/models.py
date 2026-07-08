@@ -17,6 +17,15 @@ from pydantic import BaseModel, ConfigDict, Field, validator
 
 T = TypeVar("T")
 
+# Anchored YouTube-host allowlist. Shared so every video_url field enforces the
+# same host restriction — an arbitrary host (e.g. http://169.254.169.254/<11ch>)
+# or a leading-dash token (--config-locations=...) must NOT reach the yt-dlp /
+# pytube fetch layer. See adversarial audit: unvalidated video_url → SSRF + CWE-88
+# argument injection.
+_YOUTUBE_URL_REGEX = re.compile(
+    r"^(https?://)?(www\.)?(youtube\.com/watch\?v=|youtu\.be/|youtube\.com/embed/|youtube\.com/shorts/)[a-zA-Z0-9_-]{11}"
+)
+
 
 # ============ Standardized API Response Wrapper ============
 
@@ -26,7 +35,9 @@ class ApiResponse(BaseModel, Generic[T]):
 
     status: str = Field(..., description="'success' or 'error'")
     data: Optional[T] = Field(None, description="Response payload")
-    error: Optional[str] = Field(None, description="Error message (when status='error')")
+    error: Optional[str] = Field(
+        None, description="Error message (when status='error')"
+    )
     detail: Optional[str] = Field(None, description="Additional error detail")
     timestamp: datetime = Field(default_factory=datetime.utcnow)
     request_id: str = Field(default_factory=lambda: f"req_{uuid.uuid4().hex[:12]}")
@@ -145,7 +156,10 @@ class AgentDispatchRequest(BaseModel):
 
     job_id: Optional[str] = None
     events: list[dict[str, Any]] = Field(default_factory=list)
-    transcript: Optional[str] = Field(None, description="Transcript text — events will be auto-extracted if events list is empty")
+    transcript: Optional[str] = Field(
+        None,
+        description="Transcript text — events will be auto-extracted if events list is empty",
+    )
     agent_types: Optional[list[str]] = Field(
         None, description="Specific agent types to dispatch"
     )
@@ -192,6 +206,16 @@ class ChatRequest(BaseModel):
     context: Optional[str] = Field("tooltip-assistant", description="Chat context")
     session_id: Optional[str] = Field("default", description="Session identifier")
     history: Optional[list[dict[str, str]]] = Field(None, description="Chat history")
+
+    @validator("video_url")
+    def validate_video_url(cls, value: Optional[str]) -> Optional[str]:
+        # Optional field: allow None, but any provided URL must be a real
+        # YouTube host — blocks SSRF / yt-dlp arg-injection via /api/v1/chat.
+        if value is None:
+            return value
+        if not _YOUTUBE_URL_REGEX.match(value):
+            raise ValueError("Invalid YouTube URL format")
+        return value
 
     class Config:
         populate_by_name = True
@@ -604,6 +628,14 @@ class TranscriptActionRequest(BaseModel):
         description="Optional Gemini video metadata controls (clip window, fps, resolution)",
     )
 
+    @validator("video_url")
+    def validate_video_url(cls, value: str) -> str:
+        # Anchored YouTube-host allowlist — blocks SSRF / yt-dlp arg-injection
+        # via arbitrary hosts. Matches the sibling video request models.
+        if not _YOUTUBE_URL_REGEX.match(value):
+            raise ValueError("Invalid YouTube URL format")
+        return value
+
 
 class TranscriptActionResponse(BaseModel):
     """Response model for transcript-to-action workflow"""
@@ -625,7 +657,9 @@ class TranscriptActionResponse(BaseModel):
 class KnowledgeIngestRequest(BaseModel):
     """Request model for knowledge ingest."""
 
-    text: str = Field(..., description="Non-empty transcript-derived insight or durable fact")
+    text: str = Field(
+        ..., description="Non-empty transcript-derived insight or durable fact"
+    )
     tags: Optional[Any] = Field(
         default=None, description="Optional topic tags; normalized server-side"
     )
