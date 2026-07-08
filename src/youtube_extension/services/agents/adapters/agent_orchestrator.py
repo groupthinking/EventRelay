@@ -10,6 +10,7 @@ parallel processing, and intelligent routing.
 import asyncio
 import logging
 import uuid
+from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Optional
@@ -60,7 +61,10 @@ class AgentOrchestrator:
         self.logger = logging.getLogger("agent_orchestrator")
         self._agents: dict[str, BaseAgent] = {}
         self._agent_types: dict[str, type[BaseAgent]] = {}
-        self._a2a_log: list[A2AContextMessage] = []
+        # Bounded: the module-level `orchestrator` singleton lives for the whole
+        # process and every dispatch appends here, so an unbounded list would
+        # grow without limit. maxlen evicts the oldest entries automatically.
+        self._a2a_log: deque[A2AContextMessage] = deque(maxlen=1000)
         self._task_mappings: dict[str, list[str]] = {
             "video_analysis": [
                 "video_master",
@@ -460,7 +464,9 @@ class AgentOrchestrator:
         limit: int = 50,
     ) -> list[dict[str, Any]]:
         """Return recent A2A messages, optionally filtered by conversation."""
-        msgs = self._a2a_log
+        # Materialize to a list so `[-limit:]` slicing works (deque is not
+        # sliceable).
+        msgs = list(self._a2a_log)
         if conversation_id:
             msgs = [m for m in msgs if m.conversation_id == conversation_id]
         return [

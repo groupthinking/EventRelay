@@ -1057,6 +1057,27 @@ class TestA2AEndpoints:
         data = resp.json()
         assert data["data"]["count"] == 0
 
+    def test_get_agent_sessions_returns_filtered_logs(self, client):
+        """/agents/sessions reads the shared orchestrator and passes filters through."""
+        mock_orch = MagicMock()
+        mock_orch.get_session_logs.return_value = [
+            {"agent_type": "researcher", "status": "ok"}
+        ]
+        with patch.object(router_module, "_shared_orchestrator", mock_orch):
+            resp = client.get("/api/v1/agents/sessions?agent_type=researcher&limit=5")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["data"]["count"] == 1
+        mock_orch.get_session_logs.assert_called_once_with(
+            agent_type="researcher", limit=5
+        )
+
+    def test_get_agent_sessions_503_when_orchestrator_unavailable(self, client):
+        """When the shared orchestrator failed to import, the endpoint 503s."""
+        with patch.object(router_module, "_shared_orchestrator", None):
+            resp = client.get("/api/v1/agents/sessions")
+        assert resp.status_code == 503
+
 
 # ===========================================================================
 # Actions Endpoints
