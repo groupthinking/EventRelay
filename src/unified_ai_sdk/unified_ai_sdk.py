@@ -5,9 +5,11 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import re
+from collections.abc import Awaitable
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable, Awaitable
+from typing import Any, Callable
 
 from .rate_limiter import ModelProvider, RateLimiter
 
@@ -247,15 +249,23 @@ class UnifiedAISDK:
 
         # General network errors or specific string-based checks for Gemini
         exc_str = str(exc).lower()
+        status_match = re.search(r"(?:^|:\s+)(\d{3})\b", exc_str)
+        if status_match:
+            status_code = int(status_match.group(1))
+            if status_code == 429 or status_code >= 500:
+                return True
+            if 400 <= status_code < 500:
+                return False
+
         if "timeout" in exc_str or "deadline exceeded" in exc_str:
             return True
-        if "rate limit" in exc_str or "429" in exc_str:
+        if "rate limit" in exc_str:
             return True
-        if "internal server error" in exc_str or "500" in exc_str or "503" in exc_str:
+        if "internal server error" in exc_str:
             return True
 
         # Auth and Validation errors should not be retried
-        if any(term in exc_str for term in ["authentication", "unauthorized", "api_key", "invalid_request", "400", "401", "403"]):
+        if any(term in exc_str for term in ["authentication", "unauthorized", "api_key", "invalid_request"]):
             return False
 
         return True
