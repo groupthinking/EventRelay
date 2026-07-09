@@ -853,10 +853,13 @@ class DatabaseHealthMonitor:
 # Global database optimization system
 # Use /tmp for Cloud Run compatibility (read-only filesystem except /tmp)
 database_url = os.getenv("DATABASE_URL", "sqlite:////tmp/uvai_data/app.db")
-# Increase connection pool size to handle more concurrent requests.
-# min_connections: 5 (keep some ready), max_connections: 50 (handle bursts)
+# Connection pool sizing (applied by the PostgreSQL branch; the SQLite default
+# path ignores these). Env-configurable so deployments can tune concurrency
+# without a code change. Defaults: keep a few ready (5), allow bursts (50).
 connection_pool = DatabaseConnectionPool(
-    database_url, min_connections=5, max_connections=50
+    database_url,
+    min_connections=int(os.getenv("DB_POOL_MIN_CONNECTIONS", "5")),
+    max_connections=int(os.getenv("DB_POOL_MAX_CONNECTIONS", "50")),
 )
 query_optimizer = QueryOptimizer(connection_pool)
 health_monitor = DatabaseHealthMonitor(query_optimizer)

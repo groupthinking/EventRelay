@@ -1293,14 +1293,39 @@ async def _periodic_cleanup():
             _agent_executions.evict_expired()
             _dispatches.evict_expired()
         except Exception as exc:
-            logger.debug("Periodic cleanup failed: %s", exc)
+            # Log at warning (not debug) so eviction failures are visible in
+            # production — a silently failing sweep would let the in-memory job
+            # stores grow unbounded, defeating the memory-leak fix.
+            logger.warning("Periodic cleanup failed: %s", exc)
         await asyncio.sleep(300)  # Sweep every 5 minutes
+
+
+# Hold a strong module-level reference to the cleanup task. A bare
+# asyncio.create_task(...) is fire-and-forget: the event loop keeps only a weak
+# reference, so the task can be garbage-collected mid-flight and silently stop
+# sweeping. Keeping the reference (and cancelling it on shutdown) keeps the loop
+# alive for the app's lifetime.
+_cleanup_task: "asyncio.Task[None] | None" = None
 
 
 @router.on_event("startup")
 async def startup_event():
     """Start background tasks on API startup."""
-    asyncio.create_task(_periodic_cleanup())
+    global _cleanup_task
+    _cleanup_task = asyncio.create_task(_periodic_cleanup())
+
+
+@router.on_event("shutdown")
+async def shutdown_event():
+    """Cancel background tasks on API shutdown."""
+    global _cleanup_task
+    if _cleanup_task is not None:
+        _cleanup_task.cancel()
+        try:
+            await _cleanup_task
+        except asyncio.CancelledError:
+            pass
+        _cleanup_task = None
 
 
 def _persist_video_job(job: VideoJobStatusResponse) -> None:
