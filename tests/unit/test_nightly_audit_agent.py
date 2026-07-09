@@ -53,7 +53,7 @@ class _RecordingMetricsService:
         self.samples += 1
         return {"timestamp": datetime.now(timezone.utc).isoformat()}
 
-    async def _persist_metrics(self):
+    async def persist_metrics(self):
         self.persisted = True
 
 

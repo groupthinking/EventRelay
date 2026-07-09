@@ -55,6 +55,7 @@ logging.basicConfig(
     format='%(asctime)s - [AuditAgent] - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+SUPPORTS_LOAD_AVERAGE = hasattr(os, "getloadavg")
 
 
 class FallbackActiveMeasurementService:
@@ -71,7 +72,7 @@ class FallbackActiveMeasurementService:
         return None
 
     async def get_system_metrics(self):
-        load_average = os.getloadavg()[0] if hasattr(os, "getloadavg") else None
+        load_average = os.getloadavg()[0] if SUPPORTS_LOAD_AVERAGE else None
         measurement = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "source": "fallback_active_measurement",
@@ -80,7 +81,7 @@ class FallbackActiveMeasurementService:
         self.measurements.append(measurement)
         return measurement
 
-    async def _persist_metrics(self):
+    async def persist_metrics(self):
         metrics_path = self.log_dir / "active_measurements.jsonl"
         with open(metrics_path, "a") as f:
             for measurement in self.measurements:
@@ -98,10 +99,10 @@ class AuditAgent:
         measurement_interval: float = 1.0,
     ):
         self.dry_run = dry_run
-        self.lookback_hours = lookback_hours
+        self.lookback_hours = max(1, lookback_hours)
         self.active_measurement = active_measurement
-        self.measurement_samples = measurement_samples
-        self.measurement_interval = measurement_interval
+        self.measurement_samples = max(1, measurement_samples)
+        self.measurement_interval = max(0.0, measurement_interval)
         self.log_dir = Path("logs")
         self.log_dir.mkdir(exist_ok=True)
         self.report = []
@@ -205,8 +206,8 @@ class AuditAgent:
         if not self.metrics_service:
             self.metrics_service = FallbackActiveMeasurementService(self.log_dir)
 
-        samples = max(1, self.measurement_samples)
-        interval = max(0.0, self.measurement_interval)
+        samples = self.measurement_samples
+        interval = self.measurement_interval
         self.report.append(f"📏 ACTIVE MEASUREMENT: collecting {samples} live samples")
 
         try:
@@ -216,7 +217,7 @@ class AuditAgent:
                 if interval and sample_index < samples - 1:
                     await asyncio.sleep(interval)
 
-            persist = getattr(self.metrics_service, "_persist_metrics", None)
+            persist = getattr(self.metrics_service, "persist_metrics", None)
             if persist:
                 await persist()
         finally:
