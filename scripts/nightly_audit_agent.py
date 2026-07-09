@@ -19,10 +19,11 @@ import argparse
 import asyncio
 import json
 import logging
+import os
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 try:
     import orjson
@@ -42,7 +43,6 @@ try:
         HealthStatus,
         get_health_monitoring_service,
     )
-    from youtube_extension.backend.services.logging_service import get_logging_service
     from youtube_extension.backend.services.metrics_service import MetricsService
 except ImportError:
     # Print warning but don't fail immediately, allows dry-run in incomplete envs
@@ -55,6 +55,38 @@ logging.basicConfig(
     format='%(asctime)s - [AuditAgent] - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+
+class FallbackActiveMeasurementService:
+    """Minimal active measurement collector used when MetricsService is unavailable."""
+
+    def __init__(self, log_dir: Path):
+        self.log_dir = log_dir
+        self.measurements = []
+
+    async def start_collection(self):
+        self.log_dir.mkdir(exist_ok=True)
+
+    async def stop_collection(self):
+        return None
+
+    async def get_system_metrics(self):
+        load_average = os.getloadavg()[0] if hasattr(os, "getloadavg") else None
+        measurement = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "source": "fallback_active_measurement",
+            "load_average_1m": load_average,
+        }
+        self.measurements.append(measurement)
+        return measurement
+
+    async def _persist_metrics(self):
+        metrics_path = self.log_dir / "active_measurements.jsonl"
+        with open(metrics_path, "a") as f:
+            for measurement in self.measurements:
+                f.write(json.dumps(measurement) + "\n")
+        self.measurements.clear()
+
 
 class AuditAgent:
     def __init__(
@@ -167,8 +199,11 @@ class AuditAgent:
 
     async def _collect_active_measurements(self):
         """Collect live metric samples before analysis for more accurate output."""
-        if not self.active_measurement or not self.metrics_service:
+        if not self.active_measurement:
             return
+
+        if not self.metrics_service:
+            self.metrics_service = FallbackActiveMeasurementService(self.log_dir)
 
         samples = max(1, self.measurement_samples)
         interval = max(0.0, self.measurement_interval)
@@ -206,7 +241,8 @@ class AuditAgent:
                 with open(log_file, 'rb') as f:
                     for line in f:
                         try:
-                            if not line.strip(): continue
+                            if not line.strip():
+                                continue
                             if HAS_ORJSON:
                                 entry = orjson.loads(line)
                             else:
@@ -297,7 +333,7 @@ class AuditAgent:
         except Exception as e:
             logger.error(f"Error analyzing metrics: {e}")
 
-    async def first_principles_analysis(self, issue: Dict[str, Any]):
+    async def first_principles_analysis(self, issue: dict[str, Any]):
         """
         Five Whys Interrogation
         """

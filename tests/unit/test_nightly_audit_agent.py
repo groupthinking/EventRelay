@@ -78,3 +78,26 @@ async def test_run_audit_collects_active_measurements_before_analysis(tmp_path, 
     assert metrics_service.samples == 2
     assert metrics_service.persisted is True
     assert metrics_service.stopped is True
+
+
+@pytest.mark.asyncio
+async def test_active_measurement_uses_fallback_when_metrics_service_unavailable(
+    tmp_path, monkeypatch
+):
+    module = _load_audit_module()
+    monkeypatch.chdir(tmp_path)
+
+    agent = module.AuditAgent(
+        dry_run=True,
+        active_measurement=True,
+        measurement_samples=2,
+        measurement_interval=0,
+    )
+    agent.metrics_service = None
+
+    await agent._collect_active_measurements()
+
+    metrics_file = tmp_path / "logs" / "active_measurements.jsonl"
+    lines = metrics_file.read_text().strip().splitlines()
+    assert len(lines) == 2
+    assert any("ACTIVE MEASUREMENT" in line for line in agent.report)
