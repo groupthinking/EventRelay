@@ -301,6 +301,29 @@ def test_issue_enrichment_labeling_auto_apply(config):
 
 
 # ---------------------------------------------------------------------------
+# chat planning workflow (issue #233)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_chat_instructions_exist(config):
+    chat = config.get("chat", {})
+    instructions = chat.get("instructions", "").strip()
+    assert instructions, "chat.instructions must exist and be non-empty"
+
+
+@pytest.mark.unit
+def test_chat_instructions_cover_plan_command(config):
+    chat = config.get("chat", {})
+    instructions = chat.get("instructions", "")
+    assert "@coderabbitai plan" in instructions
+    assert "checklist" in instructions.lower()
+    assert "completed findings" in instructions.lower()
+    assert "pending tasks" in instructions.lower()
+    assert "tests" in instructions.lower()
+
+
+# ---------------------------------------------------------------------------
 # Regression / boundary: pre-existing fields not broken by the PR
 # ---------------------------------------------------------------------------
 

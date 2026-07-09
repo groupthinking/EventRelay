@@ -473,19 +473,44 @@ async def run_transcript_action(
         and duration_seconds > TranscriptActionWorkflow.ASYNC_VIDEO_THRESHOLD_SECONDS
     )
 
-    if is_long_video:
-        result = await _queue_transcript_action_job(
-            request,
-            metadata=metadata,
-            http_request=http_request,
+    try:
+        if is_long_video:
+            result = await _queue_transcript_action_job(
+                request,
+                metadata=metadata,
+                http_request=http_request,
+            )
+        else:
+            result = await workflow.run(
+                request.video_url,
+                language=request.language,
+                transcript_text=request.transcript_text,
+                video_options=request.video_options,
+                prefetched_metadata=metadata,
+            )
+    except Exception as exc:  # noqa: BLE001 - never surface a raw 500 for processing failures
+        logger.exception(
+            "transcript-action failed; returning graceful error response",
+            extra={"video_url": request.video_url},
         )
-    else:
-        result = await workflow.run(
+        await _emit_event(
+            "com.eventrelay.transcript.failed",
+            {"url": request.video_url, "errors": [str(exc)]},
             request.video_url,
-            language=request.language,
-            transcript_text=request.transcript_text,
-            video_options=request.video_options,
-            prefetched_metadata=metadata,
+        )
+        return TranscriptActionResponse(
+            success=False,
+            video_url=request.video_url,
+            metadata={},
+            transcript={
+                "text": "",
+                "segments": [],
+                "source": "unavailable",
+                "error": str(exc),
+            },
+            outputs={},
+            errors=[f"Transcript action failed: {exc}"],
+            orchestration_meta={"processing_time": 0.0, "agents_used": []},
         )
 
     if result.get("async_processing"):

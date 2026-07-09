@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import Nav from '@/components/Nav';
 import Footer from '@/components/Footer';
-import { VideoGenerator } from '@/components/video-generator';
+import VideoGenerator from '@/components/video-generator';
 
 interface APIResponse {
   status: 'success' | 'error' | 'loading' | null;
@@ -342,16 +342,11 @@ response = requests.post(
           </div>
         </div>
 
-        {/* Experimental Features */}
-        <div className="mt-12 p-6 bg-white/5 rounded-xl border border-white/10">
-          <div className="flex items-center gap-2 mb-4">
-            <span className="px-2 py-1 rounded bg-purple-500/20 text-purple-400 text-xs font-bold">EXPERIMENTAL</span>
-            <h2 className="text-lg font-semibold">Video Generation</h2>
-          </div>
-          <p className="text-white/50 text-sm mb-4">
-            Generate short videos from text prompts using Google Veo via the Vercel AI Gateway.
-            Requires AI_GATEWAY_API_KEY to be configured.
-          </p>
+        {/* Experimental: AI Video Generator */}
+        <div className="mt-10">
+          <h2 className="text-sm font-medium text-white/60 mb-4 uppercase tracking-widest">
+            Experimental Features
+          </h2>
           <VideoGenerator />
         </div>
       </div>

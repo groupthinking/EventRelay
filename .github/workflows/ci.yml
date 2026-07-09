@@ -33,6 +33,10 @@ jobs:
           node-version: "22"
           cache: "npm"
       - run: npm install --legacy-peer-deps
+      - name: TypeScript type-check (apps/web)
+        run: cd apps/web && npm run type-check
+      - name: ESLint (apps/web)
+        run: cd apps/web && npm run lint
       - name: Build web app
         run: npm run build:web
       - uses: actions/upload-artifact@v7

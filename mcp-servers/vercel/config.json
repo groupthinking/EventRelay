@@ -1,19 +1,9 @@
 {
   "name": "vercel",
-  "description": "Vercel MCP server — enables AI assistants to manage deployments, search docs, and check domain availability.",
-  "command": "npx",
-  "args": ["-y", "@vercel/mcp@latest"],
+  "transport": "sse",
+  "url": "https://mcp.vercel.com/sse",
   "env": {
-    "VERCEL_TOKEN": "Required. Personal access token from https://vercel.com/account/tokens",
-    "VERCEL_TEAM_ID": "Optional. Vercel team/org ID to scope operations."
-  },
-  "capabilities": [
-    "search-documentation",
-    "list-projects",
-    "view-deployments",
-    "view-deployment-logs",
-    "check-domain-availability",
-    "manage-environment-variables"
-  ],
-  "setup": "1. Create a token at https://vercel.com/account/tokens\n2. Set VERCEL_TOKEN in your shell environment or .env\n3. Optionally set VERCEL_TEAM_ID for team-scoped access\n4. Restart your AI assistant to pick up the new MCP server"
+    "VERCEL_TOKEN": "${VERCEL_TOKEN}",
+    "VERCEL_TEAM_ID": "${VERCEL_TEAM_ID}"
+  }
 }

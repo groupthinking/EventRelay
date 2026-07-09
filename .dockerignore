@@ -1,6 +1,9 @@
-# Node & Frontend (not needed for Python backend container)
+# Node & Frontend
 node_modules/
 apps/
+!apps/web/
+apps/web/node_modules/
+apps/web/.next/
 .next/
 
 # Chrome / NotebookLM browser profiles (~1GB)

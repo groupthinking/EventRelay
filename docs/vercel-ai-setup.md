@@ -1,79 +1,103 @@
-# Vercel AI Gateway & Tooling Setup
+# Vercel AI & Developer Tooling Setup
 
-This document covers configuring Vercel AI Gateway, MCP server, and Skills.sh
-for the EventRelay project.
+This document covers how to wire up Vercel AI Gateway, the Vercel MCP server,
+and IDE plugins for AI coding assistants working on EventRelay.
 
-## AI Gateway Configuration
+---
 
-The Vercel AI Gateway provides a unified endpoint for routing LLM calls to
-multiple providers (OpenAI, Anthropic, Google) with built-in observability.
+## 1. Vercel AI Gateway
 
-### Environment Variables
-
-| Variable | Purpose | Where to set |
-|----------|---------|--------------|
-| `AI_GATEWAY_API_KEY` | Vercel AI Gateway key (vck_…) | Vercel Dashboard or `.env.local` |
-| `VERCEL_TOKEN` | Personal access token for Vercel MCP | Shell environment |
-| `VERCEL_TEAM_ID` | Team/org ID (optional) | Shell environment |
-
-### Setting via Vercel CLI
+### Required environment variables
 
 ```bash
-# Add AI Gateway key to the Vercel project
-vercel env add AI_GATEWAY_API_KEY production preview development
+# Add to the Vercel project (all environments) — consumed by apps/web at runtime
+vercel env add AI_GATEWAY_API_KEY        # Your Vercel AI Gateway API key
 ```
 
-### How It Works
+Get `AI_GATEWAY_API_KEY` from: **Vercel Dashboard → AI → Gateway → API Keys**
 
-1. When `AI_GATEWAY_API_KEY` is set and `BACKEND_URL` is unset, `/api/chat`
-   falls back to Vercel AI Gateway using the `ai` SDK's `streamText`.
-2. `/api/video/generate` always routes through the AI Gateway for video
-   generation using Google Veo 3.1.
-3. The existing `vercel-ai-gateway.ts` module provides raw fetch-based access
-   for embeddings and chat completions (used by event extraction).
+> **Security note:** `VERCEL_TOKEN` is a personal access token used only by
+> MCP tooling and CI — it must **not** be exposed to the app's runtime
+> environment. See section 2 for where to configure it.
 
-## Vercel MCP Server
+### Local development
 
-The Vercel MCP server allows AI assistants to interact with your Vercel account.
+```bash
+# Copy .env.example and fill in values
+cp .env.example .env
+# Set AI_GATEWAY_API_KEY in your local .env
+```
 
-### Setup
+---
 
-Already configured in `.gemini/settings.json`. Requires `VERCEL_TOKEN` in env.
+## 2. Vercel MCP Server
 
-Capabilities:
-- Search Vercel documentation
-- List and manage projects
-- View deployment details and logs
-- Check domain availability
+The Vercel MCP server exposes tools for listing deployments, fetching build
+logs, and managing project env vars directly from AI coding assistants.
 
-## Skills.sh
+### Connection details
 
-Install reusable AI agent skills for enhanced Vercel integration:
+- **Transport**: SSE
+- **URL**: `https://mcp.vercel.com`
+- **Auth**: `VERCEL_TOKEN` (+ optional `VERCEL_TEAM_ID`)
+
+`VERCEL_TOKEN` and `VERCEL_TEAM_ID` are **development/CI-scoped** secrets for the
+MCP tooling only. Configure them in your local shell or CI secret store, **not**
+as Vercel project runtime environment variables:
+
+```bash
+# Local shell / CI secret store (NOT the Vercel project runtime env)
+export VERCEL_TOKEN=...       # Vercel personal access token
+export VERCEL_TEAM_ID=...     # Vercel team ID (starts with team_)
+```
+
+---
+
+## 3. Skills.sh (AI agent skill packs)
+
+Install the Vercel agent skill pack so AI assistants understand Vercel-specific
+patterns:
 
 ```bash
 npx skills add vercel-labs/agent-skills
 ```
 
-### Vercel Plugin for Coding Agents
+---
 
-Connect Claude Code, Codex, Cursor, or Roo Code to the AI Gateway:
+## 4. Vercel Plugin for IDE AI agents
+
+For **Claude Code**, **GitHub Copilot Workspace**, or **Cursor**:
 
 ```bash
 npx plugins add vercel/vercel-plugin
 ```
 
-## IDE Integration
+This gives the agent access to Vercel deployment status, preview URLs, and
+environment variable management from within the IDE.
 
-### Cursor / Windsurf
+---
 
-A `.cursorrules` file is included at the repository root. It points AI assistants
-to the Vercel docs context at `https://vercel.com/docs/llms-full.txt`.
+## 5. Full Vercel LLM documentation context
 
-### Claude Code
+For comprehensive Vercel documentation in LLM context windows:
 
-Use the WebFetch tool to pull Vercel context:
+```txt
+https://vercel.com/docs/llms-full.txt
 ```
-fetch https://vercel.com/docs/llms-full.txt
-```
 
-Or reference the Vercel MCP server configured in `.gemini/settings.json`.
+Add this URL to your AI assistant's context files (`.cursorrules`,
+`CLAUDE.md`, etc.) for up-to-date Vercel API and config reference.
+
+---
+
+## 6. Video generation
+
+The `/api/video/generate` endpoint requires:
+- `AI_GATEWAY_API_KEY` set with access to Google Veo 3.1
+- A function `maxDuration` of 300s for the video route (declared in‑code in
+  `apps/web/src/app/api/video/generate/route.ts` via `export const maxDuration = 300`).
+  Fluid Compute is recommended for these long‑running functions. Note: the
+  Vercel project's Root Directory is `apps/web`, so any deploy‑level overrides
+  belong in `apps/web/vercel.json`, not the repository‑root `vercel.json`.
+
+Model: `google/veo-3.1-generate-001`

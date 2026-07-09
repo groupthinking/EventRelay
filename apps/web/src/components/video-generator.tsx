@@ -1,97 +1,245 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
-type GenerationState = 'idle' | 'generating' | 'complete' | 'error';
+type GenerationState = 'idle' | 'generating' | 'done' | 'error';
 
-interface VideoResult {
-  base64?: string;
-  mediaType?: string;
-  error?: string;
+interface VideoGeneratorProps {
+  className?: string;
 }
 
-export function VideoGenerator() {
+// Client-side ceiling for the request. Kept above the server's maxDuration
+// (300s) so the server-side timeout wins first and the user sees the server's
+// more informative 504 rather than a generic client-side abort.
+const CLIENT_TIMEOUT_MS = 310_000;
+
+export default function VideoGenerator({ className = '' }: VideoGeneratorProps) {
   const [prompt, setPrompt] = useState('');
+  const [aspectRatio, setAspectRatio] = useState('16:9');
+  const [duration, setDuration] = useState(5);
   const [state, setState] = useState<GenerationState>('idle');
-  const [result, setResult] = useState<VideoResult | null>(null);
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [elapsed, setElapsed] = useState(0);
 
-  const handleGenerate = async () => {
-    if (!prompt.trim()) return;
-    setState('generating');
-    setResult(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  // Tracks the current `blob:` object URL so we can revoke it (freeing the
+  // buffered video) before creating a new one or on unmount.
+  const objectUrlRef = useRef<string | null>(null);
 
-    try {
-      const response = await fetch('/api/video/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: prompt.trim() }),
-      });
-
-      const data = await response.json();
-      if (!response.ok) {
-        setState('error');
-        setResult({ error: data.error || 'Generation failed' });
-        return;
-      }
-
-      setState('complete');
-      setResult(data);
-    } catch (err) {
-      setState('error');
-      setResult({ error: err instanceof Error ? err.message : 'Network error' });
+  const clearTimer = () => {
+    if (timerRef.current !== null) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
     }
   };
 
-  const videoSrc = result?.base64 ? `data:${result.mediaType || 'video/mp4'};base64,${result.base64}` : null;
+  const revokeObjectUrl = () => {
+    if (objectUrlRef.current !== null) {
+      URL.revokeObjectURL(objectUrlRef.current);
+      objectUrlRef.current = null;
+    }
+  };
+
+  // On unmount, tear down the elapsed-time interval, abort any in-flight
+  // request so it doesn't keep running (up to 5 min) or set state on an
+  // unmounted component, and revoke any outstanding object URL.
+  useEffect(() => {
+    return () => {
+      clearTimer();
+      abortRef.current?.abort();
+      revokeObjectUrl();
+    };
+  }, []);
+
+  const handleGenerate = async () => {
+    if (!prompt.trim() || state === 'generating') return;
+
+    setState('generating');
+    setError(null);
+    revokeObjectUrl();
+    setVideoUrl(null);
+    setElapsed(0);
+    const t0 = Date.now();
+
+    // Tick elapsed timer
+    clearTimer();
+    timerRef.current = setInterval(() => {
+      setElapsed(Math.floor((Date.now() - t0) / 1000));
+    }, 1000);
+
+    // Combine the mandated request timeout (AbortSignal.timeout) with the
+    // component's own controller so an unmount still aborts the in-flight
+    // fetch. Either signal firing aborts the request.
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    try {
+      const res = await fetch('/api/video/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: prompt.trim(), aspectRatio, duration }),
+        signal: AbortSignal.any([AbortSignal.timeout(CLIENT_TIMEOUT_MS), controller.signal]),
+      });
+
+      clearTimer();
+
+      if (!res.ok) {
+        let message = `HTTP ${res.status}`;
+        try {
+          const data = await res.json();
+          message = data.error ?? message;
+        } catch (parseErr) {
+          // Non-JSON error body; keep the status-based message.
+          console.error('[video-generator] Non-JSON error body:', parseErr);
+        }
+        throw new Error(message);
+      }
+
+      // The route streams the raw video bytes; wrap them in a same-origin
+      // `blob:` URL, which the app's `media-src 'self' blob: data:` CSP permits.
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      objectUrlRef.current = url;
+      setVideoUrl(url);
+      setState('done');
+    } catch (err) {
+      // An unmount aborts the in-flight fetch (abortRef), which rejects with an
+      // AbortError. That's expected teardown, not a failure — don't log it (it
+      // would pollute logs and can trip console-based alerting). Real timeouts
+      // reject with TimeoutError and still get logged.
+      if (!(err instanceof DOMException && err.name === 'AbortError')) {
+        console.error('[video-generator] Error:', err);
+      }
+      clearTimer();
+      setError(err instanceof Error ? err.message : 'Unknown error');
+      setState('error');
+    }
+  };
+
+  const videoSrc = videoUrl;
 
   return (
-    <div className="space-y-4">
-      <div className="flex gap-3">
-        <input
-          type="text"
-          value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
-          placeholder="Describe the video you want to generate..."
-          aria-label="Video generation prompt"
-          className="flex-1 px-4 py-3 bg-surface-900 rounded-xl border border-white/10 text-white/80 placeholder:text-white/30 focus:outline-none focus:border-primary-500/50"
-          maxLength={1000}
-          disabled={state === 'generating'}
-        />
+    <div className={`bg-white/5 rounded-2xl border border-white/10 p-6 ${className}`}>
+      <div className="flex items-center gap-3 mb-6">
+        <span className="px-2 py-1 rounded-md text-xs font-bold bg-purple-500/20 text-purple-400 border border-purple-500/30">
+          EXPERIMENTAL
+        </span>
+        <h2 className="text-lg font-semibold text-white">AI Video Generator</h2>
+        <span className="text-xs text-white/40">Powered by Google Veo 3.1 via Vercel AI Gateway</span>
+      </div>
+
+      <div className="space-y-4">
+        {/* Prompt input */}
+        <div>
+          <label htmlFor="video-prompt" className="block text-sm text-white/60 mb-2">Prompt</label>
+          <textarea
+            id="video-prompt"
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            placeholder="A cinematic shot of a futuristic city at golden hour, time-lapse clouds..."
+            maxLength={1000}
+            rows={3}
+            className="w-full px-4 py-3 bg-slate-900 rounded-xl border border-white/10 text-sm text-white/80 placeholder-white/30 resize-none focus:outline-none focus:border-purple-500/50 transition-colors"
+          />
+          <p className="text-xs text-white/30 mt-1 text-right">{prompt.length}/1000</p>
+        </div>
+
+        {/* Controls */}
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label htmlFor="video-aspect-ratio" className="block text-sm text-white/60 mb-2">Aspect Ratio</label>
+            <select
+              id="video-aspect-ratio"
+              value={aspectRatio}
+              onChange={(e) => setAspectRatio(e.target.value)}
+              className="w-full px-3 py-2 bg-slate-900 rounded-lg border border-white/10 text-sm text-white/80 focus:outline-none focus:border-purple-500/50"
+            >
+              <option value="16:9">16:9 (Landscape)</option>
+              <option value="9:16">9:16 (Portrait)</option>
+              <option value="1:1">1:1 (Square)</option>
+              <option value="4:3">4:3 (Standard)</option>
+            </select>
+          </div>
+          <div>
+            <label htmlFor="video-duration" className="block text-sm text-white/60 mb-2">Duration (seconds)</label>
+            <select
+              id="video-duration"
+              value={duration}
+              onChange={(e) => setDuration(Number(e.target.value))}
+              className="w-full px-3 py-2 bg-slate-900 rounded-lg border border-white/10 text-sm text-white/80 focus:outline-none focus:border-purple-500/50"
+            >
+              <option value={5}>5s</option>
+              <option value={8}>8s</option>
+              <option value={10}>10s</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Generate button */}
         <button
           onClick={handleGenerate}
           disabled={state === 'generating' || !prompt.trim()}
-          className="px-6 py-3 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 font-medium text-white disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 transition"
+          className="w-full py-3 rounded-xl bg-gradient-to-r from-purple-600 to-purple-700 font-medium text-sm hover:opacity-90 transition disabled:opacity-40 disabled:cursor-not-allowed"
         >
-          {state === 'generating' ? 'Generating...' : 'Generate'}
+          {state === 'generating' ? (
+            <span className="flex items-center justify-center gap-2">
+              <span className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
+              Generating… {elapsed > 0 && `(${elapsed}s)`}
+            </span>
+          ) : (
+            'Generate Video'
+          )}
         </button>
-      </div>
 
-      {state === 'generating' && (
-        <div className="flex items-center justify-center h-48 bg-surface-900 rounded-xl border border-white/10">
-          <div className="text-center">
-            <div className="w-10 h-10 rounded-full border-4 border-purple-500 border-t-transparent animate-spin mx-auto mb-3" />
-            <p className="text-white/60 text-sm">Generating video (this may take a few minutes)...</p>
+        {/* Warning */}
+        <p className="text-xs text-yellow-500/70 text-center">
+          ⚠️ Video generation can take 1–3 minutes and requires AI_GATEWAY_API_KEY to be configured.
+        </p>
+
+        {/* Error */}
+        {state === 'error' && error && (
+          <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-sm text-red-400">
+            {error}
           </div>
-        </div>
-      )}
+        )}
 
-      {state === 'error' && result?.error && (
-        <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-xl">
-          <p className="text-red-400 text-sm">{result.error}</p>
-        </div>
-      )}
+        {/* Video result */}
+        {state === 'done' && videoSrc && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-green-400">✅ Generation complete ({elapsed}s)</span>
+              <a
+                href={videoSrc}
+                download="generated-video.mp4"
+                aria-label="Download the generated video as an MP4 file"
+                className="text-xs text-white/50 hover:text-white transition"
+              >
+                Download ↓
+              </a>
+            </div>
+            <video
+              src={videoSrc}
+              controls
+              autoPlay
+              loop
+              playsInline
+              aria-label={`Generated video for prompt: ${prompt.trim()}`}
+              className="w-full rounded-xl border border-white/10 bg-black"
+            >
+              <track kind="captions" label="No captions available" />
+            </video>
+          </div>
+        )}
 
-      {state === 'complete' && videoSrc && (
-        <div className="rounded-xl overflow-hidden border border-white/10">
-          <video
-            src={videoSrc}
-            controls
-            className="w-full max-h-96"
-            autoPlay
-            muted
-          />
-        </div>
-      )}
+        {/* Idle placeholder */}
+        {state === 'idle' && (
+          <div className="flex items-center justify-center h-32 rounded-xl border border-white/5 bg-slate-900/50">
+            <p className="text-white/20 text-sm">Generated video will appear here</p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

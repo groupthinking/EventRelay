@@ -1,25 +1,29 @@
-# EventRelay — Cursor/AI IDE Context Rules
+# EventRelay Cursor Rules
 
-## Vercel Documentation Reference
-When answering questions about Vercel deployments, AI Gateway, or serverless functions,
-reference the full Vercel docs: https://vercel.com/docs/llms-full.txt
+## Project overview
+Monorepo: Next.js 16 App Router (apps/web) + Python FastAPI backend (src/).
+Deployed on Vercel (frontend) and Cloud Run/Railway (backend).
+AI pipeline: SSE streaming, CloudEvents, Ray Serve, MCP tools.
 
-## Project Context
-- Frontend: Next.js 16 app in `apps/web/` deployed on Vercel
-- Backend: Python/FastAPI deployed on Cloud Run at api.uvai.io
-- AI Gateway: Vercel AI Gateway at ai-gateway.vercel.sh (key: AI_GATEWAY_API_KEY)
-- MCP Servers: configured in `.gemini/settings.json`
+## Critical paths — always flag issues here
+- apps/web/src/app/api/pipeline/stream/route.ts — SSE streaming (source of #139 hang)
+- src/uvai/unified_ai_sdk/ — must be real implementations, not stubs
+- src/mcp/ — MCP tool definitions and registry
 
-## Key Conventions
-- All LLM calls prefer Vercel AI Gateway when AI_GATEWAY_API_KEY is set
-- Use `@ai-sdk/gateway` provider for AI SDK calls (streamText, generateText)
-- Video generation uses `experimental_generateVideo` with model `google/veo-3.1-generate-001`
-- Never use `dQw4w9WgXcQ` as test video ID; use `auJzb1D-fag`
-- TypeScript strict mode; Python mypy strict
-- Monorepo: root package.json manages workspaces under `apps/*`
+## Vercel documentation
+Full LLM context: https://vercel.com/docs/llms-full.txt
 
-## Vercel-Specific Patterns
-- Root `vercel.json` handles all redirects, function config, and region settings
-- `apps/web/vercel.json` only has framework/build config
-- maxDuration for long-running routes set in root vercel.json `functions` block
-- CSP and security headers configured in `next.config.js`
+## AI Gateway
+- Video generation route: apps/web/src/app/api/video/generate/route.ts
+- Video model: google/veo-3.1-generate-001
+- Env var: AI_GATEWAY_API_KEY
+
+## TypeScript rules
+- strict mode is ON — no implicit any, no unsafe assertions
+- All fetch() calls must have AbortSignal.timeout()
+- SSE streams must always call controller.close() in finally block
+
+## Never do
+- Return mock/hardcoded data from production AI SDK methods
+- Use bare catch without logging
+- Commit secrets or API keys

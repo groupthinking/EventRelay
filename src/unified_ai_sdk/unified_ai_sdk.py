@@ -1,23 +1,48 @@
-"""
-Unified AI SDK - Placeholder Implementation
-===========================================
+"""Unified interface for Gemini, Anthropic, and OpenAI requests."""
 
-Provides unified interface for multiple AI providers.
-This is a placeholder implementation.
+from __future__ import annotations
 
-TODO: Replace with production unified AI SDK implementation.
-"""
-
+import asyncio
+import logging
+import os
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Optional, Union
+from typing import Any, Callable
 
-# Import ModelProvider from rate_limiter
-from .rate_limiter import ModelProvider
+from .rate_limiter import ModelProvider, RateLimiter
+
+logger = logging.getLogger(__name__)
+
+try:
+    from google import genai as _genai
+    from google.genai import types as _genai_types
+
+    _GENAI_AVAILABLE = True
+except ImportError:
+    _genai = None
+    _genai_types = None
+    _GENAI_AVAILABLE = False
+
+try:
+    import anthropic as _anthropic_sdk
+
+    _ANTHROPIC_AVAILABLE = True
+except ImportError:
+    _anthropic_sdk = None
+    _ANTHROPIC_AVAILABLE = False
+
+try:
+    import openai as _openai_sdk
+
+    _OPENAI_AVAILABLE = True
+except ImportError:
+    _openai_sdk = None
+    _OPENAI_AVAILABLE = False
 
 
 class TaskType(Enum):
-    """Task types for AI processing"""
+    """Task types for AI processing."""
+
     VIDEO_ANALYSIS = "video_analysis"
     CODE_GENERATION = "code_generation"
     TREND_ANALYSIS = "trend_analysis"
@@ -32,10 +57,11 @@ class TaskType(Enum):
 
 @dataclass
 class AIRequest:
-    """Request object for AI operations"""
+    """Request object for AI operations."""
+
     prompt: str
     model: str
-    provider: Union[ModelProvider, str]  # ModelProvider enum or string
+    provider: ModelProvider | str
     task_type: TaskType
     temperature: float = 0.7
     max_tokens: int = 4000
@@ -44,80 +70,270 @@ class AIRequest:
 
 @dataclass
 class AIResponse:
-    """Response object from AI operations"""
+    """Response object from AI operations."""
+
     content: str
     model: str
     provider: str
     success: bool = True
     tokens_used: int = 0
-    error: Optional[str] = None
+    error: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
 class UnifiedAISDK:
-    """
-    Unified interface for multiple AI providers.
+    """Unified AI client with provider-specific routing and retries."""
 
-    This is a placeholder implementation that provides a basic
-    structure for unified AI requests.
+    def __init__(self, config: dict[str, Any] | None = None):
+        self.config = dict(config or {})
+        retry_attempts = int(self.config.get("retry_attempts", 3))
+        if retry_attempts < 1:
+            raise ValueError("retry_attempts must be at least 1")
+        self.retry_attempts = retry_attempts
+        self.retry_base_delay = float(self.config.get("retry_base_delay", 1.0))
+        self.retry_max_delay = float(self.config.get("retry_max_delay", 8.0))
+        # Bound per-request latency so a slow upstream can't pin the
+        # asyncio.to_thread worker for the SDK default (OpenAI/Anthropic: 600s).
+        self.request_timeout = float(self.config.get("request_timeout", 60.0))
+        self.rate_limiter = RateLimiter(self.config.get("rate_limits"))
 
-    TODO: Implement actual provider integrations for Claude, Grok, OpenAI, etc.
-    """
-
-    def __init__(self, config: Optional[dict[str, Any]] = None):
-        """
-        Initialize Unified AI SDK.
-
-        Args:
-            config: Configuration dict with API keys and settings
-        """
-        self.config = config if config is not None else {}
-
-    async def unified_request(self, request: AIRequest) -> AIResponse:
-        """
-        Execute a unified AI request across providers.
-
-        Args:
-            request: AIRequest object with prompt and configuration
-
-        Returns:
-            AIResponse with the result
-
-        Note:
-            This is a placeholder that returns a simulated response.
-            TODO: Implement actual provider API calls.
-        """
-        # Get provider name
-        provider_name = request.provider.value if isinstance(request.provider, ModelProvider) else str(request.provider)
-
-        # Placeholder implementation - returns simulated response
-        return AIResponse(
-            content=f"[Placeholder response for {request.task_type.value} task using {request.model}]",
-            model=request.model,
-            provider=provider_name,
-            success=True,
-            tokens_used=len(request.prompt.split()) * 2,  # Rough estimate
-            metadata={
-                "task_type": request.task_type.value,
-                "temperature": request.temperature,
-                "max_tokens": request.max_tokens,
-                "note": "This is a placeholder response. Implement actual AI provider integration."
-            }
+        self._gemini_key = (
+            self.config.get("gemini_api_key")
+            or os.getenv("GEMINI_API_KEY")
+            or os.getenv("GOOGLE_GENERATIVE_AI_API_KEY")
+            or os.getenv("GOOGLE_API_KEY")
+        )
+        self._anthropic_key = self.config.get("anthropic_api_key") or os.getenv(
+            "ANTHROPIC_API_KEY"
+        )
+        self._openai_key = self.config.get("openai_api_key") or os.getenv(
+            "OPENAI_API_KEY"
         )
 
-    async def health_check(self) -> dict[str, Any]:
-        """
-        Check health status of all configured providers.
+        self._gemini_client: object | None = None
+        self._anthropic_client: object | None = None
+        self._openai_client: object | None = None
 
-        Returns:
-            Dict with health status for each provider
-        """
-        return {
-            "status": "placeholder",
-            "providers": {
-                "claude": "not_implemented",
-                "grok": "not_implemented",
-                "openai": "not_implemented",
-            },
-            "note": "Placeholder health check - implement actual provider checks"
+        self._handlers: dict[str, Callable[[AIRequest], tuple[str, int]]] = {
+            "openai": self._generate_openai,
+            "claude": self._generate_anthropic,
+            "gemini": self._generate_gemini,
         }
+
+        self._init_clients()
+
+    async def unified_request(self, request: AIRequest) -> AIResponse:
+        """Execute a provider-specific request with retry handling."""
+        try:
+            provider_name = self._normalize_provider(request.provider)
+        except ValueError as exc:
+            # Unsupported provider (e.g. ModelProvider.GROK, which MCPBridge
+            # routes) must not raise: honor the contract of returning a
+            # structured failure response rather than an unhandled exception.
+            return AIResponse(
+                content="",
+                model=request.model,
+                provider=str(request.provider),
+                success=False,
+                error=str(exc),
+                metadata={
+                    "task_type": request.task_type.value,
+                    "temperature": request.temperature,
+                    "max_tokens": request.max_tokens,
+                    "attempts": 0,
+                },
+            )
+        provider = self._rate_limit_provider(provider_name)
+
+        for attempt in range(1, self.retry_attempts + 1):
+            try:
+                await self.rate_limiter.wait_if_needed(provider, request.max_tokens)
+                content, tokens_used = await asyncio.to_thread(
+                    self._dispatch_sync, provider_name, request
+                )
+                return AIResponse(
+                    content=content,
+                    model=request.model,
+                    provider=provider_name,
+                    success=True,
+                    tokens_used=tokens_used,
+                    metadata={
+                        "task_type": request.task_type.value,
+                        "temperature": request.temperature,
+                        "max_tokens": request.max_tokens,
+                        "attempts": attempt,
+                    },
+                )
+            except Exception as exc:
+                logger.warning(
+                    "UnifiedAISDK %s attempt %s/%s failed: %s",
+                    provider_name,
+                    attempt,
+                    self.retry_attempts,
+                    exc,
+                )
+                if attempt >= self.retry_attempts:
+                    return AIResponse(
+                        content="",
+                        model=request.model,
+                        provider=provider_name,
+                        success=False,
+                        error=str(exc),
+                        metadata={
+                            "task_type": request.task_type.value,
+                            "temperature": request.temperature,
+                            "max_tokens": request.max_tokens,
+                            "attempts": attempt,
+                        },
+                    )
+
+                delay = min(
+                    self.retry_base_delay * (2 ** (attempt - 1)),
+                    self.retry_max_delay,
+                )
+                if delay > 0:
+                    await asyncio.sleep(delay)
+
+        # Unreachable: retry_attempts >= 1 is enforced in __init__, so the loop
+        # always returns on its final attempt. Explicit terminal keeps strict
+        # mypy's missing-return check satisfied.
+        raise RuntimeError("unified_request exhausted retries without returning")
+
+    async def health_check(self) -> dict[str, Any]:
+        """Report which providers are ready for live traffic."""
+        providers = {
+            "gemini": {
+                "configured": bool(self._gemini_key),
+                "sdk_available": _GENAI_AVAILABLE,
+                "ready": self._gemini_client is not None,
+            },
+            "anthropic": {
+                "configured": bool(self._anthropic_key),
+                "sdk_available": _ANTHROPIC_AVAILABLE,
+                "ready": self._anthropic_client is not None,
+            },
+            "openai": {
+                "configured": bool(self._openai_key),
+                "sdk_available": _OPENAI_AVAILABLE,
+                "ready": self._openai_client is not None,
+            },
+        }
+        ready_count = sum(1 for info in providers.values() if info["ready"])
+        return {
+            "status": "ok" if ready_count else "degraded",
+            "ready_providers": ready_count,
+            "providers": providers,
+        }
+
+    def _init_clients(self) -> None:
+        if _GENAI_AVAILABLE and self._gemini_key:
+            try:
+                self._gemini_client = _genai.Client(api_key=self._gemini_key)
+            except Exception as exc:
+                logger.warning("UnifiedAISDK failed to init Gemini client: %s", exc)
+
+        if _ANTHROPIC_AVAILABLE and self._anthropic_key:
+            try:
+                self._anthropic_client = _anthropic_sdk.Anthropic(
+                    api_key=self._anthropic_key
+                )
+            except Exception as exc:
+                logger.warning("UnifiedAISDK failed to init Anthropic client: %s", exc)
+
+        if _OPENAI_AVAILABLE and self._openai_key:
+            try:
+                self._openai_client = _openai_sdk.OpenAI(api_key=self._openai_key)
+            except Exception as exc:
+                logger.warning("UnifiedAISDK failed to init OpenAI client: %s", exc)
+
+    def _normalize_provider(self, provider: ModelProvider | str) -> str:
+        provider_name = (
+            provider.value if isinstance(provider, ModelProvider) else str(provider)
+        ).lower()
+        if provider_name in {"claude", "anthropic"}:
+            return "claude"
+        if provider_name in {"openai", "gemini"}:
+            return provider_name
+        raise ValueError(f"Unsupported provider: {provider_name}")
+
+    def _rate_limit_provider(self, provider_name: str) -> ModelProvider:
+        if provider_name == "claude":
+            return ModelProvider.CLAUDE
+        if provider_name == "openai":
+            return ModelProvider.OPENAI
+        return ModelProvider.GEMINI
+
+    def _dispatch_sync(self, provider_name: str, request: AIRequest) -> tuple[str, int]:
+        handler = self._handlers[provider_name]
+        content, tokens_used = handler(request)
+        if not content:
+            raise RuntimeError(
+                f"{provider_name} (model={request.model}) returned empty content"
+            )
+        return content, tokens_used
+
+    def _generate_openai(self, request: AIRequest) -> tuple[str, int]:
+        if self._openai_client is None:
+            raise RuntimeError(f"OpenAI client is not configured for {request.model}")
+        response = self._openai_client.chat.completions.create(  # type: ignore[attr-defined]
+            model=request.model,
+            messages=[{"role": "user", "content": request.prompt}],
+            max_tokens=request.max_tokens,
+            temperature=request.temperature,
+            timeout=self.request_timeout,
+        )
+        choices = getattr(response, "choices", None)
+        if not choices or len(choices) == 0:
+            raise RuntimeError(f"OpenAI ({request.model}) returned no choices")
+        content = choices[0].message.content or ""
+        usage = getattr(response, "usage", None)
+        tokens_used = int(getattr(usage, "total_tokens", 0) or 0)
+        return content, tokens_used
+
+    def _generate_anthropic(self, request: AIRequest) -> tuple[str, int]:
+        if self._anthropic_client is None:
+            raise RuntimeError(
+                f"Anthropic client is not configured for {request.model}"
+            )
+        response = self._anthropic_client.messages.create(  # type: ignore[attr-defined]
+            model=request.model,
+            max_tokens=request.max_tokens,
+            # The repo requires anthropic>=0.78.0, which supports adaptive thinking.
+            # `temperature` is intentionally omitted: Anthropic rejects a non-1
+            # temperature when extended thinking is enabled, and the default
+            # AIRequest.temperature (0.7) would fail every request. This mirrors
+            # the canonical calls in llm_router / protocol_bridge.
+            thinking={"type": "adaptive"},
+            messages=[{"role": "user", "content": request.prompt}],
+            timeout=self.request_timeout,
+        )
+        text_blocks = [
+            getattr(block, "text", "")
+            for block in response.content
+            if getattr(block, "type", None) == "text"
+        ]
+        usage = getattr(response, "usage", None)
+        input_tokens = int(getattr(usage, "input_tokens", 0) or 0)
+        output_tokens = int(getattr(usage, "output_tokens", 0) or 0)
+        return "\n".join(text_blocks), input_tokens + output_tokens
+
+    def _generate_gemini(self, request: AIRequest) -> tuple[str, int]:
+        if self._gemini_client is None:
+            raise RuntimeError(f"Gemini client is not configured for {request.model}")
+        kwargs: dict[str, Any] = {"model": request.model, "contents": request.prompt}
+        if _GENAI_AVAILABLE and _genai_types is not None:
+            kwargs["config"] = _genai_types.GenerateContentConfig(
+                temperature=request.temperature,
+                max_output_tokens=request.max_tokens,
+            )
+        response = self._gemini_client.models.generate_content(**kwargs)  # type: ignore[attr-defined]
+        text = response.text
+        if text is None and not getattr(response, "candidates", None):
+            raise RuntimeError(f"Gemini ({request.model}) returned no candidates")
+        if text is None:
+            parts = response.candidates[0].content.parts
+            text_parts = [part.text for part in parts if getattr(part, "text", None)]
+            text = "\n".join(text_parts) if text_parts else ""
+        usage = getattr(response, "usage_metadata", None)
+        tokens_used = int(getattr(usage, "total_token_count", 0) or 0)
+        return text or "", tokens_used

@@ -1,16 +1,30 @@
 import { NextResponse } from 'next/server';
+import { generateText } from 'ai';
 import { resolveTrustedBillingEmail } from '@/lib/billing/billing-context';
 import { isProSubscriber } from '@/lib/billing/entitlement-store';
 import { checkFreeChatQuota } from '@/lib/billing/chat-quota';
 import { grokChatCompletion } from '@/lib/billing/grok-client';
 import { FREE_CHAT_DAILY_LIMIT, resolvePaidTierRouting } from '@/lib/billing/paid-tier-model';
 import { kaizenObserve } from '@/lib/billing/kaizen-trace';
-import { hasAiGatewayKey, getGateway, GATEWAY_MODELS } from '@/lib/ai-gateway';
-import { streamText } from 'ai';
+import { aiGateway, GATEWAY_CHAT_MODEL } from '@/lib/ai-gateway';
+
+type ChatHistoryMessage = { role: 'user' | 'assistant'; content: string };
 
 const rawBackendUrl = process.env.BACKEND_URL || '';
 const BACKEND_URL = rawBackendUrl.startsWith('http') ? rawBackendUrl : 'http://localhost:8000';
 const BACKEND_AVAILABLE = rawBackendUrl.startsWith('http');
+
+function isValidChatHistoryMessage(message: unknown): message is ChatHistoryMessage {
+  if (!message || typeof message !== 'object') {
+    return false;
+  }
+
+  const candidate = message as { role?: unknown; content?: unknown };
+  return (
+    (candidate.role === 'user' || candidate.role === 'assistant')
+    && typeof candidate.content === 'string'
+  );
+}
 
 export async function POST(request: Request) {
   let routing = resolvePaidTierRouting(false);
@@ -68,28 +82,49 @@ export async function POST(request: Request) {
       }
     }
 
-    if (!BACKEND_AVAILABLE) {
-      // AI Gateway fallback: when no backend is configured, route through Vercel AI Gateway
-      if (hasAiGatewayKey()) {
-        const messages = [
-          ...(body.history || []).map((m: { role: string; content: string }) => ({
-            role: m.role as 'user' | 'assistant',
-            content: m.content,
-          })),
-          { role: 'user' as const, content: body.query || '' },
-        ];
+    if (BACKEND_AVAILABLE) {
+      const response = await fetch(`${BACKEND_URL}/api/v1/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(process.env.EVENTRELAY_API_KEY ? { 'X-API-Key': process.env.EVENTRELAY_API_KEY } : {}),
+          'X-Billing-Plan': routing.plan,
+          'X-Lead-Model': routing.model,
+          'X-Lead-Runtime': routing.runtime,
+        },
+        body: JSON.stringify({
+          message: body.query,
+          video_url: body.video_url || '',
+          video_id: body.video_id || '',
+          conversation_history: body.history || [],
+          model: routing.model,
+          lead_runtime: routing.runtime,
+        }),
+        signal: AbortSignal.timeout(30_000),
+      });
 
-        const result = streamText({
-          model: getGateway()(GATEWAY_MODELS.chat),
-          messages,
-        });
-
-        return result.toTextStreamResponse();
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Chat API error:', response.status, errorText);
+        return NextResponse.json(
+          { answer: 'The AI assistant is temporarily unavailable. Please try again.', routing },
+          { status: response.status },
+        );
       }
 
+      const data = await response.json();
+
+      return NextResponse.json({
+        answer: data.response || data.answer || data.message || 'No response generated.',
+        routing,
+        plan: routing.plan,
+      });
+    }
+
+    if (!process.env.AI_GATEWAY_API_KEY && !process.env.VERCEL_AI_GATEWAY_API_KEY && !process.env.VERCEL_API_KEY) {
       return NextResponse.json(
         {
-          answer: 'Chat requires a backend connection. Configure BACKEND_URL or AI_GATEWAY_API_KEY to enable the AI assistant.',
+          answer: 'Chat requires either BACKEND_URL or AI_GATEWAY_API_KEY to be configured.',
           routing,
           plan: routing.plan,
         },
@@ -97,41 +132,21 @@ export async function POST(request: Request) {
       );
     }
 
-    const response = await fetch(`${BACKEND_URL}/api/v1/chat`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(process.env.EVENTRELAY_API_KEY ? { 'X-API-Key': process.env.EVENTRELAY_API_KEY } : {}),
-        'X-Billing-Plan': routing.plan,
-        'X-Lead-Model': routing.model,
-        'X-Lead-Runtime': routing.runtime,
-      },
-      body: JSON.stringify({
-        message: body.query,
-        video_url: body.video_url || '',
-        video_id: body.video_id || '',
-        conversation_history: body.history || [],
-        model: routing.model,
-        lead_runtime: routing.runtime,
-      }),
-      signal: AbortSignal.timeout(30_000),
+    const history = Array.isArray(body.history)
+      ? body.history.filter(isValidChatHistoryMessage)
+      : [];
+
+    const query = body.query || body.message || '';
+    const { text } = await generateText({
+      model: aiGateway(GATEWAY_CHAT_MODEL),
+      messages: [...history, { role: 'user', content: query }],
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Chat API error:', response.status, errorText);
-      return NextResponse.json(
-        { answer: 'The AI assistant is temporarily unavailable. Please try again.', routing },
-        { status: response.status },
-      );
-    }
-
-    const data = await response.json();
-
     return NextResponse.json({
-      answer: data.response || data.answer || data.message || 'No response generated.',
+      answer: text,
       routing,
       plan: routing.plan,
+      provider: 'vercel-ai-gateway',
     });
   } catch (error) {
     console.error('Chat proxy error:', error);
