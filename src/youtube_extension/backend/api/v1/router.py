@@ -804,8 +804,15 @@ async def video_to_software_v1(
 )
 async def get_cache_stats_v1(cache_service: CacheService = Depends(get_cache_service)):
     """Get cache statistics"""
+    global _stats_cache_time, _stats_cache
     try:
+        now = time.time()
+        if now - _stats_cache_time < _stats_cache_ttl and _stats_cache:
+            return CacheStats(**_stats_cache)
+
         stats = cache_service.get_cache_statistics()
+        _stats_cache = stats
+        _stats_cache_time = now
         return CacheStats(**stats)
     except Exception as e:
         logger.error(f"Error getting cache stats: {e}")
@@ -1271,6 +1278,29 @@ _JOB_MAX_SIZE: int = int(os.getenv("JOB_STORE_MAX_SIZE", "2000"))
 _video_jobs: _TTLDict = _TTLDict(ttl=_JOB_TTL, max_size=_JOB_MAX_SIZE)
 _agent_executions: _TTLDict = _TTLDict(ttl=_JOB_TTL, max_size=_JOB_MAX_SIZE)
 _dispatches: _TTLDict = _TTLDict(ttl=_JOB_TTL, max_size=_JOB_MAX_SIZE)
+
+# Cache for heavy statistics calculations
+_stats_cache: dict[str, Any] = {}
+_stats_cache_time: float = 0
+_stats_cache_ttl: float = 60
+
+
+async def _periodic_cleanup():
+    """Background task to proactively evict expired jobs from in-memory stores."""
+    while True:
+        try:
+            _video_jobs.evict_expired()
+            _agent_executions.evict_expired()
+            _dispatches.evict_expired()
+        except Exception as exc:
+            logger.debug("Periodic cleanup failed: %s", exc)
+        await asyncio.sleep(300)  # Sweep every 5 minutes
+
+
+@router.on_event("startup")
+async def startup_event():
+    """Start background tasks on API startup."""
+    asyncio.create_task(_periodic_cleanup())
 
 
 def _persist_video_job(job: VideoJobStatusResponse) -> None:
