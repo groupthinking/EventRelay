@@ -25,18 +25,34 @@ except ImportError:
 
 try:
     import anthropic as _anthropic_sdk
+    from anthropic import APIStatusError as AnthropicAPIStatusError
+    from anthropic import APITimeoutError as AnthropicAPITimeoutError
+    from anthropic import InternalServerError as AnthropicInternalServerError
+    from anthropic import RateLimitError as AnthropicRateLimitError
 
     _ANTHROPIC_AVAILABLE = True
-except ImportError:
+except (ImportError, AttributeError):
     _anthropic_sdk = None
+    AnthropicRateLimitError = type("AnthropicRateLimitError", (Exception,), {})
+    AnthropicAPITimeoutError = type("AnthropicAPITimeoutError", (Exception,), {})
+    AnthropicAPIStatusError = type("AnthropicAPIStatusError", (Exception,), {})
+    AnthropicInternalServerError = type("AnthropicInternalServerError", (Exception,), {})
     _ANTHROPIC_AVAILABLE = False
 
 try:
     import openai as _openai_sdk
+    from openai import APIStatusError as OpenAIAPIStatusError
+    from openai import APITimeoutError as OpenAIAPITimeoutError
+    from openai import InternalServerError as OpenAIInternalServerError
+    from openai import RateLimitError as OpenAIRateLimitError
 
     _OPENAI_AVAILABLE = True
-except ImportError:
+except (ImportError, AttributeError):
     _openai_sdk = None
+    OpenAIRateLimitError = type("OpenAIRateLimitError", (Exception,), {})
+    OpenAIAPITimeoutError = type("OpenAIAPITimeoutError", (Exception,), {})
+    OpenAIAPIStatusError = type("OpenAIAPIStatusError", (Exception,), {})
+    OpenAIInternalServerError = type("OpenAIInternalServerError", (Exception,), {})
     _OPENAI_AVAILABLE = False
 
 
@@ -212,21 +228,21 @@ class UnifiedAISDK:
         """Determine if an exception warrants a retry."""
         # OpenAI/Grok exceptions
         if _OPENAI_AVAILABLE:
-            if isinstance(exc, _openai_sdk.RateLimitError):
+            if isinstance(exc, OpenAIRateLimitError):
                 return True
-            if isinstance(exc, (_openai_sdk.APITimeoutError, _openai_sdk.InternalServerError)):
+            if isinstance(exc, (OpenAIAPITimeoutError, OpenAIInternalServerError)):
                 return True
-            if isinstance(exc, _openai_sdk.APIStatusError):
+            if isinstance(exc, OpenAIAPIStatusError):
                 # Retry on 5xx, but not 4xx (except 429)
                 return exc.status_code >= 500
 
         # Anthropic exceptions
         if _ANTHROPIC_AVAILABLE:
-            if isinstance(exc, _anthropic_sdk.RateLimitError):
+            if isinstance(exc, AnthropicRateLimitError):
                 return True
-            if isinstance(exc, (_anthropic_sdk.APITimeoutError, _anthropic_sdk.InternalServerError)):
+            if isinstance(exc, (AnthropicAPITimeoutError, AnthropicInternalServerError)):
                 return True
-            if isinstance(exc, _anthropic_sdk.APIStatusError):
+            if isinstance(exc, AnthropicAPIStatusError):
                 return exc.status_code >= 500
 
         # General network errors or specific string-based checks for Gemini
@@ -350,13 +366,13 @@ class UnifiedAISDK:
             tokens_used = int(getattr(usage, "total_tokens", 0) or 0)
             return content, tokens_used
 
-        except _openai_sdk.RateLimitError as exc:
+        except OpenAIRateLimitError as exc:
             logger.error("OpenAI Rate Limit: %s", exc)
             raise
-        except _openai_sdk.APITimeoutError as exc:
+        except OpenAIAPITimeoutError as exc:
             logger.error("OpenAI Timeout: %s", exc)
             raise
-        except _openai_sdk.APIStatusError as exc:
+        except OpenAIAPIStatusError as exc:
             logger.error("OpenAI Status Error (status=%s): %s", exc.status_code, exc.message)
             raise
         except Exception as exc:
@@ -396,13 +412,13 @@ class UnifiedAISDK:
             output_tokens = int(getattr(usage, "output_tokens", 0) or 0)
             return "\n".join(text_blocks), input_tokens + output_tokens
 
-        except _anthropic_sdk.RateLimitError as exc:
+        except AnthropicRateLimitError as exc:
             logger.error("Anthropic Rate Limit: %s", exc)
             raise
-        except _anthropic_sdk.APITimeoutError as exc:
+        except AnthropicAPITimeoutError as exc:
             logger.error("Anthropic Timeout: %s", exc)
             raise
-        except _anthropic_sdk.APIStatusError as exc:
+        except AnthropicAPIStatusError as exc:
             logger.error("Anthropic Status Error (status=%s): %s", exc.status_code, exc.message)
             raise
         except Exception as exc:
@@ -472,13 +488,13 @@ class UnifiedAISDK:
             tokens_used = int(getattr(usage, "total_tokens", 0) or 0)
             return content, tokens_used
 
-        except _openai_sdk.RateLimitError as exc:
+        except OpenAIRateLimitError as exc:
             logger.error("Grok Rate Limit: %s", exc)
             raise
-        except _openai_sdk.APITimeoutError as exc:
+        except OpenAIAPITimeoutError as exc:
             logger.error("Grok Timeout: %s", exc)
             raise
-        except _openai_sdk.APIStatusError as exc:
+        except OpenAIAPIStatusError as exc:
             logger.error("Grok Status Error (status=%s): %s", exc.status_code, exc.message)
             raise
         except Exception as exc:
