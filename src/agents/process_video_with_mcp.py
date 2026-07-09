@@ -278,17 +278,23 @@ class RealVideoProcessor:
     async def _save_to_google_drive(self, video_id: str, content: dict[str, Any]) -> dict[str, Any]:
         # Emulate Drive by writing locally under CWD/gdrive_results
         folder = Path.cwd() / "gdrive_results" / content.get("category", "General")
-        folder.mkdir(parents=True, exist_ok=True)
-        file_path = folder / f"{video_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
 
-        payload = {
-            "video_id": video_id,
-            "category": content.get("category"),
-            "content": content,
-            "real_processing_validated": True,
-            "saved_at": datetime.now().isoformat(),
-        }
-        file_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        def _ensure_dir_and_write():
+            folder.mkdir(parents=True, exist_ok=True)
+            file_path = folder / f"{video_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+
+            payload = {
+                "video_id": video_id,
+                "category": content.get("category"),
+                "content": content,
+                "real_processing_validated": True,
+                "saved_at": datetime.now().isoformat(),
+            }
+            file_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+            return file_path
+
+        # Run blocking I/O in a separate thread to keep the event loop free.
+        file_path = await asyncio.to_thread(_ensure_dir_and_write)
 
         return {
             "success": True,

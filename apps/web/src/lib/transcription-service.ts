@@ -54,80 +54,87 @@ export async function fetchTranscript({
     return { success: false, error: 'url or audioUrl is required', transcript: '' };
   }
 
-  // Strategy 1: Try YouTube transcript API via backend (fast + free)
-  if (url && !audioUrl && BACKEND_AVAILABLE) {
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 8_000);
+  // Fetch YouTube metadata (description, chapters, title) — shared by all strategies
+  const metadataPromise = url ? fetchYouTubeMetadata(url).catch((err) => {
+    console.log('YouTube metadata fetch failed:', err);
+    return null;
+  }) : Promise.resolve(null);
 
-      const ytResponse = await fetch(`${BACKEND_URL}/api/v1/transcript-action`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...(process.env.EVENTRELAY_API_KEY ? { 'X-API-Key': process.env.EVENTRELAY_API_KEY } : {}) },
-        body: JSON.stringify({ video_url: url, language }),
-        signal: controller.signal,
-      }).finally(() => clearTimeout(timeout));
-
-      if (ytResponse.ok) {
-        const result = await ytResponse.json();
-
-        // Handle transcript as segments array
-        const segments = Array.isArray(result.transcript) ? result.transcript : [];
-        if (segments.length > 0) {
-          const fullText = segments
-            .map((s: { text?: string }) => s.text || '')
-            .join(' ')
-            .trim();
-
-          if (fullText.length > 50) {
-            return {
-              success: true,
-              transcript: fullText,
-              segments,
-              source: 'youtube',
-              wordCount: fullText.split(/\s+/).length,
-            };
-          }
-        }
-
-        // Handle transcript as { text: string }
-        const transcriptText =
-          typeof result.transcript === 'string'
-            ? result.transcript
-            : result.transcript?.text;
-        if (typeof transcriptText === 'string' && transcriptText.length > 50) {
-          return {
-            success: true,
-            transcript: transcriptText,
-            source: 'youtube',
-            wordCount: transcriptText.split(/\s+/).length,
-          };
-        }
-      }
-    } catch {
-      console.log('YouTube transcript unavailable, falling back to AI providers');
-    }
-  }
-
-  // Fetch YouTube metadata (description, chapters, title) — shared by both fallback strategies
-  let metadata: Awaited<ReturnType<typeof fetchYouTubeMetadata>> = null;
-  if (url) {
-    try {
-      metadata = await fetchYouTubeMetadata(url);
-    } catch {
-      console.log('YouTube metadata fetch failed, continuing without');
-    }
-  }
-
-  // Strategies 2 & 3: Run Gemini and OpenAI in parallel — first successful result wins.
-  // This eliminates the worst-case sequential 30s+30s wait when both providers
-  // are available, cutting latency to the faster of the two.
+  // Strategies 1, 2 & 3: Run Backend, Gemini, and OpenAI in parallel — first successful result wins.
+  // This eliminates the worst-case sequential 8s + 30s + 30s wait when multiple
+  // strategies are available, cutting latency to the fastest of the three.
   if (url && !audioUrl) {
     const candidates: Promise<TranscriptionResult | null>[] = [];
 
+    // Strategy 1: Try YouTube transcript API via backend (fast + free)
+    if (BACKEND_AVAILABLE) {
+      const backendPromise: Promise<TranscriptionResult | null> = (async () => {
+        try {
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 8_000);
+
+          const ytResponse = await fetch(`${BACKEND_URL}/api/v1/transcript-action`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(process.env.EVENTRELAY_API_KEY ? { 'X-API-Key': process.env.EVENTRELAY_API_KEY } : {}),
+            },
+            body: JSON.stringify({ video_url: url, language }),
+            signal: controller.signal,
+          }).finally(() => clearTimeout(timeout));
+
+          if (ytResponse.ok) {
+            const result = await ytResponse.json();
+
+            // Handle transcript as segments array
+            const segments = Array.isArray(result.transcript) ? result.transcript : [];
+            if (segments.length > 0) {
+              const fullText = segments
+                .map((s: { text?: string }) => s.text || '')
+                .join(' ')
+                .trim();
+
+              if (fullText.length > 50) {
+                return {
+                  success: true,
+                  transcript: fullText,
+                  segments,
+                  source: 'youtube',
+                  wordCount: fullText.split(/\s+/).length,
+                } satisfies TranscriptionResult;
+              }
+            }
+
+            // Handle transcript as { text: string }
+            const transcriptText =
+              typeof result.transcript === 'string'
+                ? result.transcript
+                : result.transcript?.text;
+            if (typeof transcriptText === 'string' && transcriptText.length > 50) {
+              return {
+                success: true,
+                transcript: transcriptText,
+                source: 'youtube',
+                wordCount: transcriptText.split(/\s+/).length,
+              } satisfies TranscriptionResult;
+            }
+          }
+          return null;
+        } catch (e) {
+          console.log('YouTube backend transcript unavailable:', e);
+          return null;
+        }
+      })();
+      candidates.push(backendPromise);
+    }
+
     // Strategy 2: Gemini with Google Search grounding
     if (hasGeminiKey()) {
-      const metadataContext = metadata ? formatMetadataAsContext(metadata) : '';
-      const geminiPrompt = `You are a video transcription assistant.
+      const geminiPromise: Promise<TranscriptionResult | null> = (async () => {
+        try {
+          const metadata = await metadataPromise;
+          const metadataContext = metadata ? formatMetadataAsContext(metadata) : '';
+          const geminiPrompt = `You are a video transcription assistant.
 
 For the following YouTube video, find the ACTUAL transcript, description, and chapter content.
 The video creator often provides detailed descriptions with chapter breakdowns — USE that
@@ -143,8 +150,6 @@ INSTRUCTIONS:
 4. Include timestamps in [MM:SS] format where possible.
 5. Do NOT return generic advice like "click Show Transcript" — return actual content.`;
 
-      const geminiPromise: Promise<TranscriptionResult | null> = (async () => {
-        try {
           const text = hasAiGatewayKey()
             ? (
                 await gatewayChat({
@@ -190,9 +195,10 @@ INSTRUCTIONS:
 
     // Strategy 3: OpenAI Responses API with web_search
     if (process.env.OPENAI_API_KEY) {
-      const metadataContext = metadata ? formatMetadataAsContext(metadata) : '';
       const openaiPromise: Promise<TranscriptionResult | null> = (async () => {
         try {
+          const metadata = await metadataPromise;
+          const metadataContext = metadata ? formatMetadataAsContext(metadata) : '';
           const response = await getOpenAI().responses.create({
             model: 'gpt-4o-mini',
             instructions: `You are a video content transcription assistant.
