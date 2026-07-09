@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 import unified_ai_sdk.unified_ai_sdk as sdk_mod
 from unified_ai_sdk import AIRequest, ModelProvider, TaskType, UnifiedAISDK
@@ -204,6 +205,18 @@ class TestUnifiedAISDK:
 
         assert result.success is False
         assert result.metadata["attempts"] == 1
+
+    def test_should_retry_rejects_gemini_400_with_incidental_500(self):
+        sdk = UnifiedAISDK({"retry_attempts": 3, "retry_base_delay": 0})
+
+        assert (
+            sdk._should_retry(
+                RuntimeError(
+                    "400 INVALID_ARGUMENT: input token count 500 exceeds model limit"
+                )
+            )
+            is False
+        )
 
     @pytest.mark.asyncio
     async def test_structured_output_support(self):
