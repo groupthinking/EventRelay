@@ -84,7 +84,7 @@ class AnthropicAPI {
     if (typeof conversationId !== 'string') {
       console.warn('Invalid conversationId type:', typeof conversationId);
       // Generate a fallback ID if the input is not a string
-      conversationId = 'conv_fallback_' + Date.now().toString(36);
+      conversationId = 'conv_fallback_' + crypto.randomBytes(4).toString('hex');
     }
     
     // Generate a seed from the conversation ID for consistent mocks
@@ -155,8 +155,7 @@ class AnthropicAPI {
   }
 }
 
-// Fix: Use crypto for UUID generation
-const generateUUID = () => crypto.randomUUID ? crypto.randomUUID() : `claude-${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
+const generateUUID = () => crypto.randomUUID();
 
 /**
  * Extract data from Claude conversation
@@ -165,7 +164,7 @@ async function extractFromClaude(options = {}) {
   console.log(`Extracting Claude conversation:`, options);
   
   // Extract conversationId from options
-  const conversationId = options.conversationId || ('conv_' + Date.now().toString(36));
+  const conversationId = options.conversationId || ('conv_' + crypto.randomBytes(4).toString('hex'));
   
   // 1. Authentication
   const anthropicClient = new AnthropicAPI(ANTHROPIC_API_KEY);
@@ -244,7 +243,7 @@ async function sendToMcpEndpoint(mcpContext) {
 async function main() {
   try {
     // Use a generated conversation ID
-    const convId = "conv_" + Date.now().toString(36);
+    const convId = "conv_" + crypto.randomBytes(4).toString('hex');
     console.log(`Using conversation ID: ${convId}`);
     
     const result = await extractFromClaude({ conversationId: convId });

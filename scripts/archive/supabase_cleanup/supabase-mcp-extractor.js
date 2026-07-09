@@ -7,6 +7,7 @@
 
 // Using modern import syntax for node-fetch
 const { default: fetch } = require('node-fetch');
+const crypto = require('crypto');
 
 // Supabase MCP endpoint
 const MCP_ENDPOINT = 'https://nsfrhirwsjqwhagtuaxx.supabase.co/functions/v1/connect-to-cursor-mcp';
@@ -110,7 +111,7 @@ async function extractFromClaude(conversationId) {
   
   // 4. Transformation to MCP
   const mcpContext = {
-    context_id: `claude-${conversationId}-${Date.now()}`,
+    context_id: crypto.randomUUID(),
     operation: "extract",
     parameters: {
       source: "claude",
@@ -180,7 +181,7 @@ async function main() {
   try {
     // Use a real or test conversation ID
     // Note: For real use, you need a valid conversation ID from Claude
-    const result = await extractFromClaude("conv_" + Date.now().toString(36));
+    const result = await extractFromClaude("conv_" + crypto.randomBytes(4).toString('hex'));
     console.log("Extraction complete!");
   } catch (error) {
     console.error("Extraction failed:", error);

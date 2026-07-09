@@ -5,9 +5,8 @@
  * It can capture query results, schema information, and database metadata.
  */
 
-// Fix: Use crypto for UUID generation instead of external dependency
 const crypto = require('crypto');
-const generateUUID = () => crypto.randomUUID ? crypto.randomUUID() : `sql-${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
+const generateUUID = () => crypto.randomUUID();
 
 /**
  * Extract context from SQL query results
@@ -22,7 +21,7 @@ const generateUUID = () => crypto.randomUUID ? crypto.randomUUID() : `sql-${Date
 async function extractFromSql(options = {}) {
   console.log(`Extracting SQL context with options:`, options);
   
-  const contextId = `sql-${options.connection?.database || 'query'}-${Date.now()}`;
+  const contextId = `sql-${options.connection?.database || 'query'}-${crypto.randomBytes(4).toString('hex')}`;
   
   try {
     // Create the result object
