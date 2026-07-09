@@ -249,8 +249,12 @@ class UnifiedAISDK:
 
         # General network errors or specific string-based checks for Gemini
         exc_str = str(exc).lower()
-        # Match provider status codes at the message start or after a response prefix.
-        status_match = re.search(r"(?:^|:\s+)(\d{3})\b", exc_str)
+        # Match common status formats like "400 INVALID_ARGUMENT" or
+        # "response: 500" without treating incidental counts as statuses.
+        status_match = re.match(r"\s*(\d{3})\b", exc_str) or re.search(
+            r"\b(?:http(?: status)?|response|status(?:_code)?|code)\s*[:=]\s*(\d{3})\b",
+            exc_str,
+        )
         if status_match:
             status_code = int(status_match.group(1))
             if status_code == 429 or status_code >= 500:
