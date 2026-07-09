@@ -1,5 +1,9 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 
+vi.mock('@/lib/billing/entitlement-store', () => ({
+  isProSubscriber: vi.fn().mockResolvedValue(true),
+}));
+
 import { POST } from '@/app/api/video/generate/route';
 
 const GATEWAY_URL = 'https://ai-gateway.vercel.sh/v1/video/generations';
