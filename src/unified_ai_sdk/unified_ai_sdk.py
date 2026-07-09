@@ -7,7 +7,7 @@ import logging
 import os
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable
+from typing import Any, Callable, Awaitable
 
 from .rate_limiter import ModelProvider, RateLimiter
 
@@ -92,8 +92,7 @@ class UnifiedAISDK:
         self.retry_attempts = retry_attempts
         self.retry_base_delay = float(self.config.get("retry_base_delay", 1.0))
         self.retry_max_delay = float(self.config.get("retry_max_delay", 8.0))
-        # Bound per-request latency so a slow upstream can't pin the
-        # asyncio.to_thread worker for the SDK default (OpenAI/Anthropic: 600s).
+        # Bound per-request latency.
         self.request_timeout = float(self.config.get("request_timeout", 60.0))
         self.rate_limiter = RateLimiter(self.config.get("rate_limits"))
 
@@ -109,15 +108,23 @@ class UnifiedAISDK:
         self._openai_key = self.config.get("openai_api_key") or os.getenv(
             "OPENAI_API_KEY"
         )
+        self._grok_key = (
+            self.config.get("grok_api_key")
+            or os.getenv("GROK_API_KEY")
+            or os.getenv("XAI_API_KEY")
+            or os.getenv("XAI_GROK4_API")
+        )
 
-        self._gemini_client: object | None = None
-        self._anthropic_client: object | None = None
-        self._openai_client: object | None = None
+        self._gemini_client: Any | None = None
+        self._anthropic_client: Any | None = None
+        self._openai_client: Any | None = None
+        self._grok_client: Any | None = None
 
-        self._handlers: dict[str, Callable[[AIRequest], tuple[str, int]]] = {
+        self._handlers: dict[str, Callable[[AIRequest], Awaitable[tuple[str, int]]]] = {
             "openai": self._generate_openai,
             "claude": self._generate_anthropic,
             "gemini": self._generate_gemini,
+            "grok": self._generate_grok,
         }
 
         self._init_clients()
@@ -127,9 +134,6 @@ class UnifiedAISDK:
         try:
             provider_name = self._normalize_provider(request.provider)
         except ValueError as exc:
-            # Unsupported provider (e.g. ModelProvider.GROK, which MCPBridge
-            # routes) must not raise: honor the contract of returning a
-            # structured failure response rather than an unhandled exception.
             return AIResponse(
                 content="",
                 model=request.model,
@@ -148,9 +152,13 @@ class UnifiedAISDK:
         for attempt in range(1, self.retry_attempts + 1):
             try:
                 await self.rate_limiter.wait_if_needed(provider, request.max_tokens)
-                content, tokens_used = await asyncio.to_thread(
-                    self._dispatch_sync, provider_name, request
-                )
+
+                handler = self._handlers[provider_name]
+                content, tokens_used = await handler(request)
+
+                if not content:
+                     raise RuntimeError(f"{provider_name} (model={request.model}) returned empty content")
+
                 return AIResponse(
                     content=content,
                     model=request.model,
@@ -172,7 +180,11 @@ class UnifiedAISDK:
                     self.retry_attempts,
                     exc,
                 )
-                if attempt >= self.retry_attempts:
+
+                # Determine if we should retry
+                should_retry = self._should_retry(exc)
+
+                if attempt >= self.retry_attempts or not should_retry:
                     return AIResponse(
                         content="",
                         model=request.model,
@@ -194,10 +206,43 @@ class UnifiedAISDK:
                 if delay > 0:
                     await asyncio.sleep(delay)
 
-        # Unreachable: retry_attempts >= 1 is enforced in __init__, so the loop
-        # always returns on its final attempt. Explicit terminal keeps strict
-        # mypy's missing-return check satisfied.
         raise RuntimeError("unified_request exhausted retries without returning")
+
+    def _should_retry(self, exc: Exception) -> bool:
+        """Determine if an exception warrants a retry."""
+        # OpenAI/Grok exceptions
+        if _OPENAI_AVAILABLE:
+            if isinstance(exc, _openai_sdk.RateLimitError):
+                return True
+            if isinstance(exc, (_openai_sdk.APITimeoutError, _openai_sdk.InternalServerError)):
+                return True
+            if isinstance(exc, _openai_sdk.APIStatusError):
+                # Retry on 5xx, but not 4xx (except 429)
+                return exc.status_code >= 500
+
+        # Anthropic exceptions
+        if _ANTHROPIC_AVAILABLE:
+            if isinstance(exc, _anthropic_sdk.RateLimitError):
+                return True
+            if isinstance(exc, (_anthropic_sdk.APITimeoutError, _anthropic_sdk.InternalServerError)):
+                return True
+            if isinstance(exc, _anthropic_sdk.APIStatusError):
+                return exc.status_code >= 500
+
+        # General network errors or specific string-based checks for Gemini
+        exc_str = str(exc).lower()
+        if "timeout" in exc_str or "deadline exceeded" in exc_str:
+            return True
+        if "rate limit" in exc_str or "429" in exc_str:
+            return True
+        if "internal server error" in exc_str or "500" in exc_str or "503" in exc_str:
+            return True
+
+        # Auth and Validation errors should not be retried
+        if any(term in exc_str for term in ["authentication", "unauthorized", "api_key", "invalid_request", "400", "401", "403"]):
+            return False
+
+        return True
 
     async def health_check(self) -> dict[str, Any]:
         """Report which providers are ready for live traffic."""
@@ -217,6 +262,11 @@ class UnifiedAISDK:
                 "sdk_available": _OPENAI_AVAILABLE,
                 "ready": self._openai_client is not None,
             },
+            "grok": {
+                "configured": bool(self._grok_key),
+                "sdk_available": _OPENAI_AVAILABLE,
+                "ready": self._grok_client is not None,
+            },
         }
         ready_count = sum(1 for info in providers.values() if info["ready"])
         return {
@@ -234,7 +284,7 @@ class UnifiedAISDK:
 
         if _ANTHROPIC_AVAILABLE and self._anthropic_key:
             try:
-                self._anthropic_client = _anthropic_sdk.Anthropic(
+                self._anthropic_client = _anthropic_sdk.AsyncAnthropic(
                     api_key=self._anthropic_key
                 )
             except Exception as exc:
@@ -242,9 +292,18 @@ class UnifiedAISDK:
 
         if _OPENAI_AVAILABLE and self._openai_key:
             try:
-                self._openai_client = _openai_sdk.OpenAI(api_key=self._openai_key)
+                self._openai_client = _openai_sdk.AsyncOpenAI(api_key=self._openai_key)
             except Exception as exc:
                 logger.warning("UnifiedAISDK failed to init OpenAI client: %s", exc)
+
+        if _OPENAI_AVAILABLE and self._grok_key:
+            try:
+                self._grok_client = _openai_sdk.AsyncOpenAI(
+                    api_key=self._grok_key,
+                    base_url="https://api.x.ai/v1"
+                )
+            except Exception as exc:
+                logger.warning("UnifiedAISDK failed to init Grok client: %s", exc)
 
     def _normalize_provider(self, provider: ModelProvider | str) -> str:
         provider_name = (
@@ -252,7 +311,7 @@ class UnifiedAISDK:
         ).lower()
         if provider_name in {"claude", "anthropic"}:
             return "claude"
-        if provider_name in {"openai", "gemini"}:
+        if provider_name in {"openai", "gemini", "grok"}:
             return provider_name
         raise ValueError(f"Unsupported provider: {provider_name}")
 
@@ -261,79 +320,167 @@ class UnifiedAISDK:
             return ModelProvider.CLAUDE
         if provider_name == "openai":
             return ModelProvider.OPENAI
+        if provider_name == "grok":
+            return ModelProvider.GROK
         return ModelProvider.GEMINI
 
-    def _dispatch_sync(self, provider_name: str, request: AIRequest) -> tuple[str, int]:
-        handler = self._handlers[provider_name]
-        content, tokens_used = handler(request)
-        if not content:
-            raise RuntimeError(
-                f"{provider_name} (model={request.model}) returned empty content"
-            )
-        return content, tokens_used
-
-    def _generate_openai(self, request: AIRequest) -> tuple[str, int]:
+    async def _generate_openai(self, request: AIRequest) -> tuple[str, int]:
         if self._openai_client is None:
             raise RuntimeError(f"OpenAI client is not configured for {request.model}")
-        response = self._openai_client.chat.completions.create(  # type: ignore[attr-defined]
-            model=request.model,
-            messages=[{"role": "user", "content": request.prompt}],
-            max_tokens=request.max_tokens,
-            temperature=request.temperature,
-            timeout=self.request_timeout,
-        )
-        choices = getattr(response, "choices", None)
-        if not choices or len(choices) == 0:
-            raise RuntimeError(f"OpenAI ({request.model}) returned no choices")
-        content = choices[0].message.content or ""
-        usage = getattr(response, "usage", None)
-        tokens_used = int(getattr(usage, "total_tokens", 0) or 0)
-        return content, tokens_used
 
-    def _generate_anthropic(self, request: AIRequest) -> tuple[str, int]:
+        kwargs: dict[str, Any] = {
+            "model": request.model,
+            "messages": [{"role": "user", "content": request.prompt}],
+            "max_tokens": request.max_tokens,
+            "temperature": request.temperature,
+            "timeout": self.request_timeout,
+        }
+
+        if request.structured_output:
+            kwargs["response_format"] = {"type": "json_object"}
+
+        try:
+            response = await self._openai_client.chat.completions.create(**kwargs)
+            choices = getattr(response, "choices", None)
+            if not choices or len(choices) == 0:
+                raise RuntimeError(f"OpenAI ({request.model}) returned no choices")
+
+            content = choices[0].message.content or ""
+            usage = getattr(response, "usage", None)
+            tokens_used = int(getattr(usage, "total_tokens", 0) or 0)
+            return content, tokens_used
+
+        except _openai_sdk.RateLimitError as exc:
+            logger.error("OpenAI Rate Limit: %s", exc)
+            raise
+        except _openai_sdk.APITimeoutError as exc:
+            logger.error("OpenAI Timeout: %s", exc)
+            raise
+        except _openai_sdk.APIStatusError as exc:
+            logger.error("OpenAI Status Error (status=%s): %s", exc.status_code, exc.message)
+            raise
+        except Exception as exc:
+            logger.error("OpenAI Unexpected Error: %s", exc)
+            raise
+
+    async def _generate_anthropic(self, request: AIRequest) -> tuple[str, int]:
         if self._anthropic_client is None:
-            raise RuntimeError(
-                f"Anthropic client is not configured for {request.model}"
-            )
-        response = self._anthropic_client.messages.create(  # type: ignore[attr-defined]
-            model=request.model,
-            max_tokens=request.max_tokens,
-            # The repo requires anthropic>=0.78.0, which supports adaptive thinking.
-            # `temperature` is intentionally omitted: Anthropic rejects a non-1
-            # temperature when extended thinking is enabled, and the default
-            # AIRequest.temperature (0.7) would fail every request. This mirrors
-            # the canonical calls in llm_router / protocol_bridge.
-            thinking={"type": "adaptive"},
-            messages=[{"role": "user", "content": request.prompt}],
-            timeout=self.request_timeout,
-        )
-        text_blocks = [
-            getattr(block, "text", "")
-            for block in response.content
-            if getattr(block, "type", None) == "text"
-        ]
-        usage = getattr(response, "usage", None)
-        input_tokens = int(getattr(usage, "input_tokens", 0) or 0)
-        output_tokens = int(getattr(usage, "output_tokens", 0) or 0)
-        return "\n".join(text_blocks), input_tokens + output_tokens
+            raise RuntimeError(f"Anthropic client is not configured for {request.model}")
 
-    def _generate_gemini(self, request: AIRequest) -> tuple[str, int]:
+        kwargs: dict[str, Any] = {
+            "model": request.model,
+            "max_tokens": request.max_tokens,
+            "messages": [{"role": "user", "content": request.prompt}],
+            "timeout": self.request_timeout,
+        }
+
+        # Handle adaptive thinking (requires no temperature != 1)
+        # Based on existing codebase patterns
+        kwargs["thinking"] = {"type": "adaptive"}
+
+        if request.structured_output:
+            # Anthropic doesn't have a direct equivalent to response_format="json"
+            # in the same way, but we can nudge it via system prompt or
+            # assume the user does it. For robustness, we'll just log and proceed.
+            logger.debug("Anthropic: structured_output requested, ensure prompt specifies JSON.")
+
+        try:
+            response = await self._anthropic_client.messages.create(**kwargs)
+            text_blocks = [
+                getattr(block, "text", "")
+                for block in response.content
+                if getattr(block, "type", None) == "text"
+            ]
+            usage = getattr(response, "usage", None)
+            input_tokens = int(getattr(usage, "input_tokens", 0) or 0)
+            output_tokens = int(getattr(usage, "output_tokens", 0) or 0)
+            return "\n".join(text_blocks), input_tokens + output_tokens
+
+        except _anthropic_sdk.RateLimitError as exc:
+            logger.error("Anthropic Rate Limit: %s", exc)
+            raise
+        except _anthropic_sdk.APITimeoutError as exc:
+            logger.error("Anthropic Timeout: %s", exc)
+            raise
+        except _anthropic_sdk.APIStatusError as exc:
+            logger.error("Anthropic Status Error (status=%s): %s", exc.status_code, exc.message)
+            raise
+        except Exception as exc:
+            logger.error("Anthropic Unexpected Error: %s", exc)
+            raise
+
+    async def _generate_gemini(self, request: AIRequest) -> tuple[str, int]:
         if self._gemini_client is None:
             raise RuntimeError(f"Gemini client is not configured for {request.model}")
-        kwargs: dict[str, Any] = {"model": request.model, "contents": request.prompt}
-        if _GENAI_AVAILABLE and _genai_types is not None:
-            kwargs["config"] = _genai_types.GenerateContentConfig(
-                temperature=request.temperature,
-                max_output_tokens=request.max_tokens,
+
+        config_kwargs: dict[str, Any] = {
+            "temperature": request.temperature,
+            "max_output_tokens": request.max_tokens,
+        }
+
+        if request.structured_output:
+            config_kwargs["response_mime_type"] = "application/json"
+
+        try:
+            # Use the asynchronous aio namespace
+            response = await self._gemini_client.aio.models.generate_content(
+                model=request.model,
+                contents=request.prompt,
+                config=_genai_types.GenerateContentConfig(**config_kwargs) if _genai_types else None
             )
-        response = self._gemini_client.models.generate_content(**kwargs)  # type: ignore[attr-defined]
-        text = response.text
-        if text is None and not getattr(response, "candidates", None):
-            raise RuntimeError(f"Gemini ({request.model}) returned no candidates")
-        if text is None:
-            parts = response.candidates[0].content.parts
-            text_parts = [part.text for part in parts if getattr(part, "text", None)]
-            text = "\n".join(text_parts) if text_parts else ""
-        usage = getattr(response, "usage_metadata", None)
-        tokens_used = int(getattr(usage, "total_token_count", 0) or 0)
-        return text or "", tokens_used
+
+            text = response.text
+            if text is None and not getattr(response, "candidates", None):
+                raise RuntimeError(f"Gemini ({request.model}) returned no candidates")
+            if text is None:
+                parts = response.candidates[0].content.parts
+                text_parts = [part.text for part in parts if getattr(part, "text", None)]
+                text = "\n".join(text_parts) if text_parts else ""
+
+            usage = getattr(response, "usage_metadata", None)
+            tokens_used = int(getattr(usage, "total_token_count", 0) or 0)
+            return text or "", tokens_used
+
+        except Exception as exc:
+            logger.error("Gemini Unexpected Error: %s", exc)
+            raise
+
+    async def _generate_grok(self, request: AIRequest) -> tuple[str, int]:
+        if self._grok_client is None:
+            raise RuntimeError(f"Grok client is not configured for {request.model}")
+
+        kwargs: dict[str, Any] = {
+            "model": request.model,
+            "messages": [{"role": "user", "content": request.prompt}],
+            "max_tokens": request.max_tokens,
+            "temperature": request.temperature,
+            "timeout": self.request_timeout,
+        }
+
+        # Grok API supports similar response_format as OpenAI
+        if request.structured_output:
+            kwargs["response_format"] = {"type": "json_object"}
+
+        try:
+            response = await self._grok_client.chat.completions.create(**kwargs)
+            choices = getattr(response, "choices", None)
+            if not choices or len(choices) == 0:
+                raise RuntimeError(f"Grok ({request.model}) returned no choices")
+
+            content = choices[0].message.content or ""
+            usage = getattr(response, "usage", None)
+            tokens_used = int(getattr(usage, "total_tokens", 0) or 0)
+            return content, tokens_used
+
+        except _openai_sdk.RateLimitError as exc:
+            logger.error("Grok Rate Limit: %s", exc)
+            raise
+        except _openai_sdk.APITimeoutError as exc:
+            logger.error("Grok Timeout: %s", exc)
+            raise
+        except _openai_sdk.APIStatusError as exc:
+            logger.error("Grok Status Error (status=%s): %s", exc.status_code, exc.message)
+            raise
+        except Exception as exc:
+            logger.error("Grok Unexpected Error: %s", exc)
+            raise
