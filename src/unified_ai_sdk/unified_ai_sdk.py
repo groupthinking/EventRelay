@@ -249,6 +249,7 @@ class UnifiedAISDK:
 
         # General network errors or specific string-based checks for Gemini
         exc_str = str(exc).lower()
+        # Match provider status codes at the message start or after a response prefix.
         status_match = re.search(r"(?:^|:\s+)(\d{3})\b", exc_str)
         if status_match:
             status_code = int(status_match.group(1))
