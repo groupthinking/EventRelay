@@ -811,8 +811,12 @@ async def get_cache_stats_v1(cache_service: CacheService = Depends(get_cache_ser
             return CacheStats(**_stats_cache)
 
         stats = cache_service.get_cache_statistics()
-        _stats_cache = stats
-        _stats_cache_time = now
+        # Only cache successful results. get_cache_statistics() swallows its own
+        # exceptions and returns a zeroed dict with an "error" key on failure;
+        # caching that would serve bogus all-zero stats for the whole TTL window.
+        if "error" not in stats:
+            _stats_cache = stats
+            _stats_cache_time = now
         return CacheStats(**stats)
     except Exception as e:
         logger.error(f"Error getting cache stats: {e}")

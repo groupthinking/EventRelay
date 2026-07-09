@@ -850,16 +850,44 @@ class DatabaseHealthMonitor:
             }
 
 
+def _parse_pool_size(env_var: str, default: int) -> int:
+    """Parse a positive-int pool-size env var, falling back to ``default``.
+
+    Runs at import time, so a malformed value (empty string, non-numeric, or
+    non-positive) must never crash startup — log a warning and use the default.
+    """
+    raw = os.getenv(env_var, str(default))
+    try:
+        value = int(raw)
+        if value <= 0:
+            raise ValueError(f"{env_var} must be positive, got {value}")
+        return value
+    except ValueError as error:
+        logger.warning(
+            "Invalid %s=%r (%s); using default %d", env_var, raw, error, default
+        )
+        return default
+
+
 # Global database optimization system
 # Use /tmp for Cloud Run compatibility (read-only filesystem except /tmp)
 database_url = os.getenv("DATABASE_URL", "sqlite:////tmp/uvai_data/app.db")
 # Connection pool sizing (applied by the PostgreSQL branch; the SQLite default
 # path ignores these). Env-configurable so deployments can tune concurrency
 # without a code change. Defaults: keep a few ready (5), allow bursts (50).
+_min_conn = _parse_pool_size("DB_POOL_MIN_CONNECTIONS", 5)
+_max_conn = _parse_pool_size("DB_POOL_MAX_CONNECTIONS", 50)
+if _min_conn > _max_conn:
+    logger.warning(
+        "DB_POOL_MIN_CONNECTIONS (%d) > DB_POOL_MAX_CONNECTIONS (%d); swapping",
+        _min_conn,
+        _max_conn,
+    )
+    _min_conn, _max_conn = _max_conn, _min_conn
 connection_pool = DatabaseConnectionPool(
     database_url,
-    min_connections=int(os.getenv("DB_POOL_MIN_CONNECTIONS", "5")),
-    max_connections=int(os.getenv("DB_POOL_MAX_CONNECTIONS", "50")),
+    min_connections=_min_conn,
+    max_connections=_max_conn,
 )
 query_optimizer = QueryOptimizer(connection_pool)
 health_monitor = DatabaseHealthMonitor(query_optimizer)
