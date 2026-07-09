@@ -57,8 +57,19 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 class AuditAgent:
-    def __init__(self, dry_run: bool = False):
+    def __init__(
+        self,
+        dry_run: bool = False,
+        lookback_hours: int = 72,
+        active_measurement: bool = False,
+        measurement_samples: int = 3,
+        measurement_interval: float = 1.0,
+    ):
         self.dry_run = dry_run
+        self.lookback_hours = lookback_hours
+        self.active_measurement = active_measurement
+        self.measurement_samples = measurement_samples
+        self.measurement_interval = measurement_interval
         self.log_dir = Path("logs")
         self.log_dir.mkdir(exist_ok=True)
         self.report = []
@@ -89,6 +100,9 @@ class AuditAgent:
         self._add_report_header(start_time)
 
         logger.info("Starting Nightly Audit...")
+        self.report.append(f"Analysis lookback: {self.lookback_hours} hours")
+
+        await self._collect_active_measurements()
 
         # 1. Analysis Phase
         await self.analyze_phase()
@@ -115,7 +129,7 @@ class AuditAgent:
         # Check System Health
         await self._check_system_health()
 
-        # Scan Logs for Errors and Status Codes (Last 24h)
+        # Scan Logs for Errors and Status Codes
         await self._scan_logs()
 
         # Check Metrics for Latency
@@ -151,8 +165,30 @@ class AuditAgent:
                 "details": str(e)
             })
 
+    async def _collect_active_measurements(self):
+        """Collect live metric samples before analysis for more accurate output."""
+        if not self.active_measurement or not self.metrics_service:
+            return
+
+        samples = max(1, self.measurement_samples)
+        interval = max(0.0, self.measurement_interval)
+        self.report.append(f"📏 ACTIVE MEASUREMENT: collecting {samples} live samples")
+
+        try:
+            await self.metrics_service.start_collection()
+            for sample_index in range(samples):
+                await self.metrics_service.get_system_metrics()
+                if interval and sample_index < samples - 1:
+                    await asyncio.sleep(interval)
+
+            persist = getattr(self.metrics_service, "_persist_metrics", None)
+            if persist:
+                await persist()
+        finally:
+            await self.metrics_service.stop_collection()
+
     async def _scan_logs(self):
-        """Scan logs for recent critical failures and status codes > 400 (Last 24h)"""
+        """Scan logs for recent critical failures and status codes > 400."""
         error_log_path = self.log_dir / "error_logs.jsonl"
         structured_log_path = self.log_dir / "structured_logs.jsonl"
 
@@ -162,7 +198,7 @@ class AuditAgent:
             logger.warning("No log files found to scan.")
             return
 
-        cutoff_time = datetime.now(timezone.utc) - timedelta(hours=24)
+        cutoff_time = datetime.now(timezone.utc) - timedelta(hours=self.lookback_hours)
         found_issues = []
 
         for log_file in files_to_scan:
@@ -412,9 +448,38 @@ class AuditAgent:
 async def main():
     parser = argparse.ArgumentParser(description="Jules Audit Agent")
     parser.add_argument("--dry-run", action="store_true", help="Simulate remediation actions")
+    parser.add_argument(
+        "--lookback-hours",
+        type=int,
+        default=72,
+        help="Hours of logs and metrics to scan (default: 72)",
+    )
+    parser.add_argument(
+        "--active-measurement",
+        action="store_true",
+        help="Collect live metric samples before analysis",
+    )
+    parser.add_argument(
+        "--measurement-samples",
+        type=int,
+        default=3,
+        help="Number of live metric samples to collect",
+    )
+    parser.add_argument(
+        "--measurement-interval",
+        type=float,
+        default=1.0,
+        help="Seconds between live metric samples",
+    )
     args = parser.parse_args()
 
-    agent = AuditAgent(dry_run=args.dry_run)
+    agent = AuditAgent(
+        dry_run=args.dry_run,
+        lookback_hours=args.lookback_hours,
+        active_measurement=args.active_measurement,
+        measurement_samples=args.measurement_samples,
+        measurement_interval=args.measurement_interval,
+    )
     await agent.run_audit()
 
 if __name__ == "__main__":
