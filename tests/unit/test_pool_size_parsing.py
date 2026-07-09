@@ -38,3 +38,15 @@ class TestParsePoolSize:
     ) -> None:
         monkeypatch.setenv("DB_POOL_TEST", bad)
         assert _parse_pool_size("DB_POOL_TEST", 8) == 8
+
+    def test_value_above_ceiling_is_clamped(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("DB_POOL_TEST", "1000000")
+        assert _parse_pool_size("DB_POOL_TEST", 5, max_allowed=200) == 200
+
+    def test_value_at_ceiling_is_kept(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("DB_POOL_TEST", "200")
+        assert _parse_pool_size("DB_POOL_TEST", 5, max_allowed=200) == 200

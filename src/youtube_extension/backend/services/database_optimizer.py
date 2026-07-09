@@ -850,17 +850,25 @@ class DatabaseHealthMonitor:
             }
 
 
-def _parse_pool_size(env_var: str, default: int) -> int:
+def _parse_pool_size(env_var: str, default: int, max_allowed: int = 200) -> int:
     """Parse a positive-int pool-size env var, falling back to ``default``.
 
     Runs at import time, so a malformed value (empty string, non-numeric, or
     non-positive) must never crash startup — log a warning and use the default.
+    Values above ``max_allowed`` are clamped so a mistyped env var (e.g. an
+    extra zero) can't exhaust the database's connection limit or file
+    descriptors.
     """
     raw = os.getenv(env_var, str(default))
     try:
         value = int(raw)
         if value <= 0:
             raise ValueError(f"{env_var} must be positive, got {value}")
+        if value > max_allowed:
+            logger.warning(
+                "%s=%d exceeds max_allowed=%d; clamping", env_var, value, max_allowed
+            )
+            return max_allowed
         return value
     except ValueError as error:
         logger.warning(
