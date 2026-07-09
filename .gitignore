@@ -201,3 +201,14 @@ docs/gemini_reference/
 data/audit/*.jsonl
 # TypeScript incremental build cache
 *.tsbuildinfo
+
+# Test artifacts
+tests/load/baseline_results*
+tests/load/normal_results*
+tests/load/peak_results*
+security-scan.json
+safety-report.json
+backend.log
+frontend.log
+apps/web/test-results/
+apps/web/playwright-report/
