@@ -16,6 +16,10 @@ const GENERAL_LIMIT = Number(process.env.UVAI_API_RATE_LIMIT_PER_MINUTE || 60);
 const AI_LIMIT = Number(process.env.UVAI_AI_RATE_LIMIT_PER_MINUTE || 12);
 
 const AI_ROUTE_PREFIXES = [
+  // Both /api/agents/actions (runActionAgent) and /api/agents/dispatch invoke an
+  // LLM per request, so both must fail closed on a limiter outage. The sibling
+  // /api/agents/status is a cheap GET and is intentionally left off (fails open).
+  '/api/agents/actions',
   '/api/agents/dispatch',
   '/api/chat',
   '/api/extract-events',

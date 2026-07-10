@@ -75,6 +75,31 @@ describe('proxy rate limiting — production without a working Redis limiter', (
     expect(body.code).toBe('rate_limit_unavailable');
   });
 
+  it('fails CLOSED with 503 for /api/agents/actions (LLM route, not just dispatch)', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('UVAI_RATE_LIMIT_FAIL_OPEN', '');
+    clearRedisEnv();
+
+    const proxy = await loadProxy();
+    const res = await proxy(apiRequest('/api/agents/actions'));
+
+    expect(res.status).toBe(503);
+    const body = await res.json();
+    expect(body.code).toBe('rate_limit_unavailable');
+  });
+
+  it('fails OPEN for the cheap /api/agents/status route', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('UVAI_RATE_LIMIT_FAIL_OPEN', '');
+    clearRedisEnv();
+
+    const proxy = await loadProxy();
+    const res = await proxy(apiRequest('/api/agents/status'));
+
+    expect(res.status).not.toBe(503);
+    expect(res.status).not.toBe(429);
+  });
+
   it('honours UVAI_RATE_LIMIT_FAIL_OPEN=1 to fail open even for AI routes', async () => {
     vi.stubEnv('NODE_ENV', 'production');
     vi.stubEnv('UVAI_RATE_LIMIT_FAIL_OPEN', '1');
