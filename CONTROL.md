@@ -13,4 +13,4 @@
 
 **Do not trust without re-verify:** root `ARCHITECTURE.md`, `docs/refactor/STATE.md`, `shared/_core/SYSTEM_STATUS.md`, Drive concept PDFs, empty `packages/*`, `src/vera` (pyc only).
 
-**Owner next action:** fix GitHub + Vercel CLI auth (see EXECUTION-PLAN GATE-0), then say “GATE-0 auth done”.
+**Owner next action:** complete GATE-3 launch config — Cloudflare Turnstile keys, Stripe webhook secret, Stripe price IDs, Google OAuth (see EXECUTION-PLAN GATE-3) — then trigger the GATE-4 Vercel deploy. (GATE-0 CLI auth is resolved via the `env -u GITHUB_TOKEN` / `env -u VERCEL_TOKEN` workaround.)

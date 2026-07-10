@@ -15,7 +15,7 @@ GATE-2  Live product baseline   DONE 2026-07-10 — see sessions/gate2-20260710T
 GATE-3  Launch config — AUDIT DONE, launch blocked on Turnstile/Webhook/Prices/OAuth
 GATE-4  Security High — code done on fix/gate4-security-hardening; deploy pending
 GATE-5  Single pipeline reliability (honest handoff)
-GATE-6  Doc consolidation complete
+GATE-6  Doc consolidation       PENDING (all G6 tasks TODO; exit unmet)
 GATE-7  Optional: data plane (BQ/RAG) only if product needs it
 ```
 

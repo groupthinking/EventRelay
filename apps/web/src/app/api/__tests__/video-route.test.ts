@@ -51,7 +51,9 @@ describe('POST /api/video', () => {
         text: async () => '{}',
       } as unknown as Response),
     );
-    const res = await POST(postRequest({ url: 'https://youtu.be/x' }));
+    // Must be a valid 11-char YouTube id — the BFF allowlist now rejects short
+    // ids (e.g. `youtu.be/x`) with a 400 before the transcript chain runs.
+    const res = await POST(postRequest({ url: 'https://youtu.be/dQw4w9WgXcQ' }));
     const body = await res.json();
     expect(body.status).toBe('failed');
     expect(body.result.success).toBe(false);
