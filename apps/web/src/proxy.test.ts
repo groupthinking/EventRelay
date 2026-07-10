@@ -16,9 +16,9 @@ vi.mock('@upstash/redis', () => ({
   },
 }));
 
-function apiRequest(path: string): NextRequest {
+function apiRequest(path: string, method = 'GET'): NextRequest {
   return new NextRequest(`http://localhost:3000${path}`, {
-    method: 'GET',
+    method,
     headers: { 'x-real-ip': '203.0.113.5' },
   });
 }
@@ -62,30 +62,44 @@ describe('proxy rate limiting — production without a working Redis limiter', (
     expect(res.headers.get('X-RateLimit-Limit')).toBeTruthy();
   });
 
-  it('fails CLOSED with 503 for AI routes (denial-of-wallet protection)', async () => {
+  it('fails CLOSED with 503 for AI writes (POST) — denial-of-wallet protection', async () => {
     vi.stubEnv('NODE_ENV', 'production');
     vi.stubEnv('UVAI_RATE_LIMIT_FAIL_OPEN', '');
     clearRedisEnv();
 
     const proxy = await loadProxy();
-    const res = await proxy(apiRequest('/api/chat'));
+    const res = await proxy(apiRequest('/api/chat', 'POST'));
 
     expect(res.status).toBe(503);
     const body = await res.json();
     expect(body.code).toBe('rate_limit_unavailable');
   });
 
-  it('fails CLOSED with 503 for /api/agents/actions (LLM route, not just dispatch)', async () => {
+  it('fails CLOSED with 503 for POST /api/agents/actions (LLM route, not just dispatch)', async () => {
     vi.stubEnv('NODE_ENV', 'production');
     vi.stubEnv('UVAI_RATE_LIMIT_FAIL_OPEN', '');
     clearRedisEnv();
 
     const proxy = await loadProxy();
-    const res = await proxy(apiRequest('/api/agents/actions'));
+    const res = await proxy(apiRequest('/api/agents/actions', 'POST'));
 
     expect(res.status).toBe(503);
     const body = await res.json();
     expect(body.code).toBe('rate_limit_unavailable');
+  });
+
+  it('fails OPEN for cheap GET reads under an AI prefix (e.g. GET /api/video status)', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('UVAI_RATE_LIMIT_FAIL_OPEN', '');
+    clearRedisEnv();
+
+    const proxy = await loadProxy();
+    // /api/video is an AI prefix, but the GET handler is a cheap status read —
+    // a limiter outage must not 503 it (only expensive writes fail closed).
+    const res = await proxy(apiRequest('/api/video', 'GET'));
+
+    expect(res.status).not.toBe(503);
+    expect(res.status).not.toBe(429);
   });
 
   it('fails OPEN for the cheap /api/agents/status route', async () => {
@@ -100,13 +114,13 @@ describe('proxy rate limiting — production without a working Redis limiter', (
     expect(res.status).not.toBe(429);
   });
 
-  it('honours UVAI_RATE_LIMIT_FAIL_OPEN=1 to fail open even for AI routes', async () => {
+  it('honours UVAI_RATE_LIMIT_FAIL_OPEN=1 to fail open even for AI writes', async () => {
     vi.stubEnv('NODE_ENV', 'production');
     vi.stubEnv('UVAI_RATE_LIMIT_FAIL_OPEN', '1');
     clearRedisEnv();
 
     const proxy = await loadProxy();
-    const res = await proxy(apiRequest('/api/chat'));
+    const res = await proxy(apiRequest('/api/chat', 'POST'));
 
     expect(res.status).not.toBe(503);
     expect(res.status).not.toBe(429);
