@@ -16,7 +16,7 @@ import {
   parseBackendJson,
   PIPELINE_HEALTH_TIMEOUT_MS as HEALTH_PROBE_MS,
 } from '@/lib/pipeline-backend-health';
-import { resolveVideoUrl } from '@/lib/video-url-request';
+import { isAllowedYoutubeUrl, resolveVideoUrl } from '@/lib/video-url-request';
 
 const { configured: BACKEND_CONFIGURED, url: CONFIGURED_BACKEND_URL } = getBackendConfig();
 const BACKEND_URL = CONFIGURED_BACKEND_URL || 'http://localhost:8000';
@@ -225,6 +225,17 @@ export async function POST(request: Request) {
 
     if (!url) {
       return NextResponse.json({ error: 'Video URL is required' }, { status: 400 });
+    }
+
+    if (!isAllowedYoutubeUrl(url)) {
+      return NextResponse.json(
+        {
+          error:
+            'Invalid YouTube URL. Only youtube.com / youtu.be watch, embed, or shorts URLs are accepted.',
+          code: 'invalid_youtube_url',
+        },
+        { status: 400 },
+      );
     }
 
     await publishEvent(EventTypes.VIDEO_RECEIVED, { url, pipeline: 'end-to-end' }, url);

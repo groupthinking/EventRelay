@@ -181,7 +181,10 @@ async function checkRateLimit(request: NextRequest): Promise<RateLimitResult> {
       if (process.env.NODE_ENV !== 'production') {
         console.warn('Upstash rate limit check failed; using in-memory fallback.', error);
       } else {
-        console.warn('Upstash rate limit check failed in production; failing open.', error);
+        console.error(
+          'Upstash rate limit check failed in production; failing closed for expensive AI routes.',
+          error,
+        );
       }
     }
   }
@@ -191,11 +194,25 @@ async function checkRateLimit(request: NextRequest): Promise<RateLimitResult> {
     return checkMemoryLimit(key, limit);
   }
 
-  // Production without Redis: fail-open (allowed) with the warning already emitted above.
+  // Production without working Redis: fail-closed (deny) unless emergency override.
+  // Fail-open re-opens denial-of-wallet on AI routes (audit findings #4/#7).
+  const failOpen = process.env.UVAI_RATE_LIMIT_FAIL_OPEN === '1';
+  if (failOpen) {
+    console.warn(
+      '[RateLimit] UVAI_RATE_LIMIT_FAIL_OPEN=1 — production rate limit failing open (emergency).',
+    );
+    return {
+      allowed: true,
+      limit,
+      remaining: limit,
+      resetAt: Math.ceil((Date.now() + WINDOW_SECONDS * 1000) / 1000),
+    };
+  }
+
   return {
-    allowed: true,
+    allowed: false,
     limit,
-    remaining: limit,
+    remaining: 0,
     resetAt: Math.ceil((Date.now() + WINDOW_SECONDS * 1000) / 1000),
   };
 }

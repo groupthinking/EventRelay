@@ -114,6 +114,43 @@ describe('POST /api/video/generate', () => {
     expect(redisExpireMock).toHaveBeenCalledWith('ratelimit:video-generate:10.1.1.1', 600);
   });
 
+  it('fails closed with 503 when Redis credentials are missing in production', async () => {
+    const { resolveUpstashRedisCredentials } = await import('@/lib/billing/redis-credentials');
+    (resolveUpstashRedisCredentials as any).mockReturnValueOnce(null);
+    const prev = process.env.NODE_ENV;
+    const prevFailOpen = process.env.UVAI_RATE_LIMIT_FAIL_OPEN;
+    process.env.NODE_ENV = 'production';
+    delete process.env.UVAI_RATE_LIMIT_FAIL_OPEN;
+
+    try {
+      const res = await POST(postReq(validBody, '10.8.8.8'));
+      expect(res.status).toBe(503);
+      const body = await res.json();
+      expect(body.code).toBe('rate_limit_unavailable');
+      expect(generateVideoMock).not.toHaveBeenCalled();
+    } finally {
+      process.env.NODE_ENV = prev;
+      if (prevFailOpen === undefined) delete process.env.UVAI_RATE_LIMIT_FAIL_OPEN;
+      else process.env.UVAI_RATE_LIMIT_FAIL_OPEN = prevFailOpen;
+    }
+  });
+
+  it('fails closed with 503 when Redis throws in production', async () => {
+    redisIncrMock.mockRejectedValueOnce(new Error('redis down'));
+    const prev = process.env.NODE_ENV;
+    delete process.env.UVAI_RATE_LIMIT_FAIL_OPEN;
+    process.env.NODE_ENV = 'production';
+    try {
+      const res = await POST(postReq(validBody, '10.7.7.7'));
+      expect(res.status).toBe(503);
+      const body = await res.json();
+      expect(body.code).toBe('rate_limit_error');
+      expect(generateVideoMock).not.toHaveBeenCalled();
+    } finally {
+      process.env.NODE_ENV = prev;
+    }
+  });
+
   it('streams the bytes when generation is successful', async () => {
     const fakeVideoData = new Uint8Array([1, 2, 3, 4]);
     generateVideoMock.mockResolvedValue({
