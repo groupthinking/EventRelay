@@ -185,8 +185,8 @@ async function checkRateLimit(request: NextRequest): Promise<RateLimitResult> {
   if (!redisClient && process.env.NODE_ENV === 'production' && !prodRedisWarned) {
     console.error(
       '[RateLimit] No Upstash/KV Redis configured in production (checked UPSTASH_REDIS_REST_* and KV_REST_API_*). ' +
-      'Failing CLOSED for expensive AI writes (POST/PUT/PATCH/DELETE on AI routes; denial-of-wallet protection) and ' +
-      'OPEN for reads (GET/HEAD) and all non-AI routes so a limiter outage cannot take down status/health/billing/auth. ' +
+      'Failing CLOSED for all AI routes (denial-of-wallet protection — some AI GETs are paid calls) and OPEN for ' +
+      'non-AI routes so a limiter outage cannot take down billing/auth/health. ' +
       'Configure Upstash or Vercel KV for full enforcement. ' +
       'See src/proxy.ts and the rate-limit-middleware agent in config/agent_network.json.'
     );
@@ -220,18 +220,19 @@ async function checkRateLimit(request: NextRequest): Promise<RateLimitResult> {
     resetAt: Math.ceil((Date.now() + WINDOW_SECONDS * 1000) / 1000),
   };
 
-  // Production without a working Redis limiter. Fail CLOSED only for *expensive*
-  // AI operations — writes (POST/PUT/PATCH/DELETE) on an AI route — to preserve
-  // denial-of-wallet protection (audit findings #4/#7). Cheap reads (GET/HEAD),
-  // even under an AI prefix — e.g. `GET /api/video` (status), `GET /api/pipeline`
-  // (metadata), `GET /api/training/status` — fail OPEN, alongside all non-AI
-  // routes (billing, auth, health, general API), so a limiter outage or
-  // credential misconfiguration cannot take status/health endpoints offline.
-  // The emergency override forces open even for AI writes.
-  const isWriteMethod = request.method !== 'GET' && request.method !== 'HEAD';
-  const overrideOpen = process.env.UVAI_RATE_LIMIT_FAIL_OPEN === '1';
-  if (routeClass !== 'ai' || !isWriteMethod || overrideOpen) {
-    if (routeClass === 'ai' && isWriteMethod && overrideOpen) {
+  // Production without a working Redis limiter. Fail CLOSED for ALL AI-prefixed
+  // routes regardless of HTTP method. A method-based "GETs are cheap" heuristic
+  // is unsafe here: several AI GETs are themselves paid calls — e.g.
+  // `GET /api/realtime/session` mints an OpenAI Realtime client secret and
+  // `GET /api/video/search` runs a Gemini embedding — so failing GETs open would
+  // reopen the denial-of-wallet vector (audit findings #4/#7). Non-AI routes
+  // (billing, auth, health, general API) still fail OPEN so a limiter outage
+  // can't take the whole API down. The accepted trade-off is that cheap AI
+  // status GETs (e.g. `GET /api/video`, `GET /api/pipeline`) briefly 503 during
+  // a Redis outage — strictly safer than leaking unmetered paid calls. The
+  // emergency override forces open even for AI routes.
+  if (routeClass !== 'ai' || process.env.UVAI_RATE_LIMIT_FAIL_OPEN === '1') {
+    if (routeClass === 'ai') {
       console.warn(
         '[RateLimit] UVAI_RATE_LIMIT_FAIL_OPEN=1 — production AI rate limit failing open (emergency).',
       );
@@ -239,7 +240,7 @@ async function checkRateLimit(request: NextRequest): Promise<RateLimitResult> {
     return allowResult;
   }
 
-  // AI write, no Redis, no override: deny. This is a limiter *outage*, not a
+  // AI route, no Redis, no override: deny. This is a limiter *outage*, not a
   // genuine per-client overage, so it surfaces as 503 (see proxy handler).
   return {
     allowed: false,

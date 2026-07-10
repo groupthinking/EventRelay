@@ -62,7 +62,7 @@ describe('proxy rate limiting — production without a working Redis limiter', (
     expect(res.headers.get('X-RateLimit-Limit')).toBeTruthy();
   });
 
-  it('fails CLOSED with 503 for AI writes (POST) — denial-of-wallet protection', async () => {
+  it('fails CLOSED with 503 for AI routes (POST /api/chat) — denial-of-wallet protection', async () => {
     vi.stubEnv('NODE_ENV', 'production');
     vi.stubEnv('UVAI_RATE_LIMIT_FAIL_OPEN', '');
     clearRedisEnv();
@@ -88,21 +88,23 @@ describe('proxy rate limiting — production without a working Redis limiter', (
     expect(body.code).toBe('rate_limit_unavailable');
   });
 
-  it('fails OPEN for cheap GET reads under an AI prefix (e.g. GET /api/video status)', async () => {
+  it('fails CLOSED for paid AI GET endpoints (GET /api/video/search runs an embedding)', async () => {
     vi.stubEnv('NODE_ENV', 'production');
     vi.stubEnv('UVAI_RATE_LIMIT_FAIL_OPEN', '');
     clearRedisEnv();
 
     const proxy = await loadProxy();
-    // /api/video is an AI prefix, but the GET handler is a cheap status read —
-    // a limiter outage must not 503 it (only expensive writes fail closed).
-    const res = await proxy(apiRequest('/api/video', 'GET'));
+    // Some AI GETs are paid calls (embedding / OpenAI Realtime secret), so ALL
+    // AI-prefixed routes fail closed regardless of method — a method-based
+    // "GETs are cheap" rule would leak these during a Redis outage.
+    const res = await proxy(apiRequest('/api/video/search?videoId=x&q=y', 'GET'));
 
-    expect(res.status).not.toBe(503);
-    expect(res.status).not.toBe(429);
+    expect(res.status).toBe(503);
+    const body = await res.json();
+    expect(body.code).toBe('rate_limit_unavailable');
   });
 
-  it('fails OPEN for the cheap /api/agents/status route', async () => {
+  it('fails OPEN for non-AI GET routes (e.g. /api/agents/status)', async () => {
     vi.stubEnv('NODE_ENV', 'production');
     vi.stubEnv('UVAI_RATE_LIMIT_FAIL_OPEN', '');
     clearRedisEnv();
@@ -114,7 +116,7 @@ describe('proxy rate limiting — production without a working Redis limiter', (
     expect(res.status).not.toBe(429);
   });
 
-  it('honours UVAI_RATE_LIMIT_FAIL_OPEN=1 to fail open even for AI writes', async () => {
+  it('honours UVAI_RATE_LIMIT_FAIL_OPEN=1 to fail open even for AI routes', async () => {
     vi.stubEnv('NODE_ENV', 'production');
     vi.stubEnv('UVAI_RATE_LIMIT_FAIL_OPEN', '1');
     clearRedisEnv();
