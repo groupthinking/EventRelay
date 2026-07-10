@@ -142,11 +142,13 @@ async function checkRedisLimit(redisClient: Redis, key: string, limit: number): 
     await redisClient.expire(redisKey, WINDOW_SECONDS + 5);
   }
 
+  const allowed = count <= limit;
   return {
-    allowed: count <= limit,
+    allowed,
     limit,
     remaining: Math.max(0, limit - count),
     resetAt,
+    reason: allowed ? undefined : 'exceeded',
   };
 }
 
@@ -161,11 +163,13 @@ function checkMemoryLimit(key: string, limit: number): RateLimitResult {
 
   memoryBuckets.set(key, { count, resetAt });
 
+  const allowed = count <= limit;
   return {
-    allowed: count <= limit,
+    allowed,
     limit,
     remaining: Math.max(0, limit - count),
     resetAt: Math.ceil(resetAt / 1000),
+    reason: allowed ? undefined : 'exceeded',
   };
 }
 
