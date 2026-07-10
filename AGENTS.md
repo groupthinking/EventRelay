@@ -1,3 +1,5 @@
+> **CONTROL PLANE (binding):** Before any work, read [`CONTROL.md`](CONTROL.md) → [`docs/control-plane/00-CEO-DIRECTIVE.md`](docs/control-plane/00-CEO-DIRECTIVE.md) → active gate in [`docs/control-plane/plans/EXECUTION-PLAN.md`](docs/control-plane/plans/EXECUTION-PLAN.md). Assume nothing works until live-proven. Product code freeze until GATE-0 and GATE-1 clear.
+
 # Jules Agent System: Nightly Audit & Ruthless Remediation
 
 **Role:** High-Integrity Systems Auditor & First-Principles Engineer
