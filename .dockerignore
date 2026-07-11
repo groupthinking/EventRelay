@@ -1,18 +1,21 @@
-# .dockerignore — Exclude unnecessary files from Docker build context
-
-# Version Control
-.git/
-.gitignore
-
-# Node dependencies (rebuilt in container)
+# Node & Frontend
 node_modules/
+# Keep apps/web for the build, but ignore other apps if any
+apps/*
+!apps/web/
 apps/web/node_modules/
 apps/web/.next/
+.next/
+.turbo/
 
-# Python artifacts
+# Chrome / NotebookLM browser profiles (~1GB)
+notebooklm_chrome_profile/
+src/utils/notebooklm_profile/
+src/utils/notebooklm_profile_v2/
+
+# Python
 __pycache__/
 *.pyc
-*.pyo
 .venv/
 venv/
 *.egg-info/
@@ -20,6 +23,7 @@ dist/
 build/
 
 # IDE & System
+.git/
 .idea/
 .vscode/
 .DS_Store
@@ -33,17 +37,11 @@ logs/
 
 # Config & Secrets
 .env*
-!.env.example
 *.pem
 *.key
 *.cert
 *secret*.json
 gha-creds-*.json
-
-# Chrome / NotebookLM browser profiles
-notebooklm_chrome_profile/
-src/utils/notebooklm_profile/
-src/utils/notebooklm_profile_v2/
 
 # Research & Archives
 research/
