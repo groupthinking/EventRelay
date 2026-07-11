@@ -17,15 +17,6 @@
     "@dataconnect/generated": "file:src/dataconnect-generated",
     "@google/genai": "^2.11.0",
     "@google/generative-ai": "^0.24.1",
-<<<<<<< HEAD
-    "@opentelemetry/core": "^2.8.0",
-    "@opentelemetry/exporter-trace-otlp-http": "^0.219.0",
-    "@opentelemetry/instrumentation": "^0.219.0",
-    "@opentelemetry/sdk-trace-base": "^2.8.0",
-    "@sentry/nextjs": "^10.57.0",
-    "@stripe/stripe-js": "^9.8.0",
-    "@supabase/supabase-js": "^2.39.0",
-=======
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/core": "^2.9.0",
     "@opentelemetry/instrumentation": "^0.220.0",
@@ -35,7 +26,6 @@
     "@sentry/nextjs": "^10.65.0",
     "@stripe/stripe-js": "^9.9.0",
     "@supabase/supabase-js": "^2.110.2",
->>>>>>> origin/main
     "@upstash/redis": "^1.38.0",
     "@upstash/search": "^0.1.7",
     "ai": "^7.0.15",
@@ -59,16 +49,6 @@
     "zustand": "^5.0.14"
   },
   "devDependencies": {
-<<<<<<< HEAD
-    "@tailwindcss/postcss": "^4.3.1",
-    "@types/node": "^20",
-    "@types/react": "^18",
-    "@types/react-dom": "^18",
-    "autoprefixer": "^10.0.1",
-    "eslint": "^9",
-    "eslint-config-next": "^16.2.7",
-    "postcss": "^8.5.10",
-=======
     "@tailwindcss/postcss": "^4.3.2",
     "@types/node": "^26",
     "@types/react": "^19",
@@ -78,7 +58,6 @@
     "eslint-config-next": "^16.2.10",
     "playwright": "^1.61.1",
     "postcss": "^8.5.17",
->>>>>>> origin/main
     "tailwindcss": "^4.3.1",
     "typescript": "^7.0.2",
     "vite": "^8.1.4",
