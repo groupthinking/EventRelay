@@ -18,15 +18,24 @@ import {
   Save as SaveIcon,
   Search,
   Sparkles,
+  Video,
   X,
-  Youtube,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useRealtimeVoice } from '@/hooks/use-realtime-voice';
+import {
+  studioRunQuality,
+  studioStatusLabel,
+  studioStatusMessage,
+  type StudioPipelineCheck,
+  type StudioRunQuality,
+} from '@/lib/studio-pipeline-status';
 
 type OutcomeId = 'app' | 'sop' | 'lesson' | 'research' | 'automation' | 'content';
 type RunState = 'idle' | 'working' | 'ready';
 type ResultAction = 'preview' | 'export' | 'deploy' | 'save';
+
+const DEFAULT_PROMPT = 'Turn this video into a polished workflow I can review, export, and deploy.';
 
 interface GeneratedPackage {
   title: string;
@@ -35,9 +44,19 @@ interface GeneratedPackage {
   sourceNotes: string[];
   deliverables: string[];
   nextSteps: string[];
+  evidence: string[];
   safetyNote?: string;
   createdAt: string;
 }
+
+type PipelineCheck = StudioPipelineCheck & {
+  backend?: {
+    configured?: boolean;
+    available?: boolean;
+    host?: string | null;
+    reason?: string;
+  };
+};
 
 const OUTCOMES: Array<{ id: OutcomeId; label: string; description: string }> = [
   { id: 'app', label: 'App', description: 'Product screen or working flow.' },
@@ -125,9 +144,21 @@ const OUTPUT_COPY: Record<OutcomeId, { noun: string; deliverables: string[]; nex
   },
 };
 
+function isValidYouTubeId(id: string) {
+  return /^[A-Za-z0-9_-]{11}$/.test(id);
+}
+
 function getYouTubeId(url: string) {
   const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/))([^&?/]+)/);
-  return match?.[1] || '';
+  const candidate = match?.[1] || '';
+  return isValidYouTubeId(candidate) ? candidate : '';
+}
+
+function currentVideoUrlForLink(videoUrl: string) {
+  const id = getYouTubeId(videoUrl);
+  if (!id) return '/dashboard';
+  const normalized = videoUrl.trim() || `https://www.youtube.com/watch?v=${id}`;
+  return `/dashboard?video=${encodeURIComponent(normalized)}`;
 }
 
 function isUnsafeRequest(text: string) {
@@ -151,35 +182,76 @@ function buildPackage({
   outcome,
   prompt,
   unsafe,
+  pipelineCheck,
 }: {
   videoId: string;
   videoUrl: string;
   outcome: OutcomeId;
   prompt: string;
   unsafe: boolean;
+  pipelineCheck?: PipelineCheck | null;
 }): GeneratedPackage {
   const copy = OUTPUT_COPY[outcome];
   const cleanPrompt = unsafe
     ? 'Create a benign safety review and educational workflow instead of harmful instructions.'
     : prompt.trim() || 'Turn this video into a useful workflow package.';
   const sourceLabel = videoId ? `YouTube source ${videoId}` : 'Pending source URL';
+  const backendHost = pipelineCheck?.backend?.host;
+  const backendReason = pipelineCheck?.backend?.reason;
+  const pipelineState = pipelineStateLabel(pipelineCheck, unsafe);
 
   return {
     title: `${copy.noun[0].toUpperCase()}${copy.noun.slice(1)} from video`,
-    summary: `${sourceLabel} is packaged as a ${copy.noun}. The output keeps the source visible, turns the request into concrete deliverables, and is ready for review before a deeper backend run.`,
+    summary: `${sourceLabel} is packaged as a ${copy.noun}. The source is visible, the request is turned into concrete deliverables, and backend readiness is checked before handoff.`,
     primaryOutput: cleanPrompt,
     sourceNotes: [
       videoUrl ? `Source URL: ${videoUrl}` : 'No source URL entered yet.',
       videoId ? 'Preview and thumbnail evidence are attached.' : 'Add a valid YouTube URL to attach video evidence.',
       'Speaker audio is used for context only; no voice cloning is performed.',
+      pipelineState,
+      backendHost ? `Backend target: ${backendHost}${backendReason ? ` (${backendReason})` : ''}` : 'Backend target was not available for this run.',
     ],
     deliverables: copy.deliverables,
     nextSteps: copy.nextSteps,
+    evidence: [
+      videoId ? 'Video preview loaded' : 'Video preview pending',
+      frameUrlsForPackage(videoId),
+      pipelineEvidenceLabel(pipelineCheck),
+      unsafe ? 'Safety gate applied' : 'Safety gate passed',
+    ],
     safetyNote: unsafe
       ? 'Unsafe instructions were converted into a benign planning and risk-review package.'
       : undefined,
     createdAt: new Date().toISOString(),
   };
+}
+
+function pipelineStateLabel(pipelineCheck: PipelineCheck | null | undefined, unsafe: boolean) {
+  if (!pipelineCheck) {
+    return unsafe
+      ? 'Pipeline was not called because the request was redirected for safety.'
+      : 'Local package prepared while source evidence is attached.';
+  }
+
+  if (pipelineCheck.pipeline === 'local-fallback') {
+    return 'Pipeline returned a local fallback handoff while automatic execution waits on backend or provider configuration.';
+  }
+
+  if (pipelineCheck.ok) {
+    return `Pipeline checked successfully${pipelineCheck.pipeline ? ` (${pipelineCheck.pipeline})` : ''}.`;
+  }
+
+  return `Pipeline checked and returned ${pipelineCheck.status}${pipelineCheck.message ? `: ${pipelineCheck.message}` : '.'}`;
+}
+
+function pipelineEvidenceLabel(pipelineCheck: PipelineCheck | null | undefined) {
+  if (pipelineCheck?.pipeline === 'local-fallback') return 'Local fallback handoff created';
+  if (pipelineCheck?.ok) return 'Pipeline response received';
+  return 'Fallback package created';
+}
+
+function frameUrlsForPackage(videoId: string) {
+  return videoId ? 'Thumbnail frames attached' : 'Thumbnail frames pending';
 }
 
 function packageToText(pkg: GeneratedPackage) {
@@ -195,6 +267,9 @@ function packageToText(pkg: GeneratedPackage) {
     '',
     'Deliverables:',
     ...pkg.deliverables.map((item) => `- ${item}`),
+    '',
+    'Evidence:',
+    ...pkg.evidence.map((item) => `- ${item}`),
     '',
     'Next steps:',
     ...pkg.nextSteps.map((item) => `- ${item}`),
@@ -221,6 +296,13 @@ function readSavedPackages() {
   }
 }
 
+/**
+ * Renders a selectable output category card.
+ *
+ * @param outcome - The outcome shown in the card.
+ * @param selected - Whether the card is currently selected.
+ * @param onSelect - Called when the card is clicked.
+ */
 function OutcomeCard({
   outcome,
   selected,
@@ -234,8 +316,9 @@ function OutcomeCard({
     <button
       type="button"
       onClick={onSelect}
+      aria-pressed={selected}
       className={clsx(
-        'rounded-lg border px-3 py-2 text-left transition-all',
+        'rounded-lg border px-3 py-2 text-left transition-colors',
         selected
           ? 'border-slate-950 bg-slate-950 text-white shadow-sm'
           : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50',
@@ -249,11 +332,14 @@ function OutcomeCard({
   );
 }
 
+/**
+ * Displays a placeholder panel prompting the user to paste a YouTube link.
+ */
 function EmptyFrame() {
   return (
     <div className="flex h-full min-h-[300px] flex-col items-center justify-center gap-4 rounded-lg border border-dashed border-slate-300 bg-slate-50 text-center">
       <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white text-slate-600 shadow-sm">
-        <Youtube className="h-7 w-7" />
+        <Video className="h-7 w-7" aria-hidden="true" />
       </div>
       <div>
         <div className="text-base font-semibold text-slate-950">Paste a YouTube link</div>
@@ -265,10 +351,13 @@ function EmptyFrame() {
   );
 }
 
+/**
+ * Renders the Video Workflow Studio interface.
+ */
 export default function VideoWorkflowStudio() {
   const [videoUrl, setVideoUrl] = useState('');
   const [selectedOutcome, setSelectedOutcome] = useState<OutcomeId>('app');
-  const [prompt, setPrompt] = useState('Turn this video into a polished workflow I can review, export, and deploy.');
+  const [prompt, setPrompt] = useState(DEFAULT_PROMPT);
   const [runState, setRunState] = useState<RunState>('idle');
   const [unsafeRedirect, setUnsafeRedirect] = useState(false);
   const [developerOpen, setDeveloperOpen] = useState(false);
@@ -276,9 +365,12 @@ export default function VideoWorkflowStudio() {
   const [generatedPackage, setGeneratedPackage] = useState<GeneratedPackage | null>(null);
   const [saveCount, setSaveCount] = useState(0);
   const [actionMessage, setActionMessage] = useState('Build a result to unlock preview, export, deploy, and save.');
+  const [runQuality, setRunQuality] = useState<StudioRunQuality>('idle');
 
   const audioRef = useRef<HTMLAudioElement>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const videoUrlRef = useRef('');
+  const promptRef = useRef(DEFAULT_PROMPT);
   const realtime = useRealtimeVoice(audioRef);
 
   const videoId = useMemo(() => getYouTubeId(videoUrl), [videoUrl]);
@@ -291,14 +383,14 @@ export default function VideoWorkflowStudio() {
   const voiceEngaged = realtime.isActive || voiceConnecting;
   const voiceLabel = voiceConnecting ? 'Voice connecting' : realtime.isActive ? 'Voice on' : 'Voice off';
 
-  const statusLabel = resultReady ? 'Ready' : isWorking ? 'Working' : 'Idle';
-  const statusMessage = unsafeRedirect
-    ? 'Safe alternative prepared. Harmful instructions stay out of the output.'
-    : resultReady
-      ? `${selectedOutcomeLabel} package ready for preview, export, deploy, or save.`
-      : isWorking
-        ? `Building the ${selectedOutcomeLabel.toLowerCase()} from the current source.`
-        : 'Ready when the source and outcome are set.';
+  const statusLabel = studioStatusLabel(runQuality, runState);
+  const statusMessage = studioStatusMessage(
+    runQuality,
+    runState,
+    selectedOutcomeLabel,
+    unsafeRedirect,
+  );
+  const dashboardHandoffUrl = currentVideoUrlForLink(videoUrl);
 
   const disconnectRealtime = realtime.disconnect;
 
@@ -309,28 +401,90 @@ export default function VideoWorkflowStudio() {
     };
   }, [disconnectRealtime]);
 
-  const runWorkflow = (event?: FormEvent) => {
+  const runWorkflow = async (event?: FormEvent) => {
     event?.preventDefault();
+    if (isWorking) return;
     if (timerRef.current) clearTimeout(timerRef.current);
 
-    const unsafe = isUnsafeRequest(prompt);
+    const currentVideoUrl = videoUrlRef.current || videoUrl;
+    const currentPrompt = promptRef.current || prompt;
+    const currentVideoId = getYouTubeId(currentVideoUrl);
+    const unsafe = isUnsafeRequest(currentPrompt);
     setUnsafeRedirect(unsafe);
     setRunState('working');
-    setActionMessage('Preparing the package from the current source and outcome.');
+    setRunQuality('idle');
+    setActionMessage(unsafe ? 'Preparing a safe alternative package.' : 'Checking backend readiness (async kickoff).');
+
+    let pipelineCheck: PipelineCheck | null = null;
+    if (!unsafe && currentVideoId) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 12_000);
+      try {
+        const response = await fetch('/api/pipeline', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            url: currentVideoUrl,
+            async: true, // prefer async to avoid 524 on long runs
+            outcome: selectedOutcome,
+            prompt: currentPrompt,
+            project_type: selectedOutcome === 'app' ? 'web' : selectedOutcome,
+            deployment_target: 'vercel',
+          }),
+          signal: controller.signal,
+        });
+        const payload = await response.json().catch(() => ({}));
+        const jobId = typeof payload.job_id === 'string' ? payload.job_id : undefined;
+        pipelineCheck = {
+          ok: response.ok,
+          status: response.status,
+          pipeline: typeof payload.pipeline === 'string' ? payload.pipeline : undefined,
+          jobId,
+          backend: payload.backend && typeof payload.backend === 'object' ? payload.backend : undefined,
+          message: typeof payload.error === 'string'
+            ? payload.error
+            : typeof payload.detail === 'string'
+              ? payload.detail
+              : typeof payload.result?.message === 'string'
+                ? payload.result.message
+                : undefined,
+        };
+      } catch (error) {
+        pipelineCheck = {
+          ok: false,
+          status: 0,
+          message: error instanceof Error && error.name === 'AbortError'
+            ? 'Backend check timed out.'
+            : error instanceof Error
+              ? error.message
+              : 'Backend check failed.',
+        };
+      } finally {
+        clearTimeout(timeout);
+      }
+    }
+
+    const quality = studioRunQuality(pipelineCheck, unsafe, Boolean(currentVideoId));
 
     timerRef.current = setTimeout(() => {
       const nextPackage = buildPackage({
-        videoId,
-        videoUrl,
+        videoId: currentVideoId,
+        videoUrl: currentVideoUrl,
         outcome: selectedOutcome,
-        prompt,
+        prompt: currentPrompt,
         unsafe,
+        pipelineCheck,
       });
       setGeneratedPackage(nextPackage);
+      setRunQuality(quality);
       setRunState('ready');
       setActiveAction('preview');
-      setActionMessage('Package ready. Choose preview, export, deploy, or save.');
-    }, 900);
+      setActionMessage(
+        quality === 'live'
+          ? 'Backend accepted the job. This package is a planning draft — open Dashboard for live analysis.'
+          : 'Planning draft only. Studio does not run the full agent pipeline; use Dashboard for live results.',
+      );
+    }, unsafe ? 250 : 100);
   };
 
   const handleResultAction = (action: ResultAction) => {
@@ -389,21 +543,46 @@ export default function VideoWorkflowStudio() {
             </Link>
             <Link href="/prototype" className="rounded-full px-4 py-1.5 hover:bg-white hover:text-slate-950">
               Prototype
+              <span className="ml-1.5 text-[10px] font-semibold uppercase tracking-wide text-amber-600">Preview</span>
+            </Link>
+            <Link href="/dashboard/agents" className="rounded-full px-4 py-1.5 hover:bg-white hover:text-slate-950">
+              Agents
             </Link>
           </nav>
 
           <button
             type="button"
             onClick={() => runWorkflow()}
-            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm shadow-blue-600/20 transition hover:bg-blue-700"
+            aria-busy={isWorking || undefined}
+            disabled={isWorking}
+            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm shadow-blue-600/20 transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            <Sparkles className="h-4 w-4" />
+            <Sparkles className="h-4 w-4" aria-hidden="true" />
             Run workflow
           </button>
         </div>
       </header>
 
       <main className="mx-auto grid max-w-[1440px] gap-5 px-5 py-5 lg:grid-cols-[minmax(0,1.45fr)_minmax(340px,0.75fr)] lg:px-8">
+        <div className="lg:col-span-2 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div className="text-sm text-slate-600">
+              <span className="font-semibold text-slate-950">Studio</span> builds local planning drafts.
+              {' '}
+              <span className="font-semibold text-slate-950">Dashboard</span> runs the live agent pipeline (transcript, actions, agents).
+              {' '}
+              <span className="font-semibold text-slate-950">Prototype</span> is a design walkthrough — not connected to production APIs.
+            </div>
+            <Link
+              href={dashboardHandoffUrl}
+              className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700 transition hover:bg-blue-100"
+            >
+              Open live analysis
+              <ChevronRight className="h-4 w-4" />
+            </Link>
+          </div>
+        </div>
+
         <section className="space-y-5">
           <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
             <form onSubmit={runWorkflow} className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
@@ -412,16 +591,25 @@ export default function VideoWorkflowStudio() {
               </label>
               <input
                 id="video-url"
+                type="url"
+                inputMode="url"
+                autoComplete="off"
+                spellCheck={false}
                 value={videoUrl}
-                onChange={(event) => setVideoUrl(event.target.value)}
-                placeholder="Paste a YouTube link"
-                className="h-12 rounded-lg border border-slate-200 bg-slate-50 px-4 text-sm text-slate-950 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100"
+                onChange={(event) => {
+                  videoUrlRef.current = event.target.value;
+                  setVideoUrl(event.target.value);
+                }}
+                placeholder="e.g. https://youtube.com/watch?v=…"
+                className="h-12 rounded-lg border border-slate-200 bg-slate-50 px-4 text-sm text-slate-950 outline-none transition-[background-color,border-color,box-shadow] placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100"
               />
               <button
                 type="submit"
-                className="inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-slate-950 px-5 text-sm font-semibold text-white transition hover:bg-slate-800"
+                aria-busy={isWorking || undefined}
+                disabled={isWorking}
+                className="inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-slate-950 px-5 text-sm font-semibold text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                <Play className="h-4 w-4" />
+                <Play className="h-4 w-4" aria-hidden="true" />
                 Run
               </button>
             </form>
@@ -443,6 +631,7 @@ export default function VideoWorkflowStudio() {
                   src={`https://www.youtube.com/embed/${videoId}`}
                   title="YouTube video preview"
                   className="aspect-video w-full border-0"
+                  loading="lazy"
                   allowFullScreen
                 />
               ) : (
@@ -458,7 +647,14 @@ export default function VideoWorkflowStudio() {
                 >
                   {frame ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={frame} alt={`Source frame ${index + 1}`} className="h-full w-full object-cover" />
+                    <img
+                      src={frame}
+                      alt={`Source frame ${index + 1}`}
+                      width={320}
+                      height={180}
+                      loading="lazy"
+                      className="h-full w-full object-cover"
+                    />
                   ) : (
                     <div className="flex h-full items-center justify-center text-xs text-slate-400">Frame {index + 1}</div>
                   )}
@@ -482,17 +678,25 @@ export default function VideoWorkflowStudio() {
               <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
                 <button
                   type="button"
+                  aria-pressed={voiceEngaged}
+                  aria-label={voiceEngaged ? 'Disable voice input' : 'Enable voice input'}
                   onClick={voiceEngaged ? realtime.stop : realtime.start}
                   className={clsx(
-                    'inline-flex items-center gap-2 rounded-md px-2 py-1 text-xs font-semibold transition',
+                    'inline-flex items-center gap-2 rounded-md px-2 py-1 text-xs font-semibold transition-colors',
                     voiceEngaged ? 'bg-blue-600 text-white' : 'bg-white text-slate-700 hover:bg-slate-100',
                   )}
                 >
-                  {voiceEngaged ? <Mic className="h-3.5 w-3.5" /> : <MicOff className="h-3.5 w-3.5" />}
+                  {voiceEngaged ? <Mic className="h-3.5 w-3.5" aria-hidden="true" /> : <MicOff className="h-3.5 w-3.5" aria-hidden="true" />}
                   {voiceLabel}
                 </button>
                 {realtime.isActive && (
-                  <button type="button" onClick={realtime.toggleMute} className="text-xs font-medium text-slate-500 hover:text-slate-900">
+                  <button
+                    type="button"
+                    aria-pressed={realtime.status === 'muted'}
+                    aria-label={realtime.status === 'muted' ? 'Resume voice session' : 'Mute voice session'}
+                    onClick={realtime.toggleMute}
+                    className="text-xs font-medium text-slate-500 hover:text-slate-900"
+                  >
                     {realtime.status === 'muted' ? 'Resume' : 'Mute'}
                   </button>
                 )}
@@ -517,24 +721,36 @@ export default function VideoWorkflowStudio() {
               <input
                 id="result-prompt"
                 value={prompt}
-                onChange={(event) => setPrompt(event.target.value)}
-                className="h-12 rounded-lg border border-slate-200 bg-slate-50 px-4 text-sm text-slate-950 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100"
+                onChange={(event) => {
+                  promptRef.current = event.target.value;
+                  setPrompt(event.target.value);
+                }}
+                placeholder="e.g. Build a working app I can deploy to Vercel"
+                autoComplete="off"
+                className="h-12 rounded-lg border border-slate-200 bg-slate-50 px-4 text-sm text-slate-950 outline-none transition-[background-color,border-color,box-shadow] placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100"
               />
               <button
                 type="submit"
-                className="inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-blue-600 px-5 text-sm font-semibold text-white shadow-sm shadow-blue-600/20 transition hover:bg-blue-700"
+                aria-busy={isWorking || undefined}
+                disabled={isWorking}
+                className="inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-blue-600 px-5 text-sm font-semibold text-white shadow-sm shadow-blue-600/20 transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Build result
-                <ChevronRight className="h-4 w-4" />
+                <ChevronRight className="h-4 w-4" aria-hidden="true" />
               </button>
             </form>
 
-            <div className="mt-3 flex flex-col gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 md:flex-row md:items-center md:justify-between">
+            <div
+              role="status"
+              aria-live="polite"
+              className="mt-3 flex flex-col gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 md:flex-row md:items-center md:justify-between"
+            >
               <span>{statusMessage}</span>
               <span
                 className={clsx(
                   'inline-flex w-fit rounded-full px-2 py-1 font-semibold',
-                  resultReady && 'bg-emerald-100 text-emerald-700',
+                  resultReady && runQuality === 'live' && 'bg-emerald-100 text-emerald-700',
+                  resultReady && runQuality !== 'live' && 'bg-amber-100 text-amber-800',
                   isWorking && 'bg-blue-100 text-blue-700',
                   runState === 'idle' && 'bg-white text-slate-500',
                 )}
@@ -576,7 +792,7 @@ export default function VideoWorkflowStudio() {
                   >
                     <div className="flex items-start gap-3">
                       <div className="flex h-9 w-9 flex-none items-center justify-center rounded-lg bg-white text-slate-700 shadow-sm">
-                        <Icon className="h-4 w-4" />
+                        <Icon className="h-4 w-4" aria-hidden="true" />
                       </div>
                       <div className="min-w-0">
                         <div className="text-sm font-semibold text-slate-950">{card.title}</div>
@@ -591,10 +807,10 @@ export default function VideoWorkflowStudio() {
             <div className="mt-4 rounded-lg border border-slate-200 bg-white p-4">
               <div className="mb-3 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2 text-sm font-semibold text-slate-950">
-                  {activeAction === 'preview' && <Monitor className="h-4 w-4 text-blue-600" />}
-                  {activeAction === 'export' && <FileText className="h-4 w-4 text-blue-600" />}
-                  {activeAction === 'deploy' && <Rocket className="h-4 w-4 text-blue-600" />}
-                  {activeAction === 'save' && <CheckCircle2 className="h-4 w-4 text-blue-600" />}
+                  {activeAction === 'preview' && <Monitor className="h-4 w-4 text-blue-600" aria-hidden="true" />}
+                  {activeAction === 'export' && <FileText className="h-4 w-4 text-blue-600" aria-hidden="true" />}
+                  {activeAction === 'deploy' && <Rocket className="h-4 w-4 text-blue-600" aria-hidden="true" />}
+                  {activeAction === 'save' && <CheckCircle2 className="h-4 w-4 text-blue-600" aria-hidden="true" />}
                   {RESULT_CARDS.find((card) => card.id === activeAction)?.title}
                 </div>
                 {saveCount > 0 && <span className="text-xs text-slate-500">{saveCount} saved</span>}
@@ -631,7 +847,7 @@ export default function VideoWorkflowStudio() {
                       <div className="grid gap-2">
                         {generatedPackage.nextSteps.map((step) => (
                           <div key={step} className="flex gap-2 rounded-lg bg-slate-50 p-2 text-xs leading-5">
-                            <Rocket className="mt-0.5 h-3.5 w-3.5 flex-none text-blue-600" />
+                            <Rocket className="mt-0.5 h-3.5 w-3.5 flex-none text-blue-600" aria-hidden="true" />
                             <span>{step}</span>
                           </div>
                         ))}
@@ -649,9 +865,16 @@ export default function VideoWorkflowStudio() {
                   )}
 
                   <div className="grid gap-2">
+                    {generatedPackage.evidence.map((item) => (
+                      <div key={item} className="flex gap-2 text-xs leading-5 text-slate-600">
+                        <Layers className="mt-0.5 h-3.5 w-3.5 flex-none text-blue-600" aria-hidden="true" />
+                        <span>{item}</span>
+                      </div>
+                    ))}
+
                     {generatedPackage.deliverables.map((item) => (
                       <div key={item} className="flex gap-2 text-xs leading-5 text-slate-600">
-                        <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 flex-none text-emerald-600" />
+                        <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 flex-none text-emerald-600" aria-hidden="true" />
                         <span>{item}</span>
                       </div>
                     ))}
@@ -665,7 +888,7 @@ export default function VideoWorkflowStudio() {
                 </div>
               ) : (
                 <div className="flex items-start gap-2 rounded-lg bg-slate-50 p-3 text-sm leading-6 text-slate-500">
-                  <Clipboard className="mt-1 h-4 w-4 flex-none text-slate-400" />
+                  <Clipboard className="mt-1 h-4 w-4 flex-none text-slate-400" aria-hidden="true" />
                   <span>{actionMessage}</span>
                 </div>
               )}
@@ -679,22 +902,24 @@ export default function VideoWorkflowStudio() {
           <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
             <button
               type="button"
+              aria-expanded={developerOpen}
+              aria-controls="developer-details-panel"
               onClick={() => setDeveloperOpen((open) => !open)}
               className="flex w-full items-center justify-between text-left text-sm font-semibold text-slate-950"
             >
               <span className="inline-flex items-center gap-2">
-                <PanelRightOpen className="h-4 w-4 text-slate-500" />
+                <PanelRightOpen className="h-4 w-4 text-slate-500" aria-hidden="true" />
                 Developer details
               </span>
-              {developerOpen ? <X className="h-4 w-4 text-slate-400" /> : <ChevronRight className="h-4 w-4 text-slate-400" />}
+              {developerOpen ? <X className="h-4 w-4 text-slate-400" aria-hidden="true" /> : <ChevronRight className="h-4 w-4 text-slate-400" aria-hidden="true" />}
             </button>
 
             {developerOpen && (
-              <div className="mt-3 max-h-52 space-y-2 overflow-y-auto rounded-lg bg-slate-950 p-3 text-xs text-slate-200">
+              <div id="developer-details-panel" className="mt-3 max-h-52 space-y-2 overflow-y-auto rounded-lg bg-slate-950 p-3 text-xs text-slate-200">
                 {realtime.events.length ? (
                   realtime.events.map((event) => (
                     <div key={event.id} className="flex items-start gap-2 border-b border-white/10 pb-2 last:border-0 last:pb-0">
-                      <Search className="mt-0.5 h-3.5 w-3.5 flex-none text-blue-300" />
+                      <Search className="mt-0.5 h-3.5 w-3.5 flex-none text-blue-300" aria-hidden="true" />
                       <div className="min-w-0">
                         <div className="font-mono text-[11px] text-blue-200">{event.type}</div>
                         <div className="text-slate-300">{event.label}</div>
@@ -703,7 +928,7 @@ export default function VideoWorkflowStudio() {
                   ))
                 ) : (
                   <div className="flex items-center gap-2 text-slate-400">
-                    <Layers className="h-4 w-4" />
+                    <Layers className="h-4 w-4" aria-hidden="true" />
                     Voice events appear here when the toggle is on.
                   </div>
                 )}

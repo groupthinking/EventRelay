@@ -25,11 +25,14 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
+from youtube_extension.utils.proxy import get_proxy_url, get_transcript_proxy_config
+
 logger = logging.getLogger(__name__)
 
 # Optional Gemini Vision integration for frame analysis
 try:
-    from src.youtube_extension.services.ai.gemini_service import GeminiService, GeminiConfig
+    # Use package import (works with PYTHONPATH=src and when the real MCP server on 8010 is exercised)
+    from youtube_extension.services.ai.gemini_service import GeminiService, GeminiConfig
     GEMINI_VISION_AVAILABLE = True
 except ImportError:
     GeminiService = None
@@ -85,7 +88,10 @@ class EnhancedVideoProcessor:
     
     async def _init_session(self):
         """Initialize aiohttp session with proper headers and SSL context"""
-        if not self.session:
+        if os.getenv("SENTRY_DSN"):
+            import sentry_sdk
+            sentry_sdk.add_breadcrumb(category="video", message="Initializing HTTP session", level="info")
+        if not self.session or getattr(self.session, 'closed', False):
             # Create SSL context that handles certificate verification
             import ssl
             import certifi
@@ -97,9 +103,39 @@ class EnhancedVideoProcessor:
                     'User-Agent': 'UVAI-Enhanced-Video-Processor/1.0',
                     'Content-Type': 'application/json'
                 },
+                timeout=aiohttp.ClientTimeout(total=30, connect=10, sock_read=20),
                 connector=aiohttp.TCPConnector(ssl=ssl_context)
             )
-    
+
+    async def _generate_build_plan(self, video_url: str, metadata: dict, transcript: dict, ai_analysis: dict) -> dict:
+        """Minimal build plan generator to unblock pipeline.
+        (Quick & dirty — will evolve via specialized agents later.)
+        """
+        return {
+            "title": (ai_analysis.get("title") if isinstance(ai_analysis, dict) else None)
+                     or (metadata.get("title") if isinstance(metadata, dict) else None)
+                     or "Video Build Plan",
+            "overview": (ai_analysis.get("summary") if isinstance(ai_analysis, dict) else None)
+                        or "No summary available",
+            "key_moments": (ai_analysis.get("key_moments") if isinstance(ai_analysis, dict) else []) or [],
+            "suggested_structure": ["intro", "main_content", "conclusion"],
+            "assets_needed": ["thumbnails", "clips"],
+            "status": "handoff",
+            "handoff_only": True,
+            "generated_at": datetime.now().isoformat(),
+            "video_url": video_url
+        }
+
+    def _build_extracted_info(self, metadata: dict, ai_analysis: dict, build_plan: dict, transcript: dict) -> dict:
+        """Minimal extracted info builder to unblock the pipeline after build_plan."""
+        return {
+            "metadata": metadata or {},
+            "ai_analysis": ai_analysis or {},
+            "build_plan": build_plan or {},
+            "transcript": transcript or {},
+            "status": "extracted"
+        }
+
     async def process_video(self, video_url: str) -> Dict[str, Any]:
         """
         Enhanced video processing pipeline
@@ -120,6 +156,14 @@ class EnhancedVideoProcessor:
             # Step 3: If YouTube transcript failed, fall back to Gemini transcript
             if transcript.get("source") == "failed" or not transcript.get("text"):
                 transcript = await self._get_gemini_transcript(video_id, video_url)
+
+            # Step 3.5: Optional OpenAI Whisper fallback for better STT / avoid Gemini 403s
+            # (Sentry AI monitoring will capture these LLM calls too)
+            if (transcript.get("source") == "failed" or not transcript.get("text")) and os.getenv("OPENAI_API_KEY"):
+                try:
+                    transcript = await self._get_openai_whisper_transcript(video_id, video_url)
+                except Exception as e:
+                    logger.warning(f"OpenAI Whisper fallback failed: {e}")
 
             # Step 4: Enhanced AI analysis using Gemini
             ai_analysis = await self._analyze_with_gemini(video_url, transcript, metadata)
@@ -149,6 +193,8 @@ class EnhancedVideoProcessor:
                 'metadata': metadata,
                 'transcript': transcript,
                 'ai_analysis': ai_analysis,
+                'build_plan': build_plan,
+                'extracted_info': extracted_info,
                 'visual_context': visual_context,
                 'markdown_analysis': markdown_content,
                 'save_path': save_path,
@@ -160,6 +206,12 @@ class EnhancedVideoProcessor:
         except Exception as e:
             logger.error(f"❌ Enhanced processing failed: {e}")
             raise
+        finally:
+            # Ensure session is closed to prevent "Unclosed client session" at exit (LLM/ingest paths)
+            try:
+                await self.close()
+            except Exception:
+                pass
     
     async def _get_gemini_transcript(self, video_id: str, video_url: str) -> Dict[str, Any]:
         """
@@ -225,6 +277,49 @@ class EnhancedVideoProcessor:
             logger.warning(f"Gemini transcript failed: {e}")
             # Fallback to YouTube transcript API
             return await self._get_youtube_transcript_fallback(video_id)
+
+    async def _get_openai_whisper_transcript(self, video_id: str, video_url: str) -> Dict[str, Any]:
+        """Fallback to OpenAI Whisper for transcription (avoids Gemini 403s, better STT)."""
+        try:
+            from openai import OpenAI
+            import tempfile
+            import os as os_mod
+
+            client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+            # Download audio snippet using yt-dlp (already dep)
+            with tempfile.TemporaryDirectory() as tmpdir:
+                audio_path = os_mod.path.join(tmpdir, f"{video_id}.mp3")
+                # yt-dlp command for audio only
+                import subprocess
+                ytdlp_cmd = ["yt-dlp", "-x", "--audio-format", "mp3"]
+                proxy_url = get_proxy_url()
+                if proxy_url:
+                    ytdlp_cmd.extend(["--proxy", proxy_url])
+                # "--" ends option parsing so a video_url starting with "-" cannot
+                # inject yt-dlp flags (CWE-88). Pair with YouTube-host validators
+                # on API models.
+                ytdlp_cmd.extend(["-o", audio_path, "--", video_url])
+                subprocess.run(
+                    ytdlp_cmd, check=True, capture_output=True, timeout=60
+                )
+
+                with open(audio_path, "rb") as audio_file:
+                    transcription = client.audio.transcriptions.create(
+                        model="whisper-1",
+                        file=audio_file,
+                        response_format="text"
+                    )
+
+            return {
+                'text': transcription,
+                'source': 'openai_whisper',
+                'confidence': 0.92,
+                'processing_time': datetime.now().isoformat()
+            }
+        except Exception as e:
+            logger.warning(f"OpenAI Whisper failed: {e}")
+            return {'text': '', 'source': 'failed', 'error': str(e)}
     
     async def _get_youtube_transcript_fallback(self, video_id: str) -> Dict[str, Any]:
         """Fallback to YouTube transcript API"""
@@ -232,7 +327,7 @@ class EnhancedVideoProcessor:
             from youtube_transcript_api import YouTubeTranscriptApi
 
             # Use new API format for version 1.2.2+
-            yt_api = YouTubeTranscriptApi()
+            yt_api = YouTubeTranscriptApi(proxy_config=get_transcript_proxy_config())
             transcript = yt_api.fetch(video_id)
 
             # Handle FetchedTranscriptSnippet objects properly
@@ -762,7 +857,9 @@ Provide a structured JSON response with visual_elements array containing:
     async def close(self):
         """Clean up resources"""
         if self.session:
-            await self.session.close()
+            if not self.session.closed:
+                await self.session.close()
+            self.session = None  # Important: reset so next use recreates fresh session
 
 # Factory function for MCP integration
 def get_enhanced_video_processor() -> EnhancedVideoProcessor:

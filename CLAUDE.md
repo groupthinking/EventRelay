@@ -1,3 +1,5 @@
+> **CONTROL PLANE (binding):** Read [`CONTROL.md`](CONTROL.md) and [`docs/control-plane/00-CEO-DIRECTIVE.md`](docs/control-plane/00-CEO-DIRECTIVE.md) first. Do not implement product features until EXECUTION-PLAN GATE-0/1 are complete. Verify live; no architecture claims from stale ARCHITECTURE.md.
+
 # CLAUDE.md
 
 This file provides context for Claude Code when working in the EventRelay repository.
@@ -114,6 +116,7 @@ turbo run test
 - **No secrets in code**: All keys/credentials go in `.env` (gitignored)
 - **Security**: Validate inputs via Pydantic; no `dangerouslySetInnerHTML` in React; sanitize subprocess args
 - **Type safety enforced**: mypy strict (Python), TypeScript strict (frontend)
+- **Vercel docs context**: Use `https://vercel.com/docs/llms-full.txt` when you need complete Vercel platform context for AI Gateway, Hosting, or MCP-related work.
 
 ## SDK ↔ Backend Contract Alignment
 
@@ -136,7 +139,7 @@ grep -A 30 "class TranscriptActionResponse" sdk/python/eventrelay_sdk/types.py
 
 ## Anthropic SDK Version
 
-The project requires `anthropic>=0.78.0`. This floor guarantees:
+The project requires `anthropic>=0.105.0` (see `pyproject.toml`). This floor guarantees:
 - `thinking={"type": "adaptive"}` (adaptive thinking, no `budget_tokens`) — introduced in 0.78.0
 - `output_config={"effort": "..."}` (GA effort control, no beta header) — introduced in 0.75.0
 - Current model string: `claude-opus-4-8` (no date suffix)

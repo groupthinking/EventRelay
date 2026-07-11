@@ -17,6 +17,7 @@ from typing import Any, Optional
 import httpx
 
 from youtube_extension.utils import extract_video_id
+from youtube_extension.utils.proxy import get_transcript_proxy_config
 
 # Fallback transcript retrieval
 try:
@@ -251,7 +252,9 @@ class RealYouTubeAPIService:
             transcript_data = None
             if HAS_TRANSCRIPT_API:
                 try:
-                    yt_api = YouTubeTranscriptApi()
+                    yt_api = YouTubeTranscriptApi(
+                        proxy_config=get_transcript_proxy_config()
+                    )
                     transcript_data = yt_api.fetch(video_id)
                     logger.info(f"✅ youtube-transcript-api fetched transcript for {video_id}")
                 except (TranscriptsDisabled, NoTranscriptFound) as e:

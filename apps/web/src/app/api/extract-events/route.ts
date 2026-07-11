@@ -2,6 +2,16 @@ import OpenAI from 'openai';
 import { Type } from '@google/genai';
 import { NextResponse } from 'next/server';
 import { getGeminiClient, hasGeminiKey } from '@/lib/gemini-client';
+<<<<<<< HEAD
+=======
+import { GEMINI_SEARCH_MODEL, GEMINI_STRUCTURED_MODEL } from '@/lib/gemini-models';
+import {
+  gatewayChat,
+  hasAiGatewayKey,
+  stripJsonCodeFence,
+  toGatewayModelId,
+} from '@/lib/vercel-ai-gateway';
+>>>>>>> origin/main
 
 export const runtime = 'nodejs';
 export const maxDuration = 120;
@@ -129,15 +139,40 @@ async function extractWithOpenAI(trimmed: string, videoTitle?: string, videoUrl?
 }
 
 async function extractWithGemini(trimmed: string, videoTitle?: string, videoUrl?: string) {
+<<<<<<< HEAD
   const ai = getGeminiClient();
   const response = await ai.models.generateContent({
     model: 'gemini-3-pro-preview',
+=======
+  if (hasAiGatewayKey()) {
+    const result = await gatewayChat({
+      model: toGatewayModelId(GEMINI_STRUCTURED_MODEL),
+      messages: [
+        { role: 'system', content: SYSTEM_PROMPT },
+        {
+          role: 'user',
+          content: `${buildUserPrompt(trimmed, videoTitle, videoUrl)}\n\nReturn ONLY valid JSON.`,
+        },
+      ],
+      max_tokens: 4096,
+      temperature: 0.3,
+    });
+    return JSON.parse(stripJsonCodeFence(result.content));
+  }
+
+  const ai = getGeminiClient();
+  const response = await ai.models.generateContent({
+    model: GEMINI_STRUCTURED_MODEL,
+>>>>>>> origin/main
     contents: `${SYSTEM_PROMPT}\n\n${buildUserPrompt(trimmed, videoTitle, videoUrl)}`,
     config: {
       temperature: 0.3,
       responseMimeType: 'application/json',
       responseSchema: geminiResponseSchema,
+<<<<<<< HEAD
       tools: [{ googleSearch: {} }],
+=======
+>>>>>>> origin/main
     },
   });
   const text = response.text ?? '';
@@ -185,15 +220,21 @@ export async function POST(request: Request) {
     // If no transcript but have videoUrl + Gemini, do direct video analysis via Google Search
     if (!parsed && videoUrl && hasGeminiKey()) {
       try {
+<<<<<<< HEAD
         const ai = getGeminiClient();
         const response = await ai.models.generateContent({
           model: 'gemini-3-pro-preview',
           contents: `${SYSTEM_PROMPT}\n\nAnalyze this YouTube video and extract structured data.
 Use your Google Search tool to find the video's transcript, description, and chapter content.
+=======
+        const videoPrompt = `${SYSTEM_PROMPT}\n\nAnalyze this YouTube video and extract structured data.
+Find the video's transcript, description, and chapter content.
+>>>>>>> origin/main
 
 Video URL: ${videoUrl}
 ${videoTitle ? `Video Title: ${videoTitle}` : ''}
 
+<<<<<<< HEAD
 Extract events, actions, summary, and topics from the actual video content found via search.`,
           config: {
             temperature: 0.3,
@@ -204,6 +245,33 @@ Extract events, actions, summary, and topics from the actual video content found
         });
         const text = response.text ?? '';
         parsed = JSON.parse(text);
+=======
+Extract events, actions, summary, and topics from the actual video content.
+Respond with ONLY valid JSON matching the required structure.`;
+
+        if (hasAiGatewayKey()) {
+          const result = await gatewayChat({
+            model: toGatewayModelId(GEMINI_SEARCH_MODEL),
+            messages: [{ role: 'user', content: videoPrompt }],
+            max_tokens: 4096,
+            temperature: 0.3,
+          });
+          parsed = JSON.parse(stripJsonCodeFence(result.content));
+        } else {
+          const ai = getGeminiClient();
+          const response = await ai.models.generateContent({
+            model: GEMINI_SEARCH_MODEL,
+            contents: videoPrompt,
+            config: {
+              temperature: 0.3,
+              responseMimeType: 'application/json',
+              tools: [{ googleSearch: {} }],
+            },
+          });
+          const text = response.text ?? '';
+          parsed = JSON.parse(text);
+        }
+>>>>>>> origin/main
         provider = 'gemini-search';
       } catch (e) {
         console.warn('Gemini direct video extraction failed:', e);
@@ -225,7 +293,7 @@ Extract events, actions, summary, and topics from the actual video content found
 
     return NextResponse.json({
       success: false,
-      error: message,
+      error: 'Failed to extract events',
       data: { events: [], actions: [], summary: '', topics: [] },
     });
   }

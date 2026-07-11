@@ -27,18 +27,10 @@ from fastapi.responses import JSONResponse, RedirectResponse
 project_root = Path(__file__).parent.parent
 
 # Import services and container
-# Import integrations router
-# Import integrations router
-# try:
-#     from integrations.routes import router as integrations_router
-# except ImportError:
-#     integrations_router = None
 # Configure structured logging (Cloud Run captures stdout/stderr automatically)
 import os
 import sys
 
-# from ..processors.video_processor import default_processor as video_processor
-# Import API routers
 # Import API routers
 from .api.v1.router import router as v1_router
 from .containers.service_container import get_service_container
@@ -131,8 +123,6 @@ app.add_middleware(
         "http://localhost:5173",
         "http://localhost:8080",
         "http://localhost:3001",
-        "https://event-relay-web.vercel.app",
-        "https://eventrelay-production.up.railway.app",
         "https://uvai.io",
         "https://www.uvai.io",
     ],
@@ -172,10 +162,6 @@ from .api.reporting_routes import router as reporting_router
 
 app.include_router(mcp_bridge.router)
 app.include_router(reporting_router)
-
-# Include integrations router if available
-# if integrations_router:
-#     app.include_router(integrations_router)
 
 
 # Root redirect to documentation

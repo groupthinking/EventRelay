@@ -1,4 +1,20 @@
 const path = require('path');
+<<<<<<< HEAD
+=======
+const { Module } = require('module');
+
+const appNodeModules = path.join(__dirname, 'node_modules');
+const nodePathEntries = (process.env.NODE_PATH || '')
+  .split(path.delimiter)
+  .filter(Boolean);
+
+if (!nodePathEntries.includes(appNodeModules)) {
+  // Let hoisted workspace packages like @sentry/nextjs resolve Next.js from apps/web.
+  process.env.NODE_PATH = [appNodeModules, ...nodePathEntries].join(path.delimiter);
+  Module._initPaths();
+}
+
+>>>>>>> origin/main
 const { withSentryConfig } = require('@sentry/nextjs');
 
 const contentSecurityPolicy = [
@@ -11,7 +27,7 @@ const contentSecurityPolicy = [
   "font-src 'self' data:",
   "style-src 'self' 'unsafe-inline'",
   "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://va.vercel-scripts.com https://vitals.vercel-insights.com",
-  "connect-src 'self' https://api.uvai.io https://uvai-backend-gpwz4wb5na-uc.a.run.app https://api.openai.com https://generativelanguage.googleapis.com https://*.supabase.co wss://*.supabase.co https://*.upstash.io https://vitals.vercel-insights.com https://*.vercel-insights.com",
+  "connect-src 'self' https://api.uvai.io https://uvai-backend-gpwz4wb5na-uc.a.run.app https://api.openai.com https://generativelanguage.googleapis.com https://*.supabase.co wss://*.supabase.co https://*.upstash.io https://vitals.vercel-insights.com https://*.vercel-insights.com https://*.ingest.us.sentry.io https://*.ingest.sentry.io",
   "frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com https://js.stripe.com https://hooks.stripe.com",
   "media-src 'self' blob: data:",
   "worker-src 'self' blob:",
@@ -38,7 +54,11 @@ const securityHeaders = [
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  experimental: {
+    optimizePackageImports: ['lucide-react'],
+  },
   turbopack: {
+    // Monorepo root so Turbopack resolves hoisted/workspace deps outside apps/web.
     root: path.resolve(__dirname, '../..'),
   },
   images: {
@@ -80,10 +100,19 @@ const nextConfig = {
 };
 
 const sentryWebpackPluginOptions = {
+<<<<<<< HEAD
   // For all available options, see https://github.com/getsentry/sentry-webpack-plugin#options
   org: process.env.SENTRY_ORG || '',
   project: process.env.SENTRY_PROJECT || 'v0-uvai',
   silent: !process.env.CI,
+=======
+  org: process.env.SENTRY_ORG || '',
+  project: process.env.SENTRY_PROJECT || 'v0-uvai',
+  silent: !process.env.CI,
+  // Preview/prod builds succeed without Sentry upload credentials.
+  disableServerWebpackPlugin: !process.env.SENTRY_AUTH_TOKEN,
+  disableClientWebpackPlugin: !process.env.SENTRY_AUTH_TOKEN,
+>>>>>>> origin/main
 };
 
 module.exports = withSentryConfig(nextConfig, sentryWebpackPluginOptions);

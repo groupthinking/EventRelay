@@ -453,6 +453,7 @@ class TestServiceFactories:
         sc._config = {
             "enhanced_analysis_dir": "/tmp/test_enhanced",
             "feedback_dir": "/tmp/test_feedback",
+            "knowledge_dir": "/tmp/test_knowledge",
         }
         service = sc._create_data_service()
         from youtube_extension.backend.services.data_service import DataService

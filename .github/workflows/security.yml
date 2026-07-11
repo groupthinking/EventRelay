@@ -19,10 +19,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: '22'
           cache: 'npm'
@@ -32,7 +32,7 @@ jobs:
       - name: Upload audit report
         if: always()
         run: npm audit --json > npm-audit-report.json || true
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: npm-audit-report
@@ -42,16 +42,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
       - run: pip install safety
       - run: safety scan --output json > safety-report.json || true
         continue-on-error: true
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: safety-report
@@ -60,13 +60,13 @@ jobs:
   bandit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
       - run: pip install bandit
       - run: bandit -r src -f json -o bandit-report.json || true
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: bandit-report
           path: bandit-report.json
@@ -74,9 +74,9 @@ jobs:
   trivy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Cache Trivy DB
-        uses: actions/cache@v3
+        uses: actions/cache@v5
         with:
           path: ~/.cache/trivy
           key: trivy-db-${{ github.run_id }}
@@ -86,7 +86,7 @@ jobs:
       - name: Build image for scanning
         run: docker build -t eventrelay:test -f Dockerfile .
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
         with:
           image-ref: 'eventrelay:test'
           format: 'sarif'
@@ -97,12 +97,12 @@ jobs:
           severity: 'CRITICAL,HIGH'
           trivyignores: '.trivyignore'
       - name: Upload Trivy results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         if: always()
         with:
           sarif_file: 'trivy-results.sarif'
       - name: Generate human-readable report
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
         if: always()
         with:
           image-ref: 'eventrelay:test'

@@ -7,19 +7,28 @@ on:
     branches: [main]
 
 permissions:
-  contents: write
+  contents: read
   pull-requests: write
   issues: write
+  deployments: read
 
 env:
-  # Defaults to production. Override with the `E2E_BASE_URL` repository
-  # variable to point at another deployment (e.g. a Vercel preview). Note:
-  # Vercel preview deployments are protected (HTTP 401) and require a
-  # "Protection Bypass for Automation" token forwarded as a request header
-  # before they can be exercised here — until that is wired up, the E2E
-  # gate validates production rather than the PR's own preview build.
+  # By default the E2E suite runs against production. To validate a PR's own
+  # Vercel preview instead, two things are needed:
+  #   1. Point BASE_URL at the preview — set the `E2E_BASE_URL` repository
+  #      variable, or compute the per-PR preview URL in a prior step and export
+  #      it to $GITHUB_ENV as E2E_BASE_URL.
+  #   2. Provide `VERCEL_AUTOMATION_BYPASS_SECRET` as a repository secret.
+  #      Vercel previews return HTTP 401 to anonymous traffic; the test harness
+  #      forwards this value as the `x-vercel-protection-bypass` header on every
+  #      request (see tests/e2e/pipeline.test.ts). Generate it under Vercel →
+  #      Project → Settings → Deployment Protection → Protection Bypass for
+  #      Automation.
+  # When the variable/secret are unset (the default), BASE_URL falls back to
+  # production and no bypass header is sent — behaviour is unchanged.
   BASE_URL: ${{ vars.E2E_BASE_URL || 'https://uvai.io' }}
   TEST_YOUTUBE_URL: https://www.youtube.com/watch?v=auJzb1D-fag
+  VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
 
 jobs:
   e2e:
@@ -27,16 +36,117 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     continue-on-error: true
+    # Only run on pull requests when a preview target is configured via the
+    # `E2E_BASE_URL` repository variable, or when VERCEL_TOKEN is available to
+    # auto-detect the preview URL. Pushes to `main` always run as a production
+    # health check.
+    if: github.event_name == 'push' || vars.E2E_BASE_URL != '' || secrets.VERCEL_TOKEN != ''
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
+
+      - name: Resolve Vercel preview URL
+        id: preview
+        if: github.event_name == 'pull_request' && vars.E2E_BASE_URL == ''
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_TEAM_ID: ${{ secrets.VERCEL_TEAM_ID }}
+        run: |
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # Query Vercel API for the latest deployment on this commit
+          TEAM_PARAM=""
+          if [ -n "$VERCEL_TEAM_ID" ]; then
+            TEAM_PARAM="&teamId=$VERCEL_TEAM_ID"
+          fi
+
+          echo "Waiting for Vercel deployment to reach READY state..."
+          for i in $(seq 1 30); do
+            RESPONSE=$(curl -s -H "Authorization: Bearer $VERCEL_TOKEN" \
+              "https://api.vercel.com/v6/deployments?meta-githubCommitSha=${{ github.event.pull_request.head.sha }}${TEAM_PARAM}&limit=1")
+
+            STATE=$(echo "$RESPONSE" | jq -r '.deployments[0].state // empty')
+            URL=$(echo "$RESPONSE" | jq -r '.deployments[0].url // empty')
+
+            if [ "$STATE" = "READY" ] && [ -n "$URL" ]; then
+              echo "url=https://$URL" >> $GITHUB_OUTPUT
+              echo "skip=false" >> $GITHUB_OUTPUT
+              echo "Preview deployment ready: https://$URL"
+              exit 0
+            fi
+
+            echo "Attempt $i/30: state=$STATE, waiting 20s..."
+            sleep 20
+          done
+
+          echo "Timed out waiting for deployment. Falling back to default BASE_URL."
+          echo "skip=true" >> $GITHUB_OUTPUT
+
+      - name: Override BASE_URL with preview deployment
+        if: steps.preview.outputs.skip == 'false'
+        run: echo "BASE_URL=${{ steps.preview.outputs.url }}" >> $GITHUB_ENV
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '22'
           cache: 'npm'
+
+      - name: Extract Vercel preview URL for this PR
+        id: preview
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          SHA="${{ github.event.pull_request.head.sha }}"
+          PREVIEW_URL=""
+
+          for i in $(seq 1 30); do
+            DEPLOYMENT_STATUS=0
+            DEPLOY_ID=$(gh api \
+              "/repos/${{ github.repository }}/deployments?sha=${SHA}&per_page=20" \
+              --jq '[.[] | select(.environment | ascii_downcase | startswith("preview"))] | first | .id // empty' 2>deployments.err) || DEPLOYMENT_STATUS=$?
+            if [ -s deployments.err ]; then
+              echo "gh api deployments stderr:" >&2
+              cat deployments.err >&2
+            fi
+            rm -f deployments.err
+
+            if [ "${DEPLOYMENT_STATUS:-0}" != "0" ]; then
+              exit "$DEPLOYMENT_STATUS"
+            fi
+
+            if [ -n "$DEPLOY_ID" ]; then
+              STATUS_LOOKUP=0
+              PREVIEW_URL=$(gh api \
+                "/repos/${{ github.repository }}/deployments/${DEPLOY_ID}/statuses" \
+                --jq '[.[] | select(.state=="success")] | first | .environment_url // empty' 2>deployment-status.err) || STATUS_LOOKUP=$?
+              if [ -s deployment-status.err ]; then
+                echo "gh api deployment statuses stderr:" >&2
+                cat deployment-status.err >&2
+              fi
+              rm -f deployment-status.err
+
+              if [ "${STATUS_LOOKUP:-0}" != "0" ]; then
+                exit "$STATUS_LOOKUP"
+              fi
+            fi
+
+            if [ -n "$PREVIEW_URL" ]; then
+              break
+            fi
+
+            sleep 10
+          done
+
+          if [ -n "$PREVIEW_URL" ]; then
+            echo "BASE_URL=$PREVIEW_URL" >> "$GITHUB_ENV"
+            echo "preview_url=$PREVIEW_URL" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Install dependencies
         run: npm install --legacy-peer-deps
@@ -72,7 +182,7 @@ jobs:
 
       - name: Post PR comment with results
         if: github.event_name == 'pull_request'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const status = '${{ steps.results.outputs.status }}';
@@ -119,35 +229,32 @@ jobs:
               body,
             });
 
-      - name: Log failure to failure-log.md
+      - name: Log failure to the job summary
         if: steps.results.outputs.status == 'red'
+        env:
+          # Passed via env, not interpolated inline: github.head_ref is the PR
+          # source branch name and is attacker-controlled on pull_request events.
+          # Expanding it directly in the run: script would allow shell injection
+          # (flagged by actionlint/zizmor). The shell receives these as data only.
+          TRIGGER_EVENT: ${{ github.event_name }}
+          TRIGGER_REF: ${{ github.head_ref || github.ref_name }}
+          COMMIT_SHA: ${{ github.sha }}
         run: |
           DATE=$(date -u '+%Y-%m-%d %H:%M:%S UTC')
           FAILURES=$(grep -A 2 'FAIL\|AssertionError\|Error:' test-output.txt | head -30 || echo "See test-output.txt")
 
-          cat >> tests/failure-log.md << EOF
-
-          ---
-
-          ### 🔴 Failure — $DATE
-
-          **Trigger:** ${{ github.event_name }} on \`${{ github.ref_name }}\`
-          **Commit:** \`${{ github.sha }}\`
-          **Runner:** GitHub Actions
-
-          **Failed tests:**
-          \`\`\`
-          $FAILURES
-          \`\`\`
-
-          **Status:** Logged automatically. Manual investigation required.
-          EOF
-
-          git config user.email "ci@eventrelay.dev"
-          git config user.name "EventRelay CI"
-          git add tests/failure-log.md
-          git commit -m "ci: log E2E test failure [skip ci]" || true
-          git push || true
+          {
+            echo "### 🔴 E2E Failure — $DATE"
+            echo ""
+            echo "**Trigger:** ${TRIGGER_EVENT} on \`${TRIGGER_REF}\`"
+            echo "**Commit:** \`${COMMIT_SHA}\`"
+            echo "**Deployment:** $BASE_URL"
+            echo ""
+            echo "**Failed tests:**"
+            echo '```'
+            echo "$FAILURES"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Fail the job if tests failed
         if: steps.results.outputs.status == 'red'
