@@ -52,6 +52,16 @@ export default function AgentDashboard({ executions, loading, className }: Agent
       <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
         {executions.map((exec) => {
           const style = STATUS_STYLES[exec.status] || STATUS_STYLES.queued;
+
+          let resultPreview = '';
+          if (exec.result) {
+            if (exec.result.goal && exec.result.plan && exec.result.reason) {
+               resultPreview = `Goal: ${exec.result.goal} • Plan: ${Array.isArray(exec.result.plan) ? exec.result.plan.length + ' steps' : 'Available'}`;
+            } else {
+               resultPreview = String(exec.result.summary || exec.result.output || JSON.stringify(exec.result).slice(0, 120));
+            }
+          }
+
           return (
             <div
               key={exec.agent_id}
@@ -86,9 +96,9 @@ export default function AgentDashboard({ executions, loading, className }: Agent
               </div>
 
               {/* Result preview */}
-              {exec.result && (
+              {resultPreview && (
                 <p className="text-xs text-white/40 mt-2 line-clamp-2">
-                  {String(exec.result.summary || exec.result.output || JSON.stringify(exec.result).slice(0, 120))}
+                  {resultPreview}
                 </p>
               )}
               {exec.error && (
