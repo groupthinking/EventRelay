@@ -16,7 +16,9 @@ const GENERAL_LIMIT = Number(process.env.UVAI_API_RATE_LIMIT_PER_MINUTE || 60);
 const AI_LIMIT = Number(process.env.UVAI_AI_RATE_LIMIT_PER_MINUTE || 12);
 
 const AI_ROUTE_PREFIXES = [
-  // Routes that reach an AI provider and so get the tighter AI rate-limit tier.
+  // AI-related route prefixes: their writes and paid GETs reach an AI provider,
+  // so the whole prefix gets the tighter AI rate-limit tier (some GET handlers
+  // under these prefixes are cheap status/info reads that reach no provider).
   // On a limiter outage the *outage* fail-open/closed decision is per-request:
   // writes here (and a couple of paid GETs) fail CLOSED, while the cheap GET
   // handlers on these prefixes — e.g. GET /api/agents/{actions,dispatch},
@@ -120,7 +122,10 @@ function isAiRoute(pathname: string): boolean {
 // added billable read under an existing AI prefix is protected automatically,
 // instead of silently leaking until someone remembers to denylist it. Matched
 // EXACTLY (not by prefix) so the paid GET /api/video/search is not covered by
-// the cheap /api/video.
+// the cheap /api/video. Consequence for maintainers: a NEW cheap GET sub-route
+// under an existing AI prefix (e.g. a hypothetical GET /api/pipeline/info) fails
+// closed on an outage until it is added here — the safe default; add verified
+// cheap reads to this list to restore fail-open for them.
 //   cheap  → fail OPEN:   the paths below
 //   paid   → fail CLOSED: GET /api/realtime/session (mints an OpenAI Realtime
 //                         secret), GET /api/video/search (Gemini embedding), and
@@ -237,7 +242,7 @@ async function checkRateLimit(request: NextRequest): Promise<RateLimitResult> {
       'verified cheap reads /api/agents/{actions,dispatch}, /api/pipeline, /api/training/status and /api/video — ' +
       'denial-of-wallet protection) and OPEN for everything else (non-AI routes AND those cheap AI GETs) so a ' +
       'limiter outage cannot take down the API. Configure Upstash or Vercel KV for full enforcement. ' +
-      'See src/proxy.ts and the rate-limit-middleware agent in config/agent_network.json.'
+      'See apps/web/src/proxy.ts and the rate-limit-middleware agent in config/agent_network.json.'
     );
     prodRedisWarned = true;
   }
