@@ -616,20 +616,20 @@ class AnthropicAdapter(ProtocolAdapter):
             return {"protocol": "anthropic", "success": False, "error": str(e), "context_id": context.id}
 
     async def health_check(self) -> bool:
-        """Check Anthropic API reachability."""
+        """Check Anthropic API reachability via GET /v1/models (no quota cost)."""
         import httpx
 
         if not self.api_key:
             return False
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
-                # Send a minimal request; any HTTP response means endpoint is reachable
-                resp = await client.post(
-                    f"{self.base_url}/v1/messages",
-                    headers={"x-api-key": self.api_key, "anthropic-version": "2023-06-01", "content-type": "application/json"},
-                    json={"model": "claude-3-haiku-20240307", "max_tokens": 1, "messages": [{"role": "user", "content": "hi"}]},
+                # Use the models-list endpoint: verifies key/endpoint reachability
+                # without invoking a model or consuming token quota.
+                resp = await client.get(
+                    f"{self.base_url}/v1/models",
+                    headers={"x-api-key": self.api_key, "anthropic-version": "2023-06-01"},
                 )
-                return resp.status_code in (200, 400, 401, 403, 429)
+                return resp.status_code in (200, 401, 403, 429)
         except Exception:
             return False
 

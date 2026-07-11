@@ -2,8 +2,8 @@
 Unified AI SDK - Real Provider Implementation
 ==============================================
 
-Provides unified interface for multiple AI providers (Claude, OpenAI, Grok/xAI).
-Dispatches requests to real provider APIs via httpx with retry logic.
+Provides unified interface for multiple AI providers (Claude, OpenAI, Grok/xAI, Gemini).
+Dispatches requests to real provider APIs via httpx (single attempt per call; no retry).
 """
 
 import logging
@@ -118,8 +118,13 @@ class UnifiedAISDK:
             return os.getenv(env_var)
         return None
 
-    def _resolve_provider(self, request: AIRequest) -> ModelProvider:
-        """Resolve provider from request, handling string values."""
+    def _resolve_provider(self, request: AIRequest) -> Optional[ModelProvider]:
+        """Resolve provider from request, handling string values.
+
+        Returns ``None`` if the provider string does not match any known
+        ``ModelProvider`` member so callers can surface an explicit failure
+        instead of silently routing to an unintended provider.
+        """
         if isinstance(request.provider, ModelProvider):
             return request.provider
         # Try to match string to enum
@@ -127,8 +132,8 @@ class UnifiedAISDK:
         for member in ModelProvider:
             if member.value == provider_str:
                 return member
-        # Default to OpenAI if unrecognized
-        return ModelProvider.OPENAI
+        # Unrecognized — return None so the caller can report the failure
+        return None
 
     async def unified_request(self, request: AIRequest) -> AIResponse:
         """
@@ -142,6 +147,15 @@ class UnifiedAISDK:
             unavailable or the API call fails.
         """
         provider = self._resolve_provider(request)
+        if provider is None:
+            return AIResponse(
+                content="",
+                model=request.model,
+                provider=str(request.provider),
+                success=False,
+                error=f"Unsupported provider: '{request.provider}'",
+            )
+
         provider_name = provider.value
         api_key = self._get_api_key(provider)
 
@@ -351,24 +365,23 @@ class UnifiedAISDK:
             try:
                 client = await self._get_client()
                 if provider == ModelProvider.CLAUDE:
-                    # Anthropic: HEAD-like check by sending minimal request
-                    # Just verify we can reach the endpoint (will get 400 for empty body, but that means reachable)
-                    resp = await client.post(
-                        _PROVIDER_ENDPOINTS[ModelProvider.CLAUDE],
-                        headers={"x-api-key": api_key, "anthropic-version": "2023-06-01", "content-type": "application/json"},
-                        json={"model": "claude-3-haiku-20240307", "max_tokens": 1, "messages": [{"role": "user", "content": "hi"}]},
+                    # Anthropic: lightweight reachability check via GET /v1/models
+                    # (avoids triggering a billable completion)
+                    resp = await client.get(
+                        "https://api.anthropic.com/v1/models",
+                        headers={"x-api-key": api_key, "anthropic-version": "2023-06-01"},
                         timeout=10.0,
                     )
-                    # Any non-network response means the endpoint is reachable
-                    if resp.status_code in (200, 400, 401, 403, 429):
+                    if resp.status_code in (200, 401, 403, 429):
                         results[provider.value] = {"status": "available" if resp.status_code == 200 else "reachable", "http_status": resp.status_code}
                     else:
                         results[provider.value] = {"status": "unavailable", "reason": f"HTTP {resp.status_code}"}
 
                 elif provider in (ModelProvider.OPENAI, ModelProvider.GROK):
                     endpoint = _PROVIDER_ENDPOINTS[provider]
-                    # Use models list endpoint for lightweight check
-                    models_url = endpoint.rsplit("/", 1)[0] + "/models"
+                    # Strip two path segments (e.g. /chat/completions) to reach the
+                    # versioned base, then append /models for a lightweight check
+                    models_url = endpoint.rsplit("/", 2)[0] + "/models"
                     resp = await client.get(
                         models_url,
                         headers={"Authorization": f"Bearer {api_key}"},
