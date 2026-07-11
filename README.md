@@ -1,5 +1,8 @@
 # 🎯 EventRelay — AI Video Processing & Event Extraction Platform
 
+> **Operators / agents:** Start at [`CONTROL.md`](CONTROL.md). Live status and the only execution plan live under [`docs/control-plane/`](docs/control-plane/). Stale architecture docs are not authoritative.
+
+
 <!-- ✅ AI agent access verified: write/sync capability confirmed via test task resolution -->
 
 [![CI](https://github.com/groupthinking/EventRelay/actions/workflows/ci.yml/badge.svg)](https://github.com/groupthinking/EventRelay/actions/workflows/ci.yml)
