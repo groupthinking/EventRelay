@@ -1,14 +1,4 @@
-<<<<<<< HEAD
-"""
-Rate Limiter
-============
-
-Provides basic rate limiting functionality for AI providers.
-Throttles requests per-provider based on configurable limits.
-"""
-=======
 """Lightweight in-process rate limiting helpers for AI providers."""
->>>>>>> origin/main
 
 import asyncio
 import time
@@ -30,12 +20,7 @@ class RateLimiter:
     """
     Basic rate limiter for AI API requests.
 
-<<<<<<< HEAD
-    Provides request throttling per provider with configurable
-    requests-per-minute and tokens-per-minute limits.
-=======
     Provides simple request throttling per provider.
->>>>>>> origin/main
     """
 
     def __init__(self, config: Optional[dict[str, Any]] = None):

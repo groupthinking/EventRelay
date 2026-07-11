@@ -22,8 +22,6 @@ from enum import Enum
 from typing import Any, Callable, Optional
 from urllib.parse import urlparse
 
-import httpx
-
 from .context_manager import MCPContext, get_context_manager
 from .server_registry import ServerCapability
 
@@ -515,59 +513,6 @@ class OpenAIAdapter(ProtocolAdapter):
         return True
 
     async def send_request(self, request: dict[str, Any], context: MCPContext) -> dict[str, Any]:
-<<<<<<< HEAD
-        """Send request to OpenAI API."""
-        if not getattr(self, "api_key", None):
-            return {
-                "protocol": "openai",
-                "success": False,
-                "error": "OpenAI adapter not initialized (no API key)",
-                "context_id": context.id,
-            }
-        try:
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                payload = {
-                    "model": getattr(self, "model", "gpt-4"),
-                    "messages": request.get("messages", [{"role": "user", "content": request.get("prompt", "")}]),
-                    "temperature": request.get("temperature", 0.7),
-                    "max_tokens": request.get("max_tokens", 4000),
-                }
-                resp = await client.post(
-                    f"{self.base_url}/chat/completions",
-                    headers={"Authorization": f"Bearer {self.api_key}"},
-                    json=payload,
-                )
-                resp.raise_for_status()
-                data = resp.json()
-                return {
-                    "protocol": "openai",
-                    "success": True,
-                    "response": data["choices"][0]["message"]["content"],
-                    "context_id": context.id,
-                    "usage": data.get("usage"),
-                }
-        except Exception as e:
-            logger.error(f"OpenAI request failed: {e}")
-            return {
-                "protocol": "openai",
-                "success": False,
-                "error": str(e),
-                "context_id": context.id,
-            }
-
-    async def health_check(self) -> bool:
-        """Check OpenAI API reachability."""
-        if not getattr(self, "api_key", None):
-            return False
-        try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.get(
-                    f"{self.base_url}/models",
-                    headers={"Authorization": f"Bearer {self.api_key}"},
-                )
-                return resp.status_code == 200
-        except Exception:
-=======
         """Send request to OpenAI API"""
         if self._client is None:
             raise RuntimeError("OpenAI adapter not initialized — call initialize() first")
@@ -609,7 +554,6 @@ class OpenAIAdapter(ProtocolAdapter):
             return True
         except Exception as e:
             logger.warning("OpenAI health check failed: %s", e)
->>>>>>> origin/main
             return False
 
     async def get_capabilities(self) -> list[ServerCapability]:
@@ -635,92 +579,11 @@ class AnthropicAdapter(ProtocolAdapter):
         """Initialize Anthropic adapter"""
         self.api_key = config.get("api_key") or os.getenv("ANTHROPIC_API_KEY")
         self.model = config.get("model", "claude-opus-4-8")
-        self.base_url = "https://api.anthropic.com"
 
         if not self.api_key:
             logger.error("Anthropic API key not provided")
             return False
 
-<<<<<<< HEAD
-        # Validate base_url if overridden
-        base_url = config.get("base_url", self.base_url)
-        parsed = urlparse(base_url)
-        if parsed.scheme != "https" or not parsed.netloc:
-            logger.error("Unsafe Anthropic base_url rejected (must be HTTPS with a host)")
-            return False
-        self.base_url = base_url
-
-        return True
-
-    async def send_request(self, request: dict[str, Any], context: MCPContext) -> dict[str, Any]:
-        """Send request to Anthropic API."""
-        if not getattr(self, "api_key", None):
-            return {
-                "protocol": "anthropic",
-                "success": False,
-                "error": "Anthropic adapter not initialized (no API key)",
-                "context_id": context.id,
-            }
-        try:
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                messages = request.get("messages", [{"role": "user", "content": request.get("prompt", "")}])
-                payload = {
-                    "model": getattr(self, "model", "claude-opus-4-8"),
-                    "max_tokens": request.get("max_tokens", 4000),
-                    "messages": messages,
-                }
-                resp = await client.post(
-                    f"{self.base_url}/v1/messages",
-                    headers={
-                        "x-api-key": self.api_key,
-                        "anthropic-version": "2023-06-01",
-                        "content-type": "application/json",
-                    },
-                    json=payload,
-                )
-                resp.raise_for_status()
-                data = resp.json()
-                content = "".join(
-                    block["text"] for block in data.get("content", []) if block.get("type") == "text"
-                )
-                return {
-                    "protocol": "anthropic",
-                    "success": True,
-                    "response": content,
-                    "context_id": context.id,
-                    "usage": data.get("usage"),
-                }
-        except Exception as e:
-            logger.error(f"Anthropic request failed: {e}")
-            return {
-                "protocol": "anthropic",
-                "success": False,
-                "error": str(e),
-                "context_id": context.id,
-            }
-
-    async def health_check(self) -> bool:
-        """Check Anthropic API reachability without consuming tokens."""
-        if not getattr(self, "api_key", None):
-            return False
-        try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                # Send intentionally invalid payload (empty messages) to test
-                # reachability without generating tokens. A 400 confirms the
-                # API is reachable; only network errors indicate unavailability.
-                resp = await client.post(
-                    f"{self.base_url}/v1/messages",
-                    headers={
-                        "x-api-key": self.api_key,
-                        "anthropic-version": "2023-06-01",
-                        "content-type": "application/json",
-                    },
-                    json={"model": self.model, "max_tokens": 1, "messages": []},
-                )
-                # 400 = reachable (invalid request rejected), 401 = bad key but reachable
-                return resp.status_code in (200, 400, 401)
-        except Exception:
-=======
         if not _HAS_ANTHROPIC:
             logger.error("anthropic package is not installed")
             return False
@@ -778,7 +641,6 @@ class AnthropicAdapter(ProtocolAdapter):
             return True
         except Exception as e:
             logger.warning("Anthropic health check failed: %s", e)
->>>>>>> origin/main
             return False
 
     async def get_capabilities(self) -> list[ServerCapability]:
@@ -802,85 +664,11 @@ class GoogleAIAdapter(ProtocolAdapter):
         """Initialize Google AI adapter"""
         self.api_key = config.get("api_key") or os.getenv("GEMINI_API_KEY")
         self.model = config.get("model", "gemini-pro")
-        self.base_url = "https://generativelanguage.googleapis.com"
 
         if not self.api_key:
             logger.error("Google AI API key not provided")
             return False
 
-<<<<<<< HEAD
-        # Validate base_url if overridden
-        base_url = config.get("base_url", self.base_url)
-        parsed = urlparse(base_url)
-        if parsed.scheme != "https" or not parsed.netloc:
-            logger.error("Unsafe Google AI base_url rejected (must be HTTPS with a host)")
-            return False
-        self.base_url = base_url
-
-        return True
-
-    async def send_request(self, request: dict[str, Any], context: MCPContext) -> dict[str, Any]:
-        """Send request to Google AI (Gemini) API."""
-        if not getattr(self, "api_key", None):
-            return {
-                "protocol": "google_ai",
-                "success": False,
-                "error": "Google AI adapter not initialized (no API key)",
-                "context_id": context.id,
-            }
-        try:
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                model = request.get("model", getattr(self, "model", "gemini-pro"))
-                prompt = request.get("prompt", "")
-                url = f"{self.base_url}/v1beta/models/{model}:generateContent"
-                payload = {
-                    "contents": [{"parts": [{"text": prompt}]}],
-                    "generationConfig": {
-                        "temperature": request.get("temperature", 0.7),
-                        "maxOutputTokens": request.get("max_tokens", 4000),
-                    },
-                }
-                resp = await client.post(
-                    url,
-                    headers={"x-goog-api-key": self.api_key},
-                    json=payload,
-                )
-                resp.raise_for_status()
-                data = resp.json()
-                candidates = data.get("candidates", [])
-                content = ""
-                if candidates:
-                    parts = candidates[0].get("content", {}).get("parts", [])
-                    content = "".join(p.get("text", "") for p in parts)
-                return {
-                    "protocol": "google_ai",
-                    "success": True,
-                    "response": content,
-                    "context_id": context.id,
-                    "usage": data.get("usageMetadata"),
-                }
-        except Exception as e:
-            logger.error(f"Google AI request failed: {e}")
-            return {
-                "protocol": "google_ai",
-                "success": False,
-                "error": str(e),
-                "context_id": context.id,
-            }
-
-    async def health_check(self) -> bool:
-        """Check Google AI API reachability."""
-        if not getattr(self, "api_key", None):
-            return False
-        try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.get(
-                    f"{self.base_url}/v1beta/models",
-                    headers={"x-goog-api-key": self.api_key},
-                )
-                return resp.status_code == 200
-        except Exception:
-=======
         if not _HAS_GENAI:
             logger.error("google-genai package is not installed")
             return False
@@ -956,7 +744,6 @@ class GoogleAIAdapter(ProtocolAdapter):
             return True
         except Exception as e:
             logger.warning("Google AI health check failed: %s", e)
->>>>>>> origin/main
             return False
 
     async def get_capabilities(self) -> list[ServerCapability]:

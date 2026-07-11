@@ -737,10 +737,6 @@ class TestOpenAIAdapter:
         )
         assert result is False
 
-<<<<<<< HEAD
-    async def test_health_check_returns_false_without_api_key(self):
-        adapter = OpenAIAdapter()
-=======
     async def test_initialize_rejects_non_string_base_url(self):
         # An explicit null/non-string base_url must be rejected cleanly rather
         # than raising TypeError out of urlparse() inside initialize().
@@ -752,7 +748,6 @@ class TestOpenAIAdapter:
 
     async def test_health_check_returns_false_when_not_initialized(self):
         adapter = OpenAIAdapter()
->>>>>>> origin/main
         assert await adapter.health_check() is False
 
     async def test_get_capabilities_returns_ai_inference(self):
@@ -868,11 +863,7 @@ class TestAnthropicAdapter:
         await adapter.initialize({"api_key": "sk-ant"})
         assert adapter.model == "claude-opus-4-8"
 
-<<<<<<< HEAD
-    async def test_health_check_returns_false_without_api_key(self):
-=======
     async def test_health_check_returns_false_when_not_initialized(self):
->>>>>>> origin/main
         adapter = AnthropicAdapter()
         assert await adapter.health_check() is False
 
@@ -997,11 +988,7 @@ class TestGoogleAIAdapter:
         await adapter.initialize({"api_key": "key"})
         assert adapter.model == "gemini-pro"
 
-<<<<<<< HEAD
-    async def test_health_check_returns_false_without_api_key(self):
-=======
     async def test_health_check_returns_false_when_not_initialized(self):
->>>>>>> origin/main
         adapter = GoogleAIAdapter()
         assert await adapter.health_check() is False
 
