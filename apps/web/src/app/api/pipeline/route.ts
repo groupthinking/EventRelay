@@ -123,22 +123,27 @@ function buildLocalFallbackPipeline({
   deploymentTarget,
   features,
   backend,
+  customReason,
+  customStatus,
 }: {
   url: string;
   projectType: string;
   deploymentTarget: string;
   features: string[];
   backend: Awaited<ReturnType<typeof checkBackendHealth>>;
+  customReason?: string;
+  customStatus?: string;
 }) {
-  const backendReason = backend.reason || 'Backend pipeline is not available';
+  const backendReason = customReason || backend.reason || 'Backend pipeline is not available';
+  const buildStatus = customStatus || 'handoff_ready_backend_unavailable';
 
   return {
     live_url: null,
     github_repo: null,
-    build_status: 'handoff_ready_backend_unavailable',
+    build_status: buildStatus,
     video_analysis: {
       title: 'Workflow handoff from video source',
-      summary: `UVAI could not run the full backend pipeline for ${url}. A deterministic handoff was created so the user still leaves with review, build, and deploy steps.`,
+      summary: `UVAI could not run the full backend pipeline for ${url} (${backendReason}). A deterministic handoff was created so the user still leaves with review, build, and deploy steps.`,
       events: [
         {
           type: 'source',
@@ -156,7 +161,8 @@ function buildLocalFallbackPipeline({
       actions: [
         {
           title: 'Review the source and intended outcome',
-          description: 'Confirm the user goal, expected deliverable, and any safety or consent constraints before generating implementation details.',
+          description:
+            'Confirm the user goal, expected deliverable, and any safety or consent constraints before generating implementation details.',
           category: 'review',
           estimatedMinutes: 5,
         },
@@ -168,7 +174,8 @@ function buildLocalFallbackPipeline({
         },
         {
           title: 'Reconnect automatic execution',
-          description: 'Fix BACKEND_URL and provider billing/quota, then rerun the same source through the full backend pipeline.',
+          description:
+            'Fix BACKEND_URL and provider billing/quota, then rerun the same source through the full backend pipeline.',
           category: 'configuration',
           estimatedMinutes: 10,
         },
@@ -178,18 +185,21 @@ function buildLocalFallbackPipeline({
     },
     code_generation: {
       status: 'handoff_ready',
-      project_type: projectType,
-      files: [
+      framework: projectType,
+      files_created: [
         'README.md',
         'workflow/spec.md',
         'workflow/acceptance-checks.md',
         'vercel-deploy-checklist.md',
       ],
+      entry_point: 'README.md',
       features,
     },
     deployment: {
       target: deploymentTarget,
       status: 'blocked_by_configuration',
+      platforms: [deploymentTarget],
+      urls: {},
       blockers: [
         backendReason,
         'Gemini billing or API access must be valid for automatic video analysis.',
@@ -197,7 +207,7 @@ function buildLocalFallbackPipeline({
       ],
     },
     features_implemented: features,
-    message: 'Created a local fallback handoff. Automatic code generation and deployment require a healthy backend pipeline and valid provider billing.',
+    message: `Created a local fallback handoff (${backendReason}). Automatic code generation and deployment require a healthy backend pipeline and valid provider billing.`,
   };
 }
 
@@ -268,13 +278,14 @@ export async function POST(request: Request) {
         const jobId = payload?.data?.job_id;
 
         if (response.ok && jobId) {
+          const origin = new URL(request.url).origin;
           return NextResponse.json({
             id: jobId,
             status: 'pending',
             pipeline: 'backend-async',
             async_processing: true,
             job_id: jobId,
-            status_url: `/api/jobs/${jobId}`,
+            status_url: `${origin}/api/jobs/${jobId}`,
           });
         }
 
@@ -378,9 +389,21 @@ export async function POST(request: Request) {
               topics: analysis.topics,
               architectureCode: analysis.architectureCode,
             },
-            code_generation: null,
-            deployment: null,
-            message: 'Backend pipeline unavailable. Video analysis complete but code generation and deployment require the Python backend.',
+            code_generation: {
+              status: 'not_attempted',
+              framework: project_type,
+              files_created: [],
+              entry_point: '',
+              features,
+            },
+            deployment: {
+              target: deployment_target,
+              status: 'not_attempted',
+              platforms: [deployment_target],
+              urls: {},
+            },
+            message:
+              'Backend pipeline unavailable. Video analysis complete but code generation and deployment require the Python backend.',
           },
         });
       } catch (e) {
@@ -460,6 +483,8 @@ export async function POST(request: Request) {
       deploymentTarget: deployment_target,
       features,
       backend: backendHealth,
+      customReason: geminiError ? `AI analysis failed: ${geminiError.code}` : undefined,
+      customStatus: geminiError ? 'handoff_ready_analysis_failed' : undefined,
     });
 
     await publishEvent(EventTypes.PIPELINE_COMPLETED, {

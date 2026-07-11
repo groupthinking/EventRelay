@@ -1,8 +1,8 @@
 # GATE-4 Security High Cluster Report
 
-**When:** 2026-07-10T18:05–18:10Z UTC  
-**Branch:** `fix/gate4-security-hardening` (from `e70aa66a`)  
-**Baseline:** `eventrelay-audit-report.md` findings #1–4, #7  
+**When:** 2026-07-10T18:05–18:10Z UTC
+**Branch:** `fix/gate4-security-hardening` (from `e70aa66a`)
+**Baseline:** `eventrelay-audit-report.md` findings #1–4, #7
 
 ---
 
