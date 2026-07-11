@@ -1,24 +1,32 @@
-# Dockerfile for EventRelay Backend - Cloud Run Optimized
-# Multi-stage build for smaller image size
+# Dockerfile for EventRelay - Hybrid Python + Node.js (v22)
+# Fixes: "ffmpeg not found" and "npm: command not found" production errors
+# Multi-stage build optimized for production
 
-# Stage 1: Builder
-FROM python:3.12-slim AS builder
+# ── Stage 1: Builder ──────────────────────────────────────────────────────────
+FROM python:3.11-slim AS builder
 
 WORKDIR /app
 
-# Install build dependencies
+# Install system build deps + ffmpeg + Node.js 22 LTS in a single layer
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    gnupg \
+    ffmpeg \
     build-essential \
+    && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+    && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy dependency files
-COPY pyproject.toml ./
-COPY requirements.txt* ./
+# Copy dependency manifests
+COPY pyproject.toml requirements.txt* ./
+COPY package.json package-lock.json ./
+COPY apps/web/package.json ./apps/web/
 
-# Copy source code for package installation (needed for editable installs)
-COPY src/ ./src/
+# Copy local file dependencies for npm workspace
+COPY src/dataconnect-generated ./src/dataconnect-generated
+COPY apps/web/src/dataconnect-generated ./apps/web/src/dataconnect-generated
 
-# Install dependencies
+# Install Python dependencies
 RUN pip install --no-cache-dir --upgrade pip && \
     if [ -f requirements.txt ]; then \
         pip install --no-cache-dir -r requirements.txt; \
@@ -26,51 +34,65 @@ RUN pip install --no-cache-dir --upgrade pip && \
         pip install --no-cache-dir -e .; \
     fi
 
-# Stage 2: Runtime
-FROM python:3.12-slim AS runtime
+# Install Node.js dependencies for the web app
+# Using workspace to ensure proper hoisting and dependency resolution
+RUN npm ci --workspace=apps/web --production --legacy-peer-deps
+
+# ── Stage 2: Runtime ──────────────────────────────────────────────────────────
+FROM python:3.11-slim AS runtime
 
 WORKDIR /app
 
-# Create non-root user for security
-RUN groupadd --gid 1000 uvai && \
-    useradd --uid 1000 --gid uvai --shell /bin/bash --create-home uvai
+# Create non-root user (UID 1000)
+RUN groupadd --gid 1000 appuser && \
+    useradd --uid 1000 --gid appuser --shell /bin/bash --create-home appuser
 
-# Install runtime dependencies only (including Node.js/npm for build verification of generated projects)
+# Install runtime system deps: ffmpeg + Node.js 22 LTS + curl (for health check)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
+    ffmpeg \
     curl \
     gnupg \
-    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    ca-certificates \
+    && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy installed packages from builder
-COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
+# Copy installed Python packages from builder
+COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
 
-# Copy application code
-COPY --chown=uvai:uvai src/ ./src/
-COPY --chown=uvai:uvai pyproject.toml ./
+# Copy installed Node.js packages from builder
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/apps/web/node_modules ./apps/web/node_modules
 
-# Create data directories
-RUN mkdir -p /app/data/enhanced_analysis /app/data/cache /app/logs /app/generated_projects /app/youtube_processed_videos /tmp/uvai_data && \
-    chown -R uvai:uvai /app/data /app/logs /app/generated_projects /app/youtube_processed_videos /tmp/uvai_data
+# Copy local dataconnect artifacts to avoid dangling symlinks
+COPY --from=builder /app/src/dataconnect-generated ./src/dataconnect-generated
+COPY --from=builder /app/apps/web/src/dataconnect-generated ./apps/web/src/dataconnect-generated
 
-# Switch to non-root user
-USER uvai
+# Copy application code with correct ownership
+COPY --chown=appuser:appuser . .
+
+# Runtime data directories
+RUN mkdir -p /app/data/enhanced_analysis /app/data/cache /app/logs \
+             /app/generated_projects /app/youtube_processed_videos /tmp/uvai_data && \
+    chown -R appuser:appuser /app/data /app/logs /app/generated_projects \
+                              /app/youtube_processed_videos /tmp/uvai_data
+
+USER appuser
 
 # Environment variables
-ENV PORT=8080
-ENV HOST=0.0.0.0
-ENV PYTHONUNBUFFERED=1
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONPATH=/app/src
+ENV PORT=8080 \
+    HOST=0.0.0.0 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONPATH=/app/src \
+    NODE_ENV=production
 
 EXPOSE ${PORT}
 
-# Health check (uses PORT env var)
-HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-    CMD python -c "import os,urllib.request; urllib.request.urlopen(f'http://localhost:{os.environ.get(\"PORT\",8080)}/api/v1/health')" || exit 1
+# Health check using curl (installed above)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+    CMD curl -f http://localhost:${PORT:-8080}/health || exit 1
 
-# Run — use shell form so $PORT is expanded at runtime
-CMD python -m uvicorn youtube_extension.main:app --host 0.0.0.0 --port $PORT
+# Run — shell form so $PORT is expanded at runtime
+CMD python -m uvicorn youtube_extension.main:app --host 0.0.0.0 --port ${PORT}

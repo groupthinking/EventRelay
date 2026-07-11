@@ -473,19 +473,44 @@ async def run_transcript_action(
         and duration_seconds > TranscriptActionWorkflow.ASYNC_VIDEO_THRESHOLD_SECONDS
     )
 
-    if is_long_video:
-        result = await _queue_transcript_action_job(
-            request,
-            metadata=metadata,
-            http_request=http_request,
+    try:
+        if is_long_video:
+            result = await _queue_transcript_action_job(
+                request,
+                metadata=metadata,
+                http_request=http_request,
+            )
+        else:
+            result = await workflow.run(
+                request.video_url,
+                language=request.language,
+                transcript_text=request.transcript_text,
+                video_options=request.video_options,
+                prefetched_metadata=metadata,
+            )
+    except Exception as exc:  # noqa: BLE001 - never surface a raw 500 for processing failures
+        logger.exception(
+            "transcript-action failed; returning graceful error response",
+            extra={"video_url": request.video_url},
         )
-    else:
-        result = await workflow.run(
+        await _emit_event(
+            "com.eventrelay.transcript.failed",
+            {"url": request.video_url, "errors": [str(exc)]},
             request.video_url,
-            language=request.language,
-            transcript_text=request.transcript_text,
-            video_options=request.video_options,
-            prefetched_metadata=metadata,
+        )
+        return TranscriptActionResponse(
+            success=False,
+            video_url=request.video_url,
+            metadata={},
+            transcript={
+                "text": "",
+                "segments": [],
+                "source": "unavailable",
+                "error": str(exc),
+            },
+            outputs={},
+            errors=[f"Transcript action failed: {exc}"],
+            orchestration_meta={"processing_time": 0.0, "agents_used": []},
         )
 
     if result.get("async_processing"):
@@ -779,8 +804,19 @@ async def video_to_software_v1(
 )
 async def get_cache_stats_v1(cache_service: CacheService = Depends(get_cache_service)):
     """Get cache statistics"""
+    global _stats_cache_time, _stats_cache
     try:
+        now = time.time()
+        if now - _stats_cache_time < _stats_cache_ttl and _stats_cache:
+            return CacheStats(**_stats_cache)
+
         stats = cache_service.get_cache_statistics()
+        # Only cache successful results. get_cache_statistics() swallows its own
+        # exceptions and returns a zeroed dict with an "error" key on failure;
+        # caching that would serve bogus all-zero stats for the whole TTL window.
+        if "error" not in stats:
+            _stats_cache = stats
+            _stats_cache_time = now
         return CacheStats(**stats)
     except Exception as e:
         logger.error(f"Error getting cache stats: {e}")
@@ -1246,6 +1282,54 @@ _JOB_MAX_SIZE: int = int(os.getenv("JOB_STORE_MAX_SIZE", "2000"))
 _video_jobs: _TTLDict = _TTLDict(ttl=_JOB_TTL, max_size=_JOB_MAX_SIZE)
 _agent_executions: _TTLDict = _TTLDict(ttl=_JOB_TTL, max_size=_JOB_MAX_SIZE)
 _dispatches: _TTLDict = _TTLDict(ttl=_JOB_TTL, max_size=_JOB_MAX_SIZE)
+
+# Cache for heavy statistics calculations
+_stats_cache: dict[str, Any] = {}
+_stats_cache_time: float = 0
+_stats_cache_ttl: float = 60
+
+
+async def _periodic_cleanup():
+    """Background task to proactively evict expired jobs from in-memory stores."""
+    while True:
+        try:
+            _video_jobs.evict_expired()
+            _agent_executions.evict_expired()
+            _dispatches.evict_expired()
+        except Exception as exc:
+            # Log at warning (not debug) so eviction failures are visible in
+            # production — a silently failing sweep would let the in-memory job
+            # stores grow unbounded, defeating the memory-leak fix.
+            logger.warning("Periodic cleanup failed: %s", exc)
+        await asyncio.sleep(300)  # Sweep every 5 minutes
+
+
+# Hold a strong module-level reference to the cleanup task. A bare
+# asyncio.create_task(...) is fire-and-forget: the event loop keeps only a weak
+# reference, so the task can be garbage-collected mid-flight and silently stop
+# sweeping. Keeping the reference (and cancelling it on shutdown) keeps the loop
+# alive for the app's lifetime.
+_cleanup_task: "asyncio.Task[None] | None" = None
+
+
+@router.on_event("startup")
+async def startup_event():
+    """Start background tasks on API startup."""
+    global _cleanup_task
+    _cleanup_task = asyncio.create_task(_periodic_cleanup())
+
+
+@router.on_event("shutdown")
+async def shutdown_event():
+    """Cancel background tasks on API shutdown."""
+    global _cleanup_task
+    if _cleanup_task is not None:
+        _cleanup_task.cancel()
+        try:
+            await _cleanup_task
+        except asyncio.CancelledError:
+            pass
+        _cleanup_task = None
 
 
 def _persist_video_job(job: VideoJobStatusResponse) -> None:
