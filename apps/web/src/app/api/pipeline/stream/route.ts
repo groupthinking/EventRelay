@@ -27,10 +27,7 @@ import { publishEvent, EventTypes } from '@/lib/cloudevents';
 import { backendHeaders, resolveBackendStatusUrl } from '@/lib/pipeline-backend';
 import { checkBackendHealth, getBackendConfig } from '@/lib/pipeline-backend-health';
 import { saveTrainingExample, TUNING_THRESHOLD } from '@/lib/training-store';
-<<<<<<< HEAD
-=======
 import { PipelineDeadline } from '../route';
->>>>>>> origin/main
 
 const { configured: BACKEND_CONFIGURED, url: CONFIGURED_BACKEND_URL } = getBackendConfig();
 const JOB_POLL_INTERVAL_MS = 2000;

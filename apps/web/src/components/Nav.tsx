@@ -43,22 +43,14 @@ export default function Nav({ rightSlot, subtitle, fixed = false }: NavProps) {
   return (
     <nav
       className={clsx(
-<<<<<<< HEAD
-        'flex items-center justify-between px-6 lg:px-12 py-4 border-b border-white/[0.05] z-50',
-=======
         'flex flex-wrap items-center justify-between px-6 lg:px-12 py-4 border-b border-white/[0.05] z-50',
->>>>>>> origin/main
         fixed
           ? 'fixed top-0 left-0 right-0 bg-surface-950/80 backdrop-blur-xl'
           : 'bg-surface-950/80 backdrop-blur-xl'
       )}
     >
       <div className="flex items-center gap-4">
-<<<<<<< HEAD
-        <Link href="/" className="flex items-center gap-3 group">
-=======
         <Link href="/dashboard" className="flex items-center gap-3 group">
->>>>>>> origin/main
           <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center font-black text-base shadow-lg shadow-primary-500/25 transition-transform group-hover:scale-105">
             U
           </div>

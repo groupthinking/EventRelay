@@ -2,9 +2,6 @@ import { NextResponse } from 'next/server';
 import { waitUntil } from '@vercel/functions';
 import { publishEvent, EventTypes } from '@/lib/cloudevents';
 import { analyzeVideoWithGemini } from '@/lib/gemini-video-analyzer';
-<<<<<<< HEAD
-import { hasGeminiKey } from '@/lib/gemini-client';
-=======
 import {
   classifyGeminiError,
   getGeminiConfig,
@@ -20,7 +17,6 @@ import {
   PIPELINE_HEALTH_TIMEOUT_MS as HEALTH_PROBE_MS,
 } from '@/lib/pipeline-backend-health';
 import { isAllowedYoutubeUrl, resolveVideoUrl } from '@/lib/video-url-request';
->>>>>>> origin/main
 
 const { configured: BACKEND_CONFIGURED, url: CONFIGURED_BACKEND_URL } = getBackendConfig();
 const BACKEND_URL = CONFIGURED_BACKEND_URL || 'http://localhost:8000';
@@ -41,9 +37,6 @@ interface VideoProcessJobResponse {
 }
 
 export const runtime = 'nodejs';
-<<<<<<< HEAD
-export const maxDuration = 300;
-=======
 /** Sync route — short budget; use /api/pipeline/stream or async=true for long runs. */
 export const maxDuration = 60;
 
@@ -217,7 +210,6 @@ function buildLocalFallbackPipeline({
     message: `Created a local fallback handoff (${backendReason}). Automatic code generation and deployment require a healthy backend pipeline and valid provider billing.`,
   };
 }
->>>>>>> origin/main
 
 /**
  * POST /api/pipeline
@@ -234,22 +226,15 @@ function buildLocalFallbackPipeline({
 export async function POST(request: Request) {
   let videoUrl: string | undefined;
   try {
-<<<<<<< HEAD
-    const body = await request.json();
-    const { url, project_type = 'web', deployment_target = 'vercel', features } = body;
-=======
     const body = await request.json() as Record<string, unknown>;
     const url = resolveVideoUrl(body);
     const project_type = stringValue(body.project_type, 'web');
     const deployment_target = stringValue(body.deployment_target, 'vercel');
     const features = featureList(body.features);
->>>>>>> origin/main
     videoUrl = url;
 
     if (!url) {
       return NextResponse.json({ error: 'Video URL is required' }, { status: 400 });
-<<<<<<< HEAD
-=======
     }
 
     if (!isAllowedYoutubeUrl(url)) {
@@ -261,7 +246,6 @@ export async function POST(request: Request) {
         },
         { status: 400 },
       );
->>>>>>> origin/main
     }
 
     await publishEvent(EventTypes.VIDEO_RECEIVED, { url, pipeline: 'end-to-end' }, url);
@@ -280,27 +264,6 @@ export async function POST(request: Request) {
     // ── Strategy 0: Async kickoff (returns job_id immediately) ──
     if (asyncMode && useBackend) {
       try {
-<<<<<<< HEAD
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 300_000); // 5 min for full pipeline
-
-        let response: Response;
-        try {
-          response = await fetch(`${BACKEND_URL}/api/v1/video-to-software`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              video_url: url,
-              project_type,
-              deployment_target,
-              features: features || ['responsive_design', 'modern_ui'],
-            }),
-            signal: controller.signal,
-          });
-        } finally {
-          clearTimeout(timeout);
-        }
-=======
         const response = await fetch(`${backendUrl}/api/v1/videos/process`, {
           method: 'POST',
           headers: backendHeaders(),
@@ -351,7 +314,6 @@ export async function POST(request: Request) {
           }),
           signal: deadline.signalFor(PIPELINE_BACKEND_TIMEOUT_MS),
         });
->>>>>>> origin/main
 
         if (response.ok) {
           const result = await response.json();
@@ -394,15 +356,11 @@ export async function POST(request: Request) {
     if (hasGeminiKey() && deadline.remainingMs() > 1_000) {
       try {
         const startTime = Date.now();
-<<<<<<< HEAD
-        const analysis = await analyzeVideoWithGemini(url);
-=======
         const analysis = await deadline.runWithBudget(
           analyzeVideoWithGemini(url),
           PIPELINE_GEMINI_TIMEOUT_MS,
           'Gemini analysis',
         );
->>>>>>> origin/main
         const elapsed = Date.now() - startTime;
 
         // Direct waitUntil on publishEvent (CloudEvent) for completion — ancillary, non-blocking return to client
@@ -454,12 +412,6 @@ export async function POST(request: Request) {
       }
     }
 
-<<<<<<< HEAD
-    return NextResponse.json(
-      { error: 'No pipeline available. Configure BACKEND_URL for full pipeline or GEMINI_API_KEY for analysis only.' },
-      { status: 503 },
-    );
-=======
     // ── Strategy 3: Transcript-only when Gemini is blocked but transcript fetch works ──
     if (geminiError && deadline.remainingMs() > 2_000) {
       try {
@@ -556,7 +508,6 @@ export async function POST(request: Request) {
         : 'No automatic pipeline is currently available. Returned a fallback handoff instead of blocking the user.',
       result: fallback,
     });
->>>>>>> origin/main
   } catch (error) {
     console.error('Pipeline error:', error);
     // Direct waitUntil on publishEvent (ancillary CloudEvent) so it does not block error response
@@ -571,11 +522,8 @@ export async function POST(request: Request) {
 }
 
 export async function GET() {
-<<<<<<< HEAD
-=======
   const backend = await checkBackendHealth();
   const gemini = getGeminiConfig();
->>>>>>> origin/main
   return NextResponse.json({
     name: 'EventRelay End-to-End Pipeline',
     version: '1.0.0',
@@ -586,10 +534,6 @@ export async function GET() {
       '3. Transport: CloudEvents published at each stage',
       '4. Execute: Agents generate code, create repo, deploy to Vercel',
     ],
-<<<<<<< HEAD
-    backend_available: BACKEND_AVAILABLE,
-    gemini_available: hasGeminiKey(),
-=======
     backend_configured: backend.configured,
     backend_available: backend.available,
     backend_host: backend.host,
@@ -597,7 +541,6 @@ export async function GET() {
     gemini_available: gemini.configured,
     gemini_mode: gemini.mode,
     gemini_routing: getGeminiRoutingLabel(),
->>>>>>> origin/main
     endpoints: {
       pipeline: 'POST /api/pipeline - Full end-to-end pipeline',
       video: 'POST /api/video - Video analysis only',

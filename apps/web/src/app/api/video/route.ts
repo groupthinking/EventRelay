@@ -4,10 +4,7 @@ import { publishEvent, EventTypes } from '@/lib/cloudevents';
 import { analyzeVideoWithGemini } from '@/lib/gemini-video-analyzer';
 import { hasGeminiKey } from '@/lib/gemini-client';
 import { saveTrainingExample } from '@/lib/training-store';
-<<<<<<< HEAD
-=======
 import { isAllowedYoutubeUrl } from '@/lib/video-url-request';
->>>>>>> origin/main
 
 // Backend URL with validation - skip if not a valid URL
 const rawBackendUrl = process.env.BACKEND_URL || '';
@@ -25,8 +22,6 @@ function getBaseUrl(request: Request): string {
   const url = new URL(request.url);
   return `${url.protocol}//${url.host}`;
 }
-<<<<<<< HEAD
-=======
 async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   let timeout: ReturnType<typeof setTimeout> | undefined;
   try {
@@ -41,7 +36,6 @@ async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): P
   }
 }
 
->>>>>>> origin/main
 
 /**
  * POST /api/video
@@ -55,19 +49,14 @@ export async function POST(request: Request) {
   let videoUrl: string | undefined;
   try {
     const body = await request.json();
-<<<<<<< HEAD
-=======
     if (!body || typeof body !== 'object') {
       return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
     }
->>>>>>> origin/main
     const { url } = body;
     videoUrl = url;
 
     if (!url) {
       return NextResponse.json({ error: 'Video URL is required' }, { status: 400 });
-<<<<<<< HEAD
-=======
     }
 
     if (typeof url !== 'string' || !isAllowedYoutubeUrl(url)) {
@@ -79,7 +68,6 @@ export async function POST(request: Request) {
         },
         { status: 400 },
       );
->>>>>>> origin/main
     }
 
     await publishEvent(EventTypes.VIDEO_RECEIVED, { url }, url);
@@ -286,10 +274,7 @@ export async function POST(request: Request) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url }),
-<<<<<<< HEAD
-=======
         signal: AbortSignal.timeout(15000),
->>>>>>> origin/main
       });
       const transcribeResult = await transcribeRes.json();
       if (transcribeResult.success && transcribeResult.transcript) {
@@ -310,10 +295,7 @@ export async function POST(request: Request) {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ transcript, videoUrl: url }),
-<<<<<<< HEAD
-=======
           signal: AbortSignal.timeout(15000),
->>>>>>> origin/main
         });
         const extractResult = await extractRes.json();
         if (extractResult.success && extractResult.data) {

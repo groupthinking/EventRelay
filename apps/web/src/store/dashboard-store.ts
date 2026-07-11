@@ -239,22 +239,6 @@ async function streamPipeline(url: string, id: string, ctx: StreamCtx): Promise<
     throw new Error(`Pipeline stream failed: ${res.status}`);
   }
 
-<<<<<<< HEAD
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  const agents = new Map<string, AgentExecution>();
-  let buffer = '';
-  let completed = false;
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split('\n');
-    buffer = lines.pop() || '';
-
-=======
   const pipelineMode = mapPipelineModeHeader(
     typeof res.headers?.get === 'function' ? res.headers.get('X-Pipeline-Mode') : null,
   );
@@ -276,7 +260,6 @@ async function streamPipeline(url: string, id: string, ctx: StreamCtx): Promise<
     const lines = buffer.split('\n');
     buffer = lines.pop() || '';
 
->>>>>>> origin/main
     for (const line of lines) {
       const trimmed = line.trim();
       if (!trimmed.startsWith('data: ')) continue;
@@ -400,15 +383,7 @@ async function legacyAnalyze(url: string, id: string, ctx: StreamCtx & { getVide
       }
     }
   } catch (error) {
-<<<<<<< HEAD
-    updateVideo(id, { status: 'failed', progress: 0 });
-    addActivity(
-      `Analysis failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      'error',
-    );
-=======
     throw error instanceof Error ? error : new Error('Analysis failed');
->>>>>>> origin/main
   }
 }
 
@@ -711,17 +686,9 @@ export const useDashboardStore = create<DashboardState>()(
       addActivity(`Pipeline complete (${result.processing_time || 'done'})`, 'success');
     } catch (error) {
       clearInterval(interval);
-<<<<<<< HEAD
-      updateVideo(id, { status: 'failed', progress: 0 });
-      addActivity(
-        `Pipeline failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        'error',
-      );
-=======
       const reason = error instanceof Error ? error.message : 'Unknown error';
       console.warn('[Dashboard] Pipeline deploy failed, creating handoff:', error);
       createDeployHandoff(url, id, { updateVideo, addActivity }, reason);
->>>>>>> origin/main
     }
   },
 

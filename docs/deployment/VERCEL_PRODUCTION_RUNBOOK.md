@@ -70,16 +70,6 @@ All 3 user outcomes + supporting items (grep 0, waitUntil close-before-BG + no b
 ## Production Gates Not Yet Ready
 
 
-<<<<<<< HEAD
-- `BACKEND_URL` and `NEXT_PUBLIC_BACKEND_URL` are configured in Vercel for
-  Production, Preview, and Development with the Cloud Run backend URL, but the
-  backend itself must become healthy before launch. Current checks found:
-  - `https://uvai-backend-gpwz4wb5na-uc.a.run.app/api/v1/health` returns `500`.
-  - `https://api.uvai.io/api/v1/health` returns `503`.
-- Gemini billing/API access must be fixed for Google project `688578214833`.
-- OpenAI project quota/billing must be fixed for project
-  `proj_r6YRYxAKC2FeLk7NUmrBp9wg`.
-=======
 Operator changes applied on 2026-06-17:
 
 - **Vercel (`garv1/v0-uvai`)**: `BACKEND_URL`, `NEXT_PUBLIC_BACKEND_URL`, and
@@ -103,7 +93,6 @@ Remaining dashboard items (optional / follow-up):
 
 - `SENTRY_AUTH_TOKEN` on Vercel for source-map upload at build time.
 - Configure Vercel Log Drains for persistent logs.
->>>>>>> origin/main
 - Configure Vercel Log Drains for persistent logs.
 - Configure Vercel WAF/bot rules and any IP blocks required for launch.
 - Configure Deployment Protection for preview deployments.

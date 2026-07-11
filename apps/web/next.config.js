@@ -1,6 +1,4 @@
 const path = require('path');
-<<<<<<< HEAD
-=======
 const { Module } = require('module');
 
 const appNodeModules = path.join(__dirname, 'node_modules');
@@ -14,7 +12,6 @@ if (!nodePathEntries.includes(appNodeModules)) {
   Module._initPaths();
 }
 
->>>>>>> origin/main
 const { withSentryConfig } = require('@sentry/nextjs');
 
 const contentSecurityPolicy = [
@@ -100,19 +97,12 @@ const nextConfig = {
 };
 
 const sentryWebpackPluginOptions = {
-<<<<<<< HEAD
-  // For all available options, see https://github.com/getsentry/sentry-webpack-plugin#options
-  org: process.env.SENTRY_ORG || '',
-  project: process.env.SENTRY_PROJECT || 'v0-uvai',
-  silent: !process.env.CI,
-=======
   org: process.env.SENTRY_ORG || '',
   project: process.env.SENTRY_PROJECT || 'v0-uvai',
   silent: !process.env.CI,
   // Preview/prod builds succeed without Sentry upload credentials.
   disableServerWebpackPlugin: !process.env.SENTRY_AUTH_TOKEN,
   disableClientWebpackPlugin: !process.env.SENTRY_AUTH_TOKEN,
->>>>>>> origin/main
 };
 
 module.exports = withSentryConfig(nextConfig, sentryWebpackPluginOptions);

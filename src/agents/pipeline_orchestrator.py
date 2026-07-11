@@ -21,19 +21,11 @@ VERA Integration:
 
 import logging
 import time
-<<<<<<< HEAD
-=======
 import warnings
->>>>>>> origin/main
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Optional
 
-<<<<<<< HEAD
-from .dag_executor import DAGExecutor
-from .mcp_agent_network import get_agent_network
-from .skill_monitor_emitter import get_emitter
-=======
 from agents.mcp_agent_network import get_agent_network
 from agents.skill_monitor_emitter import get_emitter
 
@@ -61,7 +53,6 @@ except Exception:
 
 # DAGExecutor is heavy and not needed for sequential mode; lazy import inside _run_dag_pipeline
 DAGExecutor = None
->>>>>>> origin/main
 
 logger = logging.getLogger(__name__)
 
@@ -91,18 +82,12 @@ def _get_vera():
             "enforcer": get_enforcer(),
         }
     except ImportError:
-<<<<<<< HEAD
-        logger.warning("VERA modules not available — running without security layer")
-=======
         logger.info("VERA modules not available in this env (hardened local maturity still applied for pipeline agents)")
->>>>>>> origin/main
         return None
     except Exception as e:
         logger.error(f"VERA initialization failed: {e} — running without security layer")
         return None
 
-<<<<<<< HEAD
-=======
 # Local hardened maturity for pipeline agents (always-on fallback / hardening when full VERA unavailable)
 # This ensures code-gen, deployer etc. are treated as level 1+ for security intent.
 PIPELINE_MIN_MATURITY = {
@@ -123,7 +108,6 @@ def _get_effective_maturity(agent_id: str) -> int:
     """Return hardened level for pipeline agents, or 0."""
     return PIPELINE_MIN_MATURITY.get(agent_id, 0)
 
->>>>>>> origin/main
 
 # --- Stage dependency declarations ---
 # Each stage declares which other stages must complete before it can start.
@@ -208,9 +192,6 @@ class VideoPipelineOrchestrator:
                 continue_on_error: bool
                 preferences: dict of user preferences for agent context
         """
-<<<<<<< HEAD
-        options = options or {}
-=======
         # Sentry AI monitoring: group LLM calls (code-gen, analysis, etc.) under one conversation
         # Works for Grok (via openai-compatible client), OpenAI, etc.
         try:
@@ -221,15 +202,12 @@ class VideoPipelineOrchestrator:
             logger.debug("Sentry not configured or ai not available: %s", e)
         options = options or {}
         self.results = {}
->>>>>>> origin/main
         execution_mode = options.get("execution_mode", "sequential")
 
         if execution_mode == "dag":
             return await self._run_dag_pipeline(video_url, options)
         return await self._run_sequential_pipeline(video_url, options)
 
-<<<<<<< HEAD
-=======
         if os.getenv("SENTRY_DSN"):
             import sentry_sdk
             sentry_sdk.add_breadcrumb(
@@ -239,7 +217,6 @@ class VideoPipelineOrchestrator:
                 level="info"
             )
 
->>>>>>> origin/main
     async def _run_sequential_pipeline(self, video_url: str, options: dict) -> dict:
         """Original sequential execution — preserved for backward compatibility."""
         run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -328,14 +305,10 @@ class VideoPipelineOrchestrator:
             else DEFAULT_PIPELINE_STAGES
         )
 
-<<<<<<< HEAD
-        # Build DAG
-=======
         # Build DAG (lazy to avoid import bloat for sequential runs)
         global DAGExecutor
         if DAGExecutor is None:
             from agents.dag_executor import DAGExecutor
->>>>>>> origin/main
         dag = DAGExecutor(on_event=self.emitter.emit)
 
         for stage_id in stage_ids:
@@ -405,8 +378,6 @@ class VideoPipelineOrchestrator:
 
         return executor
 
-<<<<<<< HEAD
-=======
     def _record_audit_stage(
         self, agent_id: str, action: str, result: PipelineResult
     ) -> None:
@@ -425,7 +396,6 @@ class VideoPipelineOrchestrator:
         except Exception:
             logger.debug("Audit append skipped for %s", agent_id, exc_info=True)
 
->>>>>>> origin/main
     async def _execute_agent_stage(self, agent_id: str) -> PipelineResult:
         """Execute a single agent stage, wrapped with VERA security checks.
 
@@ -458,13 +428,9 @@ class VideoPipelineOrchestrator:
             if vera_check is not None:
                 # Pre-check failed — return the rejection result
                 duration = (time.monotonic() - start_time) * 1000
-<<<<<<< HEAD
-                return PipelineResult(agent_id, False, {}, duration, vera_check)
-=======
                 rejected = PipelineResult(agent_id, False, {}, duration, vera_check)
                 self._record_audit_stage(agent_id, action, rejected)
                 return rejected
->>>>>>> origin/main
 
         # Emit stage start event
         await self.emitter.emit("pipeline.event", {
@@ -492,17 +458,11 @@ class VideoPipelineOrchestrator:
                         details=f"Stage {agent_id} returned error: {result.get('error', '')}",
                     )
                     self._vera["breakers"].get_breaker(agent_id).record_failure("error")
-<<<<<<< HEAD
-
-                return PipelineResult(agent_id, False, result, duration, result["error"])
-
-=======
 
                 failed = PipelineResult(agent_id, False, result, duration, result["error"])
                 self._record_audit_stage(agent_id, action, failed)
                 return failed
 
->>>>>>> origin/main
             # --- VERA: record success proof ---
             if self._vera:
                 self._vera_record_proof(
@@ -511,13 +471,9 @@ class VideoPipelineOrchestrator:
                 )
                 self._vera["breakers"].get_breaker(agent_id).record_success()
 
-<<<<<<< HEAD
-            return PipelineResult(agent_id, True, result, duration)
-=======
             success = PipelineResult(agent_id, True, result, duration)
             self._record_audit_stage(agent_id, action, success)
             return success
->>>>>>> origin/main
 
         except Exception as e:
             duration = (time.monotonic() - start_time) * 1000
@@ -535,9 +491,6 @@ class VideoPipelineOrchestrator:
                 )
                 self._vera["breakers"].get_breaker(agent_id).record_failure("error")
 
-<<<<<<< HEAD
-            return PipelineResult(agent_id, False, {}, duration, str(e))
-=======
             failed = PipelineResult(agent_id, False, {}, duration, str(e))
             self._record_audit_stage(agent_id, action, failed)
             return failed
@@ -634,137 +587,6 @@ class VideoPipelineOrchestrator:
                 self._vera_harden_logged.add(agent_id)
 
         if decision is not None and not decision.allowed:
-            # Log the denial and notify enforcer
-            v["enforcer"].on_gateway_event(
-                agent_id, "authorization_failed",
-                details=f"Denied: {action} — {decision.reason}",
-            )
-            breaker.record_failure("auth_failure")
-            return f"VERA: Permission denied — {decision.reason}"
-
-        # 4. Input firewall scan (scan serialized payload)
-        try:
-            import json
-            payload_text = json.dumps(payload, default=str)
-            scan = v["firewall"].scan_input(payload_text, context=f"pipeline.{agent_id}.{action}")
-
-            from vera.firewall import FirewallAction
-            if scan.action == FirewallAction.BLOCK:
-                v["enforcer"].on_firewall_event(
-                    agent_id,
-                    f"threat_detected_{scan.threat_level.value}",
-                    details=f"Blocked input for {action}: {scan.details}",
-                )
-                return f"VERA: Input blocked by firewall — {scan.threat_level.value} threat"
-        except Exception as e:
-            logger.warning(f"VERA firewall scan error (non-blocking): {e}")
-
-        return None  # All checks passed
-
-    def _vera_record_proof(
-        self,
-        agent_id: str,
-        action: str,
-        payload: dict,
-        result: dict,
-        duration_ms: float,
-        authorized: bool,
-        success: bool,
-    ) -> None:
-        """Record a tamper-evident execution proof for this stage."""
-        v = self._vera
-        if not v:
-            return
-
-        try:
-            import json
-
-            _, credential = self._vera_credentials.get(agent_id, (None, None))
-            jti = credential.token_id if credential else ""
-            maturity = credential.maturity_level if credential else 0
-
-            input_text = json.dumps(payload, default=str)
-            output_text = json.dumps(result, default=str)[:2000]
-
-            proof = v["ExecutionProof"](
-                agent_id=agent_id,
-                agent_credential_jti=jti,
-                maturity_level=maturity,
-                action_type="stage_execution",
-                tool="mcp-agent-network",
-                operation=action,
-                input_hash=v["hash_data"](input_text),
-                output_hash=v["hash_data"](output_text),
-                input_summary=f"pipeline.{action}",
-                output_summary=("success" if success else f"error: {result.get('error', 'unknown')}")[:200],
-                duration_ms=duration_ms,
-                capability_used=action,
-                authorization_approved=authorized,
-                session_id=self.pipeline_state.get("run_id", ""),
-                correlation_id=self.pipeline_state.get("run_id", ""),
-                chain_prev=v["proof_store"].get_chain_tip(agent_id),
-            )
-            v["proof_store"].append(proof)
-        except Exception as e:
-            logger.error(f"VERA proof recording failed (non-blocking): {e}")
->>>>>>> origin/main
-
-    def _vera_pre_check(
-        self, agent_id: str, agent_name: str, action: str, payload: dict
-    ) -> Optional[str]:
-        """Run VERA pre-execution checks. Returns error message or None if clear."""
-        v = self._vera
-        if not v:
-            return None
-
-        # 1. Circuit breaker check
-        breaker = v["breakers"].get_breaker(agent_id)
-        if not breaker.allow_action():
-            snap = breaker.snapshot()
-            return (
-                f"VERA: Circuit breaker OPEN for {agent_id} "
-                f"(trips={snap.consecutive_trips}, "
-                f"cooldown={snap.current_cooldown_seconds}s)"
-            )
-
-        # 2. Identity — issue credential if not yet issued, verify if cached
-        if agent_id not in self._vera_credentials:
-            maturity_level = v["maturity"].get_level(agent_id)
-            # Register agent in maturity system if not yet registered
-            v["maturity"].register_agent(agent_id, agent_name, initial_level=maturity_level)
-
-            token, credential = v["identity"].issue_credential(
-                agent_id=agent_id,
-                agent_name=agent_name,
-                maturity_level=maturity_level,
-            )
-            self._vera_credentials[agent_id] = (token, credential)
-        else:
-            token, credential = self._vera_credentials[agent_id]
-            # Re-verify the cached credential
-            verified = v["identity"].verify_credential(token)
-            if verified is None:
-                # Credential invalid/expired/revoked — re-issue
-                if v["identity"].is_revoked(agent_id):
-                    return f"VERA: Agent {agent_id} credentials revoked"
-                maturity_level = v["maturity"].get_level(agent_id)
-                token, credential = v["identity"].issue_credential(
-                    agent_id=agent_id,
-                    agent_name=agent_name,
-                    maturity_level=maturity_level,
-                )
-                self._vera_credentials[agent_id] = (token, credential)
-
-        # 3. Gateway permission check
-        maturity_level = v["maturity"].get_level(agent_id)
-        decision = v["gateway"].check_permission(
-            agent_id=agent_id,
-            tool="mcp-agent-network",
-            operation=action,
-            maturity_level=maturity_level,
-        )
-
-        if not decision.allowed:
             # Log the denial and notify enforcer
             v["enforcer"].on_gateway_event(
                 agent_id, "authorization_failed",

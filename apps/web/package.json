@@ -17,12 +17,6 @@
     "@dataconnect/generated": "file:src/dataconnect-generated",
     "@google/genai": "^2.11.0",
     "@google/generative-ai": "^0.24.1",
-<<<<<<< HEAD
-    "@sentry/nextjs": "^10.57.0",
-    "@stripe/stripe-js": "^2.0.0",
-    "@supabase/supabase-js": "^2.39.0",
-    "@upstash/redis": "^1.28.0",
-=======
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/core": "^2.9.0",
     "@opentelemetry/instrumentation": "^0.220.0",
@@ -35,7 +29,6 @@
     "@upstash/redis": "^1.38.0",
     "@upstash/search": "^0.1.7",
     "ai": "^7.0.15",
->>>>>>> origin/main
     "@vercel/analytics": "^2.0.1",
     "@vercel/functions": "^3.7.5",
     "@vercel/speed-insights": "^2.0.0",
