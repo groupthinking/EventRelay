@@ -4,6 +4,7 @@
 # --- Build Artifacts ---
 # --- Data & Models ---
 data/knowledge_base.json
+data/jobs/
 data/mcp_contexts/
 # --- Dependencies ---
 # --- Editors & IDEs ---
@@ -170,6 +171,14 @@ src/utils/notebooklm_profile/
 src/utils/notebooklm_profile_v2/
 .gstack/
 
+# --- Security audit artifacts (keep local; never publish a vuln map to a public repo) ---
+docs/security/eventrelay-audit-*
+
+# --- Extra secret hardening (defense-in-depth; gitleaks is the enforcing gate) ---
+ob.txt
+*private*.txt
+*secret*.txt
+
 # Claude agent worktrees (auto-generated, never commit)
 .claude/worktrees/
 
@@ -178,3 +187,17 @@ src/utils/notebooklm_profile_v2/
 supabase/functions/**/index.js
 supabase/functions/**/index.js.map
 supabase/functions/**/index.d.ts
+apps/web/package-lock.json
+
+# --- Committed build/cache artifacts that must never be tracked ---
+# Firebase Data Connect local PGlite emulator cache (~27M of binary DB files)
+dataconnect/.dataconnect/
+**/.dataconnect/pgliteData/
+# Root test-coverage artifact (the coverage/ dir is ignored above, but this stray file slipped through)
+coverage.json
+# Saved Google AI Studio webpage dump (vendored HTML/JS/CSS, ~23M)
+docs/gemini_reference/
+# Runtime pipeline audit logs (written by pipeline_audit_store at runtime)
+data/audit/*.jsonl
+# TypeScript incremental build cache
+*.tsbuildinfo

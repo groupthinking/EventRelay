@@ -25,6 +25,12 @@ from PIL import Image
 try:
     import google.generativeai as genai
     GEMINI_AVAILABLE = True
+    import warnings
+    warnings.filterwarnings(
+        "ignore",
+        category=FutureWarning,
+        message=".*google.generativeai.*"
+    )
 except ImportError:
     genai = None
     GEMINI_AVAILABLE = False
@@ -196,6 +202,10 @@ class GemmaTextClient:
         # Hugging Face pipelines return a list[dict]
         generated = outputs[0].get("generated_text", "") if outputs else ""
         return _TextOnlyResponse(text=generated)
+
+    def close(self) -> None:
+        """Explicit cleanup for Gemma pipeline (releases model weights if held)."""
+        self._pipeline = None
 
 
 class VeoVideoClient:
@@ -1780,3 +1790,12 @@ Keep the summary to 2-3 sentences.
         self._model = None
         self._is_initialized = False
         self.logger.info("Gemini service cleaned up")
+
+    def close(self) -> None:
+        """Synchronous explicit close hook (calls cleanup best-effort for LLM client hygiene)."""
+        try:
+            # If already in async context caller should await cleanup(); this is best-effort.
+            self._model = None
+            self._is_initialized = False
+        except Exception:
+            pass

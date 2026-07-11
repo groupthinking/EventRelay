@@ -13,7 +13,7 @@
  * Environment:
  *   BASE_URL — deployment URL (default: https://uvai.io)
  *   TEST_YOUTUBE_URL — short video for pipeline test
- *     (default: https://www.youtube.com/watch?v=dQw4w9WgXcQ — 3:33)
+ *     (default: https://www.youtube.com/watch?v=auJzb1D-fag)
  *
  * Red/Green Signal:
  *   - GREEN: all tests pass → stdout: "✅ ALL TESTS PASSED"
@@ -25,9 +25,28 @@ import { describe, it, expect, beforeAll } from 'vitest';
 const BASE_URL = process.env.BASE_URL || 'https://uvai.io';
 const TEST_YOUTUBE_URL =
   process.env.TEST_YOUTUBE_URL ||
-  'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
+  'https://www.youtube.com/watch?v=auJzb1D-fag';
+
+// To exercise a protected deployment (e.g. a Vercel preview, which returns 401
+// to anonymous requests), set VERCEL_AUTOMATION_BYPASS_SECRET to the project's
+// "Protection Bypass for Automation" secret. It is attached as a header on
+// every request so the preview is reachable. Unset (the default — e.g. when
+// BASE_URL is production) → no header is added and behaviour is unchanged.
+const VERCEL_BYPASS_SECRET = process.env.VERCEL_AUTOMATION_BYPASS_SECRET || '';
 
 // ─── Helpers ────────────────────────────────────────────────────────
+
+/** Merge the Vercel protection-bypass header into a request init, when configured. */
+function withBypass(init?: RequestInit): RequestInit {
+  if (!VERCEL_BYPASS_SECRET) return init ?? {};
+  // Normalize via the Headers constructor so any HeadersInit shape (plain
+  // object, Headers instance, or [key, value][] array) is preserved — a bare
+  // spread would silently drop a Headers/array-typed init.headers.
+  const headers = new Headers(init?.headers);
+  headers.set('x-vercel-protection-bypass', VERCEL_BYPASS_SECRET);
+  headers.set('x-vercel-set-bypass-cookie', 'true');
+  return { ...init, headers };
+}
 
 /** Fetch with a hard timeout and automatic retry for transient network errors. */
 async function fetchWithTimeout(
@@ -41,7 +60,7 @@ async function fetchWithTimeout(
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const res = await fetch(url, { ...init, signal: controller.signal });
+      const res = await fetch(url, { ...withBypass(init), signal: controller.signal });
       clearTimeout(timer);
       return res;
     } catch (err) {

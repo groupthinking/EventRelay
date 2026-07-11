@@ -5,8 +5,10 @@ Consensus voting for architecture and code generation decisions
 """
 
 import asyncio
+import difflib
 import logging
 import os
+import re
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Optional
@@ -375,18 +377,23 @@ class TriModelConsensusTool:
             )
 
         elif strategy == ConsensusStrategy.MAJORITY_VOTE:
-            # For now, use highest confidence as tiebreaker
-            # TODO: Implement actual similarity-based voting
-            best_response = max(valid_responses, key=lambda r: r.confidence)
+            # Cluster responses by textual similarity so that models giving
+            # substantively the same answer count as votes for that answer.
+            # The largest cluster wins; ties break on summed confidence.
+            winning_cluster, best_response = self._majority_vote(valid_responses)
             agreement_score = self._calculate_agreement(valid_responses)
+            vote_share = len(winning_cluster) / len(valid_responses)
 
             return ConsensusResult(
                 consensus_response=best_response.response,
-                consensus_confidence=sum(r.confidence for r in valid_responses) / len(valid_responses),
+                consensus_confidence=sum(r.confidence for r in winning_cluster) / len(winning_cluster),
                 strategy_used=strategy,
                 model_responses=valid_responses,
                 agreement_score=agreement_score,
-                reasoning="Majority vote (tiebreaker: highest confidence)"
+                reasoning=(
+                    f"Majority vote: {len(winning_cluster)}/{len(valid_responses)} models agreed "
+                    f"({vote_share:.0%}); representative from {best_response.model_name}"
+                )
             )
 
         else:
@@ -402,6 +409,67 @@ class TriModelConsensusTool:
                 agreement_score=agreement_score,
                 reasoning=f"Default strategy: highest confidence ({best_response.model_name})"
             )
+
+    # Two responses are treated as the same "vote" when their similarity
+    # meets or exceeds this threshold.
+    MAJORITY_SIMILARITY_THRESHOLD = 0.6
+
+    def _text_similarity(self, a: str, b: str) -> float:
+        """
+        Compute similarity between two response strings (0.0-1.0).
+
+        Combines token-level Jaccard overlap (shared vocabulary) with a
+        character sequence ratio (shared ordering) so that responses which
+        say the same thing in the same way score highest.
+        """
+        a_norm = a.lower().strip()
+        b_norm = b.lower().strip()
+
+        if not a_norm and not b_norm:
+            return 1.0
+        if not a_norm or not b_norm:
+            return 0.0
+
+        a_tokens = set(re.findall(r"\w+", a_norm))
+        b_tokens = set(re.findall(r"\w+", b_norm))
+        if a_tokens and b_tokens:
+            jaccard = len(a_tokens & b_tokens) / len(a_tokens | b_tokens)
+        else:
+            jaccard = 0.0
+
+        sequence_ratio = difflib.SequenceMatcher(None, a_norm, b_norm).ratio()
+        return (jaccard + sequence_ratio) / 2
+
+    def _majority_vote(
+        self, responses: list[ModelResponse]
+    ) -> tuple[list[ModelResponse], ModelResponse]:
+        """
+        Group responses into similarity clusters and return the winning cluster
+        along with its representative response.
+
+        Each response is compared against existing clusters and joins the first
+        one whose representative is similar enough; otherwise it starts a new
+        cluster. The cluster with the most members wins (ties broken by summed
+        confidence), and the highest-confidence member represents it.
+        """
+        clusters: list[list[ModelResponse]] = []
+        for resp in responses:
+            for cluster in clusters:
+                if (
+                    self._text_similarity(resp.response, cluster[0].response)
+                    >= self.MAJORITY_SIMILARITY_THRESHOLD
+                ):
+                    cluster.append(resp)
+                    break
+            else:
+                clusters.append([resp])
+
+        winning_cluster = max(
+            clusters,
+            key=lambda c: (len(c), sum(r.confidence for r in c)),
+        )
+        representative = max(winning_cluster, key=lambda r: r.confidence)
+        return winning_cluster, representative
 
     def _calculate_agreement(self, responses: list[ModelResponse]) -> float:
         """

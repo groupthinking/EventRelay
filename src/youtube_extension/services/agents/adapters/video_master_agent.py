@@ -10,6 +10,7 @@ Provides comprehensive video processing using Google AI (Gemini) with clean serv
 import asyncio
 import json
 import logging
+import os
 from dataclasses import dataclass
 from typing import Any, Optional
 

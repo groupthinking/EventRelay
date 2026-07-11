@@ -54,6 +54,14 @@ try:
 except ImportError:
     logging.warning("python-dotenv not available")
 
+try:
+    from youtube_extension.utils.proxy import get_proxy_url, redact_proxy_credentials
+except ImportError:  # pragma: no cover - optional when running outside the package
+    def get_proxy_url() -> "str | None":  # type: ignore[misc]
+        return None
+    def redact_proxy_credentials(text: str) -> str:  # type: ignore[misc]
+        return text
+
 # Banned video IDs (memes, inappropriate content, etc.)
 BANNED_VIDEO_IDS = frozenset(
     [
@@ -259,6 +267,41 @@ class GeminiVideoMasterAgent:
         self.benchmark_results = []
 
         logger.info("🎯 GEMINI VIDEO MASTER AGENT INITIALIZED")
+
+        # Best-effort cleanup registration for any internal clients/sessions
+        try:
+            import atexit
+            atexit.register(self.close)
+        except Exception:
+            pass
+
+    def close(self):
+        """Explicit close for the Gemini client and any held resources (unclosed hygiene)."""
+        try:
+            if getattr(self, 'gemini_client', None) is not None:
+                # google-genai Client may expose transport close in newer sdks
+                client = self.gemini_client
+                for attr in ('close', 'aclose', '_close'):
+                    if hasattr(client, attr):
+                        fn = getattr(client, attr)
+                        try:
+                            if asyncio.iscoroutinefunction(fn):
+                                # schedule if possible; ignore in sync close
+                                pass
+                            else:
+                                fn()
+                        except Exception:
+                            pass
+                        break
+                self.gemini_client = None
+        except Exception:
+            pass
+
+    def __del__(self):
+        try:
+            self.close()
+        except Exception:
+            pass
 
     def extract_video_id(self, url: str) -> str:
         """Extract video ID from YouTube URL"""
@@ -653,12 +696,19 @@ class GeminiVideoMasterAgent:
     def _extract_youtube_metadata_with_ytdlp(video_url: str) -> dict[str, Any]:
         import yt_dlp
 
-        options = {
+        proxy_url = get_proxy_url()
+        options: dict[str, Any] = {
             "quiet": True,
             "skip_download": True,
             "extract_flat": False,
             "noplaylist": True,
         }
+        if proxy_url:
+            options["proxy"] = proxy_url
+            logger.debug(
+                "yt-dlp metadata extraction using proxy: %s",
+                redact_proxy_credentials(proxy_url),
+            )
         with yt_dlp.YoutubeDL(options) as ydl:
             info = ydl.extract_info(video_url, download=False)
 

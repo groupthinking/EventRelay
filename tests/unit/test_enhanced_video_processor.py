@@ -44,11 +44,12 @@ _VIDEO_ID = "auJzb1D-fag"
 
 def _make_processor(monkeypatch=None, *, gemini_key="test-key", youtube_key=None):
     """Create an EnhancedVideoProcessor with external deps mocked out."""
-    env = {"GEMINI_API_KEY": gemini_key}
+    env = {k: v for k, v in os.environ.items() if k in ("PATH", "HOME", "LANG", "PYTHONPATH")}
+    env["GEMINI_API_KEY"] = gemini_key
     if youtube_key:
         env["YOUTUBE_API_KEY"] = youtube_key
 
-    with patch.dict(os.environ, env, clear=False):
+    with patch.dict(os.environ, env, clear=True):
         with patch.object(_mod, "GEMINI_VISION_AVAILABLE", False):
             proc = EnhancedVideoProcessor()
     return proc
@@ -414,6 +415,7 @@ class TestInitSession:
     async def test_does_not_recreate_existing_session(self):
         proc = _make_processor()
         existing = MagicMock()
+        existing.closed = False
         proc.session = existing
 
         with patch("aiohttp.ClientSession") as mock_cls:
@@ -431,6 +433,7 @@ class TestClose:
     async def test_close_calls_session_close(self):
         proc = _make_processor()
         mock_session = MagicMock()
+        mock_session.closed = False
         mock_session.close = AsyncMock()
         proc.session = mock_session
 

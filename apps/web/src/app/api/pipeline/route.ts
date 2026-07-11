@@ -1,14 +1,215 @@
 import { NextResponse } from 'next/server';
+import { waitUntil } from '@vercel/functions';
 import { publishEvent, EventTypes } from '@/lib/cloudevents';
 import { analyzeVideoWithGemini } from '@/lib/gemini-video-analyzer';
-import { hasGeminiKey } from '@/lib/gemini-client';
+import {
+  classifyGeminiError,
+  getGeminiConfig,
+  getGeminiRoutingLabel,
+  hasGeminiKey,
+  type ClassifiedGeminiError,
+} from '@/lib/gemini-client';
+import { backendHeaders } from '@/lib/pipeline-backend';
+import {
+  checkBackendHealth,
+  getBackendConfig,
+  parseBackendJson,
+  PIPELINE_HEALTH_TIMEOUT_MS as HEALTH_PROBE_MS,
+} from '@/lib/pipeline-backend-health';
+import { isAllowedYoutubeUrl, resolveVideoUrl } from '@/lib/video-url-request';
 
-const rawBackendUrl = process.env.BACKEND_URL || '';
-const BACKEND_URL = rawBackendUrl.startsWith('http') ? rawBackendUrl : 'http://localhost:8000';
-const BACKEND_AVAILABLE = rawBackendUrl.startsWith('http');
+const { configured: BACKEND_CONFIGURED, url: CONFIGURED_BACKEND_URL } = getBackendConfig();
+const BACKEND_URL = CONFIGURED_BACKEND_URL || 'http://localhost:8000';
+/** @deprecated Use runtime `checkBackendHealth()` — URL configured ≠ reachable */
+const BACKEND_AVAILABLE = BACKEND_CONFIGURED;
+
+interface BackendApiResponse<T> {
+  status?: string;
+  data?: T;
+  error?: string;
+  detail?: string;
+}
+
+interface VideoProcessJobResponse {
+  job_id: string;
+  video_url?: string;
+  status?: string;
+}
 
 export const runtime = 'nodejs';
-export const maxDuration = 300;
+/** Sync route — short budget; use /api/pipeline/stream or async=true for long runs. */
+export const maxDuration = 60;
+
+export const MAX_DURATION_MS = maxDuration * 1000;
+
+/** Health probe budget for Cloud Run cold start + TLS. */
+export const PIPELINE_HEALTH_TIMEOUT_MS = HEALTH_PROBE_MS;
+/** Backend video-to-software cap — clamped to remaining request budget. */
+// Reduced from 50s to 25s to leave buffer for response serialization and overhead
+export const PIPELINE_BACKEND_TIMEOUT_MS = 25_000;
+/** Gemini fallback cap — only runs if backend left enough wall-clock time. */
+export const PIPELINE_GEMINI_TIMEOUT_MS = 15_000;
+/** Minimum time to reserve for response handling */
+export const PIPELINE_RESPONSE_BUFFER_MS = 2_000;
+
+/** Tracks elapsed time so sequential fallback steps stay within maxDuration. */
+export class PipelineDeadline {
+  constructor(private readonly endsAt: number) {}
+
+  static fromMaxDuration(): PipelineDeadline {
+    return new PipelineDeadline(Date.now() + MAX_DURATION_MS);
+  }
+
+  remainingMs(): number {
+    return Math.max(0, this.endsAt - Date.now());
+  }
+
+  budgetMs(requestedMs: number): number {
+    return Math.min(requestedMs, this.remainingMs());
+  }
+
+  signalFor(requestedMs: number): AbortSignal {
+    const ms = this.budgetMs(requestedMs);
+    if (ms <= 0) {
+      throw new Error('Pipeline deadline exceeded');
+    }
+    return timeoutSignal(ms);
+  }
+
+  async runWithBudget<T>(
+    promise: Promise<T>,
+    requestedMs: number,
+    label: string,
+  ): Promise<T> {
+    const ms = this.budgetMs(requestedMs);
+    if (ms <= 0) {
+      throw new Error(`${label}: pipeline deadline exceeded`);
+    }
+    return withTimeout(promise, ms, label);
+  }
+}
+
+function timeoutSignal(ms: number): AbortSignal {
+  return AbortSignal.timeout(ms);
+}
+
+async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timeout = setTimeout(() => reject(new Error(`${label} timed out`)), ms);
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
+
+function stringValue(value: unknown, fallback: string): string {
+  return typeof value === 'string' && value.trim() ? value.trim() : fallback;
+}
+
+function featureList(value: unknown): string[] {
+  if (!Array.isArray(value)) return ['source_review', 'workflow_steps', 'vercel_handoff'];
+  const features = value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
+  return features.length ? features : ['source_review', 'workflow_steps', 'vercel_handoff'];
+}
+
+function buildLocalFallbackPipeline({
+  url,
+  projectType,
+  deploymentTarget,
+  features,
+  backend,
+  customReason,
+  customStatus,
+}: {
+  url: string;
+  projectType: string;
+  deploymentTarget: string;
+  features: string[];
+  backend: Awaited<ReturnType<typeof checkBackendHealth>>;
+  customReason?: string;
+  customStatus?: string;
+}) {
+  const backendReason = customReason || backend.reason || 'Backend pipeline is not available';
+  const buildStatus = customStatus || 'handoff_ready_backend_unavailable';
+
+  return {
+    live_url: null,
+    github_repo: null,
+    build_status: buildStatus,
+    video_analysis: {
+      title: 'Workflow handoff from video source',
+      summary: `UVAI could not run the full backend pipeline for ${url} (${backendReason}). A deterministic handoff was created so the user still leaves with review, build, and deploy steps.`,
+      events: [
+        {
+          type: 'source',
+          title: 'Video source captured',
+          description: url,
+          confidence: 0.75,
+        },
+        {
+          type: 'configuration',
+          title: 'Automatic pipeline blocked',
+          description: backendReason,
+          confidence: 1,
+        },
+      ],
+      actions: [
+        {
+          title: 'Review the source and intended outcome',
+          description:
+            'Confirm the user goal, expected deliverable, and any safety or consent constraints before generating implementation details.',
+          category: 'review',
+          estimatedMinutes: 5,
+        },
+        {
+          title: 'Create the deployable first draft',
+          description: `Prepare the requested ${projectType} package with source notes, acceptance checks, and a Vercel deployment checklist.`,
+          category: 'build',
+          estimatedMinutes: 20,
+        },
+        {
+          title: 'Reconnect automatic execution',
+          description:
+            'Fix BACKEND_URL and provider billing/quota, then rerun the same source through the full backend pipeline.',
+          category: 'configuration',
+          estimatedMinutes: 10,
+        },
+      ],
+      topics: ['video workflow', projectType, deploymentTarget, 'fallback handoff'],
+      architectureCode: `source -> review -> ${projectType} draft -> ${deploymentTarget} handoff -> verification`,
+    },
+    code_generation: {
+      status: 'handoff_ready',
+      framework: projectType,
+      files_created: [
+        'README.md',
+        'workflow/spec.md',
+        'workflow/acceptance-checks.md',
+        'vercel-deploy-checklist.md',
+      ],
+      entry_point: 'README.md',
+      features,
+    },
+    deployment: {
+      target: deploymentTarget,
+      status: 'blocked_by_configuration',
+      platforms: [deploymentTarget],
+      urls: {},
+      blockers: [
+        backendReason,
+        'Gemini billing or API access must be valid for automatic video analysis.',
+        'OpenAI quota must be available for transcript fallback and realtime voice.',
+      ],
+    },
+    features_implemented: features,
+    message: `Created a local fallback handoff (${backendReason}). Automatic code generation and deployment require a healthy backend pipeline and valid provider billing.`,
+  };
+}
 
 /**
  * POST /api/pipeline
@@ -25,49 +226,108 @@ export const maxDuration = 300;
 export async function POST(request: Request) {
   let videoUrl: string | undefined;
   try {
-    const body = await request.json();
-    const { url, project_type = 'web', deployment_target = 'vercel', features } = body;
+    const body = await request.json() as Record<string, unknown>;
+    const url = resolveVideoUrl(body);
+    const project_type = stringValue(body.project_type, 'web');
+    const deployment_target = stringValue(body.deployment_target, 'vercel');
+    const features = featureList(body.features);
     videoUrl = url;
 
     if (!url) {
       return NextResponse.json({ error: 'Video URL is required' }, { status: 400 });
     }
 
+    if (!isAllowedYoutubeUrl(url)) {
+      return NextResponse.json(
+        {
+          error:
+            'Invalid YouTube URL. Only youtube.com / youtu.be watch, embed, or shorts URLs are accepted.',
+          code: 'invalid_youtube_url',
+        },
+        { status: 400 },
+      );
+    }
+
     await publishEvent(EventTypes.VIDEO_RECEIVED, { url, pipeline: 'end-to-end' }, url);
 
-    // ── Strategy 1: Full backend pipeline (FastAPI video-to-software) ──
-    if (BACKEND_AVAILABLE) {
-      try {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 300_000); // 5 min for full pipeline
+    const deadline = PipelineDeadline.fromMaxDuration();
+    const backendHealth = await checkBackendHealth(
+      deadline.budgetMs(PIPELINE_HEALTH_TIMEOUT_MS) || PIPELINE_HEALTH_TIMEOUT_MS,
+    );
+    const useBackend = backendHealth.available;
+    const backendUrl = CONFIGURED_BACKEND_URL || BACKEND_URL;
 
-        let response: Response;
-        try {
-          response = await fetch(`${BACKEND_URL}/api/v1/video-to-software`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              video_url: url,
-              project_type,
-              deployment_target,
-              features: features || ['responsive_design', 'modern_ui'],
-            }),
-            signal: controller.signal,
+    // Default to async for long-running video-to-software (prevents 524 timeouts on Vercel/Cloud Run)
+    // Sync POST kept for backward compat but discouraged (see sync note from composer terminal)
+    const asyncMode = body.async !== false && body.async !== 'false';  // default true unless explicitly false
+
+    // ── Strategy 0: Async kickoff (returns job_id immediately) ──
+    if (asyncMode && useBackend) {
+      try {
+        const response = await fetch(`${backendUrl}/api/v1/videos/process`, {
+          method: 'POST',
+          headers: backendHeaders(),
+          body: JSON.stringify({
+            video_url: url,
+            language: stringValue(body.language, 'en'),
+          }),
+          signal: deadline.signalFor(10_000),
+        });
+
+        const payload = await parseBackendJson<BackendApiResponse<VideoProcessJobResponse>>(response);
+        const jobId = payload?.data?.job_id;
+
+        if (response.ok && jobId) {
+          const origin = new URL(request.url).origin;
+          return NextResponse.json({
+            id: jobId,
+            status: 'pending',
+            pipeline: 'backend-async',
+            async_processing: true,
+            job_id: jobId,
+            status_url: `${origin}/api/jobs/${jobId}`,
           });
-        } finally {
-          clearTimeout(timeout);
         }
+
+        console.warn(
+          'Async backend kickoff failed, falling through to Gemini:',
+          payload?.error || payload?.detail || `HTTP ${response.status}`,
+        );
+      } catch (e) {
+        console.warn('Async backend kickoff error, falling through to Gemini:', e);
+      }
+    }
+
+    // ── Strategy 1: Full backend pipeline (FastAPI video-to-software) ──
+    // Check we have enough time left (backend timeout + response buffer)
+    if (useBackend && deadline.remainingMs() > PIPELINE_BACKEND_TIMEOUT_MS + PIPELINE_RESPONSE_BUFFER_MS) {
+      try {
+        const HEADROOM_MS = 5000;
+        const response = await fetch(`${backendUrl}/api/v1/video-to-software`, {
+          method: 'POST',
+          headers: backendHeaders(),
+          body: JSON.stringify({
+            video_url: url,
+            project_type,
+            deployment_target,
+            features,
+          }),
+          signal: deadline.signalFor(PIPELINE_BACKEND_TIMEOUT_MS),
+        });
 
         if (response.ok) {
           const result = await response.json();
 
-          await publishEvent(EventTypes.PIPELINE_COMPLETED, {
-            strategy: 'backend-pipeline',
-            success: result.status === 'success',
-            live_url: result.live_url,
-            github_repo: result.github_repo,
-            build_status: result.build_status,
-          }, url);
+          // Direct waitUntil on publishEvent (CloudEvent) for completion — ancillary, non-blocking return to client
+          waitUntil(
+            publishEvent(EventTypes.PIPELINE_COMPLETED, {
+              strategy: 'backend-pipeline',
+              success: result.status === 'success',
+              live_url: result.live_url,
+              github_repo: result.github_repo,
+              build_status: result.build_status,
+            }, url).catch(() => {}),
+          );
 
           return NextResponse.json({
             id: `pipeline_${Date.now().toString(36)}`,
@@ -92,17 +352,25 @@ export async function POST(request: Request) {
     }
 
     // ── Strategy 2: Gemini analysis (video intelligence only, no deployment) ──
-    if (hasGeminiKey()) {
+    let geminiError: ClassifiedGeminiError | undefined;
+    if (hasGeminiKey() && deadline.remainingMs() > 1_000) {
       try {
         const startTime = Date.now();
-        const analysis = await analyzeVideoWithGemini(url);
+        const analysis = await deadline.runWithBudget(
+          analyzeVideoWithGemini(url),
+          PIPELINE_GEMINI_TIMEOUT_MS,
+          'Gemini analysis',
+        );
         const elapsed = Date.now() - startTime;
 
-        await publishEvent(EventTypes.PIPELINE_COMPLETED, {
-          strategy: 'gemini-analysis-only',
-          success: true,
-          note: 'Backend unavailable — analysis only, no deployment',
-        }, url);
+        // Direct waitUntil on publishEvent (CloudEvent) for completion — ancillary, non-blocking return to client
+        waitUntil(
+          publishEvent(EventTypes.PIPELINE_COMPLETED, {
+            strategy: 'gemini-analysis-only',
+            success: true,
+            note: 'Backend unavailable — analysis only, no deployment',
+          }, url).catch(() => {}),
+        );
 
         return NextResponse.json({
           id: `pipeline_${Date.now().toString(36)}`,
@@ -121,31 +389,141 @@ export async function POST(request: Request) {
               topics: analysis.topics,
               architectureCode: analysis.architectureCode,
             },
-            code_generation: null,
-            deployment: null,
-            message: 'Backend pipeline unavailable. Video analysis complete but code generation and deployment require the Python backend.',
+            code_generation: {
+              status: 'not_attempted',
+              framework: project_type,
+              files_created: [],
+              entry_point: '',
+              features,
+            },
+            deployment: {
+              target: deployment_target,
+              status: 'not_attempted',
+              platforms: [deployment_target],
+              urls: {},
+            },
+            message:
+              'Backend pipeline unavailable. Video analysis complete but code generation and deployment require the Python backend.',
           },
         });
       } catch (e) {
-        console.error('Gemini analysis failed:', e);
+        geminiError = classifyGeminiError(e);
+        console.error('Gemini analysis failed:', geminiError.code, geminiError.message);
       }
     }
 
-    return NextResponse.json(
-      { error: 'No pipeline available. Configure BACKEND_URL for full pipeline or GEMINI_API_KEY for analysis only.' },
-      { status: 503 },
-    );
+    // ── Strategy 3: Transcript-only when Gemini is blocked but transcript fetch works ──
+    if (geminiError && deadline.remainingMs() > 2_000) {
+      try {
+        const { fetchTranscript } = await import('@/lib/transcription-service');
+        const transcriptResult = await deadline.runWithBudget(
+          fetchTranscript({ url }),
+          Math.min(10_000, deadline.remainingMs()),
+          'Transcript fallback',
+        );
+
+        if (transcriptResult.success && transcriptResult.transcript?.trim()) {
+          const wordCount = transcriptResult.wordCount ?? transcriptResult.transcript.split(/\s+/).length;
+
+          waitUntil(
+            publishEvent(EventTypes.PIPELINE_COMPLETED, {
+              strategy: 'transcript-only',
+              success: true,
+              gemini_error: geminiError.code,
+            }, url).catch(() => {}),
+          );
+
+          return NextResponse.json({
+            id: `pipeline_${Date.now().toString(36)}`,
+            status: 'partial',
+            pipeline: 'transcript-only',
+            degraded: true,
+            gemini_error: geminiError,
+            backend: backendHealth,
+            result: {
+              live_url: null,
+              github_repo: null,
+              build_status: 'analysis_blocked',
+              video_analysis: {
+                title: 'Transcript captured — AI analysis unavailable',
+                summary: `Fetched ${wordCount} words from the video source, but Gemini could not run structured analysis (${geminiError.code}).`,
+                events: [
+                  {
+                    type: 'source',
+                    title: 'Transcript captured',
+                    description: `${wordCount} words via ${transcriptResult.source || 'transcription-service'}`,
+                    confidence: 0.9,
+                  },
+                  {
+                    type: 'configuration',
+                    title: 'Gemini analysis blocked',
+                    description: geminiError.userMessage,
+                    confidence: 1,
+                  },
+                ],
+                actions: [],
+                topics: [],
+                architectureCode: '',
+                transcript_preview: transcriptResult.transcript.slice(0, 500),
+              },
+              code_generation: null,
+              deployment: null,
+              message: geminiError.userMessage,
+            },
+          });
+        }
+      } catch (e) {
+        console.warn('Transcript-only fallback failed:', e);
+      }
+    }
+
+    const fallback = buildLocalFallbackPipeline({
+      url,
+      projectType: project_type,
+      deploymentTarget: deployment_target,
+      features,
+      backend: backendHealth,
+      customReason: geminiError ? `AI analysis failed: ${geminiError.code}` : undefined,
+      customStatus: geminiError ? 'handoff_ready_analysis_failed' : undefined,
+    });
+
+    await publishEvent(EventTypes.PIPELINE_COMPLETED, {
+      strategy: 'local-fallback',
+      success: false,
+      backend: backendHealth,
+    }, url);
+
+    const geminiConfig = getGeminiConfig();
+    return NextResponse.json({
+      id: `pipeline_${Date.now().toString(36)}`,
+      status: 'partial',
+      pipeline: 'local-fallback',
+      degraded: true,
+      backend: backendHealth,
+      gemini_configured: geminiConfig.configured,
+      gemini_mode: geminiConfig.mode,
+      gemini_error: geminiError,
+      warning: geminiError
+        ? geminiError.userMessage
+        : 'No automatic pipeline is currently available. Returned a fallback handoff instead of blocking the user.',
+      result: fallback,
+    });
   } catch (error) {
     console.error('Pipeline error:', error);
-    await publishEvent(EventTypes.PIPELINE_FAILED, { error: String(error) }, videoUrl).catch(() => {});
+    // Direct waitUntil on publishEvent (ancillary CloudEvent) so it does not block error response
+    waitUntil(
+      publishEvent(EventTypes.PIPELINE_FAILED, { error: String(error) }, videoUrl).catch(() => {}),
+    );
     return NextResponse.json(
-      { error: 'Pipeline failed', details: String(error) },
+      { error: 'Pipeline failed' },
       { status: 500 },
     );
   }
 }
 
 export async function GET() {
+  const backend = await checkBackendHealth();
+  const gemini = getGeminiConfig();
   return NextResponse.json({
     name: 'EventRelay End-to-End Pipeline',
     version: '1.0.0',
@@ -156,11 +534,17 @@ export async function GET() {
       '3. Transport: CloudEvents published at each stage',
       '4. Execute: Agents generate code, create repo, deploy to Vercel',
     ],
-    backend_available: BACKEND_AVAILABLE,
-    gemini_available: hasGeminiKey(),
+    backend_configured: backend.configured,
+    backend_available: backend.available,
+    backend_host: backend.host,
+    backend_reason: backend.reason,
+    gemini_available: gemini.configured,
+    gemini_mode: gemini.mode,
+    gemini_routing: getGeminiRoutingLabel(),
     endpoints: {
       pipeline: 'POST /api/pipeline - Full end-to-end pipeline',
       video: 'POST /api/video - Video analysis only',
+      stream: 'POST /api/pipeline/stream - SSE agent visualization',
     },
   });
 }

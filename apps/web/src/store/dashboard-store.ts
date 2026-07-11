@@ -12,70 +12,28 @@
  */
 
 import { create } from 'zustand';
+import { createJSONStorage, persist } from 'zustand/middleware';
 import type {
   ExtractedEvent,
   AgentExecution,
   AgentStatus,
 } from '@/lib/types';
+import type {
+  Action,
+  Activity,
+  PipelineMode,
+  PipelineResult,
+  SearchResult,
+  Video,
+} from '@/store/dashboard-types';
 
-// ── Types ──
-
-export interface PipelineResult {
-  live_url: string | null;
-  github_repo: string | null;
-  build_status: string;
-  code_generation: {
-    framework: string;
-    files_created: string[];
-    entry_point: string;
-  } | null;
-  deployment: {
-    status: string;
-    platforms: string[];
-    urls: Record<string, string>;
-  } | null;
-}
-
-export interface Action {
-  title: string;
-  description: string;
-  category: string;
-  estimatedMinutes?: number | null;
-}
-
-export interface Video {
-  id: string;
-  title: string;
-  url: string;
-  status: 'processing' | 'complete' | 'failed';
-  progress: number;
-  thumbnail?: string;
-  duration?: string;
-  processedAt?: string;
-  transcript?: string;
-  events?: ExtractedEvent[];
-  agents?: AgentExecution[];
-  pipelineResult?: PipelineResult;
-  insights?: {
-    summary: string;
-    actions: Action[];
-    sentiment: string;
-    topics: string[];
-  };
-}
-
-export interface Activity {
-  time: string;
-  event: string;
-  type: 'success' | 'info' | 'error';
-}
-
-export interface SearchResult {
-  start: number;
-  duration: number;
-  text: string;
-  score: number;
-}
+export type {
+  Action,
+  Activity,
+  PipelineResult,
+  SearchResult,
+  Video,
+} from '@/store/dashboard-types';
 
 interface DashboardState {
   // Data
@@ -264,6 +222,12 @@ function applyStreamEvent(
  * the video. Throws if the stream fails or never reaches a terminal state, so
  * the caller can fall back to the non-streaming path.
  */
+function mapPipelineModeHeader(header: string | null): PipelineMode | undefined {
+  if (header === 'backend-proxy') return 'live';
+  if (header === 'gemini-direct') return 'serverless';
+  return undefined;
+}
+
 async function streamPipeline(url: string, id: string, ctx: StreamCtx): Promise<void> {
   const res = await fetch('/api/pipeline/stream', {
     method: 'POST',
@@ -273,6 +237,13 @@ async function streamPipeline(url: string, id: string, ctx: StreamCtx): Promise<
 
   if (!res.ok || !res.body) {
     throw new Error(`Pipeline stream failed: ${res.status}`);
+  }
+
+  const pipelineMode = mapPipelineModeHeader(
+    typeof res.headers?.get === 'function' ? res.headers.get('X-Pipeline-Mode') : null,
+  );
+  if (pipelineMode) {
+    ctx.updateVideo(id, { pipelineMode });
   }
 
   const reader = res.body.getReader();
@@ -359,6 +330,7 @@ async function legacyAnalyze(url: string, id: string, ctx: StreamCtx & { getVide
     updateVideo(id, {
       status: result.status === 'complete' ? 'complete' : 'failed',
       progress: 100,
+      pipelineMode: 'fallback',
       title: videoTitle + (videoTitle.length >= 50 ? '…' : ''),
       processedAt: 'Just now',
       duration: `${result.result?.transcript_segments || 0} segments`,
@@ -411,15 +383,88 @@ async function legacyAnalyze(url: string, id: string, ctx: StreamCtx & { getVide
       }
     }
   } catch (error) {
-    updateVideo(id, { status: 'failed', progress: 0 });
-    addActivity(
-      `Analysis failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      'error',
-    );
+    throw error instanceof Error ? error : new Error('Analysis failed');
   }
 }
 
-export const useDashboardStore = create<DashboardState>((set, get) => ({
+/** True when stream completed but insights/transcript are still empty or generic. */
+function isThinStreamResult(video: Video | undefined): boolean {
+  if (!video?.insights) return true;
+  const summary = video.insights.summary?.trim() ?? '';
+  const generic =
+    summary === 'Analysis complete' ||
+    summary.startsWith('Local fallback package');
+  const hasPayload =
+    (video.insights.actions?.length ?? 0) > 0 ||
+    (video.insights.topics?.length ?? 0) > 0 ||
+    (video.events?.length ?? 0) > 0 ||
+    (video.transcript?.trim().length ?? 0) >= 50;
+  return generic && !hasPayload;
+}
+
+/** Last-resort package when live pipeline and direct analysis are both unavailable. */
+function createLocalWorkflowPackage(
+  url: string,
+  id: string,
+  ctx: StreamCtx,
+  reason: string,
+): void {
+  const { updateVideo, addActivity } = ctx;
+  const briefTitle = truncate(url, 40);
+
+    updateVideo(id, {
+      status: 'complete',
+      progress: 100,
+      pipelineMode: 'handoff',
+      title: `Workflow brief: ${briefTitle}`,
+      processedAt: 'Just now',
+      insights: {
+      summary: `Local fallback package — backend unavailable (${reason}). Review the brief and export when the pipeline is healthy.`,
+      actions: [],
+      sentiment: 'Neutral',
+      topics: ['handoff', 'workflow-brief'],
+    },
+  });
+  addActivity('Created starter workflow package for offline handoff', 'info');
+}
+
+/** Deploy handoff when the backend pipeline endpoint is unreachable. */
+function createDeployHandoff(url: string, id: string, ctx: StreamCtx, reason: string): void {
+  const { updateVideo, addActivity } = ctx;
+  const briefTitle = truncate(url, 40);
+
+  updateVideo(id, {
+    status: 'complete',
+    progress: 100,
+    pipelineMode: 'handoff',
+    title: `Deploy handoff: ${briefTitle}`,
+    processedAt: 'Just now',
+    pipelineResult: {
+      live_url: null,
+      github_repo: null,
+      build_status: 'handoff_ready_backend_unavailable',
+      code_generation: null,
+      deployment: null,
+    },
+    insights: {
+      summary: `Deploy handoff prepared — automatic deployment unavailable (${reason}).`,
+      actions: [],
+      sentiment: 'Neutral',
+      topics: ['deploy-handoff'],
+    },
+  });
+  addActivity('Deploy handoff prepared — connect BACKEND_URL for automatic deployment', 'info');
+}
+
+const noopStorage = {
+  getItem: () => null,
+  setItem: () => {},
+  removeItem: () => {},
+};
+
+export const useDashboardStore = create<DashboardState>()(
+  persist(
+    (set, get) => ({
   videos: [],
   activities: [],
   selectedVideoId: null,
@@ -515,10 +560,51 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     try {
       await streamPipeline(url, id, ctx);
       addActivity('Pipeline complete', 'success');
+
+      const streamed = get().videos.find((v) => v.id === id);
+      if (isThinStreamResult(streamed)) {
+        addActivity('Stream returned minimal data — enriching via direct analysis…', 'info');
+        try {
+          await legacyAnalyze(url, id, ctx);
+        } catch (enrichErr) {
+          const reason =
+            enrichErr instanceof Error ? enrichErr.message : 'enrichment unavailable';
+          updateVideo(id, {
+            insights: {
+              summary: `Pipeline agents finished but returned thin analysis (${reason}). Try another video or check backend transcript-action output.`,
+              actions: streamed?.insights?.actions ?? [],
+              sentiment: 'Neutral',
+              topics: streamed?.insights?.topics ?? ['partial-analysis'],
+            },
+          });
+          addActivity('Analysis enrichment unavailable — showing partial result', 'info');
+        }
+      }
     } catch (streamErr) {
       console.warn('[Dashboard] Live pipeline unavailable, using direct analysis:', streamErr);
       addActivity('Live pipeline unavailable — using direct analysis…', 'info');
-      await legacyAnalyze(url, id, ctx);
+      try {
+        await legacyAnalyze(url, id, ctx);
+      } catch (analyzeErr) {
+        const reason =
+          analyzeErr instanceof Error ? analyzeErr.message : 'analysis unavailable';
+        console.warn('[Dashboard] Direct analysis failed, creating local package:', analyzeErr);
+        createLocalWorkflowPackage(url, id, ctx, reason);
+      }
+    }
+
+    const video = get().videos.find((v) => v.id === id);
+    if (video?.status === 'failed') {
+      createLocalWorkflowPackage(url, id, ctx, 'analysis failed');
+    }
+
+    const finalVideo = get().videos.find((v) => v.id === id);
+    if (
+      finalVideo?.status === 'complete' &&
+      (!finalVideo.events || finalVideo.events.length === 0) &&
+      (finalVideo.insights?.actions?.length || finalVideo.insights?.topics?.length)
+    ) {
+      get().extractEvents(id);
     }
 
     return id;
@@ -558,33 +644,37 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       const res = await fetch('/api/pipeline', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url, project_type: 'web', deployment_target: 'vercel' }),
+        body: JSON.stringify({ url, project_type: 'web', deployment_target: 'vercel', async: true }),
       });
       clearInterval(interval);
 
       if (!res.ok) throw new Error(`Pipeline error: ${res.status}`);
 
       const result = await res.json();
+      // Support async kickoff response (job pending) vs full sync result
+      const isAsyncPending = result.async_processing || result.status === 'pending' || !!result.job_id;
       const pipelineResult: PipelineResult = {
-        live_url: result.result?.live_url || null,
-        github_repo: result.result?.github_repo || null,
-        build_status: result.result?.build_status || 'unknown',
-        code_generation: result.result?.code_generation || null,
-        deployment: result.result?.deployment || null,
+        live_url: (result.result || result).live_url || null,
+        github_repo: (result.result || result).github_repo || null,
+        build_status: (result.result || result).build_status || (isAsyncPending ? 'pending' : 'unknown'),
+        code_generation: (result.result || result).code_generation || null,
+        deployment: (result.result || result).deployment || null,
       };
 
       updateVideo(id, {
-        status: result.status === 'success' || result.status === 'complete' ? 'complete' : 'failed',
-        progress: 100,
+        status: isAsyncPending ? 'processing' : (result.status === 'success' || result.status === 'complete' ? 'complete' : 'failed'),
+        progress: isAsyncPending ? 20 : 100,
         title: `Deployed: ${url.length > 40 ? url.substring(0, 37) + '…' : url}`,
         processedAt: 'Just now',
         pipelineResult,
         insights: {
-          summary: result.result?.video_analysis?.extracted_info?.title || 'Pipeline complete',
-          actions: result.result?.features_implemented || [],
+          summary: (result.result?.video_analysis?.extracted_info?.title || result.video_analysis?.title) || (isAsyncPending ? 'Async processing started' : 'Pipeline complete'),
+          actions: (result.result?.features_implemented || result.features_implemented) || [],
           sentiment: 'Positive',
-          topics: result.result?.code_generation?.files_created || [],
+          topics: (result.result?.code_generation?.files_created || result.code_generation?.files) || [],
         },
+        jobId: result.job_id || result.id,
+        statusUrl: result.status_url,
       });
 
       if (pipelineResult.live_url) {
@@ -596,11 +686,9 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       addActivity(`Pipeline complete (${result.processing_time || 'done'})`, 'success');
     } catch (error) {
       clearInterval(interval);
-      updateVideo(id, { status: 'failed', progress: 0 });
-      addActivity(
-        `Pipeline failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        'error',
-      );
+      const reason = error instanceof Error ? error.message : 'Unknown error';
+      console.warn('[Dashboard] Pipeline deploy failed, creating handoff:', error);
+      createDeployHandoff(url, id, { updateVideo, addActivity }, reason);
     }
   },
 
@@ -714,4 +802,17 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     );
     updateVideo(videoId, { agents: merged });
   },
-}));
+}),
+    {
+      name: 'eventrelay-dashboard-v1',
+      partialize: (state) => ({
+        videos: state.videos,
+        activities: state.activities,
+      }),
+      storage: createJSONStorage(() =>
+        typeof window !== 'undefined' ? localStorage : noopStorage,
+      ),
+      skipHydration: true,
+    },
+  ),
+);

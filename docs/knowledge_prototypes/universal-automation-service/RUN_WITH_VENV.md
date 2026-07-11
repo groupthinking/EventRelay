@@ -46,7 +46,7 @@ Use the system for **enhanced video analysis** without EventRelay/UVAI:
 source venv/bin/activate
 
 # Set API key
-export GEMINI_API_KEY="AIzaSyDu5GN_IxRFg3Ue8SYXSNWkZi-50pwDgS0"
+export GEMINI_API_KEY="REDACTED_GOOGLE_API_KEY_ROTATE"
 
 # Run Gemini mode (no EventRelay/UVAI needed)
 python3 universal_coordinator.py "https://youtu.be/VIDEO" --mode gemini --no-deploy
@@ -85,7 +85,7 @@ cd /Users/garvey/Dev/OpenAI_Hub/universal-automation-service
 source venv/bin/activate
 
 # 2. Set API key
-export GEMINI_API_KEY="AIzaSyDu5GN_IxRFg3Ue8SYXSNWkZi-50pwDgS0"
+export GEMINI_API_KEY="REDACTED_GOOGLE_API_KEY_ROTATE"
 
 # 3. Process a video
 python3 universal_coordinator.py \

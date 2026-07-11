@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { clsx } from 'clsx';
 import LandingNav from '@/components/landing/LandingNav';
+import TemplatesSection from '@/components/landing/TemplatesSection';
 import Footer from '@/components/Footer';
 
 // ─── Visual Mockup Components ──────────────────────────────────────────────────
@@ -758,6 +759,9 @@ export default function FeaturesPage() {
           ))}
         </div>
       </section>
+
+      {/* ── Template gallery ────────────────────────────────────────────────── */}
+      <TemplatesSection />
 
       {/* ── Comparison table ─────────────────────────────────────────────────── */}
       <section className="max-w-5xl mx-auto px-6 mb-24">

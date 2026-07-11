@@ -1,0 +1,121 @@
+{
+  "success": true,
+  "video_url": "https://www.youtube.com/watch?v=2Xc9gXyf2G4",
+  "metadata": {
+    "video_id": "2Xc9gXyf2G4",
+    "title": "[Beading Battle #3] Menzerna Power Lock vs. Sonax Protect and Shine (Netshield)",
+    "description": "Jetzt kostenlos Abonnieren \ud83d\ude80 https://ad.glossboss.de/#abo\n\n\ud83d\ude4b\ud83c\udffb\u200d\u2642\ufe0f G\u00f6nnt euch 10% Rabatt auf https://waschhelden.de/?jsta=gb mit dem Code \"glossboss\" \ud83d\ude80\nG\u00fcltig f\u00fcr Endkunden und ab einen Warenkorb-Wert von 50\u20ac\n\n\u2718 Werbung - Damit arbeiten wir:\n\u25ba Tool f\u00fcr Steinschlagreparatur: https://ad.glossboss.de/#steinschlagstift\n\u25ba Detailing Swabs f\u00fcr Kunststoff: https://ad.glossboss.de/#detailing-swabs\n\u25ba Eine unserer Lieblings-Schleifpasten: https://ad.glossboss.de/#schleifpaste\n\u25ba Auspuffreinigung - nie mehr ohne: https://ad.glossboss.de/#auspuff\n\n\u25ba Spannfutter f\u00fcr die PXE: http://ad.glossboss.de/#pxe-spannfutter\n\u25ba Verl\u00e4ngerung f\u00fcr die PXE: http://ad.glossboss.de/#pxe-verl\u00e4ngerung\n\nHiermit filmen wir:\n\u25ba Kamera: https://ad.glossboss.de/#kamera\n\u25ba Mikrofon: https://ad.glossboss.de/#mic\n\u25ba Stativ: https://ad.glossboss.de/#stativ\n\nWebsite: https://glossboss.de/\nFacebook: https://www.facebook.com/glossboss.de/\nInstagram: https://www.instagram.com/glossboss.de/\n\n\nMusik:\nLike Apollo by jimmysquare https://soundcloud.com/jimmysquare\nCreative Commons \u2014 Attribution 3.0 Unported\u2014 CC BY 3.0 \nhttp://creativecommons.org/licenses/by/3.0/\nMusic provided by Audio Library https://youtu.be/oIpjGVBY9AM\n\nDie mit \u25ba gekennzeichneten Links sind sogenannte Affiliate-Links, die mit dem Partnerprogramm von Amazon verkn\u00fcpft sind. Kommt \u00fcber einen solchen Link ein Einkauf zustande, werde ich mit einer Provision beteiligt. F\u00fcr Dich entstehen dabei keine Mehrkosten. Wo, wann und wie Du ein Produkt kaufst, bleibt nat\u00fcrlich Dir \u00fcberlassen.",
+    "channel_id": "UC_sfQw90zUtZpBIO0JCyClw",
+    "channel_title": "GLOSSBOSS",
+    "published_at": "2016-08-23T05:14:51Z",
+    "duration": "PT3M12S",
+    "view_count": 50070,
+    "like_count": 213,
+    "comment_count": 26,
+    "thumbnail_urls": {
+      "default": "https://i.ytimg.com/vi/2Xc9gXyf2G4/default.jpg",
+      "medium": "https://i.ytimg.com/vi/2Xc9gXyf2G4/mqdefault.jpg",
+      "high": "https://i.ytimg.com/vi/2Xc9gXyf2G4/hqdefault.jpg",
+      "standard": "https://i.ytimg.com/vi/2Xc9gXyf2G4/sddefault.jpg",
+      "maxres": "https://i.ytimg.com/vi/2Xc9gXyf2G4/maxresdefault.jpg"
+    },
+    "tags": [
+      "autopflege",
+      "fahrzeugpflege",
+      "produkttests",
+      "pflegeberichte",
+      "anleitungen",
+      "meguiars",
+      "rupes",
+      "menzerna power lock",
+      "sonax",
+      "protect and shine",
+      "netshield",
+      "beading battle"
+    ],
+    "category_id": "2",
+    "default_language": "de",
+    "default_audio_language": "de",
+    "live_broadcast_content": "none",
+    "transcript_available": false,
+    "transcript_segments": 0,
+    "source_api": "youtube_data_api_v3"
+  },
+  "transcript": {
+    "text": "Welcome to the deployment walkthrough. In this session we configure authentication, create a scalable API service, wire observability, and schedule CI/CD automation. We'll finish by outlining engineering tasks with owners and due dates.",
+    "source": "provided",
+    "segments": []
+  },
+  "outputs": {
+    "transcript_action": {
+      "success": true,
+      "data": {
+        "summary": {
+          "raw": "```json\n{\n  \"executive_summary\": \"This document outlines the deployment process for a scalable API service, including authentication, observability, and CI/CD automation. It also defines engineering tasks, owners, and due dates.\",\n  \"target_audience\": \"Engineering team, DevOps engineers, and technical leads involved in the deployment process.\",\n  \"key_objectives\": [\n    \"Configure authentication for the API service.\",\n    \"Create a scalable API service.\",\n    \"Implement observability for monitoring and troubleshooting.\",\n    \"Schedule CI/CD automation for seamless deployments.\",\n    \"Define and assign engineering tasks with deadlines.\"\n  ],\n  \"risks\": [\n    \"Potential integration issues between authentication, API service, and observability tools.\",\n    \"Scalability challenges under high load.\",\n    \"Delays in CI/CD pipeline implementation.\",\n    \"Unforeseen technical issues during deployment.\"\n  ],\n  \"next_milestones\": [\n    {\"task\": \"Complete authentication setup\", \"owner\": \"Security Team\", \"due_date\": \"2024-07-26\"},\n    {\"task\": \"Deploy initial version of API service\", \"owner\": \"Backend Team\", \"due_date\": \"2024-07-29\"},\n    {\"task\": \"Integrate observability tools\", \"owner\": \"DevOps Team\", \"due_date\": \"2024-08-02\"},\n    {\"task\": \"Automate CI/CD pipeline\", \"owner\": \"DevOps Team\", \"due_date\": \"2024-08-05\"}\n  ]\n}\n```\n"
+        },
+        "project_scaffold": {
+          "raw": "```json\n{\n  \"repository_structure\": [\n    {\n      \"path\": \"src/api\",\n      \"purpose\": \"Contains the API logic for handling requests related to the beading battle, including endpoints for submitting results, retrieving data, and user authentication.\"\n    },\n    {\n      \"path\": \"src/database\",\n      \"purpose\": \"Handles database interactions, including schema definition, data access, and migrations. Likely uses an ORM for database abstraction.\"\n    },\n    {\n      \"path\": \"src/auth\",\n      \"purpose\": \"Implements authentication and authorization logic, potentially using JWT or OAuth.\"\n    },\n    {\n      \"path\": \"src/observability\",\n      \"purpose\": \"Contains logging, metrics, and tracing instrumentation for monitoring and debugging the application.\"\n    },\n    {\n      \"path\": \"src/tests\",\n      \"purpose\": \"Unit and integration tests for various components of the application.\"\n    },\n    {\n      \"path\": \"deployment\",\n      \"purpose\": \"Configuration files and scripts for deploying the application to different environments (e.g., development, staging, production).\"\n    },\n    {\n      \"path\": \".github/workflows\",\n      \"purpose\": \"CI/CD workflows defined using GitHub Actions.\"\n    },\n    {\n      \"path\": \"docs\",\n      \"purpose\": \"Documentation for the project, including API specifications and deployment instructions.\"\n    }\n  ],\n  \"core_modules\": [\n    {\n      \"name\": \"Authentication Module\",\n      \"responsibility\": \"Handles user authentication and authorization.  Secures API endpoints.\",\n      \"api_notes\": \"Exposes endpoints for login, registration, and potentially token refresh.  Uses JWT or similar for token management.\"\n    },\n    {\n      \"name\": \"API Service Module\",\n      \"responsibility\": \"Provides RESTful API endpoints for interacting with the application. Handles requests for submitting beading battle results, retrieving data, and managing user information.\",\n      \"api_notes\": \"Defines API routes and request/response schemas. Implements business logic for processing requests.\"\n    },\n    {\n      \"name\": \"Database Module\",\n      \"responsibility\": \"Manages data persistence and retrieval. Interacts with the chosen database (e.g., PostgreSQL, MySQL).\"\n      \"api_notes\": \"Provides an abstraction layer for database operations. Uses an ORM for simplified data access.\"\n    },\n    {\n      \"name\": \"Observability Module\",\n      \"responsibility\": \"Collects logs, metrics, and traces for monitoring and debugging the application.\",\n      \"api_notes\": \"Integrates with logging and monitoring tools (e.g., Prometheus, Grafana, Jaeger).\"\n    }\n  ],\n  \"integration_points\": [\n    {\n      \"service\": \"Database (e.g., PostgreSQL, MySQL)\",\n      \"purpose\": \"Storing application data, including user information, beading battle results, and other relevant information.\"\n    },\n    {\n      \"service\": \"Monitoring and Logging Service (e.g., Prometheus, Grafana, Jaeger)\",\n      \"purpose\": \"Collecting and visualizing metrics, logs, and traces for monitoring application performance and debugging issues.\"\n    },\n    {\n      \"service\": \"CI/CD Platform (e.g., GitHub Actions)\",\n      \"purpose\": \"Automating the build, test, and deployment process.\"\n    }\n  ]\n}\n```\n"
+        },
+        "task_board": {
+          "raw": "```json\n{\n  \"columns\": [\n    {\n      \"name\": \"Backlog\",\n      \"items\": []\n    },\n    {\n      \"name\": \"In Progress\",\n      \"items\": []\n    },\n    {\n      \"name\": \"Blocked\",\n      \"items\": []\n    },\n    {\n      \"name\": \"Review\",\n      \"items\": []\n    },\n    {\n      \"name\": \"Done\",\n      \"items\": []\n    }\n  ],\n  \"items\": [\n    {\n      \"title\": \"Configure Authentication\",\n      \"owner_role\": \"Backend Engineer\",\n      \"dependencies\": [],\n      \"estimate_days\": 1,\n      \"definition_of_done\": \"Users can successfully authenticate via chosen method (e.g., OAuth, JWT). Authentication integrated with API service.\",\n      \"column\": \"Backlog\" \n    },\n    {\n      \"title\": \"Create Scalable API Service\",\n      \"owner_role\": \"Backend Engineer\",\n      \"dependencies\": [\"Configure Authentication\"],\n      \"estimate_days\": 2,\n      \"definition_of_done\": \"API service deployed and able to handle expected load. Basic CRUD operations implemented and tested.\",\n      \"column\": \"Backlog\"\n    },\n    {\n      \"title\": \"Wire Observability\",\n      \"owner_role\": \"DevOps Engineer\",\n      \"dependencies\": [\"Create Scalable API Service\"],\n      \"estimate_days\": 1,\n      \"definition_of_done\": \"Logging, metrics, and tracing implemented.  Dashboards configured to monitor key performance indicators.\",\n      \"column\": \"Backlog\"\n    },\n    {\n      \"title\": \"Schedule CI/CD Automation\",\n      \"owner_role\": \"DevOps Engineer\",\n      \"dependencies\": [\"Create Scalable API Service\"],\n      \"estimate_days\": 1,\n      \"definition_of_done\": \"Automated build, test, and deployment pipeline established. Pipeline triggered by code changes.\",\n      \"column\": \"Backlog\"\n    },\n     {\n      \"title\": \"Define Engineering Tasks (with owners and due dates)\",\n      \"owner_role\": \"Engineering Manager\",\n      \"dependencies\": [\"Configure Authentication\", \"Create Scalable API Service\", \"Wire Observability\", \"Schedule CI/CD Automation\"],\n      \"estimate_days\": 0.5,\n      \"definition_of_done\": \"Clear list of prioritized engineering tasks documented, assigned, and with due dates.  This task represents the 'outlining' mentioned in the prompt.\",\n      \"column\": \"Backlog\"\n    }\n  ]\n}\n```\n\nThis JSON represents the Kanban board.  The `items` array holds all the tasks, and each item's `column` attribute indicates where it belongs on the board.  This structure allows you to easily manipulate and display the board in a user interface.  The dependencies are explicitly listed, reflecting the workflow described in the walkthrough. The estimate and definition of done provide further clarity for each task.  The owner roles help assign responsibilities.  Finally, all tasks start in the \"Backlog\" column.\n"
+        },
+        "metadata": {
+          "video_id": "2Xc9gXyf2G4",
+          "title": "[Beading Battle #3] Menzerna Power Lock vs. Sonax Protect and Shine (Netshield)",
+          "description": "Jetzt kostenlos Abonnieren \ud83d\ude80 https://ad.glossboss.de/#abo\n\n\ud83d\ude4b\ud83c\udffb\u200d\u2642\ufe0f G\u00f6nnt euch 10% Rabatt auf https://waschhelden.de/?jsta=gb mit dem Code \"glossboss\" \ud83d\ude80\nG\u00fcltig f\u00fcr Endkunden und ab einen Warenkorb-Wert von 50\u20ac\n\n\u2718 Werbung - Damit arbeiten wir:\n\u25ba Tool f\u00fcr Steinschlagreparatur: https://ad.glossboss.de/#steinschlagstift\n\u25ba Detailing Swabs f\u00fcr Kunststoff: https://ad.glossboss.de/#detailing-swabs\n\u25ba Eine unserer Lieblings-Schleifpasten: https://ad.glossboss.de/#schleifpaste\n\u25ba Auspuffreinigung - nie mehr ohne: https://ad.glossboss.de/#auspuff\n\n\u25ba Spannfutter f\u00fcr die PXE: http://ad.glossboss.de/#pxe-spannfutter\n\u25ba Verl\u00e4ngerung f\u00fcr die PXE: http://ad.glossboss.de/#pxe-verl\u00e4ngerung\n\nHiermit filmen wir:\n\u25ba Kamera: https://ad.glossboss.de/#kamera\n\u25ba Mikrofon: https://ad.glossboss.de/#mic\n\u25ba Stativ: https://ad.glossboss.de/#stativ\n\nWebsite: https://glossboss.de/\nFacebook: https://www.facebook.com/glossboss.de/\nInstagram: https://www.instagram.com/glossboss.de/\n\n\nMusik:\nLike Apollo by jimmysquare https://soundcloud.com/jimmysquare\nCreative Commons \u2014 Attribution 3.0 Unported\u2014 CC BY 3.0 \nhttp://creativecommons.org/licenses/by/3.0/\nMusic provided by Audio Library https://youtu.be/oIpjGVBY9AM\n\nDie mit \u25ba gekennzeichneten Links sind sogenannte Affiliate-Links, die mit dem Partnerprogramm von Amazon verkn\u00fcpft sind. Kommt \u00fcber einen solchen Link ein Einkauf zustande, werde ich mit einer Provision beteiligt. F\u00fcr Dich entstehen dabei keine Mehrkosten. Wo, wann und wie Du ein Produkt kaufst, bleibt nat\u00fcrlich Dir \u00fcberlassen.",
+          "channel_id": "UC_sfQw90zUtZpBIO0JCyClw",
+          "channel_title": "GLOSSBOSS",
+          "published_at": "2016-08-23T05:14:51Z",
+          "duration": "PT3M12S",
+          "view_count": 50070,
+          "like_count": 213,
+          "comment_count": 26,
+          "thumbnail_urls": {
+            "default": "https://i.ytimg.com/vi/2Xc9gXyf2G4/default.jpg",
+            "medium": "https://i.ytimg.com/vi/2Xc9gXyf2G4/mqdefault.jpg",
+            "high": "https://i.ytimg.com/vi/2Xc9gXyf2G4/hqdefault.jpg",
+            "standard": "https://i.ytimg.com/vi/2Xc9gXyf2G4/sddefault.jpg",
+            "maxres": "https://i.ytimg.com/vi/2Xc9gXyf2G4/maxresdefault.jpg"
+          },
+          "tags": [
+            "autopflege",
+            "fahrzeugpflege",
+            "produkttests",
+            "pflegeberichte",
+            "anleitungen",
+            "meguiars",
+            "rupes",
+            "menzerna power lock",
+            "sonax",
+            "protect and shine",
+            "netshield",
+            "beading battle"
+          ],
+          "category_id": "2",
+          "default_language": "de",
+          "default_audio_language": "de",
+          "live_broadcast_content": "none",
+          "transcript_available": false,
+          "transcript_segments": 0,
+          "source_api": "youtube_data_api_v3"
+        },
+        "processing_notes": {
+          "summary_model": "gemini-1.5-pro",
+          "project_model": "gemini-1.5-pro",
+          "task_model": "gemini-1.5-pro",
+          "language": "en"
+        }
+      },
+      "errors": [],
+      "processing_time": 27.09449320100248,
+      "timestamp": "2025-09-21T01:58:33.132930"
+    }
+  },
+  "errors": [],
+  "orchestration_meta": {
+    "processing_time": 27.09525565500371,
+    "agents_used": [
+      "transcript_action"
+    ]
+  }
+}

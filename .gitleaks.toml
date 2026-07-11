@@ -1,0 +1,17 @@
+# gitleaks configuration for EventRelay.
+# Extends gitleaks' default ruleset; allowlists vendored third-party assets and
+# local-only audit artifacts that contain non-EventRelay tokens.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Paths excluded from secret scanning"
+paths = [
+  # Vendored saved web pages from Google (AI Studio / APIs Explorer): contain
+  # Google's own public page keys, not EventRelay credentials.
+  '''docs/gemini_reference/.*''',
+  # Local-only security audit artifacts (gitignored; never committed).
+  '''docs/security/.*''',
+  # Test fixtures use obvious dummy keys (e.g. "xai-secret-123"), not real secrets.
+  '''tests/.*''',
+]
