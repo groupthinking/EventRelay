@@ -1,9 +1,9 @@
 # GATE-3 Launch Config Report
 
-**When:** 2026-07-10T17:59:52Z UTC  
-**Git:** `e70aa66a`  
-**Vercel project:** `garv1/v0-uvai` (Production env)  
-**Evidence dir:** `docs/control-plane/sessions/gate3-20260710T1759Z/`  
+**When:** 2026-07-10T17:59:52Z UTC
+**Git:** `e70aa66a`
+**Vercel project:** `garv1/v0-uvai` (Production env)
+**Evidence dir:** `docs/control-plane/sessions/gate3-20260710T1759Z/`
 **Method:** `vercel env ls production` (names only) + live HTTP probes (no secret values recorded)
 
 ---
@@ -106,42 +106,42 @@ Do these in Vercel Production + Stripe + Cloudflare dashboards. Do **not** paste
 
 ### P0 blockers (must fix before any paid customer)
 
-1. **Stripe price / account consistency**  
-   - In Stripe Dashboard (same mode as `STRIPE_SECRET_KEY` — live vs test): confirm prices exist  
-   - If missing: recreate and set `STRIPE_PRICE_PRO_MONTHLY` / `ANNUAL`  
+1. **Stripe price / account consistency**
+   - In Stripe Dashboard (same mode as `STRIPE_SECRET_KEY` — live vs test): confirm prices exist
+   - If missing: recreate and set `STRIPE_PRICE_PRO_MONTHLY` / `ANNUAL`
    - Re-test: `POST /api/billing/renew` should not return `No such price` (may still need customer id; error should change)
 
-2. **`STRIPE_WEBHOOK_SECRET`**  
-   - Stripe → Webhooks → endpoint `https://uvai.io/api/billing/webhook`  
-   - Events: `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`  
-   - Put signing secret in Vercel Production  
+2. **`STRIPE_WEBHOOK_SECRET`**
+   - Stripe → Webhooks → endpoint `https://uvai.io/api/billing/webhook`
+   - Events: `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`
+   - Put signing secret in Vercel Production
    - Re-test: webhook without signature → **400** `missing_signature` (not 503)
 
-3. **Turnstile**  
-   - Cloudflare Turnstile widget for `uvai.io`  
-   - Set `NEXT_PUBLIC_TURNSTILE_SITE_KEY` + `TURNSTILE_SECRET_KEY` on Vercel  
-   - Redeploy (public key is client-bundled)  
+3. **Turnstile**
+   - Cloudflare Turnstile widget for `uvai.io`
+   - Set `NEXT_PUBLIC_TURNSTILE_SITE_KEY` + `TURNSTILE_SECRET_KEY` on Vercel
+   - Redeploy (public key is client-bundled)
    - Re-test: checkout without token → `turnstile_token_missing` (not `turnstile_not_configured`)
 
-4. **Google OAuth + NextAuth**  
-   - Set `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`  
-   - Set `NEXTAUTH_URL=https://uvai.io`  
-   - Google redirect URI: `https://uvai.io/api/auth/callback/google`  
+4. **Google OAuth + NextAuth**
+   - Set `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`
+   - Set `NEXTAUTH_URL=https://uvai.io`
+   - Google redirect URI: `https://uvai.io/api/auth/callback/google`
    - Re-test: `GET /api/auth/providers` → **200** with google provider
 
 ### P1 after P0
 
-5. Browser E2E (G3-E2E-01): sign in → checkout → Stripe test/live payment → webhook → `billing/status` shows pro  
+5. Browser E2E (G3-E2E-01): sign in → checkout → Stripe test/live payment → webhook → `billing/status` shows pro
 6. Confirm KV Redis actually read/write entitlement after webhook (optional redis CLI / status after paid session)
 
 ---
 
 ## 6) What we will NOT claim
 
-- “Stripe is fully set up” — prices rejected by Stripe API  
-- “Billing works” — checkout 403, webhook 503  
-- “Users can sign in” — auth 500  
-- “Need Upstash-named vars only” — KV aliases satisfy code  
+- “Stripe is fully set up” — prices rejected by Stripe API
+- “Billing works” — checkout 403, webhook 503
+- “Users can sign in” — auth 500
+- “Need Upstash-named vars only” — KV aliases satisfy code
 
 ---
 
@@ -154,5 +154,5 @@ Do these in Vercel Production + Stripe + Cloudflare dashboards. Do **not** paste
 | One paid lifecycle success | **NO** |
 | Documented blockers with exact next steps | **YES** |
 
-**GATE-3 status: COMPLETE as audit / incomplete as launch readiness.**  
+**GATE-3 status: COMPLETE as audit / incomplete as launch readiness.**
 Launch readiness blocked on: **Turnstile + Webhook secret + Stripe price validity + Google OAuth**.

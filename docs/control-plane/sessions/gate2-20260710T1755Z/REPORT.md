@@ -1,8 +1,8 @@
 # GATE-2 Live Product Baseline Report
 
-**When:** 2026-07-10T17:55:51Z – 17:57:16Z UTC  
-**Git (local main):** `e70aa66a` = `origin/main`  
-**Test video:** `https://www.youtube.com/watch?v=jNQXAC9IVRw` (Me at the zoo — short public clip)  
+**When:** 2026-07-10T17:55:51Z – 17:57:16Z UTC
+**Git (local main):** `e70aa66a` = `origin/main`
+**Test video:** `https://www.youtube.com/watch?v=jNQXAC9IVRw` (Me at the zoo — short public clip)
 **Evidence directory:** `docs/control-plane/sessions/gate2-20260710T1755Z/`
 
 ---
@@ -112,8 +112,8 @@
 
 ## Operator notes
 
-1. Always poll **`https://uvai.io` + status_url** (absolute), not the relative path alone.  
-2. Prefer **default async** for real users; sync is degraded.  
+1. Always poll **`https://uvai.io` + status_url** (absolute), not the relative path alone.
+2. Prefer **default async** for real users; sync is degraded.
 3. Do not claim “pipeline complete” on HTTP 200 alone — check `status`, `pipeline`, `async_processing`, and job poll.
 
 ---
@@ -124,7 +124,7 @@
 
 Exit criteria met:
 
-- [x] Session artifacts for GET/POST  
-- [x] Known failure modes written (`inventory/KNOWN-FAILURES.md`)  
-- [x] Async happy-path proven for golden video  
-- [x] Sync degradation captured honestly  
+- [x] Session artifacts for GET/POST
+- [x] Known failure modes written (`inventory/KNOWN-FAILURES.md`)
+- [x] Async happy-path proven for golden video
+- [x] Sync degradation captured honestly
