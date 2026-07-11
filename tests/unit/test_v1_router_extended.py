@@ -39,6 +39,8 @@ _STUBS = [
     "youtube_extension.services.ai.gemini_service",
     "youtube_extension.services.cloud",
     "youtube_extension.services.cloud.cloud_tasks_queue",
+    "youtube_extension.services.pipeline_audit_store",
+    "youtube_extension.services.pipeline_job_store",
     "youtube_extension.services.workflows",
     "youtube_extension.services.workflows.transcript_action_workflow",
     "youtube_extension.integration",
@@ -167,9 +169,13 @@ def _make_cache_svc():
 
 def _make_data_svc():
     svc = MagicMock()
-    svc.get_videos_summary.return_value = [
-        {"video_id": "auJzb1D-fag", "title": "Test"}
-    ]
+    _videos_summary = [{"video_id": "auJzb1D-fag", "title": "Test"}]
+    # Honor limit/offset so pagination behaves like the real data service
+    # (the /videos endpoint delegates slicing to get_videos_summary).
+    svc.get_videos_summary.side_effect = (
+        lambda limit=50, offset=0, **_: _videos_summary[offset : offset + limit]
+    )
+    svc.count_videos.return_value = 1
     svc.get_video_detail.return_value = {
         "video_id": "auJzb1D-fag",
         "metadata": {"title": "Test", "transcript_text": "hello world"},
@@ -453,6 +459,10 @@ class TestCacheEndpoints:
             svc = MagicMock()
             svc.get_cache_statistics.side_effect = RuntimeError("db down")
             return svc
+
+        # Clear global cache in the router module to ensure we hit the service
+        router_module._stats_cache = {}
+        router_module._stats_cache_time = 0
 
         app.dependency_overrides[get_cache_service] = _err
         try:

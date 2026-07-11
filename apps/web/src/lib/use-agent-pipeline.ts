@@ -218,17 +218,19 @@ export function useAgentPipeline(): UseAgentPipelineReturn {
       const controller = new AbortController();
       let timedOut = false;
       abortRef.current = controller;
+      // Match Vercel stream route budget (maxDuration 240s) — avoid demo fallback on slow backend jobs.
+      const STREAM_WAIT_MS = 210_000;
       const resetStreamTimeout = () => {
         if (timeoutRef.current) window.clearTimeout(timeoutRef.current);
         timeoutRef.current = window.setTimeout(() => {
           timedOut = true;
           controller.abort();
-        }, 8000);
+        }, STREAM_WAIT_MS);
       };
       timeoutRef.current = window.setTimeout(() => {
         timedOut = true;
         controller.abort();
-      }, 8000);
+      }, STREAM_WAIT_MS);
 
       // Reset state to validating
       setState({

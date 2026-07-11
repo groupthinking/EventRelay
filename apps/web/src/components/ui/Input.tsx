@@ -33,11 +33,13 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
   ) => {
     const generatedId = useId();
     const inputId = id || generatedId;
+    const descriptionId =
+      helperText || errorMessage ? `${inputId}-description` : undefined;
 
     const baseStyles = clsx(
       'w-full',
       'font-medium',
-      'transition-all duration-200',
+      'transition-[background-color,border-color,box-shadow] duration-200 motion-reduce:transition-none',
       'focus:outline-none',
       'placeholder:text-white/30',
       'disabled:opacity-50 disabled:cursor-not-allowed'
@@ -90,6 +92,8 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
           <input
             ref={ref}
             id={inputId}
+            aria-invalid={error || undefined}
+            aria-describedby={descriptionId}
             className={clsx(
               baseStyles,
               variants[variant],
@@ -107,6 +111,9 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
         </div>
         {(helperText || errorMessage) && (
           <p
+            id={descriptionId}
+            role={error ? 'alert' : undefined}
+            aria-live={error ? 'assertive' : 'polite'}
             className={clsx(
               'mt-2 text-xs',
               error ? 'text-red-400' : 'text-white/40'
