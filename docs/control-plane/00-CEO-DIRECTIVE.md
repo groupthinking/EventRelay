@@ -1,8 +1,8 @@
 # CEO DIRECTIVE — EventRelay / UVAI
 
-**Authority:** Lead / CEO mode for this workspace  
-**Effective:** 2026-07-09T23:15:00Z (UTC)  
-**Status:** BINDING until explicitly superseded in this folder  
+**Authority:** Lead / CEO mode for this workspace
+**Effective:** 2026-07-09T23:15:00Z (UTC)
+**Status:** BINDING until explicitly superseded in this folder
 
 ---
 
@@ -81,7 +81,7 @@ Stale claims in `ARCHITECTURE.md`, `docs/refactor/STATE.md`, `shared/_core/SYSTE
 
 ## 3. What “done” means for the company (narrow)
 
-Not “complete UVAI ecosystem.” Not “Digital Refinery ADK.”  
+Not “complete UVAI ecosystem.” Not “Digital Refinery ADK.”
 
 **Product done (P0):** A user can:
 
