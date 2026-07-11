@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 """
 Rate Limiter
 ============
@@ -5,6 +6,9 @@ Rate Limiter
 Provides basic rate limiting functionality for AI providers.
 Throttles requests per-provider based on configurable limits.
 """
+=======
+"""Lightweight in-process rate limiting helpers for AI providers."""
+>>>>>>> origin/main
 
 import asyncio
 import time
@@ -14,7 +18,8 @@ from typing import Any, Optional
 
 
 class ModelProvider(Enum):
-    """AI Model Providers"""
+    """AI model providers."""
+
     CLAUDE = "claude"
     GROK = "grok"
     OPENAI = "openai"
@@ -25,8 +30,12 @@ class RateLimiter:
     """
     Basic rate limiter for AI API requests.
 
+<<<<<<< HEAD
     Provides request throttling per provider with configurable
     requests-per-minute and tokens-per-minute limits.
+=======
+    Provides simple request throttling per provider.
+>>>>>>> origin/main
     """
 
     def __init__(self, config: Optional[dict[str, Any]] = None):
@@ -58,7 +67,9 @@ class RateLimiter:
             t for t in self._request_times[provider_name] if t > cutoff_time
         ]
         self._token_usage[provider_name] = [
-            (t, tokens) for t, tokens in self._token_usage[provider_name] if t > cutoff_time
+            (t, tokens)
+            for t, tokens in self._token_usage[provider_name]
+            if t > cutoff_time
         ]
 
         # Check request rate limit
@@ -87,14 +98,20 @@ class RateLimiter:
                 t for t in self._request_times[provider_name] if t > cutoff_time
             ]
             recent_tokens = sum(
-                tokens for t, tokens in self._token_usage[provider_name] if t > cutoff_time
+                tokens
+                for t, tokens in self._token_usage[provider_name]
+                if t > cutoff_time
             )
 
             stats[provider_name] = {
                 "requests_last_minute": len(recent_requests),
                 "tokens_last_minute": recent_tokens,
-                "limit_requests": self.config.get(provider_name, {}).get("requests_per_minute", 100),
-                "limit_tokens": self.config.get(provider_name, {}).get("tokens_per_minute", 50000),
+                "limit_requests": self.config.get(provider_name, {}).get(
+                    "requests_per_minute", 100
+                ),
+                "limit_tokens": self.config.get(provider_name, {}).get(
+                    "tokens_per_minute", 50000
+                ),
             }
 
         return stats

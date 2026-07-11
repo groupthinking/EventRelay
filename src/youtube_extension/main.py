@@ -33,7 +33,10 @@ if _sentry_dsn:
             environment=os.getenv("ENVIRONMENT", os.getenv("VERCEL_ENV", "development")),
             traces_sample_rate=float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.1")),
             integrations=[StarletteIntegration(), FastApiIntegration()],
-            send_default_pii=True,
+            # Do not attach request headers/cookies/body/user IP to events.
+            # send_default_pii=True shipped user PII + auth headers to Sentry.
+            # Opt in per-event via set_user() where genuinely needed instead.
+            send_default_pii=os.getenv("SENTRY_SEND_PII", "false").lower() == "true",
             stream_gen_ai_spans=True,  # Enable for LLM monitoring (works for OpenAI-compatible including Grok/xAI via openai client)
         )
         logger.info("Sentry initialized for backend with AI monitoring")

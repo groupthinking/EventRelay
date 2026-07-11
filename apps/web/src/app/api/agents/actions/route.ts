@@ -67,7 +67,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       message.includes('transcript is too short');
 
     return NextResponse.json(
-      { success: false, error: message, actions: [] },
+      { success: false, error: 'Action generation failed', actions: [] },
       { status: isClientError ? 400 : 502 },
     );
   }
