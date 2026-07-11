@@ -305,10 +305,11 @@ export function SearchPanel({
           style={{ background: 'rgba(16, 183, 165, 0.9)', color: '#002b26' }}
           disabled={searchLoading || !searchQuery.trim()}
           aria-busy={searchLoading || undefined}
+          aria-label={searchLoading ? 'Searching' : undefined}
         >
           {searchLoading ? (
             <svg
-              className="animate-spin h-3.5 w-3.5"
+              className="animate-spin motion-reduce:animate-none h-3.5 w-3.5"
               xmlns="http://www.w3.org/2000/svg"
               fill="none"
               viewBox="0 0 24 24"
@@ -342,8 +343,8 @@ export function SearchPanel({
               key={i}
               type="button"
               onClick={() => onSeek?.(res.start)}
-              className="w-full text-left p-4 rounded-xl border transition-colors hover:bg-white/[0.02] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#6af2de]/40"
-              style={{ background: 'rgba(37,37,44,0.4)', borderColor: 'rgba(255,255,255,0.05)' }}
+              className="w-full text-left p-4 rounded-xl border transition-colors bg-[#25252c]/40 hover:bg-white/[0.02] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#6af2de]/40"
+              style={{ borderColor: 'rgba(255,255,255,0.05)' }}
             >
               <div className="flex items-center justify-between mb-1.5">
                 <span className="text-[11px] font-mono px-2 py-0.5 rounded" style={{ background: 'rgba(106,242,222,0.1)', color: '#6af2de' }}>
