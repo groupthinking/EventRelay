@@ -17,6 +17,7 @@ from youtube_extension.backend.api.v1.models import (
     AgentExecution,
     AgentStatus,
     ApiResponse,
+    ChatRequest,
     EventExtractRequest,
     ExtractedEvent,
     FeedbackRequest,
@@ -287,6 +288,42 @@ class TestTranscriptActionRequest:
         opts = VideoClipOptions(start_seconds=0.0, end_seconds=120.0)
         req = TranscriptActionRequest(video_url=self._VALID_URL, video_options=opts)
         assert req.video_options.end_seconds == 120.0
+
+    def test_ssrf_link_local_host_rejected(self):
+        """Arbitrary host + 11-char id must not reach yt-dlp (audit SSRF #1)."""
+        with pytest.raises(ValidationError, match="Invalid YouTube URL"):
+            TranscriptActionRequest(video_url="http://169.254.169.254/aaaaaaaaaaa")
+
+    def test_ssrf_evil_host_rejected(self):
+        with pytest.raises(ValidationError, match="Invalid YouTube URL"):
+            TranscriptActionRequest(
+                video_url="https://evil.example/watch?v=aaaaaaaaaaa"
+            )
+
+    def test_leading_dash_arg_injection_rejected(self):
+        """Leading-dash token must not pass as video_url (CWE-88)."""
+        with pytest.raises(ValidationError, match="Invalid YouTube URL"):
+            TranscriptActionRequest(video_url="--config-locations=/aaaaaaaaaaa")
+
+    def test_non_youtube_rejected(self):
+        with pytest.raises(ValidationError, match="Invalid YouTube URL"):
+            TranscriptActionRequest(video_url="https://vimeo.com/12345678901")
+
+
+class TestChatRequestVideoUrl:
+    def test_optional_none_allowed(self):
+        req = ChatRequest(query="hello")
+        assert req.video_url is None
+
+    def test_valid_youtube_accepted(self):
+        req = ChatRequest(
+            query="hello", video_url="https://www.youtube.com/watch?v=jNQXAC9IVRw"
+        )
+        assert req.video_url is not None
+
+    def test_ssrf_host_rejected(self):
+        with pytest.raises(ValidationError, match="Invalid YouTube URL"):
+            ChatRequest(query="hello", video_url="http://127.0.0.1/aaaaaaaaaaa")
 
 
 # ===========================================================================
