@@ -1,6 +1,6 @@
 # KNOWN FAILURES — Live-measured only
 
-**Started:** 2026-07-10T17:57Z  
+**Started:** 2026-07-10T17:57Z
 **Rule:** Only entries with probe date + evidence path. No rumor.
 
 ---
