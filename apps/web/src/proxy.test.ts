@@ -129,11 +129,30 @@ describe('proxy rate limiting — production without a working Redis limiter', (
       '/api/pipeline',
       '/api/training/status',
       '/api/video',
+      '/api/agents/actions',
       '/api/agents/dispatch',
     ]) {
       const res = await proxy(apiRequest(path, 'GET'));
       expect(res.status, `${path} should fail open`).not.toBe(503);
       expect(res.status, `${path} should fail open`).not.toBe(429);
+    }
+  });
+
+  it('fails CLOSED for an unclassified AI GET (safe denial-of-wallet default)', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('UVAI_RATE_LIMIT_FAIL_OPEN', '');
+    clearRedisEnv();
+
+    const proxy = await loadProxy();
+    // AI-prefixed GETs are an ALLOWLIST: anything not verified cheap fails closed.
+    // /api/transcribe and /api/chat are AI routes with no cheap GET on the list,
+    // so a GET to them (or any future billable AI read) is denied during an
+    // outage rather than silently leaking an unmetered paid call.
+    for (const path of ['/api/transcribe', '/api/chat', '/api/extract-events']) {
+      const res = await proxy(apiRequest(path, 'GET'));
+      expect(res.status, `${path} should fail closed`).toBe(503);
+      const body = await res.json();
+      expect(body.code, `${path} should fail closed`).toBe('rate_limit_unavailable');
     }
   });
 
