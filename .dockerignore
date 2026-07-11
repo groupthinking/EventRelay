@@ -1,6 +1,7 @@
-# Node artifacts — exclude all node_modules and build output
+# Node & Frontend
 node_modules/
 .next/
+.turbo/
 
 # Include only apps/web from the apps/ directory (needed for npm ci in builder stage)
 # Subsequent lines re-exclude artifacts inside apps/web
