@@ -14,17 +14,18 @@ concrete reason, verified against the actual repository tree.
 | `autonomous-video-processing.yml` | KEEP | Manual matrix batch processor; well-formed, scoped permissions. |
 | `branch-cleanup.yml` | KEEP | Gated manual prune; `scripts/maintenance/branch-cleanup-delete.sh` exists; dry-run default. |
 | `bulk-issue-processor.yml` | KEEP | Manual bulk issue ops via `gh` + Python; dry-run default. |
-| `ci.yml` | KEEP | Core CI: build web, lint, unit tests. |
+| `ci.yml` | **FIX** | Added blocking `apps/web` type-check and ESLint steps before the build so CI fails fast on TypeScript or lint regressions. |
 | `codeql-analysis.yml` | **FIX** | Removed the OWASP `dependency-check` job — pinned to unstable `@main` and pointed at dead paths (`frontend/node_modules`, `src/mcp-bridge.py`); produced no usable SARIF. Switched the Node cache from the dead `frontend/node_modules` path to the npm download cache (`~/.npm`), which is correct for this npm-workspaces repo. CodeQL analysis itself retained. Dependency coverage already lives in `dependency-review.yml` + `security.yml`. |
 | `coverage.yml` | **FIX** | Added a top-level `name:` and the `workflow_dispatch` trigger the README already documented as available. |
 | `dependabot-auto-merge.yml` | KEEP | Comprehensive guards (same-repo, non-draft, SHA match, major excluded). |
 | `dependency-review.yml` | KEEP | PR dependency review with documented allow-lists. |
 | `deploy-cloud-run.yml` | KEEP | The real deployment path (GCP Cloud Run); manual dispatch. |
 | `deploy.yml` | **DELETE** | References a non-existent `deployments/` tree (manifests/terraform); actual infra is `infrastructure/`. The validate job hard-`exit 1`s on missing manifests. Generic multi-cloud (AWS+Azure+Slack) scaffold that duplicates `deploy-cloud-run.yml`. |
-| `e2e-tests.yml` | KEEP | Vitest E2E with PR reporting; `tests/e2e/` and `tests/failure-log.md` exist. |
+| `e2e-tests.yml` | **FIX** | Resolve the PR's Vercel preview deployment via the GitHub Deployments API, wait for a ready `environment_url`, and export it as `BASE_URL` before running E2E tests. |
 | `emergency-stop.yml` | KEEP | Manual operational kill-switch with typed confirmation. |
 | `issue-triage.yml` | KEEP | Keyword auto-labeling + triage comment on new issues. |
 | `mcp-optimization.yml` | **DELETE** | Entire workflow targets `mcp-servers/mcp-profiling/` (requirements.txt, investigator_client.py, profiling_server.py) which does not exist — every run fails. |
+| `phase-goal-tracker.yml` | KEEP | Tracks markdown checklists on phase issues, keeps a single status comment updated, and auto-closes the issue when all checklist goals are complete. |
 | `pr-checks.yml` | KEEP | Validates PR title/description; fork-safe comment handling. |
 | `real-processing.yml` | KEEP | Manual single-video processing; well-formed. |
 | `secret-scan.yml` | KEEP | gitleaks on the working tree; action pinned to SHA, checksum-verified install. |

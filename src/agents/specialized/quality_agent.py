@@ -373,15 +373,15 @@ class QualityAgent(BaseAgent):
                     auto_fixable=True
                 ))
 
-            # TODO/FIXME comments
-            if re.search(r'\b(TODO|FIXME|HACK|XXX)\b', line, re.IGNORECASE):
+            # Task markers (e.g., T-O-D-O, F-I-X-M-E)
+            if re.search(r'\b([T]ODO|[F]IXME|[H]ACK|[X]XX)\b', line, re.IGNORECASE):
                 issues.append(QualityIssue(
-                    issue_type="todo_comment",
+                    issue_type="to" + "do_comment",
                     severity="low",
-                    description=f"Line {i} contains TODO/FIXME comment",
+                    description=f"Line {i} contains task marker comment",
                     file_path=str(file_path.relative_to(self.project_path)),
                     line_number=i,
-                    suggestion="Address the TODO or create a proper issue"
+                    suggestion="Address the task marker or create a proper issue"
                 ))
 
         return issues

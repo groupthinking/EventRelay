@@ -1,4 +1,17 @@
 const path = require('path');
+const { Module } = require('module');
+
+const appNodeModules = path.join(__dirname, 'node_modules');
+const nodePathEntries = (process.env.NODE_PATH || '')
+  .split(path.delimiter)
+  .filter(Boolean);
+
+if (!nodePathEntries.includes(appNodeModules)) {
+  // Let hoisted workspace packages like @sentry/nextjs resolve Next.js from apps/web.
+  process.env.NODE_PATH = [appNodeModules, ...nodePathEntries].join(path.delimiter);
+  Module._initPaths();
+}
+
 const { withSentryConfig } = require('@sentry/nextjs');
 
 const contentSecurityPolicy = [
@@ -92,4 +105,4 @@ const sentryWebpackPluginOptions = {
   disableClientWebpackPlugin: !process.env.SENTRY_AUTH_TOKEN,
 };
 
-module.exports = withSentryConfig(nextConfig, sentryWebpackPluginOptions);
+module.exports = nextConfig;

@@ -17,6 +17,7 @@ The brain of your production system that unifies:
 import asyncio
 import logging
 import os
+import re
 import time
 from dataclasses import dataclass
 from datetime import datetime
@@ -163,6 +164,13 @@ class MCPBridge:
             "consensus_building",
         ]
         logger.info("✅ A2A Communication Hub initialized")
+        self.VERCEL_MCP_TOOLS = [
+            "vercel_search_docs",
+            "vercel_list_projects",
+            "vercel_list_deployments",
+            "vercel_get_deployment_logs",
+            "vercel_check_domain_availability",
+        ]
 
     async def process_request(self, request: MCPBridgeRequest) -> dict[str, Any]:
         """
@@ -322,6 +330,10 @@ class MCPBridge:
                 ModelProvider.GROK
             )  # Grok is better for real-time trends
             enhanced_plan["use_a2a"] = True  # Use multiple agents for trend analysis
+
+        request_text = str(request.content).lower()
+        if re.search(r"\b(vercel|deployment|preview)\b", request_text):
+            enhanced_plan["tools_used"].extend(self.VERCEL_MCP_TOOLS)
 
         return enhanced_plan
 
@@ -591,25 +603,14 @@ class MCPBridge:
     async def _orchestrate_collaboration(
         self, agents: list, request: MCPBridgeRequest, primary_result: AIResponse
     ) -> dict[str, Any]:
-        """Orchestrate agent collaboration.
-
-        Returns explicit unavailable status — real orchestration requires
-        agent registration and message routing that is not yet implemented.
-        """
-        if not agents:
-            return {"status": "unavailable", "reason": "No agents available for collaboration"}
-        return {"status": "unavailable", "reason": "A2A orchestration not yet implemented", "agents": len(agents)}
+        """Orchestrate agent collaboration — not yet implemented."""
+        return {"status": "unavailable", "agents": len(agents)}
 
     async def _execute_mcp_tool(
         self, tool_name: str, request: MCPBridgeRequest
     ) -> dict[str, Any]:
-        """Execute MCP tool.
-
-        Returns explicit unavailable status — tool execution requires
-        a running MCP server connection that is not yet established.
-        """
-        logger.debug("MCP tool execution not yet available: %s", tool_name)
-        return {"tool": tool_name, "status": "unavailable", "success": False, "reason": "MCP tool execution not yet implemented"}
+        """Execute MCP tool — not yet implemented."""
+        return {"tool": tool_name, "status": "unavailable", "result": None}
 
     async def _attempt_fallback_processing(self, request: MCPBridgeRequest) -> bool:
         """Attempt fallback processing on failure.

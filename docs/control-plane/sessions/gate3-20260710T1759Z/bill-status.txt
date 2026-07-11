@@ -1,0 +1,1 @@
+{"plan":"free","status":"inactive","email":null,"features":{"unlimitedChat":false,"agentDispatch":false,"apiAccess":false,"chatDailyLimit":5},"routing":{"model":"gpt-4o-mini","runtime":"standard","plan":"free"},"renewalEligible":false}

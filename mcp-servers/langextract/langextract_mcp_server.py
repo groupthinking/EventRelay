@@ -12,14 +12,15 @@ Backends supported (priority order):
 
 If neither backend is available, returns an error result.
 """
+
 import json
 import os
 import subprocess
 import sys
-from typing import Any, Dict
+from typing import Any
 
 
-def list_tools() -> Dict[str, Any]:
+def list_tools() -> dict[str, Any]:
     return {
         "tools": [
             {
@@ -29,24 +30,23 @@ def list_tools() -> Dict[str, Any]:
                     "type": "object",
                     "properties": {
                         "source_url": {"type": "string"},
-                        "raw_text": {"type": "string"}
+                        "raw_text": {"type": "string"},
                     },
-                    "anyOf": [
-                        {"required": ["source_url"]},
-                        {"required": ["raw_text"]}
-                    ]
-                }
+                    "anyOf": [{"required": ["source_url"]}, {"required": ["raw_text"]}],
+                },
             },
             {
                 "name": "health",
                 "description": "LangExtract wrapper health",
-                "input_schema": {"type": "object", "properties": {}}
-            }
+                "input_schema": {"type": "object", "properties": {}},
+            },
         ]
     }
 
-def _extract_via_http(arguments: Dict[str, Any]):
+
+def _extract_via_http(arguments: dict[str, Any]):
     import requests
+
     base = os.getenv("LANGEXTRACT_BASE")
     if not base:
         return None
@@ -55,17 +55,21 @@ def _extract_via_http(arguments: Dict[str, Any]):
         raise RuntimeError(f"LangExtract HTTP {r.status_code}: {r.text[:200]}")
     return r.json()
 
-def _extract_via_cli(arguments: Dict[str, Any]):
+
+def _extract_via_cli(arguments: dict[str, Any]):
     cli = os.getenv("LANGEXTRACT_CLI")
     if not cli:
         return None
     payload = json.dumps(arguments)
-    proc = subprocess.run([cli, "--json"], input=payload.encode(), capture_output=True, timeout=60)
+    proc = subprocess.run(
+        [cli, "--json"], input=payload.encode(), capture_output=True, timeout=60
+    )
     if proc.returncode != 0:
         raise RuntimeError(f"LangExtract CLI failed: {proc.stderr.decode()[:200]}")
     return json.loads(proc.stdout.decode())
 
-def call_tool(name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
+
+def call_tool(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
     if name == "health":
         status = "unconfigured"
         if os.getenv("LANGEXTRACT_BASE") or os.getenv("LANGEXTRACT_CLI"):
@@ -78,7 +82,9 @@ def call_tool(name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
             if res is None:
                 res = _extract_via_cli(arguments)
             if res is None:
-                raise RuntimeError("LangExtract backend not configured (set LANGEXTRACT_BASE or LANGEXTRACT_CLI)")
+                raise RuntimeError(
+                    "LangExtract backend not configured (set LANGEXTRACT_BASE or LANGEXTRACT_CLI)"
+                )
             # Normalize response
             text = res.get("text", "")
             code_blocks = res.get("code_blocks", [])
@@ -87,23 +93,28 @@ def call_tool(name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
             return {"error": str(e)}
     raise ValueError("unknown tool")
 
+
 def main():
     for line in sys.stdin:
         if not line.strip():
             continue
         req = json.loads(line)
         if req.get("method") == "tools/list":
-            sys.stdout.write(json.dumps({"result": list_tools()}) + "\n"); sys.stdout.flush()
+            sys.stdout.write(json.dumps({"result": list_tools()}) + "\n")
+            sys.stdout.flush()
         elif req.get("method") == "tools/call":
             params = req.get("params", {})
             name = params.get("name")
             args = params.get("arguments", {})
             res = call_tool(name, args)
-            sys.stdout.write(json.dumps({"result": res}) + "\n"); sys.stdout.flush()
+            sys.stdout.write(json.dumps({"result": res}) + "\n")
+            sys.stdout.flush()
         else:
-            sys.stdout.write(json.dumps({"error": {"message": "unknown method"}}) + "\n"); sys.stdout.flush()
+            sys.stdout.write(
+                json.dumps({"error": {"message": "unknown method"}}) + "\n"
+            )
+            sys.stdout.flush()
+
 
 if __name__ == "__main__":
     main()
-
-

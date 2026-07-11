@@ -4,6 +4,7 @@ import { publishEvent, EventTypes } from '@/lib/cloudevents';
 import { analyzeVideoWithGemini } from '@/lib/gemini-video-analyzer';
 import { hasGeminiKey } from '@/lib/gemini-client';
 import { saveTrainingExample } from '@/lib/training-store';
+import { isAllowedYoutubeUrl } from '@/lib/video-url-request';
 
 // Backend URL with validation - skip if not a valid URL
 const rawBackendUrl = process.env.BACKEND_URL || '';
@@ -56,6 +57,17 @@ export async function POST(request: Request) {
 
     if (!url) {
       return NextResponse.json({ error: 'Video URL is required' }, { status: 400 });
+    }
+
+    if (typeof url !== 'string' || !isAllowedYoutubeUrl(url)) {
+      return NextResponse.json(
+        {
+          error:
+            'Invalid YouTube URL. Only youtube.com / youtu.be watch, embed, or shorts URLs are accepted.',
+          code: 'invalid_youtube_url',
+        },
+        { status: 400 },
+      );
     }
 
     await publishEvent(EventTypes.VIDEO_RECEIVED, { url }, url);
