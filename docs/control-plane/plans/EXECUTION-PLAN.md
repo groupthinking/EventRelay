@@ -1,7 +1,7 @@
 # EXECUTION PLAN — Lead / CEO
 
-**Created:** 2026-07-09T23:15:00Z  
-**Product definition of done (P0):** see `00-CEO-DIRECTIVE.md` §3  
+**Created:** 2026-07-09T23:15:00Z
+**Product definition of done (P0):** see `00-CEO-DIRECTIVE.md` §3
 **Method:** Gates. No product feature work before GATE-1. No “optimization” before inventory IDs exist.
 
 ---
@@ -221,7 +221,7 @@ If 500/timeout: record body; **do not** “fix” until GATE-4 security and GATE
 | G4-PROXY-01 | Fail-closed rate limit when Redis missing in prod | **DONE** on branch | proxy.ts fail-closed |
 | G4-REG-01 | Regression tests | **LOCAL PASS** | needs PR merge for CI |
 
-**Order:** implement on branch from **synced** main only (after GATE-1).  
+**Order:** implement on branch from **synced** main only (after GATE-1).
 **Note:** local branch `fix/audit-remediation-video-url-ssrf` may contain work — **inventory before rewrite**.
 
 **GATE-4 exit:** **IMPLEMENTED on `fix/gate4-security-hardening`** — see sessions/gate4-20260710T1806Z/REPORT.md. Deploy required for prod BFF 400.
@@ -293,11 +293,11 @@ Only if product needs dashboards/training:
 
 ## What you (owner) do next — in order
 
-1. **G0-AUTH-01** (GitHub token) — 5 minutes  
-2. **G0-AUTH-02** (Vercel token) — 5 minutes  
-3. Tell the lead agent: “GATE-0 auth done”  
-4. Lead agent runs **G0-MAP-01**, **G1-BR-01**, proposes **G1-SYNC** option A or B  
-5. You approve one sync command set only  
-6. Then GATE-2 smokes, then GATE-3/4 in parallel tracks with separate PRs  
+1. **G0-AUTH-01** (GitHub token) — 5 minutes
+2. **G0-AUTH-02** (Vercel token) — 5 minutes
+3. Tell the lead agent: “GATE-0 auth done”
+4. Lead agent runs **G0-MAP-01**, **G1-BR-01**, proposes **G1-SYNC** option A or B
+5. You approve one sync command set only
+6. Then GATE-2 smokes, then GATE-3/4 in parallel tracks with separate PRs
 
 You do **not** need to design architecture right now. You need **access fixed** and **main synced**. That is progress.

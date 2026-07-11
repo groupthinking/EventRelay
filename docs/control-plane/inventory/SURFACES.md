@@ -1,6 +1,6 @@
 # SURFACES — Every place work / state lives
 
-**Last updated:** 2026-07-09T23:15:00Z  
+**Last updated:** 2026-07-09T23:15:00Z
 **Purpose:** One map of tools and workspaces so agents stop inventing parallel homes.
 
 Legend: **CANONICAL** = ship here · **SUPPORT** = allowed tooling · **ARCHIVE** = do not ship · **BLOCKED** = auth broken · **UNKNOWN** = not verified
