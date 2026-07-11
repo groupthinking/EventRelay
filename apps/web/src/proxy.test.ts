@@ -94,10 +94,63 @@ describe('proxy rate limiting — production without a working Redis limiter', (
     clearRedisEnv();
 
     const proxy = await loadProxy();
-    // Some AI GETs are paid calls (embedding / OpenAI Realtime secret), so ALL
-    // AI-prefixed routes fail closed regardless of method — a method-based
-    // "GETs are cheap" rule would leak these during a Redis outage.
+    // A handful of AI GETs are themselves paid calls (Gemini embedding here),
+    // so they fail closed even though they are reads — a blanket "GETs are
+    // cheap" rule would leak these during a Redis outage.
     const res = await proxy(apiRequest('/api/video/search?videoId=x&q=y', 'GET'));
+
+    expect(res.status).toBe(503);
+    const body = await res.json();
+    expect(body.code).toBe('rate_limit_unavailable');
+  });
+
+  it('fails CLOSED for GET /api/realtime/session (mints a paid OpenAI Realtime secret)', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('UVAI_RATE_LIMIT_FAIL_OPEN', '');
+    clearRedisEnv();
+
+    const proxy = await loadProxy();
+    const res = await proxy(apiRequest('/api/realtime/session', 'GET'));
+
+    expect(res.status).toBe(503);
+    const body = await res.json();
+    expect(body.code).toBe('rate_limit_unavailable');
+  });
+
+  it('fails OPEN for cheap AI status/health GETs so a Redis outage cannot 503 them', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('UVAI_RATE_LIMIT_FAIL_OPEN', '');
+    clearRedisEnv();
+
+    const proxy = await loadProxy();
+    // These are AI-prefixed but incur NO paid AI call — pure status/health/info
+    // reads (the full CHEAP_AI_GET_ROUTES allowlist) — so they must stay
+    // available during a limiter outage.
+    for (const path of [
+      '/api/agents/actions',
+      '/api/agents/dispatch',
+      '/api/pipeline',
+      '/api/training/status',
+      '/api/video',
+    ]) {
+      const res = await proxy(apiRequest(path, 'GET'));
+      expect(res.status, `${path} should fail open`).not.toBe(503);
+      expect(res.status, `${path} should fail open`).not.toBe(429);
+    }
+  });
+
+  it('fails CLOSED for an unclassified AI GET (safe default — not on the cheap allowlist)', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('UVAI_RATE_LIMIT_FAIL_OPEN', '');
+    clearRedisEnv();
+
+    const proxy = await loadProxy();
+    // An AI-prefixed GET that is NOT an explicitly verified cheap read must fail
+    // closed by default, so a newly added billable AI read can't silently bypass
+    // denial-of-wallet protection just because nobody updated an allowlist.
+    // `/api/transcribe/status` sits under the AI `/api/transcribe` prefix and is
+    // not in CHEAP_AI_GET_ROUTES.
+    const res = await proxy(apiRequest('/api/transcribe/status', 'GET'));
 
     expect(res.status).toBe(503);
     const body = await res.json();

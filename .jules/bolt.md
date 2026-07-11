@@ -1,0 +1,3 @@
+## 2026-07-10 - Memoizing list item components in InteractiveTranscript
+**Learning:** In interactive media applications where a parent component's state (like \`currentTime\`) updates continuously during playback, unmemoized list item components will re-render continuously alongside the parent. Wrapping these items (e.g., \`SegmentRow\`) in \`React.memo()\` is a vital architectural pattern to prevent O(N) re-renders on every tick.
+**Action:** When working with long lists where the parent is driven by a frequent tick (like an audio/video player), check if the list items are wrapped in \`React.memo\`. Verify that the callback props passed to the items (like \`onSeek\`) are referentially stable to ensure the memoization actually works.
