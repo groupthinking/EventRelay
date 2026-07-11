@@ -2,13 +2,22 @@
 
 import { forwardRef, ButtonHTMLAttributes, HTMLAttributes } from 'react';
 import { clsx } from 'clsx';
+import { Leaf, Radio, Landmark, Cog, Columns, type LucideIcon } from 'lucide-react';
 
-// Topic data with icons (using text-based icons for consistency)
-const SUGGESTED_TOPICS = [
+// Topic data with icons
+const SUGGESTED_TOPICS: {
+  id: string;
+  label: string;
+  icon: LucideIcon;
+  gradient: string;
+  borderColor: string;
+  textColor: string;
+  query: string;
+}[] = [
   {
     id: 'photosynthesis',
     label: 'Photosynthesis',
-    icon: '🌿',
+    icon: Leaf,
     gradient: 'from-green-500/20 to-emerald-500/20',
     borderColor: 'border-green-500/30',
     textColor: 'text-green-400',
@@ -17,7 +26,7 @@ const SUGGESTED_TOPICS = [
   {
     id: 'fermi-paradox',
     label: 'Fermi Paradox',
-    icon: '👽',
+    icon: Radio,
     gradient: 'from-sky-500/20 to-indigo-500/20',
     borderColor: 'border-sky-500/30',
     textColor: 'text-sky-400',
@@ -26,7 +35,7 @@ const SUGGESTED_TOPICS = [
   {
     id: 'french-revolution',
     label: 'French Revolution',
-    icon: '🏛️',
+    icon: Landmark,
     gradient: 'from-red-500/20 to-orange-500/20',
     borderColor: 'border-red-500/30',
     textColor: 'text-red-400',
@@ -35,7 +44,7 @@ const SUGGESTED_TOPICS = [
   {
     id: 'engines',
     label: 'How Engines Work',
-    icon: '⚙️',
+    icon: Cog,
     gradient: 'from-blue-500/20 to-cyan-500/20',
     borderColor: 'border-blue-500/30',
     textColor: 'text-blue-400',
@@ -44,7 +53,7 @@ const SUGGESTED_TOPICS = [
   {
     id: 'ancient-greece',
     label: 'Ancient Greece',
-    icon: 'Λ',
+    icon: Columns,
     gradient: 'from-amber-500/20 to-yellow-500/20',
     borderColor: 'border-amber-500/30',
     textColor: 'text-amber-400',
@@ -61,6 +70,7 @@ export interface TopicChipProps extends TopicChipBaseProps {
 
 const TopicChip = forwardRef<HTMLButtonElement, TopicChipProps>(
   ({ topic, onSelect, className, style, ...props }, ref) => {
+    const Icon = topic.icon;
     return (
       <button
         ref={ref}
@@ -85,11 +95,7 @@ const TopicChip = forwardRef<HTMLButtonElement, TopicChipProps>(
         style={style}
         {...props}
       >
-        <span className={clsx(
-          'text-lg font-medium'
-        )}>
-          {topic.icon}
-        </span>
+        <Icon className={clsx('h-5 w-5', topic.textColor)} aria-hidden="true" />
         <span className={clsx(
           'text-sm font-medium',
           topic.textColor,

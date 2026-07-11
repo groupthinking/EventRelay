@@ -33,6 +33,11 @@ function formatDuration(ms: number): string {
   return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
 }
 
+/**
+ * Renders a single pipeline stage row.
+ *
+ * @param stage - The stage to display
+ */
 function StageRow({ stage, index }: { stage: PipelineStage; index: number }) {
   const isRunning = stage.status === 'running';
   const isComplete = stage.status === 'complete';
@@ -41,7 +46,7 @@ function StageRow({ stage, index }: { stage: PipelineStage; index: number }) {
 
   return (
     <div
-      className="flex items-center gap-4 py-3 px-4 rounded-lg transition-all duration-500"
+      className="flex items-center gap-4 py-3 px-4 rounded-lg transition-colors duration-500 motion-reduce:transition-none"
       style={{
         background: isRunning
           ? 'rgba(106, 242, 222, 0.04)'
@@ -61,6 +66,7 @@ function StageRow({ stage, index }: { stage: PipelineStage; index: number }) {
     >
       {/* Status indicator */}
       <div className="flex-shrink-0 w-6 h-6 flex items-center justify-center">
+        <span className="sr-only">{`${stage.label}: ${stage.status}`}</span>
         {isComplete && (
           <svg
             width="16"
@@ -69,13 +75,14 @@ function StageRow({ stage, index }: { stage: PipelineStage; index: number }) {
             fill="none"
             stroke="#22c55e"
             strokeWidth="2.5"
+            aria-hidden="true"
           >
             <path d="M20 6L9 17l-5-5" />
           </svg>
         )}
         {isRunning && (
-          <div className="relative">
-            <span className="absolute inline-flex h-4 w-4 rounded-full opacity-40 animate-ping" style={{ background: '#6af2de' }} />
+          <div className="relative" aria-hidden="true">
+            <span className="absolute inline-flex h-4 w-4 rounded-full opacity-40 animate-ping motion-reduce:animate-none" style={{ background: '#6af2de' }} />
             <span className="relative inline-flex h-3 w-3 rounded-full" style={{ background: '#6af2de' }} />
           </div>
         )}
@@ -87,6 +94,7 @@ function StageRow({ stage, index }: { stage: PipelineStage; index: number }) {
             fill="none"
             stroke="#ef4444"
             strokeWidth="2.5"
+            aria-hidden="true"
           >
             <path d="M18 6L6 18M6 6l12 12" />
           </svg>
@@ -130,7 +138,7 @@ function StageRow({ stage, index }: { stage: PipelineStage; index: number }) {
         {isRunning && (
           <div className="w-20 h-1 rounded-full overflow-hidden" style={{ background: 'rgba(25, 25, 31, 0.8)' }}>
             <div
-              className="h-full rounded-full transition-all duration-700 ease-out"
+              className="h-full rounded-full transition-[width] duration-700 ease-out motion-reduce:transition-none"
               style={{
                 width: `${stage.progress}%`,
                 background: 'linear-gradient(90deg, #6af2de, #38fbf7)',
@@ -151,6 +159,16 @@ function StageRow({ stage, index }: { stage: PipelineStage; index: number }) {
   );
 }
 
+/**
+ * Renders the pipeline progress panel.
+ *
+ * @param stages - The stages shown in the progress list
+ * @param overallProgress - The overall progress percentage
+ * @param status - The current pipeline status
+ * @param videoTitle - The title displayed above the stage list
+ * @param startedAt - The time used to measure elapsed processing time
+ * @param className - Additional classes applied to the wrapper
+ */
 export default function PipelineProgress({
   stages,
   overallProgress,
@@ -160,7 +178,7 @@ export default function PipelineProgress({
   className = '',
 }: PipelineProgressProps) {
   const [elapsed, setElapsed] = useState(0);
-  const timerRef = useRef<ReturnType<typeof setInterval>>();
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     if (status === 'processing' || status === 'validating') {
@@ -214,6 +232,8 @@ export default function PipelineProgress({
             }}
           />
           <span
+            role="status"
+            aria-live="polite"
             className="font-heading text-xs tracking-widest uppercase font-bold"
             style={{ color: '#f8f5fd' }}
           >
@@ -249,7 +269,7 @@ export default function PipelineProgress({
       {/* Overall progress bar */}
       <div className="h-0.5" style={{ background: 'rgba(25, 25, 31, 0.8)' }}>
         <div
-          className="h-full transition-all duration-700 ease-out"
+          className="h-full transition-[width] duration-700 ease-out motion-reduce:transition-none"
           style={{
             width: `${overallProgress}%`,
             background:

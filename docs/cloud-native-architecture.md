@@ -194,7 +194,7 @@ This script:
 ```
 
 This script:
-- Builds Docker image (`Dockerfile.cloudrun`)
+- Builds Docker image (`Dockerfile`)
 - Pushes to Google Container Registry
 - Deploys to Cloud Run with auto-scaling configuration
 
@@ -202,7 +202,7 @@ This script:
 
 ```bash
 # Build and tag image
-docker build -f Dockerfile.cloudrun -t gcr.io/PROJECT_ID/uvai-backend:latest .
+docker build -t gcr.io/PROJECT_ID/uvai-backend:latest .
 
 # Push to GCR
 docker push gcr.io/PROJECT_ID/uvai-backend:latest

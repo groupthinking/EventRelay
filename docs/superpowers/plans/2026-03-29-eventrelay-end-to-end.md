@@ -171,48 +171,38 @@ git commit -m "fix: bridge CloudEvents publisher into youtube_extension namespac
 
 ---
 
-### Task 4: Fix Dockerfile.cloudrun
+### Task 4: Fix Dockerfile
 
-The Dockerfile doesn't set `PYTHONPATH` and uses `youtube_extension.main:app` which requires the package to be importable. The `pip install -e .` in the builder stage should handle this, but the `--user` flag installs to `/root/.local` which gets copied to `/home/appuser/.local` — the editable install's `.pth` file may reference `/app/src` which is correct.
+The Dockerfile doesn't set `PYTHONPATH` and uses `youtube_extension.main:app` which requires the package to be importable. The `pip install -e .` in the builder stage should handle this.
 
 **Files:**
-- Modify: `Dockerfile.cloudrun`
+- Modify: `Dockerfile`
 
 - [ ] **Step 1: Verify the current Dockerfile builds**
 
 ```bash
-docker build -f Dockerfile.cloudrun -t uvai-test . 2>&1 | tail -20
+docker build -t uvai-test . 2>&1 | tail -20
 ```
 
 Expected: Likely succeeds (the build installs the package). If it fails, note the error.
 
 - [ ] **Step 2: Add PYTHONPATH as safety net and fix the install**
 
-In `Dockerfile.cloudrun`, make these changes:
+In `Dockerfile`, make these changes:
 
-1. After `ENV PATH=/home/appuser/.local/bin:$PATH` (line 48), change:
+1. Ensure `PYTHONPATH=/app/src` is set.
+
+2. In the builder stage, ensure the pip install is regular (not editable).
+
+Change the install command to:
 ```dockerfile
-ENV PATH=/home/appuser/.local/bin:$PATH
-ENV PYTHONPATH=/app/src:$PYTHONPATH
+RUN pip install --no-cache-dir .[youtube,cloud,postgres]
 ```
-
-2. In the builder stage, change the pip install from editable to regular (editable installs don't work well in multi-stage Docker builds because the `.pth` file points to the builder's `/app/src`):
-
-Change line 21 from:
-```dockerfile
-RUN pip install --no-cache-dir --user -e .[youtube,ml,cloud,postgres]
-```
-to:
-```dockerfile
-RUN pip install --no-cache-dir --user .[youtube,cloud,postgres]
-```
-
-Remove `ml` extra — it pulls PyTorch (~2GB) which bloats the Cloud Run image. ML inference should use a separate service. Also remove `-e` since editable installs don't survive multi-stage copies.
 
 - [ ] **Step 3: Verify the image runs correctly**
 
 ```bash
-docker build -f Dockerfile.cloudrun -t uvai-test .
+docker build -t uvai-test .
 docker run --rm -p 8765:8000 -e GEMINI_API_KEY="${GEMINI_API_KEY}" uvai-test &
 sleep 5
 curl -s http://localhost:8765/health
@@ -224,8 +214,8 @@ Expected: `{"status":"healthy","service":"uvai-youtube-extension"}`
 - [ ] **Step 4: Commit**
 
 ```bash
-git add Dockerfile.cloudrun
-git commit -m "fix: set PYTHONPATH and remove editable install in Cloud Run Dockerfile"
+git add Dockerfile
+git commit -m "fix: set PYTHONPATH and remove editable install in Dockerfile"
 ```
 
 ---

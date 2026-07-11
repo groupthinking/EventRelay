@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any
 from urllib.parse import parse_qs, urlparse
 
 from shared.youtube import RobustYouTubeMetadata, RobustYouTubeService
+from youtube_extension.utils.proxy import get_proxy_url
 from youtube_extension.utils.video_utils import extract_video_id
 from uvai.ml.client import UVAIMLClient, get_uvai_ml_client
 from youtube_extension.backend.services.metrics_service import MetricsService
@@ -316,31 +317,49 @@ class TranscriptActionWorkflow:
         transcript: dict[str, Any] = {"text": "", "segments": [], "source": "unavailable"}
         attempted_sources: set[str] = set()
 
+        last_error: str | None = None
         for source in self._build_transcript_source_order(predicted_source):
             attempted_sources.add(source)
-            if source == "youtube_api":
-                transcript = await yt_service.get_transcript(
-                    metadata.video_id,
-                    language=language,
+            try:
+                if source == "youtube_api":
+                    transcript = await yt_service.get_transcript(
+                        metadata.video_id,
+                        language=language,
+                    )
+                elif source == "speech_v2":
+                    transcript = await self._fallback_transcript_with_speech_service(
+                        video_url,
+                        language=language,
+                    )
+                else:
+                    transcript = await self._fallback_transcript_with_gemini(
+                        video_url,
+                        language=language,
+                        video_metadata=video_metadata,
+                    )
+            except Exception as exc:  # noqa: BLE001 - resilient multi-source fallback
+                # A raising source must not abort the whole pipeline; record it and
+                # continue to the next source so we can still degrade gracefully.
+                last_error = f"{source} raised: {exc}"
+                logger.warning(
+                    "Transcript source failed, trying next source",
+                    extra={"source": source, "video_url": video_url, "error": str(exc)},
                 )
-            elif source == "speech_v2":
-                transcript = await self._fallback_transcript_with_speech_service(
-                    video_url,
-                    language=language,
-                )
-            else:
-                transcript = await self._fallback_transcript_with_gemini(
-                    video_url,
-                    language=language,
-                    video_metadata=video_metadata,
-                )
+                transcript = {
+                    "text": "",
+                    "segments": [],
+                    "source": source,
+                    "error": last_error,
+                }
+                continue
 
             if transcript.get("text"):
                 return transcript
 
-        if "error" not in transcript:
+        if not transcript.get("error"):
             transcript["error"] = (
-                "Transcript generation failed after trying "
+                last_error
+                or "Transcript generation failed after trying "
                 + ", ".join(sorted(attempted_sources))
             )
         return transcript
@@ -974,6 +993,9 @@ class TranscriptActionWorkflow:
                 "noplaylist": True,
                 "quiet": True,
             }
+            proxy_url = get_proxy_url()
+            if proxy_url:
+                ydl_opts["proxy"] = proxy_url
 
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:  # type: ignore[attr-defined]
                 info = ydl.extract_info(video_url, download=True)

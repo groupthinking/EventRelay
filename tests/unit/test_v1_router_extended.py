@@ -39,6 +39,8 @@ _STUBS = [
     "youtube_extension.services.ai.gemini_service",
     "youtube_extension.services.cloud",
     "youtube_extension.services.cloud.cloud_tasks_queue",
+    "youtube_extension.services.pipeline_audit_store",
+    "youtube_extension.services.pipeline_job_store",
     "youtube_extension.services.workflows",
     "youtube_extension.services.workflows.transcript_action_workflow",
     "youtube_extension.integration",
@@ -457,6 +459,10 @@ class TestCacheEndpoints:
             svc = MagicMock()
             svc.get_cache_statistics.side_effect = RuntimeError("db down")
             return svc
+
+        # Clear global cache in the router module to ensure we hit the service
+        router_module._stats_cache = {}
+        router_module._stats_cache_time = 0
 
         app.dependency_overrides[get_cache_service] = _err
         try:

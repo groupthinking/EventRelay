@@ -473,19 +473,44 @@ async def run_transcript_action(
         and duration_seconds > TranscriptActionWorkflow.ASYNC_VIDEO_THRESHOLD_SECONDS
     )
 
-    if is_long_video:
-        result = await _queue_transcript_action_job(
-            request,
-            metadata=metadata,
-            http_request=http_request,
+    try:
+        if is_long_video:
+            result = await _queue_transcript_action_job(
+                request,
+                metadata=metadata,
+                http_request=http_request,
+            )
+        else:
+            result = await workflow.run(
+                request.video_url,
+                language=request.language,
+                transcript_text=request.transcript_text,
+                video_options=request.video_options,
+                prefetched_metadata=metadata,
+            )
+    except Exception as exc:  # noqa: BLE001 - never surface a raw 500 for processing failures
+        logger.exception(
+            "transcript-action failed; returning graceful error response",
+            extra={"video_url": request.video_url},
         )
-    else:
-        result = await workflow.run(
+        await _emit_event(
+            "com.eventrelay.transcript.failed",
+            {"url": request.video_url, "errors": [str(exc)]},
             request.video_url,
-            language=request.language,
-            transcript_text=request.transcript_text,
-            video_options=request.video_options,
-            prefetched_metadata=metadata,
+        )
+        return TranscriptActionResponse(
+            success=False,
+            video_url=request.video_url,
+            metadata={},
+            transcript={
+                "text": "",
+                "segments": [],
+                "source": "unavailable",
+                "error": str(exc),
+            },
+            outputs={},
+            errors=[f"Transcript action failed: {exc}"],
+            orchestration_meta={"processing_time": 0.0, "agents_used": []},
         )
 
     if result.get("async_processing"):
@@ -779,8 +804,15 @@ async def video_to_software_v1(
 )
 async def get_cache_stats_v1(cache_service: CacheService = Depends(get_cache_service)):
     """Get cache statistics"""
+    global _stats_cache_time, _stats_cache
     try:
+        now = time.time()
+        if now - _stats_cache_time < _stats_cache_ttl and _stats_cache:
+            return CacheStats(**_stats_cache)
+
         stats = cache_service.get_cache_statistics()
+        _stats_cache = stats
+        _stats_cache_time = now
         return CacheStats(**stats)
     except Exception as e:
         logger.error(f"Error getting cache stats: {e}")
@@ -874,6 +906,14 @@ async def list_videos_v1(
     """Get paginated list of processed videos"""
     try:
         total = data_service.count_videos()
+        if offset >= total:
+            return {
+                "videos": [],
+                "total": total,
+                "limit": limit,
+                "offset": offset,
+                "has_more": False,
+            }
         paginated_videos = data_service.get_videos_summary(limit=limit, offset=offset)
 
         return {
@@ -1239,11 +1279,34 @@ _video_jobs: _TTLDict = _TTLDict(ttl=_JOB_TTL, max_size=_JOB_MAX_SIZE)
 _agent_executions: _TTLDict = _TTLDict(ttl=_JOB_TTL, max_size=_JOB_MAX_SIZE)
 _dispatches: _TTLDict = _TTLDict(ttl=_JOB_TTL, max_size=_JOB_MAX_SIZE)
 
+# Cache for heavy statistics calculations
+_stats_cache: dict[str, Any] = {}
+_stats_cache_time: float = 0
+_stats_cache_ttl: float = 60
+
+
+async def _periodic_cleanup():
+    """Background task to proactively evict expired jobs from in-memory stores."""
+    while True:
+        try:
+            _video_jobs.evict_expired()
+            _agent_executions.evict_expired()
+            _dispatches.evict_expired()
+        except Exception as exc:
+            logger.debug("Periodic cleanup failed: %s", exc)
+        await asyncio.sleep(300)  # Sweep every 5 minutes
+
+
+@router.on_event("startup")
+async def startup_event():
+    """Start background tasks on API startup."""
+    asyncio.create_task(_periodic_cleanup())
+
 
 def _persist_video_job(job: VideoJobStatusResponse) -> None:
     _video_jobs[job.job_id] = job
     try:
-        get_job_store().save(job.job_id, job.model_dump())
+        get_job_store().save(job.job_id, job.model_dump(mode="json"))
     except Exception as exc:
         logger.warning("Job persist failed for %s: %s", job.job_id, exc)
 
@@ -1809,7 +1872,7 @@ async def dispatch_agents(request: AgentDispatchRequest):
     dispatch = AgentDispatchResponse()
     agent_types = request.agent_types or ["analyzer", "content_creator"]
 
-    for event in request.events:
+    for event in events:
         for agent_type in agent_types:
             execution = AgentExecution(
                 agent_type=agent_type,
@@ -1822,7 +1885,7 @@ async def dispatch_agents(request: AgentDispatchRequest):
     _dispatches[dispatch.dispatch_id] = dispatch
 
     for execution in dispatch.executions:
-        asyncio.create_task(_run_agent(execution, request.events))
+        asyncio.create_task(_run_agent(execution, events))
 
     return ApiResponse.success(dispatch.model_dump())
 
@@ -1833,25 +1896,18 @@ async def _run_agent(execution: AgentExecution, events: list[dict[str, Any]]):
         execution.status = AgentStatus.running
         execution.progress = 10.0
 
-        try:
-            orchestrator = AgentOrchestrator()
-            event_data = next(
-                (e for e in events if e.get("id") == execution.event_id),
-                events[0] if events else {},
-            )
-            result = await orchestrator.execute_single(
-                agent_type=execution.agent_type,
-                context=event_data,
-            )
-            execution.result = (
-                result if isinstance(result, dict) else {"output": str(result)}
-            )
-        except Exception:
-            execution.result = {
-                "agent_type": execution.agent_type,
-                "summary": f"Processed event {execution.event_id}",
-                "status": "completed",
-            }
+        orchestrator = AgentOrchestrator()
+        event_data = next(
+            (e for e in events if e.get("id") == execution.event_id),
+            events[0] if events else {},
+        )
+        result = await orchestrator.execute_single(
+            agent_type=execution.agent_type,
+            context=event_data,
+        )
+        execution.result = (
+            result if isinstance(result, dict) else {"output": str(result)}
+        )
 
         execution.status = AgentStatus.complete
         execution.progress = 100.0

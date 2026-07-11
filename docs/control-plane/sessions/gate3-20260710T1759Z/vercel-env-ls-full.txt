@@ -1,0 +1,76 @@
+
+ name                                       value                       environments                        created     
+ NEXTAUTH_SECRET                            Encrypted                   Production                          19h ago     
+ KV_REST_API_URL                            Encrypted                   Production                          7d ago      
+ REDIS_URL                                  Encrypted                   Production                          7d ago      
+ KV_REST_API_READ_ONLY_TOKEN                Encrypted                   Production                          7d ago      
+ KV_REST_API_TOKEN                          Encrypted                   Production                          7d ago      
+ KV_URL                                     Encrypted                   Production                          7d ago      
+ STRIPE_PRICE_PRO_ANNUAL                    Encrypted                   Production                          7d ago      
+ STRIPE_PRICE_PRO_MONTHLY                   Encrypted                   Production                          7d ago      
+ EVENTRELAY_API_KEY                         Encrypted                   Production                          7d ago      
+ NEXT_PUBLIC_BACKEND_URL                    Encrypted                   Production                          7d ago      
+ BACKEND_URL                                Encrypted                   Production                          7d ago      
+ GROK_XAI_API_KEY                           Encrypted                   Production                          9d ago      
+ UPSTASH_SEARCH_REST_READONLY_TOKEN         Encrypted                   Production, Preview, Development    9d ago      
+ UPSTASH_SEARCH_REST_URL                    Encrypted                   Production, Preview, Development    9d ago      
+ UPSTASH_SEARCH_REST_TOKEN                  Encrypted                   Production, Preview, Development    9d ago      
+ AI_GATEWAY_API_KEY                         Encrypted                   Production, Preview, Development    11d ago     
+ BLOB_WEBHOOK_PUBLIC_KEY                    -----BEGIN PUBLIC …         Preview, Production                 12d ago     
+ BLOB_STORE_ID                              store_QXWfahoKhffr…         Preview, Production                 12d ago     
+ BLOB_READ_WRITE_TOKEN                      Encrypted                   Preview, Production                 12d ago     
+ STORAGE_REDIS_URL                          Encrypted                   Production, Preview                 12d ago     
+ ANTHROPIC_API_KEY                          Encrypted                   Preview, Production                 12d ago     
+ STRIPE_SECRET_KEY                          Encrypted                   Production, Preview, Development    23d ago     
+ STRIPE_MCP_KEY                             Encrypted                   Production, Preview, Development    23d ago     
+ NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY         Encrypted                   Production, Preview, Development    23d ago     
+ STRIPE_PUBLISHABLE_KEY                     Encrypted                   Production, Preview, Development    23d ago     
+ NEON_PROJECT_ID                            Encrypted                   Production, Preview, Development    23d ago     
+ NEON_POSTGRES_HOST                         Encrypted                   Production, Preview, Development    23d ago     
+ NEON_POSTGRES_PRISMA_URL                   Encrypted                   Production, Preview, Development    23d ago     
+ NEON_VITE_NEON_AUTH_URL                    Encrypted                   Production, Preview, Development    23d ago     
+ NEON_POSTGRES_URL                          Encrypted                   Production, Preview, Development    23d ago     
+ NEON_POSTGRES_PASSWORD                     Encrypted                   Production, Preview, Development    23d ago     
+ NEON_POSTGRES_URL_NO_SSL                   Encrypted                   Production, Preview, Development    23d ago     
+ NEON_AUTH_BASE_URL                         Encrypted                   Production, Preview, Development    23d ago     
+ NEON_PGUSER                                Encrypted                   Production, Preview, Development    23d ago     
+ NEON_POSTGRES_DATABASE                     Encrypted                   Production, Preview, Development    23d ago     
+ NEON_POSTGRES_USER                         Encrypted                   Production, Preview, Development    23d ago     
+ NEON_PGHOST_UNPOOLED                       Encrypted                   Production, Preview, Development    23d ago     
+ NEON_PGDATABASE                            Encrypted                   Production, Preview, Development    23d ago     
+ NEON_DATABASE_URL_UNPOOLED                 Encrypted                   Production, Preview, Development    23d ago     
+ NEON_PGHOST                                Encrypted                   Production, Preview, Development    23d ago     
+ NEON_POSTGRES_URL_NON_POOLING              Encrypted                   Production, Preview, Development    23d ago     
+ NEON_DATABASE_URL                          Encrypted                   Production, Preview, Development    23d ago     
+ NEON_PGPASSWORD                            Encrypted                   Production, Preview, Development    23d ago     
+ SENTRY_ORG                                 Encrypted                   Production, Preview, Development    23d ago     
+ SENTRY_PROJECT                             Encrypted                   Production, Preview, Development    23d ago     
+ SENTRY_DSN                                 Encrypted                   Production, Preview, Development    23d ago     
+ GITHUB_TOKEN                               Encrypted                   Production, Preview, Development    23d ago     
+ NEXT_PUBLIC_API_URL                        Encrypted                   Production, Preview, Development    23d ago     
+ POSTGRES_USER                              Encrypted                   Production, Preview, Development    44d ago     
+ SUPABASE_PUBLISHABLE_KEY                   Encrypted                   Production, Preview, Development    44d ago     
+ POSTGRES_URL                               Encrypted                   Production, Preview, Development    44d ago     
+ POSTGRES_URL_NON_POOLING                   Encrypted                   Production, Preview, Development    44d ago     
+ POSTGRES_DATABASE                          Encrypted                   Production, Preview, Development    44d ago     
+ NEXT_PUBLIC_SUPABASE_ANON_KEY              Encrypted                   Production, Preview, Development    44d ago     
+ SUPABASE_JWT_SECRET                        Encrypted                   Production, Preview, Development    44d ago     
+ POSTGRES_HOST                              Encrypted                   Production, Preview, Development    44d ago     
+ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY       Encrypted                   Production, Preview, Development    44d ago     
+ SUPABASE_ANON_KEY                          Encrypted                   Production, Preview, Development    44d ago     
+ POSTGRES_PASSWORD                          Encrypted                   Production, Preview, Development    44d ago     
+ SUPABASE_SECRET_KEY                        Encrypted                   Production, Preview, Development    44d ago     
+ POSTGRES_PRISMA_URL                        Encrypted                   Production, Preview, Development    44d ago     
+ SUPABASE_SERVICE_ROLE_KEY                  Encrypted                   Production, Preview, Development    44d ago     
+ NEXT_PUBLIC_SUPABASE_URL                   Encrypted                   Production, Preview, Development    44d ago     
+ SUPABASE_URL                               Encrypted                   Production, Preview, Development    44d ago     
+ GOOGLE_CLOUD_PROJECT                       Encrypted                   Production                          132d ago    
+ MANUS_API_KEY                              Encrypted                   Preview, Production                 132d ago    
+ XAI_API_KEY                                Encrypted                   Preview, Production                 132d ago    
+ OPENAI_API_KEY                             Encrypted                   Preview, Production                 132d ago    
+ Vertex_AI_API_KEY                          Encrypted                   Preview, Production                 132d ago    
+ GEMINI_API_KEY                             Encrypted                   Preview, Production                 132d ago    
+ UVAI_EXPERIMENTATION_CONFIG_ITEM_KEY       Encrypted                   Production, Preview, Development    185d ago    
+ UVAI_STATSIG_CLIENT_KEY                    Encrypted                   Production, Preview, Development    185d ago    
+ UVAI_STATSIG_SERVER_API_KEY                Encrypted                   Production, Preview, Development    185d ago    
+

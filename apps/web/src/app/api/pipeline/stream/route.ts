@@ -25,11 +25,11 @@ import { hasGeminiKey } from '@/lib/gemini-client';
 import { waitUntil } from '@vercel/functions';
 import { publishEvent, EventTypes } from '@/lib/cloudevents';
 import { backendHeaders, resolveBackendStatusUrl } from '@/lib/pipeline-backend';
+import { checkBackendHealth, getBackendConfig } from '@/lib/pipeline-backend-health';
 import { saveTrainingExample, TUNING_THRESHOLD } from '@/lib/training-store';
 import { PipelineDeadline } from '../route';
 
-const rawBackendUrl = process.env.BACKEND_URL || '';
-const BACKEND_URL = rawBackendUrl.startsWith('http') ? rawBackendUrl : '';
+const { configured: BACKEND_CONFIGURED, url: CONFIGURED_BACKEND_URL } = getBackendConfig();
 const JOB_POLL_INTERVAL_MS = 2000;
 const MAX_JOB_POLL_ATTEMPTS = 90;
 
@@ -525,7 +525,7 @@ export async function POST(request: Request) {
     }
 
     // Check if we can process
-    if (!hasGeminiKey() && !BACKEND_URL) {
+    if (!hasGeminiKey() && !BACKEND_CONFIGURED) {
       return new Response(
         JSON.stringify({ error: 'No pipeline available. Configure GEMINI_API_KEY or BACKEND_URL.' }),
         { status: 503, headers: { 'Content-Type': 'application/json' } },
@@ -540,14 +540,22 @@ export async function POST(request: Request) {
 
     const stream = new ReadableStream({
       async start(controller) {
+        let streamMode: 'backend-ws' | 'gemini-sse' = 'gemini-sse';
         try {
+          const backendHealth = BACKEND_CONFIGURED
+            ? await checkBackendHealth(5_000)
+            : { configured: false, available: false, host: null as string | null };
+          const useBackend = backendHealth.available;
+          const backendUrl = CONFIGURED_BACKEND_URL;
+          streamMode = useBackend ? 'backend-ws' : 'gemini-sse';
+
           // Send initial pipeline status
           controller.enqueue(
             encoder.encode(
               makeEvent({
                 type: 'pipeline_status',
                 status: 'running',
-                data: { mode: BACKEND_URL ? 'backend-ws' : 'gemini-sse', url },
+                data: { mode: streamMode, url, backendReason: backendHealth.reason },
                 timestamp: new Date().toISOString(),
               }),
             ),
@@ -616,18 +624,30 @@ export async function POST(request: Request) {
             // CloudEvent — direct waitUntil on publishEvent
             waitUntil(
               publishEvent(EventTypes.PIPELINE_COMPLETED, {
-                strategy: BACKEND_URL ? 'backend-proxy' : 'gemini-stream',
+                strategy: useBackend ? 'backend-proxy' : 'gemini-stream',
                 success: true,
               }, videoUrl).catch((err) => {
                 console.warn(`[CloudEvent] Background task failed (non-fatal):`, err);
               }),
             );
+
+            // Durable cross-video search index (Upstash) — unlike the local-disk
+            // stores above, this persists on Vercel's read-only filesystem.
+            // Skips honestly when UPSTASH_SEARCH_* env is absent.
+            waitUntil(
+              (async () => {
+                const { indexVideoAnalysis } = await import('@/lib/search-indexer');
+                await indexVideoAnalysis(videoUrl, analysis);
+              })().catch((err) => {
+                console.warn(`[SearchIndex] Background task failed (non-fatal):`, err);
+              }),
+            );
           };
 
-          if (BACKEND_URL) {
+          if (useBackend && backendUrl) {
             // Strategy 1: Proxy from backend
             try {
-              const response = await fetch(`${BACKEND_URL}/api/v1/transcript-action`, {
+              const response = await fetch(`${backendUrl}/api/v1/transcript-action`, {
                 method: 'POST',
                 headers: backendHeaders(),
                 body: JSON.stringify({ video_url: url, language: 'en' }),
@@ -657,7 +677,7 @@ export async function POST(request: Request) {
 
                   const statusUrl = resolveBackendStatusUrl(
                     transcriptResult.status_url,
-                    BACKEND_URL,
+                    backendUrl,
                   );
                   const job = await pollBackendJob(statusUrl, controller, encoder, deadline);
                   if (job.status === 'failed') {
@@ -767,7 +787,7 @@ export async function POST(request: Request) {
                 data: {
                   totalAgents: 0,
                   completedAgents: 0,
-                  mode: BACKEND_URL ? 'backend-ws' : 'gemini-sse',
+                  mode: streamMode,
                 },
                 timestamp: new Date().toISOString(),
               }),
@@ -786,7 +806,7 @@ export async function POST(request: Request) {
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache',
         Connection: 'keep-alive',
-        'X-Pipeline-Mode': BACKEND_URL ? 'backend-proxy' : 'gemini-direct',
+        'X-Pipeline-Mode': BACKEND_CONFIGURED ? 'backend-proxy' : 'gemini-direct',
       },
     });
   } catch (error) {

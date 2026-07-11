@@ -1,5 +1,10 @@
 # 🎯 EventRelay — AI Video Processing & Event Extraction Platform
 
+> **Operators / agents:** Start at [`CONTROL.md`](CONTROL.md). Live status and the only execution plan live under [`docs/control-plane/`](docs/control-plane/). Stale architecture docs are not authoritative.
+
+
+<!-- ✅ AI agent access verified: write/sync capability confirmed via test task resolution -->
+
 [![CI](https://github.com/groupthinking/EventRelay/actions/workflows/ci.yml/badge.svg)](https://github.com/groupthinking/EventRelay/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 ![Node >= 20](https://img.shields.io/badge/Node-%3E%3D20-green)
@@ -167,9 +172,12 @@ npm --prefix apps/web run lint
 |----------|----------|-------------|
 | `GEMINI_API_KEY` | Yes | Google AI Studio key for Gemini agents |
 | `OPENAI_API_KEY` | Yes | OpenAI key for event extraction, STT, and Realtime voice sessions |
+| `AI_GATEWAY_API_KEY` | No | Vercel AI Gateway key for frontend chat fallback, embeddings, and Veo video generation |
 | `OPENAI_SAFETY_IDENTIFIER` | No | Optional stable end-user or tenant identifier for OpenAI safety monitoring |
 | `BACKEND_URL` | No | Backend URL (default: `http://localhost:8000`) |
 | `YOUTUBE_API_KEY` | No | YouTube Data API for enhanced metadata |
+| `VERCEL_TOKEN` | No | Vercel access token for MCP / deployment automation |
+| `VERCEL_TEAM_ID` | No | Team scope for the Vercel MCP server |
 
 ## Deployment
 
@@ -181,6 +189,11 @@ docker run -p 8000:8000 -e GEMINI_API_KEY=... -e OPENAI_API_KEY=... eventrelay
 # Vercel (frontend)
 vercel deploy --prod
 ```
+
+For AI Gateway fallback and experimental video generation in deployed environments,
+add `AI_GATEWAY_API_KEY` to the Vercel project environment variables (dashboard
+or `vercel env add AI_GATEWAY_API_KEY`). For agent tooling, also configure
+`VERCEL_TOKEN` and `VERCEL_TEAM_ID`. See [docs/vercel-ai-setup.md](docs/vercel-ai-setup.md).
 
 ## Contributing
 
