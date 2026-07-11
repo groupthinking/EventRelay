@@ -105,4 +105,4 @@ const sentryWebpackPluginOptions = {
   disableClientWebpackPlugin: !process.env.SENTRY_AUTH_TOKEN,
 };
 
-module.exports = withSentryConfig(nextConfig, sentryWebpackPluginOptions);
+module.exports = nextConfig;
