@@ -804,8 +804,15 @@ async def video_to_software_v1(
 )
 async def get_cache_stats_v1(cache_service: CacheService = Depends(get_cache_service)):
     """Get cache statistics"""
+    global _stats_cache_time, _stats_cache
     try:
+        now = time.time()
+        if now - _stats_cache_time < _stats_cache_ttl and _stats_cache:
+            return CacheStats(**_stats_cache)
+
         stats = cache_service.get_cache_statistics()
+        _stats_cache = stats
+        _stats_cache_time = now
         return CacheStats(**stats)
     except Exception as e:
         logger.error(f"Error getting cache stats: {e}")
@@ -1272,13 +1279,53 @@ _video_jobs: _TTLDict = _TTLDict(ttl=_JOB_TTL, max_size=_JOB_MAX_SIZE)
 _agent_executions: _TTLDict = _TTLDict(ttl=_JOB_TTL, max_size=_JOB_MAX_SIZE)
 _dispatches: _TTLDict = _TTLDict(ttl=_JOB_TTL, max_size=_JOB_MAX_SIZE)
 
+# Cache for heavy statistics calculations
+_stats_cache: dict[str, Any] = {}
+_stats_cache_time: float = 0
+_stats_cache_ttl: float = 60
+
+
+async def _periodic_cleanup():
+    """Background task to proactively evict expired jobs from in-memory stores."""
+    while True:
+        try:
+            _video_jobs.evict_expired()
+            _agent_executions.evict_expired()
+            _dispatches.evict_expired()
+        except Exception as exc:
+            logger.debug("Periodic cleanup failed: %s", exc)
+        await asyncio.sleep(300)  # Sweep every 5 minutes
+
+
+@router.on_event("startup")
+async def startup_event():
+    """Start background tasks on API startup."""
+    asyncio.create_task(_periodic_cleanup())
+
 
 def _persist_video_job(job: VideoJobStatusResponse) -> None:
+    """Persist job state. Uses a background task for expensive serialization to avoid blocking."""
     _video_jobs[job.job_id] = job
+
+    def _sync_persist():
+        try:
+            # model_dump(mode="json") can be slow for large results (Issue 5)
+            data = job.model_dump(mode="json")
+            get_job_store().save(job.job_id, data)
+        except Exception as exc:
+            logger.warning("Job persist failed for %s: %s", job.job_id, exc)
+
+    # If we are in an async loop, offload serialization and I/O to a thread
     try:
-        get_job_store().save(job.job_id, job.model_dump(mode="json"))
-    except Exception as exc:
-        logger.warning("Job persist failed for %s: %s", job.job_id, exc)
+        loop = asyncio.get_running_loop()
+        if loop.is_running():
+            asyncio.create_task(asyncio.to_thread(_sync_persist))
+            return
+    except RuntimeError:
+        pass
+
+    # Fallback to sync execution if no loop
+    _sync_persist()
 
 
 def _load_video_job(job_id: str) -> Optional[VideoJobStatusResponse]:

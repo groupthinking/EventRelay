@@ -31,6 +31,8 @@ _STUBS = [
     "shared",
     "shared.youtube",
     "uvai",
+    "psutil",
+    "aiohttp",
     "uvai.ml",
     "uvai.ml.client",
     "youtube_extension.services",
@@ -102,6 +104,11 @@ _stub_attr("youtube_extension.services.ai", "HybridProcessorService", _HybridPro
 
 # Provide stub for TranscriptActionWorkflow (only if module is a stub)
 _stub_attr("youtube_extension.services.workflows.transcript_action_workflow", "TranscriptActionWorkflow")
+
+# Stub pipeline_job_store load to return None by default
+_job_store = MagicMock()
+_job_store.load.return_value = None
+_stub_attr("youtube_extension.services.pipeline_job_store", "get_job_store", MagicMock(return_value=_job_store))
 
 # ---------------------------------------------------------------------------
 # Now import the router (it will use the stubs above)
@@ -459,6 +466,10 @@ class TestCacheEndpoints:
             svc = MagicMock()
             svc.get_cache_statistics.side_effect = RuntimeError("db down")
             return svc
+
+        # Clear global cache in the router module to ensure we hit the service
+        router_module._stats_cache = {}
+        router_module._stats_cache_time = 0
 
         app.dependency_overrides[get_cache_service] = _err
         try:
