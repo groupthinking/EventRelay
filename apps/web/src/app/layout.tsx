@@ -1,31 +1,46 @@
 import type { Metadata, Viewport } from 'next';
 import { Analytics } from '@vercel/analytics/next';
 import { SpeedInsights } from '@vercel/speed-insights/next';
+import { Inter, JetBrains_Mono, Space_Grotesk } from 'next/font/google';
 import './globals.css';
+import { StructuredData } from '@/components/StructuredData';
 
-// Font CSS variables are defined via <link> to Google Fonts in <head> and
-// resolved in globals.css / tailwind.config. This avoids next/font/google
-// which hard-fails during build if the Google Fonts API is unreachable
-// (common in sandboxed CI and offline environments).
+const inter = Inter({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-body',
+});
+
+const jetBrainsMono = JetBrains_Mono({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-mono',
+});
+
+const spaceGrotesk = Space_Grotesk({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-heading',
+});
 
 export const metadata: Metadata = {
   title: {
-    default: 'UVAI — Video to Software',
+    default: 'UVAI — Video to Workflow',
     template: '%s | UVAI',
   },
-  description: 'Paste a YouTube URL. AI analyzes the video, extracts technologies and concepts, generates a project scaffold, and deploys it.',
+  description: 'Paste a YouTube URL. UVAI turns video evidence into useful workflows, exports, and deployable next steps.',
   keywords: ['video to software', 'AI video analysis', 'video to code', 'agentic video', 'code generation', 'video API', 'UVAI'],
   authors: [{ name: 'UVAI' }],
   creator: 'UVAI',
   publisher: 'UVAI',
-  metadataBase: new URL('https://v0-uvai.vercel.app'),
+  metadataBase: new URL('https://uvai.io'),
   openGraph: {
     type: 'website',
     locale: 'en_US',
-    url: 'https://v0-uvai.vercel.app',
+    url: 'https://uvai.io',
     siteName: 'UVAI',
-    title: 'UVAI — Video to Software',
-    description: 'Paste a YouTube URL. AI analyzes the video, extracts technologies and concepts, generates a project scaffold, and deploys it.',
+    title: 'UVAI — Video to Workflow',
+    description: 'Paste a YouTube URL. UVAI turns video evidence into useful workflows, exports, and deployable next steps.',
     images: [
       {
         url: '/og-image.png',
@@ -37,8 +52,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'UVAI — Video to Software',
-    description: 'Paste a YouTube URL. AI analyzes the video, extracts technologies and concepts, generates a project scaffold, and deploys it.',
+    title: 'UVAI — Video to Workflow',
+    description: 'Paste a YouTube URL. UVAI turns video evidence into useful workflows, exports, and deployable next steps.',
     images: ['/og-image.png'],
     creator: '@groupthinking',
   },
@@ -55,10 +70,8 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
-      { url: '/favicon.ico' },
       { url: '/icon.svg', type: 'image/svg+xml' },
     ],
-    apple: '/apple-touch-icon.png',
   },
   manifest: '/manifest.json',
 };
@@ -73,6 +86,8 @@ export const viewport: Viewport = {
   maximumScale: 5,
 };
 
+const shouldLoadAnalytics = process.env.VERCEL === '1';
+
 export default function RootLayout({
   children,
 }: {
@@ -81,14 +96,11 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&family=JetBrains+Mono:wght@100..800&family=Space+Grotesk:wght@300..700&display=swap"
-          rel="stylesheet"
-        />
+        <StructuredData />
       </head>
-      <body className="min-h-screen bg-surface-950 font-sans antialiased">
+      <body
+        className={`${inter.variable} ${jetBrainsMono.variable} ${spaceGrotesk.variable} min-h-screen bg-surface-950 font-sans antialiased`}
+      >
         {/* Global background effects */}
         <div className="fixed inset-0 bg-mesh pointer-events-none" />
         <div className="fixed inset-0 noise pointer-events-none" />
@@ -97,8 +109,8 @@ export default function RootLayout({
         <div className="relative z-10">
           {children}
         </div>
-        <Analytics />
-        <SpeedInsights />
+        {shouldLoadAnalytics && <Analytics />}
+        {shouldLoadAnalytics && <SpeedInsights />}
       </body>
     </html>
   );

@@ -8,7 +8,7 @@ with the backend models defined in:
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Optional
 
@@ -67,6 +67,14 @@ class VideoJobStatusResponse(BaseModel):
     transcript: Optional[str] = None
     metadata: Optional[dict[str, Any]] = None
     error: Optional[str] = None
+    error_reason: Optional[str] = Field(
+        None,
+        description="Machine-readable slug describing why a job failed (e.g. 'gemini_api_timeout')",
+    )
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        description="UTC creation timestamp; used by job-store retention (expire_before).",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -158,8 +166,9 @@ class AgentStatusResponse(BaseModel):
 class TranscriptActionRequest(BaseModel):
     """Request body for the /api/v1/transcript-action endpoint."""
 
+    video_url: str = Field(..., description="YouTube video URL to process")
     language: Optional[str] = Field(
-        None,
+        "en",
         description="Optional language code for transcript processing",
     )
     transcript_text: Optional[str] = Field(
@@ -167,7 +176,7 @@ class TranscriptActionRequest(BaseModel):
         description="Raw transcript text to process",
     )
     video_options: Optional[dict[str, Any]] = Field(
-        default_factory=dict,
+        None,
         description="Additional options for video/transcript processing",
     )
 
@@ -176,11 +185,17 @@ class TranscriptActionResponse(BaseModel):
     """Response body from the /api/v1/transcript-action endpoint."""
 
     success: bool
-    metadata: Optional[dict[str, Any]] = None
-    transcript: Optional[dict[str, Any]] = None
-    outputs: Optional[list[dict[str, Any]]] = None
-    errors: Optional[list[str]] = None
-    orchestration_meta: Optional[dict[str, Any]] = None
+    video_url: str
+    metadata: dict[str, Any]
+    transcript: dict[str, Any]
+    outputs: dict[str, Any]
+    errors: list[str] = Field(default_factory=list)
+    orchestration_meta: dict[str, Any]
+    async_processing: bool = False
+    job_id: Optional[str] = None
+    job_status: Optional[JobStatus] = None
+    status_url: Optional[str] = None
+    processing_transport: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------

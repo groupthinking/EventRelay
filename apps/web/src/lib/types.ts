@@ -48,6 +48,10 @@ export interface VideoJobStatusResponse {
   transcript?: string;
   metadata?: Record<string, unknown>;
   error?: string;
+  /** Machine-readable slug describing why a job failed (e.g. 'gemini_api_timeout') */
+  error_reason?: string;
+  /** UTC creation timestamp (ISO 8601); used by job-store retention (expire_before). */
+  created_at: string;
 }
 
 // ── Event Extraction ──
@@ -58,13 +62,17 @@ export interface EventExtractRequest {
   video_url?: string;
 }
 
+// Event Classification Taxonomy: ACTION, TOPIC, CODE, ALERT
+// Legacy types (mention, insight) kept for backward compatibility
 export interface ExtractedEvent {
   id: string;
-  type: 'action' | 'mention' | 'topic' | 'insight';
+  type: 'action' | 'topic' | 'code' | 'alert' | 'mention' | 'insight';
   title: string;
   description?: string;
   timestamp?: string;
   confidence: number;
+  severity?: 'low' | 'medium' | 'high' | 'critical';
+  sourceSegment?: string;
 }
 
 export interface EventExtractResponse {

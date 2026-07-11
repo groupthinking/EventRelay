@@ -22,6 +22,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import sqlite3
 import statistics
 import threading
@@ -284,22 +285,20 @@ class QueryOptimizer:
         # Normalize query for pattern matching
         normalized = query.lower().strip()
         # Remove parameter values for pattern matching
-        import re
 
         normalized = re.sub(r"\b\d+\b", "?", normalized)  # Replace numbers with ?
         normalized = re.sub(r"'[^']*'", "'?'", normalized)  # Replace string literals
 
-        return hashlib.md5(normalized.encode()).hexdigest()
+        return hashlib.sha256(normalized.encode()).hexdigest()
 
     def _get_query_pattern(self, query: str) -> str:
         """Extract query pattern for analysis"""
+
         # Extract the main operation and table(s)
         query_lower = query.lower().strip()
 
         if query_lower.startswith("select"):
             # Extract table names from FROM clause
-            import re
-
             from_match = re.search(r"from\s+(\w+)", query_lower)
             table = from_match.group(1) if from_match else "unknown"
             return f"SELECT from {table}"
@@ -332,7 +331,7 @@ class QueryOptimizer:
 
         # Check query cache first
         if use_cache:
-            cache_key = f"query:{query_hash}:{hashlib.md5(str(params).encode()).hexdigest() if params else 'no_params'}"
+            cache_key = f"query:{query_hash}:{hashlib.sha256(str(params).encode()).hexdigest() if params else 'no_params'}"
             cached_result = await cache_get(cache_key)
 
             if cached_result is not None:
@@ -454,11 +453,14 @@ class QueryOptimizer:
                         f"Batch executed ({batch_time:.2f}ms): {len(group_queries)} {pattern} queries"
                     )
                 else:
-                    # Execute individually
-                    for original_index, query, params in group_queries:
-                        query_result = await self.execute_query(
-                            query, params, use_cache=True
-                        )
+                    # Execute individually concurrently
+                    coroutines = [
+                        self.execute_query(query, params, use_cache=True)
+                        for _, query, params in group_queries
+                    ]
+                    query_results = await asyncio.gather(*coroutines)
+
+                    for (original_index, _, _), query_result in zip(group_queries, query_results):
                         results[original_index] = query_result
 
             total_time = (time.time() - start_time) * 1000
@@ -848,11 +850,52 @@ class DatabaseHealthMonitor:
             }
 
 
+def _parse_pool_size(env_var: str, default: int, max_allowed: int = 200) -> int:
+    """Parse a positive-int pool-size env var, falling back to ``default``.
+
+    Runs at import time, so a malformed value (empty string, non-numeric, or
+    non-positive) must never crash startup — log a warning and use the default.
+    Values above ``max_allowed`` are clamped so a mistyped env var (e.g. an
+    extra zero) can't exhaust the database's connection limit or file
+    descriptors.
+    """
+    raw = os.getenv(env_var, str(default))
+    try:
+        value = int(raw)
+        if value <= 0:
+            raise ValueError(f"{env_var} must be positive, got {value}")
+        if value > max_allowed:
+            logger.warning(
+                "%s=%d exceeds max_allowed=%d; clamping", env_var, value, max_allowed
+            )
+            return max_allowed
+        return value
+    except ValueError as error:
+        logger.warning(
+            "Invalid %s=%r (%s); using default %d", env_var, raw, error, default
+        )
+        return default
+
+
 # Global database optimization system
 # Use /tmp for Cloud Run compatibility (read-only filesystem except /tmp)
 database_url = os.getenv("DATABASE_URL", "sqlite:////tmp/uvai_data/app.db")
+# Connection pool sizing (applied by the PostgreSQL branch; the SQLite default
+# path ignores these). Env-configurable so deployments can tune concurrency
+# without a code change. Defaults: keep a few ready (5), allow bursts (50).
+_min_conn = _parse_pool_size("DB_POOL_MIN_CONNECTIONS", 5)
+_max_conn = _parse_pool_size("DB_POOL_MAX_CONNECTIONS", 50)
+if _min_conn > _max_conn:
+    logger.warning(
+        "DB_POOL_MIN_CONNECTIONS (%d) > DB_POOL_MAX_CONNECTIONS (%d); swapping",
+        _min_conn,
+        _max_conn,
+    )
+    _min_conn, _max_conn = _max_conn, _min_conn
 connection_pool = DatabaseConnectionPool(
-    database_url, min_connections=1, max_connections=10
+    database_url,
+    min_connections=_min_conn,
+    max_connections=_max_conn,
 )
 query_optimizer = QueryOptimizer(connection_pool)
 health_monitor = DatabaseHealthMonitor(query_optimizer)

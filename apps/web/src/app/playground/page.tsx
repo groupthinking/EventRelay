@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import Nav from '@/components/Nav';
 import Footer from '@/components/Footer';
+import VideoGenerator from '@/components/video-generator';
 
 interface APIResponse {
   status: 'success' | 'error' | 'loading' | null;
@@ -130,25 +131,25 @@ export default function APIPlaygroundPage() {
       method: 'POST',
       endpoint: '/api/v1/transcript-action',
       description: 'Analyze a YouTube video — extract transcript, generate insights and actions',
-      realBody: '{"url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"}',
+      realBody: '{"url": "https://www.youtube.com/watch?v=jNQXAC9IVRw"}',
     },
     {
       method: 'POST',
       endpoint: '/api/v1/chat',
       description: 'Chat with the AI about a previously analyzed video',
-      realBody: '{"message": "What are the key takeaways?", "video_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"}',
+      realBody: '{"message": "What are the key takeaways?", "video_url": "https://www.youtube.com/watch?v=jNQXAC9IVRw"}',
     },
     {
       method: 'POST',
       endpoint: '/api/v1/process-video',
       description: 'Basic video processing — metadata and transcript extraction',
-      realBody: '{"url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ", "task": "Summarize this video"}',
+      realBody: '{"url": "https://www.youtube.com/watch?v=jNQXAC9IVRw", "task": "Summarize this video"}',
     },
     {
       method: 'POST',
       endpoint: '/api/v1/process-video-markdown',
       description: 'Process video and return a markdown-formatted learning guide',
-      realBody: '{"url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ", "task": "Create a study guide"}',
+      realBody: '{"url": "https://www.youtube.com/watch?v=jNQXAC9IVRw", "task": "Create a study guide"}',
     },
     {
       method: 'GET',
@@ -339,6 +340,14 @@ response = requests.post(
               </div>
             </div>
           </div>
+        </div>
+
+        {/* Experimental: AI Video Generator */}
+        <div className="mt-10">
+          <h2 className="text-sm font-medium text-white/60 mb-4 uppercase tracking-widest">
+            Experimental Features
+          </h2>
+          <VideoGenerator />
         </div>
       </div>
       <Footer variant="compact" />

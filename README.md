@@ -1,11 +1,16 @@
 # 🎯 EventRelay — AI Video Processing & Event Extraction Platform
 
+> **Operators / agents:** Start at [`CONTROL.md`](CONTROL.md). Live status and the only execution plan live under [`docs/control-plane/`](docs/control-plane/). Stale architecture docs are not authoritative.
+
+
+<!-- ✅ AI agent access verified: write/sync capability confirmed via test task resolution -->
+
 [![CI](https://github.com/groupthinking/EventRelay/actions/workflows/ci.yml/badge.svg)](https://github.com/groupthinking/EventRelay/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 ![Node >= 20](https://img.shields.io/badge/Node-%3E%3D20-green)
 ![Python >= 3.11](https://img.shields.io/badge/Python-%3E%3D3.11-blue)
 
-AI-powered video transcript capture, structured event extraction, and agent execution for YouTube content. Paste a URL → get a word-for-word transcript, typed events, actionable tasks, and AI-driven insights.
+AI-powered video transcript capture, structured event extraction, and agent execution for YouTube content. Paste a URL → get a word-for-word transcript, typed events, actionable tasks, workflow packages, and deployable next steps.
 
 ## Architecture
 
@@ -78,7 +83,7 @@ PYTHONPATH=src python3 -m uvicorn youtube_extension.main:app --port 8000
 cd apps/web && BACKEND_URL=http://localhost:8000 npx next dev --port 3000
 ```
 
-Open http://localhost:3000/dashboard — paste a YouTube URL and watch it process.
+Open http://localhost:3000 — paste a YouTube URL and run the studio workflow. The older dashboard remains available at http://localhost:3000/dashboard.
 
 ## How It Works
 
@@ -87,6 +92,14 @@ Open http://localhost:3000/dashboard — paste a YouTube URL and watch it proces
 3. **Analyze** → 3 Gemini agents run: summary, personality mapping, strategy
 4. **Extract** → OpenAI Responses API returns structured events, actions, topics via strict JSON Schema
 5. **Display** → Dashboard shows everything in tabs: insights, transcript, events, agents
+
+## UVAI Studio + Realtime Voice
+
+The public first screen is `apps/web/src/components/VideoWorkflowStudio.tsx`: a lightweight video-to-workflow studio with YouTube preview, frame proof, outcome chips, workflow progress, safety gating, and result actions for preview/export/deploy/save.
+
+Optional voice input is hidden behind a small toggle. The browser creates an `RTCPeerConnection`, sends microphone audio, receives model audio, and opens an `oai-events` data channel. The server endpoint `POST /api/realtime/session` accepts raw SDP and uses `OPENAI_API_KEY` to post multipart `FormData` fields named `sdp` and `session` to OpenAI `/v1/realtime/calls` with `gpt-realtime-2`. The client registers a sample `check_calendar(date, time)` function tool with `session.update`.
+
+Do not use this app to clone or synthesize a YouTube speaker's voice without explicit consent. Speaker audio should be used for transcript, diarization, tone/context, and source-reference playback only.
 
 ## API Endpoints
 
@@ -99,6 +112,7 @@ Open http://localhost:3000/dashboard — paste a YouTube URL and watch it proces
 | POST | `/api/transcribe` | Transcription with YouTube/OpenAI STT fallback |
 | POST | `/api/chat` | Chat with AI about video content |
 | GET | `/api/dashboard` | Backend health check proxy |
+| POST | `/api/realtime/session` | Realtime 2 WebRTC SDP exchange for optional voice input |
 
 ### Backend Routes (FastAPI)
 
@@ -149,7 +163,7 @@ PYTHONPATH=src python3 -m pytest tests/unit/test_api_v1_models.py -v --override-
 npm run build:web
 
 # Lint
-cd apps/web && npx next lint
+npm --prefix apps/web run lint
 ```
 
 ## Environment Variables
@@ -157,9 +171,13 @@ cd apps/web && npx next lint
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `GEMINI_API_KEY` | Yes | Google AI Studio key for Gemini agents |
-| `OPENAI_API_KEY` | Yes | OpenAI key for event extraction + STT |
+| `OPENAI_API_KEY` | Yes | OpenAI key for event extraction, STT, and Realtime voice sessions |
+| `AI_GATEWAY_API_KEY` | No | Vercel AI Gateway key for frontend chat fallback, embeddings, and Veo video generation |
+| `OPENAI_SAFETY_IDENTIFIER` | No | Optional stable end-user or tenant identifier for OpenAI safety monitoring |
 | `BACKEND_URL` | No | Backend URL (default: `http://localhost:8000`) |
 | `YOUTUBE_API_KEY` | No | YouTube Data API for enhanced metadata |
+| `VERCEL_TOKEN` | No | Vercel access token for MCP / deployment automation |
+| `VERCEL_TEAM_ID` | No | Team scope for the Vercel MCP server |
 
 ## Deployment
 
@@ -171,6 +189,11 @@ docker run -p 8000:8000 -e GEMINI_API_KEY=... -e OPENAI_API_KEY=... eventrelay
 # Vercel (frontend)
 vercel deploy --prod
 ```
+
+For AI Gateway fallback and experimental video generation in deployed environments,
+add `AI_GATEWAY_API_KEY` to the Vercel project environment variables (dashboard
+or `vercel env add AI_GATEWAY_API_KEY`). For agent tooling, also configure
+`VERCEL_TOKEN` and `VERCEL_TEAM_ID`. See [docs/vercel-ai-setup.md](docs/vercel-ai-setup.md).
 
 ## Contributing
 

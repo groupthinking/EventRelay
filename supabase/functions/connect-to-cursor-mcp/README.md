@@ -6,6 +6,14 @@ This edge function implements the Model Context Protocol (MCP) for connecting to
 
 MCP is like a USB-C for AI - it provides a standard protocol for sharing context between models, tools, and applications. It enables structured, seamless context-sharing for smart, dynamic workflows in AI systems.
 
+## Authentication
+
+This function requires a valid Supabase JWT. Every request must include an
+`Authorization: Bearer <token>` header (a user access token from Supabase Auth);
+anonymous requests are rejected with `401`. JWT verification is enforced both by
+the platform (`verify_jwt = true` in `supabase/config.toml`) and re-validated in
+the function code. Do not deploy with `--no-verify-jwt`.
+
 ## Usage
 
 The function expects a POST request with a JSON body containing:
@@ -51,6 +59,7 @@ The function returns a structured MCP context response:
 ```bash
 curl -X POST \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $SUPABASE_USER_JWT" \
   -d '{"modelId": "gpt-4", "context": {"operation": "connect", "parameters": {"foo": "bar"}}}' \
   https://nsfrhirwsjqwhagtuaxx.supabase.co/functions/v1/connect-to-cursor-mcp
 ```

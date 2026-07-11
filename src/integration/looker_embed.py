@@ -20,7 +20,9 @@ class LookerEmbedService:
         # Embed secret from Looker Admin panel
         self.secret = secret or os.getenv("LOOKER_EMBED_SECRET")
         if not self.secret:
-            raise ValueError("Looker embed secret must be provided via constructor or LOOKER_EMBED_SECRET environment variable")
+            raise RuntimeError(
+                "LOOKER_EMBED_SECRET is not set; refusing to use an insecure default."
+            )
 
     def generate_sso_url(self, target_url: str, user_id: str,
                          first_name: str, last_name: str,
@@ -48,12 +50,12 @@ class LookerEmbedService:
             path,
             nonce,
             time_str,
-            session_length,
+            str(session_length),
             user_id,
-            external_group_id,
             json_permissions,
             json_models,
             json_group_ids,
+            external_group_id,
             json_user_attributes
         ])
 

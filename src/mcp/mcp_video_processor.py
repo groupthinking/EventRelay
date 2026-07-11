@@ -674,8 +674,19 @@ class MCPVideoProcessor:
 
         async def _direct_extraction():
             """Direct API extraction with timeout"""
-            transcript = YouTubeTranscriptApi.get_transcript(
-                video_id, languages=["en", "en-US", "en-GB"]
+            # youtube-transcript-api >=1.0 replaced the ``get_transcript`` class
+            # method with an instance ``fetch`` that returns a FetchedTranscript;
+            # ``to_raw_data`` yields the list-of-dicts shape the rest of the
+            # pipeline expects. The call is synchronous/blocking, so run it in an
+            # executor — otherwise it stalls the event loop and defeats the
+            # @timeout_protection / circuit-breaker hanging protection.
+            loop = asyncio.get_event_loop()
+            yt_api = YouTubeTranscriptApi()
+            transcript = await loop.run_in_executor(
+                None,
+                lambda: yt_api.fetch(
+                    video_id, languages=["en", "en-US", "en-GB"]
+                ).to_raw_data(),
             )
             if transcript and len(transcript) > 0:
                 self.mcp_logger.info(
@@ -688,10 +699,21 @@ class MCPVideoProcessor:
 
         async def _routed_extraction():
             """MCP-routed extraction with timeout"""
-            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+            # youtube-transcript-api >=1.0: ``list_transcripts`` class method is
+            # now the instance ``list``; each Transcript's ``fetch`` returns a
+            # FetchedTranscript, so ``to_raw_data`` restores the list-of-dicts.
+            # These are blocking network calls — run them in an executor to keep
+            # the event loop free and let the timeout protection work.
+            loop = asyncio.get_event_loop()
+            yt_api = YouTubeTranscriptApi()
+            transcript_list = await loop.run_in_executor(
+                None, lambda: yt_api.list(video_id)
+            )
             for transcript_item in transcript_list:
                 try:
-                    transcript = transcript_item.fetch()
+                    transcript = await loop.run_in_executor(
+                        None, lambda item=transcript_item: item.fetch().to_raw_data()
+                    )
                     if transcript and len(transcript) > 0:
                         self.mcp_logger.info(
                             "✅ MCP-routed extraction successful",

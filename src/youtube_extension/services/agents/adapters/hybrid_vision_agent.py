@@ -11,7 +11,6 @@ retaining the same interface for callers.
 import asyncio
 import os
 from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional, Union
 
@@ -163,14 +162,10 @@ class HybridVisionAgent(BaseAgent):
         """Handle auxiliary hybrid operations such as caching, batch jobs, and tokens."""
 
         def _failure(message: str) -> AgentResult:
-            processing_time = asyncio.get_event_loop().time() - start_time
             return AgentResult(
-                success=False,
-                data={"action": action},
-                errors=[message],
-                processing_time=processing_time,
-                agent_name=self.name,
-                timestamp=datetime.now()
+                status="error",
+                output={"action": action},
+                logs=[message],
             )
 
         try:
@@ -252,15 +247,12 @@ class HybridVisionAgent(BaseAgent):
                 data_payload["batch_completed"] = result.get("completed")
 
             error_message = result.get("error")
-            errors = [] if success else [error_message or f"{action} failed"]
+            logs = [] if success else [error_message or f"{action} failed"]
 
             return AgentResult(
-                success=success,
-                data=data_payload,
-                errors=errors,
-                processing_time=processing_time,
-                agent_name=self.name,
-                timestamp=datetime.now()
+                status="ok" if success else "error",
+                output=data_payload,
+                logs=logs,
             )
 
         except Exception as exc:
@@ -268,12 +260,9 @@ class HybridVisionAgent(BaseAgent):
             error_msg = f"{action} action failed: {str(exc)}"
             self.logger.error(error_msg, exc_info=True)
             return AgentResult(
-                success=False,
-                data={"action": action},
-                errors=[error_msg],
-                processing_time=processing_time,
-                agent_name=self.name,
-                timestamp=datetime.now()
+                status="error",
+                output={"action": action},
+                logs=[error_msg],
             )
 
     def _safe_get_metrics(self) -> dict[str, Any]:

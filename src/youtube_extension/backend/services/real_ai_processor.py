@@ -161,20 +161,20 @@ class RealAIProcessorService:
                 },
             },
             AIProvider.ANTHROPIC: {
-                "default": "claude-3-5-sonnet-20241022",
+                "default": "claude-opus-4-8",
                 "models": {
-                    "claude-3-5-sonnet-20241022": {
+                    "claude-opus-4-8": {
                         "max_tokens": 8192,
                         "cost_tier": "high",
                     },
-                    "claude-3-haiku-20240307": {"max_tokens": 4096, "cost_tier": "low"},
+                    "claude-haiku-4-5": {"max_tokens": 4096, "cost_tier": "low"},
                 },
             },
             AIProvider.GEMINI: {
-                "default": "gemini-1.5-flash",
+                "default": os.getenv("GEMINI_MODEL", "gemini-3.5-flash"),
                 "models": {
-                    "gemini-1.5-pro": {"max_tokens": 32768, "cost_tier": "high"},
-                    "gemini-1.5-flash": {"max_tokens": 32768, "cost_tier": "low"},
+                    "gemini-3.5-flash": {"max_tokens": 65536, "cost_tier": "low"},
+                    "gemini-2.5-flash": {"max_tokens": 65536, "cost_tier": "low"},
                 },
             },
         }
@@ -484,7 +484,6 @@ Focus on accurate classification for content discovery.
             response = await self.anthropic_client.messages.create(
                 model=model,
                 max_tokens=request.max_tokens or 2048,
-                temperature=request.temperature,
                 messages=[{"role": "user", "content": prompt}],
             )
 
@@ -541,7 +540,7 @@ Focus on accurate classification for content discovery.
 
             return AIProcessingResult(
                 provider="anthropic",
-                model=request.model or "claude-3-5-sonnet-20241022",
+                model=request.model or "claude-opus-4-8",
                 processing_type=request.processing_type.value,
                 result={},
                 tokens_used=0,
@@ -620,7 +619,7 @@ Focus on accurate classification for content discovery.
 
             return AIProcessingResult(
                 provider="gemini",
-                model=request.model or "gemini-1.5-flash",
+                model=request.model or os.getenv("GEMINI_MODEL", "gemini-3.5-flash"),
                 processing_type=request.processing_type.value,
                 result={},
                 tokens_used=0,
@@ -724,8 +723,14 @@ Focus on accurate classification for content discovery.
             # Add transcript if available
             full_text = transcript.get("full_text", "")
             if full_text:
-                # Limit transcript to avoid token limits
-                content_parts.append(f"Transcript: {full_text[:8000]}")
+                # Increase the transcript limit to a safe large context window (120k chars).
+                # This covers ~30k tokens, fitting easily into Gemini 2.0/Flash or GPT-4o.
+                limit = 120_000
+                truncated_text = full_text[:limit]
+                if len(full_text) > limit:
+                    logger.info("Transcript truncated from %d to %d chars for AI analysis", len(full_text), limit)
+                    truncated_text += "\n[... transcript truncated for length ...]"
+                content_parts.append(f"Transcript: {truncated_text}")
 
             combined_content = "\n".join(content_parts)
 

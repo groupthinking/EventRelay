@@ -9,6 +9,8 @@ Handles video information retrieval, learning logs, feedback collection, and dat
 
 import json
 import logging
+import time
+import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
@@ -26,6 +28,7 @@ class DataService:
         self,
         enhanced_analysis_dir: str = "youtube_processed_videos/enhanced_analysis",
         feedback_dir: str = "youtube_processed_videos/feedback",
+        knowledge_dir: str = "youtube_processed_videos/knowledge",
     ):
         """
         Initialize data service.
@@ -33,12 +36,20 @@ class DataService:
         Args:
             enhanced_analysis_dir: Directory for enhanced analysis data
             feedback_dir: Directory for feedback data
+            knowledge_dir: Directory for knowledge-ingest data
         """
         self.enhanced_analysis_dir = Path(enhanced_analysis_dir)
         self.feedback_dir = Path(feedback_dir)
+        self.knowledge_dir = Path(knowledge_dir)
+
+        # Cache for file list (rglob is expensive)
+        self._file_cache: list[tuple[Path, float]] = []
+        self._file_cache_timestamp: float = 0
+        self._file_cache_ttl = 60  # seconds
 
         # Ensure directories exist
         self.feedback_dir.mkdir(parents=True, exist_ok=True)
+        self.knowledge_dir.mkdir(parents=True, exist_ok=True)
 
     def get_learning_log(self) -> list[dict[str, Any]]:
         """
@@ -122,34 +133,85 @@ class DataService:
             logger.error(f"Error building learning log: {e}")
             return []
 
-    def get_videos_summary(self) -> list[dict[str, Any]]:
+    def _get_all_files_cached(self) -> list[tuple[Path, float]]:
+        """Get all enhanced analysis files with caching to avoid repeated rglob."""
+        now = time.time()
+        if now - self._file_cache_timestamp < self._file_cache_ttl:
+            # Return a shallow copy so callers can't mutate the shared cache
+            # (e.g. sort/append) and corrupt it for other readers in the TTL window.
+            return list(self._file_cache)
+
+        try:
+            if not self.enhanced_analysis_dir.exists():
+                return []
+
+            all_files: list[tuple[Path, float]] = []
+            for md_file in self.enhanced_analysis_dir.rglob("*_enhanced.md"):
+                try:
+                    mtime = md_file.stat().st_mtime
+                    all_files.append((md_file, mtime))
+                except OSError:
+                    continue
+
+            # Sort by newest first
+            all_files.sort(key=lambda x: x[1], reverse=True)
+
+            self._file_cache = all_files
+            self._file_cache_timestamp = now
+            return list(all_files)
+        except Exception as e:
+            logger.error(f"Error listing files: {e}")
+            return []
+
+    def count_videos(self) -> int:
+        """Return the total number of processed videos (fast — counts files only)."""
+        return len(self._get_all_files_cached())
+
+    def get_videos_summary(
+        self,
+        limit: Optional[int] = None,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
         """
-        Get summary list of processed videos.
+        Get paginated summary list of processed videos.
+
+        Uses a two-pass approach: the first pass collects only file paths and
+        mtimes (cheap), sorts by newest-first, then the second pass reads
+        metadata JSON only for the requested page — avoiding loading every
+        file's metadata when the collection is large.
+
+        Args:
+            limit: Maximum number of results (``None`` = all).
+            offset: Number of entries to skip (default 0).
 
         Returns:
-            List of video summaries
+            List of video summaries for the requested page.
         """
         try:
-            results = []
-
             if not self.enhanced_analysis_dir.exists():
                 logger.warning(
                     f"Enhanced analysis directory does not exist: {self.enhanced_analysis_dir}"
                 )
-                return results
+                return []
 
-            # Use recursive glob for all enhanced markdown files
-            for md_file in self.enhanced_analysis_dir.rglob("*_enhanced.md"):
+            # ── Pass 1: collect file paths + mtimes (cached) ──────────
+            all_files = self._get_all_files_cached()
+
+            # Apply pagination slice
+            end = offset + limit if limit is not None else len(all_files)
+            page_files = all_files[offset:end]
+
+            # ── Pass 2: read metadata only for the requested page ─────────────
+            results = []
+            for md_file, mtime in page_files:
                 try:
-                    # Extract video ID from filename
                     video_id = md_file.name.split("_")[0]
                     parent_dir = md_file.parent
 
-                    # Find corresponding metadata file in the same directory
                     metadata_file = next(
                         parent_dir.glob(f"{video_id}_*_metadata.json"), None
                     )
-                    metadata = {}
+                    metadata: dict[str, Any] = {}
 
                     if metadata_file and metadata_file.exists():
                         try:
@@ -160,20 +222,14 @@ class DataService:
                                 f"Failed to parse metadata file {metadata_file}: {e}"
                             )
 
-                    # Get file statistics
-                    stat = md_file.stat()
-
-                    # Extract information from metadata
                     title = (
                         metadata.get("title")
                         or metadata.get("snippet", {}).get("title")
                         or f"Video {video_id}"
                     )
-
                     published_at = metadata.get("published_at") or metadata.get(
                         "snippet", {}
                     ).get("publishedAt")
-
                     view_count = metadata.get("view_count") or metadata.get(
                         "statistics", {}
                     ).get("viewCount")
@@ -185,27 +241,20 @@ class DataService:
                             "category": parent_dir.relative_to(
                                 self.enhanced_analysis_dir
                             ).as_posix(),
-                            "timestamp": datetime.fromtimestamp(
-                                stat.st_mtime
-                            ).isoformat(),
+                            "timestamp": datetime.fromtimestamp(mtime).isoformat(),
                             "published_at": published_at,
                             "view_count": view_count,
-                            "last_modified": datetime.fromtimestamp(
-                                stat.st_mtime
-                            ).isoformat(),
+                            "last_modified": datetime.fromtimestamp(mtime).isoformat(),
                             "markdown_path": str(md_file),
                             "metadata_path": (
                                 str(metadata_file) if metadata_file else None
                             ),
                         }
                     )
-
                 except Exception as e:
                     logger.error(f"Error processing summary for {md_file}: {e}")
                     continue
 
-            # Sort by newest first
-            results.sort(key=lambda x: x["timestamp"], reverse=True)
             return results
 
         except Exception as e:
@@ -325,6 +374,39 @@ class DataService:
         except Exception as e:
             logger.error(f"Error saving feedback: {e}")
             return False
+
+    def save_knowledge_entry(
+        self, *, text: str, tags: list[str], source: str | None = None
+    ) -> Optional[dict[str, Any]]:
+        """
+        Save a durable knowledge entry to persistent storage.
+
+        Args:
+            text: Knowledge text payload
+            tags: Normalized tag list
+            source: Optional source identifier
+
+        Returns:
+            Stored entry metadata, or None when persistence fails
+        """
+        try:
+            self.knowledge_dir.mkdir(parents=True, exist_ok=True)
+            entry_id = f"kb_{uuid.uuid4().hex[:16]}"
+            normalized_source = (source or "").strip() or "api:v1:knowledge"
+            entry = {
+                "id": entry_id,
+                "text": text,
+                "tags": tags,
+                "source": normalized_source,
+                "timestamp": datetime.now().isoformat(),
+            }
+            log_file = self.knowledge_dir / "knowledge.jsonl"
+            with open(log_file, "a", encoding="utf-8") as file_handle:
+                file_handle.write(json.dumps(entry) + "\n")
+            return {"id": entry_id, "source": normalized_source, "tags": tags}
+        except Exception as exc:
+            logger.error(f"Error saving knowledge entry: {exc}")
+            return None
 
     def get_feedback_summary(self, limit: int = 100) -> list[dict[str, Any]]:
         """
@@ -447,8 +529,6 @@ class DataService:
             Cleanup summary
         """
         try:
-            import time
-
             cutoff_time = time.time() - (days_old * 24 * 60 * 60)
             cleanup_summary = {
                 "files_removed": 0,

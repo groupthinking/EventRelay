@@ -33,7 +33,10 @@ class LookerEmbeddedService:
         self.looker_host = os.getenv("LOOKER_HOST", "looker.example.com")
         self.looker_secret = os.getenv("LOOKER_EMBED_SECRET")
         if not self.looker_secret:
-            raise ValueError("LOOKER_EMBED_SECRET environment variable is not set")
+            raise RuntimeError(
+                "LOOKER_EMBED_SECRET is not set; refusing to sign embed URLs with an "
+                "insecure hardcoded default. Provide it via your secret manager."
+            )
 
     def _sign_embed_url(self, url: str) -> str:
         """Sign the URL using HMAC-SHA1"""

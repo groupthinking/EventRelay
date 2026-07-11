@@ -42,7 +42,7 @@ dependencies = [
     "pydantic-settings>=2.1.0",
     "httpx>=0.25.0",
     "aiofiles>=23.2.1",
-    "python-multipart>=0.0.6",
+    "python-multipart>=0.0.27",
     "jinja2>=3.1.2",
     "alembic>=1.12.0",
     "sqlalchemy>=2.0.0",
@@ -55,7 +55,7 @@ dependencies = [
     "typer>=0.9.0",
     "click>=8.1.7",
     "pathlib2>=2.3.7",
-    "python-dotenv>=1.0.0",
+    "python-dotenv>=1.2.2",
     "PyYAML>=6.0.0",
     "requests>=2.31.0",
     "Pillow>=10.0.0",
@@ -68,6 +68,7 @@ dependencies = [
     "qrcode[pil]>=7.0",
     "opencv-python>=4.8.0",
     "orjson>=3.9.0",
+    "aiohttp>=3.8.0",
 ]
 
 [project.optional-dependencies]
@@ -77,6 +78,7 @@ dev = [
     "pytest-cov>=4.1.0",
     "pytest-xdist>=3.5.0",
     "pytest-mock>=3.12.0",
+    "pytest-timeout>=2.1.0",
     "black>=23.0.0",
     "isort>=5.12.0",
     "flake8>=6.0.0",
@@ -101,11 +103,10 @@ deploy = [
 ]
 # Video and external API tooling (YouTube processing, downloads, etc.)
 youtube = [
-    "youtube-transcript-api>=0.6.0",
+    "youtube-transcript-api>=1.0.0",
     "google-api-python-client>=2.100.0",
     "google-cloud-speech>=2.26.0",
     "yt-dlp>=2023.7.6",
-    "aiohttp>=3.8.0",
     "asyncio-throttle>=1.0.0",
     "websockets>=12.0",
     "gitpython>=3.1.0",
@@ -130,7 +131,7 @@ ml = [
     "tokenizers>=0.15.0",
     "sentence-transformers>=2.2.0",
     "openai>=1.3.0",
-    "anthropic>=0.7.0",
+    "anthropic>=0.105.0",
     "google-generativeai>=0.3.0",
     "cohere>=4.37.0",
     "numpy>=1.24.0",
@@ -256,14 +257,28 @@ ignore = [
 "tests/**/*" = ["B011"]
 "scripts/**/*" = ["UP015", "F541"]
 
+# Single source of truth for pytest config. (A former top-level pytest.ini
+# silently shadowed this block — pytest prefers pytest.ini — so the two drifted.
+# pytest.ini has been removed and its effective settings folded in here.)
 [tool.pytest.ini_options]
 minversion = "7.4"
-addopts = "-ra -q --strict-markers --strict-config"
+pythonpath = ["src"]
 testpaths = ["tests"]
 python_files = ["test_*.py", "*_test.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 asyncio_mode = "auto"
+addopts = """\
+    -p no:ddtrace \
+    --strict-markers \
+    --strict-config \
+    --verbose \
+    --cov=youtube_extension \
+    --cov-report=html:htmlcov \
+    --cov-report=term-missing \
+    --cov-report=xml \
+    --cov-fail-under=90\
+"""
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: marks tests as integration tests",
@@ -274,17 +289,36 @@ markers = [
     "database: marks tests requiring database (sqlite/postgres)",
     "security: marks security tests",
     "accessibility: marks accessibility tests",
+    "api: marks API endpoint tests",
 ]
+# Kept lenient to match the config that has actually been in force (the old
+# pytest.ini). Do NOT switch the first entry to "error" without a full suite
+# run — thousands of tests pass under these filters today.
 filterwarnings = [
-    "error",
     "ignore::UserWarning",
     "ignore::DeprecationWarning",
     "ignore::PendingDeprecationWarning",
     "ignore::FutureWarning",  # google.generativeai deprecated, migration pending
 ]
+log_cli = true
+log_cli_level = "INFO"
+log_cli_format = "%(asctime)s [%(levelname)8s] %(name)s: %(message)s"
+log_cli_date_format = "%Y-%m-%d %H:%M:%S"
+norecursedirs = [
+    ".git", ".venv", "mcp-env", "archive", "backup_*", "build_extensions",
+    "cursor-expert-mode", "docs", "frontend", "gdrive_results",
+    "gemini_working_results", "grok4_processed_videos", "intelligence_layer",
+    "intelligence_linked", "k8s", "mcp_ecosystem_linked", "mcp_servers",
+    "results", "temp_deploy", "ultimate_results", "workflow_output",
+    "workflow_results", "youtube_processed_videos",
+]
 
 [tool.coverage.run]
-source = ["src/youtube_extension"]
+# Measure by import-package name (resolved via pythonpath=src) so it matches
+# how tests actually import the code. A path here is overridden by the
+# --cov=youtube_extension in pytest.ini anyway; keeping them in sync avoids
+# the "coverage reads 0%" trap caused by naming modules that never import.
+source = ["youtube_extension"]
 omit = [
     "*/tests/*",
     "*/migrations/*",

@@ -1,3 +1,5 @@
+import 'server-only';
+
 /**
  * YouTube metadata fetcher — extracts title, description, chapters,
  * and channel info from YouTube videos without requiring an API key.

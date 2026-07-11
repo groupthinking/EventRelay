@@ -9,6 +9,7 @@ import asyncio
 import json
 import logging
 import os
+import ssl
 import sys
 import time
 from dataclasses import dataclass
@@ -19,6 +20,11 @@ from typing import Any, Optional
 from urllib.parse import parse_qs, urlparse
 
 import aiohttp
+
+try:
+    import certifi
+except ImportError:  # pragma: no cover - optional runtime hardening
+    certifi = None
 
 # Google AI imports - using new google.genai SDK
 try:
@@ -48,12 +54,24 @@ try:
 except ImportError:
     logging.warning("python-dotenv not available")
 
+try:
+    from youtube_extension.utils.proxy import get_proxy_url, redact_proxy_credentials
+except ImportError:  # pragma: no cover - optional when running outside the package
+    def get_proxy_url() -> "str | None":  # type: ignore[misc]
+        return None
+    def redact_proxy_credentials(text: str) -> str:  # type: ignore[misc]
+        return text
+
 # Banned video IDs (memes, inappropriate content, etc.)
 BANNED_VIDEO_IDS = frozenset(
     [
         "dQw4w9WgXcQ",  # Rickroll - not a business/technical video
     ]
 )
+
+DEFAULT_GEMINI_MODEL = os.getenv("GEMINI_VIDEO_MODEL", "models/gemini-3.5-flash")
+COMPAT_GEMINI_MODEL = os.getenv("GEMINI_COMPAT_VIDEO_MODEL", "models/gemini-2.5-flash")
+DEFAULT_VIDEO_URL = os.getenv("GEMINI_DEFAULT_VIDEO_URL", "").strip()
 
 # Configure logging (stdout only for Cloud Run compatibility)
 logging.basicConfig(
@@ -62,6 +80,87 @@ logging.basicConfig(
     handlers=[logging.StreamHandler()],
 )
 logger = logging.getLogger("gemini_master_agent")
+
+
+def get_gemini_api_key() -> Optional[str]:
+    """Prefer the dedicated Gemini key; GOOGLE_API_KEY is often shared/stale."""
+
+    return (
+        os.getenv("GEMINI_API_KEY")
+        or os.getenv("GOOGLE_API_KEY")
+        or os.getenv("GOOGLE_GENERATIVE_AI_API_KEY")
+    )
+
+
+def build_ssl_context() -> ssl.SSLContext:
+    """Create a certificate-validating context for aiohttp on macOS and CI."""
+
+    if certifi:
+        return ssl.create_default_context(cafile=certifi.where())
+    return ssl.create_default_context()
+
+
+def extract_video_id(url: str) -> str:
+    """Extract a YouTube video ID from common URL formats."""
+
+    parsed = urlparse(url.strip())
+    hostname = (parsed.hostname or "").lower()
+
+    if hostname in {"youtube.com", "www.youtube.com", "m.youtube.com"}:
+        if parsed.path == "/watch":
+            return parse_qs(parsed.query).get("v", [""])[0]
+        if parsed.path.startswith(("/embed/", "/shorts/")):
+            return parsed.path.rstrip("/").split("/")[-1]
+
+    if hostname == "youtu.be":
+        return parsed.path.lstrip("/").split("/")[0]
+
+    return url.strip()
+
+
+def normalize_youtube_url(url: str) -> str:
+    """Return a canonical public YouTube watch URL for Gemini video input."""
+
+    video_id = extract_video_id(url)
+    if video_id and video_id != url.strip():
+        return f"https://www.youtube.com/watch?v={video_id}"
+    return url.strip()
+
+
+def is_banned_video_url(video_url: str) -> bool:
+    """Return whether a URL points at a blocked non-business/non-technical video."""
+
+    return extract_video_id(video_url) in BANNED_VIDEO_IDS
+
+
+def build_default_video_prompt(default_video: str | None = None) -> str:
+    """Build the no-argument CLI prompt without surfacing banned examples."""
+
+    candidate = (default_video if default_video is not None else DEFAULT_VIDEO_URL).strip()
+    lines = [
+        "",
+        "Gemini Video Master Agent",
+        "=========================",
+    ]
+
+    if candidate and not is_banned_video_url(candidate):
+        lines.extend(
+            [
+                "No video URL provided.",
+                f"Press [Enter] to process the configured default video: {candidate}",
+                "Or paste a different business or technical YouTube URL.",
+            ]
+        )
+    else:
+        lines.extend(
+            [
+                "No video URL provided.",
+                "Paste a business or technical YouTube URL to process.",
+                "Press [Enter] without a URL to exit.",
+            ]
+        )
+
+    return "\n".join(lines)
 
 
 class TaskType(Enum):
@@ -82,9 +181,9 @@ class TaskType(Enum):
 class AIProvider(Enum):
     """Available AI providers with benchmarking"""
 
-    # Gemini 2.5 Flash - confirmed working for video understanding
-    GEMINI_2_5_FLASH = "models/gemini-2.5-flash"
-    GEMINI_2_0_FLASH = "models/gemini-2.0-flash-exp"
+    # Current Gemini video models. Avoid 1.5/2.0 aliases; they are stale.
+    GEMINI_FLASH = DEFAULT_GEMINI_MODEL
+    GEMINI_COMPAT_FLASH = COMPAT_GEMINI_MODEL
     # External providers
     GROK_4 = "grok-4-0709"
     CLAUDE_3_5_SONNET = "claude-3-5-sonnet-20241022"
@@ -121,9 +220,14 @@ class GeminiVideoMasterAgent:
     """Master agent for video processing using Google AI with agent delegation"""
 
     def __init__(self):
-        self.gemini_api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
+        self.gemini_api_key = get_gemini_api_key()
+        if self.gemini_api_key:
+            os.environ["GOOGLE_API_KEY"] = self.gemini_api_key
+        self.ssl_context = build_ssl_context()
         # Use /tmp for Cloud Run compatibility (read-only root filesystem)
-        self.output_dir = Path("/tmp/gemini_processed_videos")
+        self.output_dir = Path(
+            os.getenv("GEMINI_OUTPUT_DIR", "/tmp/gemini_processed_videos")
+        )
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
         # Initialize Google AI - using new google.genai Client
@@ -145,18 +249,18 @@ class GeminiVideoMasterAgent:
             self.vision_processor = None
             logger.warning(f"⚠️ Vision Processor could not be initialized: {e}")
 
-        # Task delegation - Enforcing Gemini 2.5 Flash for all video operations
+        # Task delegation - Enforcing current Gemini Flash for all video operations
         # Ping-Pong Strategy: Parallel execution for Visual Analysis (Gemini + NVIDIA)
         self.task_delegation = {
-            TaskType.TRANSCRIPTION: AIProvider.GEMINI_2_5_FLASH,
-            TaskType.SUMMARIZATION: AIProvider.GEMINI_2_5_FLASH,
-            TaskType.VISUAL_ANALYSIS: AIProvider.GEMINI_2_5_FLASH,
-            TaskType.ACTION_GENERATION: AIProvider.GEMINI_2_5_FLASH,
-            TaskType.CONTENT_CATEGORIZATION: AIProvider.GEMINI_2_5_FLASH,
-            TaskType.TIMESTAMP_ANALYSIS: AIProvider.GEMINI_2_5_FLASH,
-            TaskType.KEY_INSIGHTS: AIProvider.GEMINI_2_5_FLASH,
-            TaskType.IMPLEMENTATION_PLAN: AIProvider.GEMINI_2_5_FLASH,
-            TaskType.PRECISION_EXTRACTION: AIProvider.GEMINI_2_0_FLASH,
+            TaskType.TRANSCRIPTION: AIProvider.GEMINI_FLASH,
+            TaskType.SUMMARIZATION: AIProvider.GEMINI_FLASH,
+            TaskType.VISUAL_ANALYSIS: AIProvider.GEMINI_FLASH,
+            TaskType.ACTION_GENERATION: AIProvider.GEMINI_FLASH,
+            TaskType.CONTENT_CATEGORIZATION: AIProvider.GEMINI_FLASH,
+            TaskType.TIMESTAMP_ANALYSIS: AIProvider.GEMINI_FLASH,
+            TaskType.KEY_INSIGHTS: AIProvider.GEMINI_FLASH,
+            TaskType.IMPLEMENTATION_PLAN: AIProvider.GEMINI_FLASH,
+            TaskType.PRECISION_EXTRACTION: AIProvider.GEMINI_FLASH,
         }
 
         # Benchmarking results
@@ -164,21 +268,51 @@ class GeminiVideoMasterAgent:
 
         logger.info("🎯 GEMINI VIDEO MASTER AGENT INITIALIZED")
 
+        # Best-effort cleanup registration for any internal clients/sessions
+        try:
+            import atexit
+            atexit.register(self.close)
+        except Exception:
+            pass
+
+    def close(self):
+        """Explicit close for the Gemini client and any held resources (unclosed hygiene)."""
+        try:
+            if getattr(self, 'gemini_client', None) is not None:
+                # google-genai Client may expose transport close in newer sdks
+                client = self.gemini_client
+                for attr in ('close', 'aclose', '_close'):
+                    if hasattr(client, attr):
+                        fn = getattr(client, attr)
+                        try:
+                            if asyncio.iscoroutinefunction(fn):
+                                # schedule if possible; ignore in sync close
+                                pass
+                            else:
+                                fn()
+                        except Exception:
+                            pass
+                        break
+                self.gemini_client = None
+        except Exception:
+            pass
+
+    def __del__(self):
+        try:
+            self.close()
+        except Exception:
+            pass
+
     def extract_video_id(self, url: str) -> str:
         """Extract video ID from YouTube URL"""
-        parsed = urlparse(url)
-        if parsed.hostname in ["youtube.com", "www.youtube.com", "youtu.be"]:
-            if parsed.path == "/watch":
-                return parse_qs(parsed.query)["v"][0]
-            elif parsed.hostname == "youtu.be":
-                return parsed.path[1:]
-        return url
+        return extract_video_id(url)
 
     async def process_video_with_gemini(self, video_url: str) -> dict[str, Any]:
         """Process video using Google AI (Gemini) with task delegation"""
 
         start_time = time.time()
         video_id = self.extract_video_id(video_url)
+        gemini_video_url = normalize_youtube_url(video_url)
 
         logger.info(f"🚀 GEMINI MASTER AGENT PROCESSING: {video_id}")
 
@@ -188,7 +322,9 @@ class GeminiVideoMasterAgent:
             logger.info(f"📋 Created {len(tasks)} tasks for delegation")
 
             # Stage 2: Execute tasks with appropriate AI providers
-            task_results = await self._execute_tasks_with_delegation(tasks, video_url)
+            task_results = await self._execute_tasks_with_delegation(
+                tasks, gemini_video_url
+            )
 
             # Stage 3: Benchmark and compare results
             benchmark_analysis = self._analyze_benchmarks()
@@ -208,6 +344,7 @@ class GeminiVideoMasterAgent:
             result = {
                 "video_id": video_id,
                 "video_url": video_url,
+                "gemini_video_url": gemini_video_url,
                 "task_results": task_results,
                 "benchmark_analysis": benchmark_analysis,
                 "comprehensive_result": comprehensive_result,
@@ -215,12 +352,17 @@ class GeminiVideoMasterAgent:
                 "processing_time": processing_time,
                 "timestamp": datetime.now().isoformat(),
                 "processing_method": "gemini_master_agent",
-                "success": True,
+                "success": save_result["successful_tasks"] > 0,
             }
 
-            logger.info(
-                f"✅ GEMINI MASTER AGENT COMPLETE: {video_id} in {processing_time:.3f}s"
-            )
+            if result["success"]:
+                logger.info(
+                    f"✅ GEMINI MASTER AGENT COMPLETE: {video_id} in {processing_time:.3f}s"
+                )
+            else:
+                logger.error(
+                    f"❌ GEMINI MASTER AGENT COMPLETED WITH 0 SUCCESSFUL TASKS: {video_id}"
+                )
             return result
 
         except Exception as e:
@@ -284,28 +426,51 @@ class GeminiVideoMasterAgent:
         """Execute tasks with appropriate AI provider delegation in PARALLEL"""
 
         coroutines = []
+        gemini_groups: dict[AIProvider, list[tuple[TaskType, str]]] = {}
         logger.info(f"🔄 Starting parallel execution of {len(tasks)} tasks...")
 
         for task_type, prompt in tasks:
             # Get the best AI provider for this task
             provider = self.task_delegation[task_type]
 
-            # Create coroutine for primary task
-            logger.info(f"✨ Scheduled {task_type.value} with {provider.value}")
-            coroutines.append(
-                self._execute_task_with_provider(task_type, prompt, provider, video_url)
-            )
+            if provider in (AIProvider.GEMINI_FLASH, AIProvider.GEMINI_COMPAT_FLASH):
+                logger.info(f"✨ Queued {task_type.value} for Gemini batch")
+                gemini_groups.setdefault(provider, []).append((task_type, prompt))
+            else:
+                logger.info(f"✨ Scheduled {task_type.value} with {provider.value}")
+                coroutines.append(
+                    self._execute_task_with_provider(
+                        task_type, prompt, provider, video_url
+                    )
+                )
 
             # PING PONG: Add parallel NVIDIA task for Visual Analysis
             if task_type == TaskType.VISUAL_ANALYSIS:
-                logger.info(
-                    f"✨ Scheduled {task_type.value} (Parallel) with NVIDIA VILA"
-                )
-                coroutines.append(
-                    self._execute_task_with_provider(
-                        task_type, prompt, AIProvider.NVIDIA_VILA, video_url
+                if (
+                    self.vision_processor
+                    and getattr(self.vision_processor, "nvidia", None)
+                    and self.vision_processor.nvidia.available
+                ):
+                    logger.info(
+                        f"✨ Scheduled {task_type.value} (Parallel) with NVIDIA VILA"
                     )
-                )
+                    coroutines.append(
+                        self._execute_task_with_provider(
+                            task_type, prompt, AIProvider.NVIDIA_VILA, video_url
+                        )
+                    )
+                else:
+                    logger.info("NVIDIA VILA unavailable; skipping optional visual pass")
+
+        for provider, provider_tasks in gemini_groups.items():
+            logger.info(
+                "✨ Scheduled Gemini batch with %s for %d tasks",
+                provider.value,
+                len(provider_tasks),
+            )
+            coroutines.append(
+                self._execute_gemini_task_batch(provider_tasks, video_url, provider)
+            )
 
         # Run all tasks in parallel
         results = await asyncio.gather(*coroutines, return_exceptions=True)
@@ -313,13 +478,412 @@ class GeminiVideoMasterAgent:
         # Process results
         task_results = []
         for res in results:
-            if isinstance(res, TaskResult):
+            if isinstance(res, list):
+                task_results.extend(
+                    item for item in res if isinstance(item, TaskResult)
+                )
+            elif isinstance(res, TaskResult):
                 task_results.append(res)
             elif isinstance(res, Exception):
                 logger.error(f"Task failed during parallel execution: {res}")
                 # We could add a failed TaskResult here for completeness if needed
 
         return task_results
+
+    async def _execute_gemini_task_batch(
+        self,
+        tasks: list[tuple[TaskType, str]],
+        video_url: str,
+        provider: AIProvider,
+    ) -> list[TaskResult]:
+        """Execute multiple Gemini video tasks with one video request."""
+
+        start_time = time.time()
+        prompt = self._build_gemini_batch_prompt(tasks, video_url)
+
+        try:
+            raw_content = await self._execute_with_gemini(
+                prompt,
+                provider,
+                video_url,
+                response_mime_type="application/json",
+            )
+            parsed = await self._parse_or_repair_gemini_batch_response(
+                raw_content,
+                tasks,
+                provider,
+            )
+            processing_time = time.time() - start_time
+            per_task_time = processing_time / max(len(tasks), 1)
+
+            task_results: list[TaskResult] = []
+            for task_type, _ in tasks:
+                content = self._stringify_task_content(parsed.get(task_type.value))
+                if not content:
+                    content = f"Task failed: Gemini batch omitted {task_type.value}"
+                    success = False
+                    quality_score = 0.0
+                else:
+                    success = True
+                    quality_score = self._calculate_quality_score(content, task_type)
+
+                cost_estimate = self._estimate_cost(provider, len(content))
+                benchmark = BenchmarkResult(
+                    provider=provider,
+                    task_type=task_type,
+                    processing_time=per_task_time,
+                    quality_score=quality_score,
+                    cost_estimate=cost_estimate,
+                    success=success,
+                    error_message=None if success else content,
+                )
+                self.benchmark_results.append(benchmark)
+                task_results.append(
+                    TaskResult(
+                        task_type=task_type,
+                        provider=provider,
+                        content=content,
+                        metadata={
+                            "processing_time": per_task_time,
+                            "batch_processing_time": processing_time,
+                            "quality_score": quality_score,
+                            "cost_estimate": cost_estimate,
+                            "batched": True,
+                        },
+                        benchmark=benchmark,
+                    )
+                )
+
+            return task_results
+
+        except Exception as e:
+            processing_time = time.time() - start_time
+            logger.error(f"❌ Gemini batch execution failed: {e}")
+
+            if self._is_youtube_access_error(e):
+                try:
+                    return await self._execute_gemini_text_fallback_batch(
+                        tasks,
+                        video_url,
+                        provider,
+                        str(e),
+                        processing_time,
+                    )
+                except Exception as fallback_error:
+                    logger.error(
+                        "❌ Gemini text fallback failed: %s", fallback_error
+                    )
+                    e = fallback_error
+
+            return [
+                self._failed_task_result(
+                    task_type,
+                    provider,
+                    processing_time / max(len(tasks), 1),
+                    str(e),
+                )
+                for task_type, _ in tasks
+            ]
+
+    async def _execute_gemini_text_fallback_batch(
+        self,
+        tasks: list[tuple[TaskType, str]],
+        video_url: str,
+        provider: AIProvider,
+        video_error: str,
+        previous_processing_time: float,
+    ) -> list[TaskResult]:
+        """Fallback to transcript/metadata context when Gemini cannot fetch video."""
+
+        start_time = time.time()
+        context = await self._build_youtube_text_context(video_url)
+        prompt = self._build_gemini_text_fallback_prompt(
+            tasks,
+            video_url,
+            context,
+            video_error,
+        )
+        raw_content = await self._execute_with_gemini_text(
+            prompt,
+            provider,
+            response_mime_type="application/json",
+        )
+        parsed = await self._parse_or_repair_gemini_batch_response(
+            raw_content,
+            tasks,
+            provider,
+        )
+        processing_time = previous_processing_time + (time.time() - start_time)
+        per_task_time = processing_time / max(len(tasks), 1)
+
+        results: list[TaskResult] = []
+        for task_type, _ in tasks:
+            content = self._stringify_task_content(parsed.get(task_type.value))
+            if not content:
+                content = f"Task failed: Gemini text fallback omitted {task_type.value}"
+                success = False
+                quality_score = 0.0
+            else:
+                success = True
+                quality_score = self._calculate_quality_score(content, task_type)
+
+            cost_estimate = self._estimate_cost(provider, len(content))
+            benchmark = BenchmarkResult(
+                provider=provider,
+                task_type=task_type,
+                processing_time=per_task_time,
+                quality_score=quality_score,
+                cost_estimate=cost_estimate,
+                success=success,
+                error_message=None if success else content,
+            )
+            self.benchmark_results.append(benchmark)
+            results.append(
+                TaskResult(
+                    task_type=task_type,
+                    provider=provider,
+                    content=content,
+                    metadata={
+                        "processing_time": per_task_time,
+                        "quality_score": quality_score,
+                        "cost_estimate": cost_estimate,
+                        "batched": True,
+                        "source": "youtube_text_fallback",
+                        "video_error": video_error,
+                    },
+                    benchmark=benchmark,
+                )
+            )
+
+        return results
+
+    async def _build_youtube_text_context(self, video_url: str) -> str:
+        """Build fallback text context from captions and metadata."""
+
+        video_id = extract_video_id(video_url)
+        context_parts = [f"Video URL: {normalize_youtube_url(video_url)}"]
+
+        try:
+            from src.shared.youtube import fetch_innertube_transcript
+
+            segments = await fetch_innertube_transcript(video_id)
+            transcript = "\n".join(
+                f"[{segment.start:.1f}s] {segment.text}" for segment in segments[:500]
+            )
+            if transcript.strip():
+                context_parts.append("Transcript:\n" + transcript)
+        except Exception as exc:
+            logger.warning("YouTube transcript fallback unavailable: %s", exc)
+
+        try:
+            metadata = await asyncio.to_thread(
+                self._extract_youtube_metadata_with_ytdlp,
+                normalize_youtube_url(video_url),
+            )
+            if metadata:
+                context_parts.append(
+                    "Metadata:\n" + json.dumps(metadata, indent=2, default=str)
+                )
+        except Exception as exc:
+            logger.warning("YouTube metadata fallback unavailable: %s", exc)
+
+        if len(context_parts) == 1:
+            raise RuntimeError("No transcript or metadata available for text fallback")
+
+        return "\n\n".join(context_parts)
+
+    @staticmethod
+    def _extract_youtube_metadata_with_ytdlp(video_url: str) -> dict[str, Any]:
+        import yt_dlp
+
+        proxy_url = get_proxy_url()
+        options: dict[str, Any] = {
+            "quiet": True,
+            "skip_download": True,
+            "extract_flat": False,
+            "noplaylist": True,
+        }
+        if proxy_url:
+            options["proxy"] = proxy_url
+            logger.debug(
+                "yt-dlp metadata extraction using proxy: %s",
+                redact_proxy_credentials(proxy_url),
+            )
+        with yt_dlp.YoutubeDL(options) as ydl:
+            info = ydl.extract_info(video_url, download=False)
+
+        return {
+            "id": info.get("id"),
+            "title": info.get("title"),
+            "channel": info.get("channel") or info.get("uploader"),
+            "duration": info.get("duration"),
+            "description": (info.get("description") or "")[:4000],
+            "categories": info.get("categories"),
+            "tags": (info.get("tags") or [])[:30],
+        }
+
+    @staticmethod
+    def _build_gemini_text_fallback_prompt(
+        tasks: list[tuple[TaskType, str]],
+        video_url: str,
+        context: str,
+        video_error: str,
+    ) -> str:
+        task_lines = "\n".join(
+            f'- "{task_type.value}": {prompt}' for task_type, prompt in tasks
+        )
+        schema_lines = ",\n".join(
+            f'  "{task_type.value}": "string"' for task_type, _ in tasks
+        )
+        return f"""
+Gemini could not access the video file directly.
+Direct video error: {video_error}
+
+Use the transcript and metadata context below to complete every task possible.
+If a task requires visual-only details that are not present in the context, say so
+inside that task's value instead of inventing details.
+
+Video: {video_url}
+
+Context:
+{context}
+
+Tasks:
+{task_lines}
+
+Return ONLY valid JSON with exactly these top-level keys:
+{{
+{schema_lines}
+}}
+""".strip()
+
+    @staticmethod
+    def _is_youtube_access_error(error: Exception) -> bool:
+        message = str(error).lower()
+        markers = (
+            "permission_denied",
+            "does not have permission",
+            "unsupported mime type",
+            "text/html",
+        )
+        return any(marker in message for marker in markers)
+
+    def _failed_task_result(
+        self,
+        task_type: TaskType,
+        provider: AIProvider,
+        processing_time: float,
+        error: str,
+    ) -> TaskResult:
+        benchmark = BenchmarkResult(
+            provider=provider,
+            task_type=task_type,
+            processing_time=processing_time,
+            quality_score=0.0,
+            cost_estimate=0.0,
+            success=False,
+            error_message=error,
+        )
+        self.benchmark_results.append(benchmark)
+        return TaskResult(
+            task_type=task_type,
+            provider=provider,
+            content=f"Task failed: {error}",
+            metadata={"error": error, "processing_time": processing_time},
+            benchmark=benchmark,
+        )
+
+    @staticmethod
+    def _build_gemini_batch_prompt(
+        tasks: list[tuple[TaskType, str]], video_url: str
+    ) -> str:
+        task_lines = "\n".join(
+            f'- "{task_type.value}": {prompt}' for task_type, prompt in tasks
+        )
+        schema_lines = ",\n".join(
+            f'  "{task_type.value}": "string"' for task_type, _ in tasks
+        )
+        return f"""
+Analyze this YouTube video once and complete every task below.
+Video: {video_url}
+
+Tasks:
+{task_lines}
+
+Return ONLY valid JSON with exactly these top-level keys:
+{{
+{schema_lines}
+}}
+
+Each value must be a detailed string. Include timestamps where relevant.
+Keep each value concise enough for stable JSON: no more than 12 bullets or
+roughly 900 words per key. For transcription, provide timestamped salient
+events instead of attempting a full verbatim transcript.
+""".strip()
+
+    async def _parse_or_repair_gemini_batch_response(
+        self,
+        raw_content: str,
+        tasks: list[tuple[TaskType, str]],
+        provider: AIProvider,
+    ) -> dict[str, Any]:
+        """Parse batch JSON, repairing malformed model output if needed."""
+
+        try:
+            return self._parse_gemini_batch_response(raw_content)
+        except json.JSONDecodeError as exc:
+            logger.warning("Gemini batch JSON parse failed, attempting repair: %s", exc)
+            repair_prompt = self._build_gemini_json_repair_prompt(raw_content, tasks)
+            repaired = await self._execute_with_gemini_text(
+                repair_prompt,
+                provider,
+                response_mime_type="application/json",
+            )
+            return self._parse_gemini_batch_response(repaired)
+
+    @staticmethod
+    def _build_gemini_json_repair_prompt(
+        raw_content: str,
+        tasks: list[tuple[TaskType, str]],
+    ) -> str:
+        schema_lines = ",\n".join(
+            f'  "{task_type.value}": "string"' for task_type, _ in tasks
+        )
+        return f"""
+Repair the malformed JSON below into valid compact JSON.
+Return ONLY valid JSON with exactly these top-level keys:
+{{
+{schema_lines}
+}}
+
+Preserve the useful content, but shorten any overlong field enough to make the
+JSON stable. Do not add commentary outside JSON.
+
+Malformed JSON:
+{raw_content[:24000]}
+""".strip()
+
+    @staticmethod
+    def _parse_gemini_batch_response(raw_content: str) -> dict[str, Any]:
+        content = raw_content.strip()
+        if content.startswith("```json"):
+            content = content[len("```json") :].strip()
+        if content.startswith("```"):
+            content = content[len("```") :].strip()
+        if content.endswith("```"):
+            content = content[:-3].strip()
+        parsed = json.loads(content)
+        if not isinstance(parsed, dict):
+            raise ValueError("Gemini batch response must be a JSON object")
+        return parsed
+
+    @staticmethod
+    def _stringify_task_content(value: Any) -> str:
+        if isinstance(value, str):
+            return value.strip()
+        if value is None:
+            return ""
+        return json.dumps(value, indent=2)
 
     async def _execute_task_with_provider(
         self, task_type: TaskType, prompt: str, provider: AIProvider, video_url: str
@@ -330,16 +894,16 @@ class GeminiVideoMasterAgent:
 
         try:
             if provider in [
-                AIProvider.GEMINI_2_5_FLASH,
-                AIProvider.GEMINI_2_0_FLASH,
+                AIProvider.GEMINI_FLASH,
+                AIProvider.GEMINI_COMPAT_FLASH,
             ]:
                 content = await self._execute_with_gemini(prompt, provider, video_url)
             elif provider == AIProvider.GROK_4:
-                content = await self._execute_with_grok4(prompt)
+                content = await self._execute_with_grok4(prompt, video_url)
             elif provider == AIProvider.CLAUDE_3_5_SONNET:
-                content = await self._execute_with_claude(prompt)
+                content = await self._execute_with_claude(prompt, video_url)
             elif provider == AIProvider.GPT_4O:
-                content = await self._execute_with_gpt4o(prompt)
+                content = await self._execute_with_gpt4o(prompt, video_url)
             elif provider == AIProvider.NVIDIA_VILA:
                 content = await self._execute_with_nvidia(prompt, video_url)
             else:
@@ -408,36 +972,181 @@ class GeminiVideoMasterAgent:
         return await self.vision_processor.nvidia.analyze_video_vlm(video_url, prompt)
 
     async def _execute_with_gemini(
-        self, prompt: str, provider: AIProvider, video_url: str
+        self,
+        prompt: str,
+        provider: AIProvider,
+        video_url: str,
+        *,
+        response_mime_type: str | None = None,
     ) -> str:
         """Execute task with Google AI (Gemini) using new google.genai SDK"""
 
         if not self.gemini_client:
             raise Exception("Gemini client not available")
 
-        try:
-            # Use Gemini's video analysis capabilities with new SDK
-            # For video URLs, we use the file_uri in the content parts
-            response = self.gemini_client.models.generate_content(
-                model=provider.value,
-                contents=[
-                    types.Part.from_uri(file_uri=video_url, mime_type="video/*"),
-                    types.Part.from_text(text=prompt),
-                ],
-            )
+        if not video_url or not video_url.strip():
+            raise ValueError("Gemini video URL is required for video analysis")
 
-            return response.text
+        model_candidates = [provider]
+        if provider == AIProvider.GEMINI_FLASH and (
+            AIProvider.GEMINI_COMPAT_FLASH.value != provider.value
+        ):
+            model_candidates.append(AIProvider.GEMINI_COMPAT_FLASH)
 
-        except Exception as e:
-            logger.error(f"❌ Gemini execution failed: {e}")
-            raise
+        errors: list[str] = []
+        for candidate in model_candidates:
+            try:
+                request: dict[str, Any] = {
+                    "model": candidate.value,
+                    "contents": types.Content(
+                        parts=[
+                            types.Part(file_data=types.FileData(file_uri=video_url)),
+                            types.Part(text=prompt),
+                        ]
+                    ),
+                }
 
-    async def _execute_with_grok4(self, prompt: str) -> str:
+                config_kwargs = {
+                    "max_output_tokens": int(
+                        os.getenv("GEMINI_MAX_OUTPUT_TOKENS", "16384")
+                    )
+                }
+                if response_mime_type:
+                    config_kwargs["response_mime_type"] = response_mime_type
+                request["config"] = types.GenerateContentConfig(**config_kwargs)
+
+                response = await asyncio.to_thread(
+                    self.gemini_client.models.generate_content,
+                    **request,
+                )
+
+                content = self._extract_gemini_text(response).strip()
+                if not content:
+                    raise ValueError(
+                        f"Gemini returned empty response for {candidate.value}"
+                    )
+
+                return content
+
+            except Exception as e:
+                error_text = str(e)
+                errors.append(f"{candidate.value}: {error_text}")
+                logger.error(f"❌ Gemini execution failed with {candidate.value}: {e}")
+                if not self._should_try_compat_gemini(e):
+                    raise
+
+        raise RuntimeError("Gemini execution failed for all models: " + " | ".join(errors))
+
+    async def _execute_with_gemini_text(
+        self,
+        prompt: str,
+        provider: AIProvider,
+        *,
+        response_mime_type: str | None = None,
+    ) -> str:
+        """Execute a text-only Gemini request for transcript/metadata fallback."""
+
+        if not self.gemini_client:
+            raise Exception("Gemini client not available")
+
+        model_candidates = [provider]
+        if provider == AIProvider.GEMINI_FLASH and (
+            AIProvider.GEMINI_COMPAT_FLASH.value != provider.value
+        ):
+            model_candidates.append(AIProvider.GEMINI_COMPAT_FLASH)
+
+        errors: list[str] = []
+        for candidate in model_candidates:
+            try:
+                request: dict[str, Any] = {
+                    "model": candidate.value,
+                    "contents": prompt,
+                    "config": self._build_gemini_generation_config(
+                        response_mime_type=response_mime_type
+                    ),
+                }
+                response = await asyncio.to_thread(
+                    self.gemini_client.models.generate_content,
+                    **request,
+                )
+                content = self._extract_gemini_text(response).strip()
+                if not content:
+                    raise ValueError(
+                        f"Gemini returned empty response for {candidate.value}"
+                    )
+                return content
+            except Exception as e:
+                errors.append(f"{candidate.value}: {e}")
+                logger.error(
+                    "❌ Gemini text execution failed with %s: %s",
+                    candidate.value,
+                    e,
+                )
+                if not self._should_try_compat_gemini(e):
+                    raise
+
+        raise RuntimeError(
+            "Gemini text execution failed for all models: " + " | ".join(errors)
+        )
+
+    @staticmethod
+    def _build_gemini_generation_config(
+        response_mime_type: str | None = None,
+    ) -> types.GenerateContentConfig:
+        config_kwargs = {
+            "max_output_tokens": int(os.getenv("GEMINI_MAX_OUTPUT_TOKENS", "16384"))
+        }
+        if response_mime_type:
+            config_kwargs["response_mime_type"] = response_mime_type
+        return types.GenerateContentConfig(**config_kwargs)
+
+    @staticmethod
+    def _extract_gemini_text(response: Any) -> str:
+        """Extract text from google-genai responses without accepting empty parts."""
+
+        text = getattr(response, "text", None)
+        if isinstance(text, str) and text.strip():
+            return text
+
+        parts: list[str] = []
+        for candidate in getattr(response, "candidates", None) or []:
+            content = getattr(candidate, "content", None)
+            for part in getattr(content, "parts", None) or []:
+                part_text = getattr(part, "text", None)
+                if isinstance(part_text, str) and part_text.strip():
+                    parts.append(part_text)
+
+        return "\n".join(parts)
+
+    @staticmethod
+    def _should_try_compat_gemini(error: Exception) -> bool:
+        """Retry with the compatibility Flash model for model/quota surface issues."""
+
+        message = str(error).lower()
+        retry_markers = (
+            "model not found",
+            "not found for api version",
+            "resource_exhausted",
+            "quota",
+            "unsupported",
+        )
+        return any(marker in message for marker in retry_markers)
+
+    def _create_aiohttp_session(self) -> aiohttp.ClientSession:
+        """Create an aiohttp session with certificate validation enabled."""
+
+        connector = aiohttp.TCPConnector(ssl=self.ssl_context)
+        return aiohttp.ClientSession(connector=connector)
+
+    async def _execute_with_grok4(self, prompt: str, video_url: str) -> str:
         """Execute task with GROK4"""
 
         grok_api_key = os.getenv("XAI_API_KEY")
         if not grok_api_key:
-            raise Exception("GROK4 API key not available")
+            logger.warning("XAI_API_KEY not set, falling back to Gemini")
+            return await self._execute_with_gemini(
+                prompt, AIProvider.GEMINI_FLASH, video_url
+            )
 
         try:
             headers = {
@@ -458,7 +1167,7 @@ class GeminiVideoMasterAgent:
                 "temperature": 0.3,
             }
 
-            async with aiohttp.ClientSession() as session:
+            async with self._create_aiohttp_session() as session:
                 async with session.post(
                     "https://api.x.ai/v1/chat/completions",
                     headers=headers,
@@ -470,13 +1179,17 @@ class GeminiVideoMasterAgent:
                         result = await response.json()
                         return result["choices"][0]["message"]["content"]
                     else:
-                        raise Exception(f"GROK4 API error: {response.status}")
+                        raise Exception(
+                            f"GROK4 API error: {response.status}: {await response.text()}"
+                        )
 
         except Exception as e:
             logger.error(f"❌ GROK4 execution failed: {e}")
-            raise
+            return await self._execute_with_gemini(
+                prompt, AIProvider.GEMINI_FLASH, video_url
+            )
 
-    async def _execute_with_claude(self, prompt: str) -> str:
+    async def _execute_with_claude(self, prompt: str, video_url: str) -> str:
         """Execute task with Claude API"""
         if os.getenv("USE_PLACEHOLDER_PROVIDERS", "false").lower() == "true":
             logger.warning("Using placeholder Claude implementation")
@@ -486,7 +1199,7 @@ class GeminiVideoMasterAgent:
         if not claude_api_key:
             logger.warning("ANTHROPIC_API_KEY not set, falling back to Gemini")
             return await self._execute_with_gemini(
-                prompt, AIProvider.GEMINI_2_5_FLASH, ""
+                prompt, AIProvider.GEMINI_FLASH, video_url
             )
 
         try:
@@ -503,7 +1216,7 @@ class GeminiVideoMasterAgent:
                 "temperature": 0.3,
             }
 
-            async with aiohttp.ClientSession() as session:
+            async with self._create_aiohttp_session() as session:
                 async with session.post(
                     "https://api.anthropic.com/v1/messages",
                     headers=headers,
@@ -513,21 +1226,24 @@ class GeminiVideoMasterAgent:
                         data = await response.json()
                         return data["content"][0]["text"]
                     else:
-                        error_msg = f"Claude API error: {response.status}"
+                        error_msg = (
+                            f"Claude API error: {response.status}: "
+                            f"{await response.text()}"
+                        )
                         logger.error(error_msg)
                         # Fallback to Gemini
                         return await self._execute_with_gemini(
-                            prompt, AIProvider.GEMINI_2_5_FLASH, ""
+                            prompt, AIProvider.GEMINI_FLASH, video_url
                         )
 
         except Exception as e:
             logger.error(f"Claude execution failed: {e}")
             # Fallback to Gemini
             return await self._execute_with_gemini(
-                prompt, AIProvider.GEMINI_2_5_FLASH, ""
+                prompt, AIProvider.GEMINI_FLASH, video_url
             )
 
-    async def _execute_with_gpt4o(self, prompt: str) -> str:
+    async def _execute_with_gpt4o(self, prompt: str, video_url: str) -> str:
         """Execute task with GPT-4o API"""
         if os.getenv("USE_PLACEHOLDER_PROVIDERS", "false").lower() == "true":
             logger.warning("Using placeholder GPT-4o implementation")
@@ -537,7 +1253,7 @@ class GeminiVideoMasterAgent:
         if not openai_api_key:
             logger.warning("OPENAI_API_KEY not set, falling back to Gemini")
             return await self._execute_with_gemini(
-                prompt, AIProvider.GEMINI_2_5_FLASH, ""
+                prompt, AIProvider.GEMINI_FLASH, video_url
             )
 
         try:
@@ -553,7 +1269,7 @@ class GeminiVideoMasterAgent:
                 "max_tokens": 4096,
             }
 
-            async with aiohttp.ClientSession() as session:
+            async with self._create_aiohttp_session() as session:
                 async with session.post(
                     "https://api.openai.com/v1/chat/completions",
                     headers=headers,
@@ -563,18 +1279,21 @@ class GeminiVideoMasterAgent:
                         data = await response.json()
                         return data["choices"][0]["message"]["content"]
                     else:
-                        error_msg = f"OpenAI API error: {response.status}"
+                        error_msg = (
+                            f"OpenAI API error: {response.status}: "
+                            f"{await response.text()}"
+                        )
                         logger.error(error_msg)
                         # Fallback to Gemini
                         return await self._execute_with_gemini(
-                            prompt, AIProvider.GEMINI_2_5_FLASH, ""
+                            prompt, AIProvider.GEMINI_FLASH, video_url
                         )
 
         except Exception as e:
             logger.error(f"GPT-4o execution failed: {e}")
             # Fallback to Gemini
             return await self._execute_with_gemini(
-                prompt, AIProvider.GEMINI_2_5_FLASH, ""
+                prompt, AIProvider.GEMINI_FLASH, video_url
             )
 
     def _calculate_quality_score(self, content: str, task_type: TaskType) -> float:
@@ -616,8 +1335,8 @@ class GeminiVideoMasterAgent:
 
         # Simplified cost estimation (tokens per 1K characters)
         costs = {
-            AIProvider.GEMINI_2_5_FLASH: 0.00015,
-            AIProvider.GEMINI_2_0_FLASH: 0.00010,
+            AIProvider.GEMINI_FLASH: 0.00015,
+            AIProvider.GEMINI_COMPAT_FLASH: 0.00015,
             AIProvider.GROK_4: 0.00025,
             AIProvider.CLAUDE_3_5_SONNET: 0.00030,
             AIProvider.GPT_4O: 0.00040,
@@ -816,39 +1535,33 @@ class GeminiVideoMasterAgent:
 async def main():
     """Main execution function"""
 
-    video_url = None
-    default_video = (
-        "https://www.youtube.com/watch?v=FHOujnBfwvk"  # Google DeepMind: Gemini 1.5 Pro
-    )
-
     if len(sys.argv) > 1:
         video_url = sys.argv[1]
     else:
-        print("\n🎥 Gemini Video Master Agent")
-        print("===========================")
-        print(f"No video URL provided. Using default technical video:\n{default_video}")
-        print("---------------------------")
-        choice = input(
-            "Press [Enter] to process default, or paste a YouTube URL: "
-        ).strip()
+        print(build_default_video_prompt())
+        if not sys.stdin.isatty():
+            print("Run again with: python src/agents/gemini_video_master_agent.py <YouTube URL>")
+            sys.exit(2)
+
+        try:
+            choice = input("> ").strip()
+        except EOFError:
+            print("No video URL supplied.")
+            sys.exit(2)
 
         if choice:
             video_url = choice
+        elif DEFAULT_VIDEO_URL and not is_banned_video_url(DEFAULT_VIDEO_URL):
+            video_url = DEFAULT_VIDEO_URL
         else:
-            video_url = default_video
+            print("No video URL supplied.")
+            sys.exit(0)
 
     # Check for banned video IDs
-    from urllib.parse import parse_qs, urlparse
+    video_id = extract_video_id(video_url)
 
-    parsed = urlparse(video_url)
-    video_id = None
-    if parsed.hostname in ("youtube.com", "www.youtube.com"):
-        video_id = parse_qs(parsed.query).get("v", [None])[0]
-    elif parsed.hostname == "youtu.be":
-        video_id = parsed.path.lstrip("/")
-
-    if video_id and video_id in BANNED_VIDEO_IDS:
-        print(f"❌ Video ID '{video_id}' is banned (meme/non-business content)")
+    if video_id in BANNED_VIDEO_IDS:
+        print("❌ This video is blocked because it is meme/non-business content.")
         print("   Please use a business or technical video for analysis.")
         sys.exit(1)
 
@@ -894,7 +1607,10 @@ async def main():
                     f"   {task_name}: {task_data['provider']} (Quality: {task_data['quality_score']:.2f})"
                 )
         else:
-            print(f"❌ PROCESSING FAILED: {result['error']}")
+            print(
+                "❌ PROCESSING FAILED: "
+                f"{result.get('error', 'No tasks completed successfully')}"
+            )
             sys.exit(1)
 
         return result

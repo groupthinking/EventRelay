@@ -9,13 +9,22 @@ Provides data validation and serialization for all API endpoints.
 
 import re
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Generic, Optional, TypeVar, Union
 
 from pydantic import BaseModel, ConfigDict, Field, validator
 
 T = TypeVar("T")
+
+# Anchored YouTube-host allowlist. Shared so every video_url field enforces the
+# same host restriction — an arbitrary host (e.g. http://169.254.169.254/<11ch>)
+# or a leading-dash token (--config-locations=...) must NOT reach the yt-dlp /
+# pytube fetch layer. See adversarial audit: unvalidated video_url → SSRF + CWE-88
+# argument injection.
+_YOUTUBE_URL_REGEX = re.compile(
+    r"^(https?://)?(www\.)?(youtube\.com/watch\?v=|youtu\.be/|youtube\.com/embed/|youtube\.com/shorts/)[a-zA-Z0-9_-]{11}"
+)
 
 
 # ============ Standardized API Response Wrapper ============
@@ -26,7 +35,9 @@ class ApiResponse(BaseModel, Generic[T]):
 
     status: str = Field(..., description="'success' or 'error'")
     data: Optional[T] = Field(None, description="Response payload")
-    error: Optional[str] = Field(None, description="Error message (when status='error')")
+    error: Optional[str] = Field(
+        None, description="Error message (when status='error')"
+    )
     detail: Optional[str] = Field(None, description="Additional error detail")
     timestamp: datetime = Field(default_factory=datetime.utcnow)
     request_id: str = Field(default_factory=lambda: f"req_{uuid.uuid4().hex[:12]}")
@@ -97,6 +108,14 @@ class VideoJobStatusResponse(BaseModel):
     transcript: Optional[str] = None
     metadata: Optional[dict[str, Any]] = None
     error: Optional[str] = None
+    error_reason: Optional[str] = Field(
+        None,
+        description="Machine-readable slug describing why a job failed (e.g. 'gemini_api_timeout')",
+    )
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        description="UTC creation timestamp; used by job-store retention (expire_before).",
+    )
 
 
 # ============ Event Extraction ============
@@ -137,7 +156,10 @@ class AgentDispatchRequest(BaseModel):
 
     job_id: Optional[str] = None
     events: list[dict[str, Any]] = Field(default_factory=list)
-    transcript: Optional[str] = Field(None, description="Transcript text — events will be auto-extracted if events list is empty")
+    transcript: Optional[str] = Field(
+        None,
+        description="Transcript text — events will be auto-extracted if events list is empty",
+    )
     agent_types: Optional[list[str]] = Field(
         None, description="Specific agent types to dispatch"
     )
@@ -185,12 +207,22 @@ class ChatRequest(BaseModel):
     session_id: Optional[str] = Field("default", description="Session identifier")
     history: Optional[list[dict[str, str]]] = Field(None, description="Chat history")
 
+    @validator("video_url")
+    def validate_video_url(cls, value: Optional[str]) -> Optional[str]:
+        # Optional field: allow None, but any provided URL must be a real
+        # YouTube host — blocks SSRF / yt-dlp arg-injection via /api/v1/chat.
+        if value is None:
+            return value
+        if not _YOUTUBE_URL_REGEX.match(value):
+            raise ValueError("Invalid YouTube URL format")
+        return value
+
     class Config:
         populate_by_name = True
         json_schema_extra = {
             "example": {
                 "query": "How can I process a YouTube video?",
-                "video_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+                "video_url": "https://www.youtube.com/watch?v=jNQXAC9IVRw",
                 "context": "tooltip-assistant",
                 "session_id": "user123",
             }
@@ -596,6 +628,14 @@ class TranscriptActionRequest(BaseModel):
         description="Optional Gemini video metadata controls (clip window, fps, resolution)",
     )
 
+    @validator("video_url")
+    def validate_video_url(cls, value: str) -> str:
+        # Anchored YouTube-host allowlist — blocks SSRF / yt-dlp arg-injection
+        # via arbitrary hosts. Matches the sibling video request models.
+        if not _YOUTUBE_URL_REGEX.match(value):
+            raise ValueError("Invalid YouTube URL format")
+        return value
+
 
 class TranscriptActionResponse(BaseModel):
     """Response model for transcript-to-action workflow"""
@@ -612,6 +652,30 @@ class TranscriptActionResponse(BaseModel):
     job_status: Optional[JobStatus] = None
     status_url: Optional[str] = None
     processing_transport: Optional[str] = None
+
+
+class KnowledgeIngestRequest(BaseModel):
+    """Request model for knowledge ingest."""
+
+    text: str = Field(
+        ..., description="Non-empty transcript-derived insight or durable fact"
+    )
+    tags: Optional[Any] = Field(
+        default=None, description="Optional topic tags; normalized server-side"
+    )
+    source: Optional[str] = Field(
+        default=None, description="Optional source identifier (job id, video id, etc.)"
+    )
+
+
+class KnowledgeIngestResponse(BaseModel):
+    """Response model for knowledge ingest."""
+
+    stored: bool = Field(..., description="True when persisted successfully")
+    id: str = Field(..., description="Stored knowledge entry identifier")
+    source: str = Field(..., description="Source identifier attached to this entry")
+    tags: list[str] = Field(default_factory=list, description="Normalized topic tags")
+    message: str = Field(..., description="Human-readable storage result")
 
 
 class FeedbackRequest(BaseModel):

@@ -69,7 +69,7 @@ Below are examples of how to use the `jobs` connector's generated functions to e
 ## getJob
 You can execute the `getJob` query using the following action shortcut function, or by calling `executeQuery()` after calling the following `QueryRef` function, both of which are defined in [dataconnect-generated/index.d.ts](./index.d.ts):
 ```typescript
-getJob(vars: GetJobVariables): QueryPromise<GetJobData, GetJobVariables>;
+getJob(vars: GetJobVariables, options?: ExecuteQueryOptions): QueryPromise<GetJobData, GetJobVariables>;
 
 interface GetJobRef {
   ...
@@ -80,7 +80,7 @@ export const getJobRef: GetJobRef;
 ```
 You can also pass in a `DataConnect` instance to the action shortcut function or `QueryRef` function.
 ```typescript
-getJob(dc: DataConnect, vars: GetJobVariables): QueryPromise<GetJobData, GetJobVariables>;
+getJob(dc: DataConnect, vars: GetJobVariables, options?: ExecuteQueryOptions): QueryPromise<GetJobData, GetJobVariables>;
 
 interface GetJobRef {
   ...
@@ -190,7 +190,7 @@ executeQuery(ref).then((response) => {
 ## listJobs
 You can execute the `listJobs` query using the following action shortcut function, or by calling `executeQuery()` after calling the following `QueryRef` function, both of which are defined in [dataconnect-generated/index.d.ts](./index.d.ts):
 ```typescript
-listJobs(vars?: ListJobsVariables): QueryPromise<ListJobsData, ListJobsVariables>;
+listJobs(vars?: ListJobsVariables, options?: ExecuteQueryOptions): QueryPromise<ListJobsData, ListJobsVariables>;
 
 interface ListJobsRef {
   ...
@@ -201,7 +201,7 @@ export const listJobsRef: ListJobsRef;
 ```
 You can also pass in a `DataConnect` instance to the action shortcut function or `QueryRef` function.
 ```typescript
-listJobs(dc: DataConnect, vars?: ListJobsVariables): QueryPromise<ListJobsData, ListJobsVariables>;
+listJobs(dc: DataConnect, vars?: ListJobsVariables, options?: ExecuteQueryOptions): QueryPromise<ListJobsData, ListJobsVariables>;
 
 interface ListJobsRef {
   ...
@@ -312,7 +312,7 @@ executeQuery(ref).then((response) => {
 ## getJobEvents
 You can execute the `getJobEvents` query using the following action shortcut function, or by calling `executeQuery()` after calling the following `QueryRef` function, both of which are defined in [dataconnect-generated/index.d.ts](./index.d.ts):
 ```typescript
-getJobEvents(vars: GetJobEventsVariables): QueryPromise<GetJobEventsData, GetJobEventsVariables>;
+getJobEvents(vars: GetJobEventsVariables, options?: ExecuteQueryOptions): QueryPromise<GetJobEventsData, GetJobEventsVariables>;
 
 interface GetJobEventsRef {
   ...
@@ -323,7 +323,7 @@ export const getJobEventsRef: GetJobEventsRef;
 ```
 You can also pass in a `DataConnect` instance to the action shortcut function or `QueryRef` function.
 ```typescript
-getJobEvents(dc: DataConnect, vars: GetJobEventsVariables): QueryPromise<GetJobEventsData, GetJobEventsVariables>;
+getJobEvents(dc: DataConnect, vars: GetJobEventsVariables, options?: ExecuteQueryOptions): QueryPromise<GetJobEventsData, GetJobEventsVariables>;
 
 interface GetJobEventsRef {
   ...
@@ -427,7 +427,7 @@ executeQuery(ref).then((response) => {
 ## listEmbeddings
 You can execute the `listEmbeddings` query using the following action shortcut function, or by calling `executeQuery()` after calling the following `QueryRef` function, both of which are defined in [dataconnect-generated/index.d.ts](./index.d.ts):
 ```typescript
-listEmbeddings(vars?: ListEmbeddingsVariables): QueryPromise<ListEmbeddingsData, ListEmbeddingsVariables>;
+listEmbeddings(vars?: ListEmbeddingsVariables, options?: ExecuteQueryOptions): QueryPromise<ListEmbeddingsData, ListEmbeddingsVariables>;
 
 interface ListEmbeddingsRef {
   ...
@@ -438,7 +438,7 @@ export const listEmbeddingsRef: ListEmbeddingsRef;
 ```
 You can also pass in a `DataConnect` instance to the action shortcut function or `QueryRef` function.
 ```typescript
-listEmbeddings(dc: DataConnect, vars?: ListEmbeddingsVariables): QueryPromise<ListEmbeddingsData, ListEmbeddingsVariables>;
+listEmbeddings(dc: DataConnect, vars?: ListEmbeddingsVariables, options?: ExecuteQueryOptions): QueryPromise<ListEmbeddingsData, ListEmbeddingsVariables>;
 
 interface ListEmbeddingsRef {
   ...
@@ -550,7 +550,7 @@ executeQuery(ref).then((response) => {
 ## getJobEmbeddings
 You can execute the `getJobEmbeddings` query using the following action shortcut function, or by calling `executeQuery()` after calling the following `QueryRef` function, both of which are defined in [dataconnect-generated/index.d.ts](./index.d.ts):
 ```typescript
-getJobEmbeddings(vars: GetJobEmbeddingsVariables): QueryPromise<GetJobEmbeddingsData, GetJobEmbeddingsVariables>;
+getJobEmbeddings(vars: GetJobEmbeddingsVariables, options?: ExecuteQueryOptions): QueryPromise<GetJobEmbeddingsData, GetJobEmbeddingsVariables>;
 
 interface GetJobEmbeddingsRef {
   ...
@@ -561,7 +561,7 @@ export const getJobEmbeddingsRef: GetJobEmbeddingsRef;
 ```
 You can also pass in a `DataConnect` instance to the action shortcut function or `QueryRef` function.
 ```typescript
-getJobEmbeddings(dc: DataConnect, vars: GetJobEmbeddingsVariables): QueryPromise<GetJobEmbeddingsData, GetJobEmbeddingsVariables>;
+getJobEmbeddings(dc: DataConnect, vars: GetJobEmbeddingsVariables, options?: ExecuteQueryOptions): QueryPromise<GetJobEmbeddingsData, GetJobEmbeddingsVariables>;
 
 interface GetJobEmbeddingsRef {
   ...

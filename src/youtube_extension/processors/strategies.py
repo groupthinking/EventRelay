@@ -204,7 +204,7 @@ class OptimizedStrategy(ProcessorStrategy):
         Process video with all optimizations enabled
         """
         start_time = time.time()
-        processing_id = hashlib.md5(f"{video_url}_{time.time()}".encode()).hexdigest()[
+        processing_id = hashlib.sha256(f"{video_url}_{time.time()}".encode()).hexdigest()[
             :8
         ]
 
@@ -214,7 +214,7 @@ class OptimizedStrategy(ProcessorStrategy):
 
         try:
             # Check cache first
-            cache_key = f"optimized_video:{hashlib.md5(video_url.encode()).hexdigest()}"
+            cache_key = f"optimized_video:{hashlib.sha256(video_url.encode()).hexdigest()}"
             cached_result = await cache_get(cache_key)
 
             if cached_result and self.config.get("enable_intelligent_caching", True):
@@ -287,7 +287,7 @@ class ParallelStrategy(ProcessorStrategy):
                 self._enhanced_strategy = EnhancedStrategy(self.config)
 
             start_time = time.time()
-            processing_id = hashlib.md5(
+            processing_id = hashlib.sha256(
                 f"{video_url}_{time.time()}".encode()
             ).hexdigest()[:8]
 
@@ -375,20 +375,32 @@ class EnhancedStrategy(ProcessorStrategy):
     def __init__(self, config: Optional[dict[str, Any]] = None):
         self.config = config or {}
         if HAS_VIDEO_DEPS:
-            self.video_client = videointelligence.VideoIntelligenceServiceClient()
+            try:
+                self.video_client = videointelligence.VideoIntelligenceServiceClient()
+            except Exception as e:  # broad catch: covers DefaultCredentialsError, TransportError, etc.
+                logger.warning(
+                    f"Could not initialize VideoIntelligenceServiceClient: "
+                    f"{type(e).__name__}: {e}"
+                )
+                self.video_client = None
         if HAS_AI_DEPS and genai:
             gemini_api_key = self.config.get("gemini_api_key") or os.getenv(
                 "GEMINI_API_KEY"
             )
-            if not gemini_api_key:
-                raise ValueError("Gemini API key is not configured.")
-            self.gemini_client = genai.Client(api_key=gemini_api_key)
+            if gemini_api_key:
+                self.gemini_client = genai.Client(api_key=gemini_api_key)
+            else:
+                logger.warning(
+                    "Gemini API key not configured; AI analysis will be unavailable."
+                )
+                self.gemini_client = None
 
     async def process_video(
         self, video_url: str, options: dict[str, Any] = None
     ) -> dict[str, Any]:
         """Complete video processing pipeline"""
         start_time = time.time()
+        video_id = None
 
         try:
             # Extract video ID
@@ -450,7 +462,7 @@ class EnhancedStrategy(ProcessorStrategy):
 
     async def extract_video_metadata(self, video_id: str) -> VideoMetadata:
         """Extract comprehensive video metadata using Vertex AI"""
-        if not HAS_VIDEO_DEPS:
+        if not HAS_VIDEO_DEPS or self.video_client is None:
             raise ValueError("Video dependencies not available")
 
         video_uri = f"gs://youtube_videos/{video_id}.mp4"  # Assuming videos are in GCS
@@ -500,7 +512,7 @@ class EnhancedStrategy(ProcessorStrategy):
         self, video_id: str, languages: list[str] = None
     ) -> list[TranscriptSegment]:
         """Extract transcript using Vertex AI Video Intelligence"""
-        if not HAS_VIDEO_DEPS:
+        if not HAS_VIDEO_DEPS or self.video_client is None:
             raise ValueError("Video dependencies not available")
 
         video_uri = f"gs://youtube_videos/{video_id}.mp4"  # Assuming videos are in GCS
@@ -562,7 +574,7 @@ class EnhancedStrategy(ProcessorStrategy):
 
         try:
             response = self.gemini_client.models.generate_content(
-                model="models/gemini-2.0-flash",
+                model=os.getenv("GEMINI_VIDEO_MODEL", "models/gemini-3.5-flash"),
                 contents=prompt,
             )
             return json.loads(response.text)

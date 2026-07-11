@@ -12,7 +12,7 @@ You can process videos with Gemini API for enhanced video understanding **right 
 
 ```bash
 # Set API key
-export GEMINI_API_KEY="AIzaSyDu5GN_IxRFg3Ue8SYXSNWkZi-50pwDgS0"
+export GEMINI_API_KEY="REDACTED_GOOGLE_API_KEY_ROTATE"
 
 # Process video (analysis only, no deployment)
 python3 universal_coordinator.py "https://youtu.be/YOUR_VIDEO" --mode gemini --no-deploy
@@ -55,7 +55,7 @@ python3 universal_coordinator.py "https://youtu.be/YOUR_VIDEO" --mode gemini --n
 
 ```bash
 # 1. Set environment variable
-export GEMINI_API_KEY="AIzaSyDu5GN_IxRFg3Ue8SYXSNWkZi-50pwDgS0"
+export GEMINI_API_KEY="REDACTED_GOOGLE_API_KEY_ROTATE"
 
 # 2. Test with a recent programming tutorial video
 python3 universal_coordinator.py "https://youtu.be/SHORT_VIDEO" --mode gemini --no-deploy
@@ -88,7 +88,7 @@ pip3 install transformers torch
 
 **Step 2: Set Environment Variables**
 ```bash
-export GEMINI_API_KEY="AIzaSyDu5GN_IxRFg3Ue8SYXSNWkZi-50pwDgS0"
+export GEMINI_API_KEY="REDACTED_GOOGLE_API_KEY_ROTATE"
 export GITHUB_TOKEN="your-github-token-here"
 ```
 
@@ -171,7 +171,7 @@ Find a **recent programming tutorial** (last 5 days) from YouTube. Examples:
 ### Example 1: Quick Video Analysis (Gemini Only)
 
 ```bash
-export GEMINI_API_KEY="AIzaSyDu5GN_IxRFg3Ue8SYXSNWkZi-50pwDgS0"
+export GEMINI_API_KEY="REDACTED_GOOGLE_API_KEY_ROTATE"
 
 python3 universal_coordinator.py \
   "https://youtu.be/programming-tutorial" \
@@ -184,7 +184,7 @@ python3 universal_coordinator.py \
 ### Example 2: Full Production Pipeline (When Dependencies Fixed)
 
 ```bash
-export GEMINI_API_KEY="AIzaSyDu5GN_IxRFg3Ue8SYXSNWkZi-50pwDgS0"
+export GEMINI_API_KEY="REDACTED_GOOGLE_API_KEY_ROTATE"
 export GITHUB_TOKEN="ghp_your_token_here"
 
 python3 universal_coordinator.py \
@@ -230,7 +230,7 @@ python3 universal_coordinator.py \
 ### Error: "GEMINI_API_KEY not found"
 
 ```bash
-export GEMINI_API_KEY="AIzaSyDu5GN_IxRFg3Ue8SYXSNWkZi-50pwDgS0"
+export GEMINI_API_KEY="REDACTED_GOOGLE_API_KEY_ROTATE"
 ```
 
 ### Error: "429 RESOURCE_EXHAUSTED"
@@ -281,6 +281,6 @@ UVAI import paths need verification. This is being investigated.
 
 **Test Command:**
 ```bash
-export GEMINI_API_KEY="AIzaSyDu5GN_IxRFg3Ue8SYXSNWkZi-50pwDgS0"
+export GEMINI_API_KEY="REDACTED_GOOGLE_API_KEY_ROTATE"
 python3 universal_coordinator.py "https://youtu.be/SHORT_VIDEO" --mode gemini --no-deploy
 ```
