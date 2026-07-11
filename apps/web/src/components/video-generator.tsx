@@ -181,7 +181,6 @@ export default function VideoGenerator({ className = '' }: VideoGeneratorProps) 
         <button
           onClick={handleGenerate}
           disabled={state === 'generating' || !prompt.trim()}
-          aria-busy={state === 'generating' || undefined}
           className="w-full py-3 rounded-xl bg-gradient-to-r from-purple-600 to-purple-700 font-medium text-sm hover:opacity-90 transition disabled:opacity-40 disabled:cursor-not-allowed"
         >
           {state === 'generating' ? (

@@ -64,7 +64,7 @@ class RealVideoProcessor:
 
     def _get_cache_key(self, video_url: str) -> str:
         """Generate cache key for video URL"""
-        return hashlib.sha256(video_url.encode()).hexdigest()[:12]
+        return hashlib.md5(video_url.encode()).hexdigest()[:12]
 
     def _get_cache_path(self, video_id: str) -> Path:
         """Get cache file path for video"""

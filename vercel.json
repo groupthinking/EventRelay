@@ -1,65 +1,18 @@
 {
-  "regions": ["iad1"],
-  "functions": {
-    "apps/web/src/app/api/pipeline/stream/route.ts": {
-      "maxDuration": 240
-    },
-    "apps/web/src/app/api/video/generate/route.ts": {
-      "maxDuration": 300
-    }
-  },
   "redirects": [
     {
       "source": "/(.*)",
-      "has": [{ "type": "host", "value": "event-relay-web.vercel.app" }],
+      "has": [
+        { "type": "host", "value": "event-relay-web.vercel.app" }
+      ],
       "destination": "https://uvai.io/$1",
       "permanent": true
     },
     {
       "source": "/(.*)",
-      "has": [{ "type": "host", "value": "v0-uvai.vercel.app" }],
-      "destination": "https://uvai.io/$1",
-      "permanent": true
-    },
-    {
-      "source": "/(.*)",
-      "has": [{ "type": "host", "value": "youtube-extension.vercel.app" }],
-      "destination": "https://uvai.io/$1",
-      "permanent": true
-    },
-    {
-      "source": "/(.*)",
-      "has": [{ "type": "host", "value": "uvai-io.pages.dev" }],
-      "destination": "https://uvai.io/$1",
-      "permanent": true
-    },
-    {
-      "source": "/(.*)",
-      "has": [{ "type": "host", "value": "sell.solutions" }],
-      "destination": "https://uvai.io/$1",
-      "permanent": true
-    },
-    {
-      "source": "/(.*)",
-      "has": [{ "type": "host", "value": "www.sell.solutions" }],
-      "destination": "https://uvai.io/$1",
-      "permanent": true
-    },
-    {
-      "source": "/(.*)",
-      "has": [{ "type": "host", "value": "myai.directory" }],
-      "destination": "https://uvai.io/$1",
-      "permanent": true
-    },
-    {
-      "source": "/(.*)",
-      "has": [{ "type": "host", "value": "www.myai.directory" }],
-      "destination": "https://uvai.io/$1",
-      "permanent": true
-    },
-    {
-      "source": "/(.*)",
-      "has": [{ "type": "host", "value": "www.uvai.io" }],
+      "has": [
+        { "type": "host", "value": "v0-uvai.vercel.app" }
+      ],
       "destination": "https://uvai.io/$1",
       "permanent": true
     }

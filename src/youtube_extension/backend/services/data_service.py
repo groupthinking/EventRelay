@@ -137,9 +137,7 @@ class DataService:
         """Get all enhanced analysis files with caching to avoid repeated rglob."""
         now = time.time()
         if now - self._file_cache_timestamp < self._file_cache_ttl:
-            # Return a shallow copy so callers can't mutate the shared cache
-            # (e.g. sort/append) and corrupt it for other readers in the TTL window.
-            return list(self._file_cache)
+            return self._file_cache
 
         try:
             if not self.enhanced_analysis_dir.exists():
@@ -158,7 +156,7 @@ class DataService:
 
             self._file_cache = all_files
             self._file_cache_timestamp = now
-            return list(all_files)
+            return all_files
         except Exception as e:
             logger.error(f"Error listing files: {e}")
             return []
@@ -529,6 +527,8 @@ class DataService:
             Cleanup summary
         """
         try:
+            import time
+
             cutoff_time = time.time() - (days_old * 24 * 60 * 60)
             cleanup_summary = {
                 "files_removed": 0,

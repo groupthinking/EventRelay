@@ -22,11 +22,11 @@
   "devDependencies": {
     "@modelcontextprotocol/sdk": "^1.26.0",
     "brace-expansion": "^5.0.7",
-    "eslint": "^10.7.0",
+    "eslint": "^8.57.1",
     "next": "^16.2.10",
-    "turbo": "^2.10.4",
-    "typescript": "^7.0.2",
-    "vitest": "^4.1.10"
+    "turbo": "^2.10.3",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.9"
   },
   "overrides": {
     "react": "^19",
@@ -51,16 +51,16 @@
     }
   },
   "dependencies": {
-    "@ai-sdk/gateway": "^4.0.16",
+    "@ai-sdk/gateway": "^4.0.12",
     "@dataconnect/generated": "file:src/dataconnect-generated",
     "@google-cloud/text-to-speech": "^6.4.0",
-    "@google/genai": "^2.11.0",
+    "@google/genai": "^2.10.0",
     "@opentelemetry/core": "^2.9.0",
-    "@types/node": "^26.1.1",
-    "ai": "^7.0.22",
+    "@types/node": "^26.1.0",
+    "ai": "^7.0.15",
     "chrome-devtools-mcp": "^1.5.0",
     "dotenv": "^17.4.2",
-    "openai": "^6.46.0",
+    "openai": "^6.45.0",
     "react": "^19",
     "react-dom": "^19",
     "tsx": "^4.23.0"

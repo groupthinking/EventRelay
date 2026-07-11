@@ -471,7 +471,7 @@ async def register_ai_server(
     name: str, endpoint: str, capabilities: list[ServerCapability]
 ) -> MCPServer:
     """Convenience function to register an AI server"""
-    server_id = f"ai-{name.lower().replace(' ', '-')}-{hashlib.sha256(endpoint.encode()).hexdigest()[:8]}"
+    server_id = f"ai-{name.lower().replace(' ', '-')}-{hashlib.md5(endpoint.encode()).hexdigest()[:8]}"
     return get_server_registry().register_server(
         id=server_id, name=name, endpoint=endpoint, capabilities=capabilities
     )

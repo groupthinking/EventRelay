@@ -16,11 +16,9 @@ const GENERAL_LIMIT = Number(process.env.UVAI_API_RATE_LIMIT_PER_MINUTE || 60);
 const AI_LIMIT = Number(process.env.UVAI_AI_RATE_LIMIT_PER_MINUTE || 12);
 
 const AI_ROUTE_PREFIXES = [
-  // /api/agents/actions (runActionAgent) and /api/agents/dispatch invoke an LLM
-  // on POST, so their writes fail closed on a limiter outage; their GET handlers
-  // are cheap availability probes and fail open (see CHEAP_AI_GET_ROUTES). This
-  // list only selects the tighter AI rate-limit tier + the outage boundary; the
-  // sibling /api/agents/status is not AI-prefixed at all (always fails open).
+  // Both /api/agents/actions (runActionAgent) and /api/agents/dispatch invoke an
+  // LLM per request, so both must fail closed on a limiter outage. The sibling
+  // /api/agents/status is a cheap GET and is intentionally left off (fails open).
   '/api/agents/actions',
   '/api/agents/dispatch',
   '/api/chat',
@@ -110,49 +108,6 @@ function isAiRoute(pathname: string): boolean {
   return AI_ROUTE_PREFIXES.some((prefix) => pathname.startsWith(prefix));
 }
 
-// Explicit allowlist of AI-prefixed GET/HEAD endpoints that are cheap reads —
-// pure status/health/info with NO paid provider call. These are the ONLY AI
-// reads that fail OPEN on a limiter outage; every other AI read fails CLOSED.
-// Verified against each handler:
-//   - GET /api/agents/actions   → returns available tool names (env check)
-//   - GET /api/agents/dispatch  → returns backend availability
-//   - GET /api/pipeline         → backend health + config info
-//   - GET /api/training/status  → reads local training status
-//   - GET /api/video            → backend health / API info
-// Matched EXACTLY (not by prefix): paid sub-routes live under these prefixes —
-// e.g. cheap `/api/video` vs paid `/api/video/search`, cheap `/api/pipeline`
-// vs paid POST `/api/pipeline/stream` — so a prefix match would misclassify
-// them. Anything not in this list is treated as paid and fails closed.
-const CHEAP_AI_GET_ROUTES = [
-  '/api/agents/actions',
-  '/api/agents/dispatch',
-  '/api/pipeline',
-  '/api/training/status',
-  '/api/video',
-];
-
-/**
- * Is THIS request one that incurs a paid AI provider call, and therefore must
- * fail CLOSED when the rate limiter is unavailable (denial-of-wallet)?
- *
- * Fails SAFE by default: every AI-route write is paid, and every AI read is
- * treated as paid UNLESS it is an explicitly verified cheap read. So a newly
- * added billable AI GET cannot silently bypass outage protection just because
- * nobody remembered to update a list — the default is closed, and only the
- * known-cheap reads are opened. Non-AI routes are never treated as paid.
- */
-function isPaidAiRequest(pathname: string, method: string): boolean {
-  if (!isAiRoute(pathname)) {
-    return false;
-  }
-  // Writes to an AI route always trigger the paid model call.
-  if (method !== 'GET' && method !== 'HEAD') {
-    return true;
-  }
-  // AI reads: paid by default; only the verified cheap reads fail open.
-  return !CHEAP_AI_GET_ROUTES.includes(pathname);
-}
-
 function getClientIp(request: NextRequest): string {
   // Prefer x-real-ip: set by Vercel's edge network and not client-controllable.
   const realIp = request.headers.get('x-real-ip');
@@ -224,19 +179,14 @@ async function checkRateLimit(request: NextRequest): Promise<RateLimitResult> {
   const clientIp = getClientIp(request);
   const routeClass = isAiRoute(pathname) ? 'ai' : 'api';
   const key = `${routeClass}:${clientIp}`;
-  // Narrower than routeClass: only requests that actually incur a paid AI call
-  // (all AI writes + the paid AI GETs) fail closed on a limiter outage.
-  const expensiveOnOutage = isPaidAiRequest(pathname, request.method);
 
   const redisClient = await getRedisClient();
 
   if (!redisClient && process.env.NODE_ENV === 'production' && !prodRedisWarned) {
     console.error(
       '[RateLimit] No Upstash/KV Redis configured in production (checked UPSTASH_REDIS_REST_* and KV_REST_API_*). ' +
-      'Failing CLOSED for requests that incur a paid AI call (all AI-route writes + all AI reads except ' +
-      'the explicitly verified cheap GETs in CHEAP_AI_GET_ROUTES — denial-of-wallet protection, safe by ' +
-      'default) and OPEN for everything else (non-AI routes AND cheap AI status/health GETs) so a limiter ' +
-      'outage cannot take down the API. ' +
+      'Failing CLOSED for all AI routes (denial-of-wallet protection — some AI GETs are paid calls) and OPEN for ' +
+      'non-AI routes so a limiter outage cannot take down billing/auth/health. ' +
       'Configure Upstash or Vercel KV for full enforcement. ' +
       'See src/proxy.ts and the rate-limit-middleware agent in config/agent_network.json.'
     );
@@ -270,29 +220,28 @@ async function checkRateLimit(request: NextRequest): Promise<RateLimitResult> {
     resetAt: Math.ceil((Date.now() + WINDOW_SECONDS * 1000) / 1000),
   };
 
-  // Production without a working Redis limiter. Fail CLOSED for every request
-  // that incurs a paid AI call — every AI-route write, plus every AI read that
-  // is not an explicitly verified cheap GET (safe by default: an unclassified
-  // AI read fails closed, so e.g. `GET /api/realtime/session` (mints an OpenAI
-  // Realtime secret) and `GET /api/video/search` (Gemini embedding) are covered
-  // without needing a denylist, and a future billable AI GET can't leak by
-  // omission). Failing those open would reopen the denial-of-wallet vector
-  // (audit findings #4/#7). Everything else fails OPEN so a limiter outage can't
-  // take the API down: non-AI routes (billing, auth, health, general API) AND
-  // the cheap AI status/health GETs in CHEAP_AI_GET_ROUTES, which are free reads
-  // that should stay available during a Redis outage. The emergency override
-  // forces open even for the paid requests.
-  if (!expensiveOnOutage || process.env.UVAI_RATE_LIMIT_FAIL_OPEN === '1') {
-    if (expensiveOnOutage) {
+  // Production without a working Redis limiter. Fail CLOSED for ALL AI-prefixed
+  // routes regardless of HTTP method. A method-based "GETs are cheap" heuristic
+  // is unsafe here: several AI GETs are themselves paid calls — e.g.
+  // `GET /api/realtime/session` mints an OpenAI Realtime client secret and
+  // `GET /api/video/search` runs a Gemini embedding — so failing GETs open would
+  // reopen the denial-of-wallet vector (audit findings #4/#7). Non-AI routes
+  // (billing, auth, health, general API) still fail OPEN so a limiter outage
+  // can't take the whole API down. The accepted trade-off is that cheap AI
+  // status GETs (e.g. `GET /api/video`, `GET /api/pipeline`) briefly 503 during
+  // a Redis outage — strictly safer than leaking unmetered paid calls. The
+  // emergency override forces open even for AI routes.
+  if (routeClass !== 'ai' || process.env.UVAI_RATE_LIMIT_FAIL_OPEN === '1') {
+    if (routeClass === 'ai') {
       console.warn(
-        '[RateLimit] UVAI_RATE_LIMIT_FAIL_OPEN=1 — production paid-AI rate limit failing open (emergency).',
+        '[RateLimit] UVAI_RATE_LIMIT_FAIL_OPEN=1 — production AI rate limit failing open (emergency).',
       );
     }
     return allowResult;
   }
 
-  // Paid AI request, no Redis, no override: deny. This is a limiter *outage*,
-  // not a genuine per-client overage, so it surfaces as 503 (see proxy handler).
+  // AI route, no Redis, no override: deny. This is a limiter *outage*, not a
+  // genuine per-client overage, so it surfaces as 503 (see proxy handler).
   return {
     allowed: false,
     limit,
