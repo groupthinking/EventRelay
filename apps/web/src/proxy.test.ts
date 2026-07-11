@@ -178,6 +178,21 @@ describe('proxy rate limiting — production without a working Redis limiter', (
     expect(res.status).not.toBe(429);
   });
 
+  it('honours UVAI_RATE_LIMIT_FAIL_OPEN=1 to fail open even for a paid AI GET (emergency override)', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('UVAI_RATE_LIMIT_FAIL_OPEN', '1');
+    clearRedisEnv();
+
+    const proxy = await loadProxy();
+    // The override must force even a paid AI GET open (Gemini embedding here),
+    // not just AI writes — the entire wallet boundary is intentionally
+    // bypassable during an outage when the operator sets this emergency flag.
+    const res = await proxy(apiRequest('/api/video/search?videoId=x&q=y', 'GET'));
+
+    expect(res.status).not.toBe(503);
+    expect(res.status).not.toBe(429);
+  });
+
   it('resolves KV_REST_API_* credentials (Vercel KV) for the limiter', async () => {
     vi.stubEnv('NODE_ENV', 'production');
     clearRedisEnv();
