@@ -1,4 +1,17 @@
 const path = require('path');
+const { Module } = require('module');
+
+const appNodeModules = path.join(__dirname, 'node_modules');
+const nodePathEntries = (process.env.NODE_PATH || '')
+  .split(path.delimiter)
+  .filter(Boolean);
+
+if (!nodePathEntries.includes(appNodeModules)) {
+  // Let hoisted workspace packages like @sentry/nextjs resolve Next.js from apps/web.
+  process.env.NODE_PATH = [appNodeModules, ...nodePathEntries].join(path.delimiter);
+  Module._initPaths();
+}
+
 const { withSentryConfig } = require('@sentry/nextjs');
 
 const contentSecurityPolicy = [
@@ -38,9 +51,13 @@ const securityHeaders = [
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  // turbopack: {
-  //   root: path.resolve(__dirname, '../..'),
-  // },
+  experimental: {
+    optimizePackageImports: ['lucide-react'],
+  },
+  turbopack: {
+    // Monorepo root so Turbopack resolves hoisted/workspace deps outside apps/web.
+    root: path.resolve(__dirname, '../..'),
+  },
   images: {
     remotePatterns: [
       { protocol: 'https', hostname: 'uvai.io' },

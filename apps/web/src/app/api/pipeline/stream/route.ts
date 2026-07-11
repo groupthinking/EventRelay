@@ -14,20 +14,22 @@
  *      response into a sequence of agent trace events with realistic timing.
  *
  * IMPORTANT: All optional post-processing (training save, embeddings,
- * CloudEvents, BigQuery export) is fire-and-forget. These MUST NOT block
- * the SSE stream from closing after pipeline_status:complete is emitted.
+ * CloudEvents, BigQuery export) uses Vercel waitUntil background execution.
+ * These MUST NOT block the SSE stream from closing after pipeline_status:complete
+ * is emitted. Consistent with @vercel/functions standard.
  * See: https://github.com/groupthinking/EventRelay/issues/139
  */
 
 import { analyzeVideoWithGemini, type VideoAnalysisResult } from '@/lib/gemini-video-analyzer';
 import { hasGeminiKey } from '@/lib/gemini-client';
+import { waitUntil } from '@vercel/functions';
 import { publishEvent, EventTypes } from '@/lib/cloudevents';
 import { backendHeaders, resolveBackendStatusUrl } from '@/lib/pipeline-backend';
+import { checkBackendHealth, getBackendConfig } from '@/lib/pipeline-backend-health';
 import { saveTrainingExample, TUNING_THRESHOLD } from '@/lib/training-store';
 import { PipelineDeadline } from '../route';
 
-const rawBackendUrl = process.env.BACKEND_URL || '';
-const BACKEND_URL = rawBackendUrl.startsWith('http') ? rawBackendUrl : '';
+const { configured: BACKEND_CONFIGURED, url: CONFIGURED_BACKEND_URL } = getBackendConfig();
 const JOB_POLL_INTERVAL_MS = 2000;
 const MAX_JOB_POLL_ATTEMPTS = 90;
 
@@ -35,9 +37,9 @@ export const runtime = 'nodejs';
 export const maxDuration = 240;
 
 /** Wall-clock budget for the full SSE response (poll + agent events). */
-export const STREAM_MAX_DURATION_MS = maxDuration * 1000;
+const STREAM_MAX_DURATION_MS = maxDuration * 1000;
 /** Initial transcript-action kickoff — clamped to remaining stream budget. */
-export const STREAM_BACKEND_KICKOFF_MS = 120_000;
+const STREAM_BACKEND_KICKOFF_MS = 120_000;
 
 /** Shape of each SSE message sent to the frontend. */
 interface AgentStreamEvent {
@@ -90,15 +92,8 @@ function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-/**
- * Fire-and-forget: run an async function without awaiting it.
- * Errors are caught and logged but never propagate.
- */
-function fireAndForget(label: string, fn: () => Promise<void>): void {
-  fn().catch((err) => {
-    console.warn(`[${label}] Fire-and-forget failed (non-fatal):`, err);
-  });
-}
+// scheduleBackground removed — all ancillary paths now use direct waitUntil( saveTrainingExample(...) / publishEvent(...) ) per requirements.
+// Orchestration remains via schedulePostProcessing for grouping after pipeline complete.
 
 function mapTaskBoardActions(taskBoard: Record<string, unknown> | undefined) {
   if (!taskBoard || typeof taskBoard !== 'object') return [];
@@ -530,7 +525,7 @@ export async function POST(request: Request) {
     }
 
     // Check if we can process
-    if (!hasGeminiKey() && !BACKEND_URL) {
+    if (!hasGeminiKey() && !BACKEND_CONFIGURED) {
       return new Response(
         JSON.stringify({ error: 'No pipeline available. Configure GEMINI_API_KEY or BACKEND_URL.' }),
         { status: 503, headers: { 'Content-Type': 'application/json' } },
@@ -545,81 +540,114 @@ export async function POST(request: Request) {
 
     const stream = new ReadableStream({
       async start(controller) {
+        let streamMode: 'backend-ws' | 'gemini-sse' = 'gemini-sse';
         try {
+          const backendHealth = BACKEND_CONFIGURED
+            ? await checkBackendHealth(5_000)
+            : { configured: false, available: false, host: null as string | null };
+          const useBackend = backendHealth.available;
+          const backendUrl = CONFIGURED_BACKEND_URL;
+          streamMode = useBackend ? 'backend-ws' : 'gemini-sse';
+
           // Send initial pipeline status
           controller.enqueue(
             encoder.encode(
               makeEvent({
                 type: 'pipeline_status',
                 status: 'running',
-                data: { mode: BACKEND_URL ? 'backend-ws' : 'gemini-sse', url },
+                data: { mode: streamMode, url, backendReason: backendHealth.reason },
                 timestamp: new Date().toISOString(),
               }),
             ),
           );
 
-          // ── Fire-and-forget helpers for optional post-processing ──
-          // These MUST NOT block the stream from closing.
+          // ── schedulePostProcessing orchestrates direct waitUntil calls for ancillary post-processing ──
+          // (training save via saveTrainingExample, embeddings via saveEmbeddings, CloudEvents via publishEvent)
+          // Called AFTER pipeline_status:complete is emitted in the agent events stream.
+          // These MUST NOT block the SSE stream close / response.
           // See: https://github.com/groupthinking/EventRelay/issues/139
+          // Direct waitUntil (no fireAndForget, no bare top-level .catch) per ancillary paths standard.
 
           const schedulePostProcessing = (videoUrl: string, analysis: VideoAnalysisResult) => {
-            // Training save — fire and forget
-            fireAndForget('Training', async () => {
-              const { saved, metadata, milestone } = await saveTrainingExample(
+            // Direct waitUntil on saveTrainingExample for training save (ancillary, post-response)
+            // Orchestrated here AFTER pipeline_status:complete events are streamed.
+            waitUntil(
+              saveTrainingExample(
                 videoUrl,
                 analysis as unknown as Record<string, unknown>,
-              );
-              if (saved && milestone) {
-                console.log(`\n🎯 TRAINING MILESTONE: ${milestone}/${TUNING_THRESHOLD} examples collected!`);
-                if (milestone >= TUNING_THRESHOLD) {
-                  console.log('🚀 READY FOR FINE-TUNING! Call POST /api/training/trigger to start.');
+              ).then(({ saved, metadata, milestone }) => {
+                if (saved && milestone) {
+                  console.log(`\n🎯 TRAINING MILESTONE: ${milestone}/${TUNING_THRESHOLD} examples collected!`);
+                  if (milestone >= TUNING_THRESHOLD) {
+                    console.log('🚀 READY FOR FINE-TUNING! Call POST /api/training/trigger to start.');
+                  }
                 }
-              }
-              if (saved) {
-                console.log(`[Training] Dataset: ${metadata.totalExamples} examples`);
-              } else {
-                console.log(`[Training] Skipped duplicate: ${videoUrl}`);
-              }
-            });
-
-            // Embeddings — fire and forget
-            fireAndForget('Embeddings', async () => {
-              let segments = analysis.transcript;
-              if (!segments || segments.length === 0) {
-                const { fetchTranscript } = await import('@/lib/transcription-service');
-                const result = await fetchTranscript({ url: videoUrl });
-                if (result.success && result.segments && result.segments.length > 0) {
-                  segments = result.segments.map(s => ({
-                    start: s.start,
-                    duration: s.duration,
-                    text: s.text || ''
-                  }));
+                if (saved) {
+                  console.log(`[Training] Dataset: ${metadata.totalExamples} examples`);
+                } else {
+                  console.log(`[Training] Skipped duplicate: ${videoUrl}`);
                 }
-              }
+              }).catch((err) => {
+                console.warn(`[Training] Background task failed (non-fatal):`, err);
+              }),
+            );
 
-              if (segments && segments.length > 0) {
-                const { chunkTranscript, generateEmbeddingsForChunks } = await import('@/lib/gemini-embedding');
-                const { saveEmbeddings } = await import('@/lib/embedding-store');
-                const chunks = chunkTranscript(segments);
-                const embeddedChunks = await generateEmbeddingsForChunks(chunks);
-                const videoId = videoUrl.match(/[?&]v=([^&]+)/)?.[1] || videoUrl.replace(/[^a-zA-Z0-9_-]/g, '_');
-                await saveEmbeddings(videoId, embeddedChunks);
-              }
-            });
+            // Embeddings — direct waitUntil on the post-processing promise (includes saveEmbeddings)
+            waitUntil(
+              (async () => {
+                let segments = analysis.transcript;
+                if (!segments || segments.length === 0) {
+                  const { fetchTranscript } = await import('@/lib/transcription-service');
+                  const result = await fetchTranscript({ url: videoUrl });
+                  if (result.success && result.segments && result.segments.length > 0) {
+                    segments = result.segments.map(s => ({
+                      start: s.start,
+                      duration: s.duration,
+                      text: s.text || ''
+                    }));
+                  }
+                }
 
-            // CloudEvent — fire and forget
-            fireAndForget('CloudEvent', async () => {
-              await publishEvent(EventTypes.PIPELINE_COMPLETED, {
-                strategy: BACKEND_URL ? 'backend-proxy' : 'gemini-stream',
+                if (segments && segments.length > 0) {
+                  const { chunkTranscript, generateEmbeddingsForChunks } = await import('@/lib/gemini-embedding');
+                  const { saveEmbeddings } = await import('@/lib/embedding-store');
+                  const chunks = chunkTranscript(segments);
+                  const embeddedChunks = await generateEmbeddingsForChunks(chunks);
+                  const videoId = videoUrl.match(/[?&]v=([^&]+)/)?.[1] || videoUrl.replace(/[^a-zA-Z0-9_-]/g, '_');
+                  await saveEmbeddings(videoId, embeddedChunks);
+                }
+              })().catch((err) => {
+                console.warn(`[Embeddings] Background task failed (non-fatal):`, err);
+              }),
+            );
+
+            // CloudEvent — direct waitUntil on publishEvent
+            waitUntil(
+              publishEvent(EventTypes.PIPELINE_COMPLETED, {
+                strategy: useBackend ? 'backend-proxy' : 'gemini-stream',
                 success: true,
-              }, videoUrl);
-            });
+              }, videoUrl).catch((err) => {
+                console.warn(`[CloudEvent] Background task failed (non-fatal):`, err);
+              }),
+            );
+
+            // Durable cross-video search index (Upstash) — unlike the local-disk
+            // stores above, this persists on Vercel's read-only filesystem.
+            // Skips honestly when UPSTASH_SEARCH_* env is absent.
+            waitUntil(
+              (async () => {
+                const { indexVideoAnalysis } = await import('@/lib/search-indexer');
+                await indexVideoAnalysis(videoUrl, analysis);
+              })().catch((err) => {
+                console.warn(`[SearchIndex] Background task failed (non-fatal):`, err);
+              }),
+            );
           };
 
-          if (BACKEND_URL) {
+          if (useBackend && backendUrl) {
             // Strategy 1: Proxy from backend
             try {
-              const response = await fetch(`${BACKEND_URL}/api/v1/transcript-action`, {
+              const response = await fetch(`${backendUrl}/api/v1/transcript-action`, {
                 method: 'POST',
                 headers: backendHeaders(),
                 body: JSON.stringify({ video_url: url, language: 'en' }),
@@ -649,7 +677,7 @@ export async function POST(request: Request) {
 
                   const statusUrl = resolveBackendStatusUrl(
                     transcriptResult.status_url,
-                    BACKEND_URL,
+                    backendUrl,
                   );
                   const job = await pollBackendJob(statusUrl, controller, encoder, deadline);
                   if (job.status === 'failed') {
@@ -670,7 +698,7 @@ export async function POST(request: Request) {
                     controller.enqueue(encoder.encode(event));
                   }
 
-                  // Schedule optional work AFTER stream events are done — fire and forget
+                  // Schedule optional work AFTER stream events (incl. pipeline_status:complete) are done — direct waitUntil inside
                   schedulePostProcessing(url, mappedAnalysis);
                   return;
                 }
@@ -682,7 +710,7 @@ export async function POST(request: Request) {
                   controller.enqueue(encoder.encode(event));
                 }
 
-                // Schedule optional work — fire and forget
+                // Schedule optional work — direct waitUntil (after complete events)
                 schedulePostProcessing(url, mappedAnalysis);
               } else {
                 throw new Error(`Backend returned ${response.status}`);
@@ -702,7 +730,7 @@ export async function POST(request: Request) {
                   controller.enqueue(encoder.encode(event));
                 }
 
-                // Schedule optional work — fire and forget
+                // Schedule optional work — direct waitUntil (after complete events)
                 schedulePostProcessing(url, analysis);
               } else {
                 controller.enqueue(
@@ -718,9 +746,10 @@ export async function POST(request: Request) {
             }
           } else {
             // Strategy 2: Direct Gemini analysis
-            fireAndForget('CloudEvent:Start', async () => {
-              await publishEvent(EventTypes.TRANSCRIPT_STARTED, { url, strategy: 'gemini-stream' }, url);
-            });
+            // Start event as true background (non-blocking even for stream setup) — direct waitUntil on publishEvent
+            waitUntil(
+              publishEvent(EventTypes.TRANSCRIPT_STARTED, { url, strategy: 'gemini-stream' }, url).catch(() => {}),
+            );
 
             const analysis = await deadline.runWithBudget(
               analyzeVideoWithGemini(url),
@@ -733,15 +762,16 @@ export async function POST(request: Request) {
               controller.enqueue(encoder.encode(event));
             }
 
-            // Schedule optional work — fire and forget
+            // Schedule optional work via direct waitUntil (non-blocking, after complete)
             schedulePostProcessing(url, analysis);
           }
         } catch (err) {
+          console.error('Pipeline stream processing error:', err);
           controller.enqueue(
             encoder.encode(
               makeEvent({
                 type: 'error',
-                data: { message: String(err) },
+                data: { message: 'Pipeline processing failed' },
                 timestamp: new Date().toISOString(),
               }),
             ),
@@ -757,7 +787,7 @@ export async function POST(request: Request) {
                 data: {
                   totalAgents: 0,
                   completedAgents: 0,
-                  mode: BACKEND_URL ? 'backend-ws' : 'gemini-sse',
+                  mode: streamMode,
                 },
                 timestamp: new Date().toISOString(),
               }),
@@ -765,7 +795,7 @@ export async function POST(request: Request) {
           );
         } finally {
           // CRITICAL: close the stream immediately after all SSE events are
-          // enqueued. This MUST NOT wait for fire-and-forget post-processing.
+          // enqueued. This MUST NOT wait for background post-processing (waitUntil).
           controller.close();
         }
       },
@@ -776,12 +806,12 @@ export async function POST(request: Request) {
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache',
         Connection: 'keep-alive',
-        'X-Pipeline-Mode': BACKEND_URL ? 'backend-proxy' : 'gemini-direct',
+        'X-Pipeline-Mode': BACKEND_CONFIGURED ? 'backend-proxy' : 'gemini-direct',
       },
     });
   } catch (error) {
     console.error('Pipeline stream error:', error);
-    return new Response(JSON.stringify({ error: String(error) }), {
+    return new Response(JSON.stringify({ error: 'Pipeline stream failed' }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
     });

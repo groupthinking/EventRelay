@@ -1,0 +1,177 @@
+name: Phase Goal Tracker
+
+on:
+  issues:
+    types: [opened, edited, reopened]
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: "Issue number to evaluate"
+        required: true
+        type: number
+
+permissions:
+  issues: write
+
+# Prevent concurrent runs for the same issue from racing: two rapid checklist
+# edits would otherwise run in parallel, each miss the single tracker comment,
+# and post duplicates. `cancel-in-progress: true` cancels an older in-flight run
+# when a newer edit arrives, so only one run per issue is active and the latest
+# edit wins — the comment upsert and issue-close are idempotent, so cancelling
+# mid-run leaves no partial state. Keyed on the issue number for both `issues`
+# and dispatch events.
+concurrency:
+  group: phase-goal-tracker-${{ github.event.issue.number || github.event.inputs.issue_number }}
+  cancel-in-progress: true
+
+jobs:
+  track:
+    name: Track phase checklist progress
+    runs-on: ubuntu-latest
+    steps:
+      - name: Evaluate checklist and update tracker comment
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const issueNumber =
+              context.eventName === 'workflow_dispatch'
+                ? Number(context.payload.inputs.issue_number)
+                : context.payload.issue.number;
+
+            // A maintainer may reopen a completed phase issue to add follow-up
+            // tasks or correct a prematurely-checked box. Don't auto-close on the
+            // reopen itself, or the reopen is reverted before they can edit.
+            const isReopenEvent =
+              context.eventName === 'issues' &&
+              context.payload.action === 'reopened';
+
+            if (!Number.isInteger(issueNumber)) {
+              core.setFailed(
+                `Invalid issue number input: ${JSON.stringify(context.payload?.inputs?.issue_number)}`
+              );
+              return;
+            }
+
+            const { data: issue } = await github.rest.issues.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issueNumber,
+            });
+
+            if (issue.pull_request) {
+              core.info(`Skipping PR #${issue.number}.`);
+              return;
+            }
+
+            const labels = issue.labels.map((label) => label.name.toLowerCase());
+            const title = (issue.title || '').toLowerCase();
+            const body = issue.body || '';
+
+            // Match the documented `phase-*` label convention: any label prefixed
+            // with `phase-` (e.g. `phase-3`, `phase-cleanup`, `phase-hardening`).
+            const phaseIssue =
+              labels.some((label) => /^phase-.+/.test(label)) ||
+              title.includes('[phase');
+
+            if (!phaseIssue) {
+              core.info(`Skipping non-phase issue #${issue.number}.`);
+              return;
+            }
+
+            const checklistItemPattern = /^\s*-\s+\[([ xX])\]\s+(.+)$/;
+            // Split on \r?\n so Windows-style (\r\n) issue bodies don't leave a
+            // trailing \r on each line, which the (.+) capture would otherwise
+            // carry into the reconstructed checklist in the tracker comment.
+            const taskMatches = body
+              .split(/\r?\n/)
+              .map((line) => line.match(checklistItemPattern))
+              .filter(Boolean);
+            const total = taskMatches.length;
+
+            if (total === 0) {
+              core.info(`No checklist found on issue #${issue.number}.`);
+              return;
+            }
+
+            const isCompleted = (match) => match?.[1]?.toLowerCase() === 'x';
+            const completedTasks = taskMatches.filter(isCompleted);
+            const maxOpenTasksToShow = 10;
+            const completed = completedTasks.length;
+            const openTaskCount = total - completed;
+            const openTasks = taskMatches
+              .filter((match) => !isCompleted(match))
+              .map((match) => `- [ ] ${match[2]}`)
+              .slice(0, maxOpenTasksToShow);
+            const progressPercent = Math.round((completed / total) * 100);
+            const done = completed === total;
+
+            const trackerMarker = '<!-- phase-goal-tracker -->';
+            const summaryBody = [
+              trackerMarker,
+              '## 🎯 Phase Goal Tracker',
+              '',
+              `- Progress: **${completed}/${total}** tasks complete (**${progressPercent}%**)`,
+              `- Status: ${done ? '✅ All goals complete' : '⏳ In progress'}`,
+              '',
+              done
+                ? isReopenEvent
+                  ? 'All checklist goals are complete. This issue was just reopened, so it will stay open for further edits.'
+                  : 'All checklist goals are complete. Closing this issue now.'
+                : `### Next goals\n${openTasks.join('\n')}${
+                    openTaskCount > maxOpenTasksToShow
+                      ? `\n\n_Showing first ${maxOpenTasksToShow} of ${openTaskCount} remaining tasks._`
+                      : ''
+                  }`,
+            ].join('\n');
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issue.number,
+              per_page: 100,
+            });
+
+            // Identify the tracker comment by its unique marker alone. Filtering
+            // on comment.user?.type === 'Bot' would couple dedup to the current
+            // token identity: switching to a PAT or GitHub App token (whose author
+            // reports a different type) would make this return undefined and post a
+            // fresh comment every run instead of updating the existing one.
+            const existing = comments.find(
+              (comment) =>
+                typeof comment.body === 'string' &&
+                comment.body.includes(trackerMarker)
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body: summaryBody,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                body: summaryBody,
+              });
+            }
+
+            if (done && isReopenEvent) {
+              core.info(
+                `Issue #${issue.number} is complete but was just reopened; ` +
+                  'leaving it open for further edits.'
+              );
+            } else if (done) {
+              if (issue.state === 'open') {
+                await github.rest.issues.update({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  state: 'closed',
+                });
+              } else {
+                core.info(`Issue #${issue.number} is already closed.`);
+              }
+            }

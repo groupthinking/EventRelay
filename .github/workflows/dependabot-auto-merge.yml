@@ -31,7 +31,7 @@ jobs:
         uses: dependabot/fetch-metadata@v2
         with:
           github-token: "${{ secrets.GITHUB_TOKEN }}"
-      - uses: actions/github-script@v7
+      - uses: actions/github-script@v9
         with:
           script: |
             const pull_number = context.payload.pull_request.number;
@@ -54,7 +54,7 @@ jobs:
 
       - name: Enable auto-merge for patch/minor only
         if: steps.metadata.outputs.update-type != 'version-update:semver-major'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const pull_number = context.payload.pull_request.number;
@@ -82,7 +82,7 @@ jobs:
     if: github.event_name == 'check_suite' && github.event.check_suite.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/github-script@v7
+      - uses: actions/github-script@v9
         with:
           script: |
             const pullRequests = context.payload.check_suite.pull_requests ?? [];
@@ -137,7 +137,14 @@ jobs:
                 continue;
               }
 
-              if (updateType.includes('semver-major')) {
+              // Dependabot reports the update type as 'version-update:semver-major'
+              // (dependabot/fetch-metadata) or the shorter 'semver-major' (the PR
+              // REST dependency.update_type field). Match both so a major bump is
+              // never auto-merged regardless of which form GitHub returns.
+              if (
+                updateType.includes('version-update:semver-major') ||
+                updateType.includes('semver-major')
+              ) {
                 core.info(`Skipping major update PR #${pullRequest.number}.`);
                 continue;
               }

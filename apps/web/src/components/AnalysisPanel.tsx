@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { clsx } from 'clsx';
+import { Bot, X, ArrowUp } from 'lucide-react';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -16,6 +17,13 @@ interface AnalysisPanelProps {
   onClose?: () => void;
 }
 
+/**
+ * Renders a chat panel for asking questions about a video.
+ *
+ * @param videoId - Identifier included in chat requests.
+ * @param videoUrl - Video URL included in chat requests.
+ * @param onClose - Called when the close button is selected.
+ */
 export default function AnalysisPanel({
   videoId,
   videoUrl,
@@ -25,7 +33,7 @@ export default function AnalysisPanel({
   const [messages, setMessages] = useState<Message[]>([
     {
       role: 'assistant',
-      content: "Hello! I've analyzed this video. You can ask me anything about its content, extracted actions, or specific details. How can I help you today?",
+      content: "Hello! I\u2019ve analyzed this video. You can ask me anything about its content, extracted actions, or specific details. How can I help you today?",
       timestamp: new Date()
     }
   ]);
@@ -75,7 +83,7 @@ export default function AnalysisPanel({
 
       const assistantMessage: Message = {
         role: 'assistant',
-        content: data.answer || "I'm sorry, I couldn't find an answer to that.",
+        content: data.answer || "I\u2019m sorry, I couldn\u2019t find an answer to that.",
         timestamp: new Date()
       };
 
@@ -93,38 +101,45 @@ export default function AnalysisPanel({
   };
 
   return (
-    <div className="flex flex-col h-full bg-surface-900/50 backdrop-blur-xl border-l border-white/[0.08] animate-slide-in-right">
+    <div className="flex flex-col h-full bg-surface-900/50 backdrop-blur-xl border-l border-white/[0.08] animate-slide-in-right motion-reduce:animate-none">
       {/* Header */}
       <div className="p-4 border-b border-white/[0.08] flex items-center justify-between bg-surface-900/80">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg bg-primary-500 flex items-center justify-center">
-            <span className="text-lg">🤖</span>
+            <Bot className="h-5 w-5 text-white" aria-hidden="true" />
           </div>
           <div>
             <h3 className="font-bold text-sm">Video Assistant</h3>
             <p className="text-[10px] text-green-400 font-medium flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+              <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse motion-reduce:animate-none" />
               Online
             </p>
           </div>
         </div>
         {onClose && (
           <button
+            type="button"
             onClick={onClose}
+            aria-label="Close video assistant"
             className="p-2 hover:bg-white/5 rounded-lg text-white/40 hover:text-white transition-colors"
           >
-            ✕
+            <X className="h-4 w-4" aria-hidden="true" />
           </button>
         )}
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div
+        className="flex-1 overflow-y-auto p-4 space-y-4"
+        role="log"
+        aria-live="polite"
+        aria-label="Conversation with video assistant"
+      >
         {messages.map((msg, i) => (
           <div
             key={i}
             className={clsx(
-              "flex flex-col max-w-[85%] animate-fade-in-up",
+              "flex flex-col max-w-[85%] animate-fade-in-up motion-reduce:animate-none",
               msg.role === 'user' ? "ml-auto items-end" : "items-start"
             )}
           >
@@ -144,12 +159,13 @@ export default function AnalysisPanel({
           </div>
         ))}
         {isLoading && (
-          <div className="flex flex-col items-start max-w-[85%] animate-fade-in-up">
+          <div className="flex flex-col items-start max-w-[85%] animate-fade-in-up motion-reduce:animate-none">
             <div className="px-4 py-3 rounded-2xl bg-white/[0.05] border border-white/[0.05] rounded-tl-none">
-              <div className="flex gap-1">
-                <span className="w-1.5 h-1.5 bg-white/40 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                <span className="w-1.5 h-1.5 bg-white/40 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                <span className="w-1.5 h-1.5 bg-white/40 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+              <span className="sr-only">Assistant is typing</span>
+              <div className="flex gap-1" aria-hidden="true">
+                <span className="w-1.5 h-1.5 bg-white/40 rounded-full animate-bounce motion-reduce:animate-none" style={{ animationDelay: '0ms' }} />
+                <span className="w-1.5 h-1.5 bg-white/40 rounded-full animate-bounce motion-reduce:animate-none" style={{ animationDelay: '150ms' }} />
+                <span className="w-1.5 h-1.5 bg-white/40 rounded-full animate-bounce motion-reduce:animate-none" style={{ animationDelay: '300ms' }} />
               </div>
             </div>
           </div>
@@ -164,17 +180,18 @@ export default function AnalysisPanel({
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask a question about the video..."
-            className="w-full bg-white/[0.03] border border-white/[0.08] rounded-xl px-4 py-3 pr-12 text-sm focus:outline-none focus:border-primary-500/50 transition-all placeholder:text-white/20"
+            placeholder="Ask a question about the video…"
+            aria-label="Ask a question about the video"
+            className="w-full bg-white/[0.03] border border-white/[0.08] rounded-xl px-4 py-3 pr-12 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40 focus:border-primary-500/50 transition-[border-color,box-shadow] placeholder:text-white/20"
           />
           <button
             type="submit"
             disabled={!input.trim() || isLoading}
-            className="absolute right-2 top-1.5 p-1.5 rounded-lg bg-primary-500 text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+            aria-label="Send message"
+            aria-busy={isLoading || undefined}
+            className="absolute right-2 top-1.5 p-1.5 rounded-lg bg-primary-500 text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
           >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
-            </svg>
+            <ArrowUp className="w-5 h-5" aria-hidden="true" />
           </button>
         </form>
         <p className="text-[10px] text-white/20 text-center mt-3">

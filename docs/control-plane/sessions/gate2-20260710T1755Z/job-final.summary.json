@@ -1,0 +1,35 @@
+{
+  "outer_status": "success",
+  "job_id": "job_638c836f7b",
+  "job_status": "complete",
+  "progress": 100.0,
+  "video_url": "https://www.youtube.com/watch?v=jNQXAC9IVRw",
+  "has_transcript": true,
+  "transcript_chars": 767,
+  "transcript_preview": "```json\n{\n  \"transcript\": \"All right, so here we are in front of the elephants. And the cool thing about these guys is that they have really, really, really long trunks. And that's, that's cool. And t",
+  "keys": [
+    "created_at",
+    "error",
+    "error_reason",
+    "job_id",
+    "metadata",
+    "progress",
+    "status",
+    "transcript",
+    "video_url"
+  ],
+  "top_keys": [
+    "data",
+    "detail",
+    "error",
+    "request_id",
+    "status",
+    "timestamp"
+  ],
+  "error": null,
+  "str_job_id_len": 14,
+  "str_status_len": 8,
+  "str_video_url_len": 43,
+  "len_metadata": 5,
+  "str_created_at_len": 27
+}
