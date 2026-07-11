@@ -1,5 +1,3 @@
-> **CONTROL PLANE (binding):** Read [`CONTROL.md`](CONTROL.md) → [`docs/control-plane/`](docs/control-plane/). Inventory over invention. Live verify before any "works" claim.
-
 # EventRelay — Gemini CLI Context
 
 This file provides project context for Gemini CLI when working in the EventRelay repository.

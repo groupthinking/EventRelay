@@ -1,3 +1,3 @@
-## 2026-07-11 - Search Panel Accessibility Fixes
-**Learning:** Adding visual feedback to `button` elements inside iterative search results, even when styled minimally, makes the UI drastically more intuitive for keyboard navigation and screen readers (by combining `focus-visible`, visual hover feedback, and `aria-busy` for loading states).
-**Action:** When creating elements intended for user interaction, always pair visual interactivity (`hover`, `active`, and `disabled` opacities) with explicit semantic accessibility traits like `aria-busy` or robust `focus-visible` ring colors.
+## 2024-07-10 - [Accessibility] Improve video generator states and focus visibility
+**Learning:** In long-running generation processes like video creation, simply disabling buttons isn't enough for screen readers. Using `aria-busy` and explicit `role="alert"` regions makes state changes much clearer. Also, character count limits for inputs should be linked directly via `aria-describedby` to provide immediate context.
+**Action:** Pair `aria-busy` with disabled states on generation buttons, and ensure error messages are always contained within alert roles for immediate announcements.

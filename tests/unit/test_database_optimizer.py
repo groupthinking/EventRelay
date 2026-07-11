@@ -1092,7 +1092,6 @@ class TestDatabaseHealthMonitorRunHealthCheck:
 class TestConvenienceFunctions:
     """Tests for module-level convenience functions"""
 
-    @pytest.mark.asyncio
     async def test_execute_optimized_query_delegates(self, tmp_path) -> None:
         from youtube_extension.backend.services import database_optimizer as _mod
         orig = _mod.query_optimizer.execute_query
@@ -1103,7 +1102,6 @@ class TestConvenienceFunctions:
         finally:
             _mod.query_optimizer.execute_query = orig
 
-    @pytest.mark.asyncio
     async def test_execute_batch_delegates(self) -> None:
         from youtube_extension.backend.services import database_optimizer as _mod
         orig = _mod.query_optimizer.execute_batch_queries
@@ -1114,7 +1112,6 @@ class TestConvenienceFunctions:
         finally:
             _mod.query_optimizer.execute_batch_queries = orig
 
-    @pytest.mark.asyncio
     async def test_get_database_performance_report_delegates(self) -> None:
         from youtube_extension.backend.services import database_optimizer as _mod
         orig = _mod.query_optimizer.get_performance_report
@@ -1125,7 +1122,6 @@ class TestConvenienceFunctions:
         finally:
             _mod.query_optimizer.get_performance_report = orig
 
-    @pytest.mark.asyncio
     async def test_get_database_health_status_delegates(self) -> None:
         from youtube_extension.backend.services import database_optimizer as _mod
         orig = _mod.health_monitor.run_health_check
@@ -1136,7 +1132,6 @@ class TestConvenienceFunctions:
         finally:
             _mod.health_monitor.run_health_check = orig
 
-    @pytest.mark.asyncio
     async def test_initialize_database_optimization_calls_initialize(self, tmp_path) -> None:
         from youtube_extension.backend.services import database_optimizer as _mod
         orig_init = _mod.connection_pool.initialize
@@ -1156,7 +1151,6 @@ class TestConvenienceFunctions:
             _mod.connection_pool.get_connection = orig_get
             _mod.connection_pool.release_connection = orig_rel
 
-    @pytest.mark.asyncio
     async def test_shutdown_database_optimization_calls_close(self) -> None:
         from youtube_extension.backend.services import database_optimizer as _mod
         orig = _mod.connection_pool.close
@@ -1178,7 +1172,6 @@ class TestExecuteBatchQueries:
         pool.release_connection = AsyncMock()
         return pool
 
-    @pytest.mark.asyncio
     async def test_batch_executes_all_queries(self, tmp_path) -> None:
         import sqlite3
         pool = DatabaseConnectionPool(f"sqlite:///{tmp_path}/test.db")
@@ -1191,7 +1184,6 @@ class TestExecuteBatchQueries:
         results = await optimizer.execute_batch_queries(queries)
         assert len(results) == 2
 
-    @pytest.mark.asyncio
     async def test_batch_exception_propagated(self) -> None:
         pool = self._make_pool()
         pool.get_connection.side_effect = RuntimeError("No DB")
@@ -1203,19 +1195,16 @@ class TestExecuteBatchQueries:
 class TestConnectionPoolInitialize:
     """DatabaseConnectionPool.initialize with different URL types"""
 
-    @pytest.mark.asyncio
     async def test_sqlite_file_creates_dir(self, tmp_path) -> None:
         db_path = tmp_path / "subdir" / "test.db"
         pool = DatabaseConnectionPool(f"sqlite:///{db_path}")
         await pool.initialize()
         # No error should occur
 
-    @pytest.mark.asyncio
     async def test_sqlite_memory_initializes(self) -> None:
         pool = DatabaseConnectionPool("sqlite:///:memory:")
         await pool.initialize()
 
-    @pytest.mark.asyncio
     async def test_haspg_false_uses_sqlite_path(self, tmp_path) -> None:
         from youtube_extension.backend.services import database_optimizer as _mod
         orig = _mod.HAS_POSTGRESQL

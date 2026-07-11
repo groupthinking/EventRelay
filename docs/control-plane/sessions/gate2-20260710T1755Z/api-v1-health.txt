@@ -1,1 +1,0 @@
-{"status":"healthy","timestamp":"2026-07-10T17:55:52.105692","version":"2.0.0","components":{"video_processor":"available","websocket":"available","gemini_key_present":true,"youtube_api_key_present":true}}

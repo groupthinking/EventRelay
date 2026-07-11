@@ -296,10 +296,7 @@ class EnhancedVideoProcessor:
                 proxy_url = get_proxy_url()
                 if proxy_url:
                     ytdlp_cmd.extend(["--proxy", proxy_url])
-                # "--" ends option parsing so a video_url starting with "-" cannot
-                # inject yt-dlp flags (CWE-88). Pair with YouTube-host validators
-                # on API models.
-                ytdlp_cmd.extend(["-o", audio_path, "--", video_url])
+                ytdlp_cmd.extend(["-o", audio_path, video_url])
                 subprocess.run(
                     ytdlp_cmd, check=True, capture_output=True, timeout=60
                 )
