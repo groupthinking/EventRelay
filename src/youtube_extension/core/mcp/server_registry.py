@@ -459,6 +459,13 @@ class MCPServerRegistry:
 _server_registry = None
 
 
+def _make_ai_server_id(name: str, endpoint: str) -> str:
+    """Return the canonical SHA-256-based server ID for an AI server."""
+    slug = name.lower().replace(" ", "-")
+    suffix = hashlib.sha256(endpoint.encode()).hexdigest()[:8]
+    return f"ai-{slug}-{suffix}"
+
+
 def get_server_registry() -> MCPServerRegistry:
     """Get the global MCP server registry instance"""
     global _server_registry
@@ -480,7 +487,7 @@ async def register_ai_server(
     created.
     """
     registry = get_server_registry()
-    server_id = f"ai-{name.lower().replace(' ', '-')}-{hashlib.sha256(endpoint.encode()).hexdigest()[:8]}"
+    server_id = _make_ai_server_id(name, endpoint)
 
     # Fast path: already registered under the canonical SHA-256 ID.
     existing = registry.get_server(server_id)
