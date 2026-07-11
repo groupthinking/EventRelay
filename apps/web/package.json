@@ -9,7 +9,6 @@
     "lint": "eslint src middleware.ts",
     "type-check": "tsc --noEmit",
     "test": "vitest run",
-    "type-check": "tsc --noEmit",
     "analyze": "next experimental-analyze --output"
   },
   "dependencies": {
@@ -17,17 +16,9 @@
     "@dataconnect/generated": "file:src/dataconnect-generated",
     "@google/genai": "^2.11.0",
     "@google/generative-ai": "^0.24.1",
-<<<<<<< HEAD
-    "@opentelemetry/core": "^2.8.0",
-    "@opentelemetry/exporter-trace-otlp-http": "^0.219.0",
-    "@opentelemetry/instrumentation": "^0.219.0",
-    "@opentelemetry/sdk-trace-base": "^2.8.0",
-    "@sentry/nextjs": "^10.57.0",
-    "@stripe/stripe-js": "^9.8.0",
-    "@supabase/supabase-js": "^2.39.0",
-=======
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/core": "^2.9.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.219.0",
     "@opentelemetry/instrumentation": "^0.220.0",
     "@opentelemetry/resources": "^2.9.0",
     "@opentelemetry/sdk-trace-base": "^2.9.0",
@@ -35,10 +26,8 @@
     "@sentry/nextjs": "^10.65.0",
     "@stripe/stripe-js": "^9.9.0",
     "@supabase/supabase-js": "^2.110.2",
->>>>>>> origin/main
     "@upstash/redis": "^1.38.0",
     "@upstash/search": "^0.1.7",
-    "ai": "^7.0.15",
     "@vercel/analytics": "^2.0.1",
     "@vercel/functions": "^3.7.5",
     "@vercel/speed-insights": "^2.0.0",
