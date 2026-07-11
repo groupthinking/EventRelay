@@ -35,6 +35,8 @@ except Exception:
     yt_dlp = None  # type: ignore
     YT_DLP_AVAILABLE = False
 
+from youtube_extension.utils.proxy import get_proxy_url
+
 logger = logging.getLogger(__name__)
 
 
@@ -224,6 +226,9 @@ class SpeechToTextService:
                     "noplaylist": True,
                     "quiet": True,
                 }
+                proxy_url = get_proxy_url()
+                if proxy_url:
+                    ydl_opts["proxy"] = proxy_url
 
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:  # type: ignore[attr-defined]
                     info = ydl.extract_info(video_url, download=True)

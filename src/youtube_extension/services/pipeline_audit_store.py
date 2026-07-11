@@ -26,6 +26,8 @@ class PipelineAuditStore:
         success: bool,
         duration_ms: float,
         details: Optional[dict[str, Any]] = None,
+        input_tokens: Optional[int] = None,
+        output_tokens: Optional[int] = None,
     ) -> None:
         entry = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -34,6 +36,8 @@ class PipelineAuditStore:
             "action": action,
             "success": success,
             "duration_ms": duration_ms,
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
             "details": details or {},
         }
         self._buffer.setdefault(run_id, []).append(entry)

@@ -5,12 +5,21 @@ Validates both Python SDK and REST API approaches
 """
 import asyncio
 import json
-import time
+import os
 import subprocess
+import time
+
+import pytest
 from google import genai
 
-# Real API Keys
-GEMINI_API_KEY = "AIzaSyAdaiRnkCVDq_-ac-iDiTPt_KLvT-MW-JY"
+# API key must come from the environment — never hardcode credentials.
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+
+if not GEMINI_API_KEY:
+    pytest.skip(
+        "API validation test requires GEMINI_API_KEY env var",
+        allow_module_level=True,
+    )
 
 async def test_gemini_python_sdk():
     """Test Gemini using Python SDK"""

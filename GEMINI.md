@@ -1,3 +1,5 @@
+> **CONTROL PLANE (binding):** Read [`CONTROL.md`](CONTROL.md) → [`docs/control-plane/`](docs/control-plane/). Inventory over invention. Live verify before any "works" claim.
+
 # EventRelay — Gemini CLI Context
 
 This file provides project context for Gemini CLI when working in the EventRelay repository.
@@ -26,7 +28,7 @@ src/                          # Python backend
 apps/
   web/                        # Next.js frontend (port 3000)
 packages/                     # Shared monorepo packages
-mcp-servers/                  # MCP server implementations (litert-mcp, shared-state)
+mcp-servers/                  # MCP server implementations (langextract, vercel config)
 tests/                        # Python tests (unit/, integration/, fixtures/, workflows/)
 docs/                         # Extended documentation
 infrastructure/               # Kubernetes manifests, Terraform, Cloud Run deploy scripts
@@ -41,7 +43,6 @@ The following MCP servers are pre-configured for Gemini CLI:
 | Server | Purpose | Trust |
 |---|---|---|
 | `github` | GitHub repo management via `@github/github-mcp-server` | `false` — external npm package |
-| `shared-state` | Local Python state coordinator for agent coordination | `true` — local project code |
 | `git-workflow` | Safe git operations (status/add/commit/pull/push) | `true` — local project code |
 | `stitch` | Google Stitch HTTP MCP endpoint | `false` — remote HTTP service |
 

@@ -96,7 +96,7 @@ class YouTubeAPIService:
         loop = asyncio.get_event_loop()
         transcript = await loop.run_in_executor(
             None,
-            lambda: YouTubeTranscriptApi.get_transcript(video_id, languages=languages)
+            lambda: YouTubeTranscriptApi().fetch(video_id, languages=languages).to_raw_data()
         )
 
         return [

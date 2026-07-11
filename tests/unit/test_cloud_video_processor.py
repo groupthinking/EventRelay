@@ -230,6 +230,27 @@ class TestExtractVideoId:
     def test_bare_id_passthrough(self, processor):
         assert processor._extract_video_id("auJzb1D-fag") == "auJzb1D-fag"
 
+    def test_uppercase_watch_url(self, processor):
+        # The API-boundary validator is case-insensitive, so an uppercase URL
+        # reaches here; extraction must not fall through to the bare-id branch
+        # and return the whole URL.
+        assert (
+            processor._extract_video_id("HTTPS://YOUTUBE.COM/WATCH?V=auJzb1D-fag")
+            == "auJzb1D-fag"
+        )
+
+    def test_mixed_case_host(self, processor):
+        assert (
+            processor._extract_video_id("https://M.YOUTUBE.COM/watch?v=auJzb1D-fag")
+            == "auJzb1D-fag"
+        )
+
+    def test_uppercase_short_url(self, processor):
+        assert (
+            processor._extract_video_id("https://YOUTU.BE/auJzb1D-fag?t=10")
+            == "auJzb1D-fag"
+        )
+
 
 # ---------------------------------------------------------------------------
 # 4. process_video_async – queue enabled
