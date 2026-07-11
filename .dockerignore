@@ -1,12 +1,14 @@
 # Node & Frontend
 node_modules/
-# Keep apps/web for the build, but ignore other apps if any
-apps/*
+.next/
+.turbo/
+
+# Include only apps/web from the apps/ directory (needed for npm ci in builder stage)
+# Subsequent lines re-exclude artifacts inside apps/web
+apps/
 !apps/web/
 apps/web/node_modules/
 apps/web/.next/
-.next/
-.turbo/
 
 # Chrome / NotebookLM browser profiles (~1GB)
 notebooklm_chrome_profile/
@@ -66,3 +68,11 @@ htmlcov/
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
+
+# Infrastructure (not needed in app image)
+infrastructure/
+supabase/
+mcp-servers/
+
+# CI/CD
+.github/
