@@ -151,7 +151,7 @@ class UnifiedAISDK:
             return AIResponse(
                 content="",
                 model=request.model,
-                provider=str(request.provider),
+                provider=request.provider.value if isinstance(request.provider, ModelProvider) else str(request.provider),
                 success=False,
                 error=f"Unsupported provider: '{request.provider}'",
             )
@@ -367,8 +367,9 @@ class UnifiedAISDK:
                 if provider == ModelProvider.CLAUDE:
                     # Anthropic: lightweight reachability check via GET /v1/models
                     # (avoids triggering a billable completion)
+                    claude_models_url = _PROVIDER_ENDPOINTS[ModelProvider.CLAUDE].rsplit("/", 1)[0] + "/models"
                     resp = await client.get(
-                        "https://api.anthropic.com/v1/models",
+                        claude_models_url,
                         headers={"x-api-key": api_key, "anthropic-version": "2023-06-01"},
                         timeout=10.0,
                     )
