@@ -460,6 +460,10 @@ class TestCacheEndpoints:
             svc.get_cache_statistics.side_effect = RuntimeError("db down")
             return svc
 
+        # Clear global cache in the router module to ensure we hit the service
+        router_module._stats_cache = {}
+        router_module._stats_cache_time = 0
+
         app.dependency_overrides[get_cache_service] = _err
         try:
             resp = client.get("/api/v1/cache/stats")

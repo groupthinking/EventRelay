@@ -164,6 +164,55 @@
       "role": "Update runbooks, docs, and deployment checklist; coordinate final smoke + prod verification",
       "tools": ["suggest_fix", "capture_technology"],
       "capabilities": ["documentation", "runbook_update", "deployment_readiness"]
+    },
+    {
+      "id": "content-generation",
+      "name": "Content Generation Agent",
+      "role": "Generate blog/social posts from video transcripts",
+      "tools": ["content-generation"],
+      "capabilities": ["content_creation", "social_media_posts", "blog_writing"]
+    },
+    {
+      "id": "seo-optimizer",
+      "name": "SEO Optimizer Agent",
+      "role": "Optimize video titles, descriptions, and tags",
+      "tools": ["seo-optimizer"],
+      "capabilities": ["seo", "metadata_optimization", "keyword_research"]
+    },
+    {
+      "id": "social-scheduler",
+      "name": "Social Scheduler Agent",
+      "role": "Schedule cross-platform social media posts",
+      "tools": ["social-scheduler"],
+      "capabilities": ["social_scheduling", "cross_platform_posting", "automated_posting"]
+    },
+    {
+      "id": "lead-scorer",
+      "name": "Lead Scorer Agent",
+      "role": "Score leads based on engagement signals",
+      "tools": ["lead-scorer"],
+      "capabilities": ["lead_scoring", "engagement_analysis", "sales_intelligence"]
+    },
+    {
+      "id": "email-campaign",
+      "name": "Email Campaign Agent",
+      "role": "Generate and send email sequences",
+      "tools": ["email-campaign"],
+      "capabilities": ["email_marketing", "campaign_automation", "copywriting"]
+    },
+    {
+      "id": "analytics-dashboard",
+      "name": "Analytics Dashboard Agent",
+      "role": "Aggregate metrics into dashboard data",
+      "tools": ["analytics-dashboard"],
+      "capabilities": ["data_aggregation", "dashboard_metrics", "reporting"]
+    },
+    {
+      "id": "ab-testing",
+      "name": "A/B Testing Agent",
+      "role": "Run A/B tests on thumbnails and titles",
+      "tools": ["ab-testing"],
+      "capabilities": ["ab_testing", "experiment_design", "conversion_optimization"]
     }
   ]
 }
