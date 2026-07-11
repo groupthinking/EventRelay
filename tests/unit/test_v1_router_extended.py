@@ -1957,8 +1957,9 @@ class TestQueueTranscriptActionJob:
         assert result["async_processing"] is True
         assert "job_id" in result
         assert result["processing_transport"] == "local_background"
-        # asyncio.create_task should have been called for fallback
-        mock_ct.assert_called_once()
+        # asyncio.create_task should have been called for fallback (may also be called
+        # by _persist_video_job background serialization, so check at least once)
+        mock_ct.assert_called()
 
     async def test_queue_job_cloud_tasks_success(self):
         """CloudTasksQueueService succeeds → queued_transport = cloud_tasks."""

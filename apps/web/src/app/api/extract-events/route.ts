@@ -259,7 +259,7 @@ Respond with ONLY valid JSON matching the required structure.`;
 
     return NextResponse.json({
       success: false,
-      error: message,
+      error: 'Failed to extract events',
       data: { events: [], actions: [], summary: '', topics: [] },
     });
   }

@@ -1,3 +1,5 @@
+> **STALE-DO-NOT-TRUST for folder layout.** Top-level paths described below (`api/`, `ingest/`, `workers/`, …) do **not** match the live tree (`apps/web`, `src/youtube_extension`, `src/agents`). Use [`CONTROL.md`](CONTROL.md) and `git ls-files` as authority. Kept for historical reference only until GATE-6 rewrite.
+
 # EventRelay — Architecture Overview
 
 Prompt Yourself:
