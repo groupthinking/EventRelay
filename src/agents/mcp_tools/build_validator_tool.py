@@ -162,6 +162,62 @@ class BuildValidatorMCPTool:
                 "project_path": project_path
             }
 
+
+    async def get_error_patterns(self, limit: int = 10) -> dict[str, Any]:
+        """Get known error patterns"""
+        patterns_file = Path("data/error_patterns.json")
+        try:
+            if patterns_file.exists():
+                import json
+                patterns = json.loads(patterns_file.read_text())
+                return {"status": "success", "patterns": patterns[:limit]}
+            return {"status": "success", "patterns": []}
+        except Exception as e:
+            logger.error(f"Error reading patterns: {e}")
+            return {"status": "error", "error": str(e)}
+
+    async def learn_from_error(self, error: str, fix: str, context: str = "") -> dict[str, Any]:
+        """Learn from a fixed error"""
+        patterns_file = Path("data/error_patterns.json")
+        try:
+            import json
+            import time
+            patterns_file.parent.mkdir(parents=True, exist_ok=True)
+
+            patterns = []
+            if patterns_file.exists():
+                patterns = json.loads(patterns_file.read_text())
+
+            new_pattern = {
+                "error": error,
+                "fix": fix,
+                "context": context,
+                "timestamp": time.time()
+            }
+            patterns.append(new_pattern)
+
+            patterns_file.write_text(json.dumps(patterns, indent=2))
+            return {"status": "success", "message": "Successfully learned from error"}
+        except Exception as e:
+            logger.error(f"Error learning from error: {e}")
+            return {"status": "error", "error": str(e)}
+
+    async def suggest_fix(self, error_output: str, command: str = "unknown", project_path: str = "") -> dict[str, Any]:
+        """Suggest a fix for an error using Gemini"""
+        if not project_path:
+            return {"status": "error", "error": "project_path is required"}
+
+        project_dir = Path(project_path)
+        result = await self._fix_errors(project_dir, command, error_output)
+
+        if result["success"]:
+            return {
+                "status": "success",
+                "diagnosis": result.get("diagnosis", ""),
+                "fixes_applied": result.get("fixes_applied", [])
+            }
+        return {"status": "error", "error": result.get("error", "Unknown error")}
+
     async def _run_npm_install(self, project_dir: Path) -> dict[str, Any]:
         """Run npm install"""
         try:
@@ -363,5 +419,8 @@ def get_build_validator_tool() -> BuildValidatorMCPTool:
 
 # MCP Tool registry for agent network
 MCP_TOOLS = {
-    "validate_build": get_build_validator_tool().validate_build
+    "validate_build": get_build_validator_tool().validate_build,
+    "get_error_patterns": get_build_validator_tool().get_error_patterns,
+    "learn_from_error": get_build_validator_tool().learn_from_error,
+    "suggest_fix": get_build_validator_tool().suggest_fix
 }
