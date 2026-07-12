@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, Optional
 
 from skills.base import BaseSkill, SkillResult
 
@@ -19,6 +19,10 @@ class LeadScorerSkill(BaseSkill):
     triggers = ["youtube.analytics.updated"]
     required_env_vars = ["DATABASE_URL"]
 
+    def __init__(self, dependencies: Optional[dict[str, Any]] = None):
+        super().__init__(dependencies)
+        self.db = self.dependencies.get("database_service")
+
     async def execute(self, payload: dict[str, Any]) -> SkillResult:
         """Score a lead based on engagement signals.
 
@@ -33,6 +37,9 @@ class LeadScorerSkill(BaseSkill):
         signals = payload.get("signals", {})
 
         logger.info("Scoring lead %s with %d signals", lead_id, len(signals))
+
+        if self.db:
+             logger.info("Using injected database_service for lead scoring")
 
         return SkillResult(
             status="success",
