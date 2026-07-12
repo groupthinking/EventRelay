@@ -149,11 +149,13 @@ class TranscriptQualityScorerDeployment:
         try:
             from uvai.ml.bigquery_export import export_transcript_outcome
             export_transcript_outcome(
-                video_url=body.get("metadata", {}).get("video_url", ""),
-                metadata=body.get("metadata", {}),
-                actual_source=body.get("actual_source", "unknown"),
-                actual_quality=float(body.get("actual_quality", 0.0)),
-                success=bool(body.get("success", False)),
+                outcome={
+                    "video_url": body.get("metadata", {}).get("video_url", ""),
+                    "metadata": body.get("metadata", {}),
+                    "actual_source": body.get("actual_source", "unknown"),
+                    "actual_quality": float(body.get("actual_quality", 0.0)),
+                    "success": bool(body.get("success", False)),
+                }
             )
         except Exception:
             logger.debug("BigQuery export skipped", exc_info=True)

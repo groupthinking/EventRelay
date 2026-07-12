@@ -126,23 +126,18 @@ def _insert_via_rest(table_id: str, rows: list[dict[str, Any]]) -> bool:
 
 
 def export_transcript_outcome(
-    video_url: str,
-    metadata: dict[str, Any],
-    actual_source: str,
-    actual_quality: float,
-    success: bool,
-    predicted_source: str | None = None,
-    predicted_quality: float | None = None,
+    outcome: dict[str, Any],
 ) -> bool:
     """Export a transcript quality outcome to BigQuery."""
+    metadata = outcome.get("metadata", {})
     row = {
-        "video_url": video_url,
+        "video_url": outcome.get("video_url"),
         "exported_at": datetime.now(timezone.utc).isoformat(),
-        "actual_source": actual_source,
-        "actual_quality": actual_quality,
-        "success": success,
-        "predicted_source": predicted_source,
-        "predicted_quality": predicted_quality,
+        "actual_source": outcome.get("actual_source"),
+        "actual_quality": outcome.get("actual_quality"),
+        "success": outcome.get("success"),
+        "predicted_source": outcome.get("predicted_source"),
+        "predicted_quality": outcome.get("predicted_quality"),
         "duration_seconds": metadata.get("duration_seconds"),
         "has_captions": metadata.get("has_captions"),
         "language": metadata.get("language"),
