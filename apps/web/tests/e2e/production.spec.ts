@@ -1,7 +1,5 @@
 import { test, expect } from '@playwright/test';
 
-const requestBaseURL = process.env.BASE_URL || 'http://127.0.0.1:3000';
-
 test.describe('EventRelay Production E2E', () => {
   test('homepage loads and displays core elements', async ({ page }) => {
     await page.goto('/');
@@ -25,7 +23,8 @@ test.describe('EventRelay Production E2E', () => {
   });
 
   test('api health endpoint is reachable from frontend proxy', async ({ page }) => {
-    const response = await page.request.get(`${requestBaseURL}/api`);
+    await page.goto('/dashboard');
+    const response = await page.request.get(new URL('/api', page.url()).toString());
     expect(response.ok()).toBeTruthy();
     const data = await response.json();
     expect(data.status).toBe('operational');

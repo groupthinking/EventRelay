@@ -19,7 +19,7 @@ sys.modules["scripts.check_production_readiness"] = _MODULE
 _SPEC.loader.exec_module(_MODULE)
 
 
-def test_main_exits_nonzero_when_a_critical_check_fails(monkeypatch: pytest.MonkeyPatch):
+def test_main_exits_nonzero_when_check_env_vars_fails(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(_MODULE, "check_env_vars", lambda: False)
     monkeypatch.setattr(_MODULE, "check_cors_config", lambda: True)
     monkeypatch.setattr(_MODULE, "check_log_levels", lambda: True)
