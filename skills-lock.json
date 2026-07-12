@@ -96,6 +96,7 @@
       "sourceType": "local",
       "skillPath": "src/skills/content_generation/main.py",
       "className": "ContentGenerationSkill",
+      "name": "Content Generation",
       "version": "1.0.0",
       "triggers": [
         "video_published"
@@ -109,6 +110,7 @@
       "sourceType": "local",
       "skillPath": "src/skills/seo_optimizer/main.py",
       "className": "SEOOptimizerSkill",
+      "name": "SEO Optimizer",
       "version": "1.0.0",
       "triggers": [
         "video_uploaded"
@@ -122,6 +124,7 @@
       "sourceType": "local",
       "skillPath": "src/skills/social_scheduler/main.py",
       "className": "SocialSchedulerSkill",
+      "name": "Social Scheduler",
       "version": "1.0.0",
       "triggers": [
         "content_generated"
@@ -135,6 +138,7 @@
       "sourceType": "local",
       "skillPath": "src/skills/lead_scorer/main.py",
       "className": "LeadScorerSkill",
+      "name": "Lead Scorer",
       "version": "1.0.0",
       "triggers": [
         "analytics_updated"
@@ -148,6 +152,7 @@
       "sourceType": "local",
       "skillPath": "src/skills/email_campaign/main.py",
       "className": "EmailCampaignSkill",
+      "name": "Email Campaign",
       "version": "1.0.0",
       "triggers": [
         "lead_scored"
@@ -162,6 +167,7 @@
       "sourceType": "local",
       "skillPath": "src/skills/analytics_dashboard/main.py",
       "className": "AnalyticsDashboardSkill",
+      "name": "Analytics Dashboard",
       "version": "1.0.0",
       "triggers": [
         "daily_cron"
@@ -175,6 +181,7 @@
       "sourceType": "local",
       "skillPath": "src/skills/ab_testing/main.py",
       "className": "ABTestingSkill",
+      "name": "A/B Testing",
       "version": "1.0.0",
       "triggers": [
         "video_uploaded"

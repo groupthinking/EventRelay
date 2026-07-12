@@ -320,6 +320,21 @@ class SkillRegistry:
             return
 
         skills_data = data.get("skills", {})
+        if isinstance(skills_data, list):
+            # Legacy list-format lock files keyed each entry by an inner "id".
+            skills_data = {
+                entry["id"]: entry
+                for entry in skills_data
+                if isinstance(entry, dict) and "id" in entry
+            }
+        elif not isinstance(skills_data, dict):
+            logger.warning(
+                "Unexpected 'skills' shape in %s: %s; skipping skill load",
+                self._lock_path,
+                type(skills_data).__name__,
+            )
+            return
+
         for skill_id, meta in skills_data.items():
             # Only load uvai-skills (local GTM skills)
             if meta.get("source") == "uvai-skills" and meta.get("sourceType") == "local":
@@ -331,7 +346,10 @@ class SkillRegistry:
         """Build a normalized metadata dict for a skill entry."""
         return {
             "id": skill_id,
-            "name": skill_id.replace("-", " ").title(),
+            # Prefer the canonical display name from the lock file; fall back to a
+            # title-cased id (which mangles acronyms like "SEO"/"A/B", so only used
+            # when no explicit name is recorded).
+            "name": meta.get("name") or skill_id.replace("-", " ").title(),
             "class_name": meta.get("className", ""),
             "version": meta.get("version", "0.0.0"),
             "triggers": meta.get("triggers", []),

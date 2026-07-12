@@ -119,6 +119,12 @@ class TestSkillDiscovery:
     def test_get_nonexistent_skill_returns_none(self, registry: SkillRegistry) -> None:
         assert registry.get_skill("nonexistent-skill") is None
 
+    def test_acronym_display_names_are_preserved(self, registry: SkillRegistry) -> None:
+        # Names come from the lock file's explicit "name" field, not a title-cased
+        # id (which would mangle acronyms into "Seo Optimizer" / "Ab Testing").
+        assert registry.get_skill("seo-optimizer")["name"] == "SEO Optimizer"
+        assert registry.get_skill("ab-testing")["name"] == "A/B Testing"
+
 
 # ---------------------------------------------------------------------------
 # Trigger matching tests
