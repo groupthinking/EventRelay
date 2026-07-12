@@ -7,6 +7,7 @@ Real-time API cost tracking, quota management, and optimization for UVAI platfor
 Monitors OpenAI, Anthropic, Gemini, YouTube Data API, and other service usage.
 """
 
+import urllib.request
 import asyncio
 import json
 import logging
@@ -362,8 +363,27 @@ class APICostMonitor:
 
         logger.warning(alert_msg)
 
-        # TODO: Implement actual notification system (email, Slack, etc.)
-        # For now, just log the alert
+        webhook_url = os.getenv('BUDGET_ALERT_WEBHOOK_URL')
+        if not webhook_url:
+            return
+
+        try:
+
+            payload = json.dumps({"text": alert_msg}).encode('utf-8')
+            req = urllib.request.Request(
+                webhook_url,
+                data=payload,
+                headers={'Content-Type': 'application/json'}
+            )
+
+            # Since this is an async function but urllib is sync, we execute it
+            # in a background thread to avoid blocking the event loop
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(None, lambda: urllib.request.urlopen(req, timeout=5))
+
+            logger.info("Budget alert notification sent successfully.")
+        except Exception as e:
+            logger.error(f"Failed to send budget alert notification: {e}")
 
     async def get_daily_cost(self, date: str = None) -> float:
         """Get total cost for a specific date"""

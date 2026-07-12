@@ -501,3 +501,48 @@ class TestAPICostMonitorInit:
 
     def test_cost_tracking_enabled_by_default(self, monitor):
         assert monitor.cost_tracking_enabled is True
+
+@pytest.mark.asyncio
+class TestBudgetAlertWebhook:
+    async def test_webhook_alert_success(self, monitor, monkeypatch, mocker):
+        # Set the webhook URL
+        monkeypatch.setenv("BUDGET_ALERT_WEBHOOK_URL", "http://example.com/webhook")
+
+        # Mock urllib.request.urlopen
+        mock_urlopen = mocker.patch("urllib.request.urlopen")
+
+        # Trigger an alert
+        await monitor._send_budget_alert(15.0, "exceeded")
+
+        # Verify urlopen was called once
+        mock_urlopen.assert_called_once()
+        req = mock_urlopen.call_args[0][0]
+        assert req.full_url == "http://example.com/webhook"
+        assert req.headers.get('Content-type') == 'application/json'
+
+    async def test_webhook_alert_failure_does_not_throw(self, monitor, monkeypatch, mocker, caplog):
+        # Set the webhook URL
+        monkeypatch.setenv("BUDGET_ALERT_WEBHOOK_URL", "http://example.com/webhook")
+
+        # Mock urllib.request.urlopen to raise an exception
+        mock_urlopen = mocker.patch("urllib.request.urlopen")
+        mock_urlopen.side_effect = Exception("Webhook failed")
+
+        # Trigger an alert - should not raise exception
+        await monitor._send_budget_alert(15.0, "exceeded")
+
+        # Verify the failure was logged
+        assert "Failed to send budget alert notification: Webhook failed" in caplog.text
+
+    async def test_no_webhook_url(self, monitor, monkeypatch, mocker):
+        # Ensure webhook URL is not set
+        monkeypatch.delenv("BUDGET_ALERT_WEBHOOK_URL", raising=False)
+
+        # Mock urllib.request.urlopen
+        mock_urlopen = mocker.patch("urllib.request.urlopen")
+
+        # Trigger an alert
+        await monitor._send_budget_alert(15.0, "exceeded")
+
+        # Verify urlopen was NOT called
+        mock_urlopen.assert_not_called()
