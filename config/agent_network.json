@@ -172,7 +172,7 @@
       "tools": ["generate_fullstack"],
       "capabilities": ["content_generation", "blog_posts", "social_posts"],
       "skill_source": "uvai-skills",
-      "trigger_events": ["video_published"]
+      "trigger_events": ["youtube.video.published", "manual"]
     },
     {
       "id": "seo-optimizer",
@@ -181,7 +181,7 @@
       "tools": ["analyze_video"],
       "capabilities": ["seo_optimization", "metadata_enhancement"],
       "skill_source": "uvai-skills",
-      "trigger_events": ["video_uploaded"]
+      "trigger_events": ["youtube.video.uploaded"]
     },
     {
       "id": "social-scheduler",
@@ -190,7 +190,7 @@
       "tools": [],
       "capabilities": ["social_media", "scheduling", "cross_platform"],
       "skill_source": "uvai-skills",
-      "trigger_events": ["content_generated"]
+      "trigger_events": ["ai.content.generated"]
     },
     {
       "id": "lead-scorer",
@@ -199,7 +199,7 @@
       "tools": [],
       "capabilities": ["lead_scoring", "engagement_analysis"],
       "skill_source": "uvai-skills",
-      "trigger_events": ["analytics_updated"]
+      "trigger_events": ["youtube.analytics.updated"]
     },
     {
       "id": "email-campaign",
@@ -208,7 +208,7 @@
       "tools": [],
       "capabilities": ["email_generation", "campaign_management"],
       "skill_source": "uvai-skills",
-      "trigger_events": ["lead_scored"]
+      "trigger_events": ["crm.lead.scored"]
     },
     {
       "id": "analytics-dashboard",
@@ -217,7 +217,7 @@
       "tools": [],
       "capabilities": ["metrics_aggregation", "dashboard_generation"],
       "skill_source": "uvai-skills",
-      "trigger_events": ["daily_cron"]
+      "trigger_events": ["system.cron.daily"]
     },
     {
       "id": "ab-testing",
@@ -226,7 +226,7 @@
       "tools": [],
       "capabilities": ["ab_testing", "variant_management"],
       "skill_source": "uvai-skills",
-      "trigger_events": ["video_uploaded"]
+      "trigger_events": ["youtube.video.uploaded"]
     }
   ]
 }

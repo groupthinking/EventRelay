@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 """Social Scheduler skill - schedules cross-platform social media posts."""
 
 from __future__ import annotations
@@ -17,7 +16,7 @@ class SocialSchedulerSkill(BaseSkill):
     skill_id = "social-scheduler"
     name = "Social Scheduler"
     version = "1.0.0"
-    triggers = ["content_generated"]
+    triggers = ["ai.content.generated"]
     required_env_vars = ["GEMINI_API_KEY"]
 
     async def execute(self, payload: dict[str, Any]) -> SkillResult:
@@ -50,27 +49,3 @@ class SocialSchedulerSkill(BaseSkill):
                 "message": f"Posts scheduled for {len(platforms)} platform(s)",
             },
         )
-=======
-import os
-import sys
-import json
-import logging
-
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
-
-def main():
-    skill_name = "social-scheduler"
-    logger.info(f"Skill {skill_name} invoked")
-    context = os.getenv("SKILL_CONTEXT", "{}")
-    logger.info(f"Context: {context}")
-    gemini_key = os.getenv("GEMINI_API_KEY")
-    if gemini_key:
-        logger.info("GEMINI_API_KEY is present")
-    else:
-        logger.warning("GEMINI_API_KEY is missing")
-    print(json.dumps({"status": "success", "skill": skill_name}))
-
-if __name__ == "__main__":
-    main()
->>>>>>> origin/main

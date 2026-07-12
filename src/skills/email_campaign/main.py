@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 """Email Campaign skill - generates and sends email sequences."""
 
 from __future__ import annotations
@@ -17,7 +16,7 @@ class EmailCampaignSkill(BaseSkill):
     skill_id = "email-campaign"
     name = "Email Campaign"
     version = "1.0.0"
-    triggers = ["lead_scored"]
+    triggers = ["crm.lead.scored"]
     required_env_vars = ["GEMINI_API_KEY", "DATABASE_URL"]
 
     async def execute(self, payload: dict[str, Any]) -> SkillResult:
@@ -47,27 +46,3 @@ class EmailCampaignSkill(BaseSkill):
                 "message": f"Email campaign ({campaign_type}) queued for lead {lead_id}",
             },
         )
-=======
-import os
-import sys
-import json
-import logging
-
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
-
-def main():
-    skill_name = "email-campaign"
-    logger.info(f"Skill {skill_name} invoked")
-    context = os.getenv("SKILL_CONTEXT", "{}")
-    logger.info(f"Context: {context}")
-    gemini_key = os.getenv("GEMINI_API_KEY")
-    if gemini_key:
-        logger.info("GEMINI_API_KEY is present")
-    else:
-        logger.warning("GEMINI_API_KEY is missing")
-    print(json.dumps({"status": "success", "skill": skill_name}))
-
-if __name__ == "__main__":
-    main()
->>>>>>> origin/main
