@@ -54,24 +54,11 @@ export async function fetchTranscript({
     return { success: false, error: 'url or audioUrl is required', transcript: '' };
   }
 
-  // Fetch YouTube metadata (description, chapters, title) lazily and share it.
-  // Only the paid fallback strategies (Gemini/OpenAI) need metadata, so we must
-  // NOT fire an outbound YouTube request on the common free-path success case
-  // where Strategy 1 (backend transcript) returns early — that would undo the
-  // "avoid unnecessary work" intent of this code path. The memoized helper
-  // guarantees at most one fetch, triggered only when a fallback awaits it.
-  let metadataPromise: ReturnType<typeof fetchYouTubeMetadata> | null = null;
-  const getMetadata = (): ReturnType<typeof fetchYouTubeMetadata> => {
-    if (!metadataPromise) {
-      metadataPromise = url
-        ? fetchYouTubeMetadata(url).catch((err) => {
-            console.log('YouTube metadata fetch failed:', err);
-            return null;
-          })
-        : Promise.resolve(null);
-    }
-    return metadataPromise;
-  };
+  // Fetch YouTube metadata (description, chapters, title) — shared by all strategies
+  const metadataPromise = url ? fetchYouTubeMetadata(url).catch((err) => {
+    console.log('YouTube metadata fetch failed:', err);
+    return null;
+  }) : Promise.resolve(null);
 
   // Strategy 1: Try YouTube transcript API via backend (fast + free).
   // Run this FIRST and return early on success so the paid AI providers
@@ -144,7 +131,7 @@ export async function fetchTranscript({
     if (hasGeminiKey()) {
       const geminiPromise: Promise<TranscriptionResult | null> = (async () => {
         try {
-          const metadata = await getMetadata();
+          const metadata = await metadataPromise;
           const metadataContext = metadata ? formatMetadataAsContext(metadata) : '';
           const geminiPrompt = `You are a video transcription assistant.
 
@@ -209,7 +196,7 @@ INSTRUCTIONS:
     if (process.env.OPENAI_API_KEY) {
       const openaiPromise: Promise<TranscriptionResult | null> = (async () => {
         try {
-          const metadata = await getMetadata();
+          const metadata = await metadataPromise;
           const metadataContext = metadata ? formatMetadataAsContext(metadata) : '';
           const response = await getOpenAI().responses.create({
             model: 'gpt-4o-mini',

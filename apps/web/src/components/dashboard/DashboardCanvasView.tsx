@@ -284,7 +284,6 @@ function DockTabButton({
   return (
     <button
       onClick={onClick}
-      aria-current={active ? 'page' : undefined}
       className="relative px-4 py-4 font-heading text-[11px] tracking-[0.15em] uppercase transition-colors whitespace-nowrap min-h-[44px]"
       style={{
         color: active ? accent : 'rgba(248,245,253,0.4)',

@@ -1,5 +1,3 @@
-> **CONTROL PLANE (binding):** Read [`CONTROL.md`](CONTROL.md) and [`docs/control-plane/00-CEO-DIRECTIVE.md`](docs/control-plane/00-CEO-DIRECTIVE.md) first. Do not implement product features until EXECUTION-PLAN GATE-0/1 are complete. Verify live; no architecture claims from stale ARCHITECTURE.md.
-
 # CLAUDE.md
 
 This file provides context for Claude Code when working in the EventRelay repository.

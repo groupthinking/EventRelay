@@ -375,25 +375,14 @@ class EnhancedStrategy(ProcessorStrategy):
     def __init__(self, config: Optional[dict[str, Any]] = None):
         self.config = config or {}
         if HAS_VIDEO_DEPS:
-            try:
-                self.video_client = videointelligence.VideoIntelligenceServiceClient()
-            except Exception as e:  # broad catch: covers DefaultCredentialsError, TransportError, etc.
-                logger.warning(
-                    f"Could not initialize VideoIntelligenceServiceClient: "
-                    f"{type(e).__name__}: {e}"
-                )
-                self.video_client = None
+            self.video_client = videointelligence.VideoIntelligenceServiceClient()
         if HAS_AI_DEPS and genai:
             gemini_api_key = self.config.get("gemini_api_key") or os.getenv(
                 "GEMINI_API_KEY"
             )
-            if gemini_api_key:
-                self.gemini_client = genai.Client(api_key=gemini_api_key)
-            else:
-                logger.warning(
-                    "Gemini API key not configured; AI analysis will be unavailable."
-                )
-                self.gemini_client = None
+            if not gemini_api_key:
+                raise ValueError("Gemini API key is not configured.")
+            self.gemini_client = genai.Client(api_key=gemini_api_key)
 
     async def process_video(
         self, video_url: str, options: dict[str, Any] = None
@@ -462,7 +451,7 @@ class EnhancedStrategy(ProcessorStrategy):
 
     async def extract_video_metadata(self, video_id: str) -> VideoMetadata:
         """Extract comprehensive video metadata using Vertex AI"""
-        if not HAS_VIDEO_DEPS or self.video_client is None:
+        if not HAS_VIDEO_DEPS:
             raise ValueError("Video dependencies not available")
 
         video_uri = f"gs://youtube_videos/{video_id}.mp4"  # Assuming videos are in GCS
@@ -512,7 +501,7 @@ class EnhancedStrategy(ProcessorStrategy):
         self, video_id: str, languages: list[str] = None
     ) -> list[TranscriptSegment]:
         """Extract transcript using Vertex AI Video Intelligence"""
-        if not HAS_VIDEO_DEPS or self.video_client is None:
+        if not HAS_VIDEO_DEPS:
             raise ValueError("Video dependencies not available")
 
         video_uri = f"gs://youtube_videos/{video_id}.mp4"  # Assuming videos are in GCS

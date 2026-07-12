@@ -140,11 +140,10 @@ export default function VideoGenerator({ className = '' }: VideoGeneratorProps) 
             onChange={(e) => setPrompt(e.target.value)}
             placeholder="A cinematic shot of a futuristic city at golden hour, time-lapse clouds..."
             maxLength={1000}
-            aria-describedby="prompt-char-count"
             rows={3}
             className="w-full px-4 py-3 bg-slate-900 rounded-xl border border-white/10 text-sm text-white/80 placeholder-white/30 resize-none focus:outline-none focus:border-purple-500/50 transition-colors"
           />
-          <p id="prompt-char-count" className="text-xs text-white/30 mt-1 text-right">{prompt.length}/1000</p>
+          <p className="text-xs text-white/30 mt-1 text-right">{prompt.length}/1000</p>
         </div>
 
         {/* Controls */}
@@ -182,8 +181,7 @@ export default function VideoGenerator({ className = '' }: VideoGeneratorProps) 
         <button
           onClick={handleGenerate}
           disabled={state === 'generating' || !prompt.trim()}
-          aria-busy={state === 'generating' || undefined}
-          className="w-full py-3 rounded-xl bg-gradient-to-r from-purple-600 to-purple-700 font-medium text-sm hover:opacity-90 transition disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900"
+          className="w-full py-3 rounded-xl bg-gradient-to-r from-purple-600 to-purple-700 font-medium text-sm hover:opacity-90 transition disabled:opacity-40 disabled:cursor-not-allowed"
         >
           {state === 'generating' ? (
             <span className="flex items-center justify-center gap-2">
@@ -202,7 +200,7 @@ export default function VideoGenerator({ className = '' }: VideoGeneratorProps) 
 
         {/* Error */}
         {state === 'error' && error && (
-          <div role="alert" className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-sm text-red-400">
+          <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-sm text-red-400">
             {error}
           </div>
         )}

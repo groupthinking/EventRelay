@@ -6,6 +6,6 @@ Run with: uvicorn uvai.core.main_v2:app --reload
 from __future__ import annotations
 
 try:
-    from youtube_extension.backend.main import app as app  # noqa: F401
+    from youtube_extension.backend.main_v2 import app as app  # noqa: F401
 except Exception as import_error:
-    raise RuntimeError(f"Failed to import canonical app: {import_error}") from import_error
+    raise RuntimeError(f"Failed to import canonical app: {import_error}")

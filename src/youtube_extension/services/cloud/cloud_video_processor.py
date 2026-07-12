@@ -13,7 +13,6 @@ Cloud-native video processor using:
 import asyncio
 import logging
 import os
-import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
@@ -300,20 +299,12 @@ class CloudNativeVideoProcessor:
         return await firestore_service.get_state(video_id)
 
     def _extract_video_id(self, video_url: str) -> str:
-        """Extract video ID from a YouTube URL.
-
-        The host/path matching is case-insensitive so uppercase URLs such as
-        ``HTTPS://YOUTUBE.COM/WATCH?V=...`` are handled here too. The
-        API-boundary validator (``models._YOUTUBE_URL_REGEX``) is itself
-        case-insensitive, so without this an uppercase URL would pass
-        validation, fall through the ``else`` branch below, and return the
-        whole URL as the "id" — breaking the downstream metadata fetch.
-        """
-        lowered = video_url.lower()
-        if 'youtube.com/watch?v=' in lowered:
-            return re.split(r'v=', video_url, flags=re.IGNORECASE)[1].split('&')[0]
-        elif 'youtu.be/' in lowered:
-            return re.split(r'youtu\.be/', video_url, flags=re.IGNORECASE)[1].split('?')[0]
+        """Extract video ID from YouTube URL"""
+        # Simple extraction - can be enhanced
+        if 'youtube.com/watch?v=' in video_url:
+            return video_url.split('v=')[1].split('&')[0]
+        elif 'youtu.be/' in video_url:
+            return video_url.split('youtu.be/')[1].split('?')[0]
         else:
             # Assume it's already an ID
             return video_url
