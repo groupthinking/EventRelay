@@ -1068,6 +1068,27 @@ class TestA2AEndpoints:
         data = resp.json()
         assert data["data"]["count"] == 0
 
+    def test_get_agent_sessions_returns_filtered_logs(self, client):
+        """/agents/sessions reads the shared orchestrator and passes filters through."""
+        mock_orch = MagicMock()
+        mock_orch.get_session_logs.return_value = [
+            {"agent_type": "researcher", "status": "ok"}
+        ]
+        with patch.object(router_module, "_shared_orchestrator", mock_orch):
+            resp = client.get("/api/v1/agents/sessions?agent_type=researcher&limit=5")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["data"]["count"] == 1
+        mock_orch.get_session_logs.assert_called_once_with(
+            agent_type="researcher", limit=5
+        )
+
+    def test_get_agent_sessions_503_when_orchestrator_unavailable(self, client):
+        """When the shared orchestrator failed to import, the endpoint 503s."""
+        with patch.object(router_module, "_shared_orchestrator", None):
+            resp = client.get("/api/v1/agents/sessions")
+        assert resp.status_code == 503
+
 
 # ===========================================================================
 # Actions Endpoints
@@ -2257,3 +2278,36 @@ class TestAdditionalErrorPaths:
             resp = client.post("/api/v1/feedback", json=payload)
         # Should succeed even if ml client fails
         assert resp.status_code == 200
+
+
+class TestRunAgentStatus:
+    """_run_agent must reflect execute_single's outcome in the execution status.
+
+    execute_single reports agent-level failures by returning an {"error": ...}
+    dict rather than raising, so the status must be derived from the result —
+    not unconditionally set to complete.
+    """
+
+    @staticmethod
+    def _execution():
+        return AgentExecution(
+            agent_type="analyzer", status=AgentStatus.queued, event_id="e1"
+        )
+
+    def test_error_dict_marks_execution_failed(self):
+        execution = self._execution()
+        orch = MagicMock()
+        orch.execute_single = AsyncMock(return_value={"error": "agent boom"})
+        with patch.object(router_module, "_shared_orchestrator", orch):
+            asyncio.run(router_module._run_agent(execution, [{"id": "e1"}]))
+        assert execution.status == AgentStatus.failed
+        assert "agent boom" in (execution.error or "")
+
+    def test_success_dict_marks_execution_complete(self):
+        execution = self._execution()
+        orch = MagicMock()
+        orch.execute_single = AsyncMock(return_value={"output": "done"})
+        with patch.object(router_module, "_shared_orchestrator", orch):
+            asyncio.run(router_module._run_agent(execution, [{"id": "e1"}]))
+        assert execution.status == AgentStatus.complete
+        assert execution.result == {"output": "done"}
