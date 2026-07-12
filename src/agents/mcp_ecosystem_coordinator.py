@@ -326,9 +326,10 @@ class SkillRegistry:
 
         skills_data = data.get("skills", {})
         if isinstance(skills_data, list):
-            # Handle list format from origin/main
+            # Handle list format from origin/main; only load entries that have a
+            # className so that _load_skill_instance() can instantiate them.
             for skill in skills_data:
-                if skill.get("source") == "uvai-skills":
+                if skill.get("source") == "uvai-skills" and skill.get("className"):
                     self._skills[skill["id"]] = skill
         elif isinstance(skills_data, dict):
             # Handle dict format from HEAD
