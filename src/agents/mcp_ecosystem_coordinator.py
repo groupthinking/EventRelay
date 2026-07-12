@@ -281,9 +281,10 @@ class MCPEcosystemCoordinator:
 class SkillRegistry:
     """Registry for discovering and invoking GTM skills from skills-lock.json.
 
-    Reads skill definitions from the lock file and dynamically loads skill
-    classes for execution. Implements explicit env-var pass-through when
-    spawning skill processes (no reliance on environment inheritance).
+    Reads skill definitions from the lock file and dynamically imports and
+    instantiates skill classes, invoking them in-process via
+    ``await instance.execute(...)``. Exposes explicit env-var selection per
+    skill (no reliance on environment inheritance).
     """
 
     _LOCK_FILE = "skills-lock.json"
@@ -391,10 +392,11 @@ class SkillRegistry:
         return instance
 
     def get_env_for_skill(self, skill_id: str) -> dict[str, str]:
-        """Get the explicit env vars to pass through to a skill subprocess.
+        """Get the explicit env vars a skill requires at execution time.
 
-        Implements MCP security requirement: do NOT rely on environment
-        inheritance; explicitly pass only required vars.
+        Implements the MCP security requirement: do NOT rely on environment
+        inheritance; resolve only the vars the skill's declared dependencies
+        need.
         """
         meta = self._skills.get(skill_id)
         if meta is None:
