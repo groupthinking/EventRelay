@@ -16,15 +16,19 @@ from dataclasses import asdict
 from datetime import datetime
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse
 
 from shared.youtube import RobustYouTubeMetadata
 from uvai.ml.client import get_uvai_ml_client
 try:
     from youtube_extension.services.agents import AgentOrchestrator
+    from youtube_extension.services.agents.adapters.agent_orchestrator import (
+        orchestrator as _shared_orchestrator,
+    )
 except ImportError:
     AgentOrchestrator = None
+    _shared_orchestrator = None
 from youtube_extension.services.ai import HybridProcessorService
 from youtube_extension.services.cloud.cloud_tasks_queue import (
     CloudTasksQueueService,
@@ -804,8 +808,15 @@ async def video_to_software_v1(
 )
 async def get_cache_stats_v1(cache_service: CacheService = Depends(get_cache_service)):
     """Get cache statistics"""
+    global _stats_cache_time, _stats_cache
     try:
+        now = time.time()
+        if now - _stats_cache_time < _stats_cache_ttl and _stats_cache:
+            return CacheStats(**_stats_cache)
+
         stats = cache_service.get_cache_statistics()
+        _stats_cache = stats
+        _stats_cache_time = now
         return CacheStats(**stats)
     except Exception as e:
         logger.error(f"Error getting cache stats: {e}")
@@ -1272,13 +1283,53 @@ _video_jobs: _TTLDict = _TTLDict(ttl=_JOB_TTL, max_size=_JOB_MAX_SIZE)
 _agent_executions: _TTLDict = _TTLDict(ttl=_JOB_TTL, max_size=_JOB_MAX_SIZE)
 _dispatches: _TTLDict = _TTLDict(ttl=_JOB_TTL, max_size=_JOB_MAX_SIZE)
 
+# Cache for heavy statistics calculations
+_stats_cache: dict[str, Any] = {}
+_stats_cache_time: float = 0
+_stats_cache_ttl: float = 60
+
+
+async def _periodic_cleanup():
+    """Background task to proactively evict expired jobs from in-memory stores."""
+    while True:
+        try:
+            _video_jobs.evict_expired()
+            _agent_executions.evict_expired()
+            _dispatches.evict_expired()
+        except Exception as exc:
+            logger.debug("Periodic cleanup failed: %s", exc)
+        await asyncio.sleep(300)  # Sweep every 5 minutes
+
+
+@router.on_event("startup")
+async def startup_event():
+    """Start background tasks on API startup."""
+    asyncio.create_task(_periodic_cleanup())
+
 
 def _persist_video_job(job: VideoJobStatusResponse) -> None:
+    """Persist job state. Uses a background task for expensive serialization to avoid blocking."""
     _video_jobs[job.job_id] = job
+
+    def _sync_persist():
+        try:
+            # model_dump(mode="json") can be slow for large results (Issue 5)
+            data = job.model_dump(mode="json")
+            get_job_store().save(job.job_id, data)
+        except Exception as exc:
+            logger.warning("Job persist failed for %s: %s", job.job_id, exc)
+
+    # If we are in an async loop, offload serialization and I/O to a thread
     try:
-        get_job_store().save(job.job_id, job.model_dump(mode="json"))
-    except Exception as exc:
-        logger.warning("Job persist failed for %s: %s", job.job_id, exc)
+        loop = asyncio.get_running_loop()
+        if loop.is_running():
+            asyncio.create_task(asyncio.to_thread(_sync_persist))
+            return
+    except RuntimeError:
+        pass
+
+    # Fallback to sync execution if no loop
+    _sync_persist()
 
 
 def _load_video_job(job_id: str) -> Optional[VideoJobStatusResponse]:
@@ -1866,12 +1917,14 @@ async def _run_agent(execution: AgentExecution, events: list[dict[str, Any]]):
         execution.status = AgentStatus.running
         execution.progress = 10.0
 
-        orchestrator = AgentOrchestrator()
+        if _shared_orchestrator is None and AgentOrchestrator is None:
+            raise RuntimeError("AgentOrchestrator not available")
+        orch = _shared_orchestrator or AgentOrchestrator()
         event_data = next(
             (e for e in events if e.get("id") == execution.event_id),
             events[0] if events else {},
         )
-        result = await orchestrator.execute_single(
+        result = await orch.execute_single(
             agent_type=execution.agent_type,
             context=event_data,
         )
@@ -1879,7 +1932,16 @@ async def _run_agent(execution: AgentExecution, events: list[dict[str, Any]]):
             result if isinstance(result, dict) else {"output": str(result)}
         )
 
-        execution.status = AgentStatus.complete
+        # execute_single reports agent-level failures (not found, non-ok status,
+        # caught exceptions) by returning an {"error": ...} dict rather than
+        # raising, so the except block below never sees them. Inspect the result
+        # and surface those failures as AgentStatus.failed instead of silently
+        # marking the execution complete.
+        if isinstance(result, dict) and result.get("error"):
+            execution.status = AgentStatus.failed
+            execution.error = str(result["error"])
+        else:
+            execution.status = AgentStatus.complete
         execution.progress = 100.0
     except Exception as exc:
         execution.status = AgentStatus.failed
@@ -1948,6 +2010,32 @@ async def send_a2a_message(
             "timestamp": msg.timestamp,
         }
     )
+
+
+@router.get(
+    "/agents/sessions",
+    response_model=ApiResponse,
+    summary="Get agent session logs",
+    tags=["Agents"],
+)
+async def get_agent_session_logs(
+    agent_type: Optional[str] = None,
+    limit: int = Query(default=50, ge=1, le=1000),
+):
+    """Return agent dispatch session logs.
+
+    Session logs track which agents were dispatched, what context they received,
+    and their execution outcomes. This enables a recursive feedback loop where
+    agent findings can be reviewed and re-dispatched as new actions.
+    """
+    if _shared_orchestrator is None:
+        raise HTTPException(
+            status_code=503, detail="AgentOrchestrator not available"
+        )
+    logs = _shared_orchestrator.get_session_logs(
+        agent_type=agent_type, limit=limit
+    )
+    return ApiResponse.success({"sessions": logs, "count": len(logs)})
 
 
 @router.get(

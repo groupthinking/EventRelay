@@ -120,9 +120,16 @@ def extract_events(
         '"title": short string, "description": string or null, '
         '"timestamp": string or null}.'
     )
+    # Increase context window to 120k chars (~30k tokens) to avoid silent data loss
+    limit = 120_000
+    truncated_transcript = transcript[:limit]
+    if len(transcript) > limit:
+        logger.info("Transcript truncated from %d to %d chars for Vercel AI Gateway extraction", len(transcript), limit)
+        truncated_transcript += "\n[... transcript truncated ...]"
+
     user = (
         f"Extract up to {max_events} key events from this transcript text:\n\n"
-        + transcript[:8000]
+        + truncated_transcript
     )
     content = chat(
         [{"role": "system", "content": system}, {"role": "user", "content": user}],

@@ -272,6 +272,199 @@ const addToKnowledgeBase: ActionTool = {
   },
 };
 
+const dispatchSubagents: ActionTool = {
+  name: 'dispatch_subagents',
+  description:
+    'Spawn multiple specialized subagents in parallel for a complex task. ' +
+    'Each subagent receives its own instruction and runs independently. ' +
+    'Use this when a task needs analysis from multiple perspectives (e.g. code review + testing + deployment).',
+  parameters: {
+    type: 'object',
+    properties: {
+      parentTask: { type: 'string', description: 'Description of the overall goal the subagents serve' },
+      subagents: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            agentType: {
+              type: 'string',
+              enum: ['code_generator', 'researcher', 'deployer', 'summarizer', 'analyzer'],
+            },
+            instruction: { type: 'string', description: 'Concrete instruction for this subagent' },
+          },
+          required: ['agentType', 'instruction'],
+          additionalProperties: false,
+        },
+        description: 'List of subagents to dispatch',
+      },
+    },
+    required: ['parentTask', 'subagents'],
+    additionalProperties: false,
+  },
+  async execute(input, ctx) {
+    const parentTask = str(input, 'parentTask');
+    const subagents = input.subagents;
+
+    if (!ctx.backendBaseUrl) {
+      return {
+        summary: `Cannot dispatch subagents — no backend configured (set BACKEND_URL).`,
+        isError: true,
+      };
+    }
+
+    if (!Array.isArray(subagents) || subagents.length === 0) {
+      return { summary: 'No subagents specified', isError: true };
+    }
+
+    // Validate each entry's shape at runtime; a bare `as` cast would let a
+    // malformed entry (missing/non-string agentType or instruction) through and
+    // silently produce `undefined` in the request body.
+    const isValidSubagent = (
+      s: unknown,
+    ): s is { agentType: string; instruction: string } =>
+      typeof s === 'object' &&
+      s !== null &&
+      typeof (s as { agentType?: unknown }).agentType === 'string' &&
+      typeof (s as { instruction?: unknown }).instruction === 'string';
+
+    if (!(subagents as unknown[]).every(isValidSubagent)) {
+      return {
+        summary: 'Invalid subagent: each entry needs a string agentType and instruction',
+        isError: true,
+      };
+    }
+
+    const typed = subagents as Array<{ agentType: string; instruction: string }>;
+    const doFetch = ctx.fetchImpl ?? fetch;
+
+    // Dispatch each subagent independently. The backend /agents/dispatch endpoint
+    // runs the cartesian product of agent_types × events, so batching all
+    // subagents into a single call (a de-duplicated agent_types list plus a
+    // parallel events list) would pair every agentType with every instruction —
+    // mispairing each subagent's agentType with the wrong instruction. Sending
+    // one (agent_type, event) pair per call keeps each agentType bound to its
+    // own instruction.
+    const dispatchOne = async (
+      sub: { agentType: string; instruction: string },
+      idx: number,
+    ): Promise<unknown> => {
+      const event = {
+        id: `sub_${Date.now()}_${idx}_${Math.random().toString(36).slice(2, 8)}`,
+        type: 'action',
+        title: sub.instruction,
+        description: `Subagent task for: ${parentTask}`,
+      };
+      const res = await doFetch(`${ctx.backendBaseUrl}/api/v1/agents/dispatch`, {
+        method: 'POST',
+        headers: backendHeaders(),
+        body: JSON.stringify({
+          job_id: ctx.jobId,
+          agent_types: [sub.agentType],
+          events: [event],
+        }),
+        signal: AbortSignal.timeout(30_000),
+      });
+      if (!res.ok) {
+        const detail = await res.text();
+        throw new Error(`${sub.agentType}: ${res.status} ${detail}`);
+      }
+      return res.json();
+    };
+
+    const settled = await Promise.allSettled(typed.map(dispatchOne));
+    const dispatches = settled
+      .filter((r): r is PromiseFulfilledResult<unknown> => r.status === 'fulfilled')
+      .map((r) => r.value);
+    const failures = settled
+      .filter((r): r is PromiseRejectedResult => r.status === 'rejected')
+      .map((r) => String(r.reason));
+
+    if (failures.length) {
+      console.error(
+        `dispatch_subagents: ${failures.length} subagent dispatch(es) failed:`,
+        failures,
+      );
+    }
+
+    if (dispatches.length === 0) {
+      return { summary: `Subagent dispatch failed: ${failures.join('; ')}`, isError: true };
+    }
+
+    const count = dispatches.reduce<number>((n, body) => {
+      const execs = (body as { data?: { executions?: unknown[] } })?.data?.executions;
+      return n + (Array.isArray(execs) ? execs.length : 1);
+    }, 0);
+    const summary = failures.length
+      ? `Dispatched ${count} subagent(s) for: ${parentTask} (${failures.length} failed: ${failures.join('; ')})`
+      : `Dispatched ${count} subagent(s) for: ${parentTask}`;
+    // Partial-success semantics: on a mix of successes and failures we still
+    // return the successful `dispatches` in `data`, but set `isError: true` so
+    // the failures aren't silently swallowed. Callers that care about partial
+    // success should inspect `data.dispatches`/`summary` rather than `isError`
+    // alone.
+    return { summary, data: { dispatches }, isError: failures.length > 0 };
+  },
+};
+
+const getAgentSessionLogs: ActionTool = {
+  name: 'get_agent_session_logs',
+  description:
+    'Retrieve session logs from previously dispatched agents to review their findings, ' +
+    'identify pending tasks, and decide follow-up actions. Use this to implement a feedback loop.',
+  parameters: {
+    type: 'object',
+    properties: {
+      agentType: {
+        type: 'string',
+        description: 'Filter logs to a specific agent type, or omit for all agents',
+      },
+      limit: { type: 'number', description: 'Maximum number of log entries to return (default 20)' },
+    },
+    required: [],
+    additionalProperties: false,
+  },
+  async execute(input, ctx) {
+    if (!ctx.backendBaseUrl) {
+      return {
+        summary: 'Cannot retrieve session logs — no backend configured (set BACKEND_URL).',
+        isError: true,
+      };
+    }
+
+    const agentType = str(input, 'agentType');
+    const limit = typeof input.limit === 'number' ? input.limit : 20;
+
+    const params = new URLSearchParams();
+    if (agentType) params.set('agent_type', agentType);
+    params.set('limit', String(limit));
+
+    const doFetch = ctx.fetchImpl ?? fetch;
+    try {
+      const res = await doFetch(
+        `${ctx.backendBaseUrl}/api/v1/agents/sessions?${params.toString()}`,
+        {
+          headers: backendHeaders(),
+          signal: AbortSignal.timeout(10_000),
+        },
+      );
+      if (!res.ok) {
+        const detail = await res.text();
+        return { summary: `Session logs retrieval failed: ${res.status} ${detail}`, isError: true };
+      }
+      const body = await res.json();
+      const sessions = body?.data?.sessions ?? [];
+      return {
+        summary: `Retrieved ${sessions.length} agent session log(s)`,
+        data: { sessions, count: sessions.length },
+      };
+    } catch (err) {
+      console.error('get_agent_session_logs failed:', err);
+      return { summary: `Session logs error: ${String(err)}`, isError: true };
+    }
+  },
+};
+
 // ── Registry ──
 
 export const ACTION_TOOLS: readonly ActionTool[] = [
@@ -279,6 +472,8 @@ export const ACTION_TOOLS: readonly ActionTool[] = [
   saveResource,
   scheduleFollowup,
   dispatchAgent,
+  dispatchSubagents,
+  getAgentSessionLogs,
   addToKnowledgeBase,
 ];
 
