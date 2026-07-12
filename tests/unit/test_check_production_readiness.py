@@ -28,3 +28,13 @@ def test_main_exits_nonzero_when_a_critical_check_fails(monkeypatch: pytest.Monk
 
     with pytest.raises(SystemExit, match="1"):
         _MODULE.main()
+
+
+def test_main_does_not_exit_when_only_log_level_check_warns(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(_MODULE, "check_env_vars", lambda: True)
+    monkeypatch.setattr(_MODULE, "check_cors_config", lambda: True)
+    monkeypatch.setattr(_MODULE, "check_log_levels", lambda: False)
+    monkeypatch.setattr(_MODULE, "check_security_middleware", lambda: True)
+    monkeypatch.setattr(_MODULE, "check_dependencies", lambda: True)
+
+    _MODULE.main()

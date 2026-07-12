@@ -102,10 +102,10 @@ def check_dependencies():
 
 def main():
     logger.info("--- EventRelay Production Readiness Audit ---")
+    check_log_levels()
     checks_passed = all([
         check_env_vars(),
         check_cors_config(),
-        check_log_levels(),
         check_security_middleware(),
         check_dependencies(),
     ])

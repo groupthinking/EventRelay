@@ -1,6 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
-const baseURL = process.env.BASE_URL || 'http://127.0.0.1:3000';
+const DEFAULT_PORT = 3000;
+const baseURL = process.env.BASE_URL || `http://127.0.0.1:${DEFAULT_PORT}`;
 
 export default defineConfig({
   testDir: './tests/e2e',
@@ -16,7 +17,7 @@ export default defineConfig({
   webServer: process.env.BASE_URL
     ? undefined
     : {
-        command: 'npm run dev -- --hostname 127.0.0.1 --port 3000',
+        command: `npm run dev -- --hostname 127.0.0.1 --port ${DEFAULT_PORT}`,
         env: {
           ...process.env,
           UVAI_RATE_LIMIT_DISABLED: '1',
