@@ -424,16 +424,17 @@ async function handleBackendStrategy(
 
 async function handleGeminiStrategy(
   url: string,
-  useBackend: boolean,
+  isBackendFallback: boolean,
   controller: ReadableStreamDefaultController<Uint8Array>,
   encoder: TextEncoder,
   deadline: PipelineDeadline,
   startTime: number
 ) {
-  // Strategy 2: Direct Gemini analysis
+  // Strategy 2: Direct Gemini analysis. Also used as the backend-failure
+  // fallback, in which case `isBackendFallback` is true.
   // Only publish TRANSCRIPT_STARTED on the direct Gemini path; the backend
   // fallback path must not emit this event (it was absent in the original code).
-  if (!useBackend) {
+  if (!isBackendFallback) {
     waitUntil(
       publishEvent(EventTypes.TRANSCRIPT_STARTED, { url, strategy: 'gemini-stream' }, url).catch(() => {}),
     );
@@ -442,7 +443,8 @@ async function handleGeminiStrategy(
   const analysis = await deadline.runWithBudget(
     analyzeVideoWithGemini(url),
     deadline.remainingMs(),
-    'Gemini stream analysis',
+    // Keep direct and fallback timeout diagnostics distinguishable.
+    isBackendFallback ? 'Gemini stream fallback' : 'Gemini stream analysis',
   );
 
   // Stream all agent events including pipeline_status:complete
@@ -450,8 +452,9 @@ async function handleGeminiStrategy(
     controller.enqueue(encoder.encode(event));
   }
 
-  // Schedule optional work via direct waitUntil (non-blocking, after complete)
-  schedulePostProcessing(url, analysis, useBackend);
+  // Gemini produced this analysis, so completion telemetry reports the Gemini
+  // strategy even when we reached here as a backend fallback (never backend-proxy).
+  schedulePostProcessing(url, analysis, false);
 }
 
 /**
@@ -786,7 +789,8 @@ export async function POST(request: Request) {
           if (useBackend && backendUrl) {
             await handleBackendStrategy(url, backendUrl, controller, encoder, deadline, startTime);
           } else {
-            await handleGeminiStrategy(url, useBackend, controller, encoder, deadline, startTime);
+            // Primary Gemini path (backend not used) — not a backend fallback.
+            await handleGeminiStrategy(url, false, controller, encoder, deadline, startTime);
           }
         } catch (err) {
           console.error('Pipeline stream processing error:', err);
