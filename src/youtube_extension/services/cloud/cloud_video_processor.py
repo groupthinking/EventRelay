@@ -100,7 +100,8 @@ class CloudNativeVideoProcessor:
         if self.enable_state:
             firestore_service = await get_firestore_service()
             await firestore_service.create_state(video_id, video_url)
-            logger.info(f"Created Firestore state for video: {video_id}")
+            safe_video_id = video_id.replace('\r', '').replace('\n', '')
+            logger.info(f"Created Firestore state for video: {safe_video_id}")
 
         # Enqueue task
         tasks_service = get_cloud_tasks_service()
@@ -141,7 +142,8 @@ class CloudNativeVideoProcessor:
                 state = await firestore_service.get_state(video_id)
 
                 if state and state.status == 'completed':
-                    logger.info(f"Using cached state for video: {video_id}")
+                    safe_video_id = video_id.replace('\r', '').replace('\n', '')
+                    logger.info(f"Using cached state for video: {safe_video_id}")
                     processing_time = (datetime.now(timezone.utc) - start_time).total_seconds()
 
                     return VideoProcessingResult(
@@ -209,8 +211,9 @@ class CloudNativeVideoProcessor:
                     processing_time=processing_time
                 )
 
+            safe_video_id = video_id.replace('\r', '').replace('\n', '')
             logger.info(
-                f"Successfully processed video: {video_id} "
+                f"Successfully processed video: {safe_video_id} "
                 f"in {processing_time:.2f}s"
             )
 
@@ -316,7 +319,8 @@ class CloudNativeVideoProcessor:
         This should integrate with real YouTube Data API.
         """
         # Placeholder - integrate with real implementation
-        logger.info(f"Fetching metadata for: {video_url}")
+        safe_url = video_url.replace('\r', '').replace('\n', '')
+        logger.info(f"Fetching metadata for: {safe_url}")
 
         return {
             'title': 'Video Title',
@@ -333,7 +337,8 @@ class CloudNativeVideoProcessor:
         This should integrate with YouTube Transcript API.
         """
         # Placeholder - integrate with real implementation
-        logger.info(f"Extracting transcript for: {video_id}")
+        safe_video_id = video_id.replace('\r', '').replace('\n', '')
+        logger.info(f"Extracting transcript for: {safe_video_id}")
 
         return {
             'text': 'Full transcript text...',
@@ -369,7 +374,8 @@ class CloudNativeVideoProcessor:
             video_metadata=metadata
         )
 
-        logger.info(f"Completed Vertex AI analysis for video: {video_id}")
+        safe_video_id = video_id.replace('\r', '').replace('\n', '')
+        logger.info(f"Completed Vertex AI analysis for video: {safe_video_id}")
 
         return {
             'summary': response.text,
