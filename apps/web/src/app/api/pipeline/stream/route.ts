@@ -450,12 +450,14 @@ async function handleGeminiStrategy(
     controller.enqueue(encoder.encode(event));
   }
 
-  // Schedule optional work via direct waitUntil (non-blocking, after complete).
-  // Always pass false: Gemini always performs the analysis here, regardless of
-  // whether we arrived via the direct path or the backend-proxy fallback.
-  schedulePostProcessing(url, analysis, false);
+  // Schedule optional work via direct waitUntil (non-blocking, after complete)
+  schedulePostProcessing(url, analysis, useBackend);
 }
 
+/**
+ * Convert a full Gemini analysis result into a timed sequence of SSE events
+ * that mimic the multi-agent pipeline execution agents would produce.
+ */
 async function* generateAgentEvents(
   analysis: VideoAnalysisResult,
   startTime: number,
