@@ -1,7 +1,7 @@
 # DOC REGISTRY — Classification (bootstrap)
 
-**Created:** 2026-07-09T23:15:00Z  
-**Rule:** Classification only. Physical moves happen under GATE-6 with a logged list.  
+**Created:** 2026-07-09T23:15:00Z
+**Rule:** Classification only. Physical moves happen under GATE-6 with a logged list.
 **Classes:** `CANONICAL` · `OPERATIONAL` · `HISTORICAL` · `CONCEPT` · `STALE-DO-NOT-TRUST` · `AGENT-ENTRY`
 
 ---
@@ -79,17 +79,17 @@
 
 When moving a file:
 
-1. Add row to `sessions/doc-moves-YYYY-MM-DD.md` with old path → new path  
-2. Leave a 5-line stub at old path pointing to new path for 14 days (or Git history only if no external links)  
-3. Never move `.env*` or credential files into docs  
+1. Add row to `sessions/doc-moves-YYYY-MM-DD.md` with old path → new path
+2. Leave a 5-line stub at old path pointing to new path for 14 days (or Git history only if no external links)
+3. Never move `.env*` or credential files into docs
 
-**Preferred archive root:** `docs/control-plane/archives/yyyy-mm/`  
+**Preferred archive root:** `docs/control-plane/archives/yyyy-mm/`
 
 ---
 
 ## 6. Registry completion checklist
 
-- [ ] Every file under `docs/*.md` classified (GATE-6)  
-- [ ] Every root `*.md` classified (partial done)  
-- [ ] Broken links after moves grepped  
-- [ ] README points to CONTROL.md  
+- [ ] Every file under `docs/*.md` classified (GATE-6)
+- [ ] Every root `*.md` classified (partial done)
+- [ ] Broken links after moves grepped
+- [ ] README points to CONTROL.md

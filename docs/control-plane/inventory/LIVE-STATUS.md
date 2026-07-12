@@ -1,8 +1,8 @@
 # LIVE STATUS — Verified facts only
 
-**Last full probe:** 2026-07-10T17:54:00Z (UTC)  
-**Probed by:** Grok lead agent  
-**Method:** `curl`, `git`, `gcloud`, `env -u GITHUB_TOKEN gh`, `env -u VERCEL_TOKEN vercel`  
+**Last full probe:** 2026-07-10T17:54:00Z (UTC)
+**Probed by:** Grok lead agent
+**Method:** `curl`, `git`, `gcloud`, `env -u GITHUB_TOKEN gh`, `env -u VERCEL_TOKEN vercel`
 **Rule:** Anything not listed with a probe time is UNKNOWN, not “probably fine.”
 
 ---
@@ -151,8 +151,8 @@ bq ls --project_id=uvai-730bb
 → only dataset: uvai_5b6dc7c4_15f7_46e5_80fb_50b6337ed14c
 ```
 
-- Matches Data Agent catalog dataset id.  
-- Code default `uvai_ml_training` (**does not appear** in `bq ls`).  
+- Matches Data Agent catalog dataset id.
+- Code default `uvai_ml_training` (**does not appear** in `bq ls`).
 - **Conclusion:** product ML export dataset is **not provisioned** (or wrong project). Catalog dataset is not the app training warehouse.
 
 ### 3.3 GCS (sample list, same probe)
@@ -166,8 +166,8 @@ These look **Discovery Engine / blueprint infra**, not the EventRelay monorepo a
 
 ### 3.4 Data Agent catalog (operator screenshot 2026-07-09)
 
-- Views under the only BQ dataset: `bucket_activity_view`, `events_view`, `object_events_view`, …  
-- Cloud SQL UI name: `all-strides-postgres-db` (docs claim different names — mismatch).  
+- Views under the only BQ dataset: `bucket_activity_view`, `events_view`, `object_events_view`, …
+- Cloud SQL UI name: `all-strides-postgres-db` (docs claim different names — mismatch).
 - Side agent log: **`RAG status Unset`**.
 
 ---
@@ -218,9 +218,9 @@ env -u GITHUB_TOKEN -u GH_TOKEN -u VERCEL_TOKEN vercel …
 
 ### 4.1 Required owner actions (no code)
 
-1. Unset or replace invalid `GITHUB_TOKEN` in shell profile / Cursor / agent env  
-2. `gh auth switch --user groupthinking` then `gh auth status`  
-3. Unset invalid `VERCEL_TOKEN` or `vercel login`  
+1. Unset or replace invalid `GITHUB_TOKEN` in shell profile / Cursor / agent env
+2. `gh auth switch --user groupthinking` then `gh auth status`
+3. Unset invalid `VERCEL_TOKEN` or `vercel login`
 4. Confirm Cloudflare account if used for DNS for `uvai.io` / `api.uvai.io`
 
 ---
@@ -232,8 +232,8 @@ env -u GITHUB_TOKEN -u GH_TOKEN -u VERCEL_TOKEN vercel …
 | `apps/web/.vercel/project.json` | `prj_4Qj52UTshPstdsMWdgFtN3B31j8B` | `v0-uvai` | **`apps/web`** | `team_3lNy0xpw2OnPBHCcsoG99Sru` |
 | `.vercel/project.json` | same projectId | `v0-uvai` | null (root) | same |
 
-Env pull artifacts present (names only):  
-`apps/web/.vercel/.env.development.local`, `.env.preview.local`, `.env.production.local`  
+Env pull artifacts present (names only):
+`apps/web/.vercel/.env.development.local`, `.env.preview.local`, `.env.production.local`
 **Do not commit. Do not paste contents.**
 
 ---
@@ -265,7 +265,7 @@ gcloud config get-value project
 vercel whoami 2>&1 | head -5
 ```
 
-Paste output into a new file:  
+Paste output into a new file:
 `docs/control-plane/sessions/smoke-YYYY-MM-DDTHHMMZ.md`
 
 ---
