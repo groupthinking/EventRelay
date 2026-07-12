@@ -26,36 +26,35 @@ if str(_SRC) not in sys.path:
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
 # Import the coordinator module directly while avoiding the heavy transitive
-# deps (aiohttp, ML libraries) pulled in by importing the full `agents` and
-# `youtube_extension.processors` packages normally. We install lightweight
-# module shims into sys.modules ONLY for the duration of the coordinator import,
-# then remove every shim we added in the finally below.
+# deps (aiohttp, ML libraries) that importing the full `agents` and
+# `youtube_extension.processors` packages would pull in. We install lightweight
+# module shims into sys.modules ONLY for the duration of the import, then FULLY
+# restore sys.modules so this test leaves no trace and stays order-independent.
 #
-# Why the cleanup matters: leaving these shims installed makes this file
-# poison later test modules depending on pytest collection order —
-#   * the synthetic `agents` package never runs the real agents/__init__.py, so
-#     a later `from agents import VideoPipelineOrchestrator` fails;
-#   * the empty-__path__ `youtube_extension.processors.*` shims shadow the real
+# Leftovers would poison later test modules depending on pytest collection order:
+#   * a synthetic `agents` package never runs the real agents/__init__.py, so a
+#     later `from agents import VideoPipelineOrchestrator` fails;
+#   * empty-__path__ `youtube_extension.processors.*` shims shadow the real
 #     package, so a later `from youtube_extension.processors... import ...`
-#     raises ModuleNotFoundError.
-# Tracking and removing only the shims we actually added keeps this integration
-# test order-independent. The already-imported coordinator module stays cached,
-# so the names imported below remain valid after the shims are removed.
-_added_stub_names: list[str] = []
+#     raises ModuleNotFoundError;
+#   * the coordinator module itself, cached against the shim extractor, would
+#     hand a later importer a module whose EnhancedVideoExtractor is the stub.
+# Snapshotting sys.modules and dropping every key added during the import (the
+# shims AND the coordinator module) avoids all three. The class names imported
+# below remain usable through their existing references after removal.
+_modules_before = set(sys.modules)
 
 if "agents" not in sys.modules:
     _agents_pkg = types.ModuleType("agents")
     _agents_pkg.__path__ = [str(_SRC / "agents")]  # type: ignore[attr-defined]
     _agents_pkg.__package__ = "agents"
     sys.modules["agents"] = _agents_pkg
-    _added_stub_names.append("agents")
 
-_YT_STUB_NAMES = [
+for _mod_name in [
     "youtube_extension",
     "youtube_extension.processors",
     "youtube_extension.processors.enhanced_extractor",
-]
-for _mod_name in _YT_STUB_NAMES:
+]:
     if _mod_name not in sys.modules:
         _stub = types.ModuleType(_mod_name)
         _stub.__path__ = []  # type: ignore[attr-defined]
@@ -65,7 +64,6 @@ for _mod_name in _YT_STUB_NAMES:
             _stub.EnhancedVideoExtractor = type("EnhancedVideoExtractor", (), {})  # type: ignore[attr-defined]
             _stub.VideoContent = type("VideoContent", (), {})  # type: ignore[attr-defined]
         sys.modules[_mod_name] = _stub
-        _added_stub_names.append(_mod_name)
 
 try:
     from agents.mcp_ecosystem_coordinator import (  # noqa: E402
@@ -73,11 +71,12 @@ try:
         SkillRegistry,
     )
 finally:
-    # Remove every shim we installed so real `agents.*` and
-    # `youtube_extension.processors.*` imports succeed in later test modules
-    # regardless of collection order. `agents.mcp_ecosystem_coordinator` stays
-    # cached so the imported names above remain valid.
-    for _mod_name in reversed(_added_stub_names):
+    # Fully restore sys.modules: drop every entry added during the import above
+    # (the shims and the coordinator module cached against them) so real
+    # `agents.*` / `youtube_extension.processors.*` imports work in later test
+    # modules regardless of collection order. The imported class names remain
+    # valid through their existing references.
+    for _mod_name in set(sys.modules) - _modules_before:
         sys.modules.pop(_mod_name, None)
 
 
