@@ -853,10 +853,8 @@ class DatabaseHealthMonitor:
 # Global database optimization system
 # Use /tmp for Cloud Run compatibility (read-only filesystem except /tmp)
 database_url = os.getenv("DATABASE_URL", "sqlite:////tmp/uvai_data/app.db")
-# Increase connection pool size to handle more concurrent requests.
-# min_connections: 5 (keep some ready), max_connections: 50 (handle bursts)
 connection_pool = DatabaseConnectionPool(
-    database_url, min_connections=5, max_connections=50
+    database_url, min_connections=1, max_connections=10
 )
 query_optimizer = QueryOptimizer(connection_pool)
 health_monitor = DatabaseHealthMonitor(query_optimizer)

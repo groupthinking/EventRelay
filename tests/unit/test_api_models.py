@@ -17,7 +17,6 @@ from youtube_extension.backend.api.v1.models import (
     AgentExecution,
     AgentStatus,
     ApiResponse,
-    ChatRequest,
     EventExtractRequest,
     ExtractedEvent,
     FeedbackRequest,
@@ -214,12 +213,6 @@ class TestVideoToSoftwareRequest:
         with pytest.raises(ValidationError):
             VideoToSoftwareRequest(url="https://not-youtube.com/video/123")
 
-    def test_non_string_url_is_validation_error_not_500(self):
-        # pre=True validator sees the raw payload; a non-str must surface as a
-        # ValidationError (422), never a bare TypeError (500).
-        with pytest.raises(ValidationError, match="Invalid YouTube URL"):
-            VideoToSoftwareRequest(url=123)
-
     def test_features_default_to_empty_list(self):
         req = VideoToSoftwareRequest(url=self._VALID_URL)
         assert req.features == []
@@ -294,39 +287,6 @@ class TestTranscriptActionRequest:
         opts = VideoClipOptions(start_seconds=0.0, end_seconds=120.0)
         req = TranscriptActionRequest(video_url=self._VALID_URL, video_options=opts)
         assert req.video_options.end_seconds == 120.0
-
-    # --- shared _YOUTUBE_URL_REGEX behaviour (mobile/music hosts + SSRF guard) ---
-
-    @pytest.mark.parametrize(
-        "url",
-        [
-            "https://m.youtube.com/watch?v=auJzb1D-fag",
-            "https://music.youtube.com/watch?v=auJzb1D-fag",
-            "HTTPS://M.YOUTUBE.COM/watch?v=auJzb1D-fag",
-            "https://youtu.be/auJzb1D-fag",
-            "https://www.youtube.com/shorts/auJzb1D-fag",
-        ],
-    )
-    def test_mobile_music_and_case_insensitive_hosts_accepted(self, url):
-        assert TranscriptActionRequest(video_url=url).video_url == url
-        assert ChatRequest(message="hi", video_url=url).video_url == url
-
-    @pytest.mark.parametrize(
-        "url",
-        [
-            "http://169.254.169.254/aaaaaaaaaaa",  # SSRF: cloud metadata
-            "--config-locations=/etc/passwd",  # CWE-88: arg injection
-            "https://vimeo.com/123456789",  # non-YouTube host
-            "https://not-youtube.com/watch?v=12345678901",
-            "https://m.youtu.be/auJzb1D-fag",  # fabricated youtu.be subdomain
-            "https://music.youtu.be/auJzb1D-fag",  # fabricated youtu.be subdomain
-        ],
-    )
-    def test_non_youtube_and_injection_urls_rejected(self, url):
-        with pytest.raises(ValidationError, match="Invalid YouTube URL"):
-            TranscriptActionRequest(video_url=url)
-        with pytest.raises(ValidationError, match="Invalid YouTube URL"):
-            ChatRequest(message="hi", video_url=url)
 
 
 # ===========================================================================

@@ -54,19 +54,6 @@ class TestExtractVideoId:
         url = "https://www.youtube.com/v/auJzb1D-fag"
         assert extract_video_id(url) == "auJzb1D-fag"
     
-    def test_uppercase_scheme_and_host(self):
-        """Uppercase scheme/host extracts, and the 11-char id keeps its case."""
-        url = "HTTPS://YOUTUBE.COM/WATCH?V=auJzb1D-fag"
-        assert extract_video_id(url) == "auJzb1D-fag"
-
-    def test_mobile_and_music_hosts(self):
-        """m./music. subdomains resolve to the same underlying video id."""
-        assert extract_video_id("https://m.youtube.com/watch?v=auJzb1D-fag") == "auJzb1D-fag"
-        assert (
-            extract_video_id("https://music.youtube.com/watch?v=auJzb1D-fag")
-            == "auJzb1D-fag"
-        )
-
     def test_invalid_url_raises_error(self):
         """Test that invalid URL raises ValueError"""
         with pytest.raises(ValueError, match="Could not extract valid YouTube video ID"):

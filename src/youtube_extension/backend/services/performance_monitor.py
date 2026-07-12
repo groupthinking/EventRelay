@@ -30,10 +30,6 @@ from typing import Any
 
 import psutil
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
 # Import cleanup service for database maintenance
 try:
     from .database_cleanup_service import cleanup_service
@@ -41,6 +37,10 @@ try:
 except ImportError:
     CLEANUP_AVAILABLE = False
     logger.warning("Database cleanup service not available")
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 @dataclass
 class PerformanceMetric:
@@ -846,7 +846,7 @@ def performance_timer(component: str, metric_name: str):
             # Store for async processing
             try:
                 asyncio.get_running_loop()
-                asyncio.create_task(_get_performance_monitor().record_metric(component, metric_name, execution_time))
+                asyncio.create_task(performance_monitor.record_metric(component, metric_name, execution_time))
             except RuntimeError:
                 # No loop: skip async record to avoid import-time errors
                 pass

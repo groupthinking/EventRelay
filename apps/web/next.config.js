@@ -1,11 +1,5 @@
 const path = require('path');
-
-let withSentryConfig = (config) => config;
-try {
-  ({ withSentryConfig } = require('@sentry/nextjs'));
-} catch {
-  // Allow builds to continue when optional Sentry runtime peers are unavailable.
-}
+const { withSentryConfig } = require('@sentry/nextjs');
 
 const contentSecurityPolicy = [
   "default-src 'self'",

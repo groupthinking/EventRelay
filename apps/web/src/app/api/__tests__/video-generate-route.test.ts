@@ -1,47 +1,15 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
-import { POST } from '@/app/api/video/generate/route';
-
-// Mock billing modules
-vi.mock('@/lib/billing/billing-context', () => ({
-  resolveTrustedBillingEmail: vi.fn(async () => 'pro@example.com'),
-}));
 
 vi.mock('@/lib/billing/entitlement-store', () => ({
-  isProSubscriber: vi.fn(async (email: string) => email === 'pro@example.com'),
+  isProSubscriber: vi.fn().mockResolvedValue(true),
 }));
 
-// Mock redis-credentials
-vi.mock('@/lib/billing/redis-credentials', () => ({
-  resolveUpstashRedisCredentials: vi.fn(() => ({ url: 'https://test.upstash.io', token: 'test-token' })),
-}));
+import { POST } from '@/app/api/video/generate/route';
 
-// Mock @upstash/redis
-const redisIncrMock = vi.fn();
-const redisExpireMock = vi.fn();
-vi.mock('@upstash/redis', () => ({
-  Redis: function() {
-    return {
-      incr: redisIncrMock,
-      expire: redisExpireMock,
-    };
-  },
-}));
+const GATEWAY_URL = 'https://ai-gateway.vercel.sh/v1/video/generations';
 
-// Mock aiGateway
-vi.mock('@/lib/ai-gateway', () => ({
-  aiGateway: {
-    videoModel: vi.fn(() => 'mock-model'),
-  },
-  GATEWAY_VIDEO_MODEL: 'google/veo-3.1-generate-001',
-}));
-
-// Mock ai
-const generateVideoMock = vi.fn();
-vi.mock('ai', () => ({
-  experimental_generateVideo: (...args: any[]) => generateVideoMock(...args),
-}));
-
-/** Build a POST request with a per-test client IP */
+/** Build a POST request with a per-test client IP so the module-scoped rate
+ *  limiter doesn't bleed between tests. Pass `raw` to send a non-JSON body. */
 function postReq(body: unknown, ip = '10.0.0.1', raw = false) {
   return new Request('http://localhost:3000/api/video/generate', {
     method: 'POST',
@@ -50,30 +18,46 @@ function postReq(body: unknown, ip = '10.0.0.1', raw = false) {
   });
 }
 
+function gatewayOk(json: unknown) {
+  return { ok: true, status: 200, json: async () => json, text: async () => JSON.stringify(json) };
+}
+function gatewayErr(status: number) {
+  return { ok: false, status, json: async () => ({}), text: async () => 'gateway error' };
+}
+function streamOf(text: string) {
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode(text));
+      controller.close();
+    },
+  });
+}
+function videoBytesOk(text = 'FAKEVIDEO') {
+  return {
+    ok: true,
+    status: 200,
+    body: streamOf(text),
+    headers: new Headers({ 'content-type': 'video/mp4', 'content-length': String(text.length) }),
+  };
+}
+
 const validBody = { prompt: 'a calm ocean at sunset', aspectRatio: '16:9', duration: 5 };
 
 beforeEach(() => {
-  vi.clearAllMocks();
-  redisIncrMock.mockResolvedValue(1);
-  generateVideoMock.mockResolvedValue({
-    video: {
-      uint8Array: new Uint8Array([1, 2, 3, 4]),
-      mediaType: 'video/mp4',
-    },
-  });
+  process.env.AI_GATEWAY_API_KEY = 'test-key';
+  global.fetch = vi.fn();
 });
 
 afterEach(() => {
   vi.restoreAllMocks();
+  delete process.env.AI_GATEWAY_API_KEY;
 });
 
 describe('POST /api/video/generate', () => {
-  it('returns 402 when user is not a Pro subscriber', async () => {
-    const { resolveTrustedBillingEmail } = await import('@/lib/billing/billing-context');
-    (resolveTrustedBillingEmail as any).mockResolvedValueOnce('free@example.com');
-
-    const res = await POST(postReq(validBody, '10.0.0.1'));
-    expect(res.status).toBe(402);
+  it('returns 503 when AI_GATEWAY_API_KEY is not configured', async () => {
+    delete process.env.AI_GATEWAY_API_KEY;
+    const res = await POST(postReq(validBody, '10.0.0.2'));
+    expect(res.status).toBe(503);
   });
 
   it('returns 400 on invalid JSON body', async () => {
@@ -101,50 +85,69 @@ describe('POST /api/video/generate', () => {
     expect(res.status).toBe(400);
   });
 
-  it('enforces the Redis rate limit (4th request within window → 429)', async () => {
-    redisIncrMock.mockResolvedValue(4);
-    const res = await POST(postReq(validBody, '10.9.9.9'));
-    expect(res.status).toBe(429);
-    expect(redisIncrMock).toHaveBeenCalledWith('ratelimit:video-generate:10.9.9.9');
+  it('enforces the per-IP rate limit (4th request within window → 429)', async () => {
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(
+      gatewayOk({ data: [{ b64_json: 'AAAA' }] }) as unknown as Response
+    );
+    const ip = '10.9.9.9';
+    for (let i = 0; i < 3; i++) {
+      const ok = await POST(postReq(validBody, ip));
+      expect(ok.status).toBe(200);
+    }
+    const limited = await POST(postReq(validBody, ip));
+    expect(limited.status).toBe(429);
   });
 
-  it('sets expiration on the first request for an IP', async () => {
-    redisIncrMock.mockResolvedValue(1);
-    await POST(postReq(validBody, '10.1.1.1'));
-    expect(redisExpireMock).toHaveBeenCalledWith('ratelimit:video-generate:10.1.1.1', 600);
+  it('propagates a gateway error status', async () => {
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(gatewayErr(500) as unknown as Response);
+    const res = await POST(postReq(validBody, '10.0.0.8'));
+    expect(res.status).toBe(500);
   });
 
-  it('streams the bytes when generation is successful', async () => {
-    const fakeVideoData = new Uint8Array([1, 2, 3, 4]);
-    generateVideoMock.mockResolvedValue({
-      video: {
-        uint8Array: fakeVideoData,
-        mediaType: 'video/mp4',
-      },
-    });
+  it('returns 502 when the gateway response has no video', async () => {
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(
+      gatewayOk({ data: [{}] }) as unknown as Response
+    );
+    const res = await POST(postReq(validBody, '10.0.0.9'));
+    expect(res.status).toBe(502);
+  });
 
+  it('streams the decoded bytes when the gateway provides base64 inline', async () => {
+    // 'QkFTRTY0' is base64 for 'BASE64'
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(
+      gatewayOk({ data: [{ b64_json: 'QkFTRTY0' }] }) as unknown as Response
+    );
     const res = await POST(postReq(validBody, '10.0.0.10'));
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toBe('video/mp4');
-    expect(res.headers.get('x-video-model')).toBe('google/veo-3.1-generate-001');
-
-    const buf = await res.arrayBuffer();
-    expect(new Uint8Array(buf)).toEqual(fakeVideoData);
+    const buf = Buffer.from(await res.arrayBuffer());
+    expect(buf.toString()).toBe('BASE64');
   });
 
-  it('propagates TimeoutError as 504', async () => {
-    const timeoutErr = new Error('Timeout');
-    timeoutErr.name = 'TimeoutError';
-    generateVideoMock.mockRejectedValue(timeoutErr);
+  it('streams a remote signed URL through without base64-in-JSON (CSP-safe, no client proxy)', async () => {
+    const fetchMock = global.fetch as ReturnType<typeof vi.fn>;
+    fetchMock
+      .mockResolvedValueOnce(gatewayOk({ data: [{ url: 'https://cdn.example/signed.mp4' }] }) as unknown as Response)
+      .mockResolvedValueOnce(videoBytesOk() as unknown as Response);
 
     const res = await POST(postReq(validBody, '10.0.0.11'));
-    expect(res.status).toBe(504);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toBe('video/mp4');
+    const buf = Buffer.from(await res.arrayBuffer());
+    expect(buf.toString()).toBe('FAKEVIDEO');
+    // second fetch was the server-side retrieval of the gateway-provided URL
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[0][0]).toBe(GATEWAY_URL);
+    expect(fetchMock.mock.calls[1][0]).toBe('https://cdn.example/signed.mp4');
   });
 
-  it('returns 500 on other generation errors', async () => {
-    generateVideoMock.mockRejectedValue(new Error('Gateway failed'));
+  it('returns 502 when the signed URL cannot be retrieved', async () => {
+    const fetchMock = global.fetch as ReturnType<typeof vi.fn>;
+    fetchMock
+      .mockResolvedValueOnce(gatewayOk({ data: [{ url: 'https://cdn.example/signed.mp4' }] }) as unknown as Response)
+      .mockResolvedValueOnce({ ok: false, status: 404, body: null, headers: new Headers() } as unknown as Response);
 
     const res = await POST(postReq(validBody, '10.0.0.12'));
-    expect(res.status).toBe(500);
+    expect(res.status).toBe(502);
   });
 });

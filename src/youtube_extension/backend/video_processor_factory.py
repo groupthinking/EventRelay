@@ -6,25 +6,15 @@ Video Processor Factory
 Factory module to provide working video processors with proper fallbacks.
 """
 
-from __future__ import annotations
-
 import logging
 import os
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from youtube_extension.backend.deepmcp.deepmcp_processor import (
-        DeepMCPAgentProcessor,
-    )
-
-    from .enhanced_video_processor import EnhancedVideoProcessor
-    from .real_video_processor import RealVideoProcessor
+from typing import Union
 
 from youtube_extension.utils.proxy import get_proxy_url
 
 logger = logging.getLogger(__name__)
 
-def get_video_processor(processor_type: str = "auto") -> EnhancedVideoProcessor | RealVideoProcessor | DeepMCPAgentProcessor:
+def get_video_processor(processor_type: str = "auto") -> Union['EnhancedVideoProcessor', 'RealVideoProcessor', 'DeepMCPAgentProcessor']:
     """
     Get appropriate video processor based on configuration
 
@@ -80,7 +70,7 @@ def get_video_processor(processor_type: str = "auto") -> EnhancedVideoProcessor 
                 return EnhancedVideoProcessor()
             except Exception as e2:
                 logger.error(f"All processors failed: {e2}")
-                raise ValueError(f"No working video processor available: {e2}") from e2
+                raise ValueError(f"No working video processor available: {e2}")
 
     if processor_type == "hybrid":
         """Hybrid processor using FastVLM + Gemini pipeline for video understanding.
@@ -155,7 +145,7 @@ def get_video_processor(processor_type: str = "auto") -> EnhancedVideoProcessor 
                 return EnhancedVideoProcessor()
             except Exception as e2:
                 logger.error(f"Hybrid fallback failed: {e2}")
-                raise ValueError(f"No working video processor available: {e2}") from e2
+                raise ValueError(f"No working video processor available: {e2}")
 
     # Final fallback
     try:
@@ -164,7 +154,7 @@ def get_video_processor(processor_type: str = "auto") -> EnhancedVideoProcessor 
         return EnhancedVideoProcessor()
     except Exception as e:
         logger.error(f"Final fallback failed: {e}")
-        raise ValueError(f"No working video processor available: {e}") from e
+        raise ValueError(f"No working video processor available: {e}")
 
 
 # Compatibility wrapper for gradual migration

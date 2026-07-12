@@ -714,7 +714,7 @@ class TestGlobalConvenienceFunctions:
     async def test_cache_key_returns_hex_string(self):
         from youtube_extension.backend.services.intelligent_cache import cache_key
         k = cache_key("test")
-        assert len(k) == 64  # sha256 hex digest (migrated from md5's 32)
+        assert len(k) == 32
         int(k, 16)  # should not raise
 
 

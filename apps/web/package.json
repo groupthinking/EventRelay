@@ -7,8 +7,8 @@
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint src middleware.ts",
-    "type-check": "tsc --noEmit",
     "test": "vitest run",
+    "type-check": "tsc --noEmit",
     "analyze": "next experimental-analyze --output"
   },
   "dependencies": {

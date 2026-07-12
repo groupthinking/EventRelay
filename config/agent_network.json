@@ -164,69 +164,6 @@
       "role": "Update runbooks, docs, and deployment checklist; coordinate final smoke + prod verification",
       "tools": ["suggest_fix", "capture_technology"],
       "capabilities": ["documentation", "runbook_update", "deployment_readiness"]
-    },
-    {
-      "id": "content-generation",
-      "name": "Content Generation Skill",
-      "role": "Generate blog/social posts from video transcripts",
-      "tools": ["generate_fullstack"],
-      "capabilities": ["content_generation", "blog_posts", "social_posts"],
-      "skill_source": "uvai-skills",
-      "trigger_events": ["video_published"]
-    },
-    {
-      "id": "seo-optimizer",
-      "name": "SEO Optimizer Skill",
-      "role": "Optimize video titles, descriptions, tags for search discoverability",
-      "tools": ["analyze_video"],
-      "capabilities": ["seo_optimization", "metadata_enhancement"],
-      "skill_source": "uvai-skills",
-      "trigger_events": ["video_uploaded"]
-    },
-    {
-      "id": "social-scheduler",
-      "name": "Social Scheduler Skill",
-      "role": "Schedule cross-platform social media posts",
-      "tools": [],
-      "capabilities": ["social_media", "scheduling", "cross_platform"],
-      "skill_source": "uvai-skills",
-      "trigger_events": ["content_generated"]
-    },
-    {
-      "id": "lead-scorer",
-      "name": "Lead Scorer Skill",
-      "role": "Score leads based on engagement signals",
-      "tools": [],
-      "capabilities": ["lead_scoring", "engagement_analysis"],
-      "skill_source": "uvai-skills",
-      "trigger_events": ["analytics_updated"]
-    },
-    {
-      "id": "email-campaign",
-      "name": "Email Campaign Skill",
-      "role": "Generate and send email sequences based on lead scoring",
-      "tools": [],
-      "capabilities": ["email_generation", "campaign_management"],
-      "skill_source": "uvai-skills",
-      "trigger_events": ["lead_scored"]
-    },
-    {
-      "id": "analytics-dashboard",
-      "name": "Analytics Dashboard Skill",
-      "role": "Aggregate metrics into dashboard data",
-      "tools": [],
-      "capabilities": ["metrics_aggregation", "dashboard_generation"],
-      "skill_source": "uvai-skills",
-      "trigger_events": ["daily_cron"]
-    },
-    {
-      "id": "ab-testing",
-      "name": "A/B Testing Skill",
-      "role": "Run A/B tests on thumbnails and titles",
-      "tools": [],
-      "capabilities": ["ab_testing", "variant_management"],
-      "skill_source": "uvai-skills",
-      "trigger_events": ["video_uploaded"]
     }
   ]
 }

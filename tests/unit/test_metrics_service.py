@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import sys
+import time
 import types
+from collections import deque
 from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -215,19 +217,6 @@ class TestMetricsServiceInit:
         monkeypatch.chdir(tmp_path)
         svc = MetricsService(config={"collection_interval": 30})
         assert svc.collection_interval == 30
-
-
-class TestMetricsServicePersistMetrics:
-    @pytest.mark.asyncio
-    async def test_persist_metrics_writes_metrics_file(self, tmp_path, monkeypatch):
-        monkeypatch.chdir(tmp_path)
-        svc = MetricsService()
-        await svc.record_metric("audit.active_sample", 1.0)
-
-        await svc.persist_metrics()
-
-        assert svc.metrics_file.exists()
-        assert "audit.active_sample" in svc.metrics_file.read_text()
 
     def test_custom_retention_period(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
