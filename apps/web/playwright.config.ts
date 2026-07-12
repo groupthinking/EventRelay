@@ -1,5 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
+const baseURL = process.env.BASE_URL || 'http://127.0.0.1:3000';
+
 export default defineConfig({
   testDir: './tests/e2e',
   fullyParallel: true,
@@ -8,9 +10,21 @@ export default defineConfig({
   workers: process.env.CI ? 1 : undefined,
   reporter: 'list',
   use: {
-    baseURL: 'http://localhost:3000',
+    baseURL,
     trace: 'on-first-retry',
   },
+  webServer: process.env.BASE_URL
+    ? undefined
+    : {
+        command: 'npm run dev -- --hostname 127.0.0.1 --port 3000',
+        env: {
+          ...process.env,
+          UVAI_RATE_LIMIT_DISABLED: '1',
+        },
+        url: baseURL,
+        reuseExistingServer: !process.env.CI,
+        timeout: 120 * 1000,
+      },
   projects: [
     {
       name: 'chromium',
