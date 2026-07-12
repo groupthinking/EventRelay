@@ -25,28 +25,36 @@ if str(_SRC) not in sys.path:
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
-# Avoid importing the full agents package (which pulls heavy deps like aiohttp).
-# Instead, import the coordinator module directly.
-_agents_pkg = sys.modules.get("agents")
-if _agents_pkg is None:
+# Import the coordinator module directly while avoiding the heavy transitive
+# deps (aiohttp, ML libraries) pulled in by importing the full `agents` and
+# `youtube_extension.processors` packages normally. We install lightweight
+# module shims into sys.modules ONLY for the duration of the coordinator import,
+# then remove every shim we added in the finally below.
+#
+# Why the cleanup matters: leaving these shims installed makes this file
+# poison later test modules depending on pytest collection order —
+#   * the synthetic `agents` package never runs the real agents/__init__.py, so
+#     a later `from agents import VideoPipelineOrchestrator` fails;
+#   * the empty-__path__ `youtube_extension.processors.*` shims shadow the real
+#     package, so a later `from youtube_extension.processors... import ...`
+#     raises ModuleNotFoundError.
+# Tracking and removing only the shims we actually added keeps this integration
+# test order-independent. The already-imported coordinator module stays cached,
+# so the names imported below remain valid after the shims are removed.
+_added_stub_names: list[str] = []
+
+if "agents" not in sys.modules:
     _agents_pkg = types.ModuleType("agents")
     _agents_pkg.__path__ = [str(_SRC / "agents")]  # type: ignore[attr-defined]
     _agents_pkg.__package__ = "agents"
     sys.modules["agents"] = _agents_pkg
+    _added_stub_names.append("agents")
 
-# Stub youtube_extension.processors to avoid pulling in heavy ML deps, but ONLY
-# for the duration of the coordinator's module-level import. The stubs use an
-# empty __path__, so if they were left in sys.modules they would poison later
-# test modules that import the real youtube_extension.processors.* (collecting
-# this file first would make those imports raise ModuleNotFoundError). We record
-# which stubs we install and drop them again in the finally below, keeping this
-# integration test order-independent.
 _YT_STUB_NAMES = [
     "youtube_extension",
     "youtube_extension.processors",
     "youtube_extension.processors.enhanced_extractor",
 ]
-_added_yt_stubs: list[str] = []
 for _mod_name in _YT_STUB_NAMES:
     if _mod_name not in sys.modules:
         _stub = types.ModuleType(_mod_name)
@@ -57,20 +65,19 @@ for _mod_name in _YT_STUB_NAMES:
             _stub.EnhancedVideoExtractor = type("EnhancedVideoExtractor", (), {})  # type: ignore[attr-defined]
             _stub.VideoContent = type("VideoContent", (), {})  # type: ignore[attr-defined]
         sys.modules[_mod_name] = _stub
-        _added_yt_stubs.append(_mod_name)
+        _added_stub_names.append(_mod_name)
 
-# Now we can safely import just the coordinator module. Once imported, the
-# coordinator holds its own references to the stub classes, so the stubs can be
-# removed from sys.modules without affecting it.
 try:
     from agents.mcp_ecosystem_coordinator import (  # noqa: E402
         MCPEcosystemCoordinator,
         SkillRegistry,
     )
 finally:
-    # Restore sys.modules so real youtube_extension.processors.* imports succeed
-    # in later test modules regardless of collection order.
-    for _mod_name in reversed(_added_yt_stubs):
+    # Remove every shim we installed so real `agents.*` and
+    # `youtube_extension.processors.*` imports succeed in later test modules
+    # regardless of collection order. `agents.mcp_ecosystem_coordinator` stays
+    # cached so the imported names above remain valid.
+    for _mod_name in reversed(_added_stub_names):
         sys.modules.pop(_mod_name, None)
 
 
