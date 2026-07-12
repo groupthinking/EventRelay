@@ -34,12 +34,20 @@ if _agents_pkg is None:
     _agents_pkg.__package__ = "agents"
     sys.modules["agents"] = _agents_pkg
 
-# Stub youtube_extension.processors to avoid pulling in heavy ML deps
-for _mod_name in [
+# Stub youtube_extension.processors to avoid pulling in heavy ML deps, but ONLY
+# for the duration of the coordinator's module-level import. The stubs use an
+# empty __path__, so if they were left in sys.modules they would poison later
+# test modules that import the real youtube_extension.processors.* (collecting
+# this file first would make those imports raise ModuleNotFoundError). We record
+# which stubs we install and drop them again in the finally below, keeping this
+# integration test order-independent.
+_YT_STUB_NAMES = [
     "youtube_extension",
     "youtube_extension.processors",
     "youtube_extension.processors.enhanced_extractor",
-]:
+]
+_added_yt_stubs: list[str] = []
+for _mod_name in _YT_STUB_NAMES:
     if _mod_name not in sys.modules:
         _stub = types.ModuleType(_mod_name)
         _stub.__path__ = []  # type: ignore[attr-defined]
@@ -49,12 +57,21 @@ for _mod_name in [
             _stub.EnhancedVideoExtractor = type("EnhancedVideoExtractor", (), {})  # type: ignore[attr-defined]
             _stub.VideoContent = type("VideoContent", (), {})  # type: ignore[attr-defined]
         sys.modules[_mod_name] = _stub
+        _added_yt_stubs.append(_mod_name)
 
-# Now we can safely import just the coordinator module
-from agents.mcp_ecosystem_coordinator import (  # noqa: E402
-    MCPEcosystemCoordinator,
-    SkillRegistry,
-)
+# Now we can safely import just the coordinator module. Once imported, the
+# coordinator holds its own references to the stub classes, so the stubs can be
+# removed from sys.modules without affecting it.
+try:
+    from agents.mcp_ecosystem_coordinator import (  # noqa: E402
+        MCPEcosystemCoordinator,
+        SkillRegistry,
+    )
+finally:
+    # Restore sys.modules so real youtube_extension.processors.* imports succeed
+    # in later test modules regardless of collection order.
+    for _mod_name in reversed(_added_yt_stubs):
+        sys.modules.pop(_mod_name, None)
 
 
 # ---------------------------------------------------------------------------
