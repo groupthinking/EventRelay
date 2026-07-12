@@ -7,9 +7,10 @@ on:
     branches: [main]
 
 permissions:
-  contents: write
+  contents: read
   pull-requests: write
   issues: write
+  deployments: read
 
 env:
   # By default the E2E suite runs against production. To validate a PR's own
@@ -35,16 +36,74 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     continue-on-error: true
+    # Only run on pull requests when a preview target is configured via the
+    # `E2E_BASE_URL` repository variable. Without it the suite would fall back
+    # to production (https://uvai.io) and exercise the live site rather than
+    # the PR's own changes — producing noise failures unrelated to the diff.
+    # Pushes to `main` always run as a production health check.
+    if: github.event_name == 'push' || vars.E2E_BASE_URL != ''
 
     steps:
       - name: Checkout
         uses: actions/checkout@v7
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '22'
           cache: 'npm'
+
+      - name: Extract Vercel preview URL for this PR
+        id: preview
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          SHA="${{ github.event.pull_request.head.sha }}"
+          PREVIEW_URL=""
+
+          for i in $(seq 1 30); do
+            DEPLOYMENT_STATUS=0
+            DEPLOY_ID=$(gh api \
+              "/repos/${{ github.repository }}/deployments?sha=${SHA}&per_page=20" \
+              --jq '[.[] | select(.environment | ascii_downcase | startswith("preview"))] | first | .id // empty' 2>deployments.err) || DEPLOYMENT_STATUS=$?
+            if [ -s deployments.err ]; then
+              echo "gh api deployments stderr:" >&2
+              cat deployments.err >&2
+            fi
+            rm -f deployments.err
+
+            if [ "${DEPLOYMENT_STATUS:-0}" != "0" ]; then
+              exit "$DEPLOYMENT_STATUS"
+            fi
+
+            if [ -n "$DEPLOY_ID" ]; then
+              STATUS_LOOKUP=0
+              PREVIEW_URL=$(gh api \
+                "/repos/${{ github.repository }}/deployments/${DEPLOY_ID}/statuses" \
+                --jq '[.[] | select(.state=="success")] | first | .environment_url // empty' 2>deployment-status.err) || STATUS_LOOKUP=$?
+              if [ -s deployment-status.err ]; then
+                echo "gh api deployment statuses stderr:" >&2
+                cat deployment-status.err >&2
+              fi
+              rm -f deployment-status.err
+
+              if [ "${STATUS_LOOKUP:-0}" != "0" ]; then
+                exit "$STATUS_LOOKUP"
+              fi
+            fi
+
+            if [ -n "$PREVIEW_URL" ]; then
+              break
+            fi
+
+            sleep 10
+          done
+
+          if [ -n "$PREVIEW_URL" ]; then
+            echo "BASE_URL=$PREVIEW_URL" >> "$GITHUB_ENV"
+            echo "preview_url=$PREVIEW_URL" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Install dependencies
         run: npm install --legacy-peer-deps
@@ -80,7 +139,7 @@ jobs:
 
       - name: Post PR comment with results
         if: github.event_name == 'pull_request'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const status = '${{ steps.results.outputs.status }}';
@@ -127,35 +186,32 @@ jobs:
               body,
             });
 
-      - name: Log failure to failure-log.md
+      - name: Log failure to the job summary
         if: steps.results.outputs.status == 'red'
+        env:
+          # Passed via env, not interpolated inline: github.head_ref is the PR
+          # source branch name and is attacker-controlled on pull_request events.
+          # Expanding it directly in the run: script would allow shell injection
+          # (flagged by actionlint/zizmor). The shell receives these as data only.
+          TRIGGER_EVENT: ${{ github.event_name }}
+          TRIGGER_REF: ${{ github.head_ref || github.ref_name }}
+          COMMIT_SHA: ${{ github.sha }}
         run: |
           DATE=$(date -u '+%Y-%m-%d %H:%M:%S UTC')
           FAILURES=$(grep -A 2 'FAIL\|AssertionError\|Error:' test-output.txt | head -30 || echo "See test-output.txt")
 
-          cat >> tests/failure-log.md << EOF
-
-          ---
-
-          ### 🔴 Failure — $DATE
-
-          **Trigger:** ${{ github.event_name }} on \`${{ github.ref_name }}\`
-          **Commit:** \`${{ github.sha }}\`
-          **Runner:** GitHub Actions
-
-          **Failed tests:**
-          \`\`\`
-          $FAILURES
-          \`\`\`
-
-          **Status:** Logged automatically. Manual investigation required.
-          EOF
-
-          git config user.email "ci@eventrelay.dev"
-          git config user.name "EventRelay CI"
-          git add tests/failure-log.md
-          git commit -m "ci: log E2E test failure [skip ci]" || true
-          git push || true
+          {
+            echo "### 🔴 E2E Failure — $DATE"
+            echo ""
+            echo "**Trigger:** ${TRIGGER_EVENT} on \`${TRIGGER_REF}\`"
+            echo "**Commit:** \`${COMMIT_SHA}\`"
+            echo "**Deployment:** $BASE_URL"
+            echo ""
+            echo "**Failed tests:**"
+            echo '```'
+            echo "$FAILURES"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Fail the job if tests failed
         if: steps.results.outputs.status == 'red'

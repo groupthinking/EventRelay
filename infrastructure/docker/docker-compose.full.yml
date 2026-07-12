@@ -97,8 +97,8 @@ services:
 
   frontend:
     build:
-      context: ./frontend
-      dockerfile: Dockerfile
+      context: ../..
+      dockerfile: apps/web/Dockerfile
     image: youtube-extension-frontend:dev
     restart: unless-stopped
     ports:
