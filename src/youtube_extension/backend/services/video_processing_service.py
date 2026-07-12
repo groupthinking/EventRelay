@@ -12,7 +12,10 @@ import logging
 import os
 import time
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Optional
+
+from youtube_extension.utils.proxy import get_proxy_url
 
 DEPLOYMENT_TARGET_ALIASES: dict[str, str] = {
     "vercel": "vercel",
@@ -252,7 +255,11 @@ class VideoProcessingService:
             # If yt-dlp is available, prefer it for tests (mocked in tests)
             try:
                 import yt_dlp  # type: ignore
-                with yt_dlp.YoutubeDL({"quiet": True}) as ydl:
+                ydl_opts: dict[str, Any] = {"quiet": True}
+                proxy_url = get_proxy_url()
+                if proxy_url:
+                    ydl_opts["proxy"] = proxy_url
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     info = ydl.extract_info(video_url, download=False)
                     video_data = info or {}
             except Exception:
@@ -469,8 +476,28 @@ class VideoProcessingService:
 
             # SAFE: Payload is passed via stdin, not command line arguments.
             # video_url is contained in the JSON payload.
+            # parents[4]: services -> backend -> youtube_extension -> src -> repo root.
+            # If the layout changes or the file is missing (e.g. slim Docker
+            # image), the existence check below degrades gracefully and
+            # LANGEXTRACT_MCP_SERVER can override the location explicitly.
+            server_path = os.getenv(
+                "LANGEXTRACT_MCP_SERVER",
+                str(
+                    Path(__file__).resolve().parents[4]
+                    / "mcp-servers"
+                    / "langextract"
+                    / "langextract_mcp_server.py"
+                ),
+            )
+            if not Path(server_path).is_file():
+                logger.warning(
+                    f"LangExtract MCP server not found at {server_path}; "
+                    "set LANGEXTRACT_MCP_SERVER to override"
+                )
+                return None
+
             proc = subprocess.run(
-                ["python3", "mcp_servers/langextract_mcp_server.py"],
+                ["python3", server_path],
                 input=payload.encode(),
                 capture_output=True,
                 timeout=60

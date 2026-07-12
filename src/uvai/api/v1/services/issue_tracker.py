@@ -299,7 +299,7 @@ class IssueTracker:
         Returns the issue ID.
         """
         async with self._lock:
-            error_signature = error_type or hashlib.md5(error_message.encode()).hexdigest()[:12]
+            error_signature = error_type or hashlib.sha256(error_message.encode()).hexdigest()[:12]
 
             # Check for recurrence
             existing_issue = self._detect_recurrence(error_signature, component)

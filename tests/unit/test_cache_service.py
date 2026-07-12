@@ -66,7 +66,7 @@ class TestGetCacheKey:
         assert k1 != k2
 
     def test_matches_md5_prefix(self, cache):
-        expected = hashlib.md5(_VIDEO_URL.encode()).hexdigest()[:12]
+        expected = hashlib.sha256(_VIDEO_URL.encode()).hexdigest()[:12]
         assert cache._get_cache_key(_VIDEO_URL) == expected
 
 

@@ -1,43 +1,22 @@
 {
-  "tools": [
+  "servers": [
     {
-      "name": "youtube_uvai_processor",
-      "transport": "stdio",
-      "command": [
-        "python3",
-        "mcp-servers/python-suite/youtube_uvai_mcp.py"
+      "id": "vercel",
+      "name": "Vercel MCP",
+      "transport": "sse",
+      "url": "https://mcp.vercel.com/sse",
+      "env": [
+        "VERCEL_TOKEN",
+        "VERCEL_TEAM_ID"
       ],
-      "env": {
-        "YOUTUBE_API_KEY": "${YOUTUBE_API_KEY}"
-      },
-      "health": {
-        "method": "tools/list",
-        "params": {}
-      }
-    },
-    {
-      "name": "video_agent",
-      "transport": "stdio",
-      "command": [
-        "python3",
-        "mcp-servers/python-suite/video_agent_server.py"
-      ],
-      "health": {
-        "method": "tools/list",
-        "params": {}
-      }
-    },
-    {
-      "name": "code_analysis",
-      "transport": "stdio",
-      "command": [
-        "python3",
-        "mcp-servers/python-suite/code_analysis_server.py"
-      ],
-      "health": {
-        "method": "tools/list",
-        "params": {}
-      }
+      "tools": [
+        "search_docs",
+        "list_projects",
+        "list_deployments",
+        "get_deployment",
+        "get_deployment_logs",
+        "check_domain_availability"
+      ]
     }
   ]
 }

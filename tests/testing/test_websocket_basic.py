@@ -1,13 +1,21 @@
 import json
+
+import pytest
 from starlette.testclient import TestClient
 
-from src.youtube_extension.processors.video_processor import default_processor as video_processor
+try:
+    from youtube_extension.backend.main import app
+except ImportError:
+    pytest.skip(
+        "youtube_extension backend app is not importable in this environment",
+        allow_module_level=True,
+    )
 
 
 def test_websocket_chat_flow():
-    client = TestClient(app)
-
-    with client.websocket_connect("/ws") as websocket:
+    # Use TestClient as a context manager so the app lifespan (service
+    # container initialization) runs before connecting.
+    with TestClient(app) as client, client.websocket_connect("/ws") as websocket:
         # Receive welcome message
         welcome_raw = websocket.receive_text()
         welcome = json.loads(welcome_raw)
@@ -32,9 +40,7 @@ def test_websocket_chat_flow():
 
 
 def test_websocket_missing_video_url():
-    client = TestClient(app)
-
-    with client.websocket_connect("/ws") as websocket:
+    with TestClient(app) as client, client.websocket_connect("/ws") as websocket:
         # Drain welcome
         _ = json.loads(websocket.receive_text())
 
