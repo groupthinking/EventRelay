@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 import unified_ai_sdk.unified_ai_sdk as sdk_mod
 from unified_ai_sdk import AIRequest, ModelProvider, TaskType, UnifiedAISDK
@@ -204,6 +205,41 @@ class TestUnifiedAISDK:
 
         assert result.success is False
         assert result.metadata["attempts"] == 1
+
+    def test_should_retry_rejects_gemini_400_with_incidental_500(self):
+        sdk = UnifiedAISDK({"retry_attempts": 3, "retry_base_delay": 0})
+
+        assert (
+            sdk._should_retry(
+                RuntimeError(
+                    "400 INVALID_ARGUMENT: input token count 500 exceeds model limit"
+                )
+            )
+            is False
+        )
+
+    def test_should_retry_ignores_non_status_colon_numbers(self):
+        sdk = UnifiedAISDK({"retry_attempts": 3, "retry_base_delay": 0})
+
+        assert (
+            sdk._should_retry(
+                RuntimeError("invalid_request: expected 3 items: 503 found")
+            )
+            is False
+        )
+
+    @pytest.mark.parametrize(
+        "message",
+        [
+            "500 INTERNAL: upstream unavailable",
+            "Response: 500 Internal Server Error",
+            "429 RESOURCE_EXHAUSTED: quota exceeded",
+        ],
+    )
+    def test_should_retry_accepts_retryable_status_formats(self, message):
+        sdk = UnifiedAISDK({"retry_attempts": 3, "retry_base_delay": 0})
+
+        assert sdk._should_retry(RuntimeError(message)) is True
 
     @pytest.mark.asyncio
     async def test_structured_output_support(self):

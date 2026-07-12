@@ -264,6 +264,7 @@ class TestOptimizedStrategyProcessVideo:
         assert result.get("optimization_applied") is True
         assert "processing_id" in result
 
+    @pytest.mark.asyncio
     async def test_cache_hit_increments_counter(self):
         opt = OptimizedStrategy()
         cache_key = f"optimized_video:{__import__('hashlib').sha256(_VALID_URL.encode()).hexdigest()}"

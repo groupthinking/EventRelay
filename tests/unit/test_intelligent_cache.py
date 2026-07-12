@@ -711,10 +711,11 @@ class TestGlobalConvenienceFunctions:
         k2 = cache_key(b=2, a=1)
         assert k1 == k2
 
+    @pytest.mark.asyncio
     async def test_cache_key_returns_hex_string(self):
         from youtube_extension.backend.services.intelligent_cache import cache_key
         k = cache_key("test")
-        assert len(k) == 64
+        assert len(k) == 64  # sha256 hex digest (migrated from md5's 32)
         int(k, 16)  # should not raise
 
 
