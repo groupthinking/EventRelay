@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 """Integration tests for GTM skill discovery and invocation.
 
 Tests verify:
@@ -52,7 +51,10 @@ for _mod_name in [
         sys.modules[_mod_name] = _stub
 
 # Now we can safely import just the coordinator module
-from agents.mcp_ecosystem_coordinator import SkillRegistry  # noqa: E402
+from agents.mcp_ecosystem_coordinator import (  # noqa: E402
+    MCPEcosystemCoordinator,
+    SkillRegistry,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -358,93 +360,34 @@ class TestSkillsLockFile:
             assert "version" in meta, f"{skill_id} missing version"
             assert "triggers" in meta, f"{skill_id} missing triggers"
             assert "dependencies" in meta, f"{skill_id} missing dependencies"
-=======
-import os
-import json
-import pytest
-import asyncio
-from unittest.mock import MagicMock, patch
-import sys
 
-# Ensure src is in path
-sys.path.append(os.path.join(os.getcwd(), "src"))
 
-# Mock dependencies that cause issues during import
-# Using MagicMock for packages needs __path__ to be set if they are used in imports
-mock_google = MagicMock()
-mock_google.__path__ = []
-sys.modules['google'] = mock_google
+# ---------------------------------------------------------------------------
+# Coordinator delegation (regression)
+# ---------------------------------------------------------------------------
 
-mock_google_cloud = MagicMock()
-mock_google_cloud.__path__ = []
-sys.modules['google.cloud'] = mock_google_cloud
 
-sys.modules['google.genai'] = MagicMock()
-sys.modules['google.generativeai'] = MagicMock()
-sys.modules['google.cloud.aiplatform'] = MagicMock()
-sys.modules['vertexai'] = MagicMock()
-sys.modules['vertexai.generative_models'] = MagicMock()
+class TestCoordinatorListSkillsDelegation:
+    """MCPEcosystemCoordinator.list_skills() delegates to the registry.
 
-sys.modules['aiohttp'] = MagicMock()
-sys.modules['pandas'] = MagicMock()
-sys.modules['youtube_transcript_api'] = MagicMock()
-sys.modules['youtube_extension.processors.enhanced_extractor'] = MagicMock()
-sys.modules['youtube_extension.services.pipeline_audit_store'] = MagicMock()
+    Regression: the coordinator wrapper passes ``source=source`` to
+    ``SkillRegistry.list_skills``; the class-based registry must accept that
+    keyword or every coordinator call raises ``TypeError``.
+    """
 
-# Import SkillRegistry after mocking
-from agents.mcp_ecosystem_coordinator import SkillRegistry
+    def _coordinator(self) -> MCPEcosystemCoordinator:
+        coord = MCPEcosystemCoordinator()
+        # Point at the repo lock file deterministically.
+        coord.skill_registry = SkillRegistry(lock_file_path=LOCK_FILE)
+        return coord
 
-@pytest.fixture
-def skill_registry():
-    # Use the real skills-lock.json created during the task
-    return SkillRegistry(lock_file="skills-lock.json")
+    def test_list_skills_no_args(self) -> None:
+        assert len(self._coordinator().list_skills()) == 7
 
-def test_skill_discovery(skill_registry):
-    """Verify that all 7 GTM skills are discovered from skills-lock.json."""
-    skills = skill_registry.list_skills(source="uvai-skills")
-    assert len(skills) == 7
+    def test_list_skills_with_source_does_not_raise(self) -> None:
+        coord = self._coordinator()
+        # source="uvai-skills" matches every loaded GTM skill.
+        assert coord.list_skills(source="uvai-skills") == coord.list_skills()
 
-    expected_ids = [
-        "content-generation",
-        "seo-optimizer",
-        "social-scheduler",
-        "lead-scorer",
-        "email-campaign",
-        "analytics-dashboard",
-        "ab-testing"
-    ]
-
-    discovered_ids = [s["id"] for s in skills]
-    for skill_id in expected_ids:
-        assert skill_id in discovered_ids
-
-@pytest.mark.asyncio
-async def test_skill_invocation(skill_registry):
-    """Verify that a skill can be invoked and returns the expected result."""
-    # We use content-generation for testing invocation
-    skill_id = "content-generation"
-    context = {"video_id": "test_123", "transcript": "Hello world"}
-
-    # We expect this to work because we created the thin wrapper main.py
-    result = await skill_registry.invoke_skill(skill_id, context)
-
-    assert result["status"] == "success"
-    assert result["skill"] == skill_id
-
-@pytest.mark.asyncio
-async def test_skill_invocation_env_vars(skill_registry):
-    """Verify that environment variables are passed (simulated)."""
-    with patch("subprocess.run") as mock_run:
-        mock_run.return_value.stdout = json.dumps({"status": "success"})
-        mock_run.return_value.returncode = 0
-
-        os.environ["GEMINI_API_KEY"] = "test_key"
-
-        await skill_registry.invoke_skill("content-generation", {})
-
-        # Check that the env passed to subprocess.run contains GEMINI_API_KEY
-        args, kwargs = mock_run.call_args
-        passed_env = kwargs.get("env", {})
-        assert passed_env.get("GEMINI_API_KEY") == "test_key"
-        assert "SKILL_CONTEXT" in passed_env
->>>>>>> origin/main
+    def test_list_skills_with_unknown_source_returns_empty(self) -> None:
+        assert self._coordinator().list_skills(source="does-not-exist") == []
