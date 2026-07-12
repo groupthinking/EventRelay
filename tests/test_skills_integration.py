@@ -51,7 +51,10 @@ for _mod_name in [
         sys.modules[_mod_name] = _stub
 
 # Now we can safely import just the coordinator module
-from agents.mcp_ecosystem_coordinator import SkillRegistry  # noqa: E402
+from agents.mcp_ecosystem_coordinator import (  # noqa: E402
+    MCPEcosystemCoordinator,
+    SkillRegistry,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -357,3 +360,34 @@ class TestSkillsLockFile:
             assert "version" in meta, f"{skill_id} missing version"
             assert "triggers" in meta, f"{skill_id} missing triggers"
             assert "dependencies" in meta, f"{skill_id} missing dependencies"
+
+
+# ---------------------------------------------------------------------------
+# Coordinator delegation (regression)
+# ---------------------------------------------------------------------------
+
+
+class TestCoordinatorListSkillsDelegation:
+    """MCPEcosystemCoordinator.list_skills() delegates to the registry.
+
+    Regression: the coordinator wrapper passes ``source=source`` to
+    ``SkillRegistry.list_skills``; the class-based registry must accept that
+    keyword or every coordinator call raises ``TypeError``.
+    """
+
+    def _coordinator(self) -> MCPEcosystemCoordinator:
+        coord = MCPEcosystemCoordinator()
+        # Point at the repo lock file deterministically.
+        coord.skill_registry = SkillRegistry(lock_file_path=LOCK_FILE)
+        return coord
+
+    def test_list_skills_no_args(self) -> None:
+        assert len(self._coordinator().list_skills()) == 7
+
+    def test_list_skills_with_source_does_not_raise(self) -> None:
+        coord = self._coordinator()
+        # source="uvai-skills" matches every loaded GTM skill.
+        assert coord.list_skills(source="uvai-skills") == coord.list_skills()
+
+    def test_list_skills_with_unknown_source_returns_empty(self) -> None:
+        assert self._coordinator().list_skills(source="does-not-exist") == []

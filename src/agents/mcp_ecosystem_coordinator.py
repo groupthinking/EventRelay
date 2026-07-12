@@ -10,11 +10,9 @@ import importlib
 import json
 import logging
 import os
-import subprocess
-import sys
 from dataclasses import asdict
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 from youtube_extension.processors.enhanced_extractor import (
     EnhancedVideoExtractor,
@@ -165,7 +163,7 @@ class MCPEcosystemCoordinator:
         self.workflow_history: list[dict] = []
         self.skill_registry = SkillRegistry()
 
-    def list_skills(self, source: Optional[str] = None) -> List[Dict[str, Any]]:
+    def list_skills(self, source: Optional[str] = None) -> list[dict[str, Any]]:
         """Returns a list of discovered skills from the registry."""
         return self.skill_registry.list_skills(source=source)
 
@@ -341,11 +339,12 @@ class SkillRegistry:
             "entry_point": meta.get("skillPath", ""),
         }
 
-    def list_skills(self) -> list[dict[str, Any]]:
-        """Return metadata for all registered GTM skills."""
+    def list_skills(self, source: Optional[str] = None) -> list[dict[str, Any]]:
+        """Return metadata for all registered GTM skills, optionally filtered by source."""
         return [
             self._build_skill_metadata(skill_id, meta)
             for skill_id, meta in self._skills.items()
+            if source is None or meta.get("source") == source
         ]
 
     def get_skill(self, skill_id: str) -> Optional[dict[str, Any]]:
