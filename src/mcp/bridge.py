@@ -597,6 +597,8 @@ class MCPBridge:
         self, agents: list, request: MCPBridgeRequest, primary_result: AIResponse
     ) -> dict[str, Any]:
         """Orchestrate agent collaboration"""
+        if not agents:
+            return {"status": "unavailable", "error": "No agents available", "agents": 0}
         return {"status": "unavailable", "agents": len(agents)}
 
     async def _execute_mcp_tool(
