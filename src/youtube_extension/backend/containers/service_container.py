@@ -123,7 +123,32 @@ class ServiceContainer:
         # MCP Orchestrator (Unified Model Context Protocol)
         self.register_singleton("mcp_orchestrator", self._create_mcp_orchestrator)
 
+        # Register aliases for skill dependencies
+        self._register_skill_dependency_aliases()
+
         logger.info("Core services registered")
+
+    def _register_skill_dependency_aliases(self):
+        """Register aliases for services used as skill dependencies."""
+        # AI Services
+        self.register_singleton("gemini_service", lambda: self.get_service("hybrid_processor_service"))
+        self.register_singleton("openai_service", self._create_openai_service_placeholder)
+
+        # Data & Analytics
+        self.register_singleton("database_service", lambda: self.get_service("data_service"))
+        self.register_singleton("analytics_service", lambda: self.get_service("metrics_service"))
+
+        # External Integration
+        self.register_singleton("email_service", lambda: self.get_service("notification_service"))
+        self.register_singleton("social_api_service", self._create_social_api_service_placeholder)
+
+    def _create_openai_service_placeholder(self):
+        """Placeholder for OpenAI service."""
+        return type("OpenAIServicePlaceholder", (), {"status": "placeholder"})()
+
+    def _create_social_api_service_placeholder(self):
+        """Placeholder for Social API service."""
+        return type("SocialAPIServicePlaceholder", (), {"status": "placeholder"})()
 
     def register_singleton(self, name: str, factory: Callable[[], T]) -> None:
         """
