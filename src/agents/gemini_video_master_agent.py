@@ -1092,7 +1092,7 @@ Malformed JSON:
     @staticmethod
     def _build_gemini_generation_config(
         response_mime_type: str | None = None,
-    ) -> types.GenerateContentConfig:
+    ) -> "types.GenerateContentConfig":
         config_kwargs = {
             "max_output_tokens": int(os.getenv("GEMINI_MAX_OUTPUT_TOKENS", "16384"))
         }
