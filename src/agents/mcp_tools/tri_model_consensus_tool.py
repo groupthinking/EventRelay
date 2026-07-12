@@ -32,8 +32,8 @@ except ImportError:
     logger.warning("Anthropic SDK not available")
 
 try:
-    import requests
-    GROK_AVAILABLE = True
+    import importlib.util
+    GROK_AVAILABLE = importlib.util.find_spec('httpx') is not None
 except ImportError:
     GROK_AVAILABLE = False
     logger.warning("Requests library not available for Grok")
@@ -286,26 +286,27 @@ class TriModelConsensusTool:
 
         try:
             # Grok uses OpenAI-compatible API
-            import requests
+            import httpx
 
             # Try Grok 2 latest (December 2024 release)
             # Model names: "grok-2-1212" or "grok-2-latest"
-            response = requests.post(
-                "https://api.x.ai/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {self.grok_api_key}",
-                    "Content-Type": "application/json"
-                },
-                json={
-                    "model": "grok-2-1212",  # Grok 2 December 2024 (latest)
-                    "messages": [
-                        {"role": "user", "content": prompt}
-                    ],
-                    "temperature": 0.7,
-                    "max_tokens": 4096  # Higher token limit
-                },
-                timeout=60
-            )
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    "https://api.x.ai/v1/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {self.grok_api_key}",
+                        "Content-Type": "application/json"
+                    },
+                    json={
+                        "model": "grok-2-1212",  # Grok 2 December 2024 (latest)
+                        "messages": [
+                            {"role": "user", "content": prompt}
+                        ],
+                        "temperature": 0.7,
+                        "max_tokens": 4096  # Higher token limit
+                    },
+                    timeout=60.0
+                )
 
             if response.status_code == 200:
                 data = response.json()
@@ -485,7 +486,7 @@ class TriModelConsensusTool:
 
         # Length similarity (normalized)
         avg_length = sum(lengths) / len(lengths)
-        length_variance = sum((l - avg_length) ** 2 for l in lengths) / len(lengths)
+        length_variance = sum((length_val - avg_length) ** 2 for length_val in lengths) / len(lengths)
         length_score = 1.0 / (1.0 + length_variance / max(avg_length, 1))
 
         # Confidence agreement
