@@ -11,6 +11,31 @@ permissions:
   actions: read
 
 jobs:
+  repo-integrity:
+    # Hard gate: fails the build on committed merge-conflict markers or Python
+    # syntax errors anywhere under src/ or tests/. Added because main once shipped
+    # unresolved conflict markers in src/skills/*, src/agents/*, and
+    # tests/test_skills_integration.py — invisible to the other jobs, whose ruff
+    # (continue-on-error) and pytest (tests/unit only) scopes never touch those paths.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Fail on committed merge-conflict markers
+        run: |
+          # Match conflict markers only at the start of a line in tracked files.
+          if git grep -n -I -E '^(<<<<<<<|=======|>>>>>>>)( |$)' -- ':!*.md'; then
+            echo "::error::Committed merge-conflict markers found (see matches above)."
+            exit 1
+          fi
+          echo "No merge-conflict markers in tracked files."
+      - name: Compile all Python sources
+        run: |
+          # Byte-compile every tracked .py file so SyntaxErrors fail CI.
+          git ls-files -z '*.py' | xargs -0 python -m py_compile
+
   build:
     runs-on: ubuntu-latest
     steps:
