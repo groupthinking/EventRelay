@@ -459,13 +459,6 @@ class MCPServerRegistry:
 _server_registry = None
 
 
-def _make_ai_server_id(name: str, endpoint: str) -> str:
-    """Return the canonical SHA-256-based server ID for an AI server."""
-    slug = name.lower().replace(" ", "-")
-    suffix = hashlib.sha256(endpoint.encode()).hexdigest()[:8]
-    return f"ai-{slug}-{suffix}"
-
-
 def get_server_registry() -> MCPServerRegistry:
     """Get the global MCP server registry instance"""
     global _server_registry
@@ -477,31 +470,9 @@ def get_server_registry() -> MCPServerRegistry:
 async def register_ai_server(
     name: str, endpoint: str, capabilities: list[ServerCapability]
 ) -> MCPServer:
-    """Convenience function to register an AI server.
-
-    Performs a name/endpoint lookup before registering so that servers
-    persisted under the old MD5-derived ID do not create duplicate entries
-    after the SHA-256 migration.  If an existing server with the same name
-    and endpoint is found under any ID it is returned (and migrated to the
-    canonical SHA-256 ID if necessary); otherwise a fresh registration is
-    created.
-    """
-    registry = get_server_registry()
-    server_id = _make_ai_server_id(name, endpoint)
-
-    # Fast path: already registered under the canonical SHA-256 ID.
-    existing = registry.get_server(server_id)
-    if existing is not None:
-        return existing
-
-    # Compatibility path: find a stale entry (e.g. old MD5-derived ID)
-    # with the same name/endpoint and migrate it to the new ID.
-    for stale_server in list(registry.servers.values()):
-        if stale_server.name == name and stale_server.endpoint == endpoint:
-            registry.unregister_server(stale_server.id)
-            break
-
-    return registry.register_server(
+    """Convenience function to register an AI server"""
+    server_id = f"ai-{name.lower().replace(' ', '-')}-{hashlib.sha256(endpoint.encode()).hexdigest()[:8]}"
+    return get_server_registry().register_server(
         id=server_id, name=name, endpoint=endpoint, capabilities=capabilities
     )
 

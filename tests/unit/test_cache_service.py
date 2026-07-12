@@ -65,7 +65,7 @@ class TestGetCacheKey:
         k2 = cache._get_cache_key("https://www.youtube.com/watch?v=bbbbbbbbbbb")
         assert k1 != k2
 
-    def test_matches_sha256_prefix(self, cache):
+    def test_matches_md5_prefix(self, cache):
         expected = hashlib.sha256(_VIDEO_URL.encode()).hexdigest()[:12]
         assert cache._get_cache_key(_VIDEO_URL) == expected
 

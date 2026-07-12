@@ -246,13 +246,7 @@ class RealVideoProcessor:
 
         # 3) yt-dlp fallback (mocked in tests)
         try:
-            from youtube_extension.utils.proxy import get_proxy_url
-
-            ydl_opts: dict[str, Any] = {"quiet": True}
-            proxy_url = get_proxy_url()
-            if proxy_url:
-                ydl_opts["proxy"] = proxy_url
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:  # type: ignore[attr-defined]
+            with yt_dlp.YoutubeDL({"quiet": True}) as ydl:  # type: ignore[attr-defined]
                 _ = ydl.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=False)
                 return [{"text": "Transcript extracted via yt-dlp", "start": 0.0, "duration": 0.0}]
         except Exception:

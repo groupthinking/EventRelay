@@ -254,7 +254,7 @@ class YouTubeInnovationLearningDB:
 
         # Extract video ID
         video_id = self._extract_video_id(video_url)
-        video_hash = hashlib.sha256(video_url.encode()).hexdigest()
+        video_hash = hashlib.md5(video_url.encode()).hexdigest()
 
         # Check if already processed
         with sqlite3.connect(self.db_path) as conn:
@@ -700,7 +700,7 @@ class YouTubeInnovationLearningDB:
             return video_url.split("youtu.be/")[1].split("?")[0]
         else:
             # Generate hash-based ID for non-YouTube URLs
-            return hashlib.sha256(video_url.encode()).hexdigest()[:11]
+            return hashlib.md5(video_url.encode()).hexdigest()[:11]
 
     async def _record_breakthrough(self, video_id: str, innovation_result: Dict[str, Any]) -> None:
         """Record breakthrough achievement"""

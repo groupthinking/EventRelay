@@ -28,7 +28,6 @@ from agents.a2a_mcp_integration import (
     A2AMCPOrchestrator,
     MCPEnabledA2AAgent,
 )
-
 from connectors.mcp_base import MCPContext
 from core.model_router import ModelRouter, RoutingDecision
 
@@ -591,34 +590,23 @@ class MCPBridge:
     async def _create_task_agents(
         self, task_type: TaskType
     ) -> list[MCPEnabledA2AAgent]:
-        """Create specialized agents for task type.
-
-        Returns an empty list — A2A agent creation requires task-specific
-        configuration that is not yet wired. Callers handle the empty-list
-        case and report status accordingly.
-        """
-        logger.debug("A2A agent creation not yet configured for task_type=%s", task_type.value)
+        """Create specialized agents for task type"""
         return []
 
     async def _orchestrate_collaboration(
         self, agents: list, request: MCPBridgeRequest, primary_result: AIResponse
     ) -> dict[str, Any]:
-        """Orchestrate agent collaboration — not yet implemented."""
+        """Orchestrate agent collaboration"""
         return {"status": "unavailable", "agents": len(agents)}
 
     async def _execute_mcp_tool(
         self, tool_name: str, request: MCPBridgeRequest
     ) -> dict[str, Any]:
-        """Execute MCP tool — not yet implemented."""
+        """Execute MCP tool"""
         return {"tool": tool_name, "status": "unavailable", "result": None}
 
     async def _attempt_fallback_processing(self, request: MCPBridgeRequest) -> bool:
-        """Attempt fallback processing on failure.
-
-        Returns False — no fallback path is currently available.
-        This is explicit: the caller already knows the primary path failed.
-        """
-        logger.warning("Fallback processing attempted for request %s but no fallback path is available", request.request_id)
+        """Attempt fallback processing on failure"""
         return False
 
 

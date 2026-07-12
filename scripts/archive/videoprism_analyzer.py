@@ -229,7 +229,7 @@ class VideoPrismAnalyzer:
             temp_dir.mkdir(exist_ok=True)
 
             # Generate unique filename
-            url_hash = hashlib.sha256(video_url.encode()).hexdigest()[:8]
+            url_hash = hashlib.md5(video_url.encode()).hexdigest()[:8]
             output_path = temp_dir / f"video_{url_hash}.%(ext)s"
 
             ydl_opts = {

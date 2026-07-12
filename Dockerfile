@@ -1,13 +1,12 @@
 # Dockerfile for EventRelay - Hybrid Python + Node.js (v22)
-# Fixes: "ffmpeg not found" and "npm: command not found" production errors
 # Multi-stage build optimized for production
 
-# ── Stage 1: Builder ──────────────────────────────────────────────────────────
+# Stage 1: Builder
 FROM python:3.11-slim AS builder
 
 WORKDIR /app
 
-# Install system build deps + ffmpeg + Node.js 22 LTS in a single layer
+# Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     gnupg \
@@ -28,26 +27,19 @@ COPY apps/web/src/dataconnect-generated ./apps/web/src/dataconnect-generated
 
 # Install Python dependencies
 RUN pip install --no-cache-dir --upgrade pip && \
-    if [ -f requirements.txt ]; then \
-        pip install --no-cache-dir -r requirements.txt; \
-    else \
-        pip install --no-cache-dir -e .; \
-    fi
+    (pip install --no-cache-dir -r requirements.txt || pip install --no-cache-dir -e .)
 
 # Install Node.js dependencies for the web app
 # Using workspace to ensure proper hoisting and dependency resolution
 RUN npm ci --workspace=apps/web --production --legacy-peer-deps
 
-# ── Stage 2: Runtime ──────────────────────────────────────────────────────────
+# Stage 2: Runtime
 FROM python:3.11-slim AS runtime
 
 WORKDIR /app
 
-# Create non-root user (UID 1000)
-RUN groupadd --gid 1000 appuser && \
-    useradd --uid 1000 --gid appuser --shell /bin/bash --create-home appuser
-
-# Install runtime system deps: ffmpeg + Node.js 22 LTS + curl (for health check)
+# Install runtime system dependencies (ffmpeg and nodejs v22)
+# gnupg is required for the Nodesource setup script
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     curl \
@@ -56,6 +48,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user
+RUN groupadd --gid 1000 appuser && \
+    useradd --uid 1000 --gid appuser --shell /bin/bash --create-home appuser
 
 # Copy installed Python packages from builder
 COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
@@ -72,27 +68,21 @@ COPY --from=builder /app/apps/web/src/dataconnect-generated ./apps/web/src/datac
 # Copy application code with correct ownership
 COPY --chown=appuser:appuser . .
 
-# Runtime data directories
-RUN mkdir -p /app/data/enhanced_analysis /app/data/cache /app/logs \
-             /app/generated_projects /app/youtube_processed_videos /tmp/uvai_data && \
-    chown -R appuser:appuser /app/data /app/logs /app/generated_projects \
-                              /app/youtube_processed_videos /tmp/uvai_data
+# Environment variables
+ENV PORT=8080
+ENV HOST=0.0.0.0
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONPATH=/app/src
+ENV NODE_ENV=production
 
 USER appuser
 
-# Environment variables
-ENV PORT=8080 \
-    HOST=0.0.0.0 \
-    PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONPATH=/app/src \
-    NODE_ENV=production
+EXPOSE 8080
 
-EXPOSE ${PORT}
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:${PORT}/health || exit 1
 
-# Health check using curl (installed above)
-HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
-    CMD curl -f http://localhost:${PORT:-8080}/health || exit 1
-
-# Run — shell form so $PORT is expanded at runtime
+# Default command (shell form for $PORT expansion)
 CMD python -m uvicorn youtube_extension.main:app --host 0.0.0.0 --port ${PORT}

@@ -864,48 +864,6 @@ class TestConvenienceFunctions:
         )
         assert s1.id == s2.id
 
-    async def test_register_ai_server_idempotent_same_id(self, tmp_path):
-        """Re-registering the same name/endpoint returns the existing server."""
-        _reg_mod._server_registry = MCPServerRegistry(
-            config_path=str(tmp_path / "config" / "mcp.json")
-        )
-        s1 = await _reg_mod.register_ai_server(
-            "My AI", "http://localhost:8700", [ServerCapability.AI_INFERENCE]
-        )
-        # Register again with the same args — should not raise and should return same ID.
-        s2 = await _reg_mod.register_ai_server(
-            "My AI", "http://localhost:8700", [ServerCapability.AI_INFERENCE]
-        )
-        assert s1.id == s2.id
-        registry = _reg_mod.get_server_registry()
-        assert len([s for s in registry.servers.values() if s.endpoint == "http://localhost:8700"]) == 1
-
-    async def test_register_ai_server_migrates_stale_id(self, tmp_path):
-        """Stale entry (e.g. old MD5-derived ID) is replaced without creating a duplicate."""
-        registry = MCPServerRegistry(
-            config_path=str(tmp_path / "config" / "mcp.json")
-        )
-        _reg_mod._server_registry = registry
-        # Manually plant a stale entry using a fake old-style ID.
-        stale_id = "ai-my-ai-oldmd5id"
-        registry.servers[stale_id] = MCPServer(
-            id=stale_id,
-            name="My AI",
-            endpoint="http://localhost:8800",
-            capabilities=[ServerCapability.AI_INFERENCE],
-        )
-
-        server = await _reg_mod.register_ai_server(
-            "My AI", "http://localhost:8800", [ServerCapability.AI_INFERENCE]
-        )
-        # Old ID must be gone; new canonical SHA-256 ID must be present.
-        assert stale_id not in registry.servers
-        assert server.id in registry.servers
-        assert server.name == "My AI"
-        assert server.endpoint == "http://localhost:8800"
-        # Exactly one server for this endpoint.
-        assert len([s for s in registry.servers.values() if s.endpoint == "http://localhost:8800"]) == 1
-
     def test_find_ai_servers_returns_list(self, tmp_path):
         _reg_mod._server_registry = MCPServerRegistry(
             config_path=str(tmp_path / "config" / "mcp.json")
