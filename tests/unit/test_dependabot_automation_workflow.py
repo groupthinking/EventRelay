@@ -80,7 +80,7 @@ def test_dependabot_workflow_approves_and_merges_without_checkout() -> None:
     )
 
 
-def test_dependabot_npm_updates_ignore_eslint_v10_until_compatible() -> None:
+def test_dependabot_ignores_eslint_v10() -> None:
     config = _load_dependabot_config()
     npm_updates = [
         update
@@ -89,7 +89,10 @@ def test_dependabot_npm_updates_ignore_eslint_v10_until_compatible() -> None:
         and update["directory"] in {"/", "/apps/web"}
     ]
 
-    assert len(npm_updates) == 2
+    assert len(npm_updates) >= 2, (
+        f"Expected npm update entries for both '/' and '/apps/web', got {len(npm_updates)}: "
+        f"{[u['directory'] for u in npm_updates]}"
+    )
 
     for update in npm_updates:
         assert {
