@@ -8,7 +8,7 @@ workflow; this README is the index.
 
 | Workflow | File | Trigger | Purpose |
 |----------|------|---------|---------|
-| CI | `ci.yml` | push / PR to `main` | Type-check + lint `apps/web`, build the web app, lint Python (informational), run unit tests |
+| CI | `ci.yml` | push / PR to `main` | Repo-integrity gate (fail on committed conflict markers + Python syntax errors across all tracked files), type-check + lint `apps/web`, build the web app, lint Python (informational), run unit tests |
 | Coverage | `coverage.yml` | push / PR to `main`,`develop`; manual | Generate pytest coverage and upload lcov to Qlty |
 | CodeQL Analysis | `codeql-analysis.yml` | push / PR to `main`; weekly (Mon 06:00 UTC) | Static security analysis for JavaScript/TypeScript and Python |
 | Security Scan | `security.yml` | push / PR to `main`; weekly (Sun 00:00 UTC) | npm audit, Python safety, bandit, Trivy image scan |

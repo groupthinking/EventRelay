@@ -320,17 +320,15 @@ class SkillRegistry:
             return
 
         skills_data = data.get("skills", {})
-        if isinstance(skills_data, list):
-            # Legacy list-format lock files keyed each entry by an inner "id".
-            skills_data = {
-                entry["id"]: entry
-                for entry in skills_data
-                if isinstance(entry, dict) and "id" in entry
-            }
-        elif not isinstance(skills_data, dict):
+        if not isinstance(skills_data, dict):
+            # The current lock schema keys skills by id in an object map. Legacy
+            # list-format lock files used a different, incomplete entry schema
+            # (no sourceType/skillPath/className), so their entries cannot be
+            # loaded or invoked here. Reject them explicitly with a warning rather
+            # than crashing on `.items()` or pretending to support them.
             logger.warning(
-                "Unexpected 'skills' shape in %s: %s; skipping skill load",
-                self._lock_path,
+                "skills-lock.json 'skills' is %s, not the expected object map; "
+                "legacy list-format lock files are not supported — skipping skill load",
                 type(skills_data).__name__,
             )
             return

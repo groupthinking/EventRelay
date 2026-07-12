@@ -125,6 +125,16 @@ class TestSkillDiscovery:
         assert registry.get_skill("seo-optimizer")["name"] == "SEO Optimizer"
         assert registry.get_skill("ab-testing")["name"] == "A/B Testing"
 
+    def test_legacy_list_format_lock_is_rejected(self, tmp_path: Path) -> None:
+        # A legacy list-format "skills" value is rejected explicitly (no crash,
+        # no skills loaded) rather than mis-loaded as the current object map.
+        lock = tmp_path / "skills-lock.json"
+        lock.write_text(
+            json.dumps({"skills": [{"id": "legacy-skill", "source": "uvai-skills"}]})
+        )
+        registry = SkillRegistry(lock_file_path=str(lock))
+        assert registry.list_skills() == []
+
 
 # ---------------------------------------------------------------------------
 # Trigger matching tests
