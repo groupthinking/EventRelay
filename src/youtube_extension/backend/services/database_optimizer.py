@@ -432,36 +432,19 @@ class QueryOptimizer:
             results = [None] * len(queries_and_params)
 
             # Execute each group
-            for pattern, group_queries in query_groups.items():
-                if len(group_queries) > 1 and hasattr(connection, "executemany"):
-                    # Use batch execution if available
-                    batch_start = time.time()
+            for _pattern, group_queries in query_groups.items():
+                # Execute all queries concurrently using asyncio.gather to avoid N+1 sequential bottlenecks
+                # and preserve expected return types and centralized logging/metrics logic.
+                coroutines = [
+                    self.execute_query(query, params, use_cache=True)
+                    for _, query, params in group_queries
+                ]
+                query_results = await asyncio.gather(*coroutines)
 
-                    # Extract queries and params
-                    [q[1] for q in group_queries]
-                    [q[2] for q in group_queries]
-
-                    # Execute batch (simplified - real implementation would be more complex)
-                    for i, (original_index, query, params) in enumerate(group_queries):
-                        query_result = await self.execute_query(
-                            query, params, use_cache=True
-                        )
-                        results[original_index] = query_result
-
-                    batch_time = (time.time() - batch_start) * 1000
-                    logger.debug(
-                        f"Batch executed ({batch_time:.2f}ms): {len(group_queries)} {pattern} queries"
-                    )
-                else:
-                    # Execute individually concurrently
-                    coroutines = [
-                        self.execute_query(query, params, use_cache=True)
-                        for _, query, params in group_queries
-                    ]
-                    query_results = await asyncio.gather(*coroutines)
-
-                    for (original_index, _, _), query_result in zip(group_queries, query_results):
-                        results[original_index] = query_result
+                for (original_index, _, _), query_result in zip(
+                    group_queries, query_results
+                ):
+                    results[original_index] = query_result
 
             total_time = (time.time() - start_time) * 1000
             avg_time_per_query = total_time / len(queries_and_params)
@@ -894,34 +877,28 @@ async def initialize_database_optimization():
         try:
             cur = conn.cursor() if hasattr(conn, "cursor") else None
             if cur:
-                cur.execute(
-                    """
+                cur.execute("""
                     CREATE TABLE IF NOT EXISTS videos (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         title TEXT,
                         processed BOOLEAN DEFAULT 0,
                         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
                     )
-                    """
-                )
-                cur.execute(
-                    """
+                    """)
+                cur.execute("""
                     CREATE TABLE IF NOT EXISTS video_analytics (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         processing_time_ms REAL,
                         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
                     )
-                    """
-                )
-                cur.execute(
-                    """
+                    """)
+                cur.execute("""
                     CREATE TABLE IF NOT EXISTS users (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         email TEXT,
                         last_active DATETIME DEFAULT CURRENT_TIMESTAMP
                     )
-                    """
-                )
+                    """)
                 # Seed minimal data if tables are empty
                 try:
                     # Seed videos
