@@ -327,7 +327,11 @@ class SkillRegistry:
             # Handle list format from origin/main; only load entries that have a
             # className so that _load_skill_instance() can instantiate them.
             for skill in skills_data:
-                if skill.get("source") == "uvai-skills" and skill.get("className"):
+                if (
+                    skill.get("source") == "uvai-skills"
+                    and skill.get("className")
+                    and skill.get("id")
+                ):
                     self._skills[skill["id"]] = skill
         elif isinstance(skills_data, dict):
             # Handle dict format from HEAD; apply the same source/sourceType/

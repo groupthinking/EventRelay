@@ -311,11 +311,35 @@ class TestEndToEndDispatch:
     async def test_no_manual_trigger_in_any_skill(
         self, registry: SkillRegistry
     ) -> None:
-        """Confirm no skill exposes a 'manual' trigger (banned by single-workflow policy)."""
+        """Confirm no skill exposes a 'manual' trigger (banned by single-workflow policy).
+
+        The regression this guards against re-added ``manual`` in three places —
+        the skill class, ``skills-lock.json``, and ``config/agent_network.json`` —
+        so the check inspects all three, not just the lock-file-derived metadata.
+        """
         skills = registry.list_skills()
+
+        # 1. Registry metadata (normalized from skills-lock.json).
         for skill in skills:
             assert "manual" not in skill["triggers"], (
-                f"Skill '{skill['id']}' has forbidden 'manual' trigger"
+                f"Skill '{skill['id']}' has forbidden 'manual' trigger in lock metadata"
+            )
+
+        # 2. The loaded skill class's own ``triggers`` attribute.
+        for skill in skills:
+            instance = registry._load_skill_instance(skill["id"])
+            class_triggers = getattr(instance, "triggers", [])
+            assert "manual" not in class_triggers, (
+                f"Skill class '{skill['id']}' declares a forbidden 'manual' trigger"
+            )
+
+        # 3. The agent-network configuration.
+        network_cfg = json.loads(
+            (_REPO_ROOT / "config" / "agent_network.json").read_text()
+        )
+        for agent in network_cfg.get("agents", []):
+            assert "manual" not in agent.get("trigger_events", []), (
+                f"Agent '{agent.get('id')}' has forbidden 'manual' in trigger_events"
             )
 
     @pytest.mark.asyncio
