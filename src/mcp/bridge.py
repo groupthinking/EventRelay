@@ -407,7 +407,7 @@ class MCPBridge:
                 "sources_found": len(search_results),
                 "augmented_content": augmented_content,
                 "queries_made": 1,
-                "status": "success",
+                "status": "success" if search_results else "unavailable",
             }
 
         except Exception as e:
