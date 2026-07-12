@@ -313,7 +313,7 @@ class SkillRegistry:
     def _load_skills(self) -> None:
         """Load GTM skill definitions from the lock file."""
         try:
-            with open(self._lock_path) as f:
+            with open(self._lock_path, encoding="utf-8") as f:
                 data = json.load(f)
         except (FileNotFoundError, json.JSONDecodeError) as e:
             logger.warning("Could not load skills-lock.json: %s", e)
