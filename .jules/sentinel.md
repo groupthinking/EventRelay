@@ -1,4 +1,7 @@
-## 2024-07-09 - Replace weak MD5 hashing with SHA-256 for caching
-**Vulnerability:** Weak MD5 hashes were being used for generating cache keys and processing IDs across multiple backend services (e.g., `cache_service.py`, `database_optimizer.py`, etc.).
-**Learning:** This repo frequently uses hashes for non-cryptographic purposes (caching and IDs). However, using MD5 triggers static analysis security warnings (like Bandit rules B324/B303) as the algorithm is vulnerable to collision attacks and considered insecure by modern cryptographic standards.
-**Prevention:** Avoid using `hashlib.md5()` entirely. Default to `hashlib.sha256()` even for non-cryptographic uses to maintain a secure baseline and comply with automated security policies.
+## 2026-07-12 - Insecure SSL Verification
+
+**Vulnerability:** Man-in-the-Middle (MitM) Attack via disabled SSL certificate verification in `aiohttp`.
+
+**Learning:** Explicitly disabling SSL certificate verification (e.g., `ssl_context.verify_mode = ssl.CERT_NONE` or `ssl_context.check_hostname = False`) disables crucial cryptographic checks that ensure you're communicating with the intended server, leaving API clients vulnerable to MitM attacks.
+
+**Prevention:** Never disable SSL verification in production environments or API clients like `aiohttp`; always rely on secure defaults.

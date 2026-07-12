@@ -170,13 +170,7 @@ class MarkdownVideoProcessor:
         prompt = prompt.replace("{{VIDEO_METADATA}}", json.dumps(metadata, indent=2))
 
         # Use OpenAI for generation
-        ssl_context = ssl.create_default_context()
-        ssl_context.check_hostname = False
-        ssl_context.verify_mode = ssl.CERT_NONE
-
-        async with aiohttp.ClientSession(
-            connector=aiohttp.TCPConnector(ssl=ssl_context)
-        ) as session:
+        async with aiohttp.ClientSession() as session:
             headers = {
                 "Authorization": f"Bearer {self.openai_api_key}",
                 "Content-Type": "application/json",
