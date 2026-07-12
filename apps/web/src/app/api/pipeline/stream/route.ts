@@ -436,7 +436,9 @@ async function handleGeminiStrategy(
   // fallback path must not emit this event (it was absent in the original code).
   if (!isBackendFallback) {
     waitUntil(
-      publishEvent(EventTypes.TRANSCRIPT_STARTED, { url, strategy: 'gemini-stream' }, url).catch(() => {}),
+      publishEvent(EventTypes.TRANSCRIPT_STARTED, { url, strategy: 'gemini-stream' }, url).catch((err) => {
+        console.warn('[CloudEvent] TRANSCRIPT_STARTED publish failed (non-fatal):', err);
+      }),
     );
   }
 
