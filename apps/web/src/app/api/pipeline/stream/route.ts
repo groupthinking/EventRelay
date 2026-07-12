@@ -240,12 +240,6 @@ async function pollBackendJob(
   throw new Error('Timed out waiting for async video job to complete (job status never reached complete or failed)');
 }
 
-/**
- * Schedule ancillary background work after the pipeline stream completes.
- * Fires-and-forgets (via waitUntil) training-example saving, embedding
- * generation, a PIPELINE_COMPLETED CloudEvent, and search indexing — none
- * of which block the response stream.
- */
 function schedulePostProcessing(videoUrl: string, analysis: VideoAnalysisResult, useBackend: boolean) {
   // Direct waitUntil on saveTrainingExample for training save (ancillary, post-response)
   // Orchestrated here AFTER pipeline_status:complete events are streamed.
@@ -431,8 +425,7 @@ async function handleGeminiStrategy(
   startTime: number
 ) {
   // Strategy 2: Direct Gemini analysis
-  // Only publish TRANSCRIPT_STARTED on the direct Gemini path; the backend
-  // fallback path must not emit this event (it was absent in the original code).
+  // Start event as true background (non-blocking even for stream setup) — direct waitUntil on publishEvent
   if (!useBackend) {
     waitUntil(
       publishEvent(EventTypes.TRANSCRIPT_STARTED, { url, strategy: 'gemini-stream' }, url).catch(() => {}),
