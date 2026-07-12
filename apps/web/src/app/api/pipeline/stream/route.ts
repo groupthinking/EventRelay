@@ -435,14 +435,19 @@ async function handleGeminiStrategy(
   // fallback path must not emit this event (it was absent in the original code).
   if (!useBackend) {
     waitUntil(
-      publishEvent(EventTypes.TRANSCRIPT_STARTED, { url, strategy: 'gemini-stream' }, url).catch(() => {}),
+      publishEvent(EventTypes.TRANSCRIPT_STARTED, { url, strategy: 'gemini-stream' }, url).catch((err) => {
+        console.warn('[CloudEvent] TRANSCRIPT_STARTED failed (non-fatal):', err);
+      }),
     );
   }
 
   const analysis = await deadline.runWithBudget(
     analyzeVideoWithGemini(url),
     deadline.remainingMs(),
-    'Gemini stream analysis',
+    // Preserve the original operator-facing distinction: a backend failure
+    // that falls through to Gemini logs 'Gemini stream fallback', while the
+    // direct Gemini path logs 'Gemini stream analysis'.
+    useBackend ? 'Gemini stream fallback' : 'Gemini stream analysis',
   );
 
   // Stream all agent events including pipeline_status:complete
