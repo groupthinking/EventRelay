@@ -8,7 +8,7 @@ workflow; this README is the index.
 
 | Workflow | File | Trigger | Purpose |
 |----------|------|---------|---------|
-| CI | `ci.yml` | push / PR to `main` | Build web app, lint Python (informational), run unit tests |
+| CI | `ci.yml` | push / PR to `main` | Type-check + lint `apps/web`, build the web app, lint Python (informational), run unit tests |
 | Coverage | `coverage.yml` | push / PR to `main`,`develop`; manual | Generate pytest coverage and upload lcov to Qlty |
 | CodeQL Analysis | `codeql-analysis.yml` | push / PR to `main`; weekly (Mon 06:00 UTC) | Static security analysis for JavaScript/TypeScript and Python |
 | Security Scan | `security.yml` | push / PR to `main`; weekly (Sun 00:00 UTC) | npm audit, Python safety, bandit, Trivy image scan |
@@ -19,12 +19,11 @@ workflow; this README is the index.
 | Auto Label | `auto-label.yml` | PR opened/reopened/synchronize | Label PRs by changed file type (docs, tests, python, etc.) |
 | Auto-Assign Issues | `auto-assign.yml` | issue opened | Assign new issues to the repository owner |
 | Issue Triage | `issue-triage.yml` | issue opened | Auto-label new issues by keyword and post a triage comment |
+| Phase Goal Tracker | `phase-goal-tracker.yml` | issue opened/edited/reopened; manual | Track phase checklist progress, comment status, auto-close when complete |
 | Bulk Issue Processor | `bulk-issue-processor.yml` | manual | Bulk label / summarize / close-stale across many issues |
 | Close stale issues | `stale.yml` | daily (00:00 UTC) | Mark and close stale issues and PRs |
 | Branch Cleanup | `branch-cleanup.yml` | manual | Gated archive-then-delete of branches (dry-run by default) |
-| E2E Tests | `e2e-tests.yml` | push / PR to `main` | Run Vitest E2E pipeline tests and report results on the PR |
-| Verify LiteRT-LM MCP | `verify-litert-mcp.yml` | push / PR touching `mcp-servers/litert-mcp/**` | Smoke-test the LiteRT MCP server (initialize, tools/list) |
-| Vision-Reasoning Stack | `vision-reasoning.yml` | push / PR touching `mcp-servers/shared-state/**` | Lint, type-check, and test the shared-state vision/reasoning modules |
+| E2E Tests | `e2e-tests.yml` | push / PR to `main` | Run Vitest E2E pipeline tests against production or the PR's Vercel preview deployment and report results on the PR |
 | Autonomous Video Processing | `autonomous-video-processing.yml` | manual | Batch-process YouTube videos by category (matrix) |
 | Real Video Processing (Cloud) | `real-processing.yml` | manual | Process a single video: transcript and/or AI analysis |
 | Deploy to Google Cloud Run | `deploy-cloud-run.yml` | manual | Build, push, and deploy the API image to Cloud Run |
@@ -96,6 +95,9 @@ A full audit of this directory was performed (see
   `deploy-cloud-run.yml`.
 - **Removed** `mcp-optimization.yml` — targeted the non-existent
   `mcp-servers/mcp-profiling/` directory, so every run failed.
+- **Removed** `verify-litert-mcp.yml` and `vision-reasoning.yml` — both only
+  exercised the `mcp-servers/` tree, which was deleted in the dead-code cleanup;
+  with the target modules gone every run failed, so the workflows were removed.
 - **Renamed** `.yaml` → `stale.yml` — the file had no basename.
 - **Fixed** `codeql-analysis.yml` — removed the fragile OWASP dependency-check
   job (`@main`, dead paths) and switched the Node cache from a dead
@@ -103,6 +105,9 @@ A full audit of this directory was performed (see
   repo's npm workspaces.
 - **Fixed** `coverage.yml` — added a `name:` and the `workflow_dispatch`
   trigger the docs already described.
+- **Fixed** `auto-assign.yml` — replaced `gh issue edit` with the REST
+  assignees endpoint after run logs showed GitHub App installation tokens cannot
+  use the CLI's GraphQL assignable mutation for this assignment.
 
 ## Resources
 

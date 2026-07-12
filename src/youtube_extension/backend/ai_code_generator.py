@@ -7,6 +7,7 @@ Uses Gemini 3 Pro Preview to generate complete full-stack applications
 based on video analysis. Produces monetizable products, not templates.
 """
 
+import ast
 import json
 import logging
 import os
@@ -437,16 +438,33 @@ Return ONLY the code."""
             "dashboard API route",
             architecture,
             video_analysis,
-            """Generate API route at app/api/dashboard/route.ts:
+            """Generate API route at app/api/dashboard/route.ts using EXACT Next.js 14 App Router format. CRITICAL: Use ONLY native code + deps declared in our generated package.json (dockerode for MCP, no undeclared pkgs).
+
+EXACT FORMAT (use this skeleton):
+import { NextResponse } from 'next/server';
+
+export async function GET() {
+  try {
+    // real data e.g. docker.listContainers() if MCP
+    return NextResponse.json({ ... });
+  } catch (e) { return NextResponse.json({error: String(e)}, {status:500}); }
+}
+
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+    // action
+    return NextResponse.json({success:true, ...});
+  } catch (e) { return NextResponse.json({error: String(e)}, {status:500}); }
+}
 
 Requirements:
-1. GET endpoint returning dashboard metrics/data
-2. POST endpoint for dashboard actions
-3. Real data sources (file system, Docker, processes, etc)
-4. TypeScript interfaces
-5. Error handling
+- Real sources (Docker, fs, processes).
+- TS interfaces.
+- NO "router" export.
+- NEVER import @material-ui/*, axios (unless added), etc. Only declared deps.
+- Use dockerode for MCP dashboards.
 
-For MCP Dashboard: Return Docker container list with status.
 Return ONLY the code."""
         )
         self._write_file(project_path / "src/app/api/dashboard/route.ts", dashboard_api)
@@ -457,27 +475,37 @@ Return ONLY the code."""
             "dashboard page",
             architecture,
             video_analysis,
-            """Generate a FUNCTIONAL Next.js dashboard at app/dashboard/page.tsx:
+            """Generate a FUNCTIONAL Next.js dashboard at app/dashboard/page.tsx using ONLY Tailwind + lucide-react (already declared in package.json from generator).
 
-PRIORITY: Working data flow over visual design.
+CRITICAL CONSTRAINTS (MUST FOLLOW EXACTLY):
+- Use ONLY Tailwind CSS classes + lucide-react icons. NO external UI libs whatsoever (@material-ui/*, @mui/*, chakra, antd, shadcn, framer-motion unless explicitly in deps, etc.).
+- All UI with plain <div>, <button>, <input>, Tailwind utilities (p-4, border, grid, flex, bg-white, rounded, shadow, etc.).
+- 'use client' for hooks.
+- Use native fetch ONLY (no axios unless we added it to package.json).
+- Import ONLY from 'lucide-react' for icons, 'react' for hooks.
+
+CRITICAL CONSTRAINTS (MUST FOLLOW):
+- Use ONLY Tailwind CSS classes + lucide-react icons (already in package.json). 
+- DO NOT import or use ANY external UI libraries: no @material-ui, no @mui/material, no Chakra, no AntD, no shadcn components.
+- All UI must be built with <div>, <button>, Tailwind (border, p-4, grid, flex, bg-white, shadow etc).
+- Keep it simple and functional.
 
 Requirements:
-1. 'use client' directive (uses hooks)
-2. Fetch real data from /api/dashboard on mount
-3. Stats/metrics cards showing API response data (not mocks)
-4. Refresh button that re-fetches data
-5. Action buttons that POST to API and update UI
-6. Loading spinner during data fetch
-7. Error message display if API fails
-8. TypeScript interfaces for API responses
-9. Responsive grid with Tailwind
+1. Fetch real data from /api/dashboard on mount using fetch.
+2. Stats/metrics cards from API response (real data).
+3. Refresh button that re-fetches.
+4. Action buttons (e.g. start/stop) that POST and update UI.
+5. Loading states + error display.
+6. TypeScript interfaces.
+7. Responsive Tailwind grid.
 
-IMPLEMENTATION NOTES:
-- For MCP Dashboard: Include Docker container operations (start/stop/list)
-- API endpoints should return real system data (Docker SDK, process info, etc)
-- State updates after each action
+IMPLEMENTATION NOTES (from Gemini video best practices for related analysis UIs):
+- Keep simple and functional. Use timestamps if video-related data.
+- For MCP/Dashboard: real Docker ops via API.
+- State updates after actions.
+- Place text prompts after video parts if multimodal (not applicable here).
 
-VALIDATION: Clicking refresh must fetch new data from server.
+VALIDATION: Refresh must fetch fresh data. Build must succeed with declared deps only.
 Return ONLY the code."""
         )
         self._write_file(project_path / "src/app/dashboard/page.tsx", dashboard)
@@ -636,6 +664,11 @@ TASK: Generate {description}
         if frontend.get("state") == "zustand":
             package["dependencies"]["zustand"] = "^4.5.0"
 
+        if frontend.get("styling") in ("material_ui", "material-ui", "mui"):
+            # Support legacy or explicit MUI (old v4 to match possible generated imports)
+            package["dependencies"]["@material-ui/core"] = "^4.12.4"
+            package["dependencies"]["@material-ui/icons"] = "^4.11.3"
+
         if backend.get("auth") == "nextauth":
             package["dependencies"]["next-auth"] = "^4.24.0"
 
@@ -652,6 +685,7 @@ TASK: Generate {description}
         package["dependencies"]["clsx"] = "^2.1.0"  # Utility
         package["dependencies"]["tailwind-merge"] = "^2.2.0"  # Tailwind utility
         package["dependencies"]["class-variance-authority"] = "^0.7.0"  # Button variants
+        package["dependencies"]["axios"] = "^1.6.0"  # HTTP client (commonly used by AI generated code)
 
         # Add infrastructure packages for production-ready apps
         # State management
@@ -662,17 +696,123 @@ TASK: Generate {description}
         package["dependencies"]["@ai-sdk/openai"] = "^0.0.15"  # OpenAI provider
         package["dependencies"]["@ai-sdk/anthropic"] = "^0.0.15"  # Anthropic provider
 
-        # For agent/MCP apps: Add dockerode for container management
-        if architecture.get("type") == "agent" or "docker" in str(architecture.get("features", [])).lower():
-            package["dependencies"]["dockerode"] = "^4.0.2"  # Docker SDK
+        # For agent/MCP apps or dashboards with container features: Add dockerode
+        if (architecture.get("type") in ("agent", "fullstack_app") or 
+            "docker" in str(architecture.get("features", [])).lower() or
+            "dashboard" in str(architecture.get("features", [])).lower()):
+            package["dependencies"]["dockerode"] = "^4.0.2"
             package["devDependencies"]["@types/dockerode"] = "^3.3.0"
 
         return package
 
-    def _write_file(self, path: Path, content: str):
-        """Write content to file"""
+    @staticmethod
+    def validate_python_syntax(code: str) -> dict[str, Any]:
+        """Validate Python code syntax using AST parsing.
+
+        Returns a dict with:
+          - ``valid``: bool indicating whether the code parses without errors.
+          - ``errors``: list of error dicts (keys: ``message``, ``line``, ``offset``).
+        """
+        try:
+            ast.parse(code)
+            return {"valid": True, "errors": []}
+        except SyntaxError as exc:
+            return {
+                "valid": False,
+                "errors": [
+                    {
+                        "message": exc.msg,
+                        "line": exc.lineno,
+                        "offset": exc.offset,
+                    }
+                ],
+            }
+        except ValueError as exc:
+            return {
+                "valid": False,
+                "errors": [{"message": str(exc), "line": None, "offset": None}],
+            }
+
+    @staticmethod
+    def validate_typescript_syntax(code: str) -> dict[str, Any]:
+        """Basic syntax validation for TypeScript/JavaScript code.
+
+        Checks that the code is non-empty and has balanced curly braces.
+        Note: brace counting is a heuristic — string literals containing
+        ``{`` or ``}`` may cause false positives, which are logged as
+        warnings rather than hard errors.
+
+        Returns a dict with:
+          - ``valid``: bool.
+          - ``errors``: list of error dicts (keys: ``message``, ``line``, ``offset``).
+        """
+        errors: list[dict[str, Any]] = []
+
+        stripped = (code or "").strip()
+        if not stripped:
+            errors.append({"message": "Empty code", "line": None, "offset": None})
+            return {"valid": False, "errors": errors}
+
+        if stripped.startswith("// Error") or stripped.startswith("/* Error"):
+            errors.append(
+                {
+                    "message": "Code generation error marker detected",
+                    "line": 1,
+                    "offset": None,
+                }
+            )
+            return {"valid": False, "errors": errors}
+
+        # Heuristic brace balance check
+        depth = 0
+        for ch in stripped:
+            if ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth < 0:
+                    errors.append(
+                        {
+                            "message": "Unexpected closing brace '}'",
+                            "line": None,
+                            "offset": None,
+                        }
+                    )
+                    break
+        if depth > 0:
+            errors.append(
+                {
+                    "message": f"Unbalanced braces: {depth} unclosed brace(s)",
+                    "line": None,
+                    "offset": None,
+                }
+            )
+
+        return {"valid": len(errors) == 0, "errors": errors}
+
+    def _write_file(self, path: Path, content: str) -> None:
+        """Write content to file, validating syntax for known code types."""
+        suffix = path.suffix.lower()
+
+        if suffix == ".py":
+            validation = self.validate_python_syntax(content)
+            if not validation["valid"]:
+                logger.warning(
+                    "Python file '%s' failed AST validation: %s",
+                    path.name,
+                    validation["errors"],
+                )
+        elif suffix in (".ts", ".tsx", ".js", ".jsx"):
+            validation = self.validate_typescript_syntax(content)
+            if not validation["valid"]:
+                logger.warning(
+                    "TypeScript/JavaScript file '%s' failed syntax check: %s",
+                    path.name,
+                    validation["errors"],
+                )
+
         path.parent.mkdir(parents=True, exist_ok=True)
-        with open(path, 'w') as f:
+        with open(path, "w", encoding="utf-8") as f:
             f.write(content)
 
     def _tailwind_config(self) -> str:

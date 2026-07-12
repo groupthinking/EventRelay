@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import Nav from '@/components/Nav';
 import Footer from '@/components/Footer';
+import VideoGenerator from '@/components/video-generator';
 
 interface APIResponse {
   status: 'success' | 'error' | 'loading' | null;
@@ -339,6 +340,14 @@ response = requests.post(
               </div>
             </div>
           </div>
+        </div>
+
+        {/* Experimental: AI Video Generator */}
+        <div className="mt-10">
+          <h2 className="text-sm font-medium text-white/60 mb-4 uppercase tracking-widest">
+            Experimental Features
+          </h2>
+          <VideoGenerator />
         </div>
       </div>
       <Footer variant="compact" />

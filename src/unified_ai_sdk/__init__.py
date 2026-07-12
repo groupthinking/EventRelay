@@ -1,13 +1,4 @@
-"""
-Unified AI SDK - Placeholder Module
-====================================
-
-This module provides placeholder implementations for the unified AI SDK classes.
-These are temporary stubs until the actual unified_ai_sdk package is implemented
-or added as a dependency.
-
-TODO: Replace with actual unified_ai_sdk implementation or add as external dependency.
-"""
+"""Unified AI SDK exports."""
 
 from .rate_limiter import ModelProvider, RateLimiter
 from .unified_ai_sdk import AIRequest, AIResponse, TaskType, UnifiedAISDK
