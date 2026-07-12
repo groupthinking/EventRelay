@@ -258,7 +258,7 @@ class LoadBalancer:
             return self._performance_based_selection(instances)
 
         # Create hash key from request metadata
-        hash_key = hashlib.md5(json.dumps(request_metadata, sort_keys=True).encode()).hexdigest()
+        hash_key = hashlib.sha256(json.dumps(request_metadata, sort_keys=True).encode()).hexdigest()
         hash_value = int(hash_key[:8], 16)  # Use first 8 chars
 
         # Select instance based on hash
