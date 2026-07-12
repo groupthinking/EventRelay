@@ -172,7 +172,7 @@
       "tools": ["generate_fullstack"],
       "capabilities": ["content_generation", "blog_posts", "social_posts"],
       "skill_source": "uvai-skills",
-      "trigger_events": ["youtube.video.published", "manual"]
+      "trigger_events": ["youtube.video.published"]
     },
     {
       "id": "seo-optimizer",
