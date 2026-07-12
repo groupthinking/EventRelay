@@ -163,8 +163,13 @@ class BuildValidatorMCPTool:
             }
 
 
-    async def get_error_patterns(self, limit: int = 10) -> dict[str, Any]:
-        """Get known error patterns"""
+    async def get_error_patterns(self, limit: int = 10, **kwargs: Any) -> dict[str, Any]:
+        """Get known error patterns.
+
+        Accepts and ignores extra keyword arguments (e.g. ``generated_code``,
+        ``run_build``) supplied by pipeline callers so that unexpected payload
+        keys do not raise a ``TypeError`` and fail the stage.
+        """
         patterns_file = Path("data/error_patterns.json")
         try:
             if patterns_file.exists():
