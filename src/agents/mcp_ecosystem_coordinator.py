@@ -10,8 +10,6 @@ import importlib
 import json
 import logging
 import os
-import subprocess
-import sys
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -332,9 +330,15 @@ class SkillRegistry:
                 if skill.get("source") == "uvai-skills" and skill.get("className"):
                     self._skills[skill["id"]] = skill
         elif isinstance(skills_data, dict):
-            # Handle dict format from HEAD
+            # Handle dict format from HEAD; apply the same source/sourceType/
+            # className guards as the list branch so only locally-instantiable
+            # skills are registered (matches origin/main's filter).
             for skill_id, meta in skills_data.items():
-                if meta.get("source") == "uvai-skills":
+                if (
+                    meta.get("source") == "uvai-skills"
+                    and meta.get("sourceType") == "local"
+                    and meta.get("className")
+                ):
                     self._skills[skill_id] = meta
 
         logger.info("Loaded %d GTM skills from %s", len(self._skills), self._lock_path)
