@@ -428,7 +428,9 @@ async function handleGeminiStrategy(
   // Start event as true background (non-blocking even for stream setup) — direct waitUntil on publishEvent
   if (!useBackend) {
     waitUntil(
-      publishEvent(EventTypes.TRANSCRIPT_STARTED, { url, strategy: 'gemini-stream' }, url).catch(() => {}),
+      publishEvent(EventTypes.TRANSCRIPT_STARTED, { url, strategy: 'gemini-stream' }, url).catch((err) => {
+        console.warn('[CloudEvent] TRANSCRIPT_STARTED publish failed (non-fatal):', err);
+      }),
     );
   }
 
