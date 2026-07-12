@@ -289,7 +289,7 @@ class QueryOptimizer:
         normalized = re.sub(r"\b\d+\b", "?", normalized)  # Replace numbers with ?
         normalized = re.sub(r"'[^']*'", "'?'", normalized)  # Replace string literals
 
-        return hashlib.md5(normalized.encode()).hexdigest()
+        return hashlib.sha256(normalized.encode()).hexdigest()
 
     def _get_query_pattern(self, query: str) -> str:
         """Extract query pattern for analysis"""
@@ -331,7 +331,7 @@ class QueryOptimizer:
 
         # Check query cache first
         if use_cache:
-            cache_key = f"query:{query_hash}:{hashlib.md5(str(params).encode()).hexdigest() if params else 'no_params'}"
+            cache_key = f"query:{query_hash}:{hashlib.sha256(str(params).encode()).hexdigest() if params else 'no_params'}"
             cached_result = await cache_get(cache_key)
 
             if cached_result is not None:
@@ -853,8 +853,10 @@ class DatabaseHealthMonitor:
 # Global database optimization system
 # Use /tmp for Cloud Run compatibility (read-only filesystem except /tmp)
 database_url = os.getenv("DATABASE_URL", "sqlite:////tmp/uvai_data/app.db")
+# Increase connection pool size to handle more concurrent requests.
+# min_connections: 5 (keep some ready), max_connections: 50 (handle bursts)
 connection_pool = DatabaseConnectionPool(
-    database_url, min_connections=1, max_connections=10
+    database_url, min_connections=5, max_connections=50
 )
 query_optimizer = QueryOptimizer(connection_pool)
 health_monitor = DatabaseHealthMonitor(query_optimizer)

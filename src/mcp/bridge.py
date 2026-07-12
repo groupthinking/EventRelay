@@ -603,6 +603,7 @@ class MCPBridge:
     async def _orchestrate_collaboration(
         self, agents: list, request: MCPBridgeRequest, primary_result: AIResponse
     ) -> dict[str, Any]:
+<<<<<<< HEAD
         """Orchestrate agent collaboration.
 
         Not yet implemented. Reports an honest ``unavailable`` status rather
@@ -613,10 +614,17 @@ class MCPBridge:
             "reason": "agent collaboration orchestration not implemented",
             "agents": len(agents),
         }
+=======
+        """Orchestrate agent collaboration"""
+        if not agents:
+            return {"status": "unavailable", "error": "No agents available", "agents": 0}
+        return {"status": "unavailable", "agents": len(agents)}
+>>>>>>> origin/main
 
     async def _execute_mcp_tool(
         self, tool_name: str, request: MCPBridgeRequest
     ) -> dict[str, Any]:
+<<<<<<< HEAD
         """Execute an MCP tool.
 
         Not yet implemented. Reports an honest ``unavailable`` status with a
@@ -629,6 +637,10 @@ class MCPBridge:
             "result": None,
             "reason": "MCP tool execution not implemented",
         }
+=======
+        """Execute MCP tool"""
+        return {"tool": tool_name, "status": "unavailable", "result": None}
+>>>>>>> origin/main
 
     async def _attempt_fallback_processing(self, request: MCPBridgeRequest) -> bool:
         """Attempt fallback processing on failure"""

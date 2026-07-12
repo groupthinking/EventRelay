@@ -36,7 +36,7 @@ def _bare_container() -> ServiceContainer:
 class TestLoadConfiguration:
     def test_defaults_set_without_env(self, monkeypatch):
         for key in [
-            "CACHE_DIR", "ENHANCED_ANALYSIS_DIR", "FEEDBACK_DIR",
+            "CACHE_DIR", "ENHANCED_ANALYSIS_DIR", "FEEDBACK_DIR", "KNOWLEDGE_DIR",
             "RATE_LIMIT_RPS", "MAX_RECENT_REQUESTS", "VIDEO_PROCESSOR_TYPE",
             "USE_LANGEXTRACT_FALLBACK", "LIVEKIT_URL", "MOZILLA_AI_URL",
             "GEMINI_API_KEY", "GOOGLE_API_KEY", "YOUTUBE_API_KEY",
@@ -49,6 +49,7 @@ class TestLoadConfiguration:
         assert sc._config["cache_dir"] == "/tmp/uvai_cache/markdown_analysis"
         assert sc._config["enhanced_analysis_dir"] == "/tmp/uvai_cache/enhanced_analysis"
         assert sc._config["feedback_dir"] == "/tmp/uvai_cache/feedback"
+        assert sc._config["knowledge_dir"] == "/tmp/uvai_cache/knowledge"
         assert sc._config["rate_limit_rps"] == 5
         assert sc._config["max_recent_requests"] == 1000
         assert sc._config["video_processor_type"] == "auto"
