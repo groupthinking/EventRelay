@@ -433,35 +433,19 @@ class QueryOptimizer:
 
             # Execute each group
             for pattern, group_queries in query_groups.items():
-                if len(group_queries) > 1 and hasattr(connection, "executemany"):
-                    # Use batch execution if available
-                    batch_start = time.time()
+                # Execute individually concurrently
+                # Avoid N+1 sequential execution by always using asyncio.gather for batch queries
+                # Since execute_query handles its own connection pooling/execution,
+                # running them concurrently gives the best performance boost
+                # without reinventing executemany constraints (e.g. lack of return values, grouping by identical SQL)
+                coroutines = [
+                    self.execute_query(query, params, use_cache=True)
+                    for _, query, params in group_queries
+                ]
+                query_results = await asyncio.gather(*coroutines)
 
-                    # Extract queries and params
-                    [q[1] for q in group_queries]
-                    [q[2] for q in group_queries]
-
-                    # Execute batch (simplified - real implementation would be more complex)
-                    for i, (original_index, query, params) in enumerate(group_queries):
-                        query_result = await self.execute_query(
-                            query, params, use_cache=True
-                        )
-                        results[original_index] = query_result
-
-                    batch_time = (time.time() - batch_start) * 1000
-                    logger.debug(
-                        f"Batch executed ({batch_time:.2f}ms): {len(group_queries)} {pattern} queries"
-                    )
-                else:
-                    # Execute individually concurrently
-                    coroutines = [
-                        self.execute_query(query, params, use_cache=True)
-                        for _, query, params in group_queries
-                    ]
-                    query_results = await asyncio.gather(*coroutines)
-
-                    for (original_index, _, _), query_result in zip(group_queries, query_results):
-                        results[original_index] = query_result
+                for (original_index, _, _), query_result in zip(group_queries, query_results):
+                    results[original_index] = query_result
 
             total_time = (time.time() - start_time) * 1000
             avg_time_per_query = total_time / len(queries_and_params)
