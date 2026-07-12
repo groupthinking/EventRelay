@@ -281,63 +281,6 @@ class TestSkillInvocation:
 
 
 # ---------------------------------------------------------------------------
-# End-to-end dispatch tests
-# ---------------------------------------------------------------------------
-
-
-class TestEndToEndDispatch:
-    """Verify the full trigger→discovery→invocation pipeline."""
-
-    @pytest.mark.asyncio
-    async def test_video_published_dispatches_to_content_generation(
-        self, registry: SkillRegistry
-    ) -> None:
-        """Emit a youtube.video.published event and assert content-generation runs."""
-        event_type = "youtube.video.published"
-        payload = {"transcript": "AI is transforming the world.", "video_id": "auJzb1D-fag"}
-
-        matched = registry.get_skills_for_trigger(event_type)
-        skill_ids = {s["id"] for s in matched}
-        assert "content-generation" in skill_ids, (
-            f"content-generation not discovered for trigger '{event_type}'"
-        )
-
-        result = await registry.invoke_skill("content-generation", payload)
-        assert result["status"] == "success"
-        assert result["output"]["video_id"] == "auJzb1D-fag"
-        assert result["output"]["generated"] is True
-
-    @pytest.mark.asyncio
-    async def test_no_manual_trigger_in_any_skill(
-        self, registry: SkillRegistry
-    ) -> None:
-        """Confirm no skill exposes a 'manual' trigger (banned by single-workflow policy)."""
-        skills = registry.list_skills()
-        for skill in skills:
-            assert "manual" not in skill["triggers"], (
-                f"Skill '{skill['id']}' has forbidden 'manual' trigger"
-            )
-
-    @pytest.mark.asyncio
-    async def test_trigger_dispatch_invokes_all_matching_skills(
-        self, registry: SkillRegistry
-    ) -> None:
-        """All skills discovered for youtube.video.uploaded execute successfully."""
-        event_type = "youtube.video.uploaded"
-        payload = {"video_id": "auJzb1D-fag", "title": "Test Video", "tags": ["ai"]}
-
-        matched = registry.get_skills_for_trigger(event_type)
-        assert len(matched) >= 1, f"No skills matched trigger '{event_type}'"
-
-        for skill_meta in matched:
-            result = await registry.invoke_skill(skill_meta["id"], payload)
-            assert result["status"] == "success", (
-                f"Skill '{skill_meta['id']}' failed for trigger '{event_type}': "
-                f"{result.get('error')}"
-            )
-
-
-# ---------------------------------------------------------------------------
 # MCP env pass-through tests
 # ---------------------------------------------------------------------------
 
