@@ -11,6 +11,19 @@ permissions:
   actions: read
 
 jobs:
+  conflict-markers:
+    name: Reject committed merge-conflict markers
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Fail on committed conflict markers
+        run: |
+          if git grep -nE '^(<<<<<<<|>>>>>>>) ' -- ':!*.md'; then
+            echo "::error::Committed merge-conflict markers found (listed above). Resolve them before merging."
+            exit 1
+          fi
+          echo "No merge-conflict markers found."
+
   build:
     runs-on: ubuntu-latest
     steps:
