@@ -241,8 +241,10 @@ async function pollBackendJob(
 }
 
 /**
- * Convert a full Gemini analysis result into a timed sequence of SSE events
- * that mimic the multi-agent pipeline execution agents would produce.
+ * Schedule ancillary background work after the pipeline stream completes.
+ * Fires-and-forgets (via waitUntil) training-example saving, embedding
+ * generation, a PIPELINE_COMPLETED CloudEvent, and search indexing — none
+ * of which block the response stream.
  */
 function schedulePostProcessing(videoUrl: string, analysis: VideoAnalysisResult, useBackend: boolean) {
   // Direct waitUntil on saveTrainingExample for training save (ancillary, post-response)
@@ -429,10 +431,13 @@ async function handleGeminiStrategy(
   startTime: number
 ) {
   // Strategy 2: Direct Gemini analysis
-  // Start event as true background (non-blocking even for stream setup) — direct waitUntil on publishEvent
-  waitUntil(
-    publishEvent(EventTypes.TRANSCRIPT_STARTED, { url, strategy: 'gemini-stream' }, url).catch(() => {}),
-  );
+  // Only publish TRANSCRIPT_STARTED on the direct Gemini path; the backend
+  // fallback path must not emit this event (it was absent in the original code).
+  if (!useBackend) {
+    waitUntil(
+      publishEvent(EventTypes.TRANSCRIPT_STARTED, { url, strategy: 'gemini-stream' }, url).catch(() => {}),
+    );
+  }
 
   const analysis = await deadline.runWithBudget(
     analyzeVideoWithGemini(url),
@@ -445,8 +450,10 @@ async function handleGeminiStrategy(
     controller.enqueue(encoder.encode(event));
   }
 
-  // Schedule optional work via direct waitUntil (non-blocking, after complete)
-  schedulePostProcessing(url, analysis, useBackend);
+  // Schedule optional work via direct waitUntil (non-blocking, after complete).
+  // Always pass false: Gemini always performs the analysis here, regardless of
+  // whether we arrived via the direct path or the backend-proxy fallback.
+  schedulePostProcessing(url, analysis, false);
 }
 
 async function* generateAgentEvents(
