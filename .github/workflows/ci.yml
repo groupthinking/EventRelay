@@ -37,6 +37,9 @@ jobs:
           git ls-files -z '*.py' | xargs -0 python -m py_compile
 
   build:
+    # Gate on repo-integrity so a broken repo fails fast without spending
+    # runner minutes on the web build / tests.
+    needs: repo-integrity
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -59,6 +62,7 @@ jobs:
           retention-days: 7
 
   lint-python:
+    needs: repo-integrity
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -71,6 +75,7 @@ jobs:
         run: ruff check src/youtube_extension/backend/ src/youtube_extension/main.py --ignore E402,F811,F401,F821,B904,B020,E701,E722
 
   lint-frontend:
+    needs: repo-integrity
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -84,6 +89,7 @@ jobs:
         run: cd apps/web && npm run lint
 
   test:
+    needs: repo-integrity
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
