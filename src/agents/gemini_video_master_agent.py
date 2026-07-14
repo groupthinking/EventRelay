@@ -65,7 +65,7 @@ except ImportError:  # pragma: no cover - optional when running outside the pack
 # Banned video IDs (memes, inappropriate content, etc.)
 BANNED_VIDEO_IDS = frozenset(
     [
-        "dQw4w9WgXcQ",  # Rickroll - not a business/technical video
+        "auJzb1D-fag",  # Rickroll - not a business/technical video
     ]
 )
 
