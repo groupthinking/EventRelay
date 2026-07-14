@@ -163,6 +163,7 @@ export default function VideoCanvasStage({
           aria-valuemax={Math.floor(duration) || 0}
           aria-valuenow={Math.floor(currentTime) || 0}
           aria-valuetext={`${formatSeconds(currentTime)} of ${formatSeconds(duration)}`}
+          aria-keyshortcuts="ArrowLeft ArrowRight Home End"
           onClick={(e) => seekFromClientX(e.clientX)}
           onKeyDown={onTrackKeyDown}
           className={`group relative flex-1 h-9 flex items-center rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-[#6af2de] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0e0e13] ${seekable ? 'cursor-pointer' : 'cursor-default'}`}
