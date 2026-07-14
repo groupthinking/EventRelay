@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 """Lead Scorer skill - scores leads based on engagement signals."""
 
 from __future__ import annotations
@@ -17,7 +16,7 @@ class LeadScorerSkill(BaseSkill):
     skill_id = "lead-scorer"
     name = "Lead Scorer"
     version = "1.0.0"
-    triggers = ["analytics_updated"]
+    triggers = ["youtube.analytics.updated"]
     required_env_vars = ["DATABASE_URL"]
 
     async def execute(self, payload: dict[str, Any]) -> SkillResult:
@@ -44,27 +43,3 @@ class LeadScorerSkill(BaseSkill):
                 "message": f"Lead {lead_id} scoring queued",
             },
         )
-=======
-import os
-import sys
-import json
-import logging
-
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
-
-def main():
-    skill_name = "lead-scorer"
-    logger.info(f"Skill {skill_name} invoked")
-    context = os.getenv("SKILL_CONTEXT", "{}")
-    logger.info(f"Context: {context}")
-    gemini_key = os.getenv("GEMINI_API_KEY")
-    if gemini_key:
-        logger.info("GEMINI_API_KEY is present")
-    else:
-        logger.warning("GEMINI_API_KEY is missing")
-    print(json.dumps({"status": "success", "skill": skill_name}))
-
-if __name__ == "__main__":
-    main()
->>>>>>> origin/main
