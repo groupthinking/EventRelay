@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, Optional
 
 from skills.base import BaseSkill, SkillResult
 
@@ -18,6 +18,11 @@ class ABTestingSkill(BaseSkill):
     version = "1.0.0"
     triggers = ["youtube.video.uploaded"]
     required_env_vars = ["GEMINI_API_KEY", "DATABASE_URL"]
+
+    def __init__(self, dependencies: Optional[dict[str, Any]] = None):
+        super().__init__(dependencies)
+        self.gemini = self.dependencies.get("gemini_service")
+        self.analytics = self.dependencies.get("analytics_service")
 
     async def execute(self, payload: dict[str, Any]) -> SkillResult:
         """Create and manage an A/B test.
@@ -40,6 +45,11 @@ class ABTestingSkill(BaseSkill):
             video_id,
             len(variants),
         )
+
+        if self.gemini:
+            logger.info("Using injected gemini_service for A/B testing")
+        if self.analytics:
+            logger.info("Using injected analytics_service for A/B testing")
 
         return SkillResult(
             status="success",

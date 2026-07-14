@@ -765,6 +765,25 @@ class TranscriptActionWorkflow:
             video_metadata=video_metadata,
         )
 
+        # Retry once for transient network errors (timeouts, 503/504, deadline
+        # exceeded) before falling through to the yt-dlp download fallback.
+        # This avoids triggering the expensive and bot-blocked download path
+        # for what are often short-lived Gemini API hiccups.
+        _transient_markers = ("timeout", "503", "504", "deadline", "unavailable")
+        if not (primary_result.success and primary_result.response) and primary_result.error:
+            if any(m in str(primary_result.error).lower() for m in _transient_markers):
+                logger.info(
+                    "Transient error in Gemini process_youtube (%s); retrying before download fallback",
+                    primary_result.error,
+                )
+                await asyncio.sleep(2.0)
+                primary_result = await gemini_service.process_youtube(
+                    video_url,
+                    transcription_prompt,
+                    response_mime_type="application/json",
+                    video_metadata=video_metadata,
+                )
+
         await self._record_metric(
             "transcript_fallback_latency_seconds",
             (primary_result.latency or 0.0),
@@ -984,24 +1003,56 @@ class TranscriptActionWorkflow:
 
         def _download() -> tuple[Path | None, Path | None]:
             temp_dir = Path(tempfile.mkdtemp(prefix="gemini_video_"))
-            output_template = str(temp_dir / "%(id)s.%(ext)s")
-            ydl_opts = {
-                "skip_download": False,
-                "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/mp4",
-                "merge_output_format": "mp4",
-                "outtmpl": output_template,
-                "noplaylist": True,
-                "quiet": True,
-            }
-            proxy_url = get_proxy_url()
-            if proxy_url:
-                ydl_opts["proxy"] = proxy_url
+            try:
+                output_template = str(temp_dir / "%(id)s.%(ext)s")
+                ydl_opts = {
+                    "skip_download": False,
+                    # Use mweb then web_embedded clients — both are significantly
+                    # less scrutinised than the default web client on GCP/Cloud Run
+                    # IPs. web_embedded does not require a PO Token for public videos.
+                    "extractor_args": {
+                        "youtube": {
+                            "player_client": ["mweb", "web_embedded"],
+                        }
+                    },
+                    # Prefer a pre-muxed stream (no ffmpeg required) before falling
+                    # back to separate video+audio tracks that need merging.
+                    "format": "best[ext=mp4]/bestvideo[ext=mp4]+bestaudio[ext=m4a]/best",
+                    "merge_output_format": "mp4",
+                    "outtmpl": output_template,
+                    "noplaylist": True,
+                    "quiet": True,
+                    # With noplaylist=True, ignoreerrors makes extract_info return
+                    # None on a failed download instead of raising; the None guard
+                    # below turns that into an explicit FileNotFoundError. (Format
+                    # fallback via the "/" chain is handled by yt-dlp's format
+                    # selection regardless. `abort_on_error` is a CLI-only compat
+                    # option ignored by the API.)
+                    "ignoreerrors": True,
+                }
+                proxy_url = get_proxy_url()
+                if proxy_url:
+                    ydl_opts["proxy"] = proxy_url
 
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:  # type: ignore[attr-defined]
-                info = ydl.extract_info(video_url, download=True)
-                filename = Path(ydl.prepare_filename(info))
-                if not filename.exists():
-                    raise FileNotFoundError("Video download failed")
-                return filename, temp_dir
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:  # type: ignore[attr-defined]
+                    info = ydl.extract_info(video_url, download=True)
+                    # With ignoreerrors=True, extract_info returns None on a failed
+                    # download instead of raising — guard so callers get the
+                    # intended FileNotFoundError rather than a cryptic TypeError
+                    # from prepare_filename(None).
+                    if info is None:
+                        raise FileNotFoundError("Video download failed")
+                    filename = Path(ydl.prepare_filename(info))
+                    if not filename.exists():
+                        raise FileNotFoundError("Video download failed")
+                    return filename, temp_dir
+            except Exception:
+                # Clean up the temp dir on any failure. The caller only receives
+                # temp_dir (and later removes it) on the success path, so an
+                # exception here would otherwise leak an orphaned directory —
+                # a frequent event now that ignoreerrors makes the None-return
+                # the primary download-failure mode.
+                shutil.rmtree(temp_dir, ignore_errors=True)
+                raise
 
         return await asyncio.to_thread(_download)

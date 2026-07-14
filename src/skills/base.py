@@ -28,7 +28,7 @@ class BaseSkill(abc.ABC):
       - name: human-readable name
       - version: semver version string
       - triggers: list of event types that trigger this skill
-      - required_env_vars: env vars needed at runtime
+      - required_env_vars: env vars needed at runtime (LEGACY)
     """
 
     skill_id: str
@@ -36,6 +36,14 @@ class BaseSkill(abc.ABC):
     version: str
     triggers: list[str]
     required_env_vars: list[str] = []
+
+    def __init__(self, dependencies: Optional[dict[str, Any]] = None):
+        """Initialize the skill with injected dependencies.
+
+        Args:
+            dependencies: Dictionary mapping dependency names to service instances.
+        """
+        self.dependencies = dependencies or {}
 
     def get_env(self) -> dict[str, str]:
         """Collect required environment variables for subprocess pass-through.
