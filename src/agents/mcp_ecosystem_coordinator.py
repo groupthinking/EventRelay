@@ -10,7 +10,6 @@ import importlib
 import json
 import logging
 import os
-import subprocess
 import sys
 from dataclasses import asdict
 from pathlib import Path
@@ -322,14 +321,13 @@ class SkillRegistry:
             return
 
         skills_data = data.get("skills", {})
+        # Filter for uvai-skills (local GTM skills)
         if isinstance(skills_data, list):
-            # Convert list format to dict if necessary (origin/main compatibility)
             for skill in skills_data:
-                if "id" in skill:
+                if skill.get("source") == "uvai-skills" and "id" in skill:
                     self._skills[skill["id"]] = skill
-        else:
+        elif isinstance(skills_data, dict):
             for skill_id, meta in skills_data.items():
-                # Only load uvai-skills (local GTM skills)
                 if meta.get("source") == "uvai-skills":
                     self._skills[skill_id] = meta
 
@@ -398,12 +396,18 @@ class SkillRegistry:
 
         # Resolve dependencies from service container
         dependencies = {}
-        for dep_name in meta.get("dependencies", []):
+        deps = meta.get("dependencies", [])
+        if deps:
             try:
-                from youtube_extension.backend.containers.service_container import get_service
-                dependencies[dep_name] = get_service(dep_name)
-            except Exception as e:
-                logger.warning("Failed to resolve dependency %s for skill %s: %s", dep_name, skill_id, e)
+                from youtube_extension.backend.containers.service_container import get_service_container
+                container = get_service_container()
+                for dep_name in deps:
+                    try:
+                        dependencies[dep_name] = container.get_service(dep_name)
+                    except Exception as e:
+                        logger.warning("Failed to resolve dependency %s for skill %s: %s", dep_name, skill_id, e)
+            except ImportError as e:
+                logger.error("Failed to import service container: %s", e)
 
         instance = skill_class(dependencies=dependencies)
         self._instances[skill_id] = instance
