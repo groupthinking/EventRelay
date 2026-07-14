@@ -9,7 +9,8 @@ class ModelProvider(Enum):
     """Supported AI model providers."""
 
     OPENAI = "openai"
-    ANTHROPIC = "anthropic"
+    CLAUDE = "claude"
+    GROK = "grok"
     GEMINI = "gemini"
 
 
