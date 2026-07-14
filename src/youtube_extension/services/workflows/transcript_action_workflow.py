@@ -1034,6 +1034,12 @@ class TranscriptActionWorkflow:
 
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:  # type: ignore[attr-defined]
                 info = ydl.extract_info(video_url, download=True)
+                # With ignoreerrors=True, extract_info returns None on a failed
+                # download instead of raising — guard so callers get the intended
+                # FileNotFoundError rather than a cryptic TypeError from
+                # prepare_filename(None).
+                if info is None:
+                    raise FileNotFoundError("Video download failed")
                 filename = Path(ydl.prepare_filename(info))
                 if not filename.exists():
                     raise FileNotFoundError("Video download failed")
