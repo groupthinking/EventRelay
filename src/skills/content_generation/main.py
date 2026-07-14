@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, Optional
 
 from skills.base import BaseSkill, SkillResult
 
@@ -18,6 +18,11 @@ class ContentGenerationSkill(BaseSkill):
     version = "1.0.0"
     triggers = ["youtube.video.published", "system.action.manual"]
     required_env_vars = ["GEMINI_API_KEY"]
+
+    def __init__(self, dependencies: Optional[dict[str, Any]] = None):
+        super().__init__(dependencies)
+        self.gemini = self.dependencies.get("gemini_service")
+        self.db = self.dependencies.get("database_service")
 
     async def execute(self, payload: dict[str, Any]) -> SkillResult:
         """Generate content from a video transcript.
@@ -40,6 +45,10 @@ class ContentGenerationSkill(BaseSkill):
             video_id,
             len(transcript),
         )
+
+        if self.gemini:
+            logger.info("Using injected gemini_service for generation")
+            # In a real implementation, we would call self.gemini.process_text(...) here
 
         # Thin wrapper: actual AI generation will be wired in a future iteration
         return SkillResult(

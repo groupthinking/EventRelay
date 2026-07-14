@@ -10,8 +10,6 @@ import importlib
 import json
 import logging
 import os
-import subprocess
-import sys
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -326,12 +324,12 @@ class SkillRegistry:
 
         skills_data = data.get("skills", {})
         if isinstance(skills_data, list):
-            # Handle list format from origin/main
+            # Handle list format (defensive: some tooling emits a list)
             for skill in skills_data:
                 if skill.get("source") == "uvai-skills":
                     self._skills[skill["id"]] = skill
         elif isinstance(skills_data, dict):
-            # Handle dict format from HEAD
+            # Handle dict format (canonical skills-lock.json shape)
             for skill_id, meta in skills_data.items():
                 if meta.get("source") == "uvai-skills":
                     self._skills[skill_id] = meta
@@ -351,12 +349,15 @@ class SkillRegistry:
             "source": meta.get("source", ""),
         }
 
-    def list_skills(self) -> list[dict[str, Any]]:
+    def list_skills(self, source: Optional[str] = None) -> list[dict[str, Any]]:
         """Return metadata for all registered GTM skills."""
-        return [
+        skills = [
             self._build_skill_metadata(skill_id, meta)
             for skill_id, meta in self._skills.items()
         ]
+        if source:
+            return [s for s in skills if self._skills[s["id"]].get("source") == source]
+        return skills
 
     def get_skill(self, skill_id: str) -> Optional[dict[str, Any]]:
         """Get metadata for a specific skill."""
@@ -386,11 +387,9 @@ class SkillRegistry:
         class_name = meta.get("className")
 
         if not skill_path:
-             raise ValueError(f"Skill {skill_id} has no skillPath or entry_point")
+            raise ValueError(f"Skill {skill_id} has no skillPath or entry_point")
 
         if not class_name:
-            # Fallback for origin/main style skills if they don't have className
-            # But HEAD style should have it.
             raise ValueError(f"Skill {skill_id} has no className")
 
         # Convert file path to module path
@@ -401,7 +400,32 @@ class SkillRegistry:
 
         module = importlib.import_module(module_path)
         skill_class = getattr(module, class_name)
-        instance = skill_class()
+
+        # Resolve dependencies from the service container. Imported lazily to
+        # avoid a circular import at module load time, and guarded so that a
+        # container import failure (e.g. a missing optional transitive dep)
+        # degrades to no injection instead of breaking every skill invocation.
+        dependencies: dict[str, Any] = {}
+        try:
+            from youtube_extension.backend.containers.service_container import (
+                get_service,
+            )
+        except Exception as e:
+            logger.warning(
+                "Service container unavailable; skipping DI for skill %s: %s",
+                skill_id,
+                e,
+            )
+            get_service = None
+
+        if get_service is not None:
+            for dep_name in meta.get("dependencies", []):
+                try:
+                    dependencies[dep_name] = get_service(dep_name)
+                except Exception as e:
+                    logger.warning("Failed to resolve dependency %s for skill %s: %s", dep_name, skill_id, e)
+
+        instance = skill_class(dependencies=dependencies)
         self._instances[skill_id] = instance
         return instance
 
