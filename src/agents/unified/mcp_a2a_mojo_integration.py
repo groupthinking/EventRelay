@@ -406,11 +406,9 @@ class IntelligentUnifiedAgent(BaseAgent):
 
         # Verify SLA compliance
         if transport_result["transport_latency_ms"] > self.sla["max_latency_ms"]:
-            print(
-                f"⚠️  SLA violation: {
-                    transport_result['transport_latency_ms']:.2f}ms > {
-                    self.sla['max_latency_ms']}ms"
-            )
+            latency_ms = transport_result["transport_latency_ms"]
+            max_latency = self.sla["max_latency_ms"]
+            print(f"⚠️  SLA violation: {latency_ms:.2f}ms > {max_latency}ms")
 
         return {
             "message_id": a2a_msg.id,
