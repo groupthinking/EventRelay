@@ -9,8 +9,9 @@ class ModelProvider(Enum):
     """Supported AI model providers."""
 
     OPENAI = "openai"
-    ANTHROPIC = "anthropic"
+    CLAUDE = "claude"
     GEMINI = "gemini"
+    GROK = "grok"
 
 
 class TokenBucket:
