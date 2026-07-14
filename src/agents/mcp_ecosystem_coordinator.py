@@ -324,11 +324,10 @@ class SkillRegistry:
             return
 
         skills_data = data.get("skills", {})
-        # Filter for uvai-skills (local GTM skills)
         if isinstance(skills_data, list):
             # Handle list format (defensive: some tooling emits a list)
             for skill in skills_data:
-                if skill.get("source") == "uvai-skills" and "id" in skill:
+                if skill.get("source") == "uvai-skills":
                     self._skills[skill["id"]] = skill
         elif isinstance(skills_data, dict):
             # Handle dict format (canonical skills-lock.json shape)
@@ -385,8 +384,8 @@ class SkillRegistry:
         if meta is None:
             raise ValueError(f"Unknown skill: {skill_id}")
 
-        skill_path = meta.get("skillPath") or meta.get("entry_point")  # e.g. "src/skills/content_generation/main.py"
-        class_name = meta.get("className")  # e.g. "ContentGenerationSkill"
+        skill_path = meta.get("skillPath") or meta.get("entry_point")
+        class_name = meta.get("className")
 
         if not skill_path:
             raise ValueError(f"Skill {skill_id} has no skillPath or entry_point")
@@ -405,18 +404,12 @@ class SkillRegistry:
 
         # Resolve dependencies from service container
         dependencies = {}
-        deps = meta.get("dependencies", [])
-        if deps:
+        for dep_name in meta.get("dependencies", []):
             try:
-                from youtube_extension.backend.containers.service_container import get_service_container
-                container = get_service_container()
-                for dep_name in deps:
-                    try:
-                        dependencies[dep_name] = container.get_service(dep_name)
-                    except Exception as e:
-                        logger.warning("Failed to resolve dependency %s for skill %s: %s", dep_name, skill_id, e)
-            except ImportError as e:
-                logger.error("Failed to import service container: %s", e)
+                from youtube_extension.backend.containers.service_container import get_service
+                dependencies[dep_name] = get_service(dep_name)
+            except Exception as e:
+                logger.warning("Failed to resolve dependency %s for skill %s: %s", dep_name, skill_id, e)
 
         instance = skill_class(dependencies=dependencies)
         self._instances[skill_id] = instance
