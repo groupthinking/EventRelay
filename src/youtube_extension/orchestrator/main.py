@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import logging
 import os
@@ -29,14 +31,23 @@ def redact_url(url: str) -> str:
         return "redis://***"
 
 
-async def process(msg):
-    """Placeholder processing function"""
-    logger.info(f"Processing message: {msg}")
-    # Simulate processing time
-    await asyncio.sleep(0.1)
+async def process(msg: dict) -> None:
+    """Handle a single consumed message.
+
+    No real task handler is wired up yet. Per the REAL_MODE_ONLY policy we must
+    not fake success with a mock delay: raising here leaves the message
+    unacknowledged (retained in the stream's pending list) rather than silently
+    dropping real work behind a stub that immediately gets xack'ed.
+    """
+    logger.info(f"Received message (no handler implemented yet): {msg}")
+    raise NotImplementedError(
+        "Orchestrator task handler is not implemented; message left unacknowledged"
+    )
 
 
-async def ensure_consumer_group(redis_client, stream_name, consumer_group):
+async def ensure_consumer_group(
+    redis_client: redis.Redis, stream_name: str, consumer_group: str
+) -> None:
     """Ensure the Redis Streams consumer group exists.
 
     Only the "already exists" (BUSYGROUP) case is treated as success. Any other
@@ -59,7 +70,7 @@ async def ensure_consumer_group(redis_client, stream_name, consumer_group):
             raise
 
 
-async def main():
+async def main() -> None:
     """
     Main Orchestrator Loop.
 
@@ -74,7 +85,7 @@ async def main():
     loop = asyncio.get_running_loop()
     stop_event = asyncio.Event()
 
-    def signal_handler():
+    def signal_handler() -> None:
         logger.info("🛑 Shutdown signal received")
         stop_event.set()
 
@@ -90,7 +101,15 @@ async def main():
 
     if redis is not None:
         try:
-            redis_client = redis.from_url(redis_url)
+            # Bounded timeouts so a hung/half-open connection surfaces as an
+            # exception (which the loop handles) instead of blocking xreadgroup /
+            # xack / xgroup_create indefinitely. socket_timeout must exceed the
+            # 1s xreadgroup block below.
+            redis_client = redis.from_url(
+                redis_url,
+                socket_connect_timeout=5,
+                socket_timeout=10,
+            )
             # Redact credentials from URL for safe logging
             safe_url = redact_url(redis_url)
             logger.info(f"✅ Orchestrator initialized, connecting to Redis at {safe_url} (Stream: {stream_name})")
