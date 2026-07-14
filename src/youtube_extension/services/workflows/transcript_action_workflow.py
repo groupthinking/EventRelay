@@ -1023,7 +1023,10 @@ class TranscriptActionWorkflow:
                 "quiet": True,
                 # Do not abort on a single format failure — allow yt-dlp to try
                 # the next format in the chain before raising an error.
-                "abort_on_error": False,
+                # NB: `abort_on_error` is a CLI-only compat option with no effect
+                # via the API; `ignoreerrors` is the parameter yt-dlp actually
+                # consults to continue past a download error.
+                "ignoreerrors": True,
             }
             proxy_url = get_proxy_url()
             if proxy_url:
