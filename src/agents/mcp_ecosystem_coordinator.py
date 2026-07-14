@@ -402,17 +402,28 @@ class SkillRegistry:
         skill_class = getattr(module, class_name)
 
         # Resolve dependencies from the service container. Imported lazily to
-        # avoid a circular import at module load time.
-        from youtube_extension.backend.containers.service_container import (
-            get_service,
-        )
+        # avoid a circular import at module load time, and guarded so that a
+        # container import failure (e.g. a missing optional transitive dep)
+        # degrades to no injection instead of breaking every skill invocation.
+        dependencies: dict[str, Any] = {}
+        try:
+            from youtube_extension.backend.containers.service_container import (
+                get_service,
+            )
+        except Exception as e:
+            logger.warning(
+                "Service container unavailable; skipping DI for skill %s: %s",
+                skill_id,
+                e,
+            )
+            get_service = None
 
-        dependencies = {}
-        for dep_name in meta.get("dependencies", []):
-            try:
-                dependencies[dep_name] = get_service(dep_name)
-            except Exception as e:
-                logger.warning("Failed to resolve dependency %s for skill %s: %s", dep_name, skill_id, e)
+        if get_service is not None:
+            for dep_name in meta.get("dependencies", []):
+                try:
+                    dependencies[dep_name] = get_service(dep_name)
+                except Exception as e:
+                    logger.warning("Failed to resolve dependency %s for skill %s: %s", dep_name, skill_id, e)
 
         instance = skill_class(dependencies=dependencies)
         self._instances[skill_id] = instance
