@@ -325,7 +325,7 @@ class LoadBalancer:
 
         elif self.algorithm == LoadBalancingAlgorithm.IP_HASH:
             if request_data and 'client_ip' in request_data:
-                hash_value = int(hashlib.md5(request_data['client_ip'].encode()).hexdigest(), 16)
+                hash_value = int(hashlib.sha256(request_data['client_ip'].encode()).hexdigest(), 16)
                 return services[hash_value % len(services)]
             else:
                 return random.choice(services)

@@ -1,45 +1,58 @@
 
 !.env.example
+!.gitkeep
 # --- Archives ---
 # --- Build Artifacts ---
+# --- Committed build/cache artifacts that must never be tracked ---
 # --- Data & Models ---
-data/knowledge_base.json
-data/jobs/
-data/mcp_contexts/
 # --- Dependencies ---
 # --- Editors & IDEs ---
+# --- Extra secret hardening (defense-in-depth; gitleaks is the enforcing gate) ---
 # --- Frameworks ---
+# --- Generated Reports & Data Dumps ---
 # --- Git & System ---
 # --- Ignore nested git repositories that aren't properly configured as submodules ---
 # --- Jupyter ---
 # --- Logs & Temp ---
-# --- Project Specific ---
-# --- Generated Reports & Data Dumps ---
-CREDENTIALS_REPORT.json
-IMPLEMENTATION_COMPLETE.md
-autonomous_processing_report_*.json
-comments_*.json
-transcript_action_result.json
-dashboard_test.html
 # --- Loose root scripts (must live under src/, scripts/, or tools/) ---
-/analyze_comments.py
-/fetch_comments.py
-/verify_enhancements.py
+# --- Project Specific ---
 # --- Secrets (CRITICAL) ---
+# --- Security audit artifacts (keep local; never publish a vuln map to a public repo) ---
+# AI Studio exports
+# Chrome / NotebookLM browser profiles (massive, never belong in repo)
+# Claude agent worktrees (auto-generated, never commit)
+# Compiled output for Supabase edge functions. Deno runs the .ts source
+# Database files (unless tracked intentionally)
+# Empty/orphaned tool directories
+# Firebase Data Connect local PGlite emulator cache (~27M of binary DB files)
+# Generated logs (keep .gitkeep files)
+# Playwright artifacts
+# Root test-coverage artifact (the coverage/ dir is ignored above, but this stray file slipped through)
+# Runtime pipeline audit logs (written by pipeline_audit_store at runtime)
+# Saved Google AI Studio webpage dump (vendored HTML/JS/CSS, ~23M)
+# Test artifacts
+# TypeScript incremental build cache
+# Webpack cache artifacts
+# directly; these are stale tsc artifacts that must not be committed or deployed.
+**/.dataconnect/pgliteData/
 **/production-secrets.json
 **/secrets.json
+*-remix.xml
 *.bak
 *.cert
 *.code-workspace
 *.coverage
-coverage.xml
 *.crt
-*.egg-info/
 *.db
+*.db-journal
+*.db-wal
+*.egg-info/
 *.gguf
 *.ipynb
 *.key
 *.log
+*.pack.gz.old
+*.pack.old
 *.pem
 *.pyc
 *.pyd
@@ -53,53 +66,42 @@ coverage.xml
 *.temp
 *.tgz
 *.tmp
+*.tsbuildinfo
 *REAL_API*.md
 *_secret_*.json
 *api*key*.txt
 *credential*.txt
+*private*.txt
+*secret*.txt
 *~
 .AppleDouble
 .DS_Store
-
-# Generated logs (keep .gitkeep files)
-*.log
-!.gitkeep
-autonomous_processing_report_*.json
-
-# Database files (unless tracked intentionally)
-performance_monitoring.db
-*.db-journal
-*.db-wal
-
-# Webpack cache artifacts
-*.pack.old
-*.pack.gz.old
-
-# AI Studio exports
-ai-studio-*.xml
-*-remix.xml
-
-# Empty/orphaned tool directories
-.kombai/
-workflow_results/
 .LSOverride
 .aiexclude
 .backup_*/
 .build/
 .cache/
+.claude/worktrees/
 .directory
 .dmypy.json
+.env
 .env*
+.env*.local
 .gemini/*.log
-.gemini/tmp/
 .gemini/auth/
 .gemini/cache/
+.gemini/tmp/
 .git
 .gitignore
+.gstack/
 .idea/
 .ipynb_checkpoints/
+.kombai/
 .mypy_cache/
+.next/
 .npm/
+.poc-runtime.db
+.poc-venv/
 .pyre/
 .pytest_cache/
 .ropeproject
@@ -110,19 +112,30 @@ workflow_results/
 .spyproject
 .turbo/
 .venv/
-.poc-venv/
-.poc-runtime.db
 .venv_prod_verify/
+.vercel
 .vscode/
 .webassets-cache
 .yarn/
+/analyze_comments.py
+/fetch_comments.py
+/verify_enhancements.py
+CREDENTIALS_REPORT.json
 Desktop.ini
 GAP_FIXING_WORKFLOW_REPORT.json
+IMPLEMENTATION_COMPLETE.md
 Thumbs.db
+UVAI_Digital_Refinery_Blueprint.pdf
 __pycache__/
 _archive/
 ai-edge-torch/
+ai-studio-*.xml
 api_usage_data.json
+apps/web/package-lock.json
+apps/web/playwright-report/
+apps/web/test-results/
+autonomous_processing_report_*.json
+backend.log
 build/
 build_extensions/
 build_extensions/uvai-extensions/ai-integrations/MiniCPM-o/
@@ -131,14 +144,26 @@ celerybeat-schedule
 celerybeat.pid
 chrome_build/
 client_secret_*.json
+comments_*.json
 cost_report.json
+coverage.json
+coverage.xml
 coverage/
 curl_output.txt
+dashboard_test.html
+data/audit/*.jsonl
+data/jobs/
+data/knowledge_base.json
+data/mcp_contexts/
+dataconnect/.dataconnect/
 dist/
 dmypy.json
 docs/_build/
+docs/gemini_reference/
+docs/security/eventrelay-audit-*
 ehthumbs.db
 external/ml-fastvlm/
+frontend.log
 generated_projects/
 gha-creds-*.json
 google-cloud-sdk/
@@ -146,69 +171,30 @@ htmlcov/
 instance/
 logs/
 node_modules/
+notebooklm_chrome_profile/
+ob.txt
+performance_monitoring.db
 pnpm-lock.yaml
 quantomcode_private.pem
 research/labs/archive/
 safari_build/
+safety-report.json
+security-scan.json
 site/
-target/
-terraform_export/
-tmp/
-venv/
-video_representations_extractor-*/
-yarn.lock
-youtube_processed_videos/
-UVAI_Digital_Refinery_Blueprint.pdf
-*.db
-.vercel
-.env*.local
-.next/
-.env
-
-# Chrome / NotebookLM browser profiles (massive, never belong in repo)
-notebooklm_chrome_profile/
 src/utils/notebooklm_profile/
 src/utils/notebooklm_profile_v2/
-.gstack/
-
-# --- Security audit artifacts (keep local; never publish a vuln map to a public repo) ---
-docs/security/eventrelay-audit-*
-
-# --- Extra secret hardening (defense-in-depth; gitleaks is the enforcing gate) ---
-ob.txt
-*private*.txt
-*secret*.txt
-
-# Claude agent worktrees (auto-generated, never commit)
-.claude/worktrees/
-
-# Compiled output for Supabase edge functions. Deno runs the .ts source
-# directly; these are stale tsc artifacts that must not be committed or deployed.
+supabase/functions/**/index.d.ts
 supabase/functions/**/index.js
 supabase/functions/**/index.js.map
-supabase/functions/**/index.d.ts
-apps/web/package-lock.json
-
-# --- Committed build/cache artifacts that must never be tracked ---
-# Firebase Data Connect local PGlite emulator cache (~27M of binary DB files)
-dataconnect/.dataconnect/
-**/.dataconnect/pgliteData/
-# Root test-coverage artifact (the coverage/ dir is ignored above, but this stray file slipped through)
-coverage.json
-# Saved Google AI Studio webpage dump (vendored HTML/JS/CSS, ~23M)
-docs/gemini_reference/
-# Runtime pipeline audit logs (written by pipeline_audit_store at runtime)
-data/audit/*.jsonl
-# TypeScript incremental build cache
-*.tsbuildinfo
-
-# Test artifacts
+target/
+terraform_export/
 tests/load/baseline_results*
 tests/load/normal_results*
 tests/load/peak_results*
-security-scan.json
-safety-report.json
-backend.log
-frontend.log
-apps/web/test-results/
-apps/web/playwright-report/
+tmp/
+transcript_action_result.json
+venv/
+video_representations_extractor-*/
+workflow_results/
+yarn.lock
+youtube_processed_videos/
