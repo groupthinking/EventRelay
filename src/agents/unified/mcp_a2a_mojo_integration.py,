@@ -100,16 +100,16 @@ class MojoTransportLayer:
     """
     Real IPC transport layer using Python's multiprocessing module.
     Provides zero-copy (same-process), shared memory, pipes, and handle passing.
-    
+
     Note: In Python, true microsecond latencies are limited by the GIL and
     system scheduler. These implementations provide the fastest available
     real IPC mechanisms in pure Python.
-    
+
     Usage:
         # Context manager (recommended)
         with MojoTransportLayer() as transport:
             result = await transport.send(message, sender_pid, receiver_pid)
-        
+
         # Manual cleanup
         transport = MojoTransportLayer()
         try:
@@ -125,11 +125,11 @@ class MojoTransportLayer:
         }
         self._shm_blocks: Dict[str, shared_memory.SharedMemory] = {}
         self._pipes: Dict[str, multiprocessing.connection.Connection] = {}
-    
+
     def __enter__(self):
         """Context manager entry."""
         return self
-    
+
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Context manager exit with cleanup."""
         self.cleanup()
@@ -193,18 +193,18 @@ class MojoTransportLayer:
                 "mcp_context": message.mcp_context.to_dict(),
             })
             size = len(serialized)
-            
+
             # Create shared memory block with unique name
             shm_name = f"eventrelay_shm_{id(message)}_{os.getpid()}"
-            
+
             # Create shared memory (real allocation)
             shm = shared_memory.SharedMemory(name=shm_name, create=True, size=size + 4)
             self._shm_blocks[shm_name] = shm
-            
+
             # Write size header (4 bytes) + data
             shm.buf[:4] = struct.pack('I', size)
             shm.buf[4:4+size] = serialized
-            
+
             return {
                 "status": "delivered",
                 "method": "shared_memory",
@@ -228,19 +228,19 @@ class MojoTransportLayer:
             # Create a real pipe
             parent_conn, child_conn = multiprocessing.Pipe()
             pipe_id = f"pipe_{id(message)}_{os.getpid()}"
-            
+
             # Store parent connection for potential reading
             self._pipes[pipe_id] = parent_conn
-            
+
             # Send message data through the pipe (real IPC)
             parent_conn.send({
                 "a2a_message": message.a2a_message.to_dict(),
                 "mcp_context": message.mcp_context.to_dict(),
             })
-            
+
             # Get file descriptor for verification
             fd = parent_conn.fileno()
-            
+
             return {
                 "status": "delivered",
                 "method": "mojo_pipe",
@@ -261,7 +261,7 @@ class MojoTransportLayer:
         This allows passing file descriptors and other OS handles between processes.
         """
         handles = []
-        
+
         for handle in message.resource_handles or []:
             # Record handle information
             handle_info = {
@@ -269,13 +269,13 @@ class MojoTransportLayer:
                 "id": id(handle),
                 "transferred": True,
             }
-            
+
             # For dict-like handles with file descriptors, we could use
             # multiprocessing.reduction.send_handle() in a real cross-process scenario
             if isinstance(handle, dict) and "fd" in handle:
                 handle_info["fd"] = handle["fd"]
                 handle_info["reducible"] = True
-            
+
             handles.append(handle_info)
 
         return {
@@ -284,11 +284,11 @@ class MojoTransportLayer:
             "handles": handles,
             "is_real": True,
         }
-    
+
     def cleanup(self):
         """
         Clean up shared memory blocks and pipes.
-        
+
         This method should be called explicitly when the transport layer
         is no longer needed, or use the context manager for automatic cleanup.
         """
@@ -300,7 +300,7 @@ class MojoTransportLayer:
             except Exception:
                 pass
         self._shm_blocks.clear()
-        
+
         # Close pipes
         for pipe_id, conn in list(self._pipes.items()):
             try:
@@ -308,11 +308,11 @@ class MojoTransportLayer:
             except Exception:
                 pass
         self._pipes.clear()
-    
+
     def __del__(self):
         """
         Cleanup on deletion as a fallback.
-        
+
         Note: Relying on __del__ is not recommended. Use context manager
         or explicit cleanup() call instead.
         """
