@@ -1,6 +1,5 @@
 import pytest
-import asyncio
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, AsyncMock
 import sys
 from pathlib import Path
 
@@ -51,8 +50,9 @@ async def test_invoke_skill_with_di():
     instance = registry._load_skill_instance(skill_id)
 
     from skills.base import SkillResult
-    instance.execute = asyncio.Future()
-    instance.execute.set_result(SkillResult(status="success", output={"test": "ok"}))
+    instance.execute = AsyncMock(
+        return_value=SkillResult(status="success", output={"test": "ok"})
+    )
 
     payload = {"video_id": "test_video"}
     result = await registry.invoke_skill(skill_id, payload)
