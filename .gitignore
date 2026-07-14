@@ -131,7 +131,6 @@ _archive/
 ai-edge-torch/
 ai-studio-*.xml
 api_usage_data.json
-apps/web/package-lock.json
 apps/web/playwright-report/
 apps/web/test-results/
 autonomous_processing_report_*.json

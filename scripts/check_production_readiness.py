@@ -22,19 +22,22 @@ def check_env_vars():
         logger.warning(f"Missing critical environment variables: {missing}")
     else:
         logger.info("✅ All critical environment variables are set.")
+    return False # warnings don't fail the audit by default, but could be changed
 
 def check_cors_config():
     logger.info("Checking CORS configuration...")
     main_path = Path("src/youtube_extension/main.py")
     if main_path.exists():
         content = main_path.read_text()
-        # Verify that allowed origins are restricted and loopbacks are rejected in production
         if "_IS_PRODUCTION = _ENVIRONMENT == \"production\"" in content and "if _IS_PRODUCTION and _is_loopback_origin(_origin):" in content:
             logger.info("✅ CORS production safety checks found in main.py.")
+            return False
         else:
             logger.error("❌ CORS production safety checks (loopback rejection) NOT found in main.py.")
+            return True
     else:
         logger.error("❌ src/youtube_extension/main.py not found.")
+        return True
 
 def check_log_levels():
     logger.info("Checking log configuration...")
@@ -46,15 +49,16 @@ def check_log_levels():
         else:
             logger.warning("⚠️ Logging level might be too verbose (DEBUG).")
     else:
-        # Fallback to main.py check
         main_path = Path("src/youtube_extension/main.py")
         if main_path.exists():
             content = main_path.read_text()
             if "logging.basicConfig(level=logging.INFO)" in content:
                 logger.info("✅ Default logging level set to INFO in main.py.")
+    return False
 
 def check_security_middleware():
     logger.info("Checking security middleware...")
+    failed = False
     main_path = Path("src/youtube_extension/main.py")
     if main_path.exists():
         content = main_path.read_text()
@@ -64,11 +68,13 @@ def check_security_middleware():
             logger.info(f"✅ Security headers middleware found: {found}")
         else:
             logger.error(f"❌ Missing security headers: {set(required_headers) - set(found)}")
+            failed = True
 
         if "APIKeyAuthMiddleware" in content or "api_key_auth" in content:
             logger.info("✅ API Key authentication middleware found.")
         else:
             logger.warning("⚠️ API Key authentication middleware not found in main.py.")
+    return failed
 
 def check_dependencies():
     logger.info("Checking production dependencies...")
@@ -79,17 +85,26 @@ def check_dependencies():
         missing = [d for d in prod_deps if d not in content.lower()]
         if not missing:
             logger.info("✅ Core production dependencies found in requirements.txt.")
+            return False
         else:
             logger.error(f"❌ Missing core dependencies in requirements.txt: {missing}")
+            return True
+    return True
 
 def main():
     logger.info("--- EventRelay Production Readiness Audit ---")
-    check_env_vars()
-    check_cors_config()
-    check_log_levels()
-    check_security_middleware()
-    check_dependencies()
-    logger.info("Audit complete.")
+    errors = []
+    errors.append(check_env_vars())
+    errors.append(check_cors_config())
+    errors.append(check_log_levels())
+    errors.append(check_security_middleware())
+    errors.append(check_dependencies())
+
+    if any(errors):
+        logger.error("❌ Audit failed! Fix the errors above before deploying.")
+        sys.exit(1)
+    else:
+        logger.info("✅ Audit complete. System is ready for production.")
 
 if __name__ == "__main__":
     main()
