@@ -1,0 +1,16 @@
+diff --git a/apps/web/src/components/dashboard/panels.tsx b/apps/web/src/components/dashboard/panels.tsx
+index f2c12cc77..6276364f7 100644
+--- a/apps/web/src/components/dashboard/panels.tsx
++++ b/apps/web/src/components/dashboard/panels.tsx
+@@ -290,7 +290,11 @@ export function SearchPanel({
+         }}
+         className="flex gap-2"
+       >
++        <label htmlFor="search-video" className="sr-only">
++          Search the video
++        </label>
+         <input
++          id="search-video"
+           type="text"
+           placeholder="Search the video…"
+           className="flex-1 px-3 py-2.5 text-sm focus:outline-none transition-colors rounded-lg"

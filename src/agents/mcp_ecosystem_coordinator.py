@@ -324,14 +324,23 @@ class SkillRegistry:
 
         skills_data = data.get("skills", {})
         if isinstance(skills_data, list):
-            # Handle list format (defensive: some tooling emits a list)
+            # Handle list format; only load entries that have a className
+            # so that _load_skill_instance() can instantiate them.
             for skill in skills_data:
-                if skill.get("source") == "uvai-skills":
+                if (
+                    skill.get("source") == "uvai-skills"
+                    and skill.get("className")
+                    and skill.get("id")
+                ):
                     self._skills[skill["id"]] = skill
         elif isinstance(skills_data, dict):
-            # Handle dict format (canonical skills-lock.json shape)
+            # Handle dict format; apply same guards as list branch
             for skill_id, meta in skills_data.items():
-                if meta.get("source") == "uvai-skills":
+                if (
+                    meta.get("source") == "uvai-skills"
+                    and meta.get("sourceType") == "local"
+                    and meta.get("className")
+                ):
                     self._skills[skill_id] = meta
 
         logger.info("Loaded %d GTM skills from %s", len(self._skills), self._lock_path)
