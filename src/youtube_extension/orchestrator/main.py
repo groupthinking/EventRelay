@@ -36,6 +36,29 @@ async def process(msg):
     await asyncio.sleep(0.1)
 
 
+async def ensure_consumer_group(redis_client, stream_name, consumer_group):
+    """Ensure the Redis Streams consumer group exists.
+
+    Only the "already exists" (BUSYGROUP) case is treated as success. Any other
+    error — most importantly a transient ConnectionError while Redis is still
+    starting up — is re-raised so the caller can retry. Swallowing those errors
+    would leave the group uncreated while the consumer keeps looping, producing a
+    permanent NOGROUP failure that never recovers and never consumes any tasks.
+    """
+    try:
+        await redis_client.xgroup_create(
+            stream_name, consumer_group, id='0', mkstream=True
+        )
+        logger.info(
+            f"Created consumer group '{consumer_group}' for stream '{stream_name}'"
+        )
+    except Exception as e:
+        if "BUSYGROUP" in str(e):
+            logger.debug(f"Consumer group '{consumer_group}' already exists")
+        else:
+            raise
+
+
 async def main():
     """
     Main Orchestrator Loop.
@@ -70,15 +93,7 @@ async def main():
             redis_client = redis.from_url(redis_url)
             # Redact credentials from URL for safe logging
             safe_url = redact_url(redis_url)
-            logger.info(f"✅ Orchestrator initialized and connected to Redis at {safe_url} (Stream: {stream_name})")
-            
-            # Create consumer group if it doesn't exist (ignore if already exists)
-            try:
-                await redis_client.xgroup_create(stream_name, consumer_group, id='0', mkstream=True)
-                logger.info(f"Created consumer group '{consumer_group}' for stream '{stream_name}'")
-            except Exception as e:
-                # Group already exists, which is fine
-                logger.debug(f"Consumer group setup: {e}")
+            logger.info(f"✅ Orchestrator initialized, connecting to Redis at {safe_url} (Stream: {stream_name})")
         except Exception as e:
             logger.error(f"Failed to initialize Redis client: {e}")
             redis_client = None
@@ -86,10 +101,20 @@ async def main():
     if redis_client is None:
         logger.info("✅ Orchestrator initialized and waiting for tasks (Mode: Standby)")
 
+    # Whether the consumer group has been confirmed to exist. Created lazily inside
+    # the loop so a transient failure at startup is retried instead of stranding the
+    # consumer, and reset on any loop error so a lost connection or a missing group
+    # (NOGROUP) triggers re-creation on the next iteration.
+    group_ready = False
+
     # Main loop
     while not stop_event.is_set():
         try:
             if redis_client:
+                if not group_ready:
+                    await ensure_consumer_group(redis_client, stream_name, consumer_group)
+                    group_ready = True
+
                 # Use Redis Streams with consumer groups for acknowledged delivery
                 # Read with 1 second block timeout so we can check stop_event frequently
                 results = await redis_client.xreadgroup(
@@ -99,9 +124,9 @@ async def main():
                     count=1,
                     block=1000  # 1 second in milliseconds
                 )
-                
+
                 if results:
-                    for stream, messages in results:
+                    for _stream, messages in results:
                         for message_id, data in messages:
                             try:
                                 # Process the message
@@ -118,6 +143,9 @@ async def main():
                 logger.debug("❤️ Orchestrator heartbeat")
 
         except Exception as e:
+            # Force the group to be re-ensured next iteration: the failure may be a
+            # dropped connection or a missing group (NOGROUP) that needs re-creating.
+            group_ready = False
             logger.error(f"Error in orchestrator loop: {e}")
             await asyncio.sleep(5)
 
