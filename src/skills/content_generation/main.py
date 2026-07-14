@@ -16,7 +16,7 @@ class ContentGenerationSkill(BaseSkill):
     skill_id = "content-generation"
     name = "Content Generation"
     version = "1.0.0"
-    triggers = ["youtube.video.published", "system.action.manual"]
+    triggers = ["youtube.video.published"]
     required_env_vars = ["GEMINI_API_KEY"]
 
     def __init__(self, dependencies: Optional[dict[str, Any]] = None):

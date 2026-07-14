@@ -20,22 +20,27 @@ A comprehensive audit of the 70 open Pull Requests was performed to identify sta
 | **#722** | 🔒 Fix insecure SSL verification... | **#721** | Superseded by the broader #721 fix. |
 | **#746** | 🎨 Palette: Add screen reader label... | **#750** | #750 provides more comprehensive ARIA labels for the same component. |
 
-## Recommended Actions (Manual)
-Since the `gh` CLI tool and a valid `GITHUB_TOKEN` were not available in the current environment, the following commands should be executed by a repository owner:
+## Actions Taken (Executed)
+On 2026-07-14 the GitHub write surface (GitHub MCP) was available, so all 9 stale
+PRs were closed with a supersession comment linking the replacement PR. Each close
+is reversible — reopen the PR if the superseding PR fails to land.
 
-```bash
-gh pr close 729 --comment "Superseded by #756 (which includes additional fixes)."
-gh pr close 695 735 736 --comment "Superseded by #737 (includes CI integrity gate)."
-gh pr close 716 747 --comment "Superseded by #749."
-gh pr close 707 714 722 --comment "Superseded by #721."
-gh pr close 746 --comment "Superseded by #750."
-```
+| Closed PR | Superseded by |
+| :--- | :--- |
+| #729 | #756 |
+| #695, #735, #736 | #737 |
+| #716, #747 | #749 |
+| #707, #714, #722 | #721 |
+| #746 | #750 |
 
-## Files created
-- `analyze_stale_prs.py`: The script used to identify duplicates and superseding PRs.
-- `stale_prs_analysis.json`: The raw output of the analysis script.
+Backlog reduced from 72 → 63 open PRs.
 
-> Note: the raw GitHub API dumps (`open_prs.json`, `open_prs_full.json`, ~3 MB / 52,889 lines)
-> were committed to the repo root by the original audit PR (#760) and have been removed as
-> build/scratch artifacts that do not belong in the source tree. They are recoverable from
-> #760's history if the raw data is needed again.
+## Outstanding — requires human triage (not auto-actionable)
+- **Conflicting Tailwind cluster**: multiple mutually-exclusive PRs (revert to v3 vs.
+  migrate to v4): #613, #616, #623, #629 (v3) vs. #630, #632 (v4). Only one strategy
+  can land; the rest should be closed once the owner picks a direction.
+- **Conflict-marker fix cluster**: #737 vs. #700 (draft) still overlap after the closes
+  above — pick one to merge.
+- **~40 draft bot PRs** (google-labs-jules[bot]) are DEFERRED per the runbook scope gate
+  until marked ready for review.
+- **Merges to protected `main`** require human sign-off (no PR is labeled `automerge`).

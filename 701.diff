@@ -1,0 +1,30 @@
+diff --git a/apps/web/src/components/InteractiveTranscript.tsx b/apps/web/src/components/InteractiveTranscript.tsx
+index b8b4d4c0c..b8ceb127b 100644
+--- a/apps/web/src/components/InteractiveTranscript.tsx
++++ b/apps/web/src/components/InteractiveTranscript.tsx
+@@ -1,6 +1,6 @@
+ 'use client';
+
+-import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
++import { useState, useRef, useEffect, useCallback, useMemo, memo } from 'react';
+ import { clsx } from 'clsx';
+
+ /* ═══════════════════════════════════════════
+@@ -53,7 +53,7 @@ function formatTimestamp(seconds: number): string {
+  * @param isPast - Whether this segment ends before the current playback position.
+  * @param onSeek - Called with the segment start time when the row is activated.
+  */
+-function SegmentRow({
++const SegmentRow = memo(function SegmentRow({
+   segment,
+   isActive,
+   isPast,
+@@ -138,7 +138,7 @@ function SegmentRow({
+       </p>
+     </div>
+   );
+-}
++});
+
+ /**
+  * Renders an interactive transcript with speaker filtering, search, and playback progress.

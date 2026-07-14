@@ -300,8 +300,7 @@
       ],
       "skill_source": "uvai-skills",
       "trigger_events": [
-        "youtube.video.published",
-        "system.action.manual"
+        "youtube.video.published"
       ]
     },
     {
