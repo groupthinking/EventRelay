@@ -50,8 +50,9 @@ for _mod_name in [
             _stub.VideoContent = type("VideoContent", (), {})  # type: ignore[attr-defined]
         sys.modules[_mod_name] = _stub
 
-# Now we can safely import just the coordinator module
+# Now we can safely import the skill registry and concrete skill classes
 from agents.mcp_ecosystem_coordinator import SkillRegistry  # noqa: E402
+from skills.ab_testing.main import ABTestingSkill  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -320,6 +321,17 @@ class TestEnvPassthrough:
     def test_nonexistent_skill_env_empty(self, registry: SkillRegistry) -> None:
         env = registry.get_env_for_skill("nonexistent")
         assert env == {}
+
+    def test_skill_class_env_matches_declared_requirements(self) -> None:
+        with patch.dict(
+            os.environ,
+            {"GEMINI_API_KEY": "gkey", "DATABASE_URL": "sqlite:///test.db"},
+        ):
+            env = ABTestingSkill().get_env()
+            assert env == {
+                "GEMINI_API_KEY": "gkey",
+                "DATABASE_URL": "sqlite:///test.db",
+            }
 
 
 # ---------------------------------------------------------------------------

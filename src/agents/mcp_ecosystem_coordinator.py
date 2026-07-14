@@ -386,11 +386,11 @@ class SkillRegistry:
         class_name = meta.get("className")
 
         if not skill_path:
-             raise ValueError(f"Skill {skill_id} has no skillPath or entry_point")
+            raise ValueError(
+                f"Skill {skill_id} missing required field: skillPath or entry_point"
+            )
 
         if not class_name:
-            # Fallback for origin/main style skills if they don't have className
-            # But HEAD style should have it.
             raise ValueError(f"Skill {skill_id} has no className")
 
         # Convert file path to module path
