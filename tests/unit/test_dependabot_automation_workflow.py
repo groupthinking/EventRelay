@@ -57,7 +57,11 @@ def test_dependabot_workflow_approves_and_merges_without_checkout() -> None:
         for step in merge_steps
     )
     assert any(
+<<<<<<< HEAD
         step.get("uses", "").startswith("dependabot/fetch-metadata@")
+=======
+        step.get("uses") == "dependabot/fetch-metadata@v3"
+>>>>>>> origin/main
         and step.get("id") == "metadata"
         for step in approve_steps
     )
