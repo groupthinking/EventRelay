@@ -98,8 +98,7 @@
       "className": "ContentGenerationSkill",
       "version": "1.0.0",
       "triggers": [
-        "youtube.video.published",
-        "system.action.manual"
+        "youtube.video.published"
       ],
       "dependencies": [
         "gemini_service",
