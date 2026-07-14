@@ -17,7 +17,7 @@ class EmailCampaignSkill(BaseSkill):
     name = "Email Campaign"
     version = "1.0.0"
     triggers = ["crm.lead.scored"]
-    required_env_vars = ["GEMINI_API_KEY", "DATABASE_URL"]
+    required_env_vars = ["GEMINI_API_KEY", "DATABASE_URL", "EMAIL_API_KEY"]
 
     async def execute(self, payload: dict[str, Any]) -> SkillResult:
         """Generate an email campaign sequence.

@@ -17,7 +17,7 @@ class SocialSchedulerSkill(BaseSkill):
     name = "Social Scheduler"
     version = "1.0.0"
     triggers = ["ai.content.generated"]
-    required_env_vars = ["GEMINI_API_KEY"]
+    required_env_vars = ["GEMINI_API_KEY", "SOCIAL_API_KEY"]
 
     async def execute(self, payload: dict[str, Any]) -> SkillResult:
         """Schedule social media posts.

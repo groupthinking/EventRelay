@@ -53,6 +53,10 @@ for _mod_name in [
 # Now we can safely import the skill registry and concrete skill classes
 from agents.mcp_ecosystem_coordinator import SkillRegistry  # noqa: E402
 from skills.ab_testing.main import ABTestingSkill  # noqa: E402
+from skills.analytics_dashboard.main import AnalyticsDashboardSkill  # noqa: E402
+from skills.content_generation.main import ContentGenerationSkill  # noqa: E402
+from skills.email_campaign.main import EmailCampaignSkill  # noqa: E402
+from skills.social_scheduler.main import SocialSchedulerSkill  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -332,6 +336,23 @@ class TestEnvPassthrough:
                 "GEMINI_API_KEY": "gkey",
                 "DATABASE_URL": "sqlite:///test.db",
             }
+
+    @pytest.mark.parametrize(
+        ("skill_class", "expected_env_vars"),
+        [
+            (ContentGenerationSkill, {"GEMINI_API_KEY", "DATABASE_URL"}),
+            (SocialSchedulerSkill, {"GEMINI_API_KEY", "SOCIAL_API_KEY"}),
+            (EmailCampaignSkill, {"GEMINI_API_KEY", "DATABASE_URL", "EMAIL_API_KEY"}),
+            (AnalyticsDashboardSkill, {"DATABASE_URL", "ANALYTICS_API_KEY"}),
+            (ABTestingSkill, {"GEMINI_API_KEY", "DATABASE_URL", "ANALYTICS_API_KEY"}),
+        ],
+    )
+    def test_skill_class_envs_align_with_registry_dependencies(
+        self,
+        skill_class: type[object],
+        expected_env_vars: set[str],
+    ) -> None:
+        assert set(skill_class.required_env_vars) == expected_env_vars
 
 
 # ---------------------------------------------------------------------------

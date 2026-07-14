@@ -17,7 +17,7 @@ class ABTestingSkill(BaseSkill):
     name = "A/B Testing"
     version = "1.0.0"
     triggers = ["youtube.video.uploaded"]
-    required_env_vars = ["GEMINI_API_KEY", "DATABASE_URL"]
+    required_env_vars = ["GEMINI_API_KEY", "DATABASE_URL", "ANALYTICS_API_KEY"]
 
     async def execute(self, payload: dict[str, Any]) -> SkillResult:
         """Create and manage an A/B test.

@@ -17,7 +17,7 @@ class ContentGenerationSkill(BaseSkill):
     name = "Content Generation"
     version = "1.0.0"
     triggers = ["youtube.video.published", "system.action.manual"]
-    required_env_vars = ["GEMINI_API_KEY"]
+    required_env_vars = ["GEMINI_API_KEY", "DATABASE_URL"]
 
     async def execute(self, payload: dict[str, Any]) -> SkillResult:
         """Generate content from a video transcript.

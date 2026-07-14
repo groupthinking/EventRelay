@@ -17,7 +17,7 @@ class AnalyticsDashboardSkill(BaseSkill):
     name = "Analytics Dashboard"
     version = "1.0.0"
     triggers = ["system.cron.daily"]
-    required_env_vars = ["DATABASE_URL"]
+    required_env_vars = ["DATABASE_URL", "ANALYTICS_API_KEY"]
 
     async def execute(self, payload: dict[str, Any]) -> SkillResult:
         """Aggregate analytics metrics.
