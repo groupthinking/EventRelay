@@ -765,6 +765,25 @@ class TranscriptActionWorkflow:
             video_metadata=video_metadata,
         )
 
+        # Retry once for transient network errors (timeouts, 503/504, deadline
+        # exceeded) before falling through to the yt-dlp download fallback.
+        # This avoids triggering the expensive and bot-blocked download path
+        # for what are often short-lived Gemini API hiccups.
+        _transient_markers = ("timeout", "503", "504", "deadline", "unavailable")
+        if not (primary_result.success and primary_result.response) and primary_result.error:
+            if any(m in str(primary_result.error).lower() for m in _transient_markers):
+                logger.info(
+                    "Transient error in Gemini process_youtube (%s); retrying before download fallback",
+                    primary_result.error,
+                )
+                await asyncio.sleep(2.0)
+                primary_result = await gemini_service.process_youtube(
+                    video_url,
+                    transcription_prompt,
+                    response_mime_type="application/json",
+                    video_metadata=video_metadata,
+                )
+
         await self._record_metric(
             "transcript_fallback_latency_seconds",
             (primary_result.latency or 0.0),
@@ -987,11 +1006,24 @@ class TranscriptActionWorkflow:
             output_template = str(temp_dir / "%(id)s.%(ext)s")
             ydl_opts = {
                 "skip_download": False,
-                "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/mp4",
+                # Use mweb then web_embedded clients — both are significantly less
+                # scrutinised than the default web client on GCP/Cloud Run IPs.
+                # web_embedded does not require a PO Token for public videos.
+                "extractor_args": {
+                    "youtube": {
+                        "player_client": ["mweb", "web_embedded"],
+                    }
+                },
+                # Prefer a pre-muxed stream (no ffmpeg required) before falling
+                # back to separate video+audio tracks that need merging.
+                "format": "best[ext=mp4]/bestvideo[ext=mp4]+bestaudio[ext=m4a]/best",
                 "merge_output_format": "mp4",
                 "outtmpl": output_template,
                 "noplaylist": True,
                 "quiet": True,
+                # Do not abort on a single format failure — allow yt-dlp to try
+                # the next format in the chain before raising an error.
+                "abort_on_error": False,
             }
             proxy_url = get_proxy_url()
             if proxy_url:
