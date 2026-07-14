@@ -129,10 +129,19 @@ class ServiceContainer:
         logger.info("Core services registered")
 
     def _register_skill_dependency_aliases(self):
-        """Register aliases for services used as skill dependencies."""
+        """Register aliases for services used as skill dependencies.
+
+        Only services backed by a real implementation are aliased here.
+        Dependencies without an implementation (e.g. ``openai_service``,
+        ``social_api_service``) are intentionally left unregistered: resolving
+        them raises ``ValueError``, which ``SkillRegistry._load_skill_instance``
+        catches and degrades to no injection, so a skill's ``if self.social_api:``
+        availability check correctly reports the service as unavailable. This
+        avoids registering truthy placeholder objects that would masquerade as
+        real services (and violate REAL_MODE_ONLY).
+        """
         # AI Services
         self.register_singleton("gemini_service", lambda: self.get_service("hybrid_processor_service"))
-        self.register_singleton("openai_service", self._create_openai_service_placeholder)
 
         # Data & Analytics
         self.register_singleton("database_service", lambda: self.get_service("data_service"))
@@ -140,15 +149,6 @@ class ServiceContainer:
 
         # External Integration
         self.register_singleton("email_service", lambda: self.get_service("notification_service"))
-        self.register_singleton("social_api_service", self._create_social_api_service_placeholder)
-
-    def _create_openai_service_placeholder(self):
-        """Placeholder for OpenAI service."""
-        return type("OpenAIServicePlaceholder", (), {"status": "placeholder"})()
-
-    def _create_social_api_service_placeholder(self):
-        """Placeholder for Social API service."""
-        return type("SocialAPIServicePlaceholder", (), {"status": "placeholder"})()
 
     def register_singleton(self, name: str, factory: Callable[[], T]) -> None:
         """
