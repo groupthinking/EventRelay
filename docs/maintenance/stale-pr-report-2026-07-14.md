@@ -32,6 +32,10 @@ gh pr close 746 --comment "Superseded by #750."
 ```
 
 ## Files created
-- `open_prs_full.json`: Full data dump from GitHub API.
 - `analyze_stale_prs.py`: The script used to identify duplicates and superseding PRs.
 - `stale_prs_analysis.json`: The raw output of the analysis script.
+
+> Note: the raw GitHub API dumps (`open_prs.json`, `open_prs_full.json`, ~3 MB / 52,889 lines)
+> were committed to the repo root by the original audit PR (#760) and have been removed as
+> build/scratch artifacts that do not belong in the source tree. They are recoverable from
+> #760's history if the raw data is needed again.
