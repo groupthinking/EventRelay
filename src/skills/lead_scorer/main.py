@@ -39,7 +39,7 @@ class LeadScorerSkill(BaseSkill):
         logger.info("Scoring lead %s with %d signals", lead_id, len(signals))
 
         if self.db:
-            logger.info("Using injected database_service for lead scoring")
+             logger.info("Using injected database_service for lead scoring")
 
         return SkillResult(
             status="success",
