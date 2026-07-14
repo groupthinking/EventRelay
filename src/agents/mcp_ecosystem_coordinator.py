@@ -10,7 +10,6 @@ import importlib
 import json
 import logging
 import os
-import sys
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -402,11 +401,15 @@ class SkillRegistry:
         module = importlib.import_module(module_path)
         skill_class = getattr(module, class_name)
 
-        # Resolve dependencies from service container
+        # Resolve dependencies from the service container. Imported lazily to
+        # avoid a circular import at module load time.
+        from youtube_extension.backend.containers.service_container import (
+            get_service,
+        )
+
         dependencies = {}
         for dep_name in meta.get("dependencies", []):
             try:
-                from youtube_extension.backend.containers.service_container import get_service
                 dependencies[dep_name] = get_service(dep_name)
             except Exception as e:
                 logger.warning("Failed to resolve dependency %s for skill %s: %s", dep_name, skill_id, e)

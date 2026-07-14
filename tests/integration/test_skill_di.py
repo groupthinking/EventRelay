@@ -1,61 +1,53 @@
-import pytest
-import asyncio
 from unittest.mock import MagicMock
-import sys
-from pathlib import Path
 
-# Add src to sys.path if not already there
-src_path = str(Path(__file__).resolve().parents[2] / "src")
-if src_path not in sys.path:
-    sys.path.insert(0, src_path)
+import pytest
 
 from agents.mcp_ecosystem_coordinator import SkillRegistry
-from youtube_extension.backend.containers.service_container import get_service_container
+from skills.base import SkillResult
+from youtube_extension.backend.containers.service_container import (
+    get_service_container,
+)
+
 
 @pytest.mark.asyncio
 async def test_skill_di_wiring():
-    """Verify that skills are correctly instantiated with their dependencies from the ServiceContainer."""
+    """Verify skills are instantiated with their dependencies from the ServiceContainer."""
     container = get_service_container()
 
-    # Mock services in the container
+    # Inject mock services into the container for testing.
     mock_gemini = MagicMock()
     mock_db = MagicMock()
-
-    # We can inject mocks into the container's _singletons for testing
     container._singletons["gemini_service"] = mock_gemini
     container._singletons["database_service"] = mock_db
 
     registry = SkillRegistry()
 
-    # Test ContentGenerationSkill (requires gemini_service and database_service)
-    skill_id = "content-generation"
-    instance = registry._load_skill_instance(skill_id)
+    # ContentGenerationSkill requires gemini_service and database_service.
+    instance = registry._load_skill_instance("content-generation")
+    assert instance.gemini is mock_gemini
+    assert instance.db is mock_db
 
-    assert instance.gemini == mock_gemini
-    assert instance.db == mock_db
-
-    # Test LeadScorerSkill (requires database_service)
-    skill_id = "lead-scorer"
-    instance = registry._load_skill_instance(skill_id)
-
-    assert instance.db == mock_db
+    # LeadScorerSkill requires only database_service.
+    instance = registry._load_skill_instance("lead-scorer")
+    assert instance.db is mock_db
     assert not hasattr(instance, "gemini") or instance.gemini is None
+
 
 @pytest.mark.asyncio
 async def test_invoke_skill_with_di():
-    """Verify that invoking a skill uses the DI-injected instance."""
+    """Verify that invoking a skill routes the payload to the DI-injected instance."""
     registry = SkillRegistry()
 
-    # Mock the execute method
-    skill_id = "seo-optimizer"
-    instance = registry._load_skill_instance(skill_id)
+    instance = registry._load_skill_instance("seo-optimizer")
 
-    from skills.base import SkillResult
-    instance.execute = asyncio.Future()
-    instance.execute.set_result(SkillResult(status="success", output={"test": "ok"}))
+    # Replace execute with an async callable (a coroutine function), so that
+    # `await instance.execute(payload)` inside invoke_skill works correctly.
+    async def fake_execute(payload):
+        return SkillResult(status="success", output={"test": "ok"})
 
-    payload = {"video_id": "test_video"}
-    result = await registry.invoke_skill(skill_id, payload)
+    instance.execute = fake_execute
+
+    result = await registry.invoke_skill("seo-optimizer", {"video_id": "test_video"})
 
     assert result["status"] == "success"
     assert result["output"]["test"] == "ok"
