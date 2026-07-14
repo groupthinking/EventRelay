@@ -6,11 +6,21 @@ from typing import Any, Optional
 
 
 class ModelProvider(Enum):
-    """Supported AI model providers."""
+    """Supported AI model providers.
+
+    ``CLAUDE`` and ``ANTHROPIC`` are distinct members (different values) that
+    both resolve to the ``"claude"`` provider path via
+    ``UnifiedAISDK._normalize_provider``. ``CLAUDE`` and ``GROK`` are required
+    because ``UnifiedAISDK._rate_limit_provider`` references them by name; do
+    not remove them without also updating every consumer in
+    ``unified_ai_sdk.py`` (handlers, normalization, health check, client init).
+    """
 
     OPENAI = "openai"
+    CLAUDE = "claude"
     ANTHROPIC = "anthropic"
     GEMINI = "gemini"
+    GROK = "grok"
 
 
 class TokenBucket:
