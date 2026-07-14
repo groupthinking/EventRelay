@@ -10,6 +10,7 @@ import importlib
 import json
 import logging
 import os
+import subprocess
 import sys
 from dataclasses import asdict
 from pathlib import Path
@@ -166,7 +167,10 @@ class MCPEcosystemCoordinator:
 
     def list_skills(self, source: Optional[str] = None) -> List[Dict[str, Any]]:
         """Returns a list of discovered skills from the registry."""
-        return self.skill_registry.list_skills(source=source)
+        skills = self.skill_registry.list_skills()
+        if source:
+            return [s for s in skills if s.get("source") == source]
+        return skills
 
     def register_server(self, server: BaseMCPServer) -> bool:
         """Registers an MCP server with the coordinator."""
@@ -321,12 +325,13 @@ class SkillRegistry:
             return
 
         skills_data = data.get("skills", {})
-        # Filter for uvai-skills (local GTM skills)
         if isinstance(skills_data, list):
+            # Handle list format from origin/main
             for skill in skills_data:
-                if skill.get("source") == "uvai-skills" and "id" in skill:
+                if skill.get("source") == "uvai-skills":
                     self._skills[skill["id"]] = skill
         elif isinstance(skills_data, dict):
+            # Handle dict format from HEAD
             for skill_id, meta in skills_data.items():
                 if meta.get("source") == "uvai-skills":
                     self._skills[skill_id] = meta
@@ -343,6 +348,7 @@ class SkillRegistry:
             "triggers": meta.get("triggers", []),
             "dependencies": meta.get("dependencies", []),
             "entry_point": meta.get("skillPath") or meta.get("entry_point", ""),
+            "source": meta.get("source", ""),
         }
 
     def list_skills(self, source: Optional[str] = None) -> list[dict[str, Any]]:
@@ -379,11 +385,16 @@ class SkillRegistry:
         if meta is None:
             raise ValueError(f"Unknown skill: {skill_id}")
 
-        skill_path = meta.get("skillPath") or meta.get("entry_point")  # e.g. "src/skills/content_generation/main.py"
-        class_name = meta.get("className")  # e.g. "ContentGenerationSkill"
+        skill_path = meta.get("skillPath") or meta.get("entry_point")
+        class_name = meta.get("className")
 
-        if not skill_path or not class_name:
-             raise ValueError(f"Skill {skill_id} missing skillPath or className")
+        if not skill_path:
+             raise ValueError(f"Skill {skill_id} has no skillPath or entry_point")
+
+        if not class_name:
+            # Fallback for origin/main style skills if they don't have className
+            # But HEAD style should have it.
+            raise ValueError(f"Skill {skill_id} has no className")
 
         # Convert file path to module path
         module_path = skill_path.replace("/", ".").removesuffix(".py")
@@ -396,18 +407,12 @@ class SkillRegistry:
 
         # Resolve dependencies from service container
         dependencies = {}
-        deps = meta.get("dependencies", [])
-        if deps:
+        for dep_name in meta.get("dependencies", []):
             try:
-                from youtube_extension.backend.containers.service_container import get_service_container
-                container = get_service_container()
-                for dep_name in deps:
-                    try:
-                        dependencies[dep_name] = container.get_service(dep_name)
-                    except Exception as e:
-                        logger.warning("Failed to resolve dependency %s for skill %s: %s", dep_name, skill_id, e)
-            except ImportError as e:
-                logger.error("Failed to import service container: %s", e)
+                from youtube_extension.backend.containers.service_container import get_service
+                dependencies[dep_name] = get_service(dep_name)
+            except Exception as e:
+                logger.warning("Failed to resolve dependency %s for skill %s: %s", dep_name, skill_id, e)
 
         instance = skill_class(dependencies=dependencies)
         self._instances[skill_id] = instance
@@ -428,6 +433,9 @@ class SkillRegistry:
             "gemini_service": ["GEMINI_API_KEY"],
             "database_service": ["DATABASE_URL"],
             "openai_service": ["OPENAI_API_KEY"],
+            "social_api_service": ["SOCIAL_API_KEY"],
+            "email_service": ["EMAIL_API_KEY"],
+            "analytics_service": ["ANALYTICS_API_KEY"],
         }
 
         env: dict[str, str] = {}
