@@ -57,113 +57,339 @@
       "id": "video-ingest",
       "name": "Video Ingest Agent",
       "role": "Extract and analyze video content",
-      "tools": ["process_video_markdown", "get_transcript", "analyze_video"],
-      "capabilities": ["youtube_processing", "transcript_extraction", "content_analysis"]
+      "tools": [
+        "process_video_markdown",
+        "get_transcript",
+        "analyze_video"
+      ],
+      "capabilities": [
+        "youtube_processing",
+        "transcript_extraction",
+        "content_analysis"
+      ]
     },
     {
       "id": "architect",
       "name": "Architecture Agent",
       "role": "Determine tech stack and project structure",
-      "tools": ["determine_architecture", "get_context", "get_capabilities"],
-      "capabilities": ["architecture_design", "tech_selection", "knowledge_integration"]
+      "tools": [
+        "determine_architecture",
+        "get_context",
+        "get_capabilities"
+      ],
+      "capabilities": [
+        "architecture_design",
+        "tech_selection",
+        "knowledge_integration"
+      ]
     },
     {
       "id": "code-gen",
       "name": "Code Generation Agent",
       "role": "Generate application code from specifications",
-      "tools": ["generate_fullstack", "generate_files", "get_error_patterns"],
-      "capabilities": ["code_generation", "fullstack_apps", "template_application"]
+      "tools": [
+        "generate_fullstack",
+        "generate_files",
+        "get_error_patterns"
+      ],
+      "capabilities": [
+        "code_generation",
+        "fullstack_apps",
+        "template_application"
+      ]
     },
     {
       "id": "build-validator",
       "name": "Build Validator Agent",
       "role": "Test builds and fix errors",
-      "tools": ["validate_build", "get_error_patterns", "learn_from_error", "suggest_fix"],
-      "capabilities": ["build_testing", "error_resolution", "skill_learning"]
+      "tools": [
+        "validate_build",
+        "get_error_patterns",
+        "learn_from_error",
+        "suggest_fix"
+      ],
+      "capabilities": [
+        "build_testing",
+        "error_resolution",
+        "skill_learning"
+      ]
     },
     {
       "id": "deployer",
       "name": "Deployment Agent",
       "role": "Deploy to GitHub and Vercel",
-      "tools": ["deploy_to_github_and_vercel", "create_repo", "push_code", "deploy_project", "get_deployment_status"],
-      "capabilities": ["github_deployment", "vercel_deployment", "ci_cd"]
+      "tools": [
+        "deploy_to_github_and_vercel",
+        "create_repo",
+        "push_code",
+        "deploy_project",
+        "get_deployment_status"
+      ],
+      "capabilities": [
+        "github_deployment",
+        "vercel_deployment",
+        "ci_cd"
+      ]
     },
     {
       "id": "knowledge-capture",
       "name": "Knowledge Capture Agent",
       "role": "Learn from each pipeline run",
-      "tools": ["capture_technology", "get_capabilities", "learn_from_error"],
-      "capabilities": ["continuous_learning", "pattern_recognition", "capability_generation"]
+      "tools": [
+        "capture_technology",
+        "get_capabilities",
+        "learn_from_error"
+      ],
+      "capabilities": [
+        "continuous_learning",
+        "pattern_recognition",
+        "capability_generation"
+      ]
     },
     {
       "id": "vercel-background",
       "name": "Vercel Background Execution Agent",
       "role": "Migrate custom fireAndForget to official waitUntil for post-response work per confirmed outcomes",
-      "tools": ["validate_build", "suggest_fix", "get_error_patterns"],
-      "capabilities": ["vercel_functions", "background_execution", "stream_close_independence"]
+      "tools": [
+        "validate_build",
+        "suggest_fix",
+        "get_error_patterns"
+      ],
+      "capabilities": [
+        "vercel_functions",
+        "background_execution",
+        "stream_close_independence"
+      ]
     },
     {
       "id": "rate-limit-middleware",
       "name": "Rate Limit Middleware Activator",
       "role": "Wire proxy.ts as active middleware, remove in-process memory cache, enforce dev-only fallback",
-      "tools": ["validate_build", "suggest_fix"],
-      "capabilities": ["middleware", "rate_limiting", "redis_vs_memory"]
+      "tools": [
+        "validate_build",
+        "suggest_fix"
+      ],
+      "capabilities": [
+        "middleware",
+        "rate_limiting",
+        "redis_vs_memory"
+      ]
     },
     {
       "id": "vercel-foundation",
       "name": "Vercel Functions Foundation Agent",
       "role": "Add @vercel/functions package and establish consistent pattern + vercel.json notes",
-      "tools": ["validate_build", "suggest_fix"],
-      "capabilities": ["dependency_management", "vercel_config", "package_foundation"]
+      "tools": [
+        "validate_build",
+        "suggest_fix"
+      ],
+      "capabilities": [
+        "dependency_management",
+        "vercel_config",
+        "package_foundation"
+      ]
     },
     {
       "id": "verification-gate",
       "name": "Verification Gate Agent",
       "role": "Implement and execute comparison methods (greps, curl bursts, stream timing, runbook smokes, build/lint) against defined outcomes",
-      "tools": ["validate_build", "get_error_patterns", "learn_from_error"],
-      "capabilities": ["verification", "e2e_testing", "observability"]
+      "tools": [
+        "validate_build",
+        "get_error_patterns",
+        "learn_from_error"
+      ],
+      "capabilities": [
+        "verification",
+        "e2e_testing",
+        "observability"
+      ]
     },
     {
       "id": "performance-observability",
       "name": "Performance & Observability Agent",
       "role": "Analyze cold starts, duration, cost impact of waitUntil + rate limits; recommend vercel.json + logging",
-      "tools": ["get_capabilities", "suggest_fix"],
-      "capabilities": ["performance_analysis", "cost_optimization", "dashboard_metrics"]
+      "tools": [
+        "get_capabilities",
+        "suggest_fix"
+      ],
+      "capabilities": [
+        "performance_analysis",
+        "cost_optimization",
+        "dashboard_metrics"
+      ]
     },
     {
       "id": "security-auditor",
       "name": "Security Auditor (Rate Limit Focus)",
       "role": "Audit rate limiting for bypasses, header integrity, prod bypass behavior",
-      "tools": ["suggest_fix"],
-      "capabilities": ["security_audit", "rate_limit_security", "header_validation"]
+      "tools": [
+        "suggest_fix"
+      ],
+      "capabilities": [
+        "security_audit",
+        "rate_limit_security",
+        "header_validation"
+      ]
     },
     {
       "id": "quality-agent",
       "name": "Quality Agent",
       "role": "Code quality, style, and test coverage for the changes; run full verification matrix",
-      "tools": ["validate_build", "get_error_patterns", "learn_from_error", "suggest_fix"],
-      "capabilities": ["code_quality", "test_enhancement", "lint_build"]
+      "tools": [
+        "validate_build",
+        "get_error_patterns",
+        "learn_from_error",
+        "suggest_fix"
+      ],
+      "capabilities": [
+        "code_quality",
+        "test_enhancement",
+        "lint_build"
+      ]
     },
     {
       "id": "strategy-agent",
       "name": "Strategy Agent",
       "role": "Ensure changes align with overall architecture, anti-framework rules, and REAL_MODE_ONLY",
-      "tools": ["get_capabilities", "get_context"],
-      "capabilities": ["strategic_review", "architecture_alignment"]
+      "tools": [
+        "get_capabilities",
+        "get_context"
+      ],
+      "capabilities": [
+        "strategic_review",
+        "architecture_alignment"
+      ]
     },
     {
       "id": "precision-extractor",
       "name": "Precision Extractor (for side-effect sites)",
       "role": "Identify and precisely migrate every remaining fire-and-forget / .catch site across all routes",
-      "tools": ["suggest_fix"],
-      "capabilities": ["pattern_extraction", "minimal_migration"]
+      "tools": [
+        "suggest_fix"
+      ],
+      "capabilities": [
+        "pattern_extraction",
+        "minimal_migration"
+      ]
     },
     {
       "id": "launch-plan",
       "name": "Launch Plan Agent",
       "role": "Update runbooks, docs, and deployment checklist; coordinate final smoke + prod verification",
-      "tools": ["suggest_fix", "capture_technology"],
-      "capabilities": ["documentation", "runbook_update", "deployment_readiness"]
+      "tools": [
+        "suggest_fix",
+        "capture_technology"
+      ],
+      "capabilities": [
+        "documentation",
+        "runbook_update",
+        "deployment_readiness"
+      ]
+    },
+    {
+      "id": "content-generation",
+      "name": "Content Generation Skill",
+      "role": "Generate blog/social posts from video transcripts",
+      "tools": [
+        "generate_fullstack"
+      ],
+      "capabilities": [
+        "content_generation",
+        "blog_posts",
+        "social_posts"
+      ],
+      "skill_source": "uvai-skills",
+      "trigger_events": [
+        "youtube.video.published",
+        "system.action.manual"
+      ]
+    },
+    {
+      "id": "seo-optimizer",
+      "name": "SEO Optimizer Skill",
+      "role": "Optimize video titles, descriptions, tags for search discoverability",
+      "tools": [
+        "analyze_video"
+      ],
+      "capabilities": [
+        "seo_optimization",
+        "metadata_enhancement"
+      ],
+      "skill_source": "uvai-skills",
+      "trigger_events": [
+        "youtube.video.uploaded"
+      ]
+    },
+    {
+      "id": "social-scheduler",
+      "name": "Social Scheduler Skill",
+      "role": "Schedule cross-platform social media posts",
+      "tools": [],
+      "capabilities": [
+        "social_media",
+        "scheduling",
+        "cross_platform"
+      ],
+      "skill_source": "uvai-skills",
+      "trigger_events": [
+        "ai.content.generated"
+      ]
+    },
+    {
+      "id": "lead-scorer",
+      "name": "Lead Scorer Skill",
+      "role": "Score leads based on engagement signals",
+      "tools": [],
+      "capabilities": [
+        "lead_scoring",
+        "engagement_analysis"
+      ],
+      "skill_source": "uvai-skills",
+      "trigger_events": [
+        "youtube.analytics.updated"
+      ]
+    },
+    {
+      "id": "email-campaign",
+      "name": "Email Campaign Skill",
+      "role": "Generate and send email sequences based on lead scoring",
+      "tools": [],
+      "capabilities": [
+        "email_generation",
+        "campaign_management"
+      ],
+      "skill_source": "uvai-skills",
+      "trigger_events": [
+        "crm.lead.scored"
+      ]
+    },
+    {
+      "id": "analytics-dashboard",
+      "name": "Analytics Dashboard Skill",
+      "role": "Aggregate metrics into dashboard data",
+      "tools": [],
+      "capabilities": [
+        "metrics_aggregation",
+        "dashboard_generation"
+      ],
+      "skill_source": "uvai-skills",
+      "trigger_events": [
+        "system.cron.daily"
+      ]
+    },
+    {
+      "id": "ab-testing",
+      "name": "A/B Testing Skill",
+      "role": "Run A/B tests on thumbnails and titles",
+      "tools": [],
+      "capabilities": [
+        "ab_testing",
+        "variant_management"
+      ],
+      "skill_source": "uvai-skills",
+      "trigger_events": [
+        "youtube.video.uploaded"
+      ]
     }
   ]
 }
