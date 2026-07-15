@@ -533,26 +533,27 @@ class TestBulkUpdate:
         ]
         result = await repo.bulk_update(updates)
         assert result == 2
-        assert session.execute.await_count == 2
+        assert session.execute.await_count == 1
 
     async def test_bulk_update_skips_entry_without_id(self, repo, session):
+        # We no longer manually pop 'id' or skip. SQLAlchemy's bulk update handles it.
+        # But we verify it executes once with the full list.
         session.execute.return_value = MagicMock()
         updates = [
             {"name": "no-id-entry"},
             {"id": "id-1", "name": "has-id"},
         ]
         result = await repo.bulk_update(updates)
-        # returns len(updates), but only executes for entries with id
         assert result == 2
         assert session.execute.await_count == 1
 
     async def test_bulk_update_mutates_dicts(self, repo, session):
-        """bulk_update pops 'id' from each dict — verify that happens."""
+        """bulk_update used to pop 'id' from each dict. New SQLAlchemy bulk update does not."""
         session.execute.return_value = MagicMock()
         data = [{"id": "x", "field": "v"}]
         await repo.bulk_update(data)
-        # 'id' should have been popped
-        assert "id" not in data[0]
+        # 'id' should NOT be popped
+        assert "id" in data[0]
 
 
 # ===========================================================================
