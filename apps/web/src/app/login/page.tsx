@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
+import { safeCallbackPath } from '@/lib/auth-paths';
 
 export const metadata: Metadata = {
   title: 'Sign in',
@@ -16,11 +17,14 @@ export const metadata: Metadata = {
 export default async function LoginRedirect({
   searchParams,
 }: {
-  searchParams: Promise<{ callbackUrl?: string }>;
+  searchParams: Promise<{ callbackUrl?: string | string[] }>;
 }) {
   const params = await searchParams;
-  const raw = params?.callbackUrl ?? '/dashboard';
-  const callback =
-    raw.startsWith('/') && !raw.startsWith('//') ? raw : '/dashboard';
+  // A repeated ?callbackUrl= yields an array at runtime — take the first value.
+  const rawParam = params?.callbackUrl;
+  const raw = Array.isArray(rawParam) ? rawParam[0] : rawParam;
+  // Reuse the shared sanitizer so /login enforces the same open-redirect
+  // protection (backslash + scheme tricks) as the proxy's callback handling.
+  const callback = safeCallbackPath(raw ?? '/dashboard');
   redirect(`/api/auth/signin?callbackUrl=${encodeURIComponent(callback)}`);
 }
