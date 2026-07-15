@@ -66,6 +66,49 @@ class TokenBucket:
         return int(max(0, self.capacity - current_tokens) + 0.5)
 
 
+class TokenBucket:
+    """
+    A token bucket rate limiter.
+    """
+
+    def __init__(self, capacity: int, refill_rate: float):
+        self.capacity = capacity
+        self.refill_rate = refill_rate
+        self.tokens = float(capacity)
+        self.last_refill = time.time()
+        self.lock = asyncio.Lock()
+
+    async def consume(self, amount: int = 1) -> float:
+        """
+        Consume tokens. Returns the wait time if tokens are not available.
+        """
+        async with self.lock:
+            now = time.time()
+            # Refill tokens
+            elapsed = now - self.last_refill
+            self.tokens = min(self.capacity, self.tokens + elapsed * self.refill_rate)
+            self.last_refill = now
+
+            if self.tokens >= amount:
+                self.tokens -= amount
+                return 0.0
+
+            # Need to wait
+            deficit = amount - self.tokens
+            wait_time = deficit / self.refill_rate
+
+            # Pretend we waited and consumed the tokens at that future time
+            self.tokens -= amount
+            return wait_time
+
+    def get_approximate_usage(self) -> int:
+        """Returns an approximation of how many tokens were used recently"""
+        now = time.time()
+        elapsed = now - self.last_refill
+        current_tokens = min(self.capacity, self.tokens + elapsed * self.refill_rate)
+        return int(max(0, self.capacity - current_tokens) + 0.5)
+
+
 class RateLimiter:
     """
     Basic rate limiter for AI API requests.
