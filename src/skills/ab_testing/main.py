@@ -1,28 +1,3 @@
-<<<<<<< HEAD
-#!/usr/bin/env python3
-"""Thin GTM skill wrapper."""
-
-import json
-import sys
-from typing import Any
-
-SKILL_ID = "ab-testing"
-
-
-def run(payload: dict[str, Any]) -> dict[str, Any]:
-    """Execute the skill wrapper with a JSON-serializable payload."""
-    return {
-        "status": "success",
-        "skill": SKILL_ID,
-        "payload": payload,
-    }
-
-
-if __name__ == "__main__":
-    raw = sys.stdin.read().strip()
-    request = json.loads(raw) if raw else {}
-    print(json.dumps(run(request)))
-=======
 """A/B Testing skill - runs A/B tests on thumbnails and titles."""
 
 from __future__ import annotations
@@ -86,4 +61,3 @@ class ABTestingSkill(BaseSkill):
                 "message": f"A/B test ({test_type}) created for video {video_id}",
             },
         )
->>>>>>> origin/main

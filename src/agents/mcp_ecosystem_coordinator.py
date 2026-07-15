@@ -13,11 +13,7 @@ import os
 import sys
 from dataclasses import asdict
 from pathlib import Path
-<<<<<<< HEAD
-from typing import TYPE_CHECKING, Any
-=======
-from typing import Any, Dict, List, Optional
->>>>>>> origin/main
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 if TYPE_CHECKING:
     from youtube_extension.processors.enhanced_extractor import VideoContent
@@ -213,10 +209,7 @@ class MCPEcosystemCoordinator:
         self.servers: dict[str, BaseMCPServer] = {}
         self.capabilities_map: dict[str, dict] = {}
         self.workflow_history: list[dict] = []
-<<<<<<< HEAD
         self.skill_registry = skill_registry or SkillRegistry()
-=======
-        self.skill_registry = SkillRegistry()
 
     def list_skills(self, source: Optional[str] = None) -> List[Dict[str, Any]]:
         """Returns a list of discovered skills from the registry."""
@@ -224,7 +217,6 @@ class MCPEcosystemCoordinator:
         if source:
             return [s for s in skills if s.get("source") == source]
         return skills
->>>>>>> origin/main
 
     def register_server(self, server: BaseMCPServer) -> bool:
         """Registers an MCP server with the coordinator."""

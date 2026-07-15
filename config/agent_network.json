@@ -288,59 +288,6 @@
       "id": "launch-plan",
       "name": "Launch Plan Agent",
       "role": "Update runbooks, docs, and deployment checklist; coordinate final smoke + prod verification",
-<<<<<<< HEAD
-      "tools": ["suggest_fix", "capture_technology"],
-      "capabilities": ["documentation", "runbook_update", "deployment_readiness"]
-    },
-    {
-      "id": "skill-content-generation",
-      "name": "Content Generation Skill",
-      "role": "Generate GTM content from transcripts",
-      "tools": ["content-generation"],
-      "capabilities": ["content_generation", "video_published"]
-    },
-    {
-      "id": "skill-seo-optimizer",
-      "name": "SEO Optimizer Skill",
-      "role": "Optimize title, description and tags",
-      "tools": ["seo-optimizer"],
-      "capabilities": ["seo_optimization", "video_uploaded"]
-    },
-    {
-      "id": "skill-social-scheduler",
-      "name": "Social Scheduler Skill",
-      "role": "Schedule cross-platform social posts",
-      "tools": ["social-scheduler"],
-      "capabilities": ["social_scheduling", "content_generated"]
-    },
-    {
-      "id": "skill-lead-scorer",
-      "name": "Lead Scorer Skill",
-      "role": "Score leads from engagement metrics",
-      "tools": ["lead-scorer"],
-      "capabilities": ["lead_scoring", "analytics_updated"]
-    },
-    {
-      "id": "skill-email-campaign",
-      "name": "Email Campaign Skill",
-      "role": "Generate and send lead email sequences",
-      "tools": ["email-campaign"],
-      "capabilities": ["email_campaigns", "lead_scored"]
-    },
-    {
-      "id": "skill-analytics-dashboard",
-      "name": "Analytics Dashboard Skill",
-      "role": "Aggregate dashboard-ready GTM metrics",
-      "tools": ["analytics-dashboard"],
-      "capabilities": ["analytics_dashboard", "daily_cron"]
-    },
-    {
-      "id": "skill-ab-testing",
-      "name": "A/B Testing Skill",
-      "role": "Run thumbnail/title A/B tests",
-      "tools": ["ab-testing"],
-      "capabilities": ["ab_testing", "video_uploaded"]
-=======
       "tools": [
         "suggest_fix",
         "capture_technology"
@@ -454,7 +401,6 @@
       "trigger_events": [
         "youtube.video.uploaded"
       ]
->>>>>>> origin/main
     }
   ]
 }
