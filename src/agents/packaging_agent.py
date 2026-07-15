@@ -125,6 +125,78 @@ class InfrastructurePackagingAgent:
 
         return len(issues) == 0, issues
 
+
+    def _prepare_output_directory(self, output_dir: str, base_dir: str) -> None:
+        """Cleans and prepares the base output directories."""
+        os.makedirs(output_dir, exist_ok=True)
+        shutil.rmtree(base_dir, ignore_errors=True)
+        os.makedirs(base_dir, exist_ok=True)
+
+    async def _process_and_write_file(self, file_path: str, file_name: str, content: str, validation_results: dict[str, list]) -> None:
+        """Centralizes the file validation, writing, and .env sanitization logic."""
+        # Codex validation
+        is_valid, issues = await self.codex_validate_content(content, file_path)
+
+        if is_valid:
+            with open(file_path, "w") as f:
+                f.write(content)
+            validation_results['passed'].append(file_path)
+        else:
+            validation_results['failed'].append({
+                'file': file_path,
+                'issues': issues
+            })
+            # For .env files with secrets, create sanitized version, else write content
+            if file_name == '.env':
+                sanitized_content = self._sanitize_env_file(content)
+                with open(file_path, "w") as f:
+                    f.write(sanitized_content)
+            else:
+                with open(file_path, "w") as f:
+                    f.write(content)
+
+    async def _process_nested_files(self, base_dir: str, project_structure: dict[str, Any], validation_results: dict[str, list]) -> None:
+        """Processes the nested folder/file dictionary."""
+        for folder, files in project_structure.items():
+            if isinstance(files, dict):
+                folder_path = os.path.join(base_dir, folder)
+                os.makedirs(folder_path, exist_ok=True)
+
+                for file_name, file_content in files.items():
+                    file_path = os.path.join(folder_path, file_name)
+                    await self._process_and_write_file(file_path, file_name, file_content, validation_results)
+
+    async def _process_flat_files(self, base_dir: str, flat_files: dict[str, str], validation_results: dict[str, list]) -> None:
+        """Processes the flat file dictionary."""
+        for file_name, file_content in flat_files.items():
+            file_path = os.path.join(base_dir, file_name)
+            await self._process_and_write_file(file_path, file_name, file_content, validation_results)
+
+    def _generate_validation_report(self, base_dir: str, project_id: str, timestamp: str, validation_results: dict[str, list]) -> dict[str, Any]:
+        """Centralizes validation report creation and JSON saving."""
+        total_passed = len(validation_results['passed'])
+        total_failed = len(validation_results['failed'])
+        total_files = total_passed + total_failed
+
+        validation_score = (total_passed / total_files * 100) if total_files > 0 else 0
+
+        validation_report = {
+            'project_id': project_id,
+            'timestamp': timestamp,
+            'total_files': total_files,
+            'passed_validation': total_passed,
+            'failed_validation': total_failed,
+            'security_issues': validation_results['failed'],
+            'validation_score': validation_score
+        }
+
+        # Save validation report
+        report_path = os.path.join(base_dir, 'VALIDATION_REPORT.json')
+        with open(report_path, 'w') as f:
+            json.dump(validation_report, f, indent=2)
+
+        return validation_report
+
     async def create_secure_project_structure(self,
                                             project_name: str,
                                             project_structure: dict[str, Any],
@@ -133,6 +205,8 @@ class InfrastructurePackagingAgent:
         """
         Create secure project structure with validation
         """
+        import os
+        from datetime import datetime
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         project_id = f"{project_name}_{timestamp}"
         base_dir = os.path.join(output_dir, project_id)
@@ -140,12 +214,7 @@ class InfrastructurePackagingAgent:
         self.logger.info(f"🚀 Starting infrastructure packaging for {project_id}")
 
         try:
-            # Ensure output directory exists
-            os.makedirs(output_dir, exist_ok=True)
-
-            # Remove previous directory if exists
-            shutil.rmtree(base_dir, ignore_errors=True)
-            os.makedirs(base_dir, exist_ok=True)
+            self._prepare_output_directory(output_dir, base_dir)
 
             validation_results = {
                 'passed': [],
@@ -153,71 +222,10 @@ class InfrastructurePackagingAgent:
                 'warnings': []
             }
 
-            # Write nested folders and files with validation
-            for folder, files in project_structure.items():
-                if isinstance(files, dict):
-                    folder_path = os.path.join(base_dir, folder)
-                    os.makedirs(folder_path, exist_ok=True)
+            await self._process_nested_files(base_dir, project_structure, validation_results)
+            await self._process_flat_files(base_dir, flat_files, validation_results)
 
-                    for file_name, content in files.items():
-                        file_path = os.path.join(folder_path, file_name)
-
-                        # Codex validation
-                        is_valid, issues = await self.codex_validate_content(content, file_path)
-
-                        if is_valid:
-                            with open(file_path, "w") as f:
-                                f.write(content)
-                            validation_results['passed'].append(file_path)
-                        else:
-                            validation_results['failed'].append({
-                                'file': file_path,
-                                'issues': issues
-                            })
-                            # Still write file but log security concerns
-                            with open(file_path, "w") as f:
-                                f.write(content)
-
-            # Write flat files with validation
-            for file_name, content in flat_files.items():
-                file_path = os.path.join(base_dir, file_name)
-
-                # Codex validation
-                is_valid, issues = await self.codex_validate_content(content, file_path)
-
-                if is_valid:
-                    with open(file_path, "w") as f:
-                        f.write(content)
-                    validation_results['passed'].append(file_path)
-                else:
-                    validation_results['failed'].append({
-                        'file': file_path,
-                        'issues': issues
-                    })
-                    # For flat files with secrets, create sanitized version
-                    if file_name == '.env':
-                        sanitized_content = self._sanitize_env_file(content)
-                        with open(file_path, "w") as f:
-                            f.write(sanitized_content)
-                    else:
-                        with open(file_path, "w") as f:
-                            f.write(content)
-
-            # Create validation report
-            validation_report = {
-                'project_id': project_id,
-                'timestamp': timestamp,
-                'total_files': len(validation_results['passed']) + len(validation_results['failed']),
-                'passed_validation': len(validation_results['passed']),
-                'failed_validation': len(validation_results['failed']),
-                'security_issues': validation_results['failed'],
-                'validation_score': len(validation_results['passed']) / (len(validation_results['passed']) + len(validation_results['failed'])) * 100 if (len(validation_results['passed']) + len(validation_results['failed'])) > 0 else 0
-            }
-
-            # Save validation report
-            report_path = os.path.join(base_dir, 'VALIDATION_REPORT.json')
-            with open(report_path, 'w') as f:
-                json.dump(validation_report, f, indent=2)
+            validation_report = self._generate_validation_report(base_dir, project_id, timestamp, validation_results)
 
             self.logger.info(f"✅ Project structure created: {base_dir}")
             self.logger.info(f"📊 Validation score: {validation_report['validation_score']:.1f}%")
@@ -227,7 +235,6 @@ class InfrastructurePackagingAgent:
         except Exception as e:
             self.logger.error(f"❌ Error creating project structure: {str(e)}")
             raise
-
     def _sanitize_env_file(self, content: str) -> str:
         """Sanitize .env file by replacing actual secrets with placeholders"""
         sanitized = content
