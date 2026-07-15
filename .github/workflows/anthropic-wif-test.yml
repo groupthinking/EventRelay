@@ -1,0 +1,39 @@
+name: anthropic-wif-test
+
+# This auth smoke-test exercises GitHub OIDC -> Anthropic WIF federation.
+# Scoped to main + manual dispatch so it does not run on (and redden) every
+# feature/dependabot branch. Change to `on: push` for all-branch coverage.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  call-claude:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch GitHub OIDC token
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const token = await core.getIDToken('https://api.anthropic.com');
+            core.setSecret(token);
+            core.exportVariable('JWT', token);
+      - name: Exchange for an Anthropic access token
+        run: |
+          curl -sS https://api.anthropic.com/v1/oauth/token \
+            -H "content-type: application/json" \
+            --data @- <<JSON | jq 'with_entries(if (.key | test("token$")) then .value = "<redacted>" else . end)'
+          {
+            "grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer",
+            "assertion": "$JWT",
+            "federation_rule_id": "fdrl_013i3heYNdeqkhJJ8oqMJysH",
+            "organization_id": "dd5f3379-f417-4545-8ab1-b9e2c8a95c08",
+            "service_account_id": "svac_01Rs4TwnH2VNmB47jDa8Wrcj",
+            "workspace_id": "wrkspc_01ADvvQXic1etGMwF8SSqRm7"
+          }
+          JSON

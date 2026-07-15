@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo, memo } from 'react';
 import { clsx } from 'clsx';
 
 /* ═══════════════════════════════════════════
@@ -45,7 +45,15 @@ function formatTimestamp(seconds: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-function SegmentRow({
+/**
+ * Renders a transcript segment row that can be focused and used to jump to its start time.
+ *
+ * @param segment - The transcript segment to display.
+ * @param isActive - Whether this segment matches the current playback position.
+ * @param isPast - Whether this segment ends before the current playback position.
+ * @param onSeek - Called with the segment start time when the row is activated.
+ */
+const SegmentRow = memo(function SegmentRow({
   segment,
   isActive,
   isPast,
@@ -71,9 +79,14 @@ function SegmentRow({
   return (
     <div
       ref={ref}
+      role="button"
+      tabIndex={0}
+      aria-label={`Jump to ${formatTimestamp(segment.startTime)}, ${segment.speaker}`}
+      aria-current={isActive || undefined}
       className={clsx(
-        'group flex gap-3 py-3 px-4 rounded-lg cursor-pointer transition-all duration-300',
-        isActive && 'scale-[1.01]',
+        'group flex gap-3 py-3 px-4 rounded-lg cursor-pointer transition-[transform,background-color,border-color,opacity] duration-300 motion-reduce:transition-none',
+        'focus:outline-none focus-visible:ring-2 focus-visible:ring-[#6af2de]/40',
+        isActive && 'scale-[1.01] motion-reduce:scale-100',
       )}
       style={{
         background: isActive
@@ -83,20 +96,22 @@ function SegmentRow({
         opacity: isPast && !isActive ? 0.5 : 1,
       }}
       onClick={() => onSeek(segment.startTime)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onSeek(segment.startTime);
+        }
+      }}
     >
       {/* Timestamp */}
-      <button
+      <span
         className="flex-shrink-0 text-[10px] font-mono tabular-nums pt-0.5 transition-colors"
         style={{
           color: isActive ? color : 'rgba(248, 245, 253, 0.25)',
         }}
-        onClick={(e) => {
-          e.stopPropagation();
-          onSeek(segment.startTime);
-        }}
       >
         {formatTimestamp(segment.startTime)}
-      </button>
+      </span>
 
       {/* Speaker label */}
       <div className="flex-shrink-0 pt-0.5">
@@ -123,8 +138,17 @@ function SegmentRow({
       </p>
     </div>
   );
-}
+});
 
+/**
+ * Renders an interactive transcript with speaker filtering, search, and playback progress.
+ *
+ * @param segments - Transcript segments to display
+ * @param currentTime - Current playback time in seconds
+ * @param onSeek - Called with the start time of a segment when a row is activated
+ * @param isPlaying - Controls the playing-state indicator in the header
+ * @param className - Additional classes applied to the outer container
+ */
 export default function InteractiveTranscript({
   segments,
   currentTime,
@@ -177,11 +201,11 @@ export default function InteractiveTranscript({
       >
         <div className="flex items-center gap-3">
           {isPlaying && (
-            <div className="flex gap-0.5 items-end h-3">
+            <div className="flex gap-0.5 items-end h-3" aria-hidden="true">
               {[0.6, 1, 0.4, 0.8, 0.5].map((h, i) => (
                 <div
                   key={i}
-                  className="w-0.5 rounded-full animate-pulse"
+                  className="w-0.5 rounded-full animate-pulse motion-reduce:animate-none"
                   style={{
                     height: `${h * 12}px`,
                     background: '#6af2de',
@@ -208,8 +232,10 @@ export default function InteractiveTranscript({
         {/* Speaker filter pills */}
         <div className="flex gap-1.5">
           <button
+            type="button"
             onClick={() => setFilterSpeaker(null)}
-            className="text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider transition-all"
+            aria-pressed={!filterSpeaker}
+            className="text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#6af2de]/40"
             style={{
               background: !filterSpeaker
                 ? 'rgba(106, 242, 222, 0.12)'
@@ -228,10 +254,12 @@ export default function InteractiveTranscript({
             return (
               <button
                 key={speaker}
+                type="button"
                 onClick={() =>
                   setFilterSpeaker(isActive ? null : speaker)
                 }
-                className="text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider transition-all"
+                aria-pressed={isActive}
+                className="text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#6af2de]/40"
                 style={{
                   background: isActive ? `${color}18` : 'rgba(25, 25, 31, 0.6)',
                   color: isActive ? color : 'rgba(248, 245, 253, 0.3)',
@@ -260,21 +288,24 @@ export default function InteractiveTranscript({
             fill="none"
             stroke="rgba(248,245,253,0.25)"
             strokeWidth="2"
+            aria-hidden="true"
           >
             <circle cx="11" cy="11" r="8" />
             <path d="m21 21-4.35-4.35" />
           </svg>
           <input
-            type="text"
+            type="search"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search transcript..."
+            placeholder="Search transcript…"
+            aria-label="Search transcript"
             className="flex-1 bg-transparent text-xs text-white placeholder:text-white/20 focus:outline-none"
           />
           {searchQuery && (
             <button
+              type="button"
               onClick={() => setSearchQuery('')}
-              className="text-[10px]"
+              className="text-[10px] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#6af2de]/40 rounded"
               style={{ color: 'rgba(248, 245, 253, 0.3)' }}
             >
               Clear
@@ -324,7 +355,7 @@ export default function InteractiveTranscript({
           </span>
           <div className="flex-1 h-1 rounded-full overflow-hidden" style={{ background: 'rgba(25, 25, 31, 0.8)' }}>
             <div
-              className="h-full rounded-full transition-all duration-300"
+              className="h-full rounded-full transition-[width] duration-300 motion-reduce:transition-none"
               style={{
                 width: `${
                   segments.length > 0

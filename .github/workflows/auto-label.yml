@@ -2,6 +2,8 @@ name: Auto Label
 on:
   pull_request:
     types: [opened, reopened, synchronized]
+  issues:
+    types: [opened, edited]
 permissions:
   pull-requests: write
   issues: write
@@ -9,36 +11,67 @@ jobs:
   label:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/github-script@v7
+      - uses: actions/github-script@v9
         with:
           script: |
-            const { data: files } = await github.rest.pulls.listFiles({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: context.payload.pull_request.number
-            });
-
             const labels = new Set();
 
-            for (const file of files) {
-              const path = file.filename;
-              if (path.includes('docs/') || path.endsWith('.md')) labels.add('documentation');
-              if (path.includes('test/') || path.includes('.test.') || path.includes('.spec.')) labels.add('tests');
-              if (path.includes('.github/workflows/')) labels.add('ci/cd');
-              if (path.endsWith('.js') || path.endsWith('.ts') || path.endsWith('.jsx') || path.endsWith('.tsx')) labels.add('javascript');
-              if (path.endsWith('.py')) labels.add('python');
-              if (path.endsWith('.css') || path.endsWith('.scss') || path.endsWith('.sass')) labels.add('styling');
+            // --- Label pull requests by changed file paths ---
+            if (context.eventName === 'pull_request') {
+              const { data: files } = await github.rest.pulls.listFiles({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: context.payload.pull_request.number
+              });
+
+              for (const file of files) {
+                const path = file.filename;
+                if (path.includes('docs/') || path.endsWith('.md')) labels.add('documentation');
+                if (path.includes('test/') || path.includes('.test.') || path.includes('.spec.')) labels.add('tests');
+                if (path.includes('.github/workflows/')) labels.add('ci/cd');
+                if (path.endsWith('.js') || path.endsWith('.ts') || path.endsWith('.jsx') || path.endsWith('.tsx')) labels.add('javascript');
+                if (path.endsWith('.py')) labels.add('python');
+                if (path.endsWith('.css') || path.endsWith('.scss') || path.endsWith('.sass')) labels.add('styling');
+              }
+
+              if (labels.size > 0) {
+                try {
+                  await github.rest.issues.addLabels({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: context.payload.pull_request.number,
+                    labels: Array.from(labels)
+                  });
+                } catch (error) {
+                  core.warning('Failed to add labels: ' + error.message);
+                }
+              }
             }
 
-            if (labels.size > 0) {
-              try {
-                await github.rest.issues.addLabels({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  issue_number: context.payload.pull_request.number,
-                  labels: Array.from(labels)
-                });
-              } catch (error) {
-                core.warning('Failed to add labels: ' + error.message);
+            // --- Label issues by title/body keywords (powers saved issue views) ---
+            if (context.eventName === 'issues') {
+              const issue = context.payload.issue;
+              const text = `${issue.title} ${issue.body || ''}`.toLowerCase();
+
+              if (/\b(mcp|agent|a2a|orchestrat|dispatch)/.test(text)) labels.add('mcp/agent');
+              if (/\b(frontend|react|next\.?js|ui|component|page|css|tailwind)\b/.test(text)) labels.add('frontend');
+              if (/\b(ci|cd|workflow|action|deploy|docker|cloud.?run|vercel)\b/.test(text)) labels.add('ci/cd');
+              if (/\b(infra|infrastructure|terraform|kubernetes|k8s|gcp|gke)\b/.test(text)) labels.add('infrastructure');
+              if (/\b(transcript|youtube|video|pipeline|event.?extract)/.test(text)) labels.add('pipeline');
+              if (issue.assignees && issue.assignees.length === 0 && (!issue.labels || issue.labels.length === 0)) {
+                labels.add('needs-triage');
+              }
+
+              if (labels.size > 0) {
+                try {
+                  await github.rest.issues.addLabels({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: issue.number,
+                    labels: Array.from(labels)
+                  });
+                } catch (error) {
+                  core.warning('Failed to add labels: ' + error.message);
+                }
               }
             }

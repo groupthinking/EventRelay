@@ -48,6 +48,10 @@ export interface VideoJobStatusResponse {
   transcript?: string;
   metadata?: Record<string, unknown>;
   error?: string;
+  /** Machine-readable slug describing why a job failed (e.g. 'gemini_api_timeout') */
+  error_reason?: string;
+  /** UTC creation timestamp (ISO 8601); used by job-store retention (expire_before). */
+  created_at: string;
 }
 
 // ---------------------------------------------------------------------------
