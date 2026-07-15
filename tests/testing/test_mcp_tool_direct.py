@@ -3,16 +3,21 @@
 Test MCP Tool: youtube-uvai-processor
 Direct invocation to validate MCP server functionality
 """
-import sys
 import json
+import sys
 from pathlib import Path
 
 # Add scripts directory to path
 scripts_dir = Path(__file__).parent / "scripts"
 sys.path.insert(0, str(scripts_dir))
 
-# Import the MCP server module
-import youtube_uvai_mcp
+# Import the MCP server module (archived legacy script; skip if unavailable)
+import pytest
+
+youtube_uvai_mcp = pytest.importorskip(
+    "youtube_uvai_mcp",
+    reason="legacy youtube_uvai_mcp script is not on the path (see scripts/archive/)",
+)
 
 def test_extract_video_id():
     """Test: extract_video_id tool"""

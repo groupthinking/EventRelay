@@ -1,82 +1,83 @@
 # EventRelay — Branch Cleanup Decision Matrix
 
-_Generated 2026-06-01T13:17Z by `scripts/maintenance/branch-fail-test.sh`._
+_Generated 2026-07-01T21:09Z by `scripts/maintenance/branch-fail-test.sh`._
 
 | Branch | PR | Ancestor | Cherry≠main | Clean-merge | Δfiles | Δloc | Behind | Age(d) | CI | Verdict |
 |---|---|---|---|---|---|---|---|---|---|---|
-| `add-observability-tests-6699426491412081943` | none | no | 373 | yes | 10932 | 208076 | 132 | 72 | skip | **CLOSE-STALE** |
-| `claude/confident-roentgen-18e955` | open #220 | no | 4 | no | 202 | 7160 | 116 | 0 | skip | **KEEP** |
-| `claude/elegant-neumann-5d4867` | open #217 | no | 13 | yes | 859 | 1185 | 1 | 0 | skip | **KEEP** |
-| `claude/evaluate-transition-to-vertex-ai` | none | no | 388 | yes | 10747 | 202343 | 132 | 76 | skip | **CLOSE-STALE** |
-| `claude/exciting-ptolemy-l9vHs` | open #216 | no | 1 | yes | 13 | 226 | 2 | 0 | skip | **KEEP** |
-| `claude/fix-action-step-error` | closed #142 | no | 1 | no | 184 | 6626 | 116 | 61 | skip | **CLOSE-SAFE** |
-| `claude/fix-code-generator-output` | none | no | 4 | yes | 436 | 22926 | 132 | 73 | skip | **CLOSE-STALE** |
-| `claude/fix-code-generator-output-again` | closed #121 | no | 30 | no | 192 | 6765 | 114 | 61 | skip | **CLOSE-SAFE** |
-| `claude/fix-code-generator-unique-output` | closed #120 | no | 31 | no | 369 | 19052 | 128 | 69 | skip | **CLOSE-SAFE** |
-| `claude/fix-identical-vanilla-template` | none | no | 1 | no | 369 | 20017 | 128 | 73 | skip | **CLOSE-STALE** |
-| `claude/integrate-stainless-sdk` | none | no | 2 | no | 380 | 24638 | 128 | 73 | skip | **CLOSE-STALE** |
-| `claude/model-enum-sdk-followups` | closed #214 | no | 2 | no | 11 | 42 | 3 | 0 | skip | **CLOSE-SAFE** |
-| `claude/modernize-stale-model-ids` | open #215 | no | 3 | yes | 8 | 21 | 1 | 0 | skip | **KEEP** |
-| `claude/slack-check-status-update-R47Ph` | none | no | 344 | yes | 5305 | 204023 | 132 | 93 | skip | **CLOSE-STALE** |
-| `coderabbitai/utg/a86dca6` | open #221 | no | 1 | yes | 1 | 416 | 0 | 0 | skip | **KEEP** |
-| `codex/consolidate-deployed-frontends` | none | no | 12 | no | 382 | 24409 | 128 | 72 | skip | **CLOSE-STALE** |
-| `codex/create-gtm-production-plan` | none | no | 26 | no | 368 | 18899 | 128 | 72 | skip | **CLOSE-STALE** |
-| `codex/fix-identical-vanilla-template` | none | no | 1 | no | 369 | 20089 | 128 | 73 | skip | **CLOSE-STALE** |
-| `codex/integrate-stainless-sdk-api-client` | none | no | 2 | no | 378 | 22883 | 128 | 73 | skip | **CLOSE-STALE** |
-| `codex/merge-scattered-mcp-repos` | none | no | 1 | yes | 374 | 20167 | 128 | 73 | skip | **CLOSE-STALE** |
-| `codex/phase-3-async-video-routing` | closed #151 | no | 0 | yes | 143 | 6105 | 88 | 61 | skip | **CLOSE-SAFE** |
-| `copilot/delete-unnecessary-action` | closed #143 | no | 3 | no | 185 | 6626 | 116 | 61 | skip | **CLOSE-SAFE** |
-| `copilot/fix-agent-pipeline-issues` | closed #136 | yes | 0 | yes | 190 | 6607 | 119 | 63 | skip | **CLOSE-SAFE** |
-| `copilot/fix-code-generator-output` | none | no | 3 | no | 370 | 20013 | 129 | 73 | skip | **CLOSE-STALE** |
-| `copilot/fix-code-generator-template-issue` | none | no | 1 | no | 368 | 19952 | 128 | 73 | skip | **CLOSE-STALE** |
-| `copilot/fix-dependency-review-action-inputs` | closed #137 | no | 1 | no | 184 | 6603 | 116 | 61 | skip | **CLOSE-SAFE** |
-| `copilot/fix-nextjs-dos-vulnerability` | closed #203 | no | 1 | no | 97 | 11803 | 22 | 9 | skip | **CLOSE-SAFE** |
-| `copilot/fix-typo-in-documentation` | none | no | 1 | no | 185 | 4287 | 116 | 61 | skip | **CLOSE-STALE** |
-| `copilot/ghsa-8h8q-6873-q5fj-patch-nextjs` | closed #199 | no | 1 | no | 97 | 11800 | 22 | 9 | skip | **CLOSE-SAFE** |
-| `copilot/handle-long-video-timeout` | none | no | 1 | yes | 193 | 6824 | 118 | 62 | skip | **CLOSE-STALE** |
-| `copilot/improve-documentation` | none | no | 4 | no | 120 | 3912 | 28 | 23 | skip | **REVIEW** |
-| `copilot/merge-mcp-repositories` | none | no | 1 | yes | 380 | 21020 | 128 | 73 | skip | **CLOSE-STALE** |
-| `copilot/security-bump-next-patched-version` | closed #201 | no | 1 | no | 97 | 11797 | 22 | 9 | skip | **CLOSE-SAFE** |
-| `fix-unused-import-cloud-ai-15137397722487778698` | none | no | 373 | yes | 10927 | 207894 | 132 | 84 | skip | **CLOSE-STALE** |
-| `fix/audit-issues` | none | no | 368 | yes | 10929 | 208024 | 132 | 91 | skip | **CLOSE-STALE** |
-| `fix/database-cleanup-sqli-8169832145558809896` | closed #197 | no | 2 | no | 98 | 2526 | 22 | 9 | skip | **CLOSE-SAFE** |
-| `fix/secure-cors-code-gen-250672599973076040` | closed #195 | no | 2 | no | 97 | 2456 | 22 | 9 | skip | **CLOSE-SAFE** |
-| `fix/sql-injection-database-cleanup-18129828169216058434` | closed #198 | no | 3 | no | 97 | 2455 | 22 | 9 | skip | **CLOSE-SAFE** |
-| `fix/unified-ai-sdk-real-providers-154` | none | no | 1 | yes | 114 | 4090 | 28 | 41 | skip | **REVIEW** |
-| `jules-13171754861581372920-22d7900e` | closed #193 | no | 3 | no | 97 | 2451 | 22 | 9 | skip | **CLOSE-SAFE** |
-| `jules-14956868518633406482-f4fcdef0` | closed #200 | no | 1 | yes | 101 | 2503 | 22 | 9 | skip | **CLOSE-SAFE** |
-| `jules-security-cors-fix-10738780459144826270` | closed #196 | no | 2 | no | 96 | 2457 | 22 | 9 | skip | **CLOSE-SAFE** |
-| `optimize-github-deployment-5034492779168511499` | closed #128 | no | 376 | yes | 10920 | 207100 | 132 | 62 | skip | **CLOSE-SAFE** |
-| `salvage/youtube-extension-port` | none | no | 26 | no | 368 | 18899 | 128 | 72 | skip | **CLOSE-STALE** |
-| `test-video-utils-edge-cases-4459148101848315985` | none | no | 374 | yes | 10927 | 207926 | 132 | 84 | skip | **CLOSE-STALE** |
-| `v0/ai-system-architecture-ac4e7c39` | none | no | 1 | yes | 95 | 2217 | 20 | 5 | skip | **REVIEW** |
-| `v0/groupthinking-2a07c3a7` | none | no | 355 | yes | 5301 | 203684 | 132 | 93 | skip | **CLOSE-STALE** |
-| `v0/groupthinking-332b31e5` | none | no | 327 | yes | 2944 | 22805 | 132 | 107 | skip | **CLOSE-STALE** |
-| `v0/groupthinking-651a70af` | none | no | 327 | yes | 2944 | 22805 | 132 | 107 | skip | **CLOSE-STALE** |
-| `v0/groupthinking-86bedbf8` | none | no | 328 | yes | 10927 | 207893 | 132 | 89 | skip | **CLOSE-STALE** |
-| `v0/groupthinking-9b1b1e32` | none | no | 327 | yes | 2944 | 22805 | 132 | 107 | skip | **CLOSE-STALE** |
-| `v0/groupthinking-aed70cab` | none | no | 327 | yes | 2944 | 22805 | 132 | 107 | skip | **CLOSE-STALE** |
-| `v0/groupthinking-c47a0d1f` | none | yes | 0 | yes | 299 | 16965 | 128 | 70 | skip | **CLOSE-SAFE** |
-| `v0/groupthinking-c6a57764` | none | no | 327 | yes | 2944 | 22805 | 132 | 107 | skip | **CLOSE-STALE** |
-| `v0/page-changes-dc7539d3` | closed #190 | no | 1 | no | 105 | 3167 | 27 | 9 | skip | **CLOSE-SAFE** |
-| `v0/producer-ai-clone-5c5cde0f` | none | yes | 0 | yes | 97 | 2463 | 26 | 9 | skip | **CLOSE-SAFE** |
-| `v0/ultrathinking-16d686fb` | none | yes | 0 | yes | 36 | 270 | 5 | 3 | skip | **CLOSE-SAFE** |
-| `v0/ultrathinking-2f38fe5f` | none | yes | 0 | yes | 292 | 8528 | 123 | 64 | skip | **CLOSE-SAFE** |
-| `v0/ultrathinking-3955abcc` | none | no | 373 | yes | 10923 | 207804 | 132 | 84 | skip | **CLOSE-STALE** |
-| `v0/ultrathinking-88584400` | none | yes | 0 | yes | 94 | 2213 | 20 | 5 | skip | **CLOSE-SAFE** |
-| `v0/ultrathinking-8d8eeaa8` | none | no | 388 | yes | 10746 | 201877 | 132 | 73 | skip | **CLOSE-STALE** |
-| `v0/ultrathinking-9af1709d` | none | no | 387 | yes | 10746 | 201758 | 132 | 76 | skip | **CLOSE-STALE** |
-| `v0/ultrathinking-b4b57996` | none | yes | 0 | yes | 292 | 8528 | 123 | 64 | skip | **CLOSE-SAFE** |
-| `v0/ultrathinking-df8a2787` | none | yes | 0 | yes | 43 | 596 | 11 | 4 | skip | **CLOSE-SAFE** |
-| `v0/ultrathinking-e1f6bbf3` | none | yes | 0 | yes | 299 | 16965 | 128 | 70 | skip | **CLOSE-SAFE** |
-| `v0/ultrathinking-f5c094d0` | none | yes | 0 | yes | 292 | 8528 | 123 | 64 | skip | **CLOSE-SAFE** |
+| `agent-lock-architecture-overview` | open #324 | no | 672 | yes | 1741 | 160472 | 57 | 2 | skip | **KEEP** |
+| `chore/docs-audit-reports` | closed #299 | no | 668 | yes | 1732 | 160489 | 57 | 12 | skip | **CLOSE-SAFE** |
+| `chore/security/upgrade-dev-deps` | open #327 | no | 616 | yes | 2781 | 169722 | 57 | 16 | skip | **KEEP** |
+| `chore/security/upgrade-vitest-vite` | open #328 | no | 617 | yes | 2780 | 158383 | 57 | 16 | skip | **KEEP** |
+| `claude/capabilities-audit-52xql7` | closed #405 | no | 631 | yes | 1960 | 166140 | 57 | 8 | skip | **CLOSE-SAFE** |
+| `claude/create-markdown-mermaid` | none | no | 1 | yes | 1557 | 158499 | 16 | 2 | skip | **REVIEW** |
+| `claude/database-schema-extraction` | open #436 | no | 3 | no | 1556 | 158131 | 14 | 2 | skip | **KEEP** |
+| `claude/dazzling-edison-0468aj` | closed #388 | no | 681 | yes | 1715 | 157361 | 57 | 9 | skip | **CLOSE-SAFE** |
+| `claude/dazzling-edison-06kjqd` | closed #390 | no | 684 | yes | 1714 | 157558 | 57 | 9 | skip | **CLOSE-SAFE** |
+| `claude/dazzling-edison-1lbv9a` | closed #386 | no | 681 | yes | 1715 | 157507 | 57 | 9 | skip | **CLOSE-SAFE** |
+| `claude/dazzling-edison-47c5po` | closed #400 | no | 1 | yes | 1694 | 157710 | 43 | 9 | skip | **CLOSE-SAFE** |
+| `claude/dazzling-edison-4aiu6o` | closed #376 | no | 681 | yes | 1715 | 157378 | 57 | 10 | skip | **CLOSE-SAFE** |
+| `claude/dazzling-edison-5kw3xm` | closed #369 | no | 683 | yes | 1715 | 157177 | 57 | 10 | skip | **CLOSE-SAFE** |
+| `claude/dazzling-edison-5uxyqn` | closed #380 | no | 681 | yes | 1715 | 157615 | 57 | 10 | skip | **CLOSE-SAFE** |
+| `claude/dazzling-edison-5wps75` | closed #373 | no | 681 | yes | 1714 | 157603 | 57 | 10 | skip | **CLOSE-SAFE** |
+| `claude/dazzling-edison-95u1m4` | closed #374 | no | 681 | yes | 1715 | 157582 | 57 | 10 | skip | **CLOSE-SAFE** |
+| `claude/dazzling-edison-bhkmhg` | closed #371 | no | 682 | yes | 1715 | 157581 | 57 | 10 | skip | **CLOSE-SAFE** |
+| `claude/dazzling-edison-emn6e2` | closed #370 | no | 681 | yes | 1714 | 157544 | 57 | 10 | skip | **CLOSE-SAFE** |
+| `claude/dazzling-edison-g5dftr` | closed #385 | no | 681 | yes | 1714 | 157685 | 57 | 10 | skip | **CLOSE-SAFE** |
+| `claude/dazzling-edison-gcfkkw` | closed #367 | no | 681 | yes | 1715 | 157417 | 57 | 10 | skip | **CLOSE-SAFE** |
+| `claude/dazzling-edison-hoefgl` | closed #366 | no | 679 | yes | 1716 | 156891 | 57 | 10 | skip | **CLOSE-SAFE** |
+| `claude/dazzling-edison-j79g5c` | open #434 | no | 1 | yes | 1563 | 158197 | 17 | 3 | skip | **KEEP** |
+| `claude/dazzling-edison-k7x14i` | closed #382 | no | 681 | yes | 1715 | 157507 | 57 | 10 | skip | **CLOSE-SAFE** |
+| `claude/dazzling-edison-ntgy52` | closed #389 | no | 684 | yes | 1714 | 157547 | 57 | 9 | skip | **CLOSE-SAFE** |
+| `claude/dazzling-edison-pap026` | closed #375 | no | 681 | yes | 1715 | 157396 | 57 | 10 | skip | **CLOSE-SAFE** |
+| `claude/dazzling-edison-ra3f0m` | open #412 | no | 3 | no | 1682 | 152941 | 27 | 7 | skip | **KEEP** |
+| `claude/dazzling-edison-w5yvz0` | closed #368 | no | 681 | yes | 1694 | 158532 | 42 | 9 | skip | **CLOSE-SAFE** |
+| `claude/dazzling-edison-wquuan` | closed #377 | no | 681 | yes | 1714 | 157543 | 57 | 10 | skip | **CLOSE-SAFE** |
+| `claude/dazzling-edison-ymkr67` | closed #378 | no | 681 | yes | 1714 | 157640 | 57 | 10 | skip | **CLOSE-SAFE** |
+| `claude/determined-maxwell-06popt` | open #442 | no | 2 | no | 5 | 270 | 2 | 1 | skip | **KEEP** |
+| `claude/determined-maxwell-nb1zz3` | closed #440 | no | 4 | no | 1503 | 160146 | 8 | 2 | skip | **CLOSE-SAFE** |
+| `claude/evaluate-unused-folders` | open #439 | no | 1 | no | 557 | 152120 | 16 | 2 | skip | **KEEP** |
+| `claude/explore-codebase-implementation-plan` | closed #317 | no | 646 | yes | 1742 | 156664 | 57 | 12 | skip | **CLOSE-SAFE** |
+| `claude/gifted-keller-9tw3p4` | open #415 | no | 1 | yes | 1682 | 158527 | 27 | 6 | skip | **KEEP** |
+| `claude/help-github-docs-page` | none | no | 653 | yes | 1731 | 159694 | 57 | 12 | skip | **REVIEW** |
+| `claude/repo-architecture-review-Aewa3` | closed #228 | no | 623 | yes | 2105 | 167056 | 57 | 2 | skip | **CLOSE-SAFE** |
+| `claude/review-session-history-tips` | none | no | 673 | yes | 1716 | 156954 | 57 | 10 | skip | **REVIEW** |
+| `claude/todo-implementation-d49k3i` | open #448 | no | 1 | yes | 1 | 73 | 0 | 0 | skip | **KEEP** |
+| `code-health/remove-commented-code-main-py-9476992181961570048` | merged #356 | no | 671 | yes | 1721 | 157514 | 57 | 10 | skip | **REVIEW** |
+| `codex/uvai-studio-realtime` | none | no | 620 | yes | 1963 | 167312 | 57 | 23 | skip | **REVIEW** |
+| `copilot/add-ast-validation-layer` | open #316 | no | 696 | yes | 1558 | 158186 | 13 | 2 | skip | **KEEP** |
+| `copilot/complete-repo` | open #430 | no | 1 | no | 1681 | 158597 | 27 | 3 | skip | **KEEP** |
+| `copilot/explore-codebase-implementation-plan` | none | no | 2 | no | 1687 | 158730 | 27 | 3 | skip | **REVIEW** |
+| `copilot/find-tips-from-github-changelog` | open #432 | no | 4 | yes | 396 | 71909 | 5 | 2 | skip | **KEEP** |
+| `copilot/find-uvai-projects-and-test-repos` | closed #333 | no | 670 | yes | 1725 | 160120 | 57 | 12 | skip | **CLOSE-SAFE** |
+| `copilot/list-latest-open-pull-requests` | merged #428 | no | 0 | no | 1680 | 158254 | 27 | 3 | skip | **REVIEW** |
+| `copilot/loop-build-next-item-on-plan` | closed #402 | no | 4 | no | 1701 | 158566 | 39 | 9 | skip | **CLOSE-SAFE** |
+| `dependabot/npm_and_yarn/zod-4.4.3` | open #422 | no | 1 | yes | 1505 | 158000 | 9 | 2 | skip | **KEEP** |
+| `feat/sentry-nextjs` | closed #296 | no | 635 | yes | 1952 | 166122 | 57 | 15 | skip | **CLOSE-SAFE** |
+| `feat/vera-platform` | closed #297 | no | 668 | yes | 1756 | 164911 | 57 | 12 | skip | **CLOSE-SAFE** |
+| `fix/ralph-max-unclosed-demo-verification` | closed #320 | no | 667 | yes | 1726 | 159582 | 57 | 12 | skip | **CLOSE-SAFE** |
+| `fix/transcript-action-graceful-errors` | closed #302 | no | 668 | yes | 1727 | 159653 | 57 | 12 | skip | **CLOSE-SAFE** |
+| `fix/video-processor-pipeline-stubs` | closed #298 | no | 672 | yes | 1723 | 158305 | 57 | 11 | skip | **CLOSE-SAFE** |
+| `jules-12006327251276669115-4bbd6fbb` | open #445 | no | 1 | yes | 1 | 8 | 0 | 0 | skip | **KEEP** |
+| `jules-7557281686534642670-eb4948a9` | open #446 | no | 1 | yes | 1 | 2 | 0 | 0 | skip | **KEEP** |
+| `jules-7975870365122853693-d93780a1` | merged #358 | no | 671 | yes | 1721 | 157529 | 57 | 10 | skip | **REVIEW** |
+| `jules-9638972698930112439-d2c4ab7c` | open #414 | no | 5 | no | 1677 | 158547 | 27 | 6 | skip | **KEEP** |
+| `ralph-max-final2` | closed #321 | no | 642 | yes | 1739 | 156415 | 57 | 13 | skip | **CLOSE-SAFE** |
+| `ralph-max-final3` | closed #322 | no | 643 | yes | 1739 | 156415 | 57 | 13 | skip | **CLOSE-SAFE** |
+| `ralph-max-final4` | closed #323 | no | 644 | yes | 1739 | 156412 | 57 | 13 | skip | **CLOSE-SAFE** |
+| `test-index-analysis-grade-5389899992828549898` | open #433 | no | 523 | no | 2991 | 165313 | 13 | 0 | skip | **KEEP** |
+| `v0/ultrathinking-2b862801` | none | yes | 0 | yes | 1556 | 157999 | 15 | 2 | skip | **CLOSE-SAFE** |
+| `v0/ultrathinking-48361bf4` | none | yes | 0 | yes | 400 | 71852 | 7 | 2 | skip | **CLOSE-SAFE** |
+| `v0/ultrathinking-588aba59` | none | no | 598 | yes | 2833 | 167247 | 57 | 28 | skip | **REVIEW** |
+| `v0/ultrathinking-6aaf1beb` | merged #441 | no | 2 | no | 2 | 249 | 2 | 1 | skip | **REVIEW** |
+| `v0/ultrathinking-6aaf1beb-2` | none | yes | 0 | yes | 400 | 71852 | 7 | 2 | skip | **CLOSE-SAFE** |
+| `v0/ultrathinking-8ff3a2ce` | none | no | 638 | yes | 1742 | 156404 | 57 | 14 | skip | **REVIEW** |
+| `v0/ultrathinking-f213cca6` | open #444 | no | 1 | yes | 2 | 249 | 1 | 1 | skip | **KEEP** |
 
 ## Verdict tally
 ```
-CLOSE-SAFE   28
-CLOSE-STALE  30
-KEEP         5
-REVIEW       3
+CLOSE-SAFE   38
+KEEP         19
+REVIEW       11
 ```
 
 Legend — **KEEP**: active/open PR or recent unique work · **CLOSE-SAFE**: PR already closed, or

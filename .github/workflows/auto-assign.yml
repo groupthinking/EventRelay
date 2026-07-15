@@ -14,8 +14,12 @@ jobs:
     steps:
       - name: Assign issue to repository owner
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ASSIGNEE: ${{ github.repository_owner }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          REPOSITORY: ${{ github.repository }}
         run: |
-          gh issue edit ${{ github.event.issue.number }} \
-            --repo ${{ github.repository }} \
-            --add-assignee "${{ github.repository_owner }}"
+          gh api \
+            --method POST \
+            "/repos/${REPOSITORY}/issues/${ISSUE_NUMBER}/assignees" \
+            --field "assignees[]=${ASSIGNEE}"

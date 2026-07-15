@@ -1,13 +1,18 @@
 #!/usr/bin/env python3
 """Test script for skill bridge connector"""
-import sys
 import time
 
 print("🧪 Testing Collective Skill Builder")
 print("=" * 60)
 
-# Import the connector
-from skill_bridge_connector import CollectiveSkillBuilder
+# Import the connector (archived legacy script; skip if unavailable)
+import pytest
+
+skill_bridge_connector = pytest.importorskip(
+    "skill_bridge_connector",
+    reason="legacy skill_bridge_connector script is not on the path (see scripts/archive/)",
+)
+CollectiveSkillBuilder = skill_bridge_connector.CollectiveSkillBuilder
 
 # Create instance
 print("\n1. Creating CollectiveSkillBuilder instance...")

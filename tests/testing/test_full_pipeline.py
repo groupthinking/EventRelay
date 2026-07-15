@@ -27,7 +27,7 @@ async def test_full_pipeline():
     print()
 
     # Short tech video for testing
-    test_video = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+    test_video = "https://www.youtube.com/watch?v=auJzb1D-fag"
     print(f"Test Video: {test_video}")
     print()
 

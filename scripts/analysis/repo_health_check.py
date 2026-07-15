@@ -98,11 +98,8 @@ def check_cross_reference():
     try:
         conn = get_pg_connection()
         cur = conn.cursor()
-        cur.execute("SELECT metadata->>'filename' as filename FROM vector_items")
-        pg_files: Set[str] = set()
-        for row in cur.fetchall():
-            if row[0]:
-                pg_files.add(row[0])
+        cur.execute("SELECT metadata->>'filename' as filename FROM vector_items WHERE metadata->>'filename' IS NOT NULL")
+        pg_files: Set[str] = {row[0] for row in cur}
         conn.close()
         print(f"Found {len(pg_files)} files in Vector DB (Cloud SQL).")
 
