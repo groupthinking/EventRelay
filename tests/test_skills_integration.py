@@ -116,6 +116,34 @@ class TestSkillDiscovery:
     def test_get_nonexistent_skill_returns_none(self, registry: SkillRegistry) -> None:
         assert registry.get_skill("nonexistent-skill") is None
 
+    def test_backward_compatibility_with_dict_format_lock_file(
+        self, tmp_path: Path
+    ) -> None:
+        lock_path = tmp_path / "skills-lock.json"
+        lock_path.write_text(
+            json.dumps(
+                {
+                    "skills": {
+                        "content-generation": {
+                            "source": "uvai-skills",
+                            "sourceType": "local",
+                            "skillPath": "src/skills/content_generation/main.py",
+                            "className": "ContentGenerationSkill",
+                            "version": "1.0.0",
+                            "triggers": ["video_published"],
+                            "dependencies": ["gemini_service"],
+                        }
+                    }
+                }
+            )
+        )
+
+        dict_registry = SkillRegistry(lock_file_path=str(lock_path))
+
+        skills = dict_registry.list_skills()
+        assert len(skills) == 1
+        assert skills[0]["id"] == "content-generation"
+
 
 # ---------------------------------------------------------------------------
 # Trigger matching tests
@@ -348,8 +376,8 @@ class TestSkillsLockFile:
         for meta in data["skills"]:
             if meta.get("source") != "uvai-skills":
                 continue
+            assert "id" in meta, "uvai skill missing id"
             skill_id = meta["id"]
-            assert "id" in meta, f"{skill_id} missing id"
             assert "skillPath" in meta, f"{skill_id} missing skillPath"
             assert "className" in meta, f"{skill_id} missing className"
             assert "version" in meta, f"{skill_id} missing version"

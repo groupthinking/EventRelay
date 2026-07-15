@@ -10,6 +10,7 @@ import importlib
 import json
 import logging
 import os
+from copy import deepcopy
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -278,7 +279,13 @@ class MCPEcosystemCoordinator:
         return status
 
 class SkillRegistry:
-    """Registry for discovering and invoking GTM skills from skills-lock.json."""
+    """Registry for discovering and invoking GTM skills from skills-lock.json.
+
+    Prefer ``lock_file_path`` for new callers; ``lock_file`` is kept as a
+    backward-compatible alias while both list- and dict-based lock files exist.
+    Prefer ``skillPath`` in lock entries; ``entry_point`` remains supported for
+    older lock files until they are rewritten to the canonical list format.
+    """
 
     _LOCK_FILE = "skills-lock.json"
 
@@ -327,6 +334,10 @@ class SkillRegistry:
                 if skill_id:
                     self._register_skill(skill_id, skill)
         elif isinstance(skills_data, dict):
+            logger.warning(
+                "skills-lock.json uses deprecated dict format; migrate to a list "
+                "of skill objects like [{'id': '...', ...}]"
+            )
             for skill_id, meta in skills_data.items():
                 if isinstance(meta, dict):
                     self._register_skill(skill_id, meta)
@@ -338,7 +349,7 @@ class SkillRegistry:
         if meta.get("source") != "uvai-skills" or meta.get("sourceType") != "local":
             return
 
-        normalized = dict(meta)
+        normalized = deepcopy(meta)
         normalized.setdefault("id", skill_id)
         self._skills[skill_id] = normalized
 
