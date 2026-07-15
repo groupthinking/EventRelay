@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -16,6 +17,13 @@ from uvai.ml.bigquery_export import (
     export_pipeline_run,
     export_transcript_outcome,
 )
+
+
+def test_get_bq_client_import_error() -> None:
+    """Test that _get_bq_client returns None when google.cloud.bigquery is missing."""
+    with patch.dict("sys.modules", {"google.cloud.bigquery": None}):
+        client = _get_bq_client()
+        assert client is None
 
 
 @patch("uvai.ml.bigquery_export._get_bq_client")
