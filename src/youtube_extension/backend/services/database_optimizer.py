@@ -422,9 +422,20 @@ class QueryOptimizer:
         """
         Execute a batch of queries concurrently.
 
-        All queries are scheduled together through a single ``asyncio.gather`` so
-        independent queries run concurrently instead of one group waiting on the
-        next. ``gather`` preserves input order, so results align with
+        Queries are scheduled together so independent queries run concurrently,
+        with two safeguards:
+
+        * **Bounded fan-out.** Concurrency is capped by a semaphore sized to the
+          connection pool, so a large batch cannot open more simultaneous
+          connection attempts than the pool can serve (which would stall the batch
+          and starve unrelated concurrent callers).
+        * **Fail-fast cancellation.** On the first query error, the remaining
+          in-flight queries are cancelled before the error propagates, so a failed
+          batch does not keep starting/finishing work after the caller has already
+          seen the failure. (There is no batch-level transaction, so writes that
+          already committed are not rolled back — but no further queries proceed.)
+
+        ``asyncio.gather`` preserves input order, so results align with
         ``queries_and_params`` by index without manual remapping.
 
         This method deliberately does NOT acquire its own pooled connection: every
@@ -439,28 +450,49 @@ class QueryOptimizer:
 
         logger.info(f"🚀 Executing batch: {len(queries_and_params)} queries")
 
+        if not queries_and_params:
+            return []
+
+        # Cap concurrent fan-out at the pool capacity; fall back to the batch size
+        # when the pool does not expose an integer capacity.
+        pool_capacity = getattr(self.connection_pool, "max_connections", None)
+        max_concurrency = (
+            pool_capacity
+            if isinstance(pool_capacity, int) and pool_capacity > 0
+            else len(queries_and_params)
+        )
+        semaphore = asyncio.Semaphore(max_concurrency)
+
+        async def _run_one(query: str, params: tuple) -> Any:
+            async with semaphore:
+                return await self.execute_query(query, params, use_cache=True)
+
+        # Explicit tasks (not bare coroutines) so stragglers can be cancelled if
+        # any query fails. gather preserves input order.
+        tasks = [
+            asyncio.ensure_future(_run_one(query, params))
+            for query, params in queries_and_params
+        ]
+
         try:
-            # Schedule every query concurrently; gather keeps result order == input order.
-            coroutines = [
-                self.execute_query(query, params, use_cache=True)
-                for query, params in queries_and_params
-            ]
-            results = await asyncio.gather(*coroutines)
-
-            total_time = (time.time() - start_time) * 1000
-            avg_time_per_query = (
-                total_time / len(queries_and_params) if queries_and_params else 0.0
-            )
-
-            logger.info(
-                f"✅ Batch completed ({total_time:.2f}ms, {avg_time_per_query:.2f}ms/query avg)"
-            )
-            return list(results)
-
+            results = await asyncio.gather(*tasks)
         except Exception as e:
+            # Cancel any still-in-flight queries and drain them so nothing keeps
+            # running after the batch has reported failure.
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
             total_time = (time.time() - start_time) * 1000
             logger.error(f"❌ Batch failed ({total_time:.2f}ms): {e}")
             raise
+
+        total_time = (time.time() - start_time) * 1000
+        avg_time_per_query = total_time / len(queries_and_params)
+        logger.info(
+            f"✅ Batch completed ({total_time:.2f}ms, {avg_time_per_query:.2f}ms/query avg)"
+        )
+        return list(results)
 
     async def _update_query_stats(
         self,

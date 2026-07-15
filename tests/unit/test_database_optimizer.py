@@ -1174,6 +1174,7 @@ class TestExecuteBatchQueries:
 
     def _make_pool(self) -> MagicMock:
         pool = MagicMock()
+        pool.max_connections = 10
         pool.get_pool_stats.return_value = {"connections_in_use": 0, "max_connections": 10}
         pool.get_connection = AsyncMock()
         pool.release_connection = AsyncMock()
@@ -1262,6 +1263,62 @@ class TestExecuteBatchQueries:
         pool = self._make_pool()
         optimizer = QueryOptimizer(pool)
         assert await optimizer.execute_batch_queries([]) == []
+
+    @pytest.mark.asyncio
+    async def test_batch_bounds_concurrency_to_pool_capacity(self) -> None:
+        """Fan-out is capped by the pool's max_connections, not the batch size."""
+        pool = self._make_pool()
+        pool.max_connections = 2
+        optimizer = QueryOptimizer(pool)
+
+        active = 0
+        max_concurrent = 0
+
+        async def fake_execute_query(query, params=None, use_cache=True):
+            nonlocal active, max_concurrent
+            active += 1
+            max_concurrent = max(max_concurrent, active)
+            for _ in range(3):
+                await asyncio.sleep(0)
+            active -= 1
+            return query
+
+        optimizer.execute_query = fake_execute_query
+        queries = [(f"SELECT {i}", ()) for i in range(6)]
+        results = await optimizer.execute_batch_queries(queries)
+
+        assert len(results) == 6
+        # Never more than the pool capacity of 2 queries in flight at once.
+        assert max_concurrent == 2
+
+    @pytest.mark.asyncio
+    async def test_batch_cancels_pending_on_failure(self) -> None:
+        """When one query fails, the still-in-flight queries are cancelled.
+
+        Guards against a failed batch continuing to apply work (e.g. writes)
+        after the caller has already seen the error.
+        """
+        pool = self._make_pool()
+        optimizer = QueryOptimizer(pool)
+
+        completed: list[str] = []
+
+        async def fake_execute_query(query, params=None, use_cache=True):
+            if query == "BOOM":
+                await asyncio.sleep(0)  # let the slow queries start first
+                raise RuntimeError("query failed")
+            await asyncio.sleep(10)  # outlasts the batch unless cancelled
+            completed.append(query)
+            return query
+
+        optimizer.execute_query = fake_execute_query
+        with pytest.raises(RuntimeError, match="query failed"):
+            await optimizer.execute_batch_queries(
+                [("SLOW1", ()), ("BOOM", ()), ("SLOW2", ())]
+            )
+
+        # Neither slow query ran to completion — both were cancelled on failure.
+        assert completed == []
 
 
 class TestConnectionPoolInitialize:
