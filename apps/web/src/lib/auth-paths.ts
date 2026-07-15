@@ -17,6 +17,16 @@ const PUBLIC_API_EXACT = new Set([
   // Checkout is additionally protected by Turnstile inside the route handler.
   '/api/billing/status',
   '/api/billing/checkout',
+  // Post-checkout activation: a brand-new payer has no NextAuth session yet.
+  // The route establishes identity from the Stripe checkout sessionId (verified
+  // against Stripe / the checkout store), so gating it behind a NextAuth token
+  // would 401 legitimate first-time activations. It cannot be forged without a
+  // real Stripe session id, so it is safe to keep session-optional here.
+  '/api/billing/activate',
+  // Returning-user renewal: identity comes from the HMAC-signed billing cookie
+  // (or anonymous), not a NextAuth session; it only opens a Stripe checkout, so
+  // it is the same pre-payment surface class as /api/billing/checkout.
+  '/api/billing/renew',
 ]);
 
 /** App routes that require a session when NEXTAUTH_SECRET is configured. */

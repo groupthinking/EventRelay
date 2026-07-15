@@ -247,6 +247,10 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   if (
     process.env.UVAI_RATE_LIMIT_DISABLED === '1' ||
     request.method === 'OPTIONS' ||
+    // Page routes (e.g. /dashboard) are matched only for auth gating above.
+    // They must not be rate-limited: a JSON 429 would render as a raw blob in
+    // the browser and page navigation would burn the shared api:<ip> quota.
+    !pathname.startsWith('/api/') ||
     shouldSkipRateLimit(pathname)
   ) {
     return NextResponse.next();

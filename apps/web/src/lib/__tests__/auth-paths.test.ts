@@ -17,11 +17,21 @@ describe('auth path policy', () => {
     expect(isPublicApiPath('/api/billing/checkout')).toBe(true);
   });
 
-  it('does not treat all billing routes as public', () => {
-    expect(isPublicApiPath('/api/billing/activate')).toBe(false);
-    expect(isPublicApiPath('/api/billing/renew')).toBe(false);
-    expect(needsAuthentication('/api/billing/activate')).toBe(true);
-    expect(needsAuthentication('/api/billing/renew')).toBe(true);
+  it('keeps checkout-lifecycle billing routes reachable without a NextAuth session', () => {
+    // activate identifies the payer from the Stripe checkout sessionId and renew
+    // from the signed billing cookie — neither has a NextAuth session at that
+    // point, so middleware must not 401 them.
+    expect(isPublicApiPath('/api/billing/activate')).toBe(true);
+    expect(isPublicApiPath('/api/billing/renew')).toBe(true);
+    expect(needsAuthentication('/api/billing/activate')).toBe(false);
+    expect(needsAuthentication('/api/billing/renew')).toBe(false);
+  });
+
+  it('still gates non-allowlisted billing routes', () => {
+    // A sibling billing route with no explicit exemption stays protected —
+    // guards against prefix-match over-exposure.
+    expect(isPublicApiPath('/api/billing/manage')).toBe(false);
+    expect(needsAuthentication('/api/billing/manage')).toBe(true);
   });
 
   it('requires auth for product APIs and dashboard pages', () => {

@@ -58,8 +58,12 @@ export const authOptions: NextAuthOptions = {
     updateAge: 24 * 60 * 60, // refresh session cookie once per day
   },
   secret: process.env.NEXTAUTH_SECRET,
-  // Use secure cookie names on HTTPS (production / uvai.io)
-  useSecureCookies: process.env.NEXTAUTH_URL?.startsWith('https://') ?? process.env.NODE_ENV === 'production',
+  // Force secure cookies in production regardless of NEXTAUTH_URL's scheme so a
+  // stray http:// value cannot silently downgrade cookie security; also enable
+  // them whenever NEXTAUTH_URL is explicitly https (e.g. https previews).
+  useSecureCookies:
+    process.env.NODE_ENV === 'production' ||
+    (process.env.NEXTAUTH_URL?.startsWith('https://') ?? false),
   pages: {
     // Keep default NextAuth UI for reliability; /login rewrites into this flow.
     signIn: '/api/auth/signin',
@@ -67,9 +71,12 @@ export const authOptions: NextAuthOptions = {
   },
   callbacks: {
     async signIn({ user, account }) {
-      if (account?.provider === 'google' && !emailAllowed(user.email)) {
+      // Enforce the domain allowlist for every provider, not just Google, so a
+      // future provider (see comment above buildProviders) cannot bypass it.
+      // emailAllowed() is a no-op when AUTH_ALLOWED_EMAIL_DOMAIN is unset.
+      if (!emailAllowed(user.email)) {
         console.warn(
-          `[auth] sign-in denied for ${user.email ?? '(no email)'} — domain allowlist is @${allowedDomain}`,
+          `[auth] sign-in denied for ${user.email ?? '(no email)'} via ${account?.provider ?? 'unknown'} — domain allowlist is @${allowedDomain}`,
         );
         return false;
       }
