@@ -140,7 +140,7 @@ class TestAgentOrchestratorInit:
 
     def test_a2a_log_starts_empty(self):
         orch = AgentOrchestrator()
-        assert orch._a2a_log == []
+        assert len(orch._a2a_log) == 0
 
     def test_default_task_mappings_present(self):
         orch = AgentOrchestrator()
