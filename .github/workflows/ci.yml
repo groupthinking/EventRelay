@@ -23,7 +23,9 @@ jobs:
         run: |
           # Opening/closing conflict sentinels always carry a label after the
           # space, so this never matches decorative "=======" underlines.
-          if git grep -nE '^(<<<<<<<|>>>>>>>) ' -- . ':(exclude).github/workflows/ci.yml'; then
+          # The pattern is line-anchored, so the quoted regex below can't
+          # self-match — this file is scanned too (markers here get caught).
+          if git grep -nE '^(<<<<<<<|>>>>>>>) '; then
             echo "::error::Committed merge-conflict markers found (see matches above)."
             exit 1
           fi
