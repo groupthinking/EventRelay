@@ -281,6 +281,7 @@ class MultiLLMVideoProcessor:
             "max_tokens": 2000,
             "temperature": 0.3,
         }
+
         async with aiohttp.ClientSession() as session:
             async with session.post(
                 "https://api.openai.com/v1/chat/completions",
@@ -319,6 +320,7 @@ class MultiLLMVideoProcessor:
                 }
             ],
         }
+
         async with aiohttp.ClientSession() as session:
             async with session.post(
                 "https://api.anthropic.com/v1/messages",
@@ -359,6 +361,7 @@ class MultiLLMVideoProcessor:
             "max_tokens": 2000,
             "temperature": 0.3,
         }
+
         async with aiohttp.ClientSession() as session:
             async with session.post(
                 "https://api.x.ai/v1/chat/completions",
