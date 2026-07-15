@@ -231,8 +231,8 @@ def test_post_json_exceptions() -> None:
         assert client._post_json("/test", {}) is None
 
     # Test HTTPError
-    mock_err = error.HTTPError(url="", hdrs=None, fp=None, code=500, msg="Server Error")  # type: ignore
-    with patch("uvai.ml.client.request.urlopen", side_effect=mock_err):
+    mock_http_error = error.HTTPError("", 500, "Server Error", None, None)
+    with patch("uvai.ml.client.request.urlopen", side_effect=mock_http_error):
         assert client._post_json("/test", {}) is None
 
 
