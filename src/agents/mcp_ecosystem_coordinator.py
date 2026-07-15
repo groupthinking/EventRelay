@@ -13,12 +13,8 @@ import os
 import subprocess
 import sys
 from dataclasses import asdict
-<<<<<<< HEAD
 from pathlib import Path
 from typing import Any, Optional
-=======
-from typing import Any, Dict, List, Optional
->>>>>>> origin/main
 
 from youtube_extension.processors.enhanced_extractor import (
     EnhancedVideoExtractor,
@@ -169,7 +165,7 @@ class MCPEcosystemCoordinator:
         self.workflow_history: list[dict] = []
         self.skill_registry = SkillRegistry()
 
-    def list_skills(self, source: Optional[str] = None) -> List[Dict[str, Any]]:
+    def list_skills(self, source: Optional[str] = None) -> list[dict[str, Any]]:
         """Returns a list of discovered skills from the registry."""
         return self.skill_registry.list_skills(source=source)
 
@@ -283,7 +279,6 @@ class MCPEcosystemCoordinator:
 
         return status
 
-<<<<<<< HEAD
 
 class SkillRegistry:
     """Registry for discovering and invoking GTM skills from skills-lock.json.
@@ -326,8 +321,13 @@ class SkillRegistry:
             logger.warning("Could not load skills-lock.json: %s", e)
             return
 
-        skills_data = data.get("skills", {})
-        for skill_id, meta in skills_data.items():
+        skills_data = data.get("skills", [])
+        # Support both list format (preferred) and legacy dict format
+        if isinstance(skills_data, list):
+            items = [(entry["id"], entry) for entry in skills_data if "id" in entry]
+        else:
+            items = list(skills_data.items())
+        for skill_id, meta in items:
             # Only load uvai-skills (local GTM skills)
             if meta.get("source") == "uvai-skills" and meta.get("sourceType") == "local":
                 self._skills[skill_id] = meta
@@ -441,110 +441,6 @@ class SkillRegistry:
             logger.error("Skill %s execution failed: %s", skill_id, e)
             return {"status": "error", "error": str(e)}
 
-=======
-class SkillRegistry:
-    """Registry for discovering and invoking skills from skills-lock.json."""
-
-    def __init__(self, lock_file: str = "skills-lock.json"):
-        self.lock_file = lock_file
-        self.skills: List[Dict[str, Any]] = []
-        self._load_skills()
-
-    def _load_skills(self):
-        """Loads skills from the lock file."""
-        if not os.path.exists(self.lock_file):
-            logger.warning(f"Lock file {self.lock_file} not found.")
-            return
-
-        try:
-            with open(self.lock_file, 'r') as f:
-                data = json.load(f)
-                # Handle both list and dict formats for backward compatibility during transition
-                skills_data = data.get("skills", [])
-                if isinstance(skills_data, list):
-                    self.skills = skills_data
-                elif isinstance(skills_data, dict):
-                    # Convert dict format to list
-                    self.skills = []
-                    for skill_id, skill_info in skills_data.items():
-                        skill_info["id"] = skill_id
-                        self.skills.append(skill_info)
-        except Exception as e:
-            logger.error(f"Error loading skills from {self.lock_file}: {e}")
-
-    def list_skills(self, source: Optional[str] = None) -> List[Dict[str, Any]]:
-        """Returns a list of discovered skills, optionally filtered by source."""
-        if source:
-            return [s for s in self.skills if s.get("source") == source]
-        return self.skills
-
-    def get_skill(self, skill_id: str) -> Optional[Dict[str, Any]]:
-        """Retrieves a skill by its ID."""
-        for skill in self.skills:
-            if skill.get("id") == skill_id:
-                return skill
-        return None
-
-    async def invoke_skill(self, skill_id: str, context: Dict[str, Any]) -> Dict[str, Any]:
-        """Invokes a skill by its ID with the given context."""
-        skill = self.get_skill(skill_id)
-        if not skill:
-            return {"status": "error", "message": f"Skill '{skill_id}' not found"}
-
-        entry_point = skill.get("entry_point")
-        if not entry_point or not os.path.exists(entry_point):
-            return {"status": "error", "message": f"Entry point '{entry_point}' not found for skill '{skill_id}'"}
-
-        # Explicitly pass required env vars (Gemini CLI security update)
-        allowed_env_vars = [
-            "GEMINI_API_KEY",
-            "OPENAI_API_KEY",
-            "YOUTUBE_API_KEY",
-            "DATABASE_URL",
-            "GITHUB_TOKEN",
-            "PYTHONPATH"
-        ]
-
-        env = {k: os.environ[k] for k in allowed_env_vars if k in os.environ}
-        env["SKILL_CONTEXT"] = json.dumps(context)
-        # Ensure minimal system env if needed
-        if "PATH" in os.environ:
-            env["PATH"] = os.environ["PATH"]
-
-        try:
-            logger.info(f"🚀 Invoking skill '{skill_id}' via {entry_point}")
-            # Run the skill as a subprocess
-            process = await asyncio.to_thread(
-                subprocess.run,
-                [sys.executable, entry_point],
-                env=env,
-                capture_output=True,
-                text=True,
-                check=True
-            )
-
-            try:
-                result = json.loads(process.stdout)
-                return result
-            except json.JSONDecodeError:
-                return {
-                    "status": "success",
-                    "output": process.stdout.strip(),
-                    "warning": "Output was not valid JSON"
-                }
-
-        except subprocess.CalledProcessError as e:
-            logger.error(f"❌ Skill '{skill_id}' failed with exit code {e.returncode}")
-            logger.error(f"Stderr: {e.stderr}")
-            return {
-                "status": "error",
-                "message": f"Skill execution failed: {str(e)}",
-                "stderr": e.stderr
-            }
-        except Exception as e:
-            logger.error(f"❌ Error invoking skill '{skill_id}': {e}")
-            return {"status": "error", "message": str(e)}
->>>>>>> origin/main
 
 # Example usage and testing
 async def main():
