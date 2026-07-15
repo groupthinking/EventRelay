@@ -36,7 +36,7 @@ try:
     GROK_AVAILABLE = importlib.util.find_spec('httpx') is not None
 except ImportError:
     GROK_AVAILABLE = False
-    logger.warning("Requests library not available for Grok")
+    logger.warning("Httpx library not available for Grok")
 
 
 class ConsensusStrategy(str, Enum):

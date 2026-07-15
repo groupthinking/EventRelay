@@ -1,0 +1,79 @@
+diff --git a/.jules/bolt.md b/.jules/bolt.md
+new file mode 100644
+index 000000000..9fda2f5ff
+--- /dev/null
++++ b/.jules/bolt.md
+@@ -0,0 +1,4 @@
++## 2024-05-15 - Prevent Event Loop Blocking in Third-Party Requests
++
++**Learning:** Synchronous HTTP libraries like `requests` can block the entire async event loop in Python, preventing background tasks and other async calls from progressing. This is especially dangerous when API requests have timeouts up to 60 seconds.
++**Action:** Use async libraries like `httpx.AsyncClient` inside `async def` methods instead of `requests` whenever making outgoing HTTP calls to ensure the event loop yields correctly.
+diff --git a/src/agents/mcp_tools/tri_model_consensus_tool.py b/src/agents/mcp_tools/tri_model_consensus_tool.py
+index be8ba6faa..307595d8b 100644
+--- a/src/agents/mcp_tools/tri_model_consensus_tool.py
++++ b/src/agents/mcp_tools/tri_model_consensus_tool.py
+@@ -32,8 +32,8 @@
+     logger.warning("Anthropic SDK not available")
+
+ try:
+-    import requests
+-    GROK_AVAILABLE = True
++    import importlib.util
++    GROK_AVAILABLE = importlib.util.find_spec('httpx') is not None
+ except ImportError:
+     GROK_AVAILABLE = False
+     logger.warning("Requests library not available for Grok")
+@@ -286,26 +286,27 @@ async def _query_grok(self, prompt: str, task_type: str) -> ModelResponse:
+
+         try:
+             # Grok uses OpenAI-compatible API
+-            import requests
++            import httpx
+
+             # Try Grok 2 latest (December 2024 release)
+             # Model names: "grok-2-1212" or "grok-2-latest"
+-            response = requests.post(
+-                "https://api.x.ai/v1/chat/completions",
+-                headers={
+-                    "Authorization": f"Bearer {self.grok_api_key}",
+-                    "Content-Type": "application/json"
+-                },
+-                json={
+-                    "model": "grok-2-1212",  # Grok 2 December 2024 (latest)
+-                    "messages": [
+-                        {"role": "user", "content": prompt}
+-                    ],
+-                    "temperature": 0.7,
+-                    "max_tokens": 4096  # Higher token limit
+-                },
+-                timeout=60
+-            )
++            async with httpx.AsyncClient() as client:
++                response = await client.post(
++                    "https://api.x.ai/v1/chat/completions",
++                    headers={
++                        "Authorization": f"Bearer {self.grok_api_key}",
++                        "Content-Type": "application/json"
++                    },
++                    json={
++                        "model": "grok-2-1212",  # Grok 2 December 2024 (latest)
++                        "messages": [
++                            {"role": "user", "content": prompt}
++                        ],
++                        "temperature": 0.7,
++                        "max_tokens": 4096  # Higher token limit
++                    },
++                    timeout=60.0
++                )
+
+             if response.status_code == 200:
+                 data = response.json()
+@@ -485,7 +486,7 @@ def _calculate_agreement(self, responses: list[ModelResponse]) -> float:
+
+         # Length similarity (normalized)
+         avg_length = sum(lengths) / len(lengths)
+-        length_variance = sum((l - avg_length) ** 2 for l in lengths) / len(lengths)
++        length_variance = sum((length_val - avg_length) ** 2 for length_val in lengths) / len(lengths)
+         length_score = 1.0 / (1.0 + length_variance / max(avg_length, 1))
+
+         # Confidence agreement
