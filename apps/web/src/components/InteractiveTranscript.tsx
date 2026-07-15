@@ -176,10 +176,21 @@ export default function InteractiveTranscript({
   }, [segments, filterSpeaker, searchQuery]);
 
   const activeSegmentId = useMemo(() => {
-    const active = segments.find(
-      (s) => currentTime >= s.startTime && currentTime < s.endTime,
-    );
-    return active?.id || null;
+    let low = 0;
+    let high = segments.length - 1;
+    while (low <= high) {
+      const mid = (low + high) >> 1;
+      const s = segments[mid];
+      if (currentTime >= s.startTime && currentTime < s.endTime) {
+        return s.id;
+      }
+      if (currentTime < s.startTime) {
+        high = mid - 1;
+      } else {
+        low = mid + 1;
+      }
+    }
+    return null;
   }, [segments, currentTime]);
 
   return (
