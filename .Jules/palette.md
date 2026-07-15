@@ -1,3 +1,7 @@
-## 2024-07-13 - [Search Input Accessibility]
-**Learning:** Found that search inputs and their corresponding submit buttons in the Dashboard panels were missing `aria-label` attributes, which can make it difficult for screen reader users to understand their purpose, especially since the input only had a placeholder.
-**Action:** Always ensure that search inputs and icon/short-text submit buttons have explicit `aria-label` attributes to provide clear context to assistive technologies.
+## 2024-07-14 - Scrubber Keyboard Accessibility
+**Learning:** Adding keyboard event listeners (like `onKeyDown`) to custom interactive elements (like a `div` acting as a scrubber/slider) doesn`t automatically expose those shortcuts to screen readers.
+**Action:** Always add `aria-keyshortcuts` to custom ARIA widgets (like `role="slider"`) to announce available keyboard commands (e.g., "ArrowLeft ArrowRight Home End") when the element receives focus.
+
+## 2026-07-13 - Search Input Accessibility
+**Learning:** Search inputs still need an explicit programmatic label when the only visible prompt is a placeholder, but a submit button with visible text like `Go` should usually rely on that visible text for its accessible name so voice-control users can activate it by name.
+**Action:** Add a real label (or equivalent programmatic name) to placeholder-only search inputs, and only add an `aria-label` to short-text submit buttons when it includes the visible button text.

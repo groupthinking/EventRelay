@@ -215,7 +215,7 @@ export default function HeroSection() {
                   <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1V9.01a6.37 6.37 0 0 0-.79-.05A6.34 6.34 0 0 0 3.15 15.3 6.34 6.34 0 0 0 9.49 21.5a6.34 6.34 0 0 0 6.35-6.35V8.64a8.24 8.24 0 0 0 4.81 1.54V6.74a4.84 4.84 0 0 1-1.06-.05z" />
                 </svg>
                 <span className="text-ink/40">youtube.com/watch?v=</span>
-                <span className="text-ink/70">dQw4w9WgXcQ</span>
+                <span className="text-ink/70">auJzb1D-fag</span>
                 <span
                   className="ml-auto text-[10px] px-2 py-0.5 rounded-full uppercase tracking-widest font-bold"
                   style={{ background: 'rgba(106,242,222,0.1)', color: '#6af2de' }}
