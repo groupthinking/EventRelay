@@ -1,3 +1,6 @@
+<<<<<<< HEAD
+"""EventRelay GTM skills package."""
+=======
 """GTM Skills package for EventRelay agent orchestration.
 
 Skills provide go-to-market automation capabilities (content generation,
@@ -23,3 +26,4 @@ __all__ = [
     "AnalyticsDashboardSkill",
     "ABTestingSkill",
 ]
+>>>>>>> origin/main

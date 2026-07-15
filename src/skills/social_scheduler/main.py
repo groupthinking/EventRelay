@@ -1,3 +1,28 @@
+<<<<<<< HEAD
+#!/usr/bin/env python3
+"""Thin GTM skill wrapper."""
+
+import json
+import sys
+from typing import Any
+
+SKILL_ID = "social-scheduler"
+
+
+def run(payload: dict[str, Any]) -> dict[str, Any]:
+    """Execute the skill wrapper with a JSON-serializable payload."""
+    return {
+        "status": "success",
+        "skill": SKILL_ID,
+        "payload": payload,
+    }
+
+
+if __name__ == "__main__":
+    raw = sys.stdin.read().strip()
+    request = json.loads(raw) if raw else {}
+    print(json.dumps(run(request)))
+=======
 """Social Scheduler skill - schedules cross-platform social media posts."""
 
 from __future__ import annotations
@@ -56,3 +81,4 @@ class SocialSchedulerSkill(BaseSkill):
                 "message": f"Posts scheduled for {len(platforms)} platform(s)",
             },
         )
+>>>>>>> origin/main
