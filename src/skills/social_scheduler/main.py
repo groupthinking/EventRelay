@@ -1,34 +1,9 @@
-<<<<<<< HEAD
-#!/usr/bin/env python3
-"""Thin GTM skill wrapper."""
-
-import json
-import sys
-from typing import Any
-
-SKILL_ID = "social-scheduler"
-
-
-def run(payload: dict[str, Any]) -> dict[str, Any]:
-    """Execute the skill wrapper with a JSON-serializable payload."""
-    return {
-        "status": "success",
-        "skill": SKILL_ID,
-        "payload": payload,
-    }
-
-
-if __name__ == "__main__":
-    raw = sys.stdin.read().strip()
-    request = json.loads(raw) if raw else {}
-    print(json.dumps(run(request)))
-=======
 """Social Scheduler skill - schedules cross-platform social media posts."""
 
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from skills.base import BaseSkill, SkillResult
 
@@ -41,12 +16,8 @@ class SocialSchedulerSkill(BaseSkill):
     skill_id = "social-scheduler"
     name = "Social Scheduler"
     version = "1.0.0"
-    triggers = ["ai.content.generated"]
+    triggers = ["content_generated"]
     required_env_vars = ["GEMINI_API_KEY"]
-
-    def __init__(self, dependencies: Optional[dict[str, Any]] = None):
-        super().__init__(dependencies)
-        self.social_api = self.dependencies.get("social_api_service")
 
     async def execute(self, payload: dict[str, Any]) -> SkillResult:
         """Schedule social media posts.
@@ -69,9 +40,6 @@ class SocialSchedulerSkill(BaseSkill):
             schedule_time or "immediate",
         )
 
-        if self.social_api:
-            logger.info("Using injected social_api_service for scheduling")
-
         return SkillResult(
             status="success",
             output={
@@ -81,4 +49,3 @@ class SocialSchedulerSkill(BaseSkill):
                 "message": f"Posts scheduled for {len(platforms)} platform(s)",
             },
         )
->>>>>>> origin/main
