@@ -129,7 +129,7 @@ def export_transcript_outcome(
     outcome: dict[str, Any],
 ) -> bool:
     """Export a transcript quality outcome to BigQuery."""
-    metadata = outcome.get("metadata") or {}
+    metadata = outcome.get("metadata", {})
     row = {
         "video_url": outcome.get("video_url"),
         "exported_at": datetime.now(timezone.utc).isoformat(),

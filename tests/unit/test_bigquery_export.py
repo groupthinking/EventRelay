@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import sys
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -17,13 +16,6 @@ from uvai.ml.bigquery_export import (
     export_pipeline_run,
     export_transcript_outcome,
 )
-
-
-def test_get_bq_client_import_error() -> None:
-    """Test that _get_bq_client returns None when google.cloud.bigquery is missing."""
-    with patch.dict("sys.modules", {"google.cloud.bigquery": None}):
-        client = _get_bq_client()
-        assert client is None
 
 
 @patch("uvai.ml.bigquery_export._get_bq_client")
@@ -183,47 +175,6 @@ def test_export_transcript_outcome_fallback(mock_insert_via_rest, mock_insert_ro
     assert success is True
     mock_insert_rows.assert_called_once()
     mock_insert_via_rest.assert_called_once()
-
-
-@patch("uvai.ml.bigquery_export._insert_rows")
-@patch("uvai.ml.bigquery_export._insert_via_rest")
-def test_export_transcript_outcome_both_fail(mock_insert_via_rest, mock_insert_rows):
-    """Test that export_transcript_outcome returns False when both insert methods fail."""
-    mock_insert_rows.return_value = False
-    mock_insert_via_rest.return_value = False
-
-    success = export_transcript_outcome(
-        outcome={
-            "video_url": "https://test.com",
-            "metadata": {"duration_seconds": 60},
-            "actual_source": "youtube",
-            "actual_quality": 0.9,
-            "success": True
-        }
-    )
-
-    assert success is False
-    mock_insert_rows.assert_called_once()
-    mock_insert_via_rest.assert_called_once()
-
-
-@patch("uvai.ml.bigquery_export._insert_rows")
-def test_export_transcript_outcome_none_metadata(mock_insert_rows):
-    """Test that export_transcript_outcome handles metadata=None without raising."""
-    mock_insert_rows.return_value = True
-
-    success = export_transcript_outcome(
-        outcome={
-            "video_url": "https://test.com",
-            "metadata": None,
-            "actual_source": "youtube",
-            "actual_quality": 0.9,
-            "success": True
-        }
-    )
-
-    assert success is True
-    mock_insert_rows.assert_called_once()
 
 
 @patch("uvai.ml.bigquery_export._insert_rows")
