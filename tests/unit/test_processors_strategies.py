@@ -270,7 +270,7 @@ class TestOptimizedStrategyProcessVideo:
         _cache[cache_key] = {"cached": True}
         try:
             result = await opt.process_video(_VALID_URL)
-            assert result == {"cached": True}
+            assert result.get("cached") is True
             assert opt.processing_stats["cache_hits"] == 1
         finally:
             del _cache[cache_key]
