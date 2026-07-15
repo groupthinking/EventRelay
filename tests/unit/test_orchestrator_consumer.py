@@ -63,6 +63,14 @@ async def test_redact_url_passthrough_without_credentials() -> None:
     assert redact_url("redis://localhost:6379") == "redis://localhost:6379"
 
 
+async def test_redact_url_without_port_has_no_trailing_colon() -> None:
+    # Credentials but no explicit port must not leave a dangling ':' in the host.
+    redacted = redact_url("redis://admin:supersecret@redis.internal/1")
+    assert "supersecret" not in redacted
+    assert "redis.internal:" not in redacted
+    assert "redis.internal" in redacted
+
+
 async def test_redact_url_never_raises_on_garbage() -> None:
     # Malformed input must degrade to a safe placeholder, never throw.
     assert redact_url("::not a url::") is not None

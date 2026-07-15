@@ -24,7 +24,11 @@ def redact_url(url: str) -> str:
     try:
         parsed = urlparse(url)
         if parsed.password or parsed.username:
-            redacted = parsed._replace(netloc=f"{parsed.username or ''}:***@{parsed.hostname}:{parsed.port or ''}")
+            host = parsed.hostname or ''
+            # Only append the port segment when one is present, otherwise the
+            # netloc gets a trailing colon (e.g. "admin:***@host:").
+            port = f":{parsed.port}" if parsed.port else ''
+            redacted = parsed._replace(netloc=f"{parsed.username or ''}:***@{host}{port}")
             return redacted.geturl()
         return url.split('@')[-1] if '@' in url else url
     except Exception:
@@ -39,7 +43,10 @@ async def process(msg: dict) -> None:
     unacknowledged (retained in the stream's pending list) rather than silently
     dropping real work behind a stub that immediately gets xack'ed.
     """
-    logger.info(f"Received message (no handler implemented yet): {msg}")
+    # Log only the field names, never the full payload — messages may carry user
+    # data or tokens that must not land in INFO-level logs / log aggregation.
+    field_names = sorted(msg.keys()) if isinstance(msg, dict) else type(msg).__name__
+    logger.info("Received message (no handler implemented yet) with fields: %s", field_names)
     raise NotImplementedError(
         "Orchestrator task handler is not implemented; message left unacknowledged"
     )
