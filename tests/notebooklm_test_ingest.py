@@ -4,7 +4,7 @@ import os
 from src.utils.notebooklm_ingest import upload_to_notebooklm
 
 # Define test file path
-TEST_FILE = "youtube_processed_videos/enhanced_analysis/General/dQw4w9WgXcQ_20260211_192116_enhanced.md"
+TEST_FILE = "youtube_processed_videos/enhanced_analysis/General/auJzb1D-fag_20260211_192116_enhanced.md"
 
 if __name__ == "__main__":
     if not os.path.exists(TEST_FILE):
