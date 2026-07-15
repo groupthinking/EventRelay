@@ -1,5 +1,3 @@
-"""Lightweight in-process rate limiting helpers for AI providers."""
-
 import asyncio
 import time
 from collections import defaultdict
@@ -8,19 +6,69 @@ from typing import Any, Optional
 
 
 class ModelProvider(Enum):
-    """AI model providers."""
+    """Supported AI model providers.
 
-    CLAUDE = "claude"
-    GROK = "grok"
+    ``CLAUDE`` and ``ANTHROPIC`` are distinct members (different values) that
+    both resolve to the ``"claude"`` provider path via
+    ``UnifiedAISDK._normalize_provider``. ``CLAUDE`` and ``GROK`` are required
+    because ``UnifiedAISDK._rate_limit_provider`` references them by name; do
+    not remove them without also updating every consumer in
+    ``unified_ai_sdk.py`` (handlers, normalization, health check, client init).
+    """
+
     OPENAI = "openai"
+    CLAUDE = "claude"
+    ANTHROPIC = "anthropic"
     GEMINI = "gemini"
+    GROK = "grok"
+
+
+class TokenBucket:
+    """
+    A token bucket rate limiter.
+    """
+
+    def __init__(self, capacity: int, refill_rate: float):
+        self.capacity = capacity
+        self.refill_rate = refill_rate
+        self.tokens = float(capacity)
+        self.last_refill = time.time()
+        self.lock = asyncio.Lock()
+
+    async def consume(self, amount: int = 1) -> float:
+        """
+        Consume tokens. Returns the wait time if tokens are not available.
+        """
+        async with self.lock:
+            now = time.time()
+            # Refill tokens
+            elapsed = now - self.last_refill
+            self.tokens = min(self.capacity, self.tokens + elapsed * self.refill_rate)
+            self.last_refill = now
+
+            if self.tokens >= amount:
+                self.tokens -= amount
+                return 0.0
+
+            # Need to wait
+            deficit = amount - self.tokens
+            wait_time = deficit / self.refill_rate
+
+            # Pretend we waited and consumed the tokens at that future time
+            self.tokens -= amount
+            return wait_time
+
+    def get_approximate_usage(self) -> int:
+        """Returns an approximation of how many tokens were used recently"""
+        now = time.time()
+        elapsed = now - self.last_refill
+        current_tokens = min(self.capacity, self.tokens + elapsed * self.refill_rate)
+        return int(max(0, self.capacity - current_tokens) + 0.5)
 
 
 class RateLimiter:
     """
     Basic rate limiter for AI API requests.
-
-    Provides simple request throttling per provider.
     """
 
     def __init__(self, config: Optional[dict[str, Any]] = None):
@@ -28,69 +76,61 @@ class RateLimiter:
         Initialize rate limiter with configuration.
 
         Args:
-            config: Dict mapping provider names to rate limit configs
+            config: Dictionary mapping provider name to rate limit settings
                    e.g., {"claude": {"requests_per_minute": 100, "tokens_per_minute": 50000}}
         """
         self.config = config if config is not None else {}
-        self._request_times = defaultdict(list)
-        self._token_usage = defaultdict(list)
+        self._request_buckets: dict[str, TokenBucket] = {}
+        self._token_buckets: dict[str, TokenBucket] = {}
+
+    def _get_or_create_buckets(self, provider_name: str) -> tuple[TokenBucket, TokenBucket]:
+        if provider_name not in self._request_buckets:
+            provider_config = self.config.get(provider_name, {})
+            # Default to 100 requests per minute
+            req_limit = provider_config.get("requests_per_minute", 100)
+            req_refill = req_limit / 60.0
+            self._request_buckets[provider_name] = TokenBucket(req_limit, req_refill)
+
+            # Default to 50000 tokens per minute
+            tok_limit = provider_config.get("tokens_per_minute", 50000)
+            tok_refill = tok_limit / 60.0
+            self._token_buckets[provider_name] = TokenBucket(tok_limit, tok_refill)
+
+        return self._request_buckets[provider_name], self._token_buckets[provider_name]
 
     async def wait_if_needed(self, provider: ModelProvider, tokens: int = 0):
         """
-        Wait if rate limit would be exceeded.
+        Check rate limits and wait if necessary.
 
         Args:
-            provider: The AI provider to check rate limits for
+            provider: Model provider to check
             tokens: Estimated tokens for this request
         """
         provider_name = provider.value
-        current_time = time.time()
+        req_bucket, tok_bucket = self._get_or_create_buckets(provider_name)
 
-        # Clean old entries (older than 1 minute)
-        cutoff_time = current_time - 60
-        self._request_times[provider_name] = [
-            t for t in self._request_times[provider_name] if t > cutoff_time
-        ]
-        self._token_usage[provider_name] = [
-            (t, tokens)
-            for t, tokens in self._token_usage[provider_name]
-            if t > cutoff_time
-        ]
+        # We first check both wait times, then sleep the max.
+        # This simplifies the locking, although in reality they are consumed immediately.
+        # But for requests, we always consume 1.
+        req_wait = await req_bucket.consume(1)
+        tok_wait = 0.0
+        if tokens > 0:
+            tok_wait = await tok_bucket.consume(tokens)
 
-        # Check request rate limit
-        provider_config = self.config.get(provider_name, {})
-        max_requests = provider_config.get("requests_per_minute", 100)
-
-        if len(self._request_times[provider_name]) >= max_requests:
-            # Need to wait
-            oldest_request = self._request_times[provider_name][0]
-            wait_time = 60 - (current_time - oldest_request)
-            if wait_time > 0:
-                await asyncio.sleep(wait_time)
-
-        # Record this request
-        self._request_times[provider_name].append(current_time)
-        self._token_usage[provider_name].append((current_time, tokens))
+        max_wait = max(req_wait, tok_wait)
+        if max_wait > 0:
+            await asyncio.sleep(max_wait)
 
     def get_statistics(self) -> dict[str, Any]:
         """Get current rate limiting statistics."""
         stats = {}
-        current_time = time.time()
-        cutoff_time = current_time - 60
 
-        for provider_name in self._request_times:
-            recent_requests = [
-                t for t in self._request_times[provider_name] if t > cutoff_time
-            ]
-            recent_tokens = sum(
-                tokens
-                for t, tokens in self._token_usage[provider_name]
-                if t > cutoff_time
-            )
+        for provider_name in set(self._request_buckets.keys()).union(self.config.keys()):
+            req_bucket, tok_bucket = self._get_or_create_buckets(provider_name)
 
             stats[provider_name] = {
-                "requests_last_minute": len(recent_requests),
-                "tokens_last_minute": recent_tokens,
+                "requests_last_minute": int(req_bucket.get_approximate_usage()),
+                "tokens_last_minute": int(tok_bucket.get_approximate_usage()),
                 "limit_requests": self.config.get(provider_name, {}).get(
                     "requests_per_minute", 100
                 ),

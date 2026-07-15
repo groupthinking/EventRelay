@@ -11,11 +11,34 @@ permissions:
   actions: read
 
 jobs:
+  guards:
+    # Fail fast on the class of breakage that shipped to main un-caught:
+    # committed merge-conflict markers and import-time Python SyntaxErrors.
+    # (main previously carried unresolved markers in 10 files because the
+    # pipeline had no syntax gate — see PR #736.)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: No committed merge-conflict markers
+        run: |
+          # Opening/closing conflict sentinels always carry a label after the
+          # space, so this never matches decorative "=======" underlines.
+          if git grep -nE '^(<<<<<<<|>>>>>>>) ' -- . ':(exclude).github/workflows/ci.yml'; then
+            echo "::error::Committed merge-conflict markers found (see matches above)."
+            exit 1
+          fi
+          echo "No conflict markers found."
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Python source compiles (no import-time SyntaxErrors)
+        run: python -m compileall -q src/
+
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: "npm"
@@ -49,7 +72,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: "npm"
