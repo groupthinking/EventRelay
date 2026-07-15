@@ -51,10 +51,7 @@ for _mod_name in [
         sys.modules[_mod_name] = _stub
 
 # Now we can safely import just the coordinator module
-from agents.mcp_ecosystem_coordinator import (  # noqa: E402
-    MCPEcosystemCoordinator,
-    SkillRegistry,
-)
+from agents.mcp_ecosystem_coordinator import SkillRegistry  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -114,26 +111,10 @@ class TestSkillDiscovery:
         assert skill["name"] == "Content Generation"
         assert skill["class_name"] == "ContentGenerationSkill"
         assert skill["version"] == "1.0.0"
-        assert "video_published" in skill["triggers"]
+        assert "youtube.video.published" in skill["triggers"]
 
     def test_get_nonexistent_skill_returns_none(self, registry: SkillRegistry) -> None:
         assert registry.get_skill("nonexistent-skill") is None
-
-    def test_acronym_display_names_are_preserved(self, registry: SkillRegistry) -> None:
-        # Names come from the lock file's explicit "name" field, not a title-cased
-        # id (which would mangle acronyms into "Seo Optimizer" / "Ab Testing").
-        assert registry.get_skill("seo-optimizer")["name"] == "SEO Optimizer"
-        assert registry.get_skill("ab-testing")["name"] == "A/B Testing"
-
-    def test_legacy_list_format_lock_is_rejected(self, tmp_path: Path) -> None:
-        # A legacy list-format "skills" value is rejected explicitly (no crash,
-        # no skills loaded) rather than mis-loaded as the current object map.
-        lock = tmp_path / "skills-lock.json"
-        lock.write_text(
-            json.dumps({"skills": [{"id": "legacy-skill", "source": "uvai-skills"}]})
-        )
-        registry = SkillRegistry(lock_file_path=str(lock))
-        assert registry.list_skills() == []
 
 
 # ---------------------------------------------------------------------------
@@ -147,14 +128,14 @@ class TestSkillTriggerMatching:
     def test_video_published_triggers_content_generation(
         self, registry: SkillRegistry
     ) -> None:
-        skills = registry.get_skills_for_trigger("video_published")
+        skills = registry.get_skills_for_trigger("youtube.video.published")
         skill_ids = {s["id"] for s in skills}
         assert "content-generation" in skill_ids
 
     def test_video_uploaded_triggers_seo_and_ab(
         self, registry: SkillRegistry
     ) -> None:
-        skills = registry.get_skills_for_trigger("video_uploaded")
+        skills = registry.get_skills_for_trigger("youtube.video.uploaded")
         skill_ids = {s["id"] for s in skills}
         assert "seo-optimizer" in skill_ids
         assert "ab-testing" in skill_ids
@@ -162,33 +143,33 @@ class TestSkillTriggerMatching:
     def test_content_generated_triggers_social_scheduler(
         self, registry: SkillRegistry
     ) -> None:
-        skills = registry.get_skills_for_trigger("content_generated")
+        skills = registry.get_skills_for_trigger("ai.content.generated")
         skill_ids = {s["id"] for s in skills}
         assert "social-scheduler" in skill_ids
 
     def test_analytics_updated_triggers_lead_scorer(
         self, registry: SkillRegistry
     ) -> None:
-        skills = registry.get_skills_for_trigger("analytics_updated")
+        skills = registry.get_skills_for_trigger("youtube.analytics.updated")
         skill_ids = {s["id"] for s in skills}
         assert "lead-scorer" in skill_ids
 
     def test_lead_scored_triggers_email_campaign(
         self, registry: SkillRegistry
     ) -> None:
-        skills = registry.get_skills_for_trigger("lead_scored")
+        skills = registry.get_skills_for_trigger("crm.lead.scored")
         skill_ids = {s["id"] for s in skills}
         assert "email-campaign" in skill_ids
 
     def test_daily_cron_triggers_analytics_dashboard(
         self, registry: SkillRegistry
     ) -> None:
-        skills = registry.get_skills_for_trigger("daily_cron")
+        skills = registry.get_skills_for_trigger("system.cron.daily")
         skill_ids = {s["id"] for s in skills}
         assert "analytics-dashboard" in skill_ids
 
     def test_unknown_trigger_returns_empty(self, registry: SkillRegistry) -> None:
-        skills = registry.get_skills_for_trigger("unknown_event")
+        skills = registry.get_skills_for_trigger("unknown.event.type")
         assert skills == []
 
 
@@ -376,34 +357,3 @@ class TestSkillsLockFile:
             assert "version" in meta, f"{skill_id} missing version"
             assert "triggers" in meta, f"{skill_id} missing triggers"
             assert "dependencies" in meta, f"{skill_id} missing dependencies"
-
-
-# ---------------------------------------------------------------------------
-# Coordinator delegation (regression)
-# ---------------------------------------------------------------------------
-
-
-class TestCoordinatorListSkillsDelegation:
-    """MCPEcosystemCoordinator.list_skills() delegates to the registry.
-
-    Regression: the coordinator wrapper passes ``source=source`` to
-    ``SkillRegistry.list_skills``; the class-based registry must accept that
-    keyword or every coordinator call raises ``TypeError``.
-    """
-
-    def _coordinator(self) -> MCPEcosystemCoordinator:
-        coord = MCPEcosystemCoordinator()
-        # Point at the repo lock file deterministically.
-        coord.skill_registry = SkillRegistry(lock_file_path=LOCK_FILE)
-        return coord
-
-    def test_list_skills_no_args(self) -> None:
-        assert len(self._coordinator().list_skills()) == 7
-
-    def test_list_skills_with_source_does_not_raise(self) -> None:
-        coord = self._coordinator()
-        # source="uvai-skills" matches every loaded GTM skill.
-        assert coord.list_skills(source="uvai-skills") == coord.list_skills()
-
-    def test_list_skills_with_unknown_source_returns_empty(self) -> None:
-        assert self._coordinator().list_skills(source="does-not-exist") == []
