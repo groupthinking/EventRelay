@@ -477,3 +477,47 @@ class TestMCPContextManager:
         retrieved = _ctx_mod.get_context(ctx.id)
         assert retrieved is not None
         assert retrieved.id == ctx.id
+
+
+class TestContinuityLayerFoundations:
+    def test_apply_state_delta_tracks_diff_and_vector_clock(self, tmp_path):
+        mgr = MCPContextManager(storage_path=str(tmp_path / "ctx"))
+        ctx = mgr.create_context(
+            "agent-user",
+            "task1",
+            "intent1",
+            code_state={"a": 1, "b": 2},
+            metadata={"agent_id": "agent-1"},
+        )
+
+        diff = mgr.apply_state_delta(
+            ctx.id,
+            {"a": 1, "b": 3, "c": 4},
+            device_id="device-a",
+        )
+
+        assert diff["updated"] == {"b": {"from": 2, "to": 3}}
+        assert diff["added"] == {"c": 4}
+        assert diff["removed"] == []
+
+        refreshed = mgr.get_context(ctx.id)
+        assert refreshed.vector_clock["device-a"] == 1
+
+    def test_get_latest_context_for_agent_restores_from_persistence(self, tmp_path):
+        storage = tmp_path / "ctx"
+        mgr1 = MCPContextManager(storage_path=str(storage))
+        ctx = mgr1.create_context(
+            "agent-user",
+            "task1",
+            "intent1",
+            code_state={"state": "initial"},
+            metadata={"agent_id": "agent-restore"},
+        )
+        mgr1.apply_state_delta(ctx.id, {"state": "updated"}, device_id="device-a")
+
+        mgr2 = MCPContextManager(storage_path=str(storage))
+        restored = mgr2.get_latest_context_for_agent("agent-restore")
+
+        assert restored is not None
+        assert restored.code_state["state"] == "updated"
+        assert restored.vector_clock["device-a"] == 1

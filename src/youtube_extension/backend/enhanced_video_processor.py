@@ -25,6 +25,8 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
+from youtube_extension.utils.proxy import get_proxy_url, get_transcript_proxy_config
+
 logger = logging.getLogger(__name__)
 
 # Optional Gemini Vision integration for frame analysis
@@ -86,7 +88,10 @@ class EnhancedVideoProcessor:
     
     async def _init_session(self):
         """Initialize aiohttp session with proper headers and SSL context"""
-        if not self.session:
+        if os.getenv("SENTRY_DSN"):
+            import sentry_sdk
+            sentry_sdk.add_breadcrumb(category="video", message="Initializing HTTP session", level="info")
+        if not self.session or getattr(self.session, 'closed', False):
             # Create SSL context that handles certificate verification
             import ssl
             import certifi
@@ -287,10 +292,14 @@ class EnhancedVideoProcessor:
                 audio_path = os_mod.path.join(tmpdir, f"{video_id}.mp3")
                 # yt-dlp command for audio only
                 import subprocess
-                subprocess.run([
-                    "yt-dlp", "-x", "--audio-format", "mp3",
-                    "-o", audio_path, video_url
-                ], check=True, capture_output=True, timeout=60)
+                ytdlp_cmd = ["yt-dlp", "-x", "--audio-format", "mp3"]
+                proxy_url = get_proxy_url()
+                if proxy_url:
+                    ytdlp_cmd.extend(["--proxy", proxy_url])
+                ytdlp_cmd.extend(["-o", audio_path, video_url])
+                subprocess.run(
+                    ytdlp_cmd, check=True, capture_output=True, timeout=60
+                )
 
                 with open(audio_path, "rb") as audio_file:
                     transcription = client.audio.transcriptions.create(
@@ -315,7 +324,7 @@ class EnhancedVideoProcessor:
             from youtube_transcript_api import YouTubeTranscriptApi
 
             # Use new API format for version 1.2.2+
-            yt_api = YouTubeTranscriptApi()
+            yt_api = YouTubeTranscriptApi(proxy_config=get_transcript_proxy_config())
             transcript = yt_api.fetch(video_id)
 
             # Handle FetchedTranscriptSnippet objects properly
@@ -845,7 +854,9 @@ Provide a structured JSON response with visual_elements array containing:
     async def close(self):
         """Clean up resources"""
         if self.session:
-            await self.session.close()
+            if not self.session.closed:
+                await self.session.close()
+            self.session = None  # Important: reset so next use recreates fresh session
 
 # Factory function for MCP integration
 def get_enhanced_video_processor() -> EnhancedVideoProcessor:

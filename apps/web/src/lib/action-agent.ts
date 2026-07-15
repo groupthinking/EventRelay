@@ -1,3 +1,5 @@
+import 'server-only';
+
 /**
  * Transcription-Driven Action Agent — server-side orchestrator.
  *
@@ -13,6 +15,7 @@
 
 import OpenAI from 'openai';
 import { getGeminiClient, hasGeminiKey } from '@/lib/gemini-client';
+import { GEMINI_FAST_MODEL } from '@/lib/gemini-models';
 import type { AgentAction } from '@/lib/action-lifecycle';
 import {
   ACTION_TOOLS,
@@ -31,7 +34,7 @@ function getOpenAI(): OpenAI {
 }
 
 const MODEL_OPENAI = 'gpt-4o-mini';
-const MODEL_GEMINI = 'gemini-3.1-pro-preview';
+const MODEL_GEMINI = GEMINI_FAST_MODEL;
 const MAX_TOOL_ROUNDS = 4;
 const MAX_TRANSCRIPT_CHARS = 8000;
 

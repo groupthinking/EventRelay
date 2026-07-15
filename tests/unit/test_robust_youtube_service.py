@@ -888,7 +888,11 @@ class TestCheckTranscriptAvailability:
         mock_api_instance = MagicMock()
         mock_api_instance.fetch.side_effect = Exception("fetch failed")
         mock_api_cls = MagicMock(return_value=mock_api_instance)
-        mock_api_cls.list.return_value = mock_transcript
+        # youtube-transcript-api >=1.0: fallback calls the instance ``list`` then
+        # fetches an actual transcript to count real segments (not languages).
+        mock_list = MagicMock()
+        mock_list.find_transcript.return_value.fetch.return_value = mock_transcript
+        mock_api_instance.list.return_value = mock_list
 
         with (
             patch(f"{_ROBUST_MODULE}.HAS_TRANSCRIPT_API", True),
@@ -918,27 +922,26 @@ class TestCheckTranscriptAvailability:
         assert available is True
         assert count == 2
 
-    async def test_all_inner_fail_still_returns_true_with_empty_list(self):
-        """When both inner tries fail, list() returns [], so returns (True, 0)."""
+    async def test_all_inner_fail_returns_false_zero(self):
+        """When both the fetch and the list() fallback fail, no transcript was
+        obtained, so the method reports (False, 0) — not a contradictory
+        (True, 0)."""
         svc = RobustYouTubeService()
         mock_api_instance = MagicMock()
         mock_api_instance.fetch.side_effect = Exception("boom")
         mock_api_cls = MagicMock(return_value=mock_api_instance)
-        mock_api_cls.list.side_effect = Exception("boom2")
+        # >=1.0: the fallback calls the instance ``list``; make it fail too so
+        # the "both inner tries fail" path is actually exercised.
+        mock_api_instance.list.side_effect = Exception("boom2")
 
-        # When both fetch and list() fail, transcript = [] and returns (True, 0)
-        # OR the outer exception fires and returns (False, 0).
-        # The actual behavior: the except catches at the inner level and sets transcript=[],
-        # then returns (True, 0).
         with (
             patch(f"{_ROBUST_MODULE}.HAS_TRANSCRIPT_API", True),
             patch(f"{_ROBUST_MODULE}.YouTubeTranscriptApi", mock_api_cls, create=True),
         ):
             available, count = await svc._check_transcript_availability(VIDEO_ID)
 
-        # Verifying the function returns without raising regardless of outcome
-        assert isinstance(available, bool)
-        assert isinstance(count, int)
+        assert available is False
+        assert count == 0
 
     async def test_outer_exception_returns_false_zero(self):
         """Outer try/except around the whole body catches unexpected errors."""
@@ -1030,7 +1033,8 @@ class TestGetTranscript:
         mock_transcript_list.find_transcript.return_value = mock_transcript_obj
 
         mock_api_cls = MagicMock(return_value=mock_api_instance)
-        mock_api_cls.list_transcripts = MagicMock(return_value=mock_transcript_list)
+        # youtube-transcript-api >=1.0: fallback uses the instance ``list``
+        mock_api_instance.list = MagicMock(return_value=mock_transcript_list)
 
         with (
             patch(f"{_ROBUST_MODULE}.HAS_TRANSCRIPT_API", True),
@@ -1272,7 +1276,8 @@ class TestGetTranscript:
         mock_api_instance = MagicMock()
         mock_api_instance.fetch.side_effect = Exception("fetch fail")
         mock_api_cls = MagicMock(return_value=mock_api_instance)
-        mock_api_cls.list_transcripts.side_effect = Exception("list fail")
+        # youtube-transcript-api >=1.0: fallback uses the instance ``list``
+        mock_api_instance.list.side_effect = Exception("list fail")
 
         innertube_segs = [CaptionSegment(text="Hi", start=0.0, duration=1.0)]
 
