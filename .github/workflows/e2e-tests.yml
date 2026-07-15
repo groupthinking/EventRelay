@@ -10,6 +10,7 @@ permissions:
   contents: read
   pull-requests: write
   issues: write
+  deployments: read
 
 env:
   # By default the E2E suite runs against production. To validate a PR's own
@@ -47,10 +48,62 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: '22'
           cache: 'npm'
+
+      - name: Extract Vercel preview URL for this PR
+        id: preview
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          SHA="${{ github.event.pull_request.head.sha }}"
+          PREVIEW_URL=""
+
+          for i in $(seq 1 30); do
+            DEPLOYMENT_STATUS=0
+            DEPLOY_ID=$(gh api \
+              "/repos/${{ github.repository }}/deployments?sha=${SHA}&per_page=20" \
+              --jq '[.[] | select(.environment | ascii_downcase | startswith("preview"))] | first | .id // empty' 2>deployments.err) || DEPLOYMENT_STATUS=$?
+            if [ -s deployments.err ]; then
+              echo "gh api deployments stderr:" >&2
+              cat deployments.err >&2
+            fi
+            rm -f deployments.err
+
+            if [ "${DEPLOYMENT_STATUS:-0}" != "0" ]; then
+              exit "$DEPLOYMENT_STATUS"
+            fi
+
+            if [ -n "$DEPLOY_ID" ]; then
+              STATUS_LOOKUP=0
+              PREVIEW_URL=$(gh api \
+                "/repos/${{ github.repository }}/deployments/${DEPLOY_ID}/statuses" \
+                --jq '[.[] | select(.state=="success")] | first | .environment_url // empty' 2>deployment-status.err) || STATUS_LOOKUP=$?
+              if [ -s deployment-status.err ]; then
+                echo "gh api deployment statuses stderr:" >&2
+                cat deployment-status.err >&2
+              fi
+              rm -f deployment-status.err
+
+              if [ "${STATUS_LOOKUP:-0}" != "0" ]; then
+                exit "$STATUS_LOOKUP"
+              fi
+            fi
+
+            if [ -n "$PREVIEW_URL" ]; then
+              break
+            fi
+
+            sleep 10
+          done
+
+          if [ -n "$PREVIEW_URL" ]; then
+            echo "BASE_URL=$PREVIEW_URL" >> "$GITHUB_ENV"
+            echo "preview_url=$PREVIEW_URL" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Install dependencies
         run: npm install --legacy-peer-deps

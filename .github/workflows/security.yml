@@ -22,7 +22,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
           cache: 'npm'
@@ -76,7 +76,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Cache Trivy DB
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.cache/trivy
           key: trivy-db-${{ github.run_id }}
@@ -86,7 +86,7 @@ jobs:
       - name: Build image for scanning
         run: docker build -t eventrelay:test -f Dockerfile .
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: 'eventrelay:test'
           format: 'sarif'
@@ -102,7 +102,7 @@ jobs:
         with:
           sarif_file: 'trivy-results.sarif'
       - name: Generate human-readable report
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         if: always()
         with:
           image-ref: 'eventrelay:test'

@@ -156,6 +156,9 @@ class RobustYouTubeService:
             proxy_url = get_proxy_url()
             if proxy_url:
                 cmd.extend(["--proxy", proxy_url])
+            # "--" terminates option parsing so a video_url beginning with "-"
+            # is treated as a positional URL, never an injected flag (CWE-88).
+            cmd.append("--")
             cmd.append(video_url)
             result = subprocess.run(
                 cmd,

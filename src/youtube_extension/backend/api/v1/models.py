@@ -17,6 +17,24 @@ from pydantic import BaseModel, ConfigDict, Field, validator
 
 T = TypeVar("T")
 
+# Anchored YouTube-host allowlist. Shared so every video_url field enforces the
+# same host restriction — an arbitrary host (e.g. http://169.254.169.254/<11ch>)
+# or a leading-dash token (--config-locations=...) must NOT reach the yt-dlp /
+# pytube fetch layer. See adversarial audit: unvalidated video_url → SSRF + CWE-88
+# argument injection.
+#
+# The (?:www|m|music)\. subdomain group is scoped to the youtube.com host so the
+# mobile (m.youtube.com) and music (music.youtube.com) front-ends — both serve the
+# canonical /watch?v= path — are admitted, while youtu.be (which only has an
+# optional www) does NOT gain fabricated m./music. subdomains. re.IGNORECASE
+# tolerates uppercase schemes/hosts. The pattern stays anchored to the
+# youtube.com/youtu.be family + an 11-char id, so only *legitimate* YouTube URLs
+# pass; non-YouTube hosts are still rejected.
+_YOUTUBE_URL_REGEX = re.compile(
+    r"^(https?://)?((?:www\.|m\.|music\.)?youtube\.com/(?:watch\?v=|embed/|shorts/)|(?:www\.)?youtu\.be/)[a-zA-Z0-9_-]{11}",
+    re.IGNORECASE,
+)
+
 
 # ============ Standardized API Response Wrapper ============
 
@@ -26,7 +44,9 @@ class ApiResponse(BaseModel, Generic[T]):
 
     status: str = Field(..., description="'success' or 'error'")
     data: Optional[T] = Field(None, description="Response payload")
-    error: Optional[str] = Field(None, description="Error message (when status='error')")
+    error: Optional[str] = Field(
+        None, description="Error message (when status='error')"
+    )
     detail: Optional[str] = Field(None, description="Additional error detail")
     timestamp: datetime = Field(default_factory=datetime.utcnow)
     request_id: str = Field(default_factory=lambda: f"req_{uuid.uuid4().hex[:12]}")
@@ -71,10 +91,7 @@ class VideoProcessJobRequest(BaseModel):
 
     @validator("video_url")
     def validate_video_url(cls, value: str) -> str:
-        youtube_regex = re.compile(
-            r"^(https?://)?(www\.)?(youtube\.com/watch\?v=|youtu\.be/|youtube\.com/embed/)[a-zA-Z0-9_-]{11}"
-        )
-        if not youtube_regex.match(value):
+        if not _YOUTUBE_URL_REGEX.match(value):
             raise ValueError("Invalid YouTube URL format")
         return value
 
@@ -145,7 +162,10 @@ class AgentDispatchRequest(BaseModel):
 
     job_id: Optional[str] = None
     events: list[dict[str, Any]] = Field(default_factory=list)
-    transcript: Optional[str] = Field(None, description="Transcript text — events will be auto-extracted if events list is empty")
+    transcript: Optional[str] = Field(
+        None,
+        description="Transcript text — events will be auto-extracted if events list is empty",
+    )
     agent_types: Optional[list[str]] = Field(
         None, description="Specific agent types to dispatch"
     )
@@ -193,6 +213,16 @@ class ChatRequest(BaseModel):
     session_id: Optional[str] = Field("default", description="Session identifier")
     history: Optional[list[dict[str, str]]] = Field(None, description="Chat history")
 
+    @validator("video_url")
+    def validate_video_url(cls, value: Optional[str]) -> Optional[str]:
+        # Optional field: allow None, but any provided URL must be a real
+        # YouTube host — blocks SSRF / yt-dlp arg-injection via /api/v1/chat.
+        if value is None:
+            return value
+        if not _YOUTUBE_URL_REGEX.match(value):
+            raise ValueError("Invalid YouTube URL format")
+        return value
+
     class Config:
         populate_by_name = True
         json_schema_extra = {
@@ -233,10 +263,7 @@ class VideoProcessingRequest(BaseModel):
     @validator("video_url")
     def validate_video_url(cls, value: str) -> str:
         """Validate YouTube URL format"""
-        youtube_regex = re.compile(
-            r"^(https?://)?(www\.)?(youtube\.com/watch\?v=|youtu\.be/|youtube\.com/embed/)[a-zA-Z0-9_-]{11}"
-        )
-        if not youtube_regex.match(value):
+        if not _YOUTUBE_URL_REGEX.match(value):
             raise ValueError("Invalid YouTube URL format")
         return value
 
@@ -285,10 +312,7 @@ class MarkdownRequest(BaseModel):
     @validator("video_url")
     def validate_video_url(cls, value: str) -> str:
         """Validate YouTube URL format"""
-        youtube_regex = re.compile(
-            r"^(https?://)?(www\.)?(youtube\.com/watch\?v=|youtu\.be/|youtube\.com/embed/)[a-zA-Z0-9_-]{11}"
-        )
-        if not youtube_regex.match(value):
+        if not _YOUTUBE_URL_REGEX.match(value):
             raise ValueError("Invalid YouTube URL format")
         return value
 
@@ -353,10 +377,11 @@ class VideoToSoftwareRequest(BaseModel):
     @validator("video_url", pre=True)
     def validate_video_url(cls, value: str) -> str:
         """Validate YouTube URL format"""
-        youtube_regex = re.compile(
-            r"^(https?://)?(www\.)?(youtube\.com/watch\?v=|youtu\.be/|youtube\.com/embed/)[a-zA-Z0-9_-]{11}"
-        )
-        if not youtube_regex.match(value):
+        # pre=True runs on the raw payload before coercion, so a non-str value
+        # (e.g. {"url": 123}) would raise TypeError inside re.match and, under
+        # Pydantic v2, propagate as a 500. Reject it as a normal validation
+        # error (422) instead.
+        if not isinstance(value, str) or not _YOUTUBE_URL_REGEX.match(value):
             raise ValueError("Invalid YouTube URL format")
         return value
 
@@ -604,6 +629,14 @@ class TranscriptActionRequest(BaseModel):
         description="Optional Gemini video metadata controls (clip window, fps, resolution)",
     )
 
+    @validator("video_url")
+    def validate_video_url(cls, value: str) -> str:
+        # Anchored YouTube-host allowlist — blocks SSRF / yt-dlp arg-injection
+        # via arbitrary hosts. Matches the sibling video request models.
+        if not _YOUTUBE_URL_REGEX.match(value):
+            raise ValueError("Invalid YouTube URL format")
+        return value
+
 
 class TranscriptActionResponse(BaseModel):
     """Response model for transcript-to-action workflow"""
@@ -625,7 +658,9 @@ class TranscriptActionResponse(BaseModel):
 class KnowledgeIngestRequest(BaseModel):
     """Request model for knowledge ingest."""
 
-    text: str = Field(..., description="Non-empty transcript-derived insight or durable fact")
+    text: str = Field(
+        ..., description="Non-empty transcript-derived insight or durable fact"
+    )
     tags: Optional[Any] = Field(
         default=None, description="Optional topic tags; normalized server-side"
     )
@@ -701,6 +736,32 @@ class FeedbackResponse(BaseModel):
                 "timestamp": "2024-01-01T12:00:00Z",
             }
         }
+
+
+class VideoPackRequest(BaseModel):
+    """Request to create or retrieve a VideoPack."""
+
+    video_url: Optional[str] = None
+    job_id: Optional[str] = None
+    video_id: Optional[str] = None
+
+
+class BlueprintRequest(BaseModel):
+    """Request to generate a project blueprint (build plan)."""
+
+    video_url: Optional[str] = None
+    job_id: Optional[str] = None
+    preferences: Optional[dict[str, Any]] = Field(default_factory=dict)
+
+
+class GenerateCodeRequest(BaseModel):
+    """Request to generate code from a blueprint or video analysis."""
+
+    video_url: Optional[str] = None
+    job_id: Optional[str] = None
+    project_type: str = Field("fullstack_app", description="Type of project to generate")
+    framework: str = Field("nextjs", description="Frontend/Backend framework")
+    blueprint: Optional[dict[str, Any]] = None
 
 
 class ErrorResponse(BaseModel):
