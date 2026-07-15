@@ -16,17 +16,6 @@
     "@dataconnect/generated": "file:src/dataconnect-generated",
     "@google/genai": "^2.11.0",
     "@google/generative-ai": "^0.24.1",
-<<<<<<< HEAD
-    "@opentelemetry/api": "^1.9.1",
-    "@opentelemetry/core": "^2.8.0",
-    "@opentelemetry/exporter-trace-otlp-http": "^0.219.0",
-    "@opentelemetry/instrumentation": "^0.219.0",
-    "@opentelemetry/sdk-trace-base": "^2.8.0",
-    "@opentelemetry/semantic-conventions": "^1.40.0",
-    "@sentry/nextjs": "^10.57.0",
-    "@stripe/stripe-js": "^9.8.0",
-    "@supabase/supabase-js": "^2.39.0",
-=======
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/core": "^2.9.0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.219.0",
@@ -37,7 +26,6 @@
     "@sentry/nextjs": "^10.65.0",
     "@stripe/stripe-js": "^9.9.0",
     "@supabase/supabase-js": "^2.110.5",
->>>>>>> origin/main
     "@upstash/redis": "^1.38.0",
     "@upstash/search": "^0.1.7",
     "@vercel/analytics": "^2.0.1",
