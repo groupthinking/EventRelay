@@ -28,7 +28,6 @@ import aiohttp
 # Google AI imports - using new google.genai SDK
 try:
     from google import genai
-    # from google.genai import types
 
     GEMINI_AVAILABLE = True
 except ImportError:
