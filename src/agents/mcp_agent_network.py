@@ -309,62 +309,8 @@ class MCPAgentNetwork:
     async def _call_knowledge_base(self, action: str, payload: dict) -> dict:
         """Call knowledge base"""
         logger.info(f"Knowledge base call: {action}")
-
-        try:
-            import sys
-            from pathlib import Path
-
-            # Resolve scripts directory and add to sys.path
-            project_root = Path(__file__).resolve().parent.parent.parent
-            scripts_dir = project_root / "scripts"
-            if str(scripts_dir) not in sys.path:
-                sys.path.insert(0, str(scripts_dir))
-
-            from knowledge_base import get_knowledge_base
-            kb = get_knowledge_base()
-
-            if action == "capture_technology":
-                video_analysis = payload.get("video_analysis", {})
-                extracted = video_analysis.get("extracted_info", {})
-                video_data = video_analysis.get("video_data", {})
-
-                title = extracted.get("title", "AI Generated Project")
-                technologies = extracted.get("technologies", [])
-
-                if not technologies:
-                    # Try getting from architecture if not in video analysis
-                    architecture = payload.get("architecture", {})
-                    tech_stack = architecture.get("tech_stack", {})
-                    if isinstance(tech_stack, dict):
-                        for category, techs in tech_stack.items():
-                            if isinstance(techs, list):
-                                technologies.extend(techs)
-                            elif isinstance(techs, str):
-                                technologies.append(techs)
-
-                if technologies:
-                    video_id = video_data.get("video_id", "unknown")
-                    video_url = video_data.get("video_url", "")
-
-                    result = kb.capture_from_video(video_id, title, technologies, video_url)
-                    return {"status": "success", "result": result}
-                else:
-                    return {"status": "skipped", "message": "No technologies to capture"}
-
-            elif action == "get_context":
-                context = kb.get_technology_context()
-                return {"status": "success", "context": context}
-
-            elif action == "get_stats":
-                stats = kb.get_stats()
-                return {"status": "success", "stats": stats}
-
-            else:
-                return {"status": "unknown_action", "action": action}
-
-        except Exception as e:
-            logger.error(f"Knowledge base error: {e}")
-            return {"error": f"Knowledge base error: {str(e)}"}
+        # TODO: Implement knowledge base integration
+        return {"status": "pending_implementation", "action": action}
 
     async def _call_vercel_api(self, action: str, payload: dict) -> dict:
         """Call deployment tools (GitHub + Vercel)"""

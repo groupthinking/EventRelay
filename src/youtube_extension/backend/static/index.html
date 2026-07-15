@@ -269,53 +269,34 @@
 
                 const data = await response.json();
 
-                // Display results securely using DOM APIs
-                resultContent.textContent = ''; // Clear previous contents safely
-
-                const sanitizeUrl = (url) => {
-                    if (!url) return '#';
-                    const strUrl = String(url).trim();
-                    // Block dangerous protocols
-                    if (/^(javascript|vbscript|data):/i.test(strUrl)) {
-                        return '#';
-                    }
-                    return strUrl;
-                };
-
-                const appendResultItem = (label, value, isLink = false) => {
-                    if (value === undefined || value === null) return;
-
-                    const div = document.createElement('div');
-                    div.className = 'result-item';
-
-                    const strong = document.createElement('strong');
-                    strong.textContent = label + ': ';
-                    div.appendChild(strong);
-
-                    if (isLink) {
-                        const a = document.createElement('a');
-                        a.href = sanitizeUrl(value);
-                        a.target = '_blank';
-                        a.className = 'link';
-                        a.textContent = String(value);
-                        div.appendChild(a);
-                    } else {
-                        div.appendChild(document.createTextNode(String(value)));
-                    }
-
-                    resultContent.appendChild(div);
-                };
-
-                appendResultItem('Project Name', data.project_name);
-                appendResultItem('Live URL', data.live_url, true);
-                appendResultItem('GitHub Repo', data.github_repo, true);
-                appendResultItem('Build Status', data.build_status);
-                appendResultItem('Processing Time', data.processing_time);
-
-                if (data.code_generation) {
-                    appendResultItem('Framework', data.code_generation.framework || 'N/A');
-                    appendResultItem('Files Created', data.code_generation.files_created?.length || 0);
-                }
+                // Display results
+                resultContent.innerHTML = `
+                    <div class="result-item">
+                        <strong>Project Name:</strong> ${data.project_name}
+                    </div>
+                    <div class="result-item">
+                        <strong>Live URL:</strong>
+                        <a href="${data.live_url}" target="_blank" class="link">${data.live_url}</a>
+                    </div>
+                    <div class="result-item">
+                        <strong>GitHub Repo:</strong>
+                        <a href="${data.github_repo}" target="_blank" class="link">${data.github_repo}</a>
+                    </div>
+                    <div class="result-item">
+                        <strong>Build Status:</strong> ${data.build_status}
+                    </div>
+                    <div class="result-item">
+                        <strong>Processing Time:</strong> ${data.processing_time}
+                    </div>
+                    ${data.code_generation ? `
+                    <div class="result-item">
+                        <strong>Framework:</strong> ${data.code_generation.framework || 'N/A'}
+                    </div>
+                    <div class="result-item">
+                        <strong>Files Created:</strong> ${data.code_generation.files_created?.length || 0}
+                    </div>
+                    ` : ''}
+                `;
 
                 result.style.display = 'block';
 

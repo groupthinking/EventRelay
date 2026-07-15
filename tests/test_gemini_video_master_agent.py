@@ -79,8 +79,8 @@ def test_default_input_does_not_surface_banned_video_id():
     prompt = master.build_default_video_prompt()
 
     assert master.extract_video_id(master.DEFAULT_VIDEO_URL) not in master.BANNED_VIDEO_IDS
-    assert "auJzb1D-fag" not in master.DEFAULT_VIDEO_URL
-    assert "auJzb1D-fag" not in prompt
+    assert "dQw4w9WgXcQ" not in master.DEFAULT_VIDEO_URL
+    assert "dQw4w9WgXcQ" not in prompt
 
 
 def test_normalize_youtube_url_removes_timestamp_params():
