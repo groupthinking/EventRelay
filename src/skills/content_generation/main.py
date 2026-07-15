@@ -1,34 +1,9 @@
-<<<<<<< HEAD
-#!/usr/bin/env python3
-"""Thin GTM skill wrapper."""
-
-import json
-import sys
-from typing import Any
-
-SKILL_ID = "content-generation"
-
-
-def run(payload: dict[str, Any]) -> dict[str, Any]:
-    """Execute the skill wrapper with a JSON-serializable payload."""
-    return {
-        "status": "success",
-        "skill": SKILL_ID,
-        "payload": payload,
-    }
-
-
-if __name__ == "__main__":
-    raw = sys.stdin.read().strip()
-    request = json.loads(raw) if raw else {}
-    print(json.dumps(run(request)))
-=======
 """Content Generation skill - generates blog/social posts from video transcripts."""
 
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from skills.base import BaseSkill, SkillResult
 
@@ -41,13 +16,8 @@ class ContentGenerationSkill(BaseSkill):
     skill_id = "content-generation"
     name = "Content Generation"
     version = "1.0.0"
-    triggers = ["youtube.video.published"]
+    triggers = ["video_published"]
     required_env_vars = ["GEMINI_API_KEY"]
-
-    def __init__(self, dependencies: Optional[dict[str, Any]] = None):
-        super().__init__(dependencies)
-        self.gemini = self.dependencies.get("gemini_service")
-        self.db = self.dependencies.get("database_service")
 
     async def execute(self, payload: dict[str, Any]) -> SkillResult:
         """Generate content from a video transcript.
@@ -71,10 +41,6 @@ class ContentGenerationSkill(BaseSkill):
             len(transcript),
         )
 
-        if self.gemini:
-            logger.info("Using injected gemini_service for generation")
-            # In a real implementation, we would call self.gemini.process_text(...) here
-
         # Thin wrapper: actual AI generation will be wired in a future iteration
         return SkillResult(
             status="success",
@@ -85,4 +51,3 @@ class ContentGenerationSkill(BaseSkill):
                 "message": f"Content generation queued for video {video_id}",
             },
         )
->>>>>>> origin/main

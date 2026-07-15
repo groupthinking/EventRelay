@@ -1,34 +1,9 @@
-<<<<<<< HEAD
-#!/usr/bin/env python3
-"""Thin GTM skill wrapper."""
-
-import json
-import sys
-from typing import Any
-
-SKILL_ID = "seo-optimizer"
-
-
-def run(payload: dict[str, Any]) -> dict[str, Any]:
-    """Execute the skill wrapper with a JSON-serializable payload."""
-    return {
-        "status": "success",
-        "skill": SKILL_ID,
-        "payload": payload,
-    }
-
-
-if __name__ == "__main__":
-    raw = sys.stdin.read().strip()
-    request = json.loads(raw) if raw else {}
-    print(json.dumps(run(request)))
-=======
 """SEO Optimizer skill - optimizes video titles, descriptions, and tags."""
 
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from skills.base import BaseSkill, SkillResult
 
@@ -41,12 +16,8 @@ class SEOOptimizerSkill(BaseSkill):
     skill_id = "seo-optimizer"
     name = "SEO Optimizer"
     version = "1.0.0"
-    triggers = ["youtube.video.uploaded"]
+    triggers = ["video_uploaded"]
     required_env_vars = ["GEMINI_API_KEY"]
-
-    def __init__(self, dependencies: Optional[dict[str, Any]] = None):
-        super().__init__(dependencies)
-        self.gemini = self.dependencies.get("gemini_service")
 
     async def execute(self, payload: dict[str, Any]) -> SkillResult:
         """Optimize SEO metadata for a video.
@@ -67,9 +38,6 @@ class SEOOptimizerSkill(BaseSkill):
 
         logger.info("Optimizing SEO for video %s", video_id)
 
-        if self.gemini:
-            logger.info("Using injected gemini_service for SEO optimization")
-
         return SkillResult(
             status="success",
             output={
@@ -81,4 +49,3 @@ class SEOOptimizerSkill(BaseSkill):
                 "message": f"SEO optimization queued for video {video_id}",
             },
         )
->>>>>>> origin/main

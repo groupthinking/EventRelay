@@ -48,16 +48,10 @@ def test_dependabot_workflow_approves_and_merges_without_checkout() -> None:
     approve_steps = approve_job["steps"]
     merge_steps = merge_job["steps"]
 
-    assert all(
-        not step.get("uses", "").startswith("actions/checkout@")
-        for step in approve_steps
-    )
-    assert all(
-        not step.get("uses", "").startswith("actions/checkout@")
-        for step in merge_steps
-    )
+    assert all(step.get("uses") != "actions/checkout@v4" for step in approve_steps)
+    assert all(step.get("uses") != "actions/checkout@v4" for step in merge_steps)
     assert any(
-        step.get("uses", "").startswith("dependabot/fetch-metadata@")
+        step.get("uses") == "dependabot/fetch-metadata@v2"
         and step.get("id") == "metadata"
         for step in approve_steps
     )

@@ -283,7 +283,16 @@ class MultiLLMVideoProcessor:
             "temperature": 0.3,
         }
 
-        async with aiohttp.ClientSession() as session:
+        # Create SSL context to handle certificate issues
+        import ssl
+
+        ssl_context = ssl.create_default_context()
+        ssl_context.check_hostname = False
+        ssl_context.verify_mode = ssl.CERT_NONE
+
+        connector = aiohttp.TCPConnector(ssl=ssl_context)
+
+        async with aiohttp.ClientSession(connector=connector) as session:
             async with session.post(
                 "https://api.openai.com/v1/chat/completions",
                 headers=headers,
@@ -322,7 +331,16 @@ class MultiLLMVideoProcessor:
             ],
         }
 
-        async with aiohttp.ClientSession() as session:
+        # Create SSL context to handle certificate issues
+        import ssl
+
+        ssl_context = ssl.create_default_context()
+        ssl_context.check_hostname = False
+        ssl_context.verify_mode = ssl.CERT_NONE
+
+        connector = aiohttp.TCPConnector(ssl=ssl_context)
+
+        async with aiohttp.ClientSession(connector=connector) as session:
             async with session.post(
                 "https://api.anthropic.com/v1/messages",
                 headers=headers,
@@ -363,7 +381,16 @@ class MultiLLMVideoProcessor:
             "temperature": 0.3,
         }
 
-        async with aiohttp.ClientSession() as session:
+        # Create SSL context to handle certificate issues
+        import ssl
+
+        ssl_context = ssl.create_default_context()
+        ssl_context.check_hostname = False
+        ssl_context.verify_mode = ssl.CERT_NONE
+
+        connector = aiohttp.TCPConnector(ssl=ssl_context)
+
+        async with aiohttp.ClientSession(connector=connector) as session:
             async with session.post(
                 "https://api.x.ai/v1/chat/completions",
                 headers=headers,

@@ -1,34 +1,9 @@
-<<<<<<< HEAD
-#!/usr/bin/env python3
-"""Thin GTM skill wrapper."""
-
-import json
-import sys
-from typing import Any
-
-SKILL_ID = "analytics-dashboard"
-
-
-def run(payload: dict[str, Any]) -> dict[str, Any]:
-    """Execute the skill wrapper with a JSON-serializable payload."""
-    return {
-        "status": "success",
-        "skill": SKILL_ID,
-        "payload": payload,
-    }
-
-
-if __name__ == "__main__":
-    raw = sys.stdin.read().strip()
-    request = json.loads(raw) if raw else {}
-    print(json.dumps(run(request)))
-=======
 """Analytics Dashboard skill - aggregates metrics into dashboard data."""
 
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from skills.base import BaseSkill, SkillResult
 
@@ -41,13 +16,8 @@ class AnalyticsDashboardSkill(BaseSkill):
     skill_id = "analytics-dashboard"
     name = "Analytics Dashboard"
     version = "1.0.0"
-    triggers = ["system.cron.daily"]
+    triggers = ["daily_cron"]
     required_env_vars = ["DATABASE_URL"]
-
-    def __init__(self, dependencies: Optional[dict[str, Any]] = None):
-        super().__init__(dependencies)
-        self.db = self.dependencies.get("database_service")
-        self.analytics = self.dependencies.get("analytics_service")
 
     async def execute(self, payload: dict[str, Any]) -> SkillResult:
         """Aggregate analytics metrics.
@@ -66,11 +36,6 @@ class AnalyticsDashboardSkill(BaseSkill):
             "Aggregating %d metrics for range %s", len(metrics), date_range
         )
 
-        if self.db:
-            logger.info("Using injected database_service for aggregation")
-        if self.analytics:
-            logger.info("Using injected analytics_service for aggregation")
-
         return SkillResult(
             status="success",
             output={
@@ -80,4 +45,3 @@ class AnalyticsDashboardSkill(BaseSkill):
                 "message": f"Dashboard data aggregated for {date_range}",
             },
         )
->>>>>>> origin/main
