@@ -116,6 +116,80 @@
       "computedHash": "65fc8ef640574e34cd315cef3a2e8ea6eb2d3b29d38eba18e1e749d812215161",
       "subscribed_triggers": []
     },
+<<<<<<< HEAD
+    "eventrelay_skills": [
+      {
+        "id": "content-generation",
+        "name": "Content Generation",
+        "version": "1.0.0",
+        "source": "uvai-skills",
+        "entry_point": "src/skills/content_generation/main.py",
+        "triggers": ["video_published", "manual"],
+        "dependencies": ["gemini_service", "database_service"],
+        "required_env_vars": ["GEMINI_API_KEY", "DATABASE_URL"]
+      },
+      {
+        "id": "seo-optimizer",
+        "name": "SEO Optimizer",
+        "version": "1.0.0",
+        "source": "uvai-skills",
+        "entry_point": "src/skills/seo_optimizer/main.py",
+        "triggers": ["video_uploaded"],
+        "dependencies": ["gemini_service"],
+        "required_env_vars": ["GEMINI_API_KEY"]
+      },
+      {
+        "id": "social-scheduler",
+        "name": "Social Scheduler",
+        "version": "1.0.0",
+        "source": "uvai-skills",
+        "entry_point": "src/skills/social_scheduler/main.py",
+        "triggers": ["content_generated"],
+        "dependencies": ["database_service"],
+        "required_env_vars": ["DATABASE_URL"]
+      },
+      {
+        "id": "lead-scorer",
+        "name": "Lead Scorer",
+        "version": "1.0.0",
+        "source": "uvai-skills",
+        "entry_point": "src/skills/lead_scorer/main.py",
+        "triggers": ["analytics_updated"],
+        "dependencies": ["database_service"],
+        "required_env_vars": ["DATABASE_URL"]
+      },
+      {
+        "id": "email-campaign",
+        "name": "Email Campaign",
+        "version": "1.0.0",
+        "source": "uvai-skills",
+        "entry_point": "src/skills/email_campaign/main.py",
+        "triggers": ["lead_scored"],
+        "dependencies": ["gemini_service", "database_service"],
+        "required_env_vars": ["GEMINI_API_KEY", "DATABASE_URL"]
+      },
+      {
+        "id": "analytics-dashboard",
+        "name": "Analytics Dashboard",
+        "version": "1.0.0",
+        "source": "uvai-skills",
+        "entry_point": "src/skills/analytics_dashboard/main.py",
+        "triggers": ["daily_cron"],
+        "dependencies": ["database_service"],
+        "required_env_vars": ["DATABASE_URL"]
+      },
+      {
+        "id": "ab-testing",
+        "name": "A/B Testing",
+        "version": "1.0.0",
+        "source": "uvai-skills",
+        "entry_point": "src/skills/ab_testing/main.py",
+        "triggers": ["video_uploaded"],
+        "dependencies": ["gemini_service", "database_service"],
+        "required_env_vars": ["GEMINI_API_KEY", "DATABASE_URL"]
+      }
+    ]
+=======
     "content-generation": {
       "source": "uvai-skills",
       "sourceType": "local",
@@ -221,5 +295,6 @@
       ],
       "subscribed_triggers": []
     }
+>>>>>>> origin/main
   }
 }
