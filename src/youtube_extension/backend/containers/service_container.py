@@ -123,32 +123,7 @@ class ServiceContainer:
         # MCP Orchestrator (Unified Model Context Protocol)
         self.register_singleton("mcp_orchestrator", self._create_mcp_orchestrator)
 
-        # Register aliases for skill dependencies
-        self._register_skill_dependency_aliases()
-
         logger.info("Core services registered")
-
-    def _register_skill_dependency_aliases(self):
-        """Register aliases for services used as skill dependencies.
-
-        Only services backed by a real implementation are aliased here.
-        Dependencies without an implementation (e.g. ``openai_service``,
-        ``social_api_service``) are intentionally left unregistered: resolving
-        them raises ``ValueError``, which ``SkillRegistry._load_skill_instance``
-        catches and degrades to no injection, so a skill's ``if self.social_api:``
-        availability check correctly reports the service as unavailable. This
-        avoids registering truthy placeholder objects that would masquerade as
-        real services (and violate REAL_MODE_ONLY).
-        """
-        # AI Services
-        self.register_singleton("gemini_service", lambda: self.get_service("hybrid_processor_service"))
-
-        # Data & Analytics
-        self.register_singleton("database_service", lambda: self.get_service("data_service"))
-        self.register_singleton("analytics_service", lambda: self.get_service("metrics_service"))
-
-        # External Integration
-        self.register_singleton("email_service", lambda: self.get_service("notification_service"))
 
     def register_singleton(self, name: str, factory: Callable[[], T]) -> None:
         """

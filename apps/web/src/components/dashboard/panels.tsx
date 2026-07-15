@@ -290,11 +290,7 @@ export function SearchPanel({
         }}
         className="flex gap-2"
       >
-        <label htmlFor="search-video" className="sr-only">
-          Search the video
-        </label>
         <input
-          id="search-video"
           type="text"
           placeholder="Search the video…"
           className="flex-1 px-3 py-2.5 text-sm focus:outline-none transition-colors rounded-lg"
@@ -304,7 +300,6 @@ export function SearchPanel({
         />
         <button
           type="submit"
-          aria-label="Search"
           className="px-4 py-2.5 font-heading font-bold text-xs tracking-wider uppercase transition-all disabled:opacity-30 active:scale-95 rounded-lg"
           style={{ background: 'rgba(16, 183, 165, 0.9)', color: '#002b26' }}
           disabled={searchLoading || !searchQuery.trim()}

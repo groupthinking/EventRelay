@@ -232,13 +232,11 @@ class RealVideoProcessor:
                 transcript_list = await loop.run_in_executor(
                     None, lambda: YouTubeTranscriptApi().list(video_id)  # type: ignore[union-attr]
                 )
-                fetch_tasks = [
-                    loop.run_in_executor(None, lambda t=t: t.fetch().to_raw_data())
-                    for t in transcript_list
-                ]
-                for task in asyncio.as_completed(fetch_tasks):
+                for t in transcript_list:
                     try:
-                        data = await task
+                        data = await loop.run_in_executor(
+                            None, lambda t=t: t.fetch().to_raw_data()
+                        )
                         if data:
                             return data
                     except Exception:

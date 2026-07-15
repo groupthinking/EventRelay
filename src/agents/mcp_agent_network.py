@@ -291,21 +291,15 @@ class MCPAgentNetwork:
         logger.info(f"Skill builder call: {action}")
 
         try:
-            from .mcp_tools import get_build_validator_tool
-            build_validator = get_build_validator_tool()
-
             # Route build validation actions
             if action == "validate_build":
+                from .mcp_tools import get_build_validator_tool
+                build_validator = get_build_validator_tool()
                 return await build_validator.validate_build(**payload)
 
             # Other skill builder actions (error patterns, learning)
-            elif action == "get_error_patterns":
-                return await build_validator.get_error_patterns(**payload)
-            elif action == "learn_from_error":
-                return await build_validator.learn_from_error(**payload)
-            elif action == "suggest_fix":
-                return await build_validator.suggest_fix(**payload)
             else:
+                # TODO: Implement other skill builder features
                 return {"status": "pending_implementation", "action": action}
 
         except Exception as e:

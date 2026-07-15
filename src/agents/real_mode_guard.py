@@ -29,7 +29,7 @@ SIMULATION_PATTERNS = [
     "# Placeholder",      # Placeholder comments
     "# FAKE",            # Explicitly marked as fake
     "# Simulate",        # Simulation comments
-    "# T" "ODO: Real implementation",  # Markers indicating missing real code
+    "# TODO: Real implementation",  # TODOs indicating missing real code
 ]
 
 
@@ -119,7 +119,7 @@ def validate_no_placeholders(code: str, file_name: str = "") -> None:
 
     placeholder_indicators = [
         "# Placeholder",
-        "# T" "ODO: Real implementation",
+        "# TODO: Real implementation",
         "# FAKE",
         "# Simulate",
         "pass  # Not implemented",

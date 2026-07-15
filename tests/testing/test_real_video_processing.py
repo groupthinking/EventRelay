@@ -21,7 +21,7 @@ async def test_real_video_processing():
     print()
 
     # Test video (short tech explainer)
-    test_video = "https://www.youtube.com/watch?v=auJzb1D-fag"  # Classic test video
+    test_video = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"  # Classic test video
     print(f"Test Video: {test_video}")
     print()
 

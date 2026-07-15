@@ -7,7 +7,7 @@ def check_data():
     # Initialize DataService directly. It uses default directories unless specified.
     # The container usually passes enhanced_analysis_dir="youtube_processed_videos/enhanced_analysis"
     service = DataService()
-    video_id = "auJzb1D-fag"
+    video_id = "dQw4w9WgXcQ"
 
     print(f"Checking data for {video_id}...")
     detail = service.get_video_detail(video_id)

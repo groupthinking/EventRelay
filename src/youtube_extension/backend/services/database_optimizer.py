@@ -70,15 +70,6 @@ except ImportError:
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Pre-compiled regex patterns for query optimization
-_RE_NUMBERS = re.compile(r"\b\d+\b")
-_RE_STRINGS = re.compile(r"'[^']*'")
-_RE_FROM = re.compile(r"from\s+(\w+)")
-_RE_INTO = re.compile(r"into\s+(\w+)")
-_RE_UPDATE = re.compile(r"update\s+(\w+)")
-_RE_WHERE = re.compile(r"where\s+(\w+)")
-_RE_ORDER_BY = re.compile(r"order by\s+(\w+)")
-
 
 @dataclass
 class QueryStats:
@@ -295,8 +286,8 @@ class QueryOptimizer:
         normalized = query.lower().strip()
         # Remove parameter values for pattern matching
 
-        normalized = _RE_NUMBERS.sub("?", normalized)  # Replace numbers with ?
-        normalized = _RE_STRINGS.sub("'?'", normalized)  # Replace string literals
+        normalized = re.sub(r"\b\d+\b", "?", normalized)  # Replace numbers with ?
+        normalized = re.sub(r"'[^']*'", "'?'", normalized)  # Replace string literals
 
         return hashlib.sha256(normalized.encode()).hexdigest()
 
@@ -308,19 +299,19 @@ class QueryOptimizer:
 
         if query_lower.startswith("select"):
             # Extract table names from FROM clause
-            from_match = _RE_FROM.search(query_lower)
+            from_match = re.search(r"from\s+(\w+)", query_lower)
             table = from_match.group(1) if from_match else "unknown"
             return f"SELECT from {table}"
         elif query_lower.startswith("insert"):
-            into_match = _RE_INTO.search(query_lower)
+            into_match = re.search(r"into\s+(\w+)", query_lower)
             table = into_match.group(1) if into_match else "unknown"
             return f"INSERT into {table}"
         elif query_lower.startswith("update"):
-            update_match = _RE_UPDATE.search(query_lower)
+            update_match = re.search(r"update\s+(\w+)", query_lower)
             table = update_match.group(1) if update_match else "unknown"
             return f"UPDATE {table}"
         elif query_lower.startswith("delete"):
-            from_match = _RE_FROM.search(query_lower)
+            from_match = re.search(r"from\s+(\w+)", query_lower)
             table = from_match.group(1) if from_match else "unknown"
             return f"DELETE from {table}"
         else:
@@ -441,21 +432,36 @@ class QueryOptimizer:
             results = [None] * len(queries_and_params)
 
             # Execute each group
-            for _pattern, group_queries in query_groups.items():
-                # Execute individually concurrently
-                # ⚡ Bolt: Always use asyncio.gather for concurrent execution,
-                # avoiding the N+1 sequential bottleneck of simulated executemany while
-                # preserving centralized metrics/logging.
-                coroutines = [
-                    self.execute_query(query, params, use_cache=True)
-                    for _, query, params in group_queries
-                ]
-                query_results = await asyncio.gather(*coroutines)
+            for pattern, group_queries in query_groups.items():
+                if len(group_queries) > 1 and hasattr(connection, "executemany"):
+                    # Use batch execution if available
+                    batch_start = time.time()
 
-                for (original_index, _, _), query_result in zip(
-                    group_queries, query_results
-                ):
-                    results[original_index] = query_result
+                    # Extract queries and params
+                    [q[1] for q in group_queries]
+                    [q[2] for q in group_queries]
+
+                    # Execute batch (simplified - real implementation would be more complex)
+                    for i, (original_index, query, params) in enumerate(group_queries):
+                        query_result = await self.execute_query(
+                            query, params, use_cache=True
+                        )
+                        results[original_index] = query_result
+
+                    batch_time = (time.time() - batch_start) * 1000
+                    logger.debug(
+                        f"Batch executed ({batch_time:.2f}ms): {len(group_queries)} {pattern} queries"
+                    )
+                else:
+                    # Execute individually concurrently
+                    coroutines = [
+                        self.execute_query(query, params, use_cache=True)
+                        for _, query, params in group_queries
+                    ]
+                    query_results = await asyncio.gather(*coroutines)
+
+                    for (original_index, _, _), query_result in zip(group_queries, query_results):
+                        results[original_index] = query_result
 
             total_time = (time.time() - start_time) * 1000
             avg_time_per_query = total_time / len(queries_and_params)
@@ -520,10 +526,12 @@ class QueryOptimizer:
 
         if "where" in query_lower and "index" not in query_lower:
             # Recommend index on WHERE clause columns
-            where_match = _RE_WHERE.search(query_lower)
+            import re
+
+            where_match = re.search(r"where\s+(\w+)", query_lower)
             if where_match:
                 column = where_match.group(1)
-                table_match = _RE_FROM.search(query_lower)
+                table_match = re.search(r"from\s+(\w+)", query_lower)
                 table = table_match.group(1) if table_match else "unknown"
 
                 recommendation = IndexRecommendation(
@@ -540,10 +548,10 @@ class QueryOptimizer:
 
         if "order by" in query_lower:
             # Recommend index on ORDER BY columns
-            order_match = _RE_ORDER_BY.search(query_lower)
+            order_match = re.search(r"order by\s+(\w+)", query_lower)
             if order_match:
                 column = order_match.group(1)
-                table_match = _RE_FROM.search(query_lower)
+                table_match = re.search(r"from\s+(\w+)", query_lower)
                 table = table_match.group(1) if table_match else "unknown"
 
                 recommendation = IndexRecommendation(
@@ -886,28 +894,34 @@ async def initialize_database_optimization():
         try:
             cur = conn.cursor() if hasattr(conn, "cursor") else None
             if cur:
-                cur.execute("""
+                cur.execute(
+                    """
                     CREATE TABLE IF NOT EXISTS videos (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         title TEXT,
                         processed BOOLEAN DEFAULT 0,
                         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
                     )
-                    """)
-                cur.execute("""
+                    """
+                )
+                cur.execute(
+                    """
                     CREATE TABLE IF NOT EXISTS video_analytics (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         processing_time_ms REAL,
                         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
                     )
-                    """)
-                cur.execute("""
+                    """
+                )
+                cur.execute(
+                    """
                     CREATE TABLE IF NOT EXISTS users (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         email TEXT,
                         last_active DATETIME DEFAULT CURRENT_TIMESTAMP
                     )
-                    """)
+                    """
+                )
                 # Seed minimal data if tables are empty
                 try:
                     # Seed videos
