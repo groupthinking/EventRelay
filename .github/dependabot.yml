@@ -6,6 +6,9 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
+    ignore:
+      - dependency-name: "eslint"
+        versions: [">=10"]
     groups:
       npm-minor-patch:
         update-types: ["minor", "patch"]
@@ -15,6 +18,9 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
+    ignore:
+      - dependency-name: "eslint"
+        versions: [">=10"]
 
   # Python backend dependencies.
   - package-ecosystem: "pip"
