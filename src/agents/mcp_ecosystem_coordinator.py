@@ -209,7 +209,7 @@ class MCPEcosystemCoordinator:
         self.servers: dict[str, BaseMCPServer] = {}
         self.capabilities_map: dict[str, dict] = {}
         self.workflow_history: list[dict] = []
-        self.skill_registry = SkillRegistry()
+        self.skill_registry = skill_registry or SkillRegistry()
 
     def list_skills(self, source: Optional[str] = None) -> List[Dict[str, Any]]:
         """Returns a list of discovered skills from the registry."""
