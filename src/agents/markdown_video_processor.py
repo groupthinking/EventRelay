@@ -7,6 +7,7 @@ import asyncio
 import json
 import logging
 import os
+import ssl
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -168,7 +169,6 @@ class MarkdownVideoProcessor:
         )
         prompt = prompt.replace("{{VIDEO_METADATA}}", json.dumps(metadata, indent=2))
 
-        # Use OpenAI for generation
         async with aiohttp.ClientSession() as session:
             headers = {
                 "Authorization": f"Bearer {self.openai_api_key}",
