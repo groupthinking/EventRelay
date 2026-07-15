@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 # REMOVED: sys.path.append removed
 
 logger = logging.getLogger(__name__)
-SKILLS_LOCK_FILE = Path(__file__).resolve().parents[2] / "skills-lock.json"
+
 
 class BaseMCPServer(abc.ABC):
     """Abstract base class for all MCP servers."""
@@ -164,48 +164,10 @@ class MCPYouTubeAPIProxyServer(BaseMCPServer):
         return {"status": "healthy", "server": self.name}
 
 
-class SkillRegistry:
-    """Registry for EventRelay GTM skills defined in skills-lock.json."""
-
-    def __init__(self, lock_file: Path = SKILLS_LOCK_FILE):
-        self.lock_file = Path(lock_file)
-        self._skills: list[dict[str, Any]] = []
-        self._load()
-
-    def _load(self) -> None:
-        if not self.lock_file.exists():
-            self._skills = []
-            return
-
-        data = json.loads(self.lock_file.read_text())
-        candidates = [
-            data.get("eventrelay_skills"),
-            data.get("skills"),
-            data.get("skills", {}).get("eventrelay_skills")
-            if isinstance(data.get("skills"), dict)
-            else None,
-        ]
-        for candidate in candidates:
-            if isinstance(candidate, list):
-                self._skills = candidate
-                return
-        self._skills = []
-
-    def list_skills(self, trigger: str | None = None) -> list[dict[str, Any]]:
-        if not trigger:
-            return list(self._skills)
-        return [s for s in self._skills if trigger in s.get("triggers", [])]
-
-    def get_skill(self, skill_id: str) -> dict[str, Any] | None:
-        for skill in self._skills:
-            if skill.get("id") == skill_id:
-                return skill
-        return None
-
 class MCPEcosystemCoordinator:
     """Coordinates multiple MCP servers, routing requests and managing capabilities."""
 
-    def __init__(self, skill_registry: SkillRegistry | None = None):
+    def __init__(self, skill_registry: "SkillRegistry | None" = None):
         self.servers: dict[str, BaseMCPServer] = {}
         self.capabilities_map: dict[str, dict] = {}
         self.workflow_history: list[dict] = []
