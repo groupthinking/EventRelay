@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import type { Redis } from '@upstash/redis';
 import { getToken } from 'next-auth/jwt';
+import {
+  needsAuthentication,
+  safeCallbackPath,
+  shouldSkipRateLimit,
+} from '@/lib/auth-paths';
 
 /**
  * Frontend proxy (Next.js 16 middleware): rate limiting (always) + login gating
@@ -8,6 +13,8 @@ import { getToken } from 'next-auth/jwt';
  * is set up — safe rollout). When enabled, /dashboard and non-public /api/* require
  * a valid NextAuth session. Server-to-server loopback calls carrying a matching
  * `x-eventrelay-internal` header (INTERNAL_REQUEST_TOKEN) bypass both.
+ *
+ * Path policy lives in `@/lib/auth-paths` so unit tests can cover it offline.
  */
 
 const WINDOW_SECONDS = 60;
@@ -29,8 +36,6 @@ const AI_ROUTE_PREFIXES = [
 const INTERNAL_TOKEN = process.env.INTERNAL_REQUEST_TOKEN;
 const AUTH_SECRET = process.env.NEXTAUTH_SECRET;
 const AUTH_ENABLED = !!AUTH_SECRET;
-// API paths that stay public even when auth is enabled (auth flow + health).
-const PUBLIC_API_PREFIXES = ['/api/auth', '/api/health', '/api/billing'];
 
 type RateLimitResult = {
   allowed: boolean;
@@ -221,31 +226,32 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   }
 
   // Login gating — enforced only when NEXTAUTH_SECRET is set; CORS preflight is exempt.
-  if (AUTH_ENABLED && request.method !== 'OPTIONS') {
-    const isApi = pathname.startsWith('/api/');
-    const isPublicApi = PUBLIC_API_PREFIXES.some(
-      (p) => pathname === p || pathname.startsWith(p + '/'),
-    );
-    const needsAuth =
-      (isApi && !isPublicApi) || pathname === '/dashboard' || pathname.startsWith('/dashboard/');
-    if (needsAuth) {
-      // next-auth resolves `NextRequest` from a second hoisted copy of `next` in this
-      // monorepo; the types are structurally identical, so bridge them.
-      const token = await getToken({ req: request as any, secret: AUTH_SECRET });
-      if (!token) {
-        if (isApi) {
-          return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
-        }
-        const signin = new URL('/api/auth/signin', request.url);
-        signin.searchParams.set('callbackUrl', request.url);
-        return NextResponse.redirect(signin);
+  if (AUTH_ENABLED && request.method !== 'OPTIONS' && needsAuthentication(pathname)) {
+    // next-auth resolves `NextRequest` from a second hoisted copy of `next` in this
+    // monorepo; the types are structurally identical, so bridge them.
+    const token = await getToken({ req: request as any, secret: AUTH_SECRET });
+    if (!token) {
+      if (pathname.startsWith('/api/')) {
+        return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
       }
+      const signin = new URL('/api/auth/signin', request.url);
+      // Relative same-origin path only — blocks open-redirect callback abuse.
+      signin.searchParams.set(
+        'callbackUrl',
+        safeCallbackPath(request.nextUrl.pathname, request.nextUrl.search),
+      );
+      return NextResponse.redirect(signin);
     }
   }
 
   if (
     process.env.UVAI_RATE_LIMIT_DISABLED === '1' ||
-    request.method === 'OPTIONS'
+    request.method === 'OPTIONS' ||
+    // Page routes (e.g. /dashboard) are matched only for auth gating above.
+    // They must not be rate-limited: a JSON 429 would render as a raw blob in
+    // the browser and page navigation would burn the shared api:<ip> quota.
+    !pathname.startsWith('/api/') ||
+    shouldSkipRateLimit(pathname)
   ) {
     return NextResponse.next();
   }

@@ -1,0 +1,1211 @@
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index 07ea653c6..403470ef1 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -11,6 +11,29 @@ permissions:
+   actions: read
+
+ jobs:
++  guards:
++    # Fail fast on the class of breakage that shipped to main un-caught:
++    # committed merge-conflict markers and import-time Python SyntaxErrors.
++    # (main previously carried unresolved markers in 10 files because the
++    # pipeline had no syntax gate — see PR #736.)
++    runs-on: ubuntu-latest
++    steps:
++      - uses: actions/checkout@v7
++      - name: No committed merge-conflict markers
++        run: |
++          # Opening/closing conflict sentinels always carry a label after the
++          # space, so this never matches decorative "=======" underlines.
++          if git grep -nE '^(<<<<<<<|>>>>>>>) ' -- . ':(exclude).github/workflows/ci.yml'; then
++            echo "::error::Committed merge-conflict markers found (see matches above)."
++            exit 1
++          fi
++          echo "No conflict markers found."
++      - uses: actions/setup-python@v6
++        with:
++          python-version: "3.12"
++      - name: Python source compiles (no import-time SyntaxErrors)
++        run: python -m compileall -q src/
++
+   build:
+     runs-on: ubuntu-latest
+     steps:
+diff --git a/config/agent_network.json b/config/agent_network.json
+index 9452edd34..e66251858 100644
+--- a/config/agent_network.json
++++ b/config/agent_network.json
+@@ -172,7 +172,7 @@
+       "tools": ["generate_fullstack"],
+       "capabilities": ["content_generation", "blog_posts", "social_posts"],
+       "skill_source": "uvai-skills",
+-      "trigger_events": ["video_published"]
++      "trigger_events": ["youtube.video.published"]
+     },
+     {
+       "id": "seo-optimizer",
+@@ -181,7 +181,7 @@
+       "tools": ["analyze_video"],
+       "capabilities": ["seo_optimization", "metadata_enhancement"],
+       "skill_source": "uvai-skills",
+-      "trigger_events": ["video_uploaded"]
++      "trigger_events": ["youtube.video.uploaded"]
+     },
+     {
+       "id": "social-scheduler",
+@@ -190,7 +190,7 @@
+       "tools": [],
+       "capabilities": ["social_media", "scheduling", "cross_platform"],
+       "skill_source": "uvai-skills",
+-      "trigger_events": ["content_generated"]
++      "trigger_events": ["ai.content.generated"]
+     },
+     {
+       "id": "lead-scorer",
+@@ -199,7 +199,7 @@
+       "tools": [],
+       "capabilities": ["lead_scoring", "engagement_analysis"],
+       "skill_source": "uvai-skills",
+-      "trigger_events": ["analytics_updated"]
++      "trigger_events": ["youtube.analytics.updated"]
+     },
+     {
+       "id": "email-campaign",
+@@ -208,7 +208,7 @@
+       "tools": [],
+       "capabilities": ["email_generation", "campaign_management"],
+       "skill_source": "uvai-skills",
+-      "trigger_events": ["lead_scored"]
++      "trigger_events": ["crm.lead.scored"]
+     },
+     {
+       "id": "analytics-dashboard",
+@@ -217,7 +217,7 @@
+       "tools": [],
+       "capabilities": ["metrics_aggregation", "dashboard_generation"],
+       "skill_source": "uvai-skills",
+-      "trigger_events": ["daily_cron"]
++      "trigger_events": ["system.cron.daily"]
+     },
+     {
+       "id": "ab-testing",
+@@ -226,7 +226,7 @@
+       "tools": [],
+       "capabilities": ["ab_testing", "variant_management"],
+       "skill_source": "uvai-skills",
+-      "trigger_events": ["video_uploaded"]
++      "trigger_events": ["youtube.video.uploaded"]
+     }
+   ]
+ }
+\ No newline at end of file
+diff --git a/skills-lock.json b/skills-lock.json
+index 5539e0816..20ef41c92 100644
+--- a/skills-lock.json
++++ b/skills-lock.json
+@@ -1,120 +1,104 @@
+ {
+   "version": 1,
+-  "skills": [
+-    {
+-      "id": "firebase-ai-logic-basics",
++  "skills": {
++    "firebase-ai-logic-basics": {
+       "source": "firebase/agent-skills",
+       "sourceType": "github",
+       "skillPath": "skills/firebase-ai-logic-basics/SKILL.md",
+       "computedHash": "c1e42edfaf46c3b2c240bc23413991948a8cc77b70dfddd2009e99c35db760eb"
+     },
+-    {
+-      "id": "firebase-app-hosting-basics",
++    "firebase-app-hosting-basics": {
+       "source": "firebase/agent-skills",
+       "sourceType": "github",
+       "skillPath": "skills/firebase-app-hosting-basics/SKILL.md",
+       "computedHash": "7f0e0330510b4e6b06bcede472cebb183a491b8a0098f92d7563454c40d78050"
+     },
+-    {
+-      "id": "firebase-auth-basics",
++    "firebase-auth-basics": {
+       "source": "firebase/agent-skills",
+       "sourceType": "github",
+       "skillPath": "skills/firebase-auth-basics/SKILL.md",
+       "computedHash": "0d29bda451353a92c3b6048a943a46c28cee267ec2e3b148f6207630adba3d73"
+     },
+-    {
+-      "id": "firebase-basics",
++    "firebase-basics": {
+       "source": "firebase/agent-skills",
+       "sourceType": "github",
+       "skillPath": "skills/firebase-basics/SKILL.md",
+       "computedHash": "88fb9ee785fa7aaa74b2c662e53b2aca0b9ee4b67c84587ee017460f54b97471"
+     },
+-    {
+-      "id": "firebase-crashlytics",
++    "firebase-crashlytics": {
+       "source": "firebase/agent-skills",
+       "sourceType": "github",
+       "skillPath": "skills/firebase-crashlytics/SKILL.md",
+       "computedHash": "2c2b5ad36eeea0910b2e335e84d678c6af75dad3ccf73033fcb7e5a8768cabbc"
+     },
+-    {
+-      "id": "firebase-data-connect",
++    "firebase-data-connect": {
+       "source": "firebase/agent-skills",
+       "sourceType": "github",
+       "skillPath": "skills/firebase-data-connect-basics/SKILL.md",
+       "computedHash": "2dfebf7892b9b17f8022057be93a1b3c11438f2c0ce89e9d56ef7be16b7cdecd"
+     },
+-    {
+-      "id": "firebase-firestore",
++    "firebase-firestore": {
+       "source": "firebase/agent-skills",
+       "sourceType": "github",
+       "skillPath": "skills/firebase-firestore/SKILL.md",
+       "computedHash": "09ce3baf45a8d2cd8f32dd48d436628d7d4ac04f24ad351bf3e352a81760ecf8"
+     },
+-    {
+-      "id": "firebase-hosting-basics",
++    "firebase-hosting-basics": {
+       "source": "firebase/agent-skills",
+       "sourceType": "github",
+       "skillPath": "skills/firebase-hosting-basics/SKILL.md",
+       "computedHash": "fb86fd4035e8e6379931faeb443557ac6f2e43fde04b397433f287e69b6532a9"
+     },
+-    {
+-      "id": "firebase-remote-config-basics",
++    "firebase-remote-config-basics": {
+       "source": "firebase/agent-skills",
+       "sourceType": "github",
+       "skillPath": "skills/firebase-remote-config-basics/SKILL.md",
+       "computedHash": "855963d0c979692811c8b0ea112aba94894ca4f538934268d33e7e4665e7412b"
+     },
+-    {
+-      "id": "firebase-security-rules-auditor",
++    "firebase-security-rules-auditor": {
+       "source": "firebase/agent-skills",
+       "sourceType": "github",
+       "skillPath": "skills/firebase-security-rules-auditor/SKILL.md",
+       "computedHash": "5a90e991bb9acfd3e43bfb570498dee60b9cef94cbb80cfb99257c7e4f61c1a0"
+     },
+-    {
+-      "id": "systematic-debugging",
++    "systematic-debugging": {
+       "source": "obra/superpowers",
+       "sourceType": "github",
+       "skillPath": "skills/systematic-debugging/SKILL.md",
+       "computedHash": "7246fdd3a795fc3daff0af72044ca99bf836e4e6a46844742858786fdfb86488"
+     },
+-    {
+-      "id": "test-driven-development",
++    "test-driven-development": {
+       "source": "obra/superpowers",
+       "sourceType": "github",
+       "skillPath": "skills/test-driven-development/SKILL.md",
+       "computedHash": "126f1ebf6ccd414f42544f6e83d8cc5adb089e1108eaffb7c400701e37eecd9f"
+     },
+-    {
+-      "id": "vercel-react-best-practices",
++    "vercel-react-best-practices": {
+       "source": "vercel-labs/agent-skills",
+       "sourceType": "github",
+       "skillPath": "skills/react-best-practices/SKILL.md",
+       "computedHash": "ca7b0c0c6e5f2750043f7f0cd72d16ac4e2abc48f9b5500d047a4b77a2506212"
+     },
+-    {
+-      "id": "verification-before-completion",
++    "verification-before-completion": {
+       "source": "obra/superpowers",
+       "sourceType": "github",
+       "skillPath": "skills/verification-before-completion/SKILL.md",
+       "computedHash": "9b446f0c7fe1cfb560b1d34439523b1a76d5f177290007b2c053a1c749a4a8ba"
+     },
+-    {
+-      "id": "xcode-project-setup",
++    "xcode-project-setup": {
+       "source": "firebase/agent-skills",
+       "sourceType": "github",
+       "skillPath": "skills/xcode-project-setup/SKILL.md",
+       "computedHash": "65fc8ef640574e34cd315cef3a2e8ea6eb2d3b29d38eba18e1e749d812215161"
+     },
+-<<<<<<< HEAD
+     "content-generation": {
+       "source": "uvai-skills",
+       "sourceType": "local",
+       "skillPath": "src/skills/content_generation/main.py",
+       "className": "ContentGenerationSkill",
+       "version": "1.0.0",
+-      "triggers": ["video_published"],
+-      "dependencies": ["gemini_service"]
++      "triggers": ["youtube.video.published"],
++      "dependencies": ["gemini_service", "database_service"]
+     },
+     "seo-optimizer": {
+       "source": "uvai-skills",
+@@ -122,7 +106,7 @@
+       "skillPath": "src/skills/seo_optimizer/main.py",
+       "className": "SEOOptimizerSkill",
+       "version": "1.0.0",
+-      "triggers": ["video_uploaded"],
++      "triggers": ["youtube.video.uploaded"],
+       "dependencies": ["gemini_service"]
+     },
+     "social-scheduler": {
+@@ -131,8 +115,8 @@
+       "skillPath": "src/skills/social_scheduler/main.py",
+       "className": "SocialSchedulerSkill",
+       "version": "1.0.0",
+-      "triggers": ["content_generated"],
+-      "dependencies": ["gemini_service"]
++      "triggers": ["ai.content.generated"],
++      "dependencies": ["gemini_service", "social_api_service"]
+     },
+     "lead-scorer": {
+       "source": "uvai-skills",
+@@ -140,7 +124,7 @@
+       "skillPath": "src/skills/lead_scorer/main.py",
+       "className": "LeadScorerSkill",
+       "version": "1.0.0",
+-      "triggers": ["analytics_updated"],
++      "triggers": ["youtube.analytics.updated"],
+       "dependencies": ["database_service"]
+     },
+     "email-campaign": {
+@@ -149,8 +133,8 @@
+       "skillPath": "src/skills/email_campaign/main.py",
+       "className": "EmailCampaignSkill",
+       "version": "1.0.0",
+-      "triggers": ["lead_scored"],
+-      "dependencies": ["gemini_service", "database_service"]
++      "triggers": ["crm.lead.scored"],
++      "dependencies": ["gemini_service", "database_service", "email_service"]
+     },
+     "analytics-dashboard": {
+       "source": "uvai-skills",
+@@ -158,8 +142,8 @@
+       "skillPath": "src/skills/analytics_dashboard/main.py",
+       "className": "AnalyticsDashboardSkill",
+       "version": "1.0.0",
+-      "triggers": ["daily_cron"],
+-      "dependencies": ["database_service"]
++      "triggers": ["system.cron.daily"],
++      "dependencies": ["database_service", "analytics_service"]
+     },
+     "ab-testing": {
+       "source": "uvai-skills",
+@@ -167,104 +151,8 @@
+       "skillPath": "src/skills/ab_testing/main.py",
+       "className": "ABTestingSkill",
+       "version": "1.0.0",
+-      "triggers": ["video_uploaded"],
+-      "dependencies": ["gemini_service", "database_service"]
+-=======
+-    {
+-      "id": "content-generation",
+-      "name": "Content Generation",
+-      "version": "1.0.0",
+-      "source": "uvai-skills",
+-      "entry_point": "src/skills/content_generation/main.py",
+-      "triggers": [
+-        "video_published",
+-        "manual"
+-      ],
+-      "dependencies": [
+-        "gemini_service",
+-        "database_service"
+-      ]
+-    },
+-    {
+-      "id": "seo-optimizer",
+-      "name": "SEO Optimizer",
+-      "version": "1.0.0",
+-      "source": "uvai-skills",
+-      "entry_point": "src/skills/seo_optimizer/main.py",
+-      "triggers": [
+-        "video_uploaded"
+-      ],
+-      "dependencies": [
+-        "gemini_service"
+-      ]
+-    },
+-    {
+-      "id": "social-scheduler",
+-      "name": "Social Scheduler",
+-      "version": "1.0.0",
+-      "source": "uvai-skills",
+-      "entry_point": "src/skills/social_scheduler/main.py",
+-      "triggers": [
+-        "content_generated"
+-      ],
+-      "dependencies": [
+-        "social_api_service"
+-      ]
+-    },
+-    {
+-      "id": "lead-scorer",
+-      "name": "Lead Scorer",
+-      "version": "1.0.0",
+-      "source": "uvai-skills",
+-      "entry_point": "src/skills/lead_scorer/main.py",
+-      "triggers": [
+-        "analytics_updated"
+-      ],
+-      "dependencies": [
+-        "database_service"
+-      ]
+-    },
+-    {
+-      "id": "email-campaign",
+-      "name": "Email Campaign",
+-      "version": "1.0.0",
+-      "source": "uvai-skills",
+-      "entry_point": "src/skills/email_campaign/main.py",
+-      "triggers": [
+-        "lead_scored"
+-      ],
+-      "dependencies": [
+-        "email_service"
+-      ]
+-    },
+-    {
+-      "id": "analytics-dashboard",
+-      "name": "Analytics Dashboard",
+-      "version": "1.0.0",
+-      "source": "uvai-skills",
+-      "entry_point": "src/skills/analytics_dashboard/main.py",
+-      "triggers": [
+-        "daily_cron"
+-      ],
+-      "dependencies": [
+-        "database_service",
+-        "analytics_service"
+-      ]
+-    },
+-    {
+-      "id": "ab-testing",
+-      "name": "A/B Testing",
+-      "version": "1.0.0",
+-      "source": "uvai-skills",
+-      "entry_point": "src/skills/ab_testing/main.py",
+-      "triggers": [
+-        "video_uploaded"
+-      ],
+-      "dependencies": [
+-        "gemini_service",
+-        "analytics_service"
+-      ]
+->>>>>>> origin/main
++      "triggers": ["youtube.video.uploaded"],
++      "dependencies": ["gemini_service", "database_service", "analytics_service"]
+     }
+-  ]
++  }
+ }
+\ No newline at end of file
+diff --git a/src/agents/mcp_ecosystem_coordinator.py b/src/agents/mcp_ecosystem_coordinator.py
+index 242f65d69..c6b2738b2 100644
+--- a/src/agents/mcp_ecosystem_coordinator.py
++++ b/src/agents/mcp_ecosystem_coordinator.py
+@@ -10,15 +10,9 @@
+ import json
+ import logging
+ import os
+-import subprocess
+-import sys
+ from dataclasses import asdict
+-<<<<<<< HEAD
+ from pathlib import Path
+-from typing import Any, Optional
+-=======
+ from typing import Any, Dict, List, Optional
+->>>>>>> origin/main
+
+ from youtube_extension.processors.enhanced_extractor import (
+     EnhancedVideoExtractor,
+@@ -171,7 +165,10 @@ def __init__(self):
+
+     def list_skills(self, source: Optional[str] = None) -> List[Dict[str, Any]]:
+         """Returns a list of discovered skills from the registry."""
+-        return self.skill_registry.list_skills(source=source)
++        skills = self.skill_registry.list_skills()
++        if source:
++            return [s for s in skills if s.get("source") == source]
++        return skills
+
+     def register_server(self, server: BaseMCPServer) -> bool:
+         """Registers an MCP server with the coordinator."""
+@@ -283,7 +280,6 @@ async def get_system_status(self) -> dict:
+
+         return status
+
+-<<<<<<< HEAD
+
+ class SkillRegistry:
+     """Registry for discovering and invoking GTM skills from skills-lock.json.
+@@ -327,10 +323,27 @@ def _load_skills(self) -> None:
+             return
+
+         skills_data = data.get("skills", {})
+-        for skill_id, meta in skills_data.items():
+-            # Only load uvai-skills (local GTM skills)
+-            if meta.get("source") == "uvai-skills" and meta.get("sourceType") == "local":
+-                self._skills[skill_id] = meta
++        if isinstance(skills_data, list):
++            # Handle list format from origin/main; only load entries that have a
++            # className so that _load_skill_instance() can instantiate them.
++            for skill in skills_data:
++                if (
++                    skill.get("source") == "uvai-skills"
++                    and skill.get("className")
++                    and skill.get("id")
++                ):
++                    self._skills[skill["id"]] = skill
++        elif isinstance(skills_data, dict):
++            # Handle dict format from HEAD; apply the same source/sourceType/
++            # className guards as the list branch so only locally-instantiable
++            # skills are registered (matches origin/main's filter).
++            for skill_id, meta in skills_data.items():
++                if (
++                    meta.get("source") == "uvai-skills"
++                    and meta.get("sourceType") == "local"
++                    and meta.get("className")
++                ):
++                    self._skills[skill_id] = meta
+
+         logger.info("Loaded %d GTM skills from %s", len(self._skills), self._lock_path)
+
+@@ -338,12 +351,13 @@ def _build_skill_metadata(self, skill_id: str, meta: dict[str, Any]) -> dict[str
+         """Build a normalized metadata dict for a skill entry."""
+         return {
+             "id": skill_id,
+-            "name": skill_id.replace("-", " ").title(),
++            "name": meta.get("name") or skill_id.replace("-", " ").title(),
+             "class_name": meta.get("className", ""),
+             "version": meta.get("version", "0.0.0"),
+             "triggers": meta.get("triggers", []),
+             "dependencies": meta.get("dependencies", []),
+-            "entry_point": meta.get("skillPath", ""),
++            "entry_point": meta.get("skillPath") or meta.get("entry_point", ""),
++            "source": meta.get("source", ""),
+         }
+
+     def list_skills(self) -> list[dict[str, Any]]:
+@@ -377,8 +391,16 @@ def _load_skill_instance(self, skill_id: str) -> Any:
+         if meta is None:
+             raise ValueError(f"Unknown skill: {skill_id}")
+
+-        skill_path = meta["skillPath"]  # e.g. "src/skills/content_generation/main.py"
+-        class_name = meta["className"]  # e.g. "ContentGenerationSkill"
++        skill_path = meta.get("skillPath") or meta.get("entry_point")
++        class_name = meta.get("className")
++
++        if not skill_path:
++             raise ValueError(f"Skill {skill_id} has no skillPath or entry_point")
++
++        if not class_name:
++            # Fallback for origin/main style skills if they don't have className
++            # But HEAD style should have it.
++            raise ValueError(f"Skill {skill_id} has no className")
+
+         # Convert file path to module path
+         module_path = skill_path.replace("/", ".").removesuffix(".py")
+@@ -407,6 +429,9 @@ def get_env_for_skill(self, skill_id: str) -> dict[str, str]:
+             "gemini_service": ["GEMINI_API_KEY"],
+             "database_service": ["DATABASE_URL"],
+             "openai_service": ["OPENAI_API_KEY"],
++            "social_api_service": ["SOCIAL_API_KEY"],
++            "email_service": ["EMAIL_API_KEY"],
++            "analytics_service": ["ANALYTICS_API_KEY"],
+         }
+
+         env: dict[str, str] = {}
+@@ -441,110 +466,6 @@ async def invoke_skill(
+             logger.error("Skill %s execution failed: %s", skill_id, e)
+             return {"status": "error", "error": str(e)}
+
+-=======
+-class SkillRegistry:
+-    """Registry for discovering and invoking skills from skills-lock.json."""
+-
+-    def __init__(self, lock_file: str = "skills-lock.json"):
+-        self.lock_file = lock_file
+-        self.skills: List[Dict[str, Any]] = []
+-        self._load_skills()
+-
+-    def _load_skills(self):
+-        """Loads skills from the lock file."""
+-        if not os.path.exists(self.lock_file):
+-            logger.warning(f"Lock file {self.lock_file} not found.")
+-            return
+-
+-        try:
+-            with open(self.lock_file, 'r') as f:
+-                data = json.load(f)
+-                # Handle both list and dict formats for backward compatibility during transition
+-                skills_data = data.get("skills", [])
+-                if isinstance(skills_data, list):
+-                    self.skills = skills_data
+-                elif isinstance(skills_data, dict):
+-                    # Convert dict format to list
+-                    self.skills = []
+-                    for skill_id, skill_info in skills_data.items():
+-                        skill_info["id"] = skill_id
+-                        self.skills.append(skill_info)
+-        except Exception as e:
+-            logger.error(f"Error loading skills from {self.lock_file}: {e}")
+-
+-    def list_skills(self, source: Optional[str] = None) -> List[Dict[str, Any]]:
+-        """Returns a list of discovered skills, optionally filtered by source."""
+-        if source:
+-            return [s for s in self.skills if s.get("source") == source]
+-        return self.skills
+-
+-    def get_skill(self, skill_id: str) -> Optional[Dict[str, Any]]:
+-        """Retrieves a skill by its ID."""
+-        for skill in self.skills:
+-            if skill.get("id") == skill_id:
+-                return skill
+-        return None
+-
+-    async def invoke_skill(self, skill_id: str, context: Dict[str, Any]) -> Dict[str, Any]:
+-        """Invokes a skill by its ID with the given context."""
+-        skill = self.get_skill(skill_id)
+-        if not skill:
+-            return {"status": "error", "message": f"Skill '{skill_id}' not found"}
+-
+-        entry_point = skill.get("entry_point")
+-        if not entry_point or not os.path.exists(entry_point):
+-            return {"status": "error", "message": f"Entry point '{entry_point}' not found for skill '{skill_id}'"}
+-
+-        # Explicitly pass required env vars (Gemini CLI security update)
+-        allowed_env_vars = [
+-            "GEMINI_API_KEY",
+-            "OPENAI_API_KEY",
+-            "YOUTUBE_API_KEY",
+-            "DATABASE_URL",
+-            "GITHUB_TOKEN",
+-            "PYTHONPATH"
+-        ]
+-
+-        env = {k: os.environ[k] for k in allowed_env_vars if k in os.environ}
+-        env["SKILL_CONTEXT"] = json.dumps(context)
+-        # Ensure minimal system env if needed
+-        if "PATH" in os.environ:
+-            env["PATH"] = os.environ["PATH"]
+-
+-        try:
+-            logger.info(f"🚀 Invoking skill '{skill_id}' via {entry_point}")
+-            # Run the skill as a subprocess
+-            process = await asyncio.to_thread(
+-                subprocess.run,
+-                [sys.executable, entry_point],
+-                env=env,
+-                capture_output=True,
+-                text=True,
+-                check=True
+-            )
+-
+-            try:
+-                result = json.loads(process.stdout)
+-                return result
+-            except json.JSONDecodeError:
+-                return {
+-                    "status": "success",
+-                    "output": process.stdout.strip(),
+-                    "warning": "Output was not valid JSON"
+-                }
+-
+-        except subprocess.CalledProcessError as e:
+-            logger.error(f"❌ Skill '{skill_id}' failed with exit code {e.returncode}")
+-            logger.error(f"Stderr: {e.stderr}")
+-            return {
+-                "status": "error",
+-                "message": f"Skill execution failed: {str(e)}",
+-                "stderr": e.stderr
+-            }
+-        except Exception as e:
+-            logger.error(f"❌ Error invoking skill '{skill_id}': {e}")
+-            return {"status": "error", "message": str(e)}
+->>>>>>> origin/main
+
+ # Example usage and testing
+ async def main():
+diff --git a/src/skills/ab_testing/main.py b/src/skills/ab_testing/main.py
+index 8012c40c0..45fd7b8d3 100644
+--- a/src/skills/ab_testing/main.py
++++ b/src/skills/ab_testing/main.py
+@@ -1,4 +1,3 @@
+-<<<<<<< HEAD
+ """A/B Testing skill - runs A/B tests on thumbnails and titles."""
+
+ from __future__ import annotations
+@@ -17,7 +16,7 @@ class ABTestingSkill(BaseSkill):
+     skill_id = "ab-testing"
+     name = "A/B Testing"
+     version = "1.0.0"
+-    triggers = ["video_uploaded"]
++    triggers = ["youtube.video.uploaded"]
+     required_env_vars = ["GEMINI_API_KEY", "DATABASE_URL"]
+
+     async def execute(self, payload: dict[str, Any]) -> SkillResult:
+@@ -52,27 +51,3 @@ async def execute(self, payload: dict[str, Any]) -> SkillResult:
+                 "message": f"A/B test ({test_type}) created for video {video_id}",
+             },
+         )
+-=======
+-import os
+-import sys
+-import json
+-import logging
+-
+-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+-logger = logging.getLogger(__name__)
+-
+-def main():
+-    skill_name = "ab-testing"
+-    logger.info(f"Skill {skill_name} invoked")
+-    context = os.getenv("SKILL_CONTEXT", "{}")
+-    logger.info(f"Context: {context}")
+-    gemini_key = os.getenv("GEMINI_API_KEY")
+-    if gemini_key:
+-        logger.info("GEMINI_API_KEY is present")
+-    else:
+-        logger.warning("GEMINI_API_KEY is missing")
+-    print(json.dumps({"status": "success", "skill": skill_name}))
+-
+-if __name__ == "__main__":
+-    main()
+->>>>>>> origin/main
+diff --git a/src/skills/analytics_dashboard/main.py b/src/skills/analytics_dashboard/main.py
+index fec368bf3..2ceb30a4e 100644
+--- a/src/skills/analytics_dashboard/main.py
++++ b/src/skills/analytics_dashboard/main.py
+@@ -1,4 +1,3 @@
+-<<<<<<< HEAD
+ """Analytics Dashboard skill - aggregates metrics into dashboard data."""
+
+ from __future__ import annotations
+@@ -17,7 +16,7 @@ class AnalyticsDashboardSkill(BaseSkill):
+     skill_id = "analytics-dashboard"
+     name = "Analytics Dashboard"
+     version = "1.0.0"
+-    triggers = ["daily_cron"]
++    triggers = ["system.cron.daily"]
+     required_env_vars = ["DATABASE_URL"]
+
+     async def execute(self, payload: dict[str, Any]) -> SkillResult:
+@@ -46,27 +45,3 @@ async def execute(self, payload: dict[str, Any]) -> SkillResult:
+                 "message": f"Dashboard data aggregated for {date_range}",
+             },
+         )
+-=======
+-import os
+-import sys
+-import json
+-import logging
+-
+-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+-logger = logging.getLogger(__name__)
+-
+-def main():
+-    skill_name = "analytics-dashboard"
+-    logger.info(f"Skill {skill_name} invoked")
+-    context = os.getenv("SKILL_CONTEXT", "{}")
+-    logger.info(f"Context: {context}")
+-    gemini_key = os.getenv("GEMINI_API_KEY")
+-    if gemini_key:
+-        logger.info("GEMINI_API_KEY is present")
+-    else:
+-        logger.warning("GEMINI_API_KEY is missing")
+-    print(json.dumps({"status": "success", "skill": skill_name}))
+-
+-if __name__ == "__main__":
+-    main()
+->>>>>>> origin/main
+diff --git a/src/skills/content_generation/main.py b/src/skills/content_generation/main.py
+index 566eed615..30b187747 100644
+--- a/src/skills/content_generation/main.py
++++ b/src/skills/content_generation/main.py
+@@ -1,4 +1,3 @@
+-<<<<<<< HEAD
+ """Content Generation skill - generates blog/social posts from video transcripts."""
+
+ from __future__ import annotations
+@@ -17,7 +16,7 @@ class ContentGenerationSkill(BaseSkill):
+     skill_id = "content-generation"
+     name = "Content Generation"
+     version = "1.0.0"
+-    triggers = ["video_published"]
++    triggers = ["youtube.video.published"]
+     required_env_vars = ["GEMINI_API_KEY"]
+
+     async def execute(self, payload: dict[str, Any]) -> SkillResult:
+@@ -52,27 +51,3 @@ async def execute(self, payload: dict[str, Any]) -> SkillResult:
+                 "message": f"Content generation queued for video {video_id}",
+             },
+         )
+-=======
+-import os
+-import sys
+-import json
+-import logging
+-
+-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+-logger = logging.getLogger(__name__)
+-
+-def main():
+-    skill_name = "content-generation"
+-    logger.info(f"Skill {skill_name} invoked")
+-    context = os.getenv("SKILL_CONTEXT", "{}")
+-    logger.info(f"Context: {context}")
+-    gemini_key = os.getenv("GEMINI_API_KEY")
+-    if gemini_key:
+-        logger.info("GEMINI_API_KEY is present")
+-    else:
+-        logger.warning("GEMINI_API_KEY is missing")
+-    print(json.dumps({"status": "success", "skill": skill_name}))
+-
+-if __name__ == "__main__":
+-    main()
+->>>>>>> origin/main
+diff --git a/src/skills/email_campaign/main.py b/src/skills/email_campaign/main.py
+index 46aab14b3..f5251fcb3 100644
+--- a/src/skills/email_campaign/main.py
++++ b/src/skills/email_campaign/main.py
+@@ -1,4 +1,3 @@
+-<<<<<<< HEAD
+ """Email Campaign skill - generates and sends email sequences."""
+
+ from __future__ import annotations
+@@ -17,7 +16,7 @@ class EmailCampaignSkill(BaseSkill):
+     skill_id = "email-campaign"
+     name = "Email Campaign"
+     version = "1.0.0"
+-    triggers = ["lead_scored"]
++    triggers = ["crm.lead.scored"]
+     required_env_vars = ["GEMINI_API_KEY", "DATABASE_URL"]
+
+     async def execute(self, payload: dict[str, Any]) -> SkillResult:
+@@ -47,27 +46,3 @@ async def execute(self, payload: dict[str, Any]) -> SkillResult:
+                 "message": f"Email campaign ({campaign_type}) queued for lead {lead_id}",
+             },
+         )
+-=======
+-import os
+-import sys
+-import json
+-import logging
+-
+-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+-logger = logging.getLogger(__name__)
+-
+-def main():
+-    skill_name = "email-campaign"
+-    logger.info(f"Skill {skill_name} invoked")
+-    context = os.getenv("SKILL_CONTEXT", "{}")
+-    logger.info(f"Context: {context}")
+-    gemini_key = os.getenv("GEMINI_API_KEY")
+-    if gemini_key:
+-        logger.info("GEMINI_API_KEY is present")
+-    else:
+-        logger.warning("GEMINI_API_KEY is missing")
+-    print(json.dumps({"status": "success", "skill": skill_name}))
+-
+-if __name__ == "__main__":
+-    main()
+->>>>>>> origin/main
+diff --git a/src/skills/lead_scorer/main.py b/src/skills/lead_scorer/main.py
+index 33ec30ff3..a53a05989 100644
+--- a/src/skills/lead_scorer/main.py
++++ b/src/skills/lead_scorer/main.py
+@@ -1,4 +1,3 @@
+-<<<<<<< HEAD
+ """Lead Scorer skill - scores leads based on engagement signals."""
+
+ from __future__ import annotations
+@@ -17,7 +16,7 @@ class LeadScorerSkill(BaseSkill):
+     skill_id = "lead-scorer"
+     name = "Lead Scorer"
+     version = "1.0.0"
+-    triggers = ["analytics_updated"]
++    triggers = ["youtube.analytics.updated"]
+     required_env_vars = ["DATABASE_URL"]
+
+     async def execute(self, payload: dict[str, Any]) -> SkillResult:
+@@ -44,27 +43,3 @@ async def execute(self, payload: dict[str, Any]) -> SkillResult:
+                 "message": f"Lead {lead_id} scoring queued",
+             },
+         )
+-=======
+-import os
+-import sys
+-import json
+-import logging
+-
+-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+-logger = logging.getLogger(__name__)
+-
+-def main():
+-    skill_name = "lead-scorer"
+-    logger.info(f"Skill {skill_name} invoked")
+-    context = os.getenv("SKILL_CONTEXT", "{}")
+-    logger.info(f"Context: {context}")
+-    gemini_key = os.getenv("GEMINI_API_KEY")
+-    if gemini_key:
+-        logger.info("GEMINI_API_KEY is present")
+-    else:
+-        logger.warning("GEMINI_API_KEY is missing")
+-    print(json.dumps({"status": "success", "skill": skill_name}))
+-
+-if __name__ == "__main__":
+-    main()
+->>>>>>> origin/main
+diff --git a/src/skills/seo_optimizer/main.py b/src/skills/seo_optimizer/main.py
+index 6dc996247..91025f747 100644
+--- a/src/skills/seo_optimizer/main.py
++++ b/src/skills/seo_optimizer/main.py
+@@ -1,4 +1,3 @@
+-<<<<<<< HEAD
+ """SEO Optimizer skill - optimizes video titles, descriptions, and tags."""
+
+ from __future__ import annotations
+@@ -17,7 +16,7 @@ class SEOOptimizerSkill(BaseSkill):
+     skill_id = "seo-optimizer"
+     name = "SEO Optimizer"
+     version = "1.0.0"
+-    triggers = ["video_uploaded"]
++    triggers = ["youtube.video.uploaded"]
+     required_env_vars = ["GEMINI_API_KEY"]
+
+     async def execute(self, payload: dict[str, Any]) -> SkillResult:
+@@ -50,27 +49,3 @@ async def execute(self, payload: dict[str, Any]) -> SkillResult:
+                 "message": f"SEO optimization queued for video {video_id}",
+             },
+         )
+-=======
+-import os
+-import sys
+-import json
+-import logging
+-
+-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+-logger = logging.getLogger(__name__)
+-
+-def main():
+-    skill_name = "seo-optimizer"
+-    logger.info(f"Skill {skill_name} invoked")
+-    context = os.getenv("SKILL_CONTEXT", "{}")
+-    logger.info(f"Context: {context}")
+-    gemini_key = os.getenv("GEMINI_API_KEY")
+-    if gemini_key:
+-        logger.info("GEMINI_API_KEY is present")
+-    else:
+-        logger.warning("GEMINI_API_KEY is missing")
+-    print(json.dumps({"status": "success", "skill": skill_name}))
+-
+-if __name__ == "__main__":
+-    main()
+->>>>>>> origin/main
+diff --git a/src/skills/social_scheduler/main.py b/src/skills/social_scheduler/main.py
+index d9bec0db6..a04982b6e 100644
+--- a/src/skills/social_scheduler/main.py
++++ b/src/skills/social_scheduler/main.py
+@@ -1,4 +1,3 @@
+-<<<<<<< HEAD
+ """Social Scheduler skill - schedules cross-platform social media posts."""
+
+ from __future__ import annotations
+@@ -17,7 +16,7 @@ class SocialSchedulerSkill(BaseSkill):
+     skill_id = "social-scheduler"
+     name = "Social Scheduler"
+     version = "1.0.0"
+-    triggers = ["content_generated"]
++    triggers = ["ai.content.generated"]
+     required_env_vars = ["GEMINI_API_KEY"]
+
+     async def execute(self, payload: dict[str, Any]) -> SkillResult:
+@@ -50,27 +49,3 @@ async def execute(self, payload: dict[str, Any]) -> SkillResult:
+                 "message": f"Posts scheduled for {len(platforms)} platform(s)",
+             },
+         )
+-=======
+-import os
+-import sys
+-import json
+-import logging
+-
+-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+-logger = logging.getLogger(__name__)
+-
+-def main():
+-    skill_name = "social-scheduler"
+-    logger.info(f"Skill {skill_name} invoked")
+-    context = os.getenv("SKILL_CONTEXT", "{}")
+-    logger.info(f"Context: {context}")
+-    gemini_key = os.getenv("GEMINI_API_KEY")
+-    if gemini_key:
+-        logger.info("GEMINI_API_KEY is present")
+-    else:
+-        logger.warning("GEMINI_API_KEY is missing")
+-    print(json.dumps({"status": "success", "skill": skill_name}))
+-
+-if __name__ == "__main__":
+-    main()
+->>>>>>> origin/main
+diff --git a/tests/test_skills_integration.py b/tests/test_skills_integration.py
+index 9722b48ac..d08fedb66 100644
+--- a/tests/test_skills_integration.py
++++ b/tests/test_skills_integration.py
+@@ -1,4 +1,3 @@
+-<<<<<<< HEAD
+ """Integration tests for GTM skill discovery and invocation.
+
+ Tests verify:
+@@ -112,7 +111,7 @@ def test_get_skill_by_id(self, registry: SkillRegistry) -> None:
+         assert skill["name"] == "Content Generation"
+         assert skill["class_name"] == "ContentGenerationSkill"
+         assert skill["version"] == "1.0.0"
+-        assert "video_published" in skill["triggers"]
++        assert "youtube.video.published" in skill["triggers"]
+
+     def test_get_nonexistent_skill_returns_none(self, registry: SkillRegistry) -> None:
+         assert registry.get_skill("nonexistent-skill") is None
+@@ -129,14 +128,14 @@ class TestSkillTriggerMatching:
+     def test_video_published_triggers_content_generation(
+         self, registry: SkillRegistry
+     ) -> None:
+-        skills = registry.get_skills_for_trigger("video_published")
++        skills = registry.get_skills_for_trigger("youtube.video.published")
+         skill_ids = {s["id"] for s in skills}
+         assert "content-generation" in skill_ids
+
+     def test_video_uploaded_triggers_seo_and_ab(
+         self, registry: SkillRegistry
+     ) -> None:
+-        skills = registry.get_skills_for_trigger("video_uploaded")
++        skills = registry.get_skills_for_trigger("youtube.video.uploaded")
+         skill_ids = {s["id"] for s in skills}
+         assert "seo-optimizer" in skill_ids
+         assert "ab-testing" in skill_ids
+@@ -144,33 +143,33 @@ def test_video_uploaded_triggers_seo_and_ab(
+     def test_content_generated_triggers_social_scheduler(
+         self, registry: SkillRegistry
+     ) -> None:
+-        skills = registry.get_skills_for_trigger("content_generated")
++        skills = registry.get_skills_for_trigger("ai.content.generated")
+         skill_ids = {s["id"] for s in skills}
+         assert "social-scheduler" in skill_ids
+
+     def test_analytics_updated_triggers_lead_scorer(
+         self, registry: SkillRegistry
+     ) -> None:
+-        skills = registry.get_skills_for_trigger("analytics_updated")
++        skills = registry.get_skills_for_trigger("youtube.analytics.updated")
+         skill_ids = {s["id"] for s in skills}
+         assert "lead-scorer" in skill_ids
+
+     def test_lead_scored_triggers_email_campaign(
+         self, registry: SkillRegistry
+     ) -> None:
+-        skills = registry.get_skills_for_trigger("lead_scored")
++        skills = registry.get_skills_for_trigger("crm.lead.scored")
+         skill_ids = {s["id"] for s in skills}
+         assert "email-campaign" in skill_ids
+
+     def test_daily_cron_triggers_analytics_dashboard(
+         self, registry: SkillRegistry
+     ) -> None:
+-        skills = registry.get_skills_for_trigger("daily_cron")
++        skills = registry.get_skills_for_trigger("system.cron.daily")
+         skill_ids = {s["id"] for s in skills}
+         assert "analytics-dashboard" in skill_ids
+
+     def test_unknown_trigger_returns_empty(self, registry: SkillRegistry) -> None:
+-        skills = registry.get_skills_for_trigger("unknown_event")
++        skills = registry.get_skills_for_trigger("unknown.event.type")
+         assert skills == []
+
+
+@@ -281,6 +280,87 @@ async def test_invoke_nonexistent_skill(self, registry: SkillRegistry) -> None:
+         assert result["status"] == "error"
+
+
++# ---------------------------------------------------------------------------
++# End-to-end dispatch tests
++# ---------------------------------------------------------------------------
++
++
++class TestEndToEndDispatch:
++    """Verify the full trigger→discovery→invocation pipeline."""
++
++    @pytest.mark.asyncio
++    async def test_video_published_dispatches_to_content_generation(
++        self, registry: SkillRegistry
++    ) -> None:
++        """Emit a youtube.video.published event and assert content-generation runs."""
++        event_type = "youtube.video.published"
++        payload = {"transcript": "AI is transforming the world.", "video_id": "auJzb1D-fag"}
++
++        matched = registry.get_skills_for_trigger(event_type)
++        skill_ids = {s["id"] for s in matched}
++        assert "content-generation" in skill_ids, (
++            f"content-generation not discovered for trigger '{event_type}'"
++        )
++
++        result = await registry.invoke_skill("content-generation", payload)
++        assert result["status"] == "success"
++        assert result["output"]["video_id"] == "auJzb1D-fag"
++        assert result["output"]["generated"] is True
++
++    @pytest.mark.asyncio
++    async def test_no_manual_trigger_in_any_skill(
++        self, registry: SkillRegistry
++    ) -> None:
++        """Confirm no skill exposes a 'manual' trigger (banned by single-workflow policy).
++
++        The regression this guards against re-added ``manual`` in three places —
++        the skill class, ``skills-lock.json``, and ``config/agent_network.json`` —
++        so the check inspects all three, not just the lock-file-derived metadata.
++        """
++        skills = registry.list_skills()
++
++        # 1. Registry metadata (normalized from skills-lock.json).
++        for skill in skills:
++            assert "manual" not in skill["triggers"], (
++                f"Skill '{skill['id']}' has forbidden 'manual' trigger in lock metadata"
++            )
++
++        # 2. The loaded skill class's own ``triggers`` attribute.
++        for skill in skills:
++            instance = registry._load_skill_instance(skill["id"])
++            class_triggers = getattr(instance, "triggers", [])
++            assert "manual" not in class_triggers, (
++                f"Skill class '{skill['id']}' declares a forbidden 'manual' trigger"
++            )
++
++        # 3. The agent-network configuration.
++        network_cfg = json.loads(
++            (_REPO_ROOT / "config" / "agent_network.json").read_text()
++        )
++        for agent in network_cfg.get("agents", []):
++            assert "manual" not in agent.get("trigger_events", []), (
++                f"Agent '{agent.get('id')}' has forbidden 'manual' in trigger_events"
++            )
++
++    @pytest.mark.asyncio
++    async def test_trigger_dispatch_invokes_all_matching_skills(
++        self, registry: SkillRegistry
++    ) -> None:
++        """All skills discovered for youtube.video.uploaded execute successfully."""
++        event_type = "youtube.video.uploaded"
++        payload = {"video_id": "auJzb1D-fag", "title": "Test Video", "tags": ["ai"]}
++
++        matched = registry.get_skills_for_trigger(event_type)
++        assert len(matched) >= 1, f"No skills matched trigger '{event_type}'"
++
++        for skill_meta in matched:
++            result = await registry.invoke_skill(skill_meta["id"], payload)
++            assert result["status"] == "success", (
++                f"Skill '{skill_meta['id']}' failed for trigger '{event_type}': "
++                f"{result.get('error')}"
++            )
++
++
+ # ---------------------------------------------------------------------------
+ # MCP env pass-through tests
+ # ---------------------------------------------------------------------------
+@@ -358,93 +438,3 @@ def test_each_gtm_skill_has_required_fields(self) -> None:
+             assert "version" in meta, f"{skill_id} missing version"
+             assert "triggers" in meta, f"{skill_id} missing triggers"
+             assert "dependencies" in meta, f"{skill_id} missing dependencies"
+-=======
+-import os
+-import json
+-import pytest
+-import asyncio
+-from unittest.mock import MagicMock, patch
+-import sys
+-
+-# Ensure src is in path
+-sys.path.append(os.path.join(os.getcwd(), "src"))
+-
+-# Mock dependencies that cause issues during import
+-# Using MagicMock for packages needs __path__ to be set if they are used in imports
+-mock_google = MagicMock()
+-mock_google.__path__ = []
+-sys.modules['google'] = mock_google
+-
+-mock_google_cloud = MagicMock()
+-mock_google_cloud.__path__ = []
+-sys.modules['google.cloud'] = mock_google_cloud
+-
+-sys.modules['google.genai'] = MagicMock()
+-sys.modules['google.generativeai'] = MagicMock()
+-sys.modules['google.cloud.aiplatform'] = MagicMock()
+-sys.modules['vertexai'] = MagicMock()
+-sys.modules['vertexai.generative_models'] = MagicMock()
+-
+-sys.modules['aiohttp'] = MagicMock()
+-sys.modules['pandas'] = MagicMock()
+-sys.modules['youtube_transcript_api'] = MagicMock()
+-sys.modules['youtube_extension.processors.enhanced_extractor'] = MagicMock()
+-sys.modules['youtube_extension.services.pipeline_audit_store'] = MagicMock()
+-
+-# Import SkillRegistry after mocking
+-from agents.mcp_ecosystem_coordinator import SkillRegistry
+-
+-@pytest.fixture
+-def skill_registry():
+-    # Use the real skills-lock.json created during the task
+-    return SkillRegistry(lock_file="skills-lock.json")
+-
+-def test_skill_discovery(skill_registry):
+-    """Verify that all 7 GTM skills are discovered from skills-lock.json."""
+-    skills = skill_registry.list_skills(source="uvai-skills")
+-    assert len(skills) == 7
+-
+-    expected_ids = [
+-        "content-generation",
+-        "seo-optimizer",
+-        "social-scheduler",
+-        "lead-scorer",
+-        "email-campaign",
+-        "analytics-dashboard",
+-        "ab-testing"
+-    ]
+-
+-    discovered_ids = [s["id"] for s in skills]
+-    for skill_id in expected_ids:
+-        assert skill_id in discovered_ids
+-
+-@pytest.mark.asyncio
+-async def test_skill_invocation(skill_registry):
+-    """Verify that a skill can be invoked and returns the expected result."""
+-    # We use content-generation for testing invocation
+-    skill_id = "content-generation"
+-    context = {"video_id": "test_123", "transcript": "Hello world"}
+-
+-    # We expect this to work because we created the thin wrapper main.py
+-    result = await skill_registry.invoke_skill(skill_id, context)
+-
+-    assert result["status"] == "success"
+-    assert result["skill"] == skill_id
+-
+-@pytest.mark.asyncio
+-async def test_skill_invocation_env_vars(skill_registry):
+-    """Verify that environment variables are passed (simulated)."""
+-    with patch("subprocess.run") as mock_run:
+-        mock_run.return_value.stdout = json.dumps({"status": "success"})
+-        mock_run.return_value.returncode = 0
+-
+-        os.environ["GEMINI_API_KEY"] = "test_key"
+-
+-        await skill_registry.invoke_skill("content-generation", {})
+-
+-        # Check that the env passed to subprocess.run contains GEMINI_API_KEY
+-        args, kwargs = mock_run.call_args
+-        passed_env = kwargs.get("env", {})
+-        assert passed_env.get("GEMINI_API_KEY") == "test_key"
+-        assert "SKILL_CONTEXT" in passed_env
+->>>>>>> origin/main
