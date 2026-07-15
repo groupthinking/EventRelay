@@ -10,6 +10,16 @@ except ImportError:
     mock_pydantic = MagicMock()
     sys.modules["pydantic"] = mock_pydantic
 
+# Another unit-test module (tests/unit/test_cloud_routes.py) installs a
+# MagicMock stub at sys.modules["src.integration.looker_embedded"] at import
+# time and never restores it. When pytest collects that module first, this
+# suite would otherwise import the stub instead of the real service and fail
+# (DID NOT RAISE / MagicMock attributes). Drop any stubbed leaf modules so we
+# bind to the real implementations under test.
+for _stubbed in ("src.integration.looker_embedded", "src.integration.looker_embed"):
+    if isinstance(sys.modules.get(_stubbed), MagicMock):
+        del sys.modules[_stubbed]
+
 from src.integration.looker_embedded import LookerEmbeddedService
 from src.integration.looker_embed import LookerEmbedService
 
