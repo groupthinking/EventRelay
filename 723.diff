@@ -1,0 +1,22 @@
+diff --git a/src/agents/process_video_with_mcp.py b/src/agents/process_video_with_mcp.py
+index 9a7753fa5..700d212c8 100644
+--- a/src/agents/process_video_with_mcp.py
++++ b/src/agents/process_video_with_mcp.py
+@@ -232,11 +232,13 @@ async def _extract_transcript_with_rotation(self, video_id: str) -> list[dict[st
+                 transcript_list = await loop.run_in_executor(
+                     None, lambda: YouTubeTranscriptApi().list(video_id)  # type: ignore[union-attr]
+                 )
+-                for t in transcript_list:
++                fetch_tasks = [
++                    loop.run_in_executor(None, lambda t=t: t.fetch().to_raw_data())
++                    for t in transcript_list
++                ]
++                for task in asyncio.as_completed(fetch_tasks):
+                     try:
+-                        data = await loop.run_in_executor(
+-                            None, lambda t=t: t.fetch().to_raw_data()
+-                        )
++                        data = await task
+                         if data:
+                             return data
+                     except Exception:

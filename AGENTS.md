@@ -72,6 +72,7 @@ Agents are granted permission and encouraged to:
 4.  **Documentation**:
     - Update `README.md` files when interface changes occur.
     - Document limitations (e.g., "Text-only CLI wrapper") clearly.
+    - For Vercel-specific work, include `https://vercel.com/docs/llms-full.txt` in the AI assistant context set.
 
 ## Commit Message Style
 GitHub Desktop 3.6 and Copilot commit generation use this section to format commit messages.

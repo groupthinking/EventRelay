@@ -7,6 +7,7 @@ Real-time API cost tracking, quota management, and optimization for UVAI platfor
 Monitors OpenAI, Anthropic, Gemini, YouTube Data API, and other service usage.
 """
 
+import aiohttp
 import asyncio
 import json
 import logging
@@ -119,6 +120,9 @@ class APICostMonitor:
         self.daily_budget = float(os.getenv('API_DAILY_BUDGET', '10.00'))
         self.alert_threshold = float(os.getenv('API_ALERT_THRESHOLD', '8.00'))
         self.cost_tracking_enabled = os.getenv('API_COST_TRACKING', 'true').lower() == 'true'
+
+        # Webhook notification settings
+        self.webhook_url = os.getenv('API_COST_WEBHOOK_URL')
 
         # Rate limiters for different services
         self.rate_limiters = {
@@ -351,8 +355,26 @@ class APICostMonitor:
         except Exception as e:
             logger.error(f"Error checking budget alerts: {e}")
 
+    async def _send_webhook_notification(self, message: str):
+        """Send an async webhook notification if URL is configured."""
+        if not self.webhook_url:
+            return
+
+        try:
+            payload = {"text": message}
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    self.webhook_url,
+                    json=payload,
+                    timeout=aiohttp.ClientTimeout(total=5)
+                ) as response:
+                    if response.status >= 400:
+                        logger.error(f"Failed to send webhook alert, status: {response.status}")
+        except Exception as e:
+            logger.error(f"Error sending webhook alert: {e}")
+
     async def _send_budget_alert(self, current_cost: float, alert_type: str):
-        """Send budget alert (implement notification system)"""
+        """Send budget alert using configured webhook system"""
         alert_msg = f"🚨 API Budget Alert: ${current_cost:.2f} "
 
         if alert_type == 'threshold':
@@ -362,8 +384,9 @@ class APICostMonitor:
 
         logger.warning(alert_msg)
 
-        # TODO: Implement actual notification system (email, Slack, etc.)
-        # For now, just log the alert
+        if self.webhook_url:
+            # Run webhook dispatch without blocking main cost tracking
+            asyncio.create_task(self._send_webhook_notification(alert_msg))
 
     async def get_daily_cost(self, date: str = None) -> float:
         """Get total cost for a specific date"""

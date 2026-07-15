@@ -250,10 +250,10 @@ if __name__ == "__main__":
 
     # Simulate a video capture
     result = kb.capture_from_video(
-        video_id="dQw4w9WgXcQ",
+        video_id="auJzb1D-fag",
         title="Test Video",
         technologies=["Python", "FastAPI", "React", "PostgreSQL"],
-        video_url="https://youtube.com/watch?v=dQw4w9WgXcQ",
+        video_url="https://youtube.com/watch?v=auJzb1D-fag",
     )
     print(f"Captured: {result}")
     print(f"\nStats: {kb.get_stats()}")
