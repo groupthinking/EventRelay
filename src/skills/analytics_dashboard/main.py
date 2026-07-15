@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, Optional
 
 from skills.base import BaseSkill, SkillResult
 
@@ -16,8 +16,13 @@ class AnalyticsDashboardSkill(BaseSkill):
     skill_id = "analytics-dashboard"
     name = "Analytics Dashboard"
     version = "1.0.0"
-    triggers = ["daily_cron"]
+    triggers = ["system.cron.daily"]
     required_env_vars = ["DATABASE_URL"]
+
+    def __init__(self, dependencies: Optional[dict[str, Any]] = None):
+        super().__init__(dependencies)
+        self.db = self.dependencies.get("database_service")
+        self.analytics = self.dependencies.get("analytics_service")
 
     async def execute(self, payload: dict[str, Any]) -> SkillResult:
         """Aggregate analytics metrics.
@@ -35,6 +40,11 @@ class AnalyticsDashboardSkill(BaseSkill):
         logger.info(
             "Aggregating %d metrics for range %s", len(metrics), date_range
         )
+
+        if self.db:
+            logger.info("Using injected database_service for aggregation")
+        if self.analytics:
+            logger.info("Using injected analytics_service for aggregation")
 
         return SkillResult(
             status="success",

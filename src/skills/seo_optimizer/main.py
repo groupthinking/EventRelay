@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, Optional
 
 from skills.base import BaseSkill, SkillResult
 
@@ -16,8 +16,12 @@ class SEOOptimizerSkill(BaseSkill):
     skill_id = "seo-optimizer"
     name = "SEO Optimizer"
     version = "1.0.0"
-    triggers = ["video_uploaded"]
+    triggers = ["youtube.video.uploaded"]
     required_env_vars = ["GEMINI_API_KEY"]
+
+    def __init__(self, dependencies: Optional[dict[str, Any]] = None):
+        super().__init__(dependencies)
+        self.gemini = self.dependencies.get("gemini_service")
 
     async def execute(self, payload: dict[str, Any]) -> SkillResult:
         """Optimize SEO metadata for a video.
@@ -37,6 +41,9 @@ class SEOOptimizerSkill(BaseSkill):
         tags = payload.get("tags", [])
 
         logger.info("Optimizing SEO for video %s", video_id)
+
+        if self.gemini:
+            logger.info("Using injected gemini_service for SEO optimization")
 
         return SkillResult(
             status="success",
