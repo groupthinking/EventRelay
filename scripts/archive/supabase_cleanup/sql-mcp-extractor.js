@@ -41,7 +41,7 @@ async function extractFromSql(options = {}) {
       // Sanitize connection info (remove passwords)
       const sanitizedConnection = { ...options.connection };
       if (sanitizedConnection.password) {
-        sanitizedConnection.password = '********';
+        sanitizedConnection.password = process.env.PASSWORD_MASK || '[REDACTED]';
       }
       
       result.connection = sanitizedConnection;

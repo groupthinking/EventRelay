@@ -50,6 +50,18 @@
         "get_capabilities",
         "get_context"
       ]
+    },
+    "gtm-skills": {
+      "endpoint": "internal://eventrelay_skills",
+      "tools": [
+        "content-generation",
+        "seo-optimizer",
+        "social-scheduler",
+        "lead-scorer",
+        "email-campaign",
+        "analytics-dashboard",
+        "ab-testing"
+      ]
     }
   },
   "agents": [

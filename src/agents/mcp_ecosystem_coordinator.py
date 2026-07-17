@@ -4,27 +4,26 @@ MCP Ecosystem Coordinator
 Unified hub for coordinating all MCP servers in the YouTube extension ecosystem
 """
 
+from __future__ import annotations
+
 import abc
 import asyncio
 import importlib
 import json
 import logging
 import os
-import subprocess
-import sys
 from dataclasses import asdict
 from pathlib import Path
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
-from youtube_extension.processors.enhanced_extractor import (
-    EnhancedVideoExtractor,
-    VideoContent,
-)
+if TYPE_CHECKING:
+    from youtube_extension.processors.enhanced_extractor import VideoContent
 
 # Add src/mcp to path for imports
 # REMOVED: sys.path.append removed
 
 logger = logging.getLogger(__name__)
+
 
 class BaseMCPServer(abc.ABC):
     """Abstract base class for all MCP servers."""
@@ -55,8 +54,15 @@ class MCPVideoProcessorServer(BaseMCPServer):
     def __init__(self):
         super().__init__("video_processor", "video_processing")
         self.supported_formats = ["mp4", "webm", "avi"]
-        # Initialize the Unified Pipeline Extractor
-        self.extractor = EnhancedVideoExtractor()
+        self.extractor = None
+        try:
+            module = importlib.import_module(
+                "youtube_extension.processors.enhanced_extractor"
+            )
+            EnhancedVideoExtractor = module.EnhancedVideoExtractor
+            self.extractor = EnhancedVideoExtractor()
+        except Exception as e:
+            logger.warning(f"Enhanced extractor unavailable: {e}")
 
     async def handle_request(self, request: dict) -> dict:
         """Process video processing requests."""
@@ -66,6 +72,8 @@ class MCPVideoProcessorServer(BaseMCPServer):
         if action == "process_video":
             logger.info(f"Processing video: {video_id}")
             try:
+                if self.extractor is None:
+                    return {"status": "error", "message": "Video extractor unavailable"}
                 # Use the Unified Pipeline (Gemini + Scoring)
                 # Note: process_video expects a URL usually, but if ID is passed, we might need to construct URL
                 # or ensure process_video handles IDs (it extracts ID from URL, so URL is safer)
@@ -156,18 +164,22 @@ class MCPYouTubeAPIProxyServer(BaseMCPServer):
     async def health_check(self) -> dict:
         return {"status": "healthy", "server": self.name}
 
+
 class MCPEcosystemCoordinator:
     """Coordinates multiple MCP servers, routing requests and managing capabilities."""
 
-    def __init__(self):
+    def __init__(self, skill_registry: SkillRegistry | None = None):
         self.servers: dict[str, BaseMCPServer] = {}
         self.capabilities_map: dict[str, dict] = {}
         self.workflow_history: list[dict] = []
-        self.skill_registry = SkillRegistry()
+        self.skill_registry = skill_registry or SkillRegistry()
 
-    def list_skills(self, source: Optional[str] = None) -> list[dict[str, Any]]:
+    def list_skills(self, source: Optional[str] = None) -> List[Dict[str, Any]]:
         """Returns a list of discovered skills from the registry."""
-        return self.skill_registry.list_skills(source=source)
+        skills = self.skill_registry.list_skills()
+        if source:
+            return [s for s in skills if s.get("source") == source]
+        return skills
 
     def register_server(self, server: BaseMCPServer) -> bool:
         """Registers an MCP server with the coordinator."""
@@ -188,7 +200,8 @@ class MCPEcosystemCoordinator:
         all_capabilities = {
             "total_servers": len(self.servers),
             "servers": {},
-            "available_tools": []
+            "available_tools": [],
+            "skills": self.skill_registry.list_skills(),
         }
 
         for name, caps in self.capabilities_map.items():
@@ -197,6 +210,18 @@ class MCPEcosystemCoordinator:
                 all_capabilities["available_tools"].extend(caps["tools"])
 
         return all_capabilities
+
+    async def invoke_skill(
+        self, skill_id: str, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Invoke a GTM skill via the class-based SkillRegistry.
+
+        Thin delegate to ``SkillRegistry.invoke_skill``, which resolves the
+        skill class from ``skills-lock.json`` and runs it in-process with
+        dependency injection. The registry is the single invocation path used
+        by the tests and callers.
+        """
+        return await self.skill_registry.invoke_skill(skill_id, payload)
 
     async def dispatch_request(self, server_name: str, request: dict) -> dict:
         """Dispatches a request to the specified MCP server."""
@@ -284,8 +309,9 @@ class SkillRegistry:
     """Registry for discovering and invoking GTM skills from skills-lock.json.
 
     Reads skill definitions from the lock file and dynamically loads skill
-    classes for execution. Implements explicit env-var pass-through when
-    spawning skill processes (no reliance on environment inheritance).
+    classes for in-process execution, resolving each skill's declared
+    dependencies via the service container (dependency injection) rather than
+    spawning subprocesses.
     """
 
     _LOCK_FILE = "skills-lock.json"
@@ -321,16 +347,26 @@ class SkillRegistry:
             logger.warning("Could not load skills-lock.json: %s", e)
             return
 
-        skills_data = data.get("skills", [])
-        # Support both list format (preferred) and legacy dict format
+        skills_data = data.get("skills", {})
         if isinstance(skills_data, list):
-            items = [(entry["id"], entry) for entry in skills_data if "id" in entry]
-        else:
-            items = list(skills_data.items())
-        for skill_id, meta in items:
-            # Only load uvai-skills (local GTM skills)
-            if meta.get("source") == "uvai-skills" and meta.get("sourceType") == "local":
-                self._skills[skill_id] = meta
+            # Handle list format; only load entries that have a className
+            # so that _load_skill_instance() can instantiate them.
+            for skill in skills_data:
+                if (
+                    skill.get("source") == "uvai-skills"
+                    and skill.get("className")
+                    and skill.get("id")
+                ):
+                    self._skills[skill["id"]] = skill
+        elif isinstance(skills_data, dict):
+            # Handle dict format; apply same guards as list branch
+            for skill_id, meta in skills_data.items():
+                if (
+                    meta.get("source") == "uvai-skills"
+                    and meta.get("sourceType") == "local"
+                    and meta.get("className")
+                ):
+                    self._skills[skill_id] = meta
 
         logger.info("Loaded %d GTM skills from %s", len(self._skills), self._lock_path)
 
@@ -338,20 +374,24 @@ class SkillRegistry:
         """Build a normalized metadata dict for a skill entry."""
         return {
             "id": skill_id,
-            "name": skill_id.replace("-", " ").title(),
+            "name": meta.get("name") or skill_id.replace("-", " ").title(),
             "class_name": meta.get("className", ""),
             "version": meta.get("version", "0.0.0"),
             "triggers": meta.get("triggers", []),
             "dependencies": meta.get("dependencies", []),
-            "entry_point": meta.get("skillPath", ""),
+            "entry_point": meta.get("skillPath") or meta.get("entry_point", ""),
+            "source": meta.get("source", ""),
         }
 
-    def list_skills(self) -> list[dict[str, Any]]:
+    def list_skills(self, source: Optional[str] = None) -> list[dict[str, Any]]:
         """Return metadata for all registered GTM skills."""
-        return [
+        skills = [
             self._build_skill_metadata(skill_id, meta)
             for skill_id, meta in self._skills.items()
         ]
+        if source:
+            return [s for s in skills if self._skills[s["id"]].get("source") == source]
+        return skills
 
     def get_skill(self, skill_id: str) -> Optional[dict[str, Any]]:
         """Get metadata for a specific skill."""
@@ -377,8 +417,14 @@ class SkillRegistry:
         if meta is None:
             raise ValueError(f"Unknown skill: {skill_id}")
 
-        skill_path = meta["skillPath"]  # e.g. "src/skills/content_generation/main.py"
-        class_name = meta["className"]  # e.g. "ContentGenerationSkill"
+        skill_path = meta.get("skillPath") or meta.get("entry_point")
+        class_name = meta.get("className")
+
+        if not skill_path:
+            raise ValueError(f"Skill {skill_id} has no skillPath or entry_point")
+
+        if not class_name:
+            raise ValueError(f"Skill {skill_id} has no className")
 
         # Convert file path to module path
         module_path = skill_path.replace("/", ".").removesuffix(".py")
@@ -388,7 +434,32 @@ class SkillRegistry:
 
         module = importlib.import_module(module_path)
         skill_class = getattr(module, class_name)
-        instance = skill_class()
+
+        # Resolve dependencies from the service container. Imported lazily to
+        # avoid a circular import at module load time, and guarded so that a
+        # container import failure (e.g. a missing optional transitive dep)
+        # degrades to no injection instead of breaking every skill invocation.
+        dependencies: dict[str, Any] = {}
+        try:
+            from youtube_extension.backend.containers.service_container import (
+                get_service,
+            )
+        except Exception as e:
+            logger.warning(
+                "Service container unavailable; skipping DI for skill %s: %s",
+                skill_id,
+                e,
+            )
+            get_service = None
+
+        if get_service is not None:
+            for dep_name in meta.get("dependencies", []):
+                try:
+                    dependencies[dep_name] = get_service(dep_name)
+                except Exception as e:
+                    logger.warning("Failed to resolve dependency %s for skill %s: %s", dep_name, skill_id, e)
+
+        instance = skill_class(dependencies=dependencies)
         self._instances[skill_id] = instance
         return instance
 
@@ -407,6 +478,9 @@ class SkillRegistry:
             "gemini_service": ["GEMINI_API_KEY"],
             "database_service": ["DATABASE_URL"],
             "openai_service": ["OPENAI_API_KEY"],
+            "social_api_service": ["SOCIAL_API_KEY"],
+            "email_service": ["EMAIL_API_KEY"],
+            "analytics_service": ["ANALYTICS_API_KEY"],
         }
 
         env: dict[str, str] = {}
