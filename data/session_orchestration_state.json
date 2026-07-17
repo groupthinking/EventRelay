@@ -1,0 +1,93 @@
+{
+  "sessions": {},
+  "playbooks": {
+    "bolt-performance-remediation": {
+      "name": "bolt-performance-remediation",
+      "description": "Database and transcript query tuning playbook",
+      "macros": [
+        "on_high_latency_remediate"
+      ]
+    },
+    "sentinel-security-audit-and-remediation": {
+      "name": "sentinel-security-audit-and-remediation",
+      "description": "Security auditing and cryptographic hashing playbook",
+      "macros": [
+        "on_vulnerability_patch"
+      ]
+    },
+    "palette-a11y-standards-remediation": {
+      "name": "palette-a11y-standards-remediation",
+      "description": "WCAG compliance and accessibility playbook",
+      "macros": [
+        "on_ui_commit_scan"
+      ]
+    },
+    "repository-clean-and-audit": {
+      "name": "repository-clean-and-audit",
+      "description": "Repo structure cleanup and refactoring playbook",
+      "macros": [
+        "on_nightly_run_cleanup"
+      ]
+    }
+  },
+  "knowledge_notes": {
+    "large_language_models_llms": {
+      "id": "large_language_models_llms",
+      "repo": "event-relay",
+      "folder": "ai-models",
+      "name": "Large Language Models (LLMs)",
+      "trigger": "Mentions LLMs",
+      "content": "Large Language Models are leveraged for reasoning, planning, and execution within the repository."
+    },
+    "mcp_protocol": {
+      "id": "mcp_protocol",
+      "repo": "event-relay",
+      "folder": "mcp-servers",
+      "name": "Model Context Protocol (MCP)",
+      "trigger": "mcp_server",
+      "content": "The Model Context Protocol standardizes how applications provide context and tools to AI agents."
+    }
+  },
+  "pending_suggestions": [
+    {
+      "id": "suggest_01",
+      "session_id": "session_alpha",
+      "title": "Use binary search in InteractiveTranscript",
+      "status": "pending"
+    }
+  ],
+  "schedules": {
+    "nightly_test_run": {
+      "id": "nightly_test_run",
+      "cron": "0 2 * * *",
+      "active": true,
+      "agent": "Jules",
+      "notifications": "email"
+    },
+    "hourly_health_check": {
+      "id": "hourly_health_check",
+      "cron": "0 * * * *",
+      "active": false,
+      "agent": "Jules",
+      "notifications": "slack"
+    }
+  },
+  "integrations": {
+    "github": {
+      "installed": true,
+      "config_link": "https://github.com/settings/apps",
+      "setup_url": ""
+    },
+    "gcp_secret_manager": {
+      "installed": true,
+      "config_link": "https://console.cloud.google.com/security/secret-manager",
+      "setup_url": ""
+    },
+    "slack": {
+      "installed": false,
+      "config_link": "",
+      "setup_url": "https://slack.com/oauth/v2/authorize"
+    }
+  },
+  "created_at": "2026-07-17T07:48:35.426640+00:00"
+}
