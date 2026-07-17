@@ -485,6 +485,16 @@ class TestCloudAIRoutes:
             })
         assert response.status_code == 500
 
+    def test_analyze_video_multi_provider_invalid_analysis_type(self):
+        """A bad analysis type is a client error: the 400 from parse_analysis_types
+        must be preserved, not swallowed into a 500 by the broad exception handler."""
+        client = TestClient(_make_cloud_ai_app())
+        response = client.post("/api/v1/cloud-ai/analyze/multi-provider", json={
+            "video_url": "https://www.youtube.com/watch?v=auJzb1D-fag",
+            "analysis_types": ["invalid_type"],
+        })
+        assert response.status_code == 400
+
 
 # ===========================================================================
 # Tests for cloud_api_endpoints.py

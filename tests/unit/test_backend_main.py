@@ -590,14 +590,19 @@ class TestExceptionHandlers:
         response = await main_module.global_exception_handler(mock_req, RuntimeError("crash"))
         assert response.status_code == 500
 
-    async def test_global_exception_handler_includes_error_type(self):
+    async def test_global_exception_handler_omits_internal_details(self):
+        """The 500 body must not leak the exception class name or message (CWE-209)."""
         import json as _json
 
         mock_req = MagicMock()
         mock_req.url = "http://test/api"
         response = await main_module.global_exception_handler(mock_req, RuntimeError("crash"))
         body = _json.loads(response.body)
-        assert body["error_type"] == "RuntimeError"
+        # The exception type must not be disclosed to the client...
+        assert "error_type" not in body
+        # ...nor may the exception message appear anywhere in the response.
+        assert "crash" not in _json.dumps(body)
+        assert "RuntimeError" not in _json.dumps(body)
 
     async def test_global_exception_handler_includes_version(self):
         import json as _json

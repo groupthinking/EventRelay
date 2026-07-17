@@ -323,6 +323,10 @@ async def analyze_video_multi_provider(request: VideoAnalysisRequest):
 
             return formatted_results
 
+    except HTTPException:
+        # Preserve client-facing status codes (e.g. 400 from parse_analysis_types);
+        # do not let the broad handler below convert them into a generic 500.
+        raise
     except Exception as e:
         logger.error(f"Multi-provider analysis failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
