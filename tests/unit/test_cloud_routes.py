@@ -577,7 +577,10 @@ class TestCloudApiEndpoints:
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "failed"
-        assert data["error"] == "something went wrong"
+        # The failure is reported, but the raw persisted exception text must be
+        # sanitized at the response boundary (CWE-209), not echoed to the client.
+        assert data["error"] == "Internal server error"
+        assert "something went wrong" not in response.text
 
     def test_process_video_exception(self):
         mock_processor = AsyncMock()

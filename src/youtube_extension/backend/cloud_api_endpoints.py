@@ -35,6 +35,18 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _client_safe_error(error_message: Optional[str]) -> Optional[str]:
+    """Return a client-safe error string.
+
+    Processing state persisted by the video processor can embed raw exception
+    text (e.g. ``Error processing video ...: <exception>``). That text must never
+    be echoed to clients through the status/result/process responses (CWE-209).
+    The full message stays in server-side state and logs; the client only learns
+    that an error occurred.
+    """
+    return "Internal server error" if error_message else None
+
+
 
 # Pydantic models for API requests/responses
 class CloudVideoProcessingRequest(BaseModel):
@@ -138,7 +150,7 @@ async def process_video_cloud(
                 ai_analysis=result.ai_analysis,
                 processing_time=result.processing_time,
                 from_cache=result.from_cache,
-                error=result.error_message,
+                error=_client_safe_error(result.error_message),
             )
 
     except Exception as e:
@@ -281,7 +293,7 @@ async def get_video_status(video_id: str):
             created_at=state.created_at,
             updated_at=state.updated_at,
             processing_time=state.processing_time,
-            error_message=state.error_message,
+            error_message=_client_safe_error(state.error_message),
         )
 
     except HTTPException:
@@ -319,7 +331,7 @@ async def get_video_result(video_id: str):
             "processing_time": state.processing_time,
             "created_at": state.created_at,
             "updated_at": state.updated_at,
-            "error_message": state.error_message,
+            "error_message": _client_safe_error(state.error_message),
         }
 
     except HTTPException:
