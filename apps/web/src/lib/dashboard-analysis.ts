@@ -1,4 +1,4 @@
-import type { Video } from '@/store/dashboard-store';
+import type { Video } from '@/store/dashboard-types';
 
 /** True when the pipeline finished but returned no usable intelligence payload. */
 export function isThinDashboardAnalysis(video: Pick<Video, 'insights' | 'transcript' | 'events'>): boolean {

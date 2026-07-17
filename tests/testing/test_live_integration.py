@@ -5,14 +5,30 @@ Testing actual production integration with real services
 """
 import asyncio
 import json
+import os
 import time
-from google import genai
-from youtube_transcript_api import YouTubeTranscriptApi, NoTranscriptFound
 
-# Real API Keys from /Users/garvey/Desktop/api/api-MASTER 2-clean.txt
-GEMINI_API_KEY = "AIzaSyAdaiRnkCVDq_-ac-iDiTPt_KLvT-MW-JY"
-YOUTUBE_API_KEY = "AIzaSyDKA991w_reg2W5Z6Juw92mg9Nj86iQFaA"
-ANTHROPIC_API_KEY = "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"
+import pytest
+
+try:
+    from google import genai
+    from youtube_transcript_api import NoTranscriptFound, YouTubeTranscriptApi
+except ImportError:
+    pytest.skip(
+        "google-genai / youtube-transcript-api are not installed",
+        allow_module_level=True,
+    )
+
+# API keys must come from the environment — never hardcode credentials.
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY", "")
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+
+if not (GEMINI_API_KEY and YOUTUBE_API_KEY):
+    pytest.skip(
+        "Live integration test requires GEMINI_API_KEY and YOUTUBE_API_KEY env vars",
+        allow_module_level=True,
+    )
 
 async def test_live_video_processing():
     """
