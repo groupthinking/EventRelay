@@ -1300,7 +1300,7 @@ class TestReportingRoutes:
         assert "looker.example.com" in data["embed_url"]
 
     def test_generate_dashboard_url_service_error(self):
-        """Service error propagates as HTTP 500."""
+        """Service error propagates as a sanitized HTTP 500 (no internal detail leaked)."""
         mock_service = MagicMock()
         mock_service.get_tenant_dashboard_url = MagicMock(
             side_effect=Exception("Looker unavailable")
@@ -1316,7 +1316,12 @@ class TestReportingRoutes:
             }
         )
         assert response.status_code == 500
-        assert "Internal server error" in response.json()["detail"]
+        # The handler sanitizes 500 bodies to a static string (CWE-209 hardening);
+        # the full exception is logged server-side, never returned to the client.
+        detail = response.json()["detail"]
+        assert detail == "Internal server error"
+        assert "Looker unavailable" not in detail
+        assert "Failed to generate" not in detail
 
     def test_generate_dashboard_url_missing_fields(self):
         """Missing required fields return 422."""
