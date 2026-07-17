@@ -342,7 +342,7 @@ class TestMCPProtocolBridgeSendProtocolRequest:
         history_actions = [h["action"] for h in context.history]
         assert "protocol_request" in history_actions
 
-    async def test_history_entry_redacts_raw_request(self):
+    async def test_history_entry_redacts_raw_request_and_response(self):
         bridge = await self._connected_bridge()
         ctx_manager = _ctx_mod.get_context_manager()
         context = ctx_manager.create_context(
@@ -355,15 +355,19 @@ class TestMCPProtocolBridgeSendProtocolRequest:
         )
         last = context.history[-1]
         details = last["details"]
-        # Raw request (and its secret) must not be persisted; only a summary.
+        # Raw request/response details must not be persisted; only summaries.
         assert "request" not in details
+        assert "response" not in details
         assert "sk-super-secret" not in str(details)
         assert set(details["request_summary"]["keys"]) == {"api_key", "prompt"}
+        assert details["response_summary"] == {
+            "type": "dict", "keys": ["status"], "key_count": 1
+        }
 
-    async def test_exception_propagates_and_history_records_failure(self):
+    async def test_exception_propagates_and_history_records_sanitized_failure(self):
         class _ErrorAdapter(_FakeAdapter):
             async def send_request(self, request, context):
-                raise ValueError("bad request")
+                raise ValueError("bad request sk-should-not-persist")
 
         bridge = MCPProtocolBridge()
         bridge.register_adapter(_ErrorAdapter(ProtocolType.MCP))
@@ -377,9 +381,11 @@ class TestMCPProtocolBridgeSendProtocolRequest:
         with pytest.raises(ValueError):
             await bridge.send_protocol_request(ProtocolType.MCP, {}, context=context)
 
-        # History should contain the failed entry
         last = context.history[-1]
-        assert last["details"]["success"] is False
+        details = last["details"]
+        assert details["success"] is False
+        assert details["error"] == {"type": "ValueError"}
+        assert "sk-should-not-persist" not in str(details)
 
 
 # ===========================================================================
@@ -664,28 +670,63 @@ class TestOpenAIAdapter:
         result = await adapter.initialize({})
         assert result is False
 
-    async def test_initialize_returns_true_with_api_key(self):
+    async def test_initialize_returns_true_with_api_key(self, monkeypatch):
+        monkeypatch.setattr(
+            _pb_mod.socket,
+            "getaddrinfo",
+            lambda *args, **kwargs: [
+                (_pb_mod.socket.AF_INET, _pb_mod.socket.SOCK_STREAM, 6, "", ("8.8.8.8", 443))
+            ],
+        )
         adapter = OpenAIAdapter()
         result = await adapter.initialize({"api_key": "sk-test-key"})
         assert result is True
 
-    async def test_initialize_stores_api_key(self):
+    async def test_initialize_stores_api_key(self, monkeypatch):
+        monkeypatch.setattr(
+            _pb_mod.socket,
+            "getaddrinfo",
+            lambda *args, **kwargs: [
+                (_pb_mod.socket.AF_INET, _pb_mod.socket.SOCK_STREAM, 6, "", ("8.8.8.8", 443))
+            ],
+        )
         adapter = OpenAIAdapter()
         await adapter.initialize({"api_key": "sk-test", "model": "gpt-3.5"})
         assert adapter.api_key == "sk-test"
         assert adapter.model == "gpt-3.5"
 
-    async def test_initialize_default_model(self):
+    async def test_initialize_default_model(self, monkeypatch):
+        monkeypatch.setattr(
+            _pb_mod.socket,
+            "getaddrinfo",
+            lambda *args, **kwargs: [
+                (_pb_mod.socket.AF_INET, _pb_mod.socket.SOCK_STREAM, 6, "", ("8.8.8.8", 443))
+            ],
+        )
         adapter = OpenAIAdapter()
         await adapter.initialize({"api_key": "sk-test"})
         assert adapter.model == "gpt-4"
 
-    async def test_initialize_default_base_url(self):
+    async def test_initialize_default_base_url(self, monkeypatch):
+        monkeypatch.setattr(
+            _pb_mod.socket,
+            "getaddrinfo",
+            lambda *args, **kwargs: [
+                (_pb_mod.socket.AF_INET, _pb_mod.socket.SOCK_STREAM, 6, "", ("8.8.8.8", 443))
+            ],
+        )
         adapter = OpenAIAdapter()
         await adapter.initialize({"api_key": "sk-test"})
         assert adapter.base_url == "https://api.openai.com/v1"
 
-    async def test_initialize_accepts_custom_https_base_url(self):
+    async def test_initialize_accepts_custom_https_base_url(self, monkeypatch):
+        monkeypatch.setattr(
+            _pb_mod.socket,
+            "getaddrinfo",
+            lambda *args, **kwargs: [
+                (_pb_mod.socket.AF_INET, _pb_mod.socket.SOCK_STREAM, 6, "", ("8.8.8.8", 443))
+            ],
+        )
         adapter = OpenAIAdapter()
         result = await adapter.initialize(
             {"api_key": "sk-test", "base_url": "https://proxy.example.com/v1"}
@@ -722,6 +763,60 @@ class TestOpenAIAdapter:
         adapter = OpenAIAdapter()
         result = await adapter.initialize(
             {"api_key": "sk-test", "base_url": None}
+        )
+        assert result is False
+
+    async def test_initialize_rejects_https_loopback_ip(self):
+        adapter = OpenAIAdapter()
+        result = await adapter.initialize(
+            {"api_key": "sk-test", "base_url": "https://127.0.0.1/v1"}
+        )
+        assert result is False
+
+    async def test_initialize_rejects_https_ipv6_loopback(self):
+        adapter = OpenAIAdapter()
+        result = await adapter.initialize(
+            {"api_key": "sk-test", "base_url": "https://[::1]/v1"}
+        )
+        assert result is False
+
+    async def test_initialize_rejects_hostname_resolving_to_private_ip(self, monkeypatch):
+        monkeypatch.setattr(
+            _pb_mod.socket,
+            "getaddrinfo",
+            lambda *args, **kwargs: [
+                (_pb_mod.socket.AF_INET, _pb_mod.socket.SOCK_STREAM, 6, "", ("10.0.0.5", 443))
+            ],
+        )
+        adapter = OpenAIAdapter()
+        result = await adapter.initialize(
+            {"api_key": "sk-test", "base_url": "https://proxy.internal/v1"}
+        )
+        assert result is False
+
+    async def test_initialize_rejects_hostname_with_mixed_public_and_private_ips(self, monkeypatch):
+        monkeypatch.setattr(
+            _pb_mod.socket,
+            "getaddrinfo",
+            lambda *args, **kwargs: [
+                (_pb_mod.socket.AF_INET, _pb_mod.socket.SOCK_STREAM, 6, "", ("8.8.8.8", 443)),
+                (_pb_mod.socket.AF_INET, _pb_mod.socket.SOCK_STREAM, 6, "", ("10.0.0.5", 443)),
+            ],
+        )
+        adapter = OpenAIAdapter()
+        result = await adapter.initialize(
+            {"api_key": "sk-test", "base_url": "https://mixed.example/v1"}
+        )
+        assert result is False
+
+    async def test_initialize_rejects_unresolvable_hostname(self, monkeypatch):
+        def _raise_gaierror(*args, **kwargs):
+            raise _pb_mod.socket.gaierror("unresolvable")
+
+        monkeypatch.setattr(_pb_mod.socket, "getaddrinfo", _raise_gaierror)
+        adapter = OpenAIAdapter()
+        result = await adapter.initialize(
+            {"api_key": "sk-test", "base_url": "https://missing.example/v1"}
         )
         assert result is False
 
