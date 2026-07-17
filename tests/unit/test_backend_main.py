@@ -35,9 +35,14 @@ _STUB_MODULES = [
     "src.integration",
     "src.integration.looker_embedded",
 ]
+# Track only the stubs we actually install here, so cleanup below removes
+# exactly our fakes and never a real module another test already loaded.
+_INSTALLED_STUBS: dict[str, MagicMock] = {}
 for _mod in _STUB_MODULES:
     if _mod not in sys.modules:
-        sys.modules[_mod] = MagicMock()
+        _stub = MagicMock()
+        sys.modules[_mod] = _stub
+        _INSTALLED_STUBS[_mod] = _stub
 
 
 # ---------------------------------------------------------------------------
@@ -45,6 +50,18 @@ for _mod in _STUB_MODULES:
 # ---------------------------------------------------------------------------
 from youtube_extension.backend import main as main_module  # noqa: E402
 from youtube_extension.backend.main import app  # noqa: E402
+
+# ---------------------------------------------------------------------------
+# backend.main now holds its own references to whatever it needed from the
+# stubs above, so remove the import-time stubs from sys.modules. Leaving them
+# in place shadows the REAL leaf modules for other test files that run later
+# in the same session (e.g. test_looker_security.py, which imports the real
+# LookerEmbeddedService and asserts it raises on a missing secret). Only
+# entries that are still exactly the stubs we installed are removed.
+# ---------------------------------------------------------------------------
+for _mod, _stub in _INSTALLED_STUBS.items():
+    if sys.modules.get(_mod) is _stub:
+        del sys.modules[_mod]
 
 # ---------------------------------------------------------------------------
 # Unique-IP generator – each test gets a fresh token-bucket so the
@@ -266,6 +283,10 @@ class TestLegacyChatEndpoint:
                 json={"message": "Boom", "session_id": "err"},
             )
         assert response.status_code == 500
+        # Regression guard for information disclosure: the sanitized response
+        # must not leak the raw exception message back to the client.
+        assert response.json()["detail"] == "Internal server error"
+        assert "service broken" not in response.text
 
 
 # ===========================================================================
