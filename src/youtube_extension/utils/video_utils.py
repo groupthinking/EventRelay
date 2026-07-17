@@ -57,13 +57,9 @@ def extract_video_id(url: str) -> str:
         r'^([0-9A-Za-z_-]{11})$'
     ]
 
-    # Try each pattern. IGNORECASE so an uppercase scheme/host (e.g.
-    # HTTPS://YOUTUBE.COM/WATCH?V=...) — which the API-boundary validator now
-    # accepts (models._YOUTUBE_URL_REGEX is case-insensitive) — is parsed here
-    # too, keeping acceptance and extraction consistent. Capture groups still
-    # preserve the case-sensitive 11-char video id verbatim.
+    # Try each pattern
     for pattern in patterns:
-        match = re.search(pattern, url, re.IGNORECASE)
+        match = re.search(pattern, url)
         if match:
             video_id = match.group(1)
             # Validate it's exactly 11 characters (YouTube standard)

@@ -326,10 +326,6 @@ class MetricsService:
         except Exception as e:
             logger.error(f"Failed to persist metrics: {e}")
 
-    async def persist_metrics(self) -> None:
-        """Persist metrics to disk."""
-        await self._persist_metrics()
-
     async def load_persisted_metrics(self) -> bool:
         """
         Load previously persisted metrics.

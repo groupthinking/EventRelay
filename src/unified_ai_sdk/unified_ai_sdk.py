@@ -6,10 +6,9 @@ import asyncio
 import logging
 import os
 import re
-from collections.abc import Awaitable
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable
+from typing import Any, Callable, Awaitable
 
 from .rate_limiter import ModelProvider, RateLimiter
 
@@ -249,29 +248,22 @@ class UnifiedAISDK:
 
         # General network errors or specific string-based checks for Gemini
         exc_str = str(exc).lower()
-        # Match common status formats like "400 INVALID_ARGUMENT" or
-        # "response: 500" without treating incidental counts as statuses.
-        status_match = re.match(r"\s*(\d{3})\b", exc_str) or re.search(
-            r"\b(?:http(?: status)?|response|status(?:_code)?|code)\s*[:=]\s*(\d{3})\b",
-            exc_str,
-        )
-        if status_match:
-            status_code = int(status_match.group(1))
-            if status_code == 429 or status_code >= 500:
-                return True
-            if 400 <= status_code < 500:
-                return False
 
-        if "timeout" in exc_str or "deadline exceeded" in exc_str:
-            return True
-        if "rate limit" in exc_str:
-            return True
-        if "internal server error" in exc_str:
-            return True
-
-        # Auth and Validation errors should not be retried
+        # Auth and Validation errors should not be retried (check these first to avoid false positives)
         if any(term in exc_str for term in ["authentication", "unauthorized", "api_key", "invalid_request"]):
             return False
+
+        # Anchored status code matching for 4xx permanent errors
+        if any(re.search(rf"\b{code}\b", exc_str) for code in ["400", "401", "403"]):
+            return False
+
+        # Explicitly retryable errors
+        if "timeout" in exc_str or "deadline exceeded" in exc_str:
+            return True
+        if "rate limit" in exc_str or re.search(r"\b429\b", exc_str):
+            return True
+        if "internal server error" in exc_str or any(re.search(rf"\b{code}\b", exc_str) for code in ["500", "503"]):
+            return True
 
         return True
 

@@ -17,31 +17,10 @@ const rawBackendUrl = process.env.BACKEND_URL || '';
 const BACKEND_URL = rawBackendUrl.startsWith('http') ? rawBackendUrl : 'http://localhost:8000';
 const BACKEND_AVAILABLE = rawBackendUrl.startsWith('http');
 
-// Resolve with the first non-null candidate, or null once every candidate has
-// settled (resolved null or rejected). Unlike Promise.race() over null-swapped
-// promises, this always settles — it cannot hang when every candidate fails.
-export function firstNonNull<T>(candidates: Promise<T | null>[]): Promise<T | null> {
-  return new Promise(resolve => {
-    let remaining = candidates.length;
-    if (remaining === 0) {
-      resolve(null);
-      return;
-    }
-    const settle = (value: T | null) => {
-      // Null check, not a truthy check: a falsy-but-valid result (e.g. an empty
-      // string or 0 for other T) must count as a real result, not a failed
-      // candidate. null is the only "no result" sentinel here.
-      if (value !== null) {
-        resolve(value);
-      } else if (--remaining === 0) {
-        resolve(null);
-      }
-    };
-    for (const p of candidates) {
-      p.then(settle, () => settle(null));
-    }
-  });
-}
+// A never-resolving promise used to skip null candidates in Promise.race():
+// when a candidate resolves to null we swap it for this so the race ignores it
+// and waits for a real result from another candidate.
+const PENDING_FOREVER = new Promise<never>(() => {});
 
 export interface TranscriptionOptions {
   url?: string;
@@ -75,11 +54,24 @@ export async function fetchTranscript({
     return { success: false, error: 'url or audioUrl is required', transcript: '' };
   }
 
-  // Fetch YouTube metadata (description, chapters, title) — shared by all strategies
-  const metadataPromise = url ? fetchYouTubeMetadata(url).catch((err) => {
-    console.log('YouTube metadata fetch failed:', err);
-    return null;
-  }) : Promise.resolve(null);
+  // Fetch YouTube metadata (description, chapters, title) lazily and share it.
+  // Only the paid fallback strategies (Gemini/OpenAI) need metadata, so we must
+  // NOT fire an outbound YouTube request on the common free-path success case
+  // where Strategy 1 (backend transcript) returns early — that would undo the
+  // "avoid unnecessary work" intent of this code path. The memoized helper
+  // guarantees at most one fetch, triggered only when a fallback awaits it.
+  let metadataPromise: ReturnType<typeof fetchYouTubeMetadata> | null = null;
+  const getMetadata = (): ReturnType<typeof fetchYouTubeMetadata> => {
+    if (!metadataPromise) {
+      metadataPromise = url
+        ? fetchYouTubeMetadata(url).catch((err) => {
+            console.log('YouTube metadata fetch failed:', err);
+            return null;
+          })
+        : Promise.resolve(null);
+    }
+    return metadataPromise;
+  };
 
   // Strategy 1: Try YouTube transcript API via backend (fast + free).
   // Run this FIRST and return early on success so the paid AI providers
@@ -152,7 +144,7 @@ export async function fetchTranscript({
     if (hasGeminiKey()) {
       const geminiPromise: Promise<TranscriptionResult | null> = (async () => {
         try {
-          const metadata = await metadataPromise;
+          const metadata = await getMetadata();
           const metadataContext = metadata ? formatMetadataAsContext(metadata) : '';
           const geminiPrompt = `You are a video transcription assistant.
 
@@ -217,7 +209,7 @@ INSTRUCTIONS:
     if (process.env.OPENAI_API_KEY) {
       const openaiPromise: Promise<TranscriptionResult | null> = (async () => {
         try {
-          const metadata = await metadataPromise;
+          const metadata = await getMetadata();
           const metadataContext = metadata ? formatMetadataAsContext(metadata) : '';
           const response = await getOpenAI().responses.create({
             model: 'gpt-4o-mini',
@@ -257,12 +249,19 @@ ${metadataContext ? `\nKNOWN METADATA:\n${metadataContext}` : ''}`,
 
     if (candidates.length > 0) {
       // Run all candidates concurrently and return the first non-null result.
-      // firstNonNull resolves as soon as any candidate yields a usable result,
-      // and resolves null once every candidate has failed — so this never hangs
-      // when all providers return null (a Promise.race() over null-swapped
-      // promises would hang forever in that case).
-      const winner = await firstNonNull(candidates);
+      // When a candidate resolves to null (no usable transcript found), we
+      // replace it with PENDING_FOREVER so Promise.race() skips it and waits
+      // for a successful result from another candidate.
+      const winner = await Promise.race(
+        candidates.map(p => p.then(r => r ?? PENDING_FOREVER))
+      ).catch(() => null);
       if (winner) return winner;
+      // If the race produced no winner (all candidates resolved to null),
+      // wait for all results and return the first usable one.
+      const results = await Promise.allSettled(candidates);
+      for (const r of results) {
+        if (r.status === 'fulfilled' && r.value) return r.value;
+      }
     }
   }
 

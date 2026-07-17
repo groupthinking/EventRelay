@@ -228,8 +228,8 @@ async def get_provider_status():
             )
 
     except Exception as e:
-        logger.error(f"Failed to get provider status: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        logger.error(f"Failed to get provider status: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get provider status: {str(e)}")
 
 
 @router.post("/analyze/video", response_model=VideoAnalysisResponse)
@@ -255,23 +255,20 @@ async def analyze_video(request: VideoAnalysisRequest):
             # Format and return response
             return format_analysis_result(result)
 
-    except RateLimitError as e:
-        # RateLimitError/ConfigurationError subclass CloudAIError, so they must be
-        # caught BEFORE the base handler or they are dead code (returning the
-        # dynamic 503 and leaking config detail — CWE-209).
-        logger.warning(f"Rate limit exceeded: {e}")
-        raise HTTPException(status_code=429, detail=f"Rate limit exceeded: {str(e)}")
-    except ConfigurationError as e:
-        logger.error(f"Configuration error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
     except CloudAIError as e:
         logger.error(f"Cloud AI analysis failed: {e}")
         raise HTTPException(status_code=503, detail=f"AI analysis failed: {str(e)}")
+    except RateLimitError as e:
+        logger.warning(f"Rate limit exceeded: {e}")
+        raise HTTPException(status_code=429, detail=f"Rate limit exceeded: {str(e)}")
+    except ConfigurationError as e:
+        logger.error(f"Configuration error: {e}")
+        raise HTTPException(status_code=500, detail=f"Configuration error: {str(e)}")
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Unexpected error during video analysis: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        logger.error(f"Unexpected error during video analysis: {e}")
+        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
 
 
 @router.post("/analyze/batch")
@@ -303,8 +300,8 @@ async def analyze_batch_videos(request: BatchAnalysisRequest, background_tasks: 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to start batch analysis: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        logger.error(f"Failed to start batch analysis: {e}")
+        raise HTTPException(status_code=500, detail=f"Batch analysis failed: {str(e)}")
 
 
 @router.post("/analyze/multi-provider", response_model=list[VideoAnalysisResponse])
@@ -326,13 +323,9 @@ async def analyze_video_multi_provider(request: VideoAnalysisRequest):
 
             return formatted_results
 
-    except HTTPException:
-        # parse_analysis_types() raises HTTPException(400, ...); preserve the 4xx
-        # contract instead of collapsing it into a 500 (matches the other handlers).
-        raise
     except Exception as e:
-        logger.error(f"Multi-provider analysis failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        logger.error(f"Multi-provider analysis failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Multi-provider analysis failed: {str(e)}")
 
 
 @router.get("/analysis-types")

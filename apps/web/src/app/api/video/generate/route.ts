@@ -16,13 +16,27 @@ const MIN_DURATION_SECONDS = 1;
 const MAX_DURATION_SECONDS = 60;
 
 /**
- * Durable Redis-backed rate limiter using Upstash.
+ * Durable Redis-backed rate limiter using Upstash/KV.
+ *
+ * Production fails closed when Redis is missing or errors — Veo is the most
+ * expensive route; fail-open would re-open denial-of-wallet (audit #4/#7).
+ * Set UVAI_RATE_LIMIT_FAIL_OPEN=1 only as an emergency break-glass.
  */
-async function checkRateLimit(ip: string): Promise<boolean> {
+async function checkRateLimit(ip: string): Promise<{ allowed: boolean; reason?: string }> {
+  const failOpen =
+    process.env.UVAI_RATE_LIMIT_FAIL_OPEN === '1' &&
+    process.env.NODE_ENV === 'production';
+
   const creds = resolveUpstashRedisCredentials();
   if (!creds) {
-    // Fallback to allow if Redis is not configured (best-effort)
-    return true;
+    if (process.env.NODE_ENV === 'production' && !failOpen) {
+      console.error(
+        '[video/generate] Redis credentials missing in production — denying video generation (fail-closed).',
+      );
+      return { allowed: false, reason: 'rate_limit_unavailable' };
+    }
+    // Local/dev without Redis: allow so engineers can exercise the route.
+    return { allowed: true };
   }
 
   try {
@@ -39,11 +53,13 @@ async function checkRateLimit(ip: string): Promise<boolean> {
     // initial expire call failed.
     await redis.expire(key, RATE_LIMIT_WINDOW_SECONDS);
 
-    return count <= RATE_LIMIT_MAX;
+    return { allowed: count <= RATE_LIMIT_MAX };
   } catch (error) {
     console.error('[video/generate] Redis rate limit error:', error);
-    // Fallback to allow on Redis failure to avoid blocking legitimate users
-    return true;
+    if (process.env.NODE_ENV === 'production' && !failOpen) {
+      return { allowed: false, reason: 'rate_limit_error' };
+    }
+    return { allowed: true };
   }
 }
 
@@ -72,7 +88,18 @@ export async function POST(request: Request) {
     request.headers.get('x-real-ip') ??
     'unknown';
 
-  if (!(await checkRateLimit(ip))) {
+  const rate = await checkRateLimit(ip);
+  if (!rate.allowed) {
+    if (rate.reason === 'rate_limit_unavailable' || rate.reason === 'rate_limit_error') {
+      return NextResponse.json(
+        {
+          error:
+            'Video generation rate limiting is unavailable. Configure Upstash/KV Redis credentials or set UVAI_RATE_LIMIT_FAIL_OPEN=1 only as an emergency override.',
+          code: rate.reason,
+        },
+        { status: 503 },
+      );
+    }
     return NextResponse.json(
       { error: 'Rate limit exceeded. Maximum 3 video generation requests per 10 minutes.' },
       { status: 429 }

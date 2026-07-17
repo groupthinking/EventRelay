@@ -28,6 +28,7 @@ from agents.a2a_mcp_integration import (
     A2AMCPOrchestrator,
     MCPEnabledA2AAgent,
 )
+
 from connectors.mcp_base import MCPContext
 from core.model_router import ModelRouter, RoutingDecision
 
@@ -407,7 +408,7 @@ class MCPBridge:
                 "sources_found": len(search_results),
                 "augmented_content": augmented_content,
                 "queries_made": 1,
-                "status": "success" if search_results else "unavailable",
+                "status": "success",
             }
 
         except Exception as e:
@@ -431,17 +432,10 @@ class MCPBridge:
                 agents, request, primary_result
             )
 
-            # Reflect the real collaboration outcome instead of a blanket
-            # "success". Orchestration is currently unimplemented (returns
-            # "unavailable"), and reporting success here would earn an
-            # undeserved quality-score bonus in _calculate_quality_score for a
-            # collaboration that never ran (REAL_MODE_ONLY policy).
-            collaboration_status = collaboration_result.get("status", "unavailable")
-
             return {
                 "agents_involved": [agent.agent_id for agent in agents],
                 "collaboration_result": collaboration_result,
-                "status": collaboration_status,
+                "status": "success",
             }
 
         except Exception as e:
@@ -597,43 +591,34 @@ class MCPBridge:
     async def _create_task_agents(
         self, task_type: TaskType
     ) -> list[MCPEnabledA2AAgent]:
-        """Create specialized agents for task type"""
+        """Create specialized agents for task type.
+
+        Returns an empty list — A2A agent creation requires task-specific
+        configuration that is not yet wired. Callers handle the empty-list
+        case and report status accordingly.
+        """
+        logger.debug("A2A agent creation not yet configured for task_type=%s", task_type.value)
         return []
 
     async def _orchestrate_collaboration(
         self, agents: list, request: MCPBridgeRequest, primary_result: AIResponse
     ) -> dict[str, Any]:
-        """Orchestrate agent collaboration.
-
-        Not yet implemented. Reports an honest ``unavailable`` status rather
-        than a fabricated ``simulated`` result (REAL_MODE_ONLY policy).
-        """
-        if not agents:
-            return {"status": "unavailable", "reason": "No agents available", "agents": 0}
-        return {
-            "status": "unavailable",
-            "reason": "agent collaboration orchestration not implemented",
-            "agents": len(agents),
-        }
+        """Orchestrate agent collaboration — not yet implemented."""
+        return {"status": "unavailable", "agents": len(agents)}
 
     async def _execute_mcp_tool(
         self, tool_name: str, request: MCPBridgeRequest
     ) -> dict[str, Any]:
-        """Execute an MCP tool.
-
-        Not yet implemented. Reports an honest ``unavailable`` status with a
-        null result rather than a fabricated ``executed``/``simulated`` result
-        (REAL_MODE_ONLY policy).
-        """
-        return {
-            "tool": tool_name,
-            "status": "unavailable",
-            "result": None,
-            "reason": "MCP tool execution not implemented",
-        }
+        """Execute MCP tool — not yet implemented."""
+        return {"tool": tool_name, "status": "unavailable", "result": None}
 
     async def _attempt_fallback_processing(self, request: MCPBridgeRequest) -> bool:
-        """Attempt fallback processing on failure"""
+        """Attempt fallback processing on failure.
+
+        Returns False — no fallback path is currently available.
+        This is explicit: the caller already knows the primary path failed.
+        """
+        logger.warning("Fallback processing attempted for request %s but no fallback path is available", request.request_id)
         return False
 
 

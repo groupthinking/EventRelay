@@ -232,13 +232,11 @@ class RealVideoProcessor:
                 transcript_list = await loop.run_in_executor(
                     None, lambda: YouTubeTranscriptApi().list(video_id)  # type: ignore[union-attr]
                 )
-                fetch_tasks = [
-                    loop.run_in_executor(None, lambda t=t: t.fetch().to_raw_data())
-                    for t in transcript_list
-                ]
-                for task in asyncio.as_completed(fetch_tasks):
+                for t in transcript_list:
                     try:
-                        data = await task
+                        data = await loop.run_in_executor(
+                            None, lambda t=t: t.fetch().to_raw_data()
+                        )
                         if data:
                             return data
                     except Exception:
@@ -248,7 +246,13 @@ class RealVideoProcessor:
 
         # 3) yt-dlp fallback (mocked in tests)
         try:
-            with yt_dlp.YoutubeDL({"quiet": True}) as ydl:  # type: ignore[attr-defined]
+            from youtube_extension.utils.proxy import get_proxy_url
+
+            ydl_opts: dict[str, Any] = {"quiet": True}
+            proxy_url = get_proxy_url()
+            if proxy_url:
+                ydl_opts["proxy"] = proxy_url
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:  # type: ignore[attr-defined]
                 _ = ydl.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=False)
                 return [{"text": "Transcript extracted via yt-dlp", "start": 0.0, "duration": 0.0}]
         except Exception:

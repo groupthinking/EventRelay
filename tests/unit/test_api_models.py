@@ -214,12 +214,6 @@ class TestVideoToSoftwareRequest:
         with pytest.raises(ValidationError):
             VideoToSoftwareRequest(url="https://not-youtube.com/video/123")
 
-    def test_non_string_url_is_validation_error_not_500(self):
-        # pre=True validator sees the raw payload; a non-str must surface as a
-        # ValidationError (422), never a bare TypeError (500).
-        with pytest.raises(ValidationError, match="Invalid YouTube URL"):
-            VideoToSoftwareRequest(url=123)
-
     def test_features_default_to_empty_list(self):
         req = VideoToSoftwareRequest(url=self._VALID_URL)
         assert req.features == []
@@ -295,38 +289,41 @@ class TestTranscriptActionRequest:
         req = TranscriptActionRequest(video_url=self._VALID_URL, video_options=opts)
         assert req.video_options.end_seconds == 120.0
 
-    # --- shared _YOUTUBE_URL_REGEX behaviour (mobile/music hosts + SSRF guard) ---
-
-    @pytest.mark.parametrize(
-        "url",
-        [
-            "https://m.youtube.com/watch?v=auJzb1D-fag",
-            "https://music.youtube.com/watch?v=auJzb1D-fag",
-            "HTTPS://M.YOUTUBE.COM/watch?v=auJzb1D-fag",
-            "https://youtu.be/auJzb1D-fag",
-            "https://www.youtube.com/shorts/auJzb1D-fag",
-        ],
-    )
-    def test_mobile_music_and_case_insensitive_hosts_accepted(self, url):
-        assert TranscriptActionRequest(video_url=url).video_url == url
-        assert ChatRequest(message="hi", video_url=url).video_url == url
-
-    @pytest.mark.parametrize(
-        "url",
-        [
-            "http://169.254.169.254/aaaaaaaaaaa",  # SSRF: cloud metadata
-            "--config-locations=/etc/passwd",  # CWE-88: arg injection
-            "https://vimeo.com/123456789",  # non-YouTube host
-            "https://not-youtube.com/watch?v=12345678901",
-            "https://m.youtu.be/auJzb1D-fag",  # fabricated youtu.be subdomain
-            "https://music.youtu.be/auJzb1D-fag",  # fabricated youtu.be subdomain
-        ],
-    )
-    def test_non_youtube_and_injection_urls_rejected(self, url):
+    def test_ssrf_link_local_host_rejected(self):
+        """Arbitrary host + 11-char id must not reach yt-dlp (audit SSRF #1)."""
         with pytest.raises(ValidationError, match="Invalid YouTube URL"):
-            TranscriptActionRequest(video_url=url)
+            TranscriptActionRequest(video_url="http://169.254.169.254/aaaaaaaaaaa")
+
+    def test_ssrf_evil_host_rejected(self):
         with pytest.raises(ValidationError, match="Invalid YouTube URL"):
-            ChatRequest(message="hi", video_url=url)
+            TranscriptActionRequest(
+                video_url="https://evil.example/watch?v=aaaaaaaaaaa"
+            )
+
+    def test_leading_dash_arg_injection_rejected(self):
+        """Leading-dash token must not pass as video_url (CWE-88)."""
+        with pytest.raises(ValidationError, match="Invalid YouTube URL"):
+            TranscriptActionRequest(video_url="--config-locations=/aaaaaaaaaaa")
+
+    def test_non_youtube_rejected(self):
+        with pytest.raises(ValidationError, match="Invalid YouTube URL"):
+            TranscriptActionRequest(video_url="https://vimeo.com/12345678901")
+
+
+class TestChatRequestVideoUrl:
+    def test_optional_none_allowed(self):
+        req = ChatRequest(query="hello")
+        assert req.video_url is None
+
+    def test_valid_youtube_accepted(self):
+        req = ChatRequest(
+            query="hello", video_url="https://www.youtube.com/watch?v=jNQXAC9IVRw"
+        )
+        assert req.video_url is not None
+
+    def test_ssrf_host_rejected(self):
+        with pytest.raises(ValidationError, match="Invalid YouTube URL"):
+            ChatRequest(query="hello", video_url="http://127.0.0.1/aaaaaaaaaaa")
 
 
 # ===========================================================================

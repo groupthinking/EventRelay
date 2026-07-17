@@ -1,11 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import type { Redis } from '@upstash/redis';
 import { getToken } from 'next-auth/jwt';
-import {
-  needsAuthentication,
-  safeCallbackPath,
-  shouldSkipRateLimit,
-} from '@/lib/auth-paths';
+import { resolveUpstashRedisCredentials } from '@/lib/billing/redis-credentials';
 
 /**
  * Frontend proxy (Next.js 16 middleware): rate limiting (always) + login gating
@@ -13,8 +9,6 @@ import {
  * is set up — safe rollout). When enabled, /dashboard and non-public /api/* require
  * a valid NextAuth session. Server-to-server loopback calls carrying a matching
  * `x-eventrelay-internal` header (INTERNAL_REQUEST_TOKEN) bypass both.
- *
- * Path policy lives in `@/lib/auth-paths` so unit tests can cover it offline.
  */
 
 const WINDOW_SECONDS = 60;
@@ -22,6 +16,12 @@ const GENERAL_LIMIT = Number(process.env.UVAI_API_RATE_LIMIT_PER_MINUTE || 60);
 const AI_LIMIT = Number(process.env.UVAI_AI_RATE_LIMIT_PER_MINUTE || 12);
 
 const AI_ROUTE_PREFIXES = [
+  // /api/agents/actions (runActionAgent) and /api/agents/dispatch invoke an LLM
+  // on POST, so their writes fail closed on a limiter outage; their GET handlers
+  // are cheap availability probes and fail open (see CHEAP_AI_GET_ROUTES). This
+  // list only selects the tighter AI rate-limit tier + the outage boundary; the
+  // sibling /api/agents/status is not AI-prefixed at all (always fails open).
+  '/api/agents/actions',
   '/api/agents/dispatch',
   '/api/chat',
   '/api/extract-events',
@@ -36,12 +36,18 @@ const AI_ROUTE_PREFIXES = [
 const INTERNAL_TOKEN = process.env.INTERNAL_REQUEST_TOKEN;
 const AUTH_SECRET = process.env.NEXTAUTH_SECRET;
 const AUTH_ENABLED = !!AUTH_SECRET;
+// API paths that stay public even when auth is enabled (auth flow + health).
+const PUBLIC_API_PREFIXES = ['/api/auth', '/api/health', '/api/billing'];
 
 type RateLimitResult = {
   allowed: boolean;
   limit: number;
   remaining: number;
   resetAt: number;
+  // Set only when `allowed` is false. `exceeded` = a genuine per-client overage
+  // (→ 429); `limiter_unavailable` = the limiter itself could not run, e.g. no
+  // Redis in production on an AI route (→ 503, this is an outage not a quota).
+  reason?: 'exceeded' | 'limiter_unavailable';
 };
 
 type MemoryBucket = {
@@ -79,13 +85,16 @@ function getRedisClient(): Promise<Redis | null> {
   }
 
   redisClientPromise = (async () => {
-    if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
+    // Accept either the canonical `UPSTASH_REDIS_REST_*` names or the
+    // `KV_REST_API_*` names that Vercel's Upstash/KV integration injects.
+    // Production only provisions the latter, so hardcoding the former left the
+    // limiter permanently client-less — the same helper the /api/video/generate
+    // route already uses.
+    const creds = resolveUpstashRedisCredentials();
+    if (creds) {
       try {
         const { Redis } = await import('@upstash/redis');
-        return new Redis({
-          url: process.env.UPSTASH_REDIS_REST_URL,
-          token: process.env.UPSTASH_REDIS_REST_TOKEN,
-        });
+        return new Redis({ url: creds.url, token: creds.token });
       } catch {
         // dynamic import failed; fall back to null below
         return null;
@@ -99,6 +108,49 @@ function getRedisClient(): Promise<Redis | null> {
 
 function isAiRoute(pathname: string): boolean {
   return AI_ROUTE_PREFIXES.some((prefix) => pathname.startsWith(prefix));
+}
+
+// Explicit allowlist of AI-prefixed GET/HEAD endpoints that are cheap reads —
+// pure status/health/info with NO paid provider call. These are the ONLY AI
+// reads that fail OPEN on a limiter outage; every other AI read fails CLOSED.
+// Verified against each handler:
+//   - GET /api/agents/actions   → returns available tool names (env check)
+//   - GET /api/agents/dispatch  → returns backend availability
+//   - GET /api/pipeline         → backend health + config info
+//   - GET /api/training/status  → reads local training status
+//   - GET /api/video            → backend health / API info
+// Matched EXACTLY (not by prefix): paid sub-routes live under these prefixes —
+// e.g. cheap `/api/video` vs paid `/api/video/search`, cheap `/api/pipeline`
+// vs paid POST `/api/pipeline/stream` — so a prefix match would misclassify
+// them. Anything not in this list is treated as paid and fails closed.
+const CHEAP_AI_GET_ROUTES = [
+  '/api/agents/actions',
+  '/api/agents/dispatch',
+  '/api/pipeline',
+  '/api/training/status',
+  '/api/video',
+];
+
+/**
+ * Is THIS request one that incurs a paid AI provider call, and therefore must
+ * fail CLOSED when the rate limiter is unavailable (denial-of-wallet)?
+ *
+ * Fails SAFE by default: every AI-route write is paid, and every AI read is
+ * treated as paid UNLESS it is an explicitly verified cheap read. So a newly
+ * added billable AI GET cannot silently bypass outage protection just because
+ * nobody remembered to update a list — the default is closed, and only the
+ * known-cheap reads are opened. Non-AI routes are never treated as paid.
+ */
+function isPaidAiRequest(pathname: string, method: string): boolean {
+  if (!isAiRoute(pathname)) {
+    return false;
+  }
+  // Writes to an AI route always trigger the paid model call.
+  if (method !== 'GET' && method !== 'HEAD') {
+    return true;
+  }
+  // AI reads: paid by default; only the verified cheap reads fail open.
+  return !CHEAP_AI_GET_ROUTES.includes(pathname);
 }
 
 function getClientIp(request: NextRequest): string {
@@ -135,11 +187,13 @@ async function checkRedisLimit(redisClient: Redis, key: string, limit: number): 
     await redisClient.expire(redisKey, WINDOW_SECONDS + 5);
   }
 
+  const allowed = count <= limit;
   return {
-    allowed: count <= limit,
+    allowed,
     limit,
     remaining: Math.max(0, limit - count),
     resetAt,
+    reason: allowed ? undefined : 'exceeded',
   };
 }
 
@@ -154,11 +208,13 @@ function checkMemoryLimit(key: string, limit: number): RateLimitResult {
 
   memoryBuckets.set(key, { count, resetAt });
 
+  const allowed = count <= limit;
   return {
-    allowed: count <= limit,
+    allowed,
     limit,
     remaining: Math.max(0, limit - count),
     resetAt: Math.ceil(resetAt / 1000),
+    reason: allowed ? undefined : 'exceeded',
   };
 }
 
@@ -168,13 +224,21 @@ async function checkRateLimit(request: NextRequest): Promise<RateLimitResult> {
   const clientIp = getClientIp(request);
   const routeClass = isAiRoute(pathname) ? 'ai' : 'api';
   const key = `${routeClass}:${clientIp}`;
+  // Narrower than routeClass: only requests that actually incur a paid AI call
+  // (all AI writes + the paid AI GETs) fail closed on a limiter outage.
+  const expensiveOnOutage = isPaidAiRequest(pathname, request.method);
 
   const redisClient = await getRedisClient();
 
   if (!redisClient && process.env.NODE_ENV === 'production' && !prodRedisWarned) {
-    console.warn(
-      '[RateLimit] No UPSTASH_REDIS_* configured in production. Rate limiting is bypassed (fail-open) to avoid silent in-process state. ' +
-      'Configure Upstash for enforcement. See src/proxy.ts and the rate-limit-middleware agent in config/agent_network.json.'
+    console.error(
+      '[RateLimit] No Upstash/KV Redis configured in production (checked UPSTASH_REDIS_REST_* and KV_REST_API_*). ' +
+      'Failing CLOSED for requests that incur a paid AI call (all AI-route writes + all AI reads except ' +
+      'the explicitly verified cheap GETs in CHEAP_AI_GET_ROUTES — denial-of-wallet protection, safe by ' +
+      'default) and OPEN for everything else (non-AI routes AND cheap AI status/health GETs) so a limiter ' +
+      'outage cannot take down the API. ' +
+      'Configure Upstash or Vercel KV for full enforcement. ' +
+      'See src/proxy.ts and the rate-limit-middleware agent in config/agent_network.json.'
     );
     prodRedisWarned = true;
   }
@@ -186,7 +250,10 @@ async function checkRateLimit(request: NextRequest): Promise<RateLimitResult> {
       if (process.env.NODE_ENV !== 'production') {
         console.warn('Upstash rate limit check failed; using in-memory fallback.', error);
       } else {
-        console.warn('Upstash rate limit check failed in production; failing open.', error);
+        console.error(
+          'Upstash rate limit check failed in production; failing closed for expensive AI routes.',
+          error,
+        );
       }
     }
   }
@@ -196,12 +263,42 @@ async function checkRateLimit(request: NextRequest): Promise<RateLimitResult> {
     return checkMemoryLimit(key, limit);
   }
 
-  // Production without Redis: fail-open (allowed) with the warning already emitted above.
-  return {
+  const allowResult: RateLimitResult = {
     allowed: true,
     limit,
     remaining: limit,
     resetAt: Math.ceil((Date.now() + WINDOW_SECONDS * 1000) / 1000),
+  };
+
+  // Production without a working Redis limiter. Fail CLOSED for every request
+  // that incurs a paid AI call — every AI-route write, plus every AI read that
+  // is not an explicitly verified cheap GET (safe by default: an unclassified
+  // AI read fails closed, so e.g. `GET /api/realtime/session` (mints an OpenAI
+  // Realtime secret) and `GET /api/video/search` (Gemini embedding) are covered
+  // without needing a denylist, and a future billable AI GET can't leak by
+  // omission). Failing those open would reopen the denial-of-wallet vector
+  // (audit findings #4/#7). Everything else fails OPEN so a limiter outage can't
+  // take the API down: non-AI routes (billing, auth, health, general API) AND
+  // the cheap AI status/health GETs in CHEAP_AI_GET_ROUTES, which are free reads
+  // that should stay available during a Redis outage. The emergency override
+  // forces open even for the paid requests.
+  if (!expensiveOnOutage || process.env.UVAI_RATE_LIMIT_FAIL_OPEN === '1') {
+    if (expensiveOnOutage) {
+      console.warn(
+        '[RateLimit] UVAI_RATE_LIMIT_FAIL_OPEN=1 — production paid-AI rate limit failing open (emergency).',
+      );
+    }
+    return allowResult;
+  }
+
+  // Paid AI request, no Redis, no override: deny. This is a limiter *outage*,
+  // not a genuine per-client overage, so it surfaces as 503 (see proxy handler).
+  return {
+    allowed: false,
+    limit,
+    remaining: 0,
+    resetAt: Math.ceil((Date.now() + WINDOW_SECONDS * 1000) / 1000),
+    reason: 'limiter_unavailable',
   };
 }
 
@@ -226,32 +323,31 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   }
 
   // Login gating — enforced only when NEXTAUTH_SECRET is set; CORS preflight is exempt.
-  if (AUTH_ENABLED && request.method !== 'OPTIONS' && needsAuthentication(pathname)) {
-    // next-auth resolves `NextRequest` from a second hoisted copy of `next` in this
-    // monorepo; the types are structurally identical, so bridge them.
-    const token = await getToken({ req: request as any, secret: AUTH_SECRET });
-    if (!token) {
-      if (pathname.startsWith('/api/')) {
-        return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+  if (AUTH_ENABLED && request.method !== 'OPTIONS') {
+    const isApi = pathname.startsWith('/api/');
+    const isPublicApi = PUBLIC_API_PREFIXES.some(
+      (p) => pathname === p || pathname.startsWith(p + '/'),
+    );
+    const needsAuth =
+      (isApi && !isPublicApi) || pathname === '/dashboard' || pathname.startsWith('/dashboard/');
+    if (needsAuth) {
+      // next-auth resolves `NextRequest` from a second hoisted copy of `next` in this
+      // monorepo; the types are structurally identical, so bridge them.
+      const token = await getToken({ req: request as any, secret: AUTH_SECRET });
+      if (!token) {
+        if (isApi) {
+          return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+        }
+        const signin = new URL('/api/auth/signin', request.url);
+        signin.searchParams.set('callbackUrl', request.url);
+        return NextResponse.redirect(signin);
       }
-      const signin = new URL('/api/auth/signin', request.url);
-      // Relative same-origin path only — blocks open-redirect callback abuse.
-      signin.searchParams.set(
-        'callbackUrl',
-        safeCallbackPath(request.nextUrl.pathname, request.nextUrl.search),
-      );
-      return NextResponse.redirect(signin);
     }
   }
 
   if (
     process.env.UVAI_RATE_LIMIT_DISABLED === '1' ||
-    request.method === 'OPTIONS' ||
-    // Page routes (e.g. /dashboard) are matched only for auth gating above.
-    // They must not be rate-limited: a JSON 429 would render as a raw blob in
-    // the browser and page navigation would burn the shared api:<ip> quota.
-    !pathname.startsWith('/api/') ||
-    shouldSkipRateLimit(pathname)
+    request.method === 'OPTIONS'
   ) {
     return NextResponse.next();
   }
@@ -259,10 +355,16 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   const result = await checkRateLimit(request);
 
   if (!result.allowed) {
+    const outage = result.reason === 'limiter_unavailable';
     return NextResponse.json(
-      { error: 'Rate limit exceeded. Please try again shortly.' },
+      outage
+        ? {
+            error: 'Rate limiter temporarily unavailable. Please try again shortly.',
+            code: 'rate_limit_unavailable',
+          }
+        : { error: 'Rate limit exceeded. Please try again shortly.' },
       {
-        status: 429,
+        status: outage ? 503 : 429,
         headers: {
           'Cache-Control': 'no-store',
           'Retry-After': String(WINDOW_SECONDS),

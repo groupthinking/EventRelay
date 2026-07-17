@@ -5,8 +5,8 @@
       "count": 3,
       "first_seen": "2025-11-22T04:13:05.906013",
       "videos": [
-        "video_002",
         "aobQxcoUlNo",
+        "video_002",
         "video_003"
       ]
     },
@@ -15,8 +15,8 @@
       "count": 3,
       "first_seen": "2025-11-22T04:13:05.906021",
       "videos": [
-        "video_002",
         "aobQxcoUlNo",
+        "video_002",
         "video_003"
       ]
     },
@@ -54,38 +54,126 @@
         "video_003"
       ]
     },
+    "natural language processing": {
+      "name": "Natural Language Processing",
+      "count": 1,
+      "first_seen": "2025-11-22T04:13:22.450977",
+      "videos": [
+        "video_002"
+      ]
+    },
     "docker": {
       "name": "Docker",
-      "count": 2,
+      "count": 18,
       "first_seen": "2025-11-25T02:51:31.861635",
       "videos": [
-        "unknown",
-        "ButAp5rF69E"
+        "ButAp5rF69E",
+        "ButAp5rF69E",
+        "ButAp5rF69E",
+        "ButAp5rF69E",
+        "ButAp5rF69E",
+        "ButAp5rF69E",
+        "ButAp5rF69E",
+        "ButAp5rF69E",
+        "ButAp5rF69E",
+        "ButAp5rF69E",
+        "ButAp5rF69E",
+        "ButAp5rF69E",
+        "ButAp5rF69E",
+        "ButAp5rF69E",
+        "ButAp5rF69E",
+        "ButAp5rF69E",
+        "ButAp5rF69E",
+        "unknown"
       ]
     },
     "mcp": {
       "name": "MCP",
-      "count": 2,
+      "count": 18,
       "first_seen": "2025-11-25T02:51:31.861642",
       "videos": [
-        "unknown",
-        "ButAp5rF69E"
+        "ButAp5rF69E",
+        "ButAp5rF69E",
+        "ButAp5rF69E",
+        "ButAp5rF69E",
+        "ButAp5rF69E",
+        "ButAp5rF69E",
+        "ButAp5rF69E",
+        "ButAp5rF69E",
+        "ButAp5rF69E",
+        "ButAp5rF69E",
+        "ButAp5rF69E",
+        "ButAp5rF69E",
+        "ButAp5rF69E",
+        "ButAp5rF69E",
+        "ButAp5rF69E",
+        "ButAp5rF69E",
+        "ButAp5rF69E",
+        "unknown"
       ]
     },
     "claude": {
       "name": "Claude",
-      "count": 1,
+      "count": 17,
       "first_seen": "2025-11-25T02:51:31.861648",
       "videos": [
+        "ButAp5rF69E",
+        "ButAp5rF69E",
+        "ButAp5rF69E",
+        "ButAp5rF69E",
+        "ButAp5rF69E",
+        "ButAp5rF69E",
+        "ButAp5rF69E",
+        "ButAp5rF69E",
+        "ButAp5rF69E",
+        "ButAp5rF69E",
+        "ButAp5rF69E",
+        "ButAp5rF69E",
+        "ButAp5rF69E",
+        "ButAp5rF69E",
+        "ButAp5rF69E",
+        "ButAp5rF69E",
         "ButAp5rF69E"
       ]
     },
     "typescript": {
       "name": "TypeScript",
-      "count": 1,
+      "count": 17,
       "first_seen": "2025-11-25T02:51:31.861652",
       "videos": [
+        "ButAp5rF69E",
+        "ButAp5rF69E",
+        "ButAp5rF69E",
+        "ButAp5rF69E",
+        "ButAp5rF69E",
+        "ButAp5rF69E",
+        "ButAp5rF69E",
+        "ButAp5rF69E",
+        "ButAp5rF69E",
+        "ButAp5rF69E",
+        "ButAp5rF69E",
+        "ButAp5rF69E",
+        "ButAp5rF69E",
+        "ButAp5rF69E",
+        "ButAp5rF69E",
+        "ButAp5rF69E",
         "ButAp5rF69E"
+      ]
+    },
+    "containers": {
+      "name": "containers",
+      "count": 1,
+      "first_seen": "2025-12-01T10:35:06.439149",
+      "videos": [
+        "unknown"
+      ]
+    },
+    "dockerode": {
+      "name": "dockerode",
+      "count": 1,
+      "first_seen": "2025-12-01T10:35:06.439158",
+      "videos": [
+        "unknown"
       ]
     }
   },
@@ -95,12 +183,12 @@
       "title": "Test Video - AI Technologies",
       "url": "https://youtube.com/watch?v=aobQxcoUlNo",
       "technologies": [
-        "Software Engineering Agents",
-        "AI Benchmarking",
-        "Human-Computer Interaction",
         "Large Language Models (LLMs)",
+        "Generative AI",
+        "Software Engineering Agents",
         "Computer Vision",
-        "Generative AI"
+        "Human-Computer Interaction",
+        "AI Benchmarking"
       ],
       "captured_at": "2025-11-22T04:13:05.905985"
     },
@@ -109,9 +197,9 @@
       "title": "Test Video 2 - LLM Integration",
       "url": "https://youtube.com/watch?v=video_002",
       "technologies": [
+        "Large Language Models (LLMs)",
         "Generative AI",
-        "Natural Language Processing",
-        "Large Language Models (LLMs)"
+        "Natural Language Processing"
       ],
       "captured_at": "2025-11-22T04:13:22.450937"
     },
@@ -120,10 +208,10 @@
       "title": "Test Video 3 - AI Systems",
       "url": "https://youtube.com/watch?v=video_003",
       "technologies": [
+        "Large Language Models (LLMs)",
         "Generative AI",
         "Software Engineering Agents",
-        "AI Benchmarking",
-        "Large Language Models (LLMs)"
+        "AI Benchmarking"
       ],
       "captured_at": "2025-11-22T04:13:22.548586"
     },
@@ -132,12 +220,204 @@
       "title": "NEW MCP Toolkit Is PERFECT! Ultimate MCP Setup For AI Coding Assistants Will 10x Your Productivity!",
       "url": "https://youtu.be/ButAp5rF69E",
       "technologies": [
-        "Claude",
+        "Docker",
         "MCP",
-        "TypeScript",
-        "Docker"
+        "Claude",
+        "TypeScript"
       ],
       "captured_at": "2025-11-25T02:51:31.861617"
+    },
+    {
+      "id": "ButAp5rF69E",
+      "title": "NEW MCP Toolkit Is PERFECT! Ultimate MCP Setup For AI Coding Assistants Will 10x Your Productivity!",
+      "url": "https://youtu.be/ButAp5rF69E",
+      "technologies": [
+        "Docker",
+        "MCP",
+        "Claude",
+        "TypeScript"
+      ],
+      "captured_at": "2025-11-25T03:17:34.766309"
+    },
+    {
+      "id": "ButAp5rF69E",
+      "title": "NEW MCP Toolkit Is PERFECT! Ultimate MCP Setup For AI Coding Assistants Will 10x Your Productivity!",
+      "url": "https://youtu.be/ButAp5rF69E",
+      "technologies": [
+        "Docker",
+        "MCP",
+        "Claude",
+        "TypeScript"
+      ],
+      "captured_at": "2025-11-25T12:10:01.200546"
+    },
+    {
+      "id": "ButAp5rF69E",
+      "title": "NEW MCP Toolkit Is PERFECT! Ultimate MCP Setup For AI Coding Assistants Will 10x Your Productivity!",
+      "url": "https://youtu.be/ButAp5rF69E",
+      "technologies": [
+        "Docker",
+        "MCP",
+        "Claude",
+        "TypeScript"
+      ],
+      "captured_at": "2025-11-25T12:53:43.916396"
+    },
+    {
+      "id": "ButAp5rF69E",
+      "title": "NEW MCP Toolkit Is PERFECT! Ultimate MCP Setup For AI Coding Assistants Will 10x Your Productivity!",
+      "url": "https://youtu.be/ButAp5rF69E",
+      "technologies": [
+        "Docker",
+        "MCP",
+        "Claude",
+        "TypeScript"
+      ],
+      "captured_at": "2025-11-25T13:12:00.500048"
+    },
+    {
+      "id": "ButAp5rF69E",
+      "title": "NEW MCP Toolkit Is PERFECT! Ultimate MCP Setup For AI Coding Assistants Will 10x Your Productivity!",
+      "url": "https://youtu.be/ButAp5rF69E",
+      "technologies": [
+        "Docker",
+        "MCP",
+        "Claude",
+        "TypeScript"
+      ],
+      "captured_at": "2025-11-25T13:31:00.878276"
+    },
+    {
+      "id": "ButAp5rF69E",
+      "title": "NEW MCP Toolkit Is PERFECT! Ultimate MCP Setup For AI Coding Assistants Will 10x Your Productivity!",
+      "url": "https://youtu.be/ButAp5rF69E",
+      "technologies": [
+        "Docker",
+        "MCP",
+        "Claude",
+        "TypeScript"
+      ],
+      "captured_at": "2025-11-25T16:19:48.940369"
+    },
+    {
+      "id": "ButAp5rF69E",
+      "title": "NEW MCP Toolkit Is PERFECT! Ultimate MCP Setup For AI Coding Assistants Will 10x Your Productivity!",
+      "url": "https://youtu.be/ButAp5rF69E",
+      "technologies": [
+        "Docker",
+        "MCP",
+        "Claude",
+        "TypeScript"
+      ],
+      "captured_at": "2025-11-25T16:41:16.336516"
+    },
+    {
+      "id": "ButAp5rF69E",
+      "title": "NEW MCP Toolkit Is PERFECT! Ultimate MCP Setup For AI Coding Assistants Will 10x Your Productivity!",
+      "url": "https://youtu.be/ButAp5rF69E",
+      "technologies": [
+        "Docker",
+        "MCP",
+        "Claude",
+        "TypeScript"
+      ],
+      "captured_at": "2025-11-25T17:33:12.334897"
+    },
+    {
+      "id": "ButAp5rF69E",
+      "title": "NEW MCP Toolkit Is PERFECT! Ultimate MCP Setup For AI Coding Assistants Will 10x Your Productivity!",
+      "url": "https://youtu.be/ButAp5rF69E",
+      "technologies": [
+        "Docker",
+        "MCP",
+        "Claude",
+        "TypeScript"
+      ],
+      "captured_at": "2025-11-26T13:04:14.290144"
+    },
+    {
+      "id": "ButAp5rF69E",
+      "title": "NEW MCP Toolkit Is PERFECT! Ultimate MCP Setup For AI Coding Assistants Will 10x Your Productivity!",
+      "url": "https://youtu.be/ButAp5rF69E",
+      "technologies": [
+        "Docker",
+        "MCP",
+        "Claude",
+        "TypeScript"
+      ],
+      "captured_at": "2025-11-26T13:17:04.549448"
+    },
+    {
+      "id": "ButAp5rF69E",
+      "title": "NEW MCP Toolkit Is PERFECT! Ultimate MCP Setup For AI Coding Assistants Will 10x Your Productivity!",
+      "url": "https://youtu.be/ButAp5rF69E",
+      "technologies": [
+        "Docker",
+        "MCP",
+        "Claude",
+        "TypeScript"
+      ],
+      "captured_at": "2025-11-26T13:36:23.515813"
+    },
+    {
+      "id": "ButAp5rF69E",
+      "title": "NEW MCP Toolkit Is PERFECT! Ultimate MCP Setup For AI Coding Assistants Will 10x Your Productivity!",
+      "url": "https://youtu.be/ButAp5rF69E",
+      "technologies": [
+        "Docker",
+        "MCP",
+        "Claude",
+        "TypeScript"
+      ],
+      "captured_at": "2025-11-26T14:06:49.273935"
+    },
+    {
+      "id": "ButAp5rF69E",
+      "title": "NEW MCP Toolkit Is PERFECT! Ultimate MCP Setup For AI Coding Assistants Will 10x Your Productivity!",
+      "url": "https://youtu.be/ButAp5rF69E",
+      "technologies": [
+        "Docker",
+        "MCP",
+        "Claude",
+        "TypeScript"
+      ],
+      "captured_at": "2025-11-26T16:02:47.828041"
+    },
+    {
+      "id": "ButAp5rF69E",
+      "title": "NEW MCP Toolkit Is PERFECT! Ultimate MCP Setup For AI Coding Assistants Will 10x Your Productivity!",
+      "url": "https://youtu.be/ButAp5rF69E",
+      "technologies": [
+        "Docker",
+        "MCP",
+        "Claude",
+        "TypeScript"
+      ],
+      "captured_at": "2025-11-27T01:53:53.858555"
+    },
+    {
+      "id": "ButAp5rF69E",
+      "title": "NEW MCP Toolkit Is PERFECT! Ultimate MCP Setup For AI Coding Assistants Will 10x Your Productivity!",
+      "url": "https://youtu.be/ButAp5rF69E",
+      "technologies": [
+        "Docker",
+        "MCP",
+        "Claude",
+        "TypeScript"
+      ],
+      "captured_at": "2025-11-27T02:02:47.485776"
+    },
+    {
+      "id": "ButAp5rF69E",
+      "title": "NEW MCP Toolkit Is PERFECT! Ultimate MCP Setup For AI Coding Assistants Will 10x Your Productivity!",
+      "url": "https://youtu.be/ButAp5rF69E",
+      "technologies": [
+        "Docker",
+        "MCP",
+        "Claude",
+        "TypeScript"
+      ],
+      "captured_at": "2025-11-27T06:20:39.911560"
     },
     {
       "id": "unknown",
@@ -145,9 +425,9 @@
       "url": "https://youtube.com/watch?v=auJzb1D-fag",
       "technologies": [
         "Docker",
+        "MCP",
         "containers",
-        "dockerode",
-        "MCP"
+        "dockerode"
       ],
       "captured_at": "2025-12-01T10:35:06.439111"
     }
@@ -209,7 +489,7 @@
     }
   ],
   "stats": {
-    "total_videos": 5,
-    "unique_techs": 10
+    "total_videos": 21,
+    "unique_techs": 13
   }
 }

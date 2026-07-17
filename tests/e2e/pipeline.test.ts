@@ -414,11 +414,7 @@ describe('EventRelay E2E — Live Deployment', () => {
       const found = indicators.filter((t) =>
         html.toLowerCase().includes(t),
       );
-      // When NEXTAUTH_SECRET is set in production the middleware redirects
-      // unauthenticated requests to the NextAuth sign-in page; that page
-      // contains "dashboard" in the callbackUrl, so we get ≥ 1 match.
-      // A fully-rendered (authenticated) dashboard will match more.
-      expect(found.length).toBeGreaterThanOrEqual(1);
+      expect(found.length).toBeGreaterThanOrEqual(2);
     });
   });
 

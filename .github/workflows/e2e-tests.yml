@@ -37,18 +37,61 @@ jobs:
     timeout-minutes: 10
     continue-on-error: true
     # Only run on pull requests when a preview target is configured via the
-    # `E2E_BASE_URL` repository variable. Without it the suite would fall back
-    # to production (https://uvai.io) and exercise the live site rather than
-    # the PR's own changes — producing noise failures unrelated to the diff.
-    # Pushes to `main` always run as a production health check.
-    if: github.event_name == 'push' || vars.E2E_BASE_URL != ''
+    # `E2E_BASE_URL` repository variable, or when VERCEL_TOKEN is available to
+    # auto-detect the preview URL. Pushes to `main` always run as a production
+    # health check.
+    if: github.event_name == 'push' || vars.E2E_BASE_URL != '' || secrets.VERCEL_TOKEN != ''
 
     steps:
       - name: Checkout
         uses: actions/checkout@v7
 
+      - name: Resolve Vercel preview URL
+        id: preview
+        if: github.event_name == 'pull_request' && vars.E2E_BASE_URL == ''
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_TEAM_ID: ${{ secrets.VERCEL_TEAM_ID }}
+        run: |
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # Query Vercel API for the latest deployment on this commit
+          TEAM_PARAM=""
+          if [ -n "$VERCEL_TEAM_ID" ]; then
+            TEAM_PARAM="&teamId=$VERCEL_TEAM_ID"
+          fi
+
+          echo "Waiting for Vercel deployment to reach READY state..."
+          for i in $(seq 1 30); do
+            RESPONSE=$(curl -s -H "Authorization: Bearer $VERCEL_TOKEN" \
+              "https://api.vercel.com/v6/deployments?meta-githubCommitSha=${{ github.event.pull_request.head.sha }}${TEAM_PARAM}&limit=1")
+
+            STATE=$(echo "$RESPONSE" | jq -r '.deployments[0].state // empty')
+            URL=$(echo "$RESPONSE" | jq -r '.deployments[0].url // empty')
+
+            if [ "$STATE" = "READY" ] && [ -n "$URL" ]; then
+              echo "url=https://$URL" >> $GITHUB_OUTPUT
+              echo "skip=false" >> $GITHUB_OUTPUT
+              echo "Preview deployment ready: https://$URL"
+              exit 0
+            fi
+
+            echo "Attempt $i/30: state=$STATE, waiting 20s..."
+            sleep 20
+          done
+
+          echo "Timed out waiting for deployment. Falling back to default BASE_URL."
+          echo "skip=true" >> $GITHUB_OUTPUT
+
+      - name: Override BASE_URL with preview deployment
+        if: steps.preview.outputs.skip == 'false'
+        run: echo "BASE_URL=${{ steps.preview.outputs.url }}" >> $GITHUB_ENV
+
       - name: Setup Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@v6
         with:
           node-version: '22'
           cache: 'npm'
@@ -138,7 +181,7 @@ jobs:
           echo "failed=$FAILED" >> $GITHUB_OUTPUT
 
       - name: Post PR comment with results
-        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        if: github.event_name == 'pull_request'
         uses: actions/github-script@v9
         with:
           script: |

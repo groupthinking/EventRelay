@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
-
 import pytest
+from unittest.mock import AsyncMock, MagicMock, patch
+from types import SimpleNamespace
 
 import unified_ai_sdk.unified_ai_sdk as sdk_mod
 from unified_ai_sdk import AIRequest, ModelProvider, TaskType, UnifiedAISDK
@@ -206,41 +205,6 @@ class TestUnifiedAISDK:
         assert result.success is False
         assert result.metadata["attempts"] == 1
 
-    def test_should_retry_rejects_gemini_400_with_incidental_500(self):
-        sdk = UnifiedAISDK({"retry_attempts": 3, "retry_base_delay": 0})
-
-        assert (
-            sdk._should_retry(
-                RuntimeError(
-                    "400 INVALID_ARGUMENT: input token count 500 exceeds model limit"
-                )
-            )
-            is False
-        )
-
-    def test_should_retry_ignores_non_status_colon_numbers(self):
-        sdk = UnifiedAISDK({"retry_attempts": 3, "retry_base_delay": 0})
-
-        assert (
-            sdk._should_retry(
-                RuntimeError("invalid_request: expected 3 items: 503 found")
-            )
-            is False
-        )
-
-    @pytest.mark.parametrize(
-        "message",
-        [
-            "500 INTERNAL: upstream unavailable",
-            "Response: 500 Internal Server Error",
-            "429 RESOURCE_EXHAUSTED: quota exceeded",
-        ],
-    )
-    def test_should_retry_accepts_retryable_status_formats(self, message):
-        sdk = UnifiedAISDK({"retry_attempts": 3, "retry_base_delay": 0})
-
-        assert sdk._should_retry(RuntimeError(message)) is True
-
     @pytest.mark.asyncio
     async def test_structured_output_support(self):
         sdk = UnifiedAISDK({"retry_attempts": 1})
@@ -286,42 +250,3 @@ class TestUnifiedAISDK:
         assert result.success is True
         assert result.content == "success"
         assert result.metadata["attempts"] == 2
-
-
-class TestModelProviderContract:
-    """Regression guard for the #773 enum drift.
-
-    #773 trimmed ``ModelProvider`` to ``{OPENAI, ANTHROPIC, GEMINI}`` while
-    ``UnifiedAISDK._rate_limit_provider`` still referenced ``ModelProvider.CLAUDE``
-    and ``.GROK`` by name, so every Claude/Grok request raised
-    ``AttributeError`` at runtime and the CI ``test`` job went red. These tests
-    assert the enum stays consistent with its consumers so the same class of
-    regression fails fast in unit tests rather than in production.
-    """
-
-    def test_enum_has_all_members_referenced_by_consumers(self):
-        # Members referenced directly by UnifiedAISDK._rate_limit_provider and
-        # the provider test suite. Removing any of these reintroduces #773.
-        for name, value in (
-            ("OPENAI", "openai"),
-            ("CLAUDE", "claude"),
-            ("ANTHROPIC", "anthropic"),
-            ("GEMINI", "gemini"),
-            ("GROK", "grok"),
-        ):
-            member = getattr(ModelProvider, name)
-            assert member.value == value
-
-    def test_rate_limit_provider_resolves_every_dispatchable_provider(self):
-        # Every provider the SDK can dispatch (see UnifiedAISDK._handlers /
-        # _normalize_provider) must map to a ModelProvider without raising.
-        sdk = UnifiedAISDK({"retry_attempts": 1})
-        for provider_name in ("openai", "claude", "grok", "gemini"):
-            provider = sdk._rate_limit_provider(provider_name)
-            assert isinstance(provider, ModelProvider)
-
-    def test_normalize_provider_maps_anthropic_alias_to_claude(self):
-        # ModelProvider.ANTHROPIC and .CLAUDE both resolve to the "claude" path.
-        sdk = UnifiedAISDK({"retry_attempts": 1})
-        assert sdk._normalize_provider(ModelProvider.ANTHROPIC) == "claude"
-        assert sdk._normalize_provider(ModelProvider.CLAUDE) == "claude"

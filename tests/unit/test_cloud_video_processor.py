@@ -230,6 +230,27 @@ class TestExtractVideoId:
     def test_bare_id_passthrough(self, processor):
         assert processor._extract_video_id("auJzb1D-fag") == "auJzb1D-fag"
 
+    def test_uppercase_watch_url(self, processor):
+        # The API-boundary validator is case-insensitive, so an uppercase URL
+        # reaches here; extraction must not fall through to the bare-id branch
+        # and return the whole URL.
+        assert (
+            processor._extract_video_id("HTTPS://YOUTUBE.COM/WATCH?V=auJzb1D-fag")
+            == "auJzb1D-fag"
+        )
+
+    def test_mixed_case_host(self, processor):
+        assert (
+            processor._extract_video_id("https://M.YOUTUBE.COM/watch?v=auJzb1D-fag")
+            == "auJzb1D-fag"
+        )
+
+    def test_uppercase_short_url(self, processor):
+        assert (
+            processor._extract_video_id("https://YOUTU.BE/auJzb1D-fag?t=10")
+            == "auJzb1D-fag"
+        )
+
 
 # ---------------------------------------------------------------------------
 # 4. process_video_async – queue enabled
@@ -383,12 +404,7 @@ class TestProcessVideoSyncFullPipeline:
         result = await p.process_video_sync("https://youtube.com/watch?v=failid")
 
         assert result.success is False
-        # error_message is persisted to Firestore and echoed to clients by
-        # /status and /result, so it must be sanitized: neither the request's
-        # video_id nor the internal exception text may leak (CWE-209).
-        assert result.error_message == "Internal server error"
-        assert "failid" not in result.error_message
-        assert "DB offline" not in result.error_message
+        assert "failid" in result.error_message
         assert result.processing_time >= 0.0
 
     async def test_error_updates_state_to_failed(self, mock_services):

@@ -7,7 +7,7 @@ async def populate_video():
     print("Populating video data...")
     url = "http://localhost:8000/api/v1/transcript-action"
 
-    payload = {"video_url": "https://www.youtube.com/watch?v=auJzb1D-fag"}
+    payload = {"video_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"}
 
     print(f"Sending request to {url}...")
     try:
