@@ -383,7 +383,12 @@ class TestProcessVideoSyncFullPipeline:
         result = await p.process_video_sync("https://youtube.com/watch?v=failid")
 
         assert result.success is False
-        assert "failid" in result.error_message
+        # error_message is persisted to Firestore and echoed to clients by
+        # /status and /result, so it must be sanitized: neither the request's
+        # video_id nor the internal exception text may leak (CWE-209).
+        assert result.error_message == "Internal server error"
+        assert "failid" not in result.error_message
+        assert "DB offline" not in result.error_message
         assert result.processing_time >= 0.0
 
     async def test_error_updates_state_to_failed(self, mock_services):
