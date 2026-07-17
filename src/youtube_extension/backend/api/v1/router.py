@@ -13,18 +13,22 @@ import os
 import time
 import uuid as _uuid
 from dataclasses import asdict
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse
 
 from shared.youtube import RobustYouTubeMetadata
 from uvai.ml.client import get_uvai_ml_client
 try:
     from youtube_extension.services.agents import AgentOrchestrator
+    from youtube_extension.services.agents.adapters.agent_orchestrator import (
+        orchestrator as _shared_orchestrator,
+    )
 except ImportError:
     AgentOrchestrator = None
+    _shared_orchestrator = None
 from youtube_extension.services.ai import HybridProcessorService
 from youtube_extension.services.cloud.cloud_tasks_queue import (
     CloudTasksQueueService,
@@ -97,6 +101,9 @@ from .models import (
     VideoProcessJobResponse,
     VideoToSoftwareRequest,
     VideoToSoftwareResponse,
+    VideoPackRequest,
+    BlueprintRequest,
+    GenerateCodeRequest,
 )
 
 performance_monitor = PerformanceMonitor()
@@ -241,8 +248,8 @@ async def health_check_v1(
         )
         return HealthResponse(**health_status)
     except Exception as e:
-        logger.error(f"Health check failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Health check failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get(
@@ -270,8 +277,8 @@ async def detailed_health_check_v1(
             "timestamp": datetime.now().isoformat(),
         }
     except Exception as e:
-        logger.error(f"Detailed health check failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Detailed health check failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # Capabilities / Model availability
@@ -650,7 +657,7 @@ async def chat_v1(
 
     except Exception as e:
         logger.error(f"Error in chat endpoint: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
 # Video Processing Endpoints
@@ -709,7 +716,7 @@ async def process_video_v1(
             {"url": request.video_url, "error": str(e)},
             request.video_url,
         )
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post(
@@ -753,9 +760,9 @@ async def process_video_markdown_v1(
         health_service.increment_metric("error_total")
         raise
     except Exception as e:
-        logger.error(f"Error in markdown processing: {e}")
+        logger.error(f"Error in markdown processing: {e}", exc_info=True)
         health_service.increment_metric("error_total")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post(
@@ -791,8 +798,8 @@ async def video_to_software_v1(
         return VideoToSoftwareResponse(**result)
 
     except Exception as e:
-        logger.error(f"Video-to-software processing failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Video-to-software processing failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # Cache Management Endpoints
@@ -804,12 +811,19 @@ async def video_to_software_v1(
 )
 async def get_cache_stats_v1(cache_service: CacheService = Depends(get_cache_service)):
     """Get cache statistics"""
+    global _stats_cache_time, _stats_cache
     try:
+        now = time.time()
+        if now - _stats_cache_time < _stats_cache_ttl and _stats_cache:
+            return CacheStats(**_stats_cache)
+
         stats = cache_service.get_cache_statistics()
+        _stats_cache = stats
+        _stats_cache_time = now
         return CacheStats(**stats)
     except Exception as e:
-        logger.error(f"Error getting cache stats: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error getting cache stats: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get(
@@ -837,8 +851,8 @@ async def get_cached_video_v1(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error retrieving cached video: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error retrieving cached video: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.delete(
@@ -860,8 +874,8 @@ async def clear_video_cache_v1(
             "timestamp": datetime.now().isoformat(),
         }
     except Exception as e:
-        logger.error(f"Error clearing video cache: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error clearing video cache: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.delete(
@@ -880,8 +894,8 @@ async def clear_all_cache_v1(cache_service: CacheService = Depends(get_cache_ser
             "timestamp": datetime.now().isoformat(),
         }
     except Exception as e:
-        logger.error(f"Error clearing all cache: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error clearing all cache: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # Data Endpoints
@@ -918,8 +932,8 @@ async def list_videos_v1(
         }
 
     except Exception as e:
-        logger.error(f"Error listing videos: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error listing videos: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get(
@@ -942,8 +956,8 @@ async def get_video_detail_v1(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error getting video detail: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error getting video detail: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get(
@@ -958,8 +972,8 @@ async def get_learning_log_v1(data_service: DataService = Depends(get_data_servi
         learning_log = data_service.get_learning_log()
         return learning_log
     except Exception as e:
-        logger.error(f"Error getting learning log: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error getting learning log: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post(
@@ -1009,8 +1023,8 @@ async def get_actions_by_video_v1(video_id: str):
         actions = repo.get_by_video_id(video_id)
         return actions
     except Exception as e:
-        logger.error(f"Error retrieving actions for {video_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error retrieving actions for {video_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.put(
@@ -1057,8 +1071,8 @@ async def update_action_v1(action_id: str, payload: dict[str, Any]):
                     logger.debug("Action feedback recording failed", exc_info=True)
         return {"success": bool(success)}
     except Exception as e:
-        logger.error(f"Error updating action {action_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error updating action {action_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # Feedback Endpoints
@@ -1104,8 +1118,8 @@ async def submit_feedback_v1(
             raise HTTPException(status_code=500, detail="Failed to save feedback")
 
     except Exception as e:
-        logger.error(f"Error saving feedback: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error saving feedback: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # Metrics Endpoints
@@ -1124,8 +1138,8 @@ async def get_metrics_v1(
         metrics_lines = health_service.get_metrics_prometheus_format()
         return JSONResponse(content="\n".join(metrics_lines), media_type="text/plain")
     except Exception as e:
-        logger.error(f"Metrics endpoint failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Metrics endpoint failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # Frontend performance ingestion endpoints
@@ -1144,8 +1158,8 @@ async def ingest_performance_alert_v1(payload: dict[str, Any]):
         )
         return {"status": "ok", "recorded": metric_name}
     except Exception as e:
-        logger.error(f"Failed to ingest performance alert: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Failed to ingest performance alert: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/performance/report", summary="Ingest frontend performance report")
@@ -1162,8 +1176,8 @@ async def ingest_performance_report_v1(report: dict[str, Any]):
                 )
         return {"status": "ok", "metrics_recorded": len(metrics)}
     except Exception as e:
-        logger.error(f"Failed to ingest performance report: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Failed to ingest performance report: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # ============================================================
@@ -1272,13 +1286,53 @@ _video_jobs: _TTLDict = _TTLDict(ttl=_JOB_TTL, max_size=_JOB_MAX_SIZE)
 _agent_executions: _TTLDict = _TTLDict(ttl=_JOB_TTL, max_size=_JOB_MAX_SIZE)
 _dispatches: _TTLDict = _TTLDict(ttl=_JOB_TTL, max_size=_JOB_MAX_SIZE)
 
+# Cache for heavy statistics calculations
+_stats_cache: dict[str, Any] = {}
+_stats_cache_time: float = 0
+_stats_cache_ttl: float = 60
+
+
+async def _periodic_cleanup():
+    """Background task to proactively evict expired jobs from in-memory stores."""
+    while True:
+        try:
+            _video_jobs.evict_expired()
+            _agent_executions.evict_expired()
+            _dispatches.evict_expired()
+        except Exception as exc:
+            logger.debug("Periodic cleanup failed: %s", exc)
+        await asyncio.sleep(300)  # Sweep every 5 minutes
+
+
+@router.on_event("startup")
+async def startup_event():
+    """Start background tasks on API startup."""
+    asyncio.create_task(_periodic_cleanup())
+
 
 def _persist_video_job(job: VideoJobStatusResponse) -> None:
+    """Persist job state. Uses a background task for expensive serialization to avoid blocking."""
     _video_jobs[job.job_id] = job
+
+    def _sync_persist():
+        try:
+            # model_dump(mode="json") can be slow for large results (Issue 5)
+            data = job.model_dump(mode="json")
+            get_job_store().save(job.job_id, data)
+        except Exception as exc:
+            logger.warning("Job persist failed for %s: %s", job.job_id, exc)
+
+    # If we are in an async loop, offload serialization and I/O to a thread
     try:
-        get_job_store().save(job.job_id, job.model_dump(mode="json"))
-    except Exception as exc:
-        logger.warning("Job persist failed for %s: %s", job.job_id, exc)
+        loop = asyncio.get_running_loop()
+        if loop.is_running():
+            asyncio.create_task(asyncio.to_thread(_sync_persist))
+            return
+    except RuntimeError:
+        pass
+
+    # Fallback to sync execution if no loop
+    _sync_persist()
 
 
 def _load_video_job(job_id: str) -> Optional[VideoJobStatusResponse]:
@@ -1601,6 +1655,139 @@ async def list_pipeline_audit_runs(limit: int = 20):
     return ApiResponse.success({"runs": runs, "count": len(runs)})
 
 
+# ============================================================
+# Phase 4 MVP — YouTube-to-Repo contract endpoints
+# ============================================================
+
+
+@router.post(
+    "/video/pack",
+    response_model=ApiResponse,
+    summary="Get or create a VideoPack",
+    tags=["Jobs"],
+)
+async def get_or_create_videopack(request: VideoPackRequest):
+    """Retrieve an existing VideoPack or create one from a job/URL."""
+    # This implementation is a shell that leverages existing fixtures and
+    # job outputs to satisfy the Phase 4 MVP contract.
+    video_id = request.video_id
+    if not video_id and request.video_url:
+        import re
+        match = re.search(r"(?:v=|\/)([0-9A-Za-z_-]{11}).*", request.video_url)
+        video_id = match.group(1) if match else None
+
+    if not video_id and request.job_id:
+        job = _load_video_job(request.job_id)
+        if job and job.metadata:
+            video_id = job.metadata.get("video_id")
+
+    if not video_id:
+        raise HTTPException(status_code=400, detail="Could not determine video_id")
+
+    # In a real implementation, this would look up in a VideoPackStore.
+    # For MVP, we return a synthesized pack from the job or a 404.
+    try:
+        from youtube_extension.videopack.schema import Provenance, Transcript, VideoPackV0
+
+        # Check if we have a job with results
+        job = None
+        if request.job_id:
+            job = _load_video_job(request.job_id)
+
+        pack = VideoPackV0(
+            video_id=video_id,
+            transcript=Transcript(
+                full_text=(
+                    job.transcript
+                    if job and job.transcript
+                    else "Transcript extraction pending or unavailable"
+                )
+            ),
+            provenance=Provenance(
+                created_at=datetime.now(timezone.utc), tool_versions={"api": "v1"}
+            ),
+        )
+        return ApiResponse.success(pack.model_dump())
+    except Exception as e:
+        logger.error(f"Failed to create VideoPack: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.post(
+    "/projects/blueprint",
+    response_model=ApiResponse,
+    summary="Generate project blueprint",
+    tags=["Jobs"],
+)
+async def generate_blueprint(request: BlueprintRequest):
+    """Generate a project build plan (blueprint) from video analysis."""
+    # MVP implementation: uses the enhanced video processor to derive a build plan
+    try:
+        from youtube_extension.backend.enhanced_video_processor import (
+            EnhancedVideoProcessor,
+        )
+
+        processor = EnhancedVideoProcessor()
+
+        # If we have a job, pull real results to inform the blueprint
+        metadata = {"title": "New Project"}
+        transcript = {"text": ""}
+        ai_analysis = {"summary": "Generated via blueprint endpoint"}
+
+        if request.job_id:
+            job = _load_video_job(request.job_id)
+            if job:
+                metadata["title"] = (job.metadata or {}).get("title") or metadata[
+                    "title"
+                ]
+                transcript["text"] = job.transcript or ""
+                if job.metadata and "outputs" in job.metadata:
+                    ai_analysis["summary"] = (
+                        job.metadata["outputs"]
+                        .get("transcript_action", {})
+                        .get("data", {})
+                        .get("summary", ai_analysis["summary"])
+                    )
+
+        # Call the internal build plan generator (exposed for MVP orchestration)
+        blueprint = await processor._generate_build_plan(
+            video_url=request.video_url or "unknown",
+            metadata=metadata,
+            transcript=transcript,
+            ai_analysis=ai_analysis,
+        )
+        return ApiResponse.success(blueprint)
+    except Exception as e:
+        logger.error(f"Failed to generate blueprint: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.post(
+    "/projects/generate",
+    response_model=ApiResponse,
+    summary="Generate project code",
+    tags=["Jobs"],
+)
+async def generate_project_code(request: GenerateCodeRequest):
+    """Generate source code for a project based on a blueprint."""
+    try:
+        from youtube_extension.backend.ai_code_generator import AICodeGenerator
+        generator = AICodeGenerator()
+
+        # In MVP, we use default architecture if blueprint is missing
+        result = await generator.generate_fullstack_project(
+            video_analysis={"extracted_info": request.blueprint or {"title": "MVP Project"}},
+            project_config={
+                "project_type": request.project_type,
+                "framework": request.framework
+            }
+        )
+        return ApiResponse.success(result)
+    except Exception as e:
+        logger.error(f"Code generation failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
 @router.get(
     "/audit/pipeline/{run_id}",
     response_model=ApiResponse,
@@ -1866,12 +2053,14 @@ async def _run_agent(execution: AgentExecution, events: list[dict[str, Any]]):
         execution.status = AgentStatus.running
         execution.progress = 10.0
 
-        orchestrator = AgentOrchestrator()
+        if _shared_orchestrator is None and AgentOrchestrator is None:
+            raise RuntimeError("AgentOrchestrator not available")
+        orch = _shared_orchestrator or AgentOrchestrator()
         event_data = next(
             (e for e in events if e.get("id") == execution.event_id),
             events[0] if events else {},
         )
-        result = await orchestrator.execute_single(
+        result = await orch.execute_single(
             agent_type=execution.agent_type,
             context=event_data,
         )
@@ -1879,7 +2068,16 @@ async def _run_agent(execution: AgentExecution, events: list[dict[str, Any]]):
             result if isinstance(result, dict) else {"output": str(result)}
         )
 
-        execution.status = AgentStatus.complete
+        # execute_single reports agent-level failures (not found, non-ok status,
+        # caught exceptions) by returning an {"error": ...} dict rather than
+        # raising, so the except block below never sees them. Inspect the result
+        # and surface those failures as AgentStatus.failed instead of silently
+        # marking the execution complete.
+        if isinstance(result, dict) and result.get("error"):
+            execution.status = AgentStatus.failed
+            execution.error = str(result["error"])
+        else:
+            execution.status = AgentStatus.complete
         execution.progress = 100.0
     except Exception as exc:
         execution.status = AgentStatus.failed
@@ -1948,6 +2146,32 @@ async def send_a2a_message(
             "timestamp": msg.timestamp,
         }
     )
+
+
+@router.get(
+    "/agents/sessions",
+    response_model=ApiResponse,
+    summary="Get agent session logs",
+    tags=["Agents"],
+)
+async def get_agent_session_logs(
+    agent_type: Optional[str] = None,
+    limit: int = Query(default=50, ge=1, le=1000),
+):
+    """Return agent dispatch session logs.
+
+    Session logs track which agents were dispatched, what context they received,
+    and their execution outcomes. This enables a recursive feedback loop where
+    agent findings can be reviewed and re-dispatched as new actions.
+    """
+    if _shared_orchestrator is None:
+        raise HTTPException(
+            status_code=503, detail="AgentOrchestrator not available"
+        )
+    logs = _shared_orchestrator.get_session_logs(
+        agent_type=agent_type, limit=limit
+    )
+    return ApiResponse.success({"sessions": logs, "count": len(logs)})
 
 
 @router.get(
