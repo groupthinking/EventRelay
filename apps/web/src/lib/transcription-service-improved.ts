@@ -3,6 +3,7 @@ import 'server-only';
 import OpenAI from 'openai';
 import { fetchYouTubeMetadata, formatMetadataAsContext } from '@/lib/youtube-metadata';
 import { getGeminiClient, hasGeminiKey } from '@/lib/gemini-client';
+import { GEMINI_SEARCH_MODEL } from '@/lib/gemini-models';
 import { assertPublicHttpUrl } from '@/lib/ssrf-guard';
 import { CircuitBreaker, retryWithBackoff, withTimeout } from '@/lib/error-handling';
 
@@ -160,7 +161,7 @@ export async function fetchTranscript({
 
               const result = await withTimeout(
                 ai.models.generateContent({
-                  model: 'gemini-3.1-pro-preview',
+                  model: GEMINI_SEARCH_MODEL,
                   contents: `You are a video transcription assistant with access to Google Search.
 
 For the following YouTube video, use your googleSearch tool to find the ACTUAL transcript,

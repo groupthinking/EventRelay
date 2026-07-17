@@ -103,6 +103,8 @@ describe('POST /api/pipeline', () => {
       actions: [],
       topics: ['test'],
       architectureCode: 'ingest -> analyze',
+      ingestScript: 'print("ingest")',
+      e22Snippets: [],
       transcript: [],
     } as Awaited<ReturnType<typeof analyzeVideoWithGemini>>);
 
@@ -117,7 +119,7 @@ describe('POST /api/pipeline', () => {
     vi.mocked(parseBackendJson).mockResolvedValue(null);
 
     const res = await POST(postRequest({
-      url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+      url: 'https://www.youtube.com/watch?v=auJzb1D-fag',
       async: true,
     }));
     const body = await res.json();
@@ -157,7 +159,7 @@ describe('POST /api/pipeline', () => {
     });
 
     const res = await POST(postRequest({
-      url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+      url: 'https://www.youtube.com/watch?v=auJzb1D-fag',
       async: false,
     }));
     const body = await res.json();
@@ -180,7 +182,7 @@ describe('POST /api/pipeline', () => {
     vi.mocked(hasGeminiKey).mockReturnValue(false);
 
     const res = await POST(postRequest({
-      url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+      url: 'https://www.youtube.com/watch?v=auJzb1D-fag',
       project_type: 'automation',
       deployment_target: 'vercel',
     }));

@@ -1024,7 +1024,7 @@ Replace the URL with any YouTube video you want to analyze. The script will:
 
 **Example with a real video:**
 ```bash
-python src/agents/gemini_video_master_agent.py "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+python src/agents/gemini_video_master_agent.py "https://www.youtube.com/watch?v=auJzb1D-fag"
 ```
 
 Would you like me to run a test with a specific video URL, or did you want to add a default/interactive mode to the script so it prompts for a URL instead of requiring a CLI argument?
@@ -1042,7 +1042,7 @@ here are some examples above, but default should be any business or technical vi
 Lets try each of the videos below, watch the output and work error if any
 
 SIDE NOTE - CONTEXT 
-https://www.youtube.com/watch?v=dQw4w9WgXcQ  = this should be banned from surving as example, its a music video meme please remember this ( dQw4w9WgXcQ   )
+https://www.youtube.com/watch?v=auJzb1D-fag  = this should be banned from surving as example, its a music video meme please remember this ( auJzb1D-fag   )
 
 *User accepted the command `cd /Users/garvey/Dev/projects/EventRelay && python src/agents/gemini_video_master_agent.py "https://www.youtube.com/watch?v=QKHL_gmlteQ" 2>&1 | head -100`*
 
@@ -1247,7 +1247,7 @@ here are some examples above, but default should be any business or technical vi
 Lets try each of the videos below, watch the output and work error if any
 
 SIDE NOTE - CONTEXT 
-https://www.youtube.com/watch?v=dQw4w9WgXcQ  = this should be banned from surving as example, its a music video meme please remember this ( dQw4w9WgXcQ   )
+https://www.youtube.com/watch?v=auJzb1D-fag  = this should be banned from surving as example, its a music video meme please remember this ( auJzb1D-fag   )
 
 ### User Input
 
@@ -1271,4 +1271,4 @@ here are some examples above, but default should be any business or technical vi
 Lets try each of the videos below, watch the output and work error if any
 
 SIDE NOTE - CONTEXT 
-https://www.youtube.com/watch?v=dQw4w9WgXcQ  = this should be banned from surving as example, its a music video meme please remember this ( dQw4w9WgXcQ   )
+https://www.youtube.com/watch?v=auJzb1D-fag  = this should be banned from surving as example, its a music video meme please remember this ( auJzb1D-fag   )

@@ -266,7 +266,7 @@ class TestOptimizedStrategyProcessVideo:
 
     async def test_cache_hit_increments_counter(self):
         opt = OptimizedStrategy()
-        cache_key = f"optimized_video:{__import__('hashlib').md5(_VALID_URL.encode()).hexdigest()}"
+        cache_key = f"optimized_video:{__import__('hashlib').sha256(_VALID_URL.encode()).hexdigest()}"
         _cache[cache_key] = {"cached": True}
         try:
             result = await opt.process_video(_VALID_URL)
@@ -277,7 +277,7 @@ class TestOptimizedStrategyProcessVideo:
 
     async def test_cache_disabled_skips_hit(self):
         opt = OptimizedStrategy({"enable_intelligent_caching": False})
-        cache_key = f"optimized_video:{__import__('hashlib').md5(_VALID_URL.encode()).hexdigest()}"
+        cache_key = f"optimized_video:{__import__('hashlib').sha256(_VALID_URL.encode()).hexdigest()}"
         _cache[cache_key] = {"cached": True}
         try:
             await opt.process_video(_VALID_URL)

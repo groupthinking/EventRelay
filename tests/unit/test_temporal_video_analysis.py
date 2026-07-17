@@ -16,6 +16,18 @@ from src.integration.temporal_video_analysis import (
 )
 
 
+@pytest.fixture
+def mock_gemini_service():
+    """Create a mock Gemini service (module-level so every test class can use it)."""
+    with patch("src.integration.temporal_video_analysis.GeminiVideoService") as mock:
+        service = MagicMock()
+        service.analyze_video = AsyncMock()
+        service.answer_video_question = AsyncMock()
+        service.close = AsyncMock()
+        mock.return_value = service
+        yield service
+
+
 class TestTemporalSegment:
     """Test temporal segment utilities."""
     
@@ -72,18 +84,7 @@ class TestTemporalEvent:
 
 class TestTemporalVideoAnalyzer:
     """Test temporal video analysis capabilities."""
-    
-    @pytest.fixture
-    def mock_gemini_service(self):
-        """Create mock Gemini service."""
-        with patch("src.integration.temporal_video_analysis.GeminiVideoService") as mock:
-            service = MagicMock()
-            service.analyze_video = AsyncMock()
-            service.answer_video_question = AsyncMock()
-            service.close = AsyncMock()
-            mock.return_value = service
-            yield service
-    
+
     @pytest.mark.asyncio
     async def test_analyze_segment(self, mock_gemini_service):
         """Test analyzing a video segment."""

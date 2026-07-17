@@ -11,5 +11,5 @@ from typing import Any, Protocol
 
 
 class VideoProcessor(Protocol):
-	async def process_video(self, video_url: str) -> dict[str, Any]:
-		...
+    async def process_video(self, video_url: str) -> dict[str, Any]:
+        ...

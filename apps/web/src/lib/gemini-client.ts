@@ -15,8 +15,9 @@ import 'server-only';
  */
 
 import { GoogleGenAI } from '@google/genai';
+import { hasAiGatewayKey } from './vercel-ai-gateway';
 
-export type GeminiAuthMode = 'studio' | 'vertex' | 'none';
+export type GeminiAuthMode = 'gateway' | 'studio' | 'vertex' | 'none';
 
 export interface GeminiConfig {
   configured: boolean;
@@ -33,6 +34,8 @@ export interface ClassifiedGeminiError {
  * Resolve which auth mode is active. AI Studio is preferred when both key types exist.
  */
 export function getGeminiAuthMode(): GeminiAuthMode {
+  if (hasAiGatewayKey()) return 'gateway';
+
   if (process.env.GOOGLE_GENAI_USE_VERTEXAI === 'true') {
     const key =
       process.env.Vertex_AI_API_KEY ||
@@ -76,7 +79,18 @@ export function resolveGeminiApiKey(): string {
  * Check if any Gemini/Google AI API key is available.
  */
 export function hasGeminiKey(): boolean {
-  return resolveGeminiApiKey().length > 0;
+  return hasAiGatewayKey() || resolveGeminiApiKey().length > 0;
+}
+
+/** Active LLM routing label for observability (gateway takes precedence). */
+export function getGeminiRoutingLabel(): string {
+  const mode = getGeminiAuthMode();
+  if (mode === 'gateway') {
+    return `gateway:${process.env.VERCEL_AI_GATEWAY_MODEL?.trim() || 'google/gemini-2.5-flash'}`;
+  }
+  if (mode === 'vertex') return 'vertex';
+  if (mode === 'studio') return 'studio';
+  return 'none';
 }
 
 /**
@@ -136,6 +150,11 @@ let _lastMode = '';
  */
 export function getGeminiClient(): GoogleGenAI {
   const key = resolveGeminiApiKey();
+  if (!key) {
+    throw new Error(
+      'No direct Gemini API key configured. Set GEMINI_API_KEY or route through AI_GATEWAY_API_KEY.',
+    );
+  }
   const mode = shouldUseVertexAI() ? 'vertex' : 'gemini';
 
   if (!_gemini || _lastKey !== key || _lastMode !== mode) {
