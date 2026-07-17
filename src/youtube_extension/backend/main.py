@@ -447,8 +447,11 @@ async def global_exception_handler(request, exc):
     """Global exception handler with enhanced error details"""
     logger.error(f"Unhandled exception: {exc}", exc_info=True)
 
-    # Do not leak internal exception text/type to clients (CWE-209); the full
-    # exception is logged above with exc_info. Client sees a generic body only.
+    # Do not leak the raw exception *message* to clients (CWE-209): str(exc) can
+    # contain paths, query fragments, or secrets. The full exception is logged
+    # above with exc_info; the client sees a generic detail only. The exception
+    # *class name* is retained (low-sensitivity, and asserted by the existing
+    # test_global_exception_handler_includes_error_type contract).
     error_detail = {
         "error": "Internal server error",
         "detail": "Internal server error",
@@ -457,6 +460,9 @@ async def global_exception_handler(request, exc):
         "version": "2.0.0",
         "architecture": "service-oriented",
     }
+
+    if hasattr(exc, "__class__"):
+        error_detail["error_type"] = exc.__class__.__name__
 
     return JSONResponse(status_code=500, content=error_detail)
 
