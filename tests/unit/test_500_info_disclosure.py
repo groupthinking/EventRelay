@@ -48,17 +48,25 @@ def _is_httpexception(call: ast.Call) -> bool:
     )
 
 
-def _is_500(call: ast.Call) -> bool:
-    # Positional form: HTTPException(500, ...)
-    if call.args and isinstance(call.args[0], ast.Constant) and call.args[0].value == 500:
+def _is_500_status(node: ast.expr) -> bool:
+    # Literal 500
+    if isinstance(node, ast.Constant) and node.value == 500:
         return True
-    # Keyword form: HTTPException(status_code=500, ...)
+    # Symbolic constant: status.HTTP_500_INTERNAL_SERVER_ERROR or a direct import
+    if isinstance(node, ast.Attribute) and node.attr == "HTTP_500_INTERNAL_SERVER_ERROR":
+        return True
+    if isinstance(node, ast.Name) and node.id == "HTTP_500_INTERNAL_SERVER_ERROR":
+        return True
+    return False
+
+
+def _is_500(call: ast.Call) -> bool:
+    # Positional form: HTTPException(<status>, ...)
+    if call.args and _is_500_status(call.args[0]):
+        return True
+    # Keyword form: HTTPException(status_code=<status>, ...)
     for kw in call.keywords:
-        if (
-            kw.arg == "status_code"
-            and isinstance(kw.value, ast.Constant)
-            and kw.value.value == 500
-        ):
+        if kw.arg == "status_code" and _is_500_status(kw.value):
             return True
     return False
 
@@ -117,6 +125,9 @@ def test_guard_detects_synthetic_leaks() -> None:
         'raise HTTPException(status_code=500, detail=f"failed: {e}")',
         "raise HTTPException(status_code=500, detail=error_msg)",  # bare variable
         'raise HTTPException(status_code=500, detail={"message": str(e)})',  # dict
+        # Symbolic status constant (status.HTTP_500_* and direct import forms)
+        "raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))",
+        "raise HTTPException(HTTP_500_INTERNAL_SERVER_ERROR, str(e))",
     ]
     for src in leaky:
         assert list(_iter_500_dynamic_detail(src)), f"scanner missed a real leak: {src}"
@@ -124,6 +135,7 @@ def test_guard_detects_synthetic_leaks() -> None:
     safe = [
         'raise HTTPException(status_code=500, detail="Internal server error")',
         'raise HTTPException(500, "Internal server error")',
+        'raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error")',
         "raise HTTPException(status_code=400, detail=str(exc))",  # 4xx echoes client input
         "raise HTTPException(status_code=429, detail=f'Rate limit: {e}')",
     ]
