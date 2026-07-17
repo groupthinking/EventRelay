@@ -6,6 +6,7 @@ Provides the core API endpoints and integrates all services including cloud AI
 
 import logging
 import os
+from urllib.parse import urlparse
 
 import uvicorn
 from fastapi import FastAPI, HTTPException
@@ -32,7 +33,10 @@ if _sentry_dsn:
             environment=os.getenv("ENVIRONMENT", os.getenv("VERCEL_ENV", "development")),
             traces_sample_rate=float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.1")),
             integrations=[StarletteIntegration(), FastApiIntegration()],
-            send_default_pii=True,
+            # Do not attach request headers/cookies/body/user IP to events.
+            # send_default_pii=True shipped user PII + auth headers to Sentry.
+            # Opt in per-event via set_user() where genuinely needed instead.
+            send_default_pii=os.getenv("SENTRY_SEND_PII", "false").lower() == "true",
             stream_gen_ai_spans=True,  # Enable for LLM monitoring (works for OpenAI-compatible including Grok/xAI via openai client)
         )
         logger.info("Sentry initialized for backend with AI monitoring")
@@ -48,18 +52,78 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
-# Configure CORS
+# Configure CORS.
+#
+# Security (OWASP A05 — Security Misconfiguration): because we send
+# ``allow_credentials=True``, every allowed origin can make *credentialed*
+# cross-origin requests. Shipping ``http://localhost:*`` origins to production
+# would let a page served from an attacker-controlled localhost app issue
+# credentialed calls against the production API, so localhost origins are only
+# enabled outside production. Production origins can be extended without a code
+# change via the ``CORS_ALLOWED_ORIGINS`` env var (comma-separated). In
+# production, any localhost/loopback origin supplied that way is rejected so a
+# stray env var cannot re-open the loopback bypass this control closes.
+# Coalesce empty/whitespace values so an explicitly-empty ENVIRONMENT="" in a
+# production deploy cannot silently fall through to the permissive dev origins.
+_ENVIRONMENT = (
+    (os.getenv("ENVIRONMENT") or "").strip()
+    or (os.getenv("VERCEL_ENV") or "").strip()
+    or "development"
+).lower()
+_IS_PRODUCTION = _ENVIRONMENT == "production"
+
+_PRODUCTION_ORIGINS = [
+    "https://uvai.io",
+    "https://www.uvai.io",
+    "https://uvaiio.vercel.app",
+]
+_DEV_ORIGINS = [
+    "http://localhost:3000",
+    "http://localhost:5173",
+    "http://localhost:8080",
+    "http://localhost:3001",
+]
+
+
+def _is_loopback_origin(origin: str) -> bool:
+    """True for http(s)://localhost / 127.0.0.1 / [::1] (any port)."""
+    host = urlparse(origin).hostname or ""
+    return host in {"localhost", "127.0.0.1", "::1"}
+
+
+# Wildcard/credentialed CORS is invalid and dangerous: the CORS spec forbids
+# `Access-Control-Allow-Origin: *` together with credentials, and Starlette
+# would happily echo a literal "*" or "null" origin, effectively allowing
+# credentialed cross-origin requests from any/opaque origin. Reject these
+# values outright so a stray env var cannot open that hole.
+_FORBIDDEN_ORIGINS = {"*", "null"}
+_EXTRA_ORIGINS = []
+for _origin in os.getenv("CORS_ALLOWED_ORIGINS", "").split(","):
+    _origin = _origin.strip()
+    if not _origin:
+        continue
+    if _origin in _FORBIDDEN_ORIGINS:
+        logger.warning(
+            "Ignoring forbidden wildcard origin %r from CORS_ALLOWED_ORIGINS "
+            "(incompatible with allow_credentials=True)",
+            _origin,
+        )
+        continue
+    if _IS_PRODUCTION and _is_loopback_origin(_origin):
+        logger.warning(
+            "Ignoring loopback origin %r from CORS_ALLOWED_ORIGINS in production", _origin
+        )
+        continue
+    _EXTRA_ORIGINS.append(_origin)
+
+_allowed_origins = list(dict.fromkeys(
+    _PRODUCTION_ORIGINS + _EXTRA_ORIGINS + ([] if _IS_PRODUCTION else _DEV_ORIGINS)
+))
+logger.info("CORS allow_origins configured for %s: %s", _ENVIRONMENT, _allowed_origins)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://localhost:5173",
-        "http://localhost:8080",
-        "http://localhost:3001",
-        "https://uvai.io",
-        "https://www.uvai.io",
-        "https://uvaiio.vercel.app",
-    ],
+    allow_origins=_allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

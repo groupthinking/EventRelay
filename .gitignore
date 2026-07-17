@@ -187,3 +187,17 @@ ob.txt
 supabase/functions/**/index.js
 supabase/functions/**/index.js.map
 supabase/functions/**/index.d.ts
+apps/web/package-lock.json
+
+# --- Committed build/cache artifacts that must never be tracked ---
+# Firebase Data Connect local PGlite emulator cache (~27M of binary DB files)
+dataconnect/.dataconnect/
+**/.dataconnect/pgliteData/
+# Root test-coverage artifact (the coverage/ dir is ignored above, but this stray file slipped through)
+coverage.json
+# Saved Google AI Studio webpage dump (vendored HTML/JS/CSS, ~23M)
+docs/gemini_reference/
+# Runtime pipeline audit logs (written by pipeline_audit_store at runtime)
+data/audit/*.jsonl
+# TypeScript incremental build cache
+*.tsbuildinfo

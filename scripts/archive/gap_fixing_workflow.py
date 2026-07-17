@@ -342,7 +342,7 @@ class GapFixingWorkflow:
     def _validate_service_files(self) -> Dict[str, Any]:
         """Validate that service classes are implemented"""
         # FIX: Point to the actual services location in src/youtube_extension
-        services_dir = self.project_root / "src/youtube_extension/backend/services"
+        services_dir = self.project_root / "src/youtube_extension/services"
 
         if not services_dir.exists():
              # Try alternative path just in case
@@ -365,7 +365,7 @@ class GapFixingWorkflow:
 
     def _validate_service_imports(self) -> Dict[str, Any]:
         """Validate service imports"""
-        services_dir = self.project_root / "src/youtube_extension/backend/services"
+        services_dir = self.project_root / "src/youtube_extension/services"
         if not services_dir.exists():
              services_dir = self.project_root / "backend/services"
 

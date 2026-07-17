@@ -13,9 +13,7 @@
     "install:all": "npm install"
   },
   "workspaces": [
-    "apps/*",
-    "packages/*",
-    "mcp-servers/*"
+    "apps/*"
   ],
   "engines": {
     "node": ">=20.6.0",
@@ -23,23 +21,29 @@
   },
   "devDependencies": {
     "@modelcontextprotocol/sdk": "^1.26.0",
-    "brace-expansion": "^1.1.12",
-    "turbo": "^2.9.14",
-    "vitest": "^4.1.9"
+    "brace-expansion": "^5.0.7",
+    "eslint": "^9.39.5",
+    "next": "^16.2.10",
+    "turbo": "^2.10.5",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.10"
   },
   "overrides": {
-    "@opentelemetry/instrumentation": "^0.219.0",
-    "next": ">=16.2.6",
+    "@opentelemetry/instrumentation": "^0.220.0",
+    "react": "^19",
+    "react-dom": "^19",
+    "next": "^16.2.10",
     "nth-check": "^2.0.1",
     "postcss": "^8.5.15",
     "undici": "^6.22.0",
-    "esbuild": "^0.27.2",
+    "esbuild": "^0.28.1",
     "uuid": "11.1.1",
     "@temporalio/client": {
       "uuid": "11.1.1"
     },
-    "vite": "^6.4.3",
-    "picomatch": ">=2.3.2",
+    "vite": "^8.1.4",
+    "vitest": "^4.1.10",
+    "picomatch": "^4.0.5",
     "protobufjs": "^7.6.2",
     "minimatch@3.1.5": {
       "brace-expansion": "^1.1.12"
@@ -49,10 +53,18 @@
     }
   },
   "dependencies": {
+    "@ai-sdk/gateway": "^4.0.19",
     "@dataconnect/generated": "file:src/dataconnect-generated",
     "@google-cloud/text-to-speech": "^6.4.0",
-    "@google/genai": "^2.7.0",
-    "chrome-devtools-mcp": "^0.10.2",
-    "openai": "^6.43.0"
+    "@google/genai": "^2.11.0",
+    "@opentelemetry/core": "^2.9.0",
+    "@types/node": "^26.1.1",
+    "ai": "^7.0.26",
+    "chrome-devtools-mcp": "^1.6.0",
+    "dotenv": "^17.4.2",
+    "openai": "^6.46.0",
+    "react": "^19",
+    "react-dom": "^19",
+    "tsx": "^4.23.1"
   }
 }

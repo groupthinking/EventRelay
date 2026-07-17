@@ -19,6 +19,8 @@ describe('action tool registry', () => {
         'add_to_knowledge_base',
         'create_workflow_task',
         'dispatch_agent',
+        'dispatch_subagents',
+        'get_agent_session_logs',
         'save_resource',
         'schedule_followup',
       ].sort(),
@@ -116,6 +118,88 @@ describe('action tool registry', () => {
     expect(body2.tags).toEqual(['a', 'b']);
   });
 
+  it('dispatch_subagents reports honestly when no backend is configured', async () => {
+    const tool = getTool('dispatch_subagents')!;
+    const res = await tool.execute(
+      { parentTask: 'ship it', subagents: [{ agentType: 'researcher', instruction: 'y' }] },
+      NO_BACKEND,
+    );
+    expect(res.isError).toBe(true);
+    expect(res.summary).toMatch(/no backend configured/i);
+  });
+
+  it('dispatch_subagents dispatches one call per subagent, pairing agentType with its own instruction', async () => {
+    // Fresh Response per call (bodies are single-use) and one call per subagent
+    // proves there is no cartesian fan-out mispairing.
+    const fetchImpl = vi
+      .fn()
+      .mockImplementation(async () => new Response(JSON.stringify({ data: { executions: [{}] } })));
+
+    const tool = getTool('dispatch_subagents')!;
+    const res = await tool.execute(
+      {
+        parentTask: 'ship the feature',
+        subagents: [
+          { agentType: 'code_generator', instruction: 'write the code' },
+          { agentType: 'researcher', instruction: 'research the API' },
+        ],
+      },
+      { backendBaseUrl: 'http://backend', fetchImpl, jobId: 'job1' },
+    );
+
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    const bodies = fetchImpl.mock.calls.map(
+      (c) => JSON.parse((c[1] as RequestInit).body as string),
+    );
+    expect(fetchImpl.mock.calls[0][0]).toBe('http://backend/api/v1/agents/dispatch');
+    expect(bodies[0].agent_types).toEqual(['code_generator']);
+    expect(bodies[0].events).toHaveLength(1);
+    expect(bodies[0].events[0].title).toBe('write the code');
+    expect(bodies[1].agent_types).toEqual(['researcher']);
+    expect(bodies[1].events[0].title).toBe('research the API');
+    expect(res.isError).toBeFalsy();
+  });
+
+  it('dispatch_subagents rejects malformed subagent entries before any dispatch', async () => {
+    const fetchImpl = vi.fn();
+    const tool = getTool('dispatch_subagents')!;
+    const res = await tool.execute(
+      { parentTask: 'x', subagents: [{ agentType: 'code_generator' }] }, // missing instruction
+      { backendBaseUrl: 'http://backend', fetchImpl, jobId: 'job1' },
+    );
+    expect(res.isError).toBe(true);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('get_agent_session_logs GETs the sessions endpoint with agent_type and limit filters', async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ data: { sessions: [{ agent_type: 'researcher' }] } })),
+      );
+    const tool = getTool('get_agent_session_logs')!;
+    const res = await tool.execute(
+      { agentType: 'researcher', limit: 5 },
+      { backendBaseUrl: 'http://backend', fetchImpl },
+    );
+
+    expect(fetchImpl).toHaveBeenCalledOnce();
+    const url = fetchImpl.mock.calls[0][0] as string;
+    expect(url).toContain('/api/v1/agents/sessions');
+    expect(url).toContain('agent_type=researcher');
+    expect(url).toContain('limit=5');
+    expect(res.isError).toBeFalsy();
+    expect(res.data).toMatchObject({ count: 1 });
+  });
+
+  it('get_agent_session_logs surfaces a non-ok backend response as an error', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(new Response('nope', { status: 503 }));
+    const tool = getTool('get_agent_session_logs')!;
+    const res = await tool.execute({}, { backendBaseUrl: 'http://backend', fetchImpl });
+    expect(res.isError).toBe(true);
+    expect(res.summary).toContain('503');
+  });
+
   it('adapts tools to OpenAI function-tool format', () => {
     const openai = toOpenAITools();
     expect(openai).toHaveLength(ACTION_TOOLS.length);
@@ -160,5 +244,55 @@ describe('resolveBackendBaseUrl', () => {
     expect(resolveBackendBaseUrl()).toBe('https://api.example.com');
     process.env.BACKEND_URL = 'http://localhost:8000///';
     expect(resolveBackendBaseUrl()).toBe('http://localhost:8000');
+  });
+});
+
+describe('backend auth headers on tool calls', () => {
+  // Regression coverage for the #470 401 gap: the transcript action agent's
+  // dispatch/ingest tools call non-public FastAPI endpoints, so they must send
+  // X-API-Key (via backendHeaders) once EVENTRELAY_API_KEY is configured.
+  const original = process.env.EVENTRELAY_API_KEY;
+  afterEach(() => {
+    if (original === undefined) delete process.env.EVENTRELAY_API_KEY;
+    else process.env.EVENTRELAY_API_KEY = original;
+  });
+
+  it('dispatch_agent sends a trimmed X-API-Key when EVENTRELAY_API_KEY is set', async () => {
+    process.env.EVENTRELAY_API_KEY = '  secret-key  '; // padded to prove trimming
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ agent_id: 'a1' })));
+    await getTool('dispatch_agent')!.execute(
+      { agentType: 'researcher', instruction: 'x' },
+      { backendBaseUrl: 'http://backend', fetchImpl, jobId: 'job1' },
+    );
+    const headers = (fetchImpl.mock.calls[0][1] as RequestInit).headers as Record<string, string>;
+    expect(headers['X-API-Key']).toBe('secret-key');
+    expect(headers['Content-Type']).toBe('application/json');
+  });
+
+  it('add_to_knowledge_base sends X-API-Key when EVENTRELAY_API_KEY is set', async () => {
+    process.env.EVENTRELAY_API_KEY = 'secret-key';
+    const fetchImpl = vi.fn().mockResolvedValue(new Response(JSON.stringify({ stored: true })));
+    await getTool('add_to_knowledge_base')!.execute(
+      { insight: 'x', tags: ['a'] },
+      { backendBaseUrl: 'http://backend', fetchImpl },
+    );
+    const headers = (fetchImpl.mock.calls[0][1] as RequestInit).headers as Record<string, string>;
+    expect(headers['X-API-Key']).toBe('secret-key');
+  });
+
+  it('omits X-API-Key when EVENTRELAY_API_KEY is unset', async () => {
+    delete process.env.EVENTRELAY_API_KEY;
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ agent_id: 'a1' })));
+    await getTool('dispatch_agent')!.execute(
+      { agentType: 'researcher', instruction: 'x' },
+      { backendBaseUrl: 'http://backend', fetchImpl, jobId: 'job1' },
+    );
+    const headers = (fetchImpl.mock.calls[0][1] as RequestInit).headers as Record<string, string>;
+    expect(headers['X-API-Key']).toBeUndefined();
+    expect(headers['Content-Type']).toBe('application/json');
   });
 });

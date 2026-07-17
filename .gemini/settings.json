@@ -8,15 +8,6 @@
       },
       "trust": false
     },
-    "shared-state": {
-      "command": "python",
-      "args": ["mcp-servers/shared-state/state_coordinator.py"],
-      "env": {
-        "PYTHONPATH": "mcp-servers/shared-state",
-        "SHARED_STATE_DB_PATH": ".runtime/shared_state.db"
-      },
-      "trust": true
-    },
     "git-workflow": {
       "command": "node",
       "args": ["tools/mcp/git_workflow_server.mjs"],

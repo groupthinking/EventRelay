@@ -965,6 +965,17 @@ class TestProcessVideoToSoftware:
 # ===========================================================================
 
 class TestTryLangextractFallback:
+    async def test_returns_none_when_server_file_missing(self):
+        svc = _make_service()
+
+        env = {"LANGEXTRACT_MCP_SERVER": "/nonexistent/langextract_mcp_server.py"}
+        with patch.dict("os.environ", env), \
+                patch("subprocess.run") as mock_run:
+            result = await svc._try_langextract_fallback(_VIDEO_URL)
+
+        assert result is None
+        mock_run.assert_not_called()
+
     async def test_returns_none_on_non_zero_returncode(self):
         svc = _make_service()
 

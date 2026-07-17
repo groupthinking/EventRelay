@@ -39,7 +39,7 @@ class BaseRepository(Generic[T], ABC):
             return entity
         except IntegrityError as e:
             await self.session.rollback()
-            raise ValueError(f"Entity creation failed: {str(e)}")
+            raise ValueError(f"Entity creation failed: {str(e)}") from e
 
     async def get_by_id(
         self, entity_id: Union[str, UUID], tenant_id: Optional[str] = None
@@ -223,16 +223,7 @@ class BaseRepository(Generic[T], ABC):
         if not updates:
             return 0
 
-        # Group updates by entity ID
-        for update_data in updates:
-            entity_id = update_data.pop("id", None)
-            if entity_id:
-                query = (
-                    update(self.model)
-                    .where(self.model.id == entity_id)
-                    .values(**update_data)
-                )
-                await self.session.execute(query)
+        await self.session.execute(update(self.model), updates)
 
         return len(updates)
 
