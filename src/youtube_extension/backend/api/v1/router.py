@@ -2015,7 +2015,16 @@ async def _run_agent(execution: AgentExecution, events: list[dict[str, Any]]):
             result if isinstance(result, dict) else {"output": str(result)}
         )
 
-        execution.status = AgentStatus.complete
+        # execute_single reports agent-level failures (not found, non-ok status,
+        # caught exceptions) by returning an {"error": ...} dict rather than
+        # raising, so the except block below never sees them. Inspect the result
+        # and surface those failures as AgentStatus.failed instead of silently
+        # marking the execution complete.
+        if isinstance(result, dict) and result.get("error"):
+            execution.status = AgentStatus.failed
+            execution.error = str(result["error"])
+        else:
+            execution.status = AgentStatus.complete
         execution.progress = 100.0
     except Exception as exc:
         execution.status = AgentStatus.failed
