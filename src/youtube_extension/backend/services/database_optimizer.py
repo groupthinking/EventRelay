@@ -27,7 +27,7 @@ import sqlite3
 import statistics
 import threading
 import time
-from collections import defaultdict, deque
+from collections import deque
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from typing import Any
@@ -420,7 +420,29 @@ class QueryOptimizer:
         self, queries_and_params: list[tuple[str, tuple]]
     ) -> list[Any]:
         """
-        Execute batch of queries with optimization
+        Execute a batch of queries concurrently.
+
+        Queries are scheduled together so independent queries run concurrently,
+        with two safeguards:
+
+        * **Bounded fan-out.** Concurrency is capped by a semaphore sized to the
+          connection pool, so a large batch cannot open more simultaneous
+          connection attempts than the pool can serve (which would stall the batch
+          and starve unrelated concurrent callers).
+        * **Fail-fast cancellation.** On the first query error, the remaining
+          in-flight queries are cancelled before the error propagates, so a failed
+          batch does not keep starting/finishing work after the caller has already
+          seen the failure. (There is no batch-level transaction, so writes that
+          already committed are not rolled back — but no further queries proceed.)
+
+        ``asyncio.gather`` preserves input order, so results align with
+        ``queries_and_params`` by index without manual remapping.
+
+        This method deliberately does NOT acquire its own pooled connection: every
+        ``execute_query`` call acquires and releases its own connection. Holding an
+        extra, unused connection here would waste a pool slot and can starve or
+        deadlock the gathered queries when the pool is saturated (the batch would
+        pin the last connection while its own queries wait for one).
 
         Target: Significant improvement over sequential execution
         """
@@ -428,51 +450,49 @@ class QueryOptimizer:
 
         logger.info(f"🚀 Executing batch: {len(queries_and_params)} queries")
 
-        # Group similar queries for batch processing
-        query_groups = defaultdict(list)
-        for i, (query, params) in enumerate(queries_and_params):
-            pattern = self._get_query_pattern(query)
-            query_groups[pattern].append((i, query, params))
+        if not queries_and_params:
+            return []
 
-        # Execute groups in parallel
-        connection = None
+        # Cap concurrent fan-out at the pool capacity; fall back to the batch size
+        # when the pool does not expose an integer capacity.
+        pool_capacity = getattr(self.connection_pool, "max_connections", None)
+        max_concurrency = (
+            pool_capacity
+            if isinstance(pool_capacity, int) and pool_capacity > 0
+            else len(queries_and_params)
+        )
+        semaphore = asyncio.Semaphore(max_concurrency)
+
+        async def _run_one(query: str, params: tuple) -> Any:
+            async with semaphore:
+                return await self.execute_query(query, params, use_cache=True)
+
+        # Explicit tasks (not bare coroutines) so stragglers can be cancelled if
+        # any query fails. gather preserves input order.
+        tasks = [
+            asyncio.ensure_future(_run_one(query, params))
+            for query, params in queries_and_params
+        ]
+
         try:
-            connection = await self.connection_pool.get_connection()
-            results = [None] * len(queries_and_params)
-
-            # Execute each group
-            for _pattern, group_queries in query_groups.items():
-                # Execute individually concurrently
-                # ⚡ Bolt: Always use asyncio.gather for concurrent execution,
-                # avoiding the N+1 sequential bottleneck of simulated executemany while
-                # preserving centralized metrics/logging.
-                coroutines = [
-                    self.execute_query(query, params, use_cache=True)
-                    for _, query, params in group_queries
-                ]
-                query_results = await asyncio.gather(*coroutines)
-
-                for (original_index, _, _), query_result in zip(
-                    group_queries, query_results
-                ):
-                    results[original_index] = query_result
-
-            total_time = (time.time() - start_time) * 1000
-            avg_time_per_query = total_time / len(queries_and_params)
-
-            logger.info(
-                f"✅ Batch completed ({total_time:.2f}ms, {avg_time_per_query:.2f}ms/query avg)"
-            )
-            return results
-
+            results = await asyncio.gather(*tasks)
         except Exception as e:
+            # Cancel any still-in-flight queries and drain them so nothing keeps
+            # running after the batch has reported failure.
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
             total_time = (time.time() - start_time) * 1000
             logger.error(f"❌ Batch failed ({total_time:.2f}ms): {e}")
             raise
 
-        finally:
-            if connection:
-                await self.connection_pool.release_connection(connection)
+        total_time = (time.time() - start_time) * 1000
+        avg_time_per_query = total_time / len(queries_and_params)
+        logger.info(
+            f"✅ Batch completed ({total_time:.2f}ms, {avg_time_per_query:.2f}ms/query avg)"
+        )
+        return list(results)
 
     async def _update_query_stats(
         self,

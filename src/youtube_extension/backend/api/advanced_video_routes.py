@@ -143,7 +143,7 @@ async def analyze_segment(request: TemporalSegmentRequest):
         }
     except Exception as e:
         logger.error(f"Segment analysis failed: {e}", exc_info=True)
-        raise HTTPException(500, str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/temporal/events")
@@ -211,7 +211,7 @@ async def extract_temporal_events(request: TemporalEventsRequest):
         }
     except Exception as e:
         logger.error(f"Event extraction failed: {e}", exc_info=True)
-        raise HTTPException(500, str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/temporal/question")
@@ -244,7 +244,7 @@ async def answer_temporal_question(request: TemporalQuestionRequest):
         }
     except Exception as e:
         logger.error(f"Temporal question failed: {e}", exc_info=True)
-        raise HTTPException(500, str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/temporal/timeline")
@@ -285,7 +285,7 @@ async def create_timeline(request: TimelineRequest):
         raise
     except Exception as e:
         logger.error(f"Timeline creation failed: {e}", exc_info=True)
-        raise HTTPException(500, str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/temporal/compare-segments")
@@ -319,7 +319,7 @@ async def compare_segments(request: SegmentComparisonRequest):
         }
     except Exception as e:
         logger.error(f"Segment comparison failed: {e}", exc_info=True)
-        raise HTTPException(500, str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/temporal/tutorial-steps")
@@ -347,7 +347,7 @@ async def extract_tutorial_steps(request: TutorialStepsRequest):
         }
     except Exception as e:
         logger.error(f"Tutorial extraction failed: {e}", exc_info=True)
-        raise HTTPException(500, str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # ============ Structured Output Endpoint ============
@@ -435,7 +435,7 @@ async def analyze_with_schema(request: StructuredAnalysisRequest):
         }
     except Exception as e:
         logger.error(f"Structured analysis failed: {e}", exc_info=True)
-        raise HTTPException(500, str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # ============ CloudEvents Publishing Endpoint ============
@@ -488,4 +488,4 @@ async def publish_video_event(
         }
     except Exception as e:
         logger.error(f"Event publishing failed: {e}", exc_info=True)
-        raise HTTPException(500, str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")

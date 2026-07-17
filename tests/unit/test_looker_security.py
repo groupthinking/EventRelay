@@ -2,6 +2,8 @@ import os
 import pytest
 from unittest.mock import MagicMock
 import sys
+import importlib.util
+from pathlib import Path
 
 # Mock pydantic if it's not available
 try:
@@ -10,8 +12,30 @@ except ImportError:
     mock_pydantic = MagicMock()
     sys.modules["pydantic"] = mock_pydantic
 
-from src.integration.looker_embedded import LookerEmbeddedService
-from src.integration.looker_embed import LookerEmbedService
+# These security tests must exercise the REAL Looker services, not a mock.
+# Other unit-test modules (test_backend_main, test_cloud_routes) install a
+# MagicMock at "src.integration.looker_embedded" in sys.modules at import time,
+# and test_backend_main does not remove it. Depending on pytest's collection
+# order that stale stub would otherwise make LookerEmbeddedService resolve to a
+# MagicMock here (the class would no longer raise on a missing secret). Load
+# the modules directly from their source files under private names so this test
+# is hermetic regardless of sys.modules state.
+_SRC = Path(__file__).resolve().parents[2] / "src"
+
+
+def _load_real(module_name: str, rel_path: str):
+    spec = importlib.util.spec_from_file_location(module_name, _SRC / rel_path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+LookerEmbeddedService = _load_real(
+    "_real_looker_embedded", "integration/looker_embedded.py"
+).LookerEmbeddedService
+LookerEmbedService = _load_real(
+    "_real_looker_embed", "integration/looker_embed.py"
+).LookerEmbedService
 
 
 def test_looker_embedded_service_no_secret():
