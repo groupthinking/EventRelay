@@ -336,13 +336,20 @@ class TestHealthEndpoint:
         assert data["status"] == "healthy"
 
     def test_health_check_service_error(self, client):
-        """When get_service raises, endpoint returns 500."""
+        """When get_service raises, endpoint returns a sanitized 500.
+
+        Regression guard for information disclosure: the response body must
+        carry the generic message and must NOT echo the underlying exception
+        text (``boom``) back to the client.
+        """
         with patch(
             "youtube_extension.backend.api.v1.router.get_service",
             side_effect=RuntimeError("boom"),
         ):
             resp = client.get("/api/v1/health")
         assert resp.status_code == 500
+        assert resp.json()["detail"] == "Internal server error"
+        assert "boom" not in resp.text
 
     def test_detailed_health_success(self, client):
         with patch(
@@ -2311,3 +2318,42 @@ class TestRunAgentStatus:
             asyncio.run(router_module._run_agent(execution, [{"id": "e1"}]))
         assert execution.status == AgentStatus.complete
         assert execution.result == {"output": "done"}
+
+
+# ---------------------------------------------------------------------------
+# _TTLDict LRU eviction order (regression for the _touch reordering bug)
+# ---------------------------------------------------------------------------
+class TestTTLDictEvictionOrder:
+    """`_enforce_max_size` must evict the least-recently-*touched* entry.
+
+    Regression for a bug where `_touch` re-assigned an existing key's
+    timestamp (`d[k] = v`) without moving it in the dict's insertion order,
+    so `next(iter(self._timestamps))` returned the first-inserted key rather
+    than the least-recently-touched one — evicting an actively-updated entry.
+    """
+
+    def _make(self, max_size: int):
+        return router_module._TTLDict(ttl=1000.0, max_size=max_size)
+
+    def test_touched_entry_survives_eviction(self):
+        d = self._make(max_size=2)
+        d["a"] = 1
+        d["b"] = 2
+        # Touch the first-inserted key: it must no longer be the eviction target.
+        d["a"] = 3
+        # Overflow -> exactly one eviction.
+        d["c"] = 4
+        assert "a" in d, "recently-touched entry was wrongly evicted"
+        assert "b" not in d, "least-recently-touched entry should have been evicted"
+        assert "c" in d
+        assert d["a"] == 3
+
+    def test_eviction_targets_least_recently_touched(self):
+        d = self._make(max_size=3)
+        d["a"] = 1
+        d["b"] = 2
+        d["c"] = 3
+        d["a"] = 10  # a is now most-recently-touched; b is oldest
+        d["d"] = 4   # overflow -> evict b
+        assert "b" not in d
+        assert {"a", "c", "d"} <= set(d.keys())

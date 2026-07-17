@@ -17,10 +17,31 @@ const rawBackendUrl = process.env.BACKEND_URL || '';
 const BACKEND_URL = rawBackendUrl.startsWith('http') ? rawBackendUrl : 'http://localhost:8000';
 const BACKEND_AVAILABLE = rawBackendUrl.startsWith('http');
 
-// A never-resolving promise used to skip null candidates in Promise.race():
-// when a candidate resolves to null we swap it for this so the race ignores it
-// and waits for a real result from another candidate.
-const PENDING_FOREVER = new Promise<never>(() => {});
+// Resolve with the first non-null candidate, or null once every candidate has
+// settled (resolved null or rejected). Unlike Promise.race() over null-swapped
+// promises, this always settles — it cannot hang when every candidate fails.
+export function firstNonNull<T>(candidates: Promise<T | null>[]): Promise<T | null> {
+  return new Promise(resolve => {
+    let remaining = candidates.length;
+    if (remaining === 0) {
+      resolve(null);
+      return;
+    }
+    const settle = (value: T | null) => {
+      // Null check, not a truthy check: a falsy-but-valid result (e.g. an empty
+      // string or 0 for other T) must count as a real result, not a failed
+      // candidate. null is the only "no result" sentinel here.
+      if (value !== null) {
+        resolve(value);
+      } else if (--remaining === 0) {
+        resolve(null);
+      }
+    };
+    for (const p of candidates) {
+      p.then(settle, () => settle(null));
+    }
+  });
+}
 
 export interface TranscriptionOptions {
   url?: string;
@@ -236,19 +257,12 @@ ${metadataContext ? `\nKNOWN METADATA:\n${metadataContext}` : ''}`,
 
     if (candidates.length > 0) {
       // Run all candidates concurrently and return the first non-null result.
-      // When a candidate resolves to null (no usable transcript found), we
-      // replace it with PENDING_FOREVER so Promise.race() skips it and waits
-      // for a successful result from another candidate.
-      const winner = await Promise.race(
-        candidates.map(p => p.then(r => r ?? PENDING_FOREVER))
-      ).catch(() => null);
+      // firstNonNull resolves as soon as any candidate yields a usable result,
+      // and resolves null once every candidate has failed — so this never hangs
+      // when all providers return null (a Promise.race() over null-swapped
+      // promises would hang forever in that case).
+      const winner = await firstNonNull(candidates);
       if (winner) return winner;
-      // If the race produced no winner (all candidates resolved to null),
-      // wait for all results and return the first usable one.
-      const results = await Promise.allSettled(candidates);
-      for (const r of results) {
-        if (r.status === 'fulfilled' && r.value) return r.value;
-      }
     }
   }
 
