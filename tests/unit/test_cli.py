@@ -406,16 +406,22 @@ class TestHealthCommand:
 
     def test_health_no_venv_shows_not_active(self):
         """Without VIRTUAL_ENV, reports venv as inactive."""
-        env_backup = "VIRTUAL_ENV"
         import os as _os
-        had_it = env_backup in _os.environ
-        _os.environ.pop(env_backup, None)
+        # Stub youtube_extension.main so health's internal import is a no-op and
+        # does not reconfigure logging/stdout mid-invoke (a fresh import runs
+        # setup_logging, which would break CliRunner output capture). Mirrors
+        # test_health_all_pass.
+        fake_main = types.ModuleType("youtube_extension.main")
+        fake_main.app = MagicMock()  # type: ignore[attr-defined]
+        saved_value = _os.environ.pop("VIRTUAL_ENV", None)
         try:
-            result = runner.invoke(app, ["health"])
+            with patch.dict(sys.modules, {"youtube_extension.main": fake_main}):
+                result = runner.invoke(app, ["health"])
         finally:
-            if had_it:
-                _os.environ[env_backup] = had_it  # type: ignore[assignment]
+            if saved_value is not None:
+                _os.environ["VIRTUAL_ENV"] = saved_value
 
+        assert result.exit_code == 1
         assert "Not active" in result.output
 
     def test_health_package_import_failure(self):
@@ -451,8 +457,15 @@ class TestHealthCommand:
         assert "Package Import" in result.output
 
     def test_health_prints_all_check_labels(self):
+        # Stub youtube_extension.main so health's import is a no-op and does not
+        # reconfigure logging/stdout mid-invoke (see test_health_all_pass) — this
+        # keeps the check labels in CliRunner's captured output regardless of
+        # whether main was already imported by a prior test.
+        fake_main = types.ModuleType("youtube_extension.main")
+        fake_main.app = MagicMock()  # type: ignore[attr-defined]
         with patch.dict("os.environ", {"VIRTUAL_ENV": "/fake"}):
-            result = runner.invoke(app, ["health"])
+            with patch.dict(sys.modules, {"youtube_extension.main": fake_main}):
+                result = runner.invoke(app, ["health"])
         assert "Virtual Environment" in result.output
         assert "Package Import" in result.output
         assert "FastAPI App" in result.output

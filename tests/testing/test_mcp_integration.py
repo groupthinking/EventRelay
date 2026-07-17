@@ -5,7 +5,19 @@ No orchestrator - direct tool usage per anti-bloat governance
 """
 import asyncio
 import json
+import os
+
+import pytest
 from google import genai
+
+# API key must come from the environment — never hardcode credentials.
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+
+if not GEMINI_API_KEY:
+    pytest.skip(
+        "MCP integration test requires GEMINI_API_KEY env var",
+        allow_module_level=True,
+    )
 
 async def test_video_to_insights():
     """Test: YouTube URL → Analysis → Insights (using existing tools only)"""
@@ -29,7 +41,7 @@ async def test_video_to_insights():
     
     # Step 2: Use Gemini 2.0 Flash for analysis (direct API - no wrapper)
     print("Step 2: Gemini 2.0 Flash analysis...")
-    client = genai.Client(api_key="AIzaSyAdaiRnkCVDq_-ac-iDiTPt_KLvT-MW-JY")
+    client = genai.Client(api_key=GEMINI_API_KEY)
     
     analysis_prompt = f"""Analyze this video and provide 3 actionable insights:
 Title: {video_metadata['title']}

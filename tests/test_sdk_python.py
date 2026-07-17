@@ -216,10 +216,9 @@ class TestTranscriptModels:
         assert req.video_options == opts
 
     def test_transcript_action_request_video_options_default_none(self) -> None:
-        """video_options defaults to an empty dict (via default_factory) when omitted."""
+        """video_options defaults to None when omitted (matching backend models.py)."""
         req = TranscriptActionRequest(video_url=TEST_VIDEO_URL)
-        # default_factory=dict means it should not be None by default
-        assert req.video_options is not None or req.video_options is None  # either is valid; key: no error
+        assert req.video_options is None
 
     def test_transcript_action_request_optional_fields(self) -> None:
         """language and transcript_text are optional on TranscriptActionRequest."""
@@ -232,14 +231,16 @@ class TestTranscriptModels:
         assert req.transcript_text == "Bonjour le monde"
 
     def test_transcript_action_request_exclude_none_dump(self) -> None:
-        """model_dump(exclude_none=True) omits None fields so only video_url is sent when no options given."""
+        """model_dump(exclude_none=True) omits None fields; language keeps its 'en' default (backend contract)."""
         req = TranscriptActionRequest(video_url=TEST_VIDEO_URL)
         dumped = req.model_dump(exclude_none=True)
         assert "video_url" in dumped
         assert dumped["video_url"] == TEST_VIDEO_URL
-        # language and transcript_text should be excluded when None
-        assert "language" not in dumped
+        # language defaults to "en" (matching backend models.py) so it is included
+        assert dumped.get("language") == "en"
+        # transcript_text and video_options should be excluded when None
         assert "transcript_text" not in dumped
+        assert "video_options" not in dumped
 
     def test_transcript_action_request_video_options_in_dump(self) -> None:
         """video_options appears in model_dump when provided."""
