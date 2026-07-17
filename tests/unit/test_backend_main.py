@@ -590,14 +590,27 @@ class TestExceptionHandlers:
         response = await main_module.global_exception_handler(mock_req, RuntimeError("crash"))
         assert response.status_code == 500
 
-    async def test_global_exception_handler_includes_error_type(self):
+    async def test_global_exception_handler_does_not_leak_internal_details(self):
+        """The 500 body must not disclose the exception (message or class) or the
+        request URL (CWE-209); those go to the server log only."""
         import json as _json
 
         mock_req = MagicMock()
-        mock_req.url = "http://test/api"
-        response = await main_module.global_exception_handler(mock_req, RuntimeError("crash"))
+        mock_req.url = "http://test/api/secret-path"
+        response = await main_module.global_exception_handler(
+            mock_req, RuntimeError("crash: db password = hunter2")
+        )
         body = _json.loads(response.body)
-        assert body["error_type"] == "RuntimeError"
+        # No exception class name, exception message, or request URL in the body.
+        assert "error_type" not in body
+        serialized = _json.dumps(body)
+        assert "RuntimeError" not in serialized
+        assert "crash" not in serialized
+        assert "hunter2" not in serialized
+        assert "secret-path" not in serialized
+        # Static, non-sensitive fields remain.
+        assert body["error"] == "Internal server error"
+        assert body["detail"] == "Internal server error"
 
     async def test_global_exception_handler_includes_version(self):
         import json as _json

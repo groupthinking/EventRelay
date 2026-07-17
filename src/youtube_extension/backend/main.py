@@ -462,6 +462,8 @@ async def global_exception_handler(request, exc):
             "error": "Internal server error",
             "detail": "Internal server error",
             "timestamp": datetime.now().isoformat(),
+            "version": "2.0.0",
+            "architecture": "service-oriented",
         },
     )
 
