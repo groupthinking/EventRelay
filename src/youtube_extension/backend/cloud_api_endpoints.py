@@ -143,7 +143,7 @@ async def process_video_cloud(
 
     except Exception as e:
         error_msg = f"Cloud processing failed: {str(e)}"
-        logger.error(error_msg)
+        logger.error(error_msg, exc_info=True)
 
         # detail is a static string; error_msg (with the exception) is logged above only
         raise HTTPException(status_code=500, detail="Internal server error")
@@ -209,7 +209,7 @@ async def process_video_task_handler(
 
     except Exception as e:
         error_msg = f"Task processing failed: {str(e)}"
-        logger.error(error_msg)
+        logger.error(error_msg, exc_info=True)
 
         # Update state with error
         try:
