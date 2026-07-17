@@ -1,8 +1,12 @@
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from typing import Optional
 
 from src.integration.looker_embedded import LookerEmbeddedService
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/reporting", tags=["Reporting & Dashboards"])
 
@@ -36,7 +40,8 @@ async def generate_dashboard_url(
         )
         return DashboardEmbedResponse(embed_url=url)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to generate dashboard embed URL: {str(e)}")
+        logger.error(f"Unhandled error in generate_dashboard_url: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.get("/dashboards")
 async def list_available_dashboards(tenant_id: str = Query(...)):
