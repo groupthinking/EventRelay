@@ -57,6 +57,9 @@ function sseResponse(events: Array<Record<string, unknown>>, ok = true): Respons
     ok,
     status: ok ? 200 : 503,
     body,
+    headers: {
+      get: (name: string) => (name === 'X-Pipeline-Mode' ? 'gemini-direct' : null),
+    },
     json: async () => ({}),
     text: async () => '',
   } as unknown as Response;
@@ -232,6 +235,7 @@ describe('dashboard-store · processVideo (real SSE pipeline)', () => {
     expect(video.events![0].id).toBe(`evt_${id}_0`);
     expect(video.events![0].confidence).toBe(0.95); // priority 'high'
     expect(video.transcript).toBe('hello world');
+    expect(video.pipelineMode).toBe('serverless');
 
     expect(store().activities.some((a) => a.event.includes('Consensus'))).toBe(true);
   });

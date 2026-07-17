@@ -1,7 +1,18 @@
 'use client';
 
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 import { clsx } from 'clsx';
+import {
+  Target,
+  Split,
+  Zap,
+  FileText,
+  Eye,
+  Volume2,
+  Cog,
+  ShieldCheck,
+  type LucideIcon,
+} from 'lucide-react';
 import type {
   AgentNode,
   AgentConnection,
@@ -12,23 +23,23 @@ import type {
 
 // ── Helpers ──
 
-const STATUS_CONFIG: Record<AgentNodeStatus, { color: string; glow: string; icon: string; label: string }> = {
-  idle:     { color: '#4b5563', glow: 'transparent',             icon: '○',  label: 'Idle' },
-  pending:  { color: '#6b7280', glow: 'rgba(107,114,128,0.3)',  icon: '⏳', label: 'Pending' },
-  running:  { color: '#818cf8', glow: 'rgba(129,140,248,0.4)',  icon: '⚡', label: 'Running' },
-  complete: { color: '#34d399', glow: 'rgba(52,211,153,0.3)',   icon: '✓',  label: 'Complete' },
-  error:    { color: '#f87171', glow: 'rgba(248,113,113,0.3)',  icon: '✗',  label: 'Error' },
+const STATUS_CONFIG: Record<AgentNodeStatus, { color: string; glow: string; label: string }> = {
+  idle:     { color: '#4b5563', glow: 'transparent',            label: 'Idle' },
+  pending:  { color: '#6b7280', glow: 'rgba(107,114,128,0.3)',  label: 'Pending' },
+  running:  { color: '#818cf8', glow: 'rgba(129,140,248,0.4)',  label: 'Running' },
+  complete: { color: '#34d399', glow: 'rgba(52,211,153,0.3)',   label: 'Complete' },
+  error:    { color: '#f87171', glow: 'rgba(248,113,113,0.3)',  label: 'Error' },
 };
 
-const ROLE_ICONS: Record<AgentRole, string> = {
-  orchestrator:       '🎯',
-  router:             '🔀',
-  parallel_crew:      '⚡',
-  transcript_analyst: '📝',
-  visual_analyst:     '👁️',
-  audio_analyst:      '🔊',
-  action_generator:   '⚙️',
-  quality_checker:    '🛡️',
+const ROLE_ICONS: Record<AgentRole, LucideIcon> = {
+  orchestrator:       Target,
+  router:             Split,
+  parallel_crew:      Zap,
+  transcript_analyst: FileText,
+  visual_analyst:     Eye,
+  audio_analyst:      Volume2,
+  action_generator:   Cog,
+  quality_checker:    ShieldCheck,
 };
 
 interface AgentFlowVisualizerProps {
@@ -40,6 +51,16 @@ interface AgentFlowVisualizerProps {
   className?: string;
 }
 
+/**
+ * Visualizes agent nodes and their connections in an interactive SVG flow diagram.
+ *
+ * @param agents - Map of agent node ids to agent data.
+ * @param connections - Connections to render between agents.
+ * @param positions - Layout positions for each agent node.
+ * @param selectedAgentId - Id of the currently selected agent, or `null`.
+ * @param onSelectAgent - Called when an agent is selected or deselected.
+ * @param className - Additional classes to apply to the container.
+ */
 export default function AgentFlowVisualizer({
   agents,
   connections,
@@ -180,7 +201,7 @@ export default function AgentFlowVisualizer({
                 stroke={conn.active ? 'rgba(129,140,248,0.4)' : 'rgba(255,255,255,0.06)'}
                 strokeWidth={conn.active ? 2.5 : 1.5}
                 markerEnd={conn.active ? 'url(#arrowhead-active)' : 'url(#arrowhead)'}
-                className="transition-all duration-500"
+                className="transition-[stroke,stroke-width] duration-500 motion-reduce:transition-none"
               />
               {/* Animated flow particles */}
               {conn.dataFlowing && (
@@ -218,11 +239,22 @@ export default function AgentFlowVisualizer({
             agent.status === 'error' ? 'url(#glow-error)' :
             'none';
 
+          const RoleIcon = ROLE_ICONS[agent.role] || Cog;
           return (
             <g
               key={id}
+              role="button"
+              tabIndex={0}
+              aria-label={`${agent.name}: ${config.label}`}
+              aria-pressed={isSelected}
               onClick={() => handleNodeClick(id)}
-              className="cursor-pointer"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  handleNodeClick(id);
+                }
+              }}
+              className="cursor-pointer focus:outline-none [&:focus-visible>rect]:stroke-[#818cf8]"
               filter={filterName}
             >
               {/* Selection ring */}
@@ -237,7 +269,7 @@ export default function AgentFlowVisualizer({
                   stroke="#818cf8"
                   strokeWidth={2}
                   strokeDasharray="6 3"
-                  className="animate-spin-slow"
+                  className="animate-spin-slow motion-reduce:animate-none"
                 >
                   <animate
                     attributeName="stroke-dashoffset"
@@ -259,7 +291,7 @@ export default function AgentFlowVisualizer({
                 fill={isSelected ? 'rgba(26,26,46,0.95)' : 'rgba(15,23,42,0.85)'}
                 stroke={config.color}
                 strokeWidth={isSelected ? 2 : 1}
-                className="transition-all duration-300"
+                className="transition-[fill,stroke,stroke-width] duration-300 motion-reduce:transition-none"
               />
 
               {/* Progress bar (when running) */}
@@ -271,18 +303,14 @@ export default function AgentFlowVisualizer({
                   height={3}
                   rx={1.5}
                   fill={config.color}
-                  className="transition-all duration-300"
+                  className="transition-[width] duration-300 motion-reduce:transition-none"
                 />
               )}
 
               {/* Role icon */}
-              <text
-                x={pos.x + 14}
-                y={pos.y + 28}
-                fontSize="16"
-              >
-                {ROLE_ICONS[agent.role] || '⚙️'}
-              </text>
+              <foreignObject x={pos.x + 10} y={pos.y + 14} width={18} height={18}>
+                <RoleIcon className="h-[18px] w-[18px] text-white/80" aria-hidden="true" />
+              </foreignObject>
 
               {/* Agent name */}
               <text

@@ -243,6 +243,7 @@ class MCPProtocolBridge:
         if self.bridge_status.get(protocol_type) != BridgeStatus.CONNECTED:
             raise RuntimeError(f"Protocol {protocol_type.value} is not connected")
 
+        # Create context if not provided
         if context is None:
             context_manager = get_context_manager()
             context = context_manager.create_context(
@@ -254,37 +255,45 @@ class MCPProtocolBridge:
         stats = self.protocol_stats.setdefault(
             protocol_type, {"in_flight": 0, "success": 0, "failure": 0}
         )
-        for counter in ("in_flight", "success", "failure"):
-            stats.setdefault(counter, 0)
+        # Ensure every counter exists before incrementing so a pre-existing
+        # partial stats dict (from a caller or future refactor) can't raise
+        # KeyError and leave the counters in an inconsistent state.
+        for _counter in ("in_flight", "success", "failure"):
+            stats.setdefault(_counter, 0)
         stats["in_flight"] += 1
 
         try:
+            # Add protocol metadata to context
             context.metadata["protocol"] = protocol_type.value
             context.metadata["request_timestamp"] = datetime.now(timezone.utc).isoformat()
 
+            # Send request through adapter
             response = await self.adapters[protocol_type].send_request(request, context)
 
+            # Update context with response. Store only a non-sensitive summary of
+            # the request — the raw dict may contain API keys/tokens/PII.
             context.add_history_entry("protocol_request", {
                 "protocol": protocol_type.value,
                 "request_summary": _summarize_payload(request),
                 "response_summary": _summarize_payload(response),
-                "success": True,
+                "success": True
             })
 
             stats["success"] += 1
             return response
 
         except Exception as e:
+            # Update context with error
             context.add_history_entry("protocol_request", {
                 "protocol": protocol_type.value,
                 "request_summary": _summarize_payload(request),
                 "error": _sanitize_exception(e),
-                "success": False,
+                "success": False
             })
 
             stats["failure"] += 1
             logger.error(
-                "Protocol request failed for %s with %s",
+                "Protocol request failed for %s (%s)",
                 protocol_type.value,
                 type(e).__name__,
             )
@@ -306,7 +315,16 @@ class MCPProtocolBridge:
         request["required_capabilities"] (if present), then the least-loaded
         protocol is selected, with error rate and preference order as
         tiebreakers.
+
+        Args:
+            request: Request data
+            preferred_protocols: Optional list of preferred protocols
+            context: Optional MCP context
+
+        Returns:
+            Response from the selected protocol
         """
+        # Determine available protocols
         available_protocols = [
             protocol for protocol, status in self.bridge_status.items()
             if status == BridgeStatus.CONNECTED
@@ -315,14 +333,19 @@ class MCPProtocolBridge:
         if not available_protocols:
             raise RuntimeError("No connected protocol adapters available")
 
+        # Use preferred protocols if specified, otherwise use all available
         candidate_protocols = preferred_protocols or available_protocols
+
+        # Filter to only available protocols
         candidate_protocols = [p for p in candidate_protocols if p in available_protocols]
 
         if not candidate_protocols:
             raise RuntimeError("No matching connected protocol adapters available")
 
         selected_protocol = await self._select_protocol(candidate_protocols, request)
+
         logger.info(f"Routing request to protocol: {selected_protocol.value}")
+
         return await self.send_protocol_request(selected_protocol, request, context)
 
     async def _select_protocol(
@@ -330,7 +353,30 @@ class MCPProtocolBridge:
         candidates: list[ProtocolType],
         request: dict[str, Any]
     ) -> ProtocolType:
+        """
+        Select the best protocol from connected candidates
+
+        Filters candidates to those whose adapters support every capability in
+        request["required_capabilities"], then picks the candidate with the
+        fewest in-flight requests, breaking ties by lowest historical error
+        rate and finally by candidate order (preference order).
+
+        Args:
+            candidates: Connected protocols to choose from, in preference order
+            request: Request data, optionally containing "required_capabilities"
+
+        Returns:
+            The selected protocol
+
+        Raises:
+            TypeError: If "required_capabilities" is not a list/tuple/set
+            ValueError: If a capability string is not a known ServerCapability
+            RuntimeError: If no candidate supports the required capabilities
+        """
         raw_capabilities = request.get("required_capabilities", [])
+        # A bare string is iterable: without this guard the loop below would
+        # iterate over its characters, raising a confusing cascade of
+        # ValueErrors. Reject non-collection inputs up front.
         if isinstance(raw_capabilities, (str, bytes)) or not isinstance(
             raw_capabilities, (list, tuple, set, frozenset)
         ):
@@ -365,6 +411,9 @@ class MCPProtocolBridge:
 
             if not capable_protocols:
                 required_names = sorted(c.value for c in required_capabilities)
+                # Log specifics internally for debugging, but keep the raised
+                # message generic so it doesn't disclose which capabilities the
+                # system knows about if it propagates to an API response.
                 logger.error(
                     "No connected protocol adapter supports required "
                     f"capabilities: {required_names}"
@@ -385,16 +434,25 @@ class MCPProtocolBridge:
         return min(enumerate(candidates), key=routing_score)[1]
 
     async def health_check_all(self) -> dict[ProtocolType, bool]:
+        """
+        Check health of all protocol adapters
+
+        Returns:
+            Dictionary mapping protocols to health status
+        """
         results = {}
 
         for protocol_type, adapter in self.adapters.items():
             try:
                 is_healthy = await adapter.health_check()
                 results[protocol_type] = is_healthy
+
+                # Update bridge status
                 if is_healthy:
                     self.bridge_status[protocol_type] = BridgeStatus.CONNECTED
                 else:
                     self.bridge_status[protocol_type] = BridgeStatus.ERROR
+
             except Exception as e:
                 logger.error(f"Health check failed for {protocol_type.value}: {e}")
                 results[protocol_type] = False
@@ -403,21 +461,44 @@ class MCPProtocolBridge:
         return results
 
     def get_bridge_status(self) -> dict[ProtocolType, BridgeStatus]:
+        """
+        Get the status of all protocol bridges
+
+        Returns:
+            Dictionary mapping protocols to bridge status
+        """
         return self.bridge_status.copy()
 
     def get_available_protocols(self) -> list[ProtocolType]:
+        """
+        Get list of available protocol types
+
+        Returns:
+            List of protocol types with connected adapters
+        """
         return [
             protocol for protocol, status in self.bridge_status.items()
             if status == BridgeStatus.CONNECTED
         ]
 
     def register_request_handler(self, request_type: str, handler: Callable) -> None:
+        """
+        Register a custom request handler
+
+        Args:
+            request_type: Type of request this handler processes
+            handler: Handler function
+        """
         self.request_handlers[request_type] = handler
         logger.info(f"Registered request handler for type: {request_type}")
 
     def _register_builtin_handlers(self) -> None:
+        """Register built-in protocol request handlers"""
+        # These will be implemented as needed
         pass
 
+
+# Built-in Protocol Adapters
 
 class OpenAIAdapter(ProtocolAdapter):
     """OpenAI API Protocol Adapter"""
@@ -435,6 +516,7 @@ class OpenAIAdapter(ProtocolAdapter):
         return ProtocolType.OPENAI
 
     async def initialize(self, config: dict[str, Any]) -> bool:
+        """Initialize OpenAI adapter"""
         self.api_key = config.get("api_key") or os.getenv("OPENAI_API_KEY")
         base_url = config.get("base_url", "https://api.openai.com/v1")
         self.model = config.get("model", "gpt-4")
@@ -443,12 +525,15 @@ class OpenAIAdapter(ProtocolAdapter):
             logger.error("OpenAI API key not provided")
             return False
 
+        # base_url may arrive as a non-string (e.g. an explicit None in config);
+        # urlparse would raise TypeError on such input, so reject it up front.
         if not isinstance(base_url, str):
             logger.error(
                 "Unsafe OpenAI base_url rejected (must be a string, got %s)",
                 type(base_url).__name__,
             )
             return False
+
         if not _is_public_https_base_url(base_url):
             logger.error(
                 "Unsafe OpenAI base_url rejected (must be HTTPS and publicly routable)"
@@ -468,6 +553,7 @@ class OpenAIAdapter(ProtocolAdapter):
         return True
 
     async def send_request(self, request: dict[str, Any], context: MCPContext) -> dict[str, Any]:
+        """Send request to OpenAI API"""
         if self._client is None:
             raise RuntimeError("OpenAI adapter not initialized — call initialize() first")
 
@@ -500,6 +586,7 @@ class OpenAIAdapter(ProtocolAdapter):
         }
 
     async def health_check(self) -> bool:
+        """Check OpenAI API health"""
         if self._client is None:
             return False
         try:
@@ -510,6 +597,7 @@ class OpenAIAdapter(ProtocolAdapter):
             return False
 
     async def get_capabilities(self) -> list[ServerCapability]:
+        """Get OpenAI capabilities"""
         return [ServerCapability.AI_INFERENCE]
 
 
@@ -528,6 +616,7 @@ class AnthropicAdapter(ProtocolAdapter):
         return ProtocolType.ANTHROPIC
 
     async def initialize(self, config: dict[str, Any]) -> bool:
+        """Initialize Anthropic adapter"""
         self.api_key = config.get("api_key") or os.getenv("ANTHROPIC_API_KEY")
         self.model = config.get("model", "claude-opus-4-8")
 
@@ -546,6 +635,7 @@ class AnthropicAdapter(ProtocolAdapter):
         return True
 
     async def send_request(self, request: dict[str, Any], context: MCPContext) -> dict[str, Any]:
+        """Send request to Anthropic API"""
         if self._client is None:
             raise RuntimeError("Anthropic adapter not initialized — call initialize() first")
 
@@ -562,6 +652,7 @@ class AnthropicAdapter(ProtocolAdapter):
             messages=messages,
         )
 
+        # Extract text content from response blocks
         text_blocks = [b.text for b in response.content if b.type == "text"]
         content = "\n".join(text_blocks) if text_blocks else None
 
@@ -578,9 +669,11 @@ class AnthropicAdapter(ProtocolAdapter):
         }
 
     async def health_check(self) -> bool:
+        """Check Anthropic API health"""
         if self._client is None:
             return False
         try:
+            # Use a minimal count_tokens call as a lightweight health probe
             await self._client.messages.count_tokens(
                 model=self.model,
                 messages=[{"role": "user", "content": "ping"}],
@@ -591,6 +684,7 @@ class AnthropicAdapter(ProtocolAdapter):
             return False
 
     async def get_capabilities(self) -> list[ServerCapability]:
+        """Get Anthropic capabilities"""
         return [ServerCapability.AI_INFERENCE]
 
 
@@ -607,6 +701,7 @@ class GoogleAIAdapter(ProtocolAdapter):
         return ProtocolType.GOOGLE_AI
 
     async def initialize(self, config: dict[str, Any]) -> bool:
+        """Initialize Google AI adapter"""
         self.api_key = config.get("api_key") or os.getenv("GEMINI_API_KEY")
         self.model = config.get("model", "gemini-pro")
 
@@ -622,11 +717,13 @@ class GoogleAIAdapter(ProtocolAdapter):
         return True
 
     async def send_request(self, request: dict[str, Any], context: MCPContext) -> dict[str, Any]:
+        """Send request to Google AI API"""
         if self._client is None:
             raise RuntimeError("Google AI adapter not initialized — call initialize() first")
 
         prompt = request.get("prompt", "")
         if request.get("messages"):
+            # Flatten messages to a single prompt for Gemini content API
             parts = []
             for msg in request["messages"]:
                 content = msg.get("content", "")
@@ -651,6 +748,7 @@ class GoogleAIAdapter(ProtocolAdapter):
         if config is not None:
             generate_kwargs["config"] = config
 
+        # google-genai Client is synchronous — run in thread pool
         response = await asyncio.to_thread(
             self._client.models.generate_content, **generate_kwargs
         )
@@ -678,6 +776,7 @@ class GoogleAIAdapter(ProtocolAdapter):
         }
 
     async def health_check(self) -> bool:
+        """Check Google AI API health"""
         if self._client is None:
             return False
         try:
@@ -688,19 +787,25 @@ class GoogleAIAdapter(ProtocolAdapter):
             return False
 
     async def get_capabilities(self) -> list[ServerCapability]:
+        """Get Google AI capabilities"""
         return [ServerCapability.AI_INFERENCE]
 
 
+# Global protocol bridge instance
 _protocol_bridge = None
 
 
 def get_protocol_bridge() -> MCPProtocolBridge:
+    """Get the global MCP protocol bridge instance"""
     global _protocol_bridge
     if _protocol_bridge is None:
         _protocol_bridge = MCPProtocolBridge()
+
+        # Register built-in adapters
         _protocol_bridge.register_adapter(OpenAIAdapter())
         _protocol_bridge.register_adapter(AnthropicAdapter())
         _protocol_bridge.register_adapter(GoogleAIAdapter())
+
     return _protocol_bridge
 
 
@@ -709,8 +814,10 @@ async def send_ai_request(
     protocol: Optional[ProtocolType] = None,
     context: Optional[MCPContext] = None
 ) -> dict[str, Any]:
+    """Convenience function to send AI request through protocol bridge"""
     bridge = get_protocol_bridge()
 
     if protocol:
         return await bridge.send_protocol_request(protocol, request, context)
-    return await bridge.route_request(request, None, context)
+    else:
+        return await bridge.route_request(request, None, context)

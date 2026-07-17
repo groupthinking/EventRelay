@@ -1,3 +1,5 @@
+import 'server-only';
+
 /**
  * Training Data Store — Auto-saves pipeline outputs as JSONL for fine-tuning.
  *

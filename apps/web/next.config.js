@@ -1,5 +1,11 @@
 const path = require('path');
-const { withSentryConfig } = require('@sentry/nextjs');
+
+let withSentryConfig = (config) => config;
+try {
+  ({ withSentryConfig } = require('@sentry/nextjs'));
+} catch {
+  // Allow builds to continue when optional Sentry runtime peers are unavailable.
+}
 
 const contentSecurityPolicy = [
   "default-src 'self'",
@@ -38,9 +44,13 @@ const securityHeaders = [
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  // turbopack: {
-  //   root: path.resolve(__dirname, '../..'),
-  // },
+  experimental: {
+    optimizePackageImports: ['lucide-react'],
+  },
+  turbopack: {
+    // Monorepo root so Turbopack resolves hoisted/workspace deps outside apps/web.
+    root: path.resolve(__dirname, '../..'),
+  },
   images: {
     remotePatterns: [
       { protocol: 'https', hostname: 'uvai.io' },
