@@ -10,13 +10,14 @@ import json
 import logging
 import os
 import sqlite3
-from typing import Any, Dict, List
-
-# Import our innovation pressure engine
-from innovation_pressure_engine import InnovationPressureEngine
+from datetime import datetime, timedelta, timezone
+from typing import Any
 
 import mcp.server.stdio
 import mcp.types as types
+
+# Import our innovation pressure engine
+from innovation_pressure_engine import InnovationPressureEngine
 from mcp.server.lowlevel import Server
 
 logging.basicConfig(level=logging.INFO)
@@ -139,7 +140,7 @@ class YouTubeInnovationLearningDB:
         """Register MCP tools for YouTube innovation learning"""
 
         @self.server.list_tools()
-        async def handle_list_tools() -> List[types.Tool]:
+        async def handle_list_tools() -> list[types.Tool]:
             return [
                 types.Tool(
                     name="intake_youtube_video_with_innovation",
@@ -215,7 +216,7 @@ class YouTubeInnovationLearningDB:
             ]
 
         @self.server.call_tool()
-        async def handle_call_tool(name: str, arguments: Dict[str, Any]) -> List[types.TextContent]:
+        async def handle_call_tool(name: str, arguments: dict[str, Any]) -> list[types.TextContent]:
             try:
                 if name == "intake_youtube_video_with_innovation":
                     result = await self.intake_youtube_video_with_innovation(arguments)
@@ -242,7 +243,7 @@ class YouTubeInnovationLearningDB:
                     text=f"Error: {str(e)}"
                 )]
 
-    async def intake_youtube_video_with_innovation(self, args: Dict[str, Any]) -> Dict[str, Any]:
+    async def intake_youtube_video_with_innovation(self, args: dict[str, Any]) -> dict[str, Any]:
         """Intake YouTube video with competitive innovation analysis"""
 
         video_url = args["video_url"]
@@ -360,7 +361,7 @@ class YouTubeInnovationLearningDB:
             # Restore original pressure level
             self.innovation_engine.competitive_rounds = original_pressure
 
-    async def track_implementation_outcome(self, args: Dict[str, Any]) -> Dict[str, Any]:
+    async def track_implementation_outcome(self, args: dict[str, Any]) -> dict[str, Any]:
         """Track implementation outcomes with learning extraction"""
 
         video_id = args["video_id"]
@@ -388,7 +389,7 @@ class YouTubeInnovationLearningDB:
 
             analysis_id = analysis[0]
             innovation_score = analysis[1]
-            breakthrough_achieved = bool(analysis[2])
+            bool(analysis[2])
 
         # Store implementation outcome
         with sqlite3.connect(self.db_path) as conn:
@@ -434,12 +435,12 @@ class YouTubeInnovationLearningDB:
             "recommendations": await self._generate_recommendations(success_status, innovation_score)
         }
 
-    async def query_learning_patterns(self, args: Dict[str, Any]) -> Dict[str, Any]:
+    async def query_learning_patterns(self, args: dict[str, Any]) -> dict[str, Any]:
         """Query learning patterns from the database"""
 
         pattern_type = args.get("pattern_type", "all")
         innovation_threshold = args.get("innovation_threshold", 0.8)
-        video_topic = args.get("video_topic", "")
+        args.get("video_topic", "")
         limit = args.get("limit", 10)
 
         with sqlite3.connect(self.db_path) as conn:
@@ -506,12 +507,12 @@ class YouTubeInnovationLearningDB:
             }
         }
 
-    async def generate_innovation_insights(self, args: Dict[str, Any]) -> Dict[str, Any]:
+    async def generate_innovation_insights(self, args: dict[str, Any]) -> dict[str, Any]:
         """Generate innovation insights using competitive pressure on database"""
 
         insight_focus = args["insight_focus"]
         pressure_rounds = args.get("pressure_rounds", 3)
-        breakthrough_requirement = args.get("breakthrough_requirement", True)
+        args.get("breakthrough_requirement", True)
 
         # Query database for context
         with sqlite3.connect(self.db_path) as conn:
@@ -579,74 +580,77 @@ class YouTubeInnovationLearningDB:
         finally:
             self.innovation_engine.competitive_rounds = original_rounds
 
-    async def get_innovation_dashboard(self, args: Dict[str, Any]) -> Dict[str, Any]:
+    async def get_innovation_dashboard(self, args: dict[str, Any]) -> dict[str, Any]:
         """Get comprehensive innovation dashboard"""
 
         time_range = args.get("time_range", "7d")
         include_patterns = args.get("include_patterns", True)
         include_breakthroughs = args.get("include_breakthroughs", True)
 
-        # Convert time range to SQL
-        time_filters = {
-            "24h": "datetime('now', '-1 day')",
-            "7d": "datetime('now', '-7 days')",
-            "30d": "datetime('now', '-30 days')",
-            "all": "datetime('2020-01-01')"
-        }
-        time_filter = time_filters.get(time_range, time_filters["7d"])
+        # Calculate exact cutoff time for parameterization
+        now = datetime.now(timezone.utc)
+        if time_range == "24h":
+            cutoff = now - timedelta(days=1)
+        elif time_range == "30d":
+            cutoff = now - timedelta(days=30)
+        elif time_range == "all":
+            cutoff = datetime(2020, 1, 1, tzinfo=timezone.utc)
+        else:
+            cutoff = now - timedelta(days=7)
+        time_filter = cutoff.strftime('%Y-%m-%d %H:%M:%S')
 
         with sqlite3.connect(self.db_path) as conn:
             # Video intake metrics
-            video_stats = conn.execute(f"""
+            video_stats = conn.execute("""
                 SELECT COUNT(*) as total_videos,
                        COUNT(CASE WHEN status = 'analyzed' THEN 1 END) as analyzed_videos,
                        AVG(CASE WHEN status = 'analyzed' THEN 1.0 ELSE 0.0 END) as analysis_rate
                 FROM video_intakes
-                WHERE intake_timestamp >= {time_filter}
-            """).fetchone()
+                WHERE intake_timestamp >= ?
+            """, (time_filter,)).fetchone()
 
             # Innovation metrics
-            innovation_stats = conn.execute(f"""
+            innovation_stats = conn.execute("""
                 SELECT AVG(innovation_score) as avg_innovation_score,
                        MAX(innovation_score) as peak_innovation_score,
                        COUNT(CASE WHEN breakthrough_achieved = 1 THEN 1 END) as breakthrough_count,
                        COUNT(*) as total_analyses
                 FROM innovation_analyses
-                WHERE analysis_timestamp >= {time_filter}
-            """).fetchone()
+                WHERE analysis_timestamp >= ?
+            """, (time_filter,)).fetchone()
 
             # Implementation success rates
-            implementation_stats = conn.execute(f"""
+            implementation_stats = conn.execute("""
                 SELECT success_status,
                        COUNT(*) as count,
                        AVG(completion_percentage) as avg_completion,
                        AVG(ia.innovation_score) as avg_innovation_correlation
                 FROM implementations i
                 JOIN innovation_analyses ia ON i.innovation_analysis_id = ia.id
-                WHERE i.implementation_timestamp >= {time_filter}
+                WHERE i.implementation_timestamp >= ?
                 GROUP BY success_status
-            """).fetchall()
+            """, (time_filter,)).fetchall()
 
             # Pattern evolution
             if include_patterns:
-                pattern_stats = conn.execute(f"""
+                pattern_stats = conn.execute("""
                     SELECT pattern_type, COUNT(*) as count, AVG(success_rate) as avg_success_rate
                     FROM pattern_database
-                    WHERE updated_timestamp >= {time_filter}
+                    WHERE updated_timestamp >= ?
                     GROUP BY pattern_type
-                """).fetchall()
+                """, (time_filter,)).fetchall()
             else:
                 pattern_stats = []
 
             # Recent breakthroughs
             if include_breakthroughs:
-                recent_breakthroughs = conn.execute(f"""
+                recent_breakthroughs = conn.execute("""
                     SELECT breakthrough_title, innovation_score, practical_value, implementation_success
                     FROM breakthrough_tracker
-                    WHERE breakthrough_timestamp >= {time_filter}
+                    WHERE breakthrough_timestamp >= ?
                     ORDER BY innovation_score DESC
                     LIMIT 5
-                """).fetchall()
+                """, (time_filter,)).fetchall()
             else:
                 recent_breakthroughs = []
 
@@ -702,7 +706,7 @@ class YouTubeInnovationLearningDB:
             # Generate hash-based ID for non-YouTube URLs
             return hashlib.md5(video_url.encode()).hexdigest()[:11]
 
-    async def _record_breakthrough(self, video_id: str, innovation_result: Dict[str, Any]) -> None:
+    async def _record_breakthrough(self, video_id: str, innovation_result: dict[str, Any]) -> None:
         """Record breakthrough achievement"""
 
         breakthrough_data = innovation_result["innovation_competition_results"]
@@ -727,7 +731,7 @@ class YouTubeInnovationLearningDB:
     async def _extract_learning_outcomes(self, video_id: str, implementation_id: int,
                                        success_status: str, completion_percentage: float,
                                        what_worked: str, what_failed: str,
-                                       learning_insights: str, innovation_score: float) -> List[Dict[str, Any]]:
+                                       learning_insights: str, innovation_score: float) -> list[dict[str, Any]]:
         """Extract and store learning outcomes"""
 
         learning_outcomes = []
@@ -818,7 +822,7 @@ class YouTubeInnovationLearningDB:
                     json.dumps({"learning_insights": learning_insights})
                 ))
 
-    async def _generate_recommendations(self, success_status: str, innovation_score: float) -> List[str]:
+    async def _generate_recommendations(self, success_status: str, innovation_score: float) -> list[str]:
         """Generate recommendations based on outcome"""
 
         recommendations = []
