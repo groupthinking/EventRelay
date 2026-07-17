@@ -255,15 +255,18 @@ async def analyze_video(request: VideoAnalysisRequest):
             # Format and return response
             return format_analysis_result(result)
 
-    except CloudAIError as e:
-        logger.error(f"Cloud AI analysis failed: {e}")
-        raise HTTPException(status_code=503, detail=f"AI analysis failed: {str(e)}")
     except RateLimitError as e:
+        # RateLimitError/ConfigurationError subclass CloudAIError, so they must be
+        # caught BEFORE the base handler or they are dead code (returning the
+        # dynamic 503 and leaking config detail — CWE-209).
         logger.warning(f"Rate limit exceeded: {e}")
         raise HTTPException(status_code=429, detail=f"Rate limit exceeded: {str(e)}")
     except ConfigurationError as e:
         logger.error(f"Configuration error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
+    except CloudAIError as e:
+        logger.error(f"Cloud AI analysis failed: {e}")
+        raise HTTPException(status_code=503, detail=f"AI analysis failed: {str(e)}")
     except HTTPException:
         raise
     except Exception as e:
@@ -323,6 +326,10 @@ async def analyze_video_multi_provider(request: VideoAnalysisRequest):
 
             return formatted_results
 
+    except HTTPException:
+        # parse_analysis_types() raises HTTPException(400, ...); preserve the 4xx
+        # contract instead of collapsing it into a 500 (matches the other handlers).
+        raise
     except Exception as e:
         logger.error(f"Multi-provider analysis failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")

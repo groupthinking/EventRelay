@@ -117,11 +117,11 @@ def setup_real_api_endpoints(app: FastAPI):
 
             return response
 
+        except HTTPException:
+            raise
         except Exception as e:
-            error_msg = f"Real API processing failed: {str(e)}"
-            logger.error(error_msg, exc_info=True)
-
-            # detail is a static string; error_msg (with the exception) is logged above only
+            # Exception text is logged server-side only; never returned to the client.
+            logger.error(f"Real API processing failed: {e}", exc_info=True)
             raise HTTPException(status_code=500, detail="Internal server error")
 
     @app.post("/api/v2/validate-video")
