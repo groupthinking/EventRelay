@@ -221,7 +221,7 @@ async def process_video_task_handler(
                 error_message="Internal server error"
             )
         except Exception as state_error:
-            logger.error(f"Failed to update error state: {state_error}")
+            logger.error(f"Failed to update error state: {state_error}", exc_info=True)
 
         # detail must be a static string — error_msg (with the exception) is logged above only.
         raise HTTPException(status_code=500, detail="Internal server error")

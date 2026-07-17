@@ -1,6 +1,6 @@
 """Regression guard against information disclosure in HTTP 500 responses.
 
-Context: several FastAPI handlers historically raised
+Context: several handlers historically raised
 ``HTTPException(status_code=500, detail=str(e))`` (or an f-string embedding the
 exception), leaking internal exception text — stack-adjacent messages, backend
 API errors, database errors — to clients. See PR #801, which sanitized most but
@@ -9,7 +9,13 @@ not all handlers.
 This test encodes the invariant directly on the source: a 500 response must use
 a *static* ``detail`` string, never one derived from the caught exception. It is
 hermetic (pure source scan, no app import / no pydantic) so it runs anywhere and
-catches new leaks in any backend route, not just the ones fixed today.
+catches new leaks in any backend route.
+
+It models the three distinct 500 sinks in this codebase:
+  1. ``HTTPException`` — both keyword (``status_code=500, detail=...``) and
+     positional (``HTTPException(500, str(e))``) forms.
+  2. FastAPI ``@app.exception_handler`` functions that build a 500 body directly.
+  3. A raw ``JSONResponse(..., status_code=500)`` (e.g. a Ray Serve deployment).
 
 It deliberately does not constrain 4xx responses: those echo client-supplied
 validation errors, which are not internal-disclosure vectors.
@@ -22,51 +28,124 @@ from pathlib import Path
 
 import pytest
 
-_BACKEND = Path(__file__).resolve().parents[2] / "src" / "youtube_extension" / "backend"
-
-# Match a single `raise HTTPException(...)` call, capturing its argument list,
-# tolerant of the call spanning multiple lines.
-_HTTP_EXC = re.compile(r"HTTPException\((?P<args>.*?)\)", re.DOTALL)
-
-# A 500 `detail=` is safe only when it is an inline *static string literal*
-# (``detail="Internal server error"``). Anything else can carry internal state to
-# the client and is flagged:
-#   detail=str(e)          detail=f"... {e} ..."      (inline dynamic string)
-#   detail=error_msg       (a variable — may hold f"...{e}...")
-#   detail={...}           (a dict whose values embed the exception)
-# The value after ``detail=`` is dynamic unless its first non-space character
-# opens a plain string literal (``"`` or ``'``). A leading ``{`` (dict) or any
-# identifier char — ``f`` of an f-string, ``s`` of ``str(``, or a bare variable
-# name — means it is not a static literal.
-_DYNAMIC_DETAIL = re.compile(r"""detail\s*=\s*(?:\{|[A-Za-z_])""")
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_BACKEND = _REPO_ROOT / "src" / "youtube_extension" / "backend"
+# Additional client-facing 500 surfaces outside the FastAPI backend package.
+_EXTRA_ROOTS = [_REPO_ROOT / "src" / "uvai" / "ml"]
 
 
 def _backend_python_files() -> list[Path]:
-    return sorted(_BACKEND.rglob("*.py"))
+    files = list(_BACKEND.rglob("*.py"))
+    for root in _EXTRA_ROOTS:
+        if root.exists():
+            files.extend(root.rglob("*.py"))
+    return sorted(set(files))
+
+
+# --- shared parsing helpers ------------------------------------------------
+
+def _balanced_call_args(text: str, open_paren_idx: int) -> str:
+    """Return the argument text of a call, balancing nested parens/brackets/braces."""
+    depth = 0
+    quote: str | None = None
+    for i in range(open_paren_idx, len(text)):
+        c = text[i]
+        if quote:
+            if c == quote:
+                quote = None
+            continue
+        if c in "\"'":
+            quote = c
+        elif c in "([{":
+            depth += 1
+        elif c in ")]}":
+            depth -= 1
+            if depth == 0:
+                return text[open_paren_idx + 1 : i]
+    return text[open_paren_idx + 1 :]
+
+
+def _split_top_level_commas(s: str) -> list[str]:
+    """Split on commas that are not nested inside parens/brackets/braces/strings."""
+    parts: list[str] = []
+    depth = 0
+    quote: str | None = None
+    buf: list[str] = []
+    for c in s:
+        if quote:
+            buf.append(c)
+            if c == quote:
+                quote = None
+        elif c in "\"'":
+            quote = c
+            buf.append(c)
+        elif c in "([{":
+            depth += 1
+            buf.append(c)
+        elif c in ")]}":
+            depth -= 1
+            buf.append(c)
+        elif c == "," and depth == 0:
+            parts.append("".join(buf))
+            buf = []
+        else:
+            buf.append(c)
+    parts.append("".join(buf))
+    return parts
+
+
+def _detail_is_dynamic(value: str) -> bool:
+    """A detail value is safe only if it is an inline static string literal.
+
+    Anything else — ``str(e)``, an f-string, a bare variable, or a ``{...}`` dict —
+    can carry internal state to the client, so it is dynamic.
+    """
+    v = value.strip()
+    if not v:
+        return False
+    return not v.startswith(('"', "'"))
+
+
+# --- sink 1: HTTPException (keyword and positional) ------------------------
+
+_HTTP_EXC_OPEN = re.compile(r"HTTPException\(")
 
 
 def _iter_500_dynamic_detail(text: str):
     """Yield (line_no, snippet) for each 500 HTTPException with a dynamic detail."""
-    for m in _HTTP_EXC.finditer(text):
-        args = m.group("args")
-        if "status_code=500" not in args.replace(" ", "").replace(
-            "status_code =", "status_code="
-        ):
-            # normalize minor spacing; only care about 500 responses
-            if "status_code=500" not in re.sub(r"\s+", "", args):
-                continue
-        if _DYNAMIC_DETAIL.search(args):
+    for m in _HTTP_EXC_OPEN.finditer(text):
+        args = _balanced_call_args(text, m.end() - 1)
+        parts = _split_top_level_commas(args)
+        nospace = re.sub(r"\s+", "", args)
+        first = parts[0].strip() if parts else ""
+        is_500 = "status_code=500" in nospace or first == "500"
+        if not is_500:
+            continue
+
+        detail_val: str | None = None
+        for p in parts:
+            ps = p.strip()
+            if ps.startswith("detail="):
+                detail_val = ps[len("detail=") :]
+                break
+        if detail_val is None and len(parts) >= 2:
+            # positional detail is the 2nd argument, unless it is a keyword arg.
+            second = parts[1]
+            if "=" not in second.split("(", 1)[0]:
+                detail_val = second
+
+        if detail_val is not None and _detail_is_dynamic(detail_val):
             line_no = text.count("\n", 0, m.start()) + 1
             yield line_no, " ".join(args.split())[:120]
 
 
-# FastAPI exception handlers are a second 500 sink the HTTPException scan above
-# does not model: they build a response body directly (dict / JSONResponse) rather
+# --- sink 2: FastAPI exception handlers ------------------------------------
+#
+# Exception handlers build a response body directly (dict / JSONResponse) rather
 # than raising. A handler must not place the exception message (`str(exc)`) or its
-# class name (`exc.__class__.__name__`) into that body — both leak internal state.
-# Logging the exception server-side is fine; those tokens appear only in response
-# construction, never in a `logger.`/`log`/`raise`/comment line, so we exclude
-# those lines to avoid false positives.
+# class name (`exc.__class__.__name__`) into that body. Logging the exception
+# server-side is fine; those tokens never appear on a `logger.`/`log`/`raise`/
+# comment line, so we exclude those lines to avoid false positives.
 _HANDLER_DECORATOR = re.compile(r"^\s*@\w+\.exception_handler\(", re.MULTILINE)
 _HANDLER_DISCLOSURE = re.compile(r"str\(\s*(?:exc|e)\s*\)|__class__\.__name__")
 # Triple-quoted docstrings, so prose that *mentions* str(exc) is not mistaken for code.
@@ -83,7 +162,6 @@ def _exception_handler_bodies(text: str):
     lines = text.splitlines(keepends=True)
     for m in _HANDLER_DECORATOR.finditer(text):
         start_line = text.count("\n", 0, m.start())
-        # Find the `def`/`async def` line that the decorator applies to.
         i = start_line
         while i < len(lines) and not lines[i].lstrip().startswith(("def ", "async def ")):
             i += 1
@@ -116,19 +194,46 @@ def _iter_handler_disclosures(text: str):
                 yield start_line + offset, bare[:120]
 
 
+# --- sink 3: raw JSONResponse 500s -----------------------------------------
+#
+# A ``JSONResponse(..., status_code=500)`` body must not embed the exception
+# (``str(exc)`` / ``str(e)`` / ``str(error)``) or an f-string interpolating one.
+_JSON_RESPONSE = re.compile(r"JSONResponse\(")
+# Exception-like variable names, so an f-string interpolating a UUID / error-id
+# (e.g. f"FALLBACK_{uuid.uuid4()...}") is not mistaken for an exception leak.
+_EXC_TOKENS = r"(?:e|ex|exc|err|error|error_msg|error_message|exception)"
+_JSON_DISCLOSURE = re.compile(
+    r"str\(\s*(?:exc|e|error)\s*\)"  # str(exc) / str(e) / str(error)
+    r"|f[\"'][^\"']*\{[^{}]*\b" + _EXC_TOKENS + r"\b[^{}]*\}"  # f"...{exc-ref}..."
+)
+
+
+def _iter_json_500_disclosures(text: str):
+    """Yield (line_no, snippet) for JSONResponse 500s whose body embeds the exception."""
+    for m in _JSON_RESPONSE.finditer(text):
+        args = _balanced_call_args(text, m.end() - 1)
+        if "status_code=500" not in re.sub(r"\s+", "", args):
+            continue
+        if _JSON_DISCLOSURE.search(args):
+            line_no = text.count("\n", 0, m.start()) + 1
+            yield line_no, " ".join(args.split())[:120]
+
+
+# --- the guards ------------------------------------------------------------
+
 def test_no_dynamic_detail_in_500_responses() -> None:
     offenders: list[str] = []
     for path in _backend_python_files():
         text = path.read_text(encoding="utf-8")
         for line_no, snippet in _iter_500_dynamic_detail(text):
-            rel = path.relative_to(_BACKEND.parents[2])
+            rel = path.relative_to(_REPO_ROOT)
             offenders.append(f"{rel}:{line_no}: HTTPException({snippet})")
 
     assert not offenders, (
         "HTTP 500 responses must use a static `detail` string (e.g. "
-        '"Internal server error") and never leak the caught exception. '
-        "Log the full error server-side instead. Offending sites:\n  "
-        + "\n  ".join(offenders)
+        '"Internal server error") and never leak the caught exception — in either '
+        "the keyword or positional form. Log the full error server-side instead. "
+        "Offending sites:\n  " + "\n  ".join(offenders)
     )
 
 
@@ -137,7 +242,7 @@ def test_no_disclosure_in_500_exception_handlers() -> None:
     for path in _backend_python_files():
         text = path.read_text(encoding="utf-8")
         for line_no, snippet in _iter_handler_disclosures(text):
-            rel = path.relative_to(_BACKEND.parents[2])
+            rel = path.relative_to(_REPO_ROOT)
             offenders.append(f"{rel}:{line_no}: {snippet}")
 
     assert not offenders, (
@@ -146,6 +251,51 @@ def test_no_disclosure_in_500_exception_handlers() -> None:
         "into the response body — log it server-side instead. Offending sites:\n  "
         + "\n  ".join(offenders)
     )
+
+
+def test_no_disclosure_in_json_500_responses() -> None:
+    offenders: list[str] = []
+    for path in _backend_python_files():
+        text = path.read_text(encoding="utf-8")
+        for line_no, snippet in _iter_json_500_disclosures(text):
+            rel = path.relative_to(_REPO_ROOT)
+            offenders.append(f"{rel}:{line_no}: JSONResponse({snippet})")
+
+    assert not offenders, (
+        "A raw JSONResponse with status_code=500 must not embed the caught "
+        "exception in its body — return a static message and log the error "
+        "server-side instead. Offending sites:\n  " + "\n  ".join(offenders)
+    )
+
+
+def test_guard_detects_a_synthetic_leak() -> None:
+    """The HTTPException scanner flags every dynamic-detail shape, keyword and positional."""
+    leaks = [
+        "raise HTTPException(status_code=500, detail=str(e))",
+        'raise HTTPException(status_code=500, detail=f"failed: {e}")',
+        "raise HTTPException(status_code=500, detail=error_msg)",  # bare variable
+        'raise HTTPException(status_code=500, detail={"message": error_msg})',  # dict
+        "raise HTTPException(500, str(e))",  # positional detail
+        'raise HTTPException(500, f"boom: {e}")',  # positional f-string
+    ]
+    for leak in leaks:
+        assert list(_iter_500_dynamic_detail(leak)), f"scanner missed a real 500 leak: {leak}"
+
+    # Static string literals are the only safe form — keyword or positional.
+    safe = [
+        'raise HTTPException(status_code=500, detail="Internal server error")',
+        'raise HTTPException(500, "Internal server error")',
+    ]
+    for s in safe:
+        assert not list(_iter_500_dynamic_detail(s)), f"scanner false-positived: {s}"
+
+    # 4xx responses echo client-supplied input and are intentionally out of scope.
+    client_errs = [
+        "raise HTTPException(status_code=400, detail=str(exc))",
+        "raise HTTPException(400, str(exc))",
+    ]
+    for c in client_errs:
+        assert not list(_iter_500_dynamic_detail(c)), f"scanner must ignore 4xx: {c}"
 
 
 def test_guard_detects_a_synthetic_handler_leak() -> None:
@@ -170,7 +320,6 @@ def test_guard_detects_a_synthetic_handler_leak() -> None:
         _iter_handler_disclosures(safe)
     ), "handler scanner false-positived a sanitized 500 handler"
 
-    # A 4xx handler may echo the exception (client-supplied validation input).
     client_err = (
         "@app.exception_handler(ValueError)\n"
         "async def h(request, exc):\n"
@@ -181,29 +330,24 @@ def test_guard_detects_a_synthetic_handler_leak() -> None:
     ), "handler scanner must ignore 4xx handlers"
 
 
-def test_guard_detects_a_synthetic_leak() -> None:
-    """Sanity check: the scanner flags every dynamic-detail shape, not just str(e)."""
-    # Each of these leaks internal state and must be flagged.
+def test_guard_detects_a_synthetic_json_500_leak() -> None:
+    """The JSONResponse scanner flags exception disclosure across nested braces."""
     leaks = [
-        "raise HTTPException(status_code=500, detail=str(e))",
-        'raise HTTPException(status_code=500, detail=f"failed: {e}")',
-        "raise HTTPException(status_code=500, detail=error_msg)",  # bare variable
-        'raise HTTPException(status_code=500, detail={"message": error_msg})',  # dict
+        'return JSONResponse({"error": str(exc)}, status_code=500)',
+        'JSONResponse(content={"m": f"failed: {e}"}, status_code=500)',
+        'JSONResponse({"error": str(error)}, status_code=500)',
     ]
     for leak in leaks:
-        assert list(_iter_500_dynamic_detail(leak)), f"scanner missed a real 500 leak: {leak}"
+        assert list(_iter_json_500_disclosures(leak)), f"json scanner missed: {leak}"
 
-    # A static string literal is the only safe form.
-    safe = 'raise HTTPException(status_code=500, detail="Internal server error")'
-    assert not list(
-        _iter_500_dynamic_detail(safe)
-    ), "scanner false-positived a static detail"
+    safe = 'JSONResponse({"error": "Internal server error"}, status_code=500)'
+    assert not list(_iter_json_500_disclosures(safe)), "json scanner false-positived"
 
-    # 4xx responses echo client-supplied input and are intentionally out of scope.
-    client_err = "raise HTTPException(status_code=400, detail=str(exc))"
+    # 4xx JSONResponses may echo client input.
+    client_err = 'JSONResponse({"detail": str(exc)}, status_code=400)'
     assert not list(
-        _iter_500_dynamic_detail(client_err)
-    ), "scanner must ignore 4xx responses"
+        _iter_json_500_disclosures(client_err)
+    ), "json scanner must ignore 4xx"
 
 
 if __name__ == "__main__":  # pragma: no cover
