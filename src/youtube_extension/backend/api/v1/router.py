@@ -13,7 +13,7 @@ import os
 import time
 import uuid as _uuid
 from dataclasses import asdict
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
@@ -101,9 +101,6 @@ from .models import (
     VideoProcessJobResponse,
     VideoToSoftwareRequest,
     VideoToSoftwareResponse,
-    VideoPackRequest,
-    BlueprintRequest,
-    GenerateCodeRequest,
 )
 
 performance_monitor = PerformanceMonitor()
@@ -1653,139 +1650,6 @@ async def get_job_status_alias(job_id: str):
 async def list_pipeline_audit_runs(limit: int = 20):
     runs = get_audit_store().list_runs(limit=limit)
     return ApiResponse.success({"runs": runs, "count": len(runs)})
-
-
-# ============================================================
-# Phase 4 MVP — YouTube-to-Repo contract endpoints
-# ============================================================
-
-
-@router.post(
-    "/video/pack",
-    response_model=ApiResponse,
-    summary="Get or create a VideoPack",
-    tags=["Jobs"],
-)
-async def get_or_create_videopack(request: VideoPackRequest):
-    """Retrieve an existing VideoPack or create one from a job/URL."""
-    # This implementation is a shell that leverages existing fixtures and
-    # job outputs to satisfy the Phase 4 MVP contract.
-    video_id = request.video_id
-    if not video_id and request.video_url:
-        import re
-        match = re.search(r"(?:v=|\/)([0-9A-Za-z_-]{11}).*", request.video_url)
-        video_id = match.group(1) if match else None
-
-    if not video_id and request.job_id:
-        job = _load_video_job(request.job_id)
-        if job and job.metadata:
-            video_id = job.metadata.get("video_id")
-
-    if not video_id:
-        raise HTTPException(status_code=400, detail="Could not determine video_id")
-
-    # In a real implementation, this would look up in a VideoPackStore.
-    # For MVP, we return a synthesized pack from the job or a 404.
-    try:
-        from youtube_extension.videopack.schema import Provenance, Transcript, VideoPackV0
-
-        # Check if we have a job with results
-        job = None
-        if request.job_id:
-            job = _load_video_job(request.job_id)
-
-        pack = VideoPackV0(
-            video_id=video_id,
-            transcript=Transcript(
-                full_text=(
-                    job.transcript
-                    if job and job.transcript
-                    else "Transcript extraction pending or unavailable"
-                )
-            ),
-            provenance=Provenance(
-                created_at=datetime.now(timezone.utc), tool_versions={"api": "v1"}
-            ),
-        )
-        return ApiResponse.success(pack.model_dump())
-    except Exception as e:
-        logger.error(f"Failed to create VideoPack: {e}")
-        raise HTTPException(status_code=500, detail=f"VideoPack generation failed: {e}")
-
-
-@router.post(
-    "/projects/blueprint",
-    response_model=ApiResponse,
-    summary="Generate project blueprint",
-    tags=["Jobs"],
-)
-async def generate_blueprint(request: BlueprintRequest):
-    """Generate a project build plan (blueprint) from video analysis."""
-    # MVP implementation: uses the enhanced video processor to derive a build plan
-    try:
-        from youtube_extension.backend.enhanced_video_processor import (
-            EnhancedVideoProcessor,
-        )
-
-        processor = EnhancedVideoProcessor()
-
-        # If we have a job, pull real results to inform the blueprint
-        metadata = {"title": "New Project"}
-        transcript = {"text": ""}
-        ai_analysis = {"summary": "Generated via blueprint endpoint"}
-
-        if request.job_id:
-            job = _load_video_job(request.job_id)
-            if job:
-                metadata["title"] = (job.metadata or {}).get("title") or metadata[
-                    "title"
-                ]
-                transcript["text"] = job.transcript or ""
-                if job.metadata and "outputs" in job.metadata:
-                    ai_analysis["summary"] = (
-                        job.metadata["outputs"]
-                        .get("transcript_action", {})
-                        .get("data", {})
-                        .get("summary", ai_analysis["summary"])
-                    )
-
-        # Call the internal build plan generator (exposed for MVP orchestration)
-        blueprint = await processor._generate_build_plan(
-            video_url=request.video_url or "unknown",
-            metadata=metadata,
-            transcript=transcript,
-            ai_analysis=ai_analysis,
-        )
-        return ApiResponse.success(blueprint)
-    except Exception as e:
-        logger.error(f"Failed to generate blueprint: {e}")
-        raise HTTPException(status_code=500, detail=f"Blueprint generation failed: {e}")
-
-
-@router.post(
-    "/projects/generate",
-    response_model=ApiResponse,
-    summary="Generate project code",
-    tags=["Jobs"],
-)
-async def generate_project_code(request: GenerateCodeRequest):
-    """Generate source code for a project based on a blueprint."""
-    try:
-        from youtube_extension.backend.ai_code_generator import AICodeGenerator
-        generator = AICodeGenerator()
-
-        # In MVP, we use default architecture if blueprint is missing
-        result = await generator.generate_fullstack_project(
-            video_analysis={"extracted_info": request.blueprint or {"title": "MVP Project"}},
-            project_config={
-                "project_type": request.project_type,
-                "framework": request.framework
-            }
-        )
-        return ApiResponse.success(result)
-    except Exception as e:
-        logger.error(f"Code generation failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get(
