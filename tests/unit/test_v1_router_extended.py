@@ -336,15 +336,18 @@ class TestHealthEndpoint:
         assert data["status"] == "healthy"
 
     def test_health_check_service_error(self, client):
-        """When get_service raises, endpoint returns a generic 500 (no detail leak)."""
+        """When get_service raises, endpoint returns a sanitized 500.
+
+        Regression guard for information disclosure: the response body must
+        carry the generic message and must NOT echo the underlying exception
+        text back to the client.
+        """
         with patch(
             "youtube_extension.backend.api.v1.router.get_service",
             side_effect=RuntimeError("boom-secret-internal-detail"),
         ):
             resp = client.get("/api/v1/health")
         assert resp.status_code == 500
-        # Regression guard: the 500 body must be generic and must NOT echo the
-        # underlying exception message (information-disclosure hardening).
         assert resp.json()["detail"] == "Internal server error"
         assert "boom-secret-internal-detail" not in resp.text
 
