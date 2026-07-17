@@ -132,13 +132,6 @@ app.add_middleware(
     expose_headers=["*"],
 )
 
-from .middleware.metrics import PrometheusMetricsMiddleware
-
-app.add_middleware(
-    PrometheusMetricsMiddleware,
-    exempt_paths=["/docs", "/redoc", "/openapi.json", "/metrics", "/api/v1/metrics"],
-)
-
 from .middleware.rate_limiting import RateLimitMiddleware
 
 app.add_middleware(
@@ -212,8 +205,8 @@ async def legacy_chat(request: dict):
         }
 
     except Exception as e:
-        logger.error(f"Legacy chat endpoint error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        logger.error(f"Legacy chat endpoint error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/api/process-video-markdown")
@@ -246,8 +239,8 @@ async def legacy_process_video_markdown(request: dict):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Legacy markdown processing error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        logger.error(f"Legacy markdown processing error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/api/process-video")
@@ -303,8 +296,8 @@ async def legacy_process_video(request: dict):
         return result
 
     except Exception as e:
-        logger.error(f"Legacy video processing error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        logger.error(f"Legacy video processing error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # Other legacy endpoints with redirects
@@ -374,8 +367,8 @@ async def system_info():
         return system_info
 
     except Exception as e:
-        logger.error(f"System info error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        logger.error(f"System info error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # Enhanced OpenAPI schema generation
@@ -451,33 +444,22 @@ async def value_error_handler(request, exc):
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request, exc):
-    """Global exception handler.
+    """Global exception handler with enhanced error details"""
+    logger.error(f"Unhandled exception: {exc}", exc_info=True)
 
-    Returns a static body only. The exception type, message, traceback, and
-    request *path* are recorded server-side via ``logger.error(..., exc_info=True)``
-    and never returned to the client, closing a CWE-209 information-disclosure
-    leak (the previous body echoed ``str(exc)``, ``exc.__class__.__name__``, and
-    the request URL).
+    error_detail = {
+        "error": "Internal server error",
+        "detail": str(exc),
+        "timestamp": datetime.now().isoformat(),
+        "path": str(request.url) if hasattr(request, "url") else "unknown",
+        "version": "2.0.0",
+        "architecture": "service-oriented",
+    }
 
-    The log line uses only ``request.url.path`` and the method — never the full
-    URL/query string, which can carry secrets (e.g. ``?token=...``) that must not
-    be persisted to centralized (Cloud Run) logs.
-    """
-    url = getattr(request, "url", None)
-    request_path = getattr(url, "path", None) or "unknown"
-    method = getattr(request, "method", "unknown")
-    logger.error(
-        f"Unhandled exception on {method} {request_path}: {exc}", exc_info=True
-    )
+    if hasattr(exc, "__class__"):
+        error_detail["error_type"] = exc.__class__.__name__
 
-    return JSONResponse(
-        status_code=500,
-        content={
-            "error": "Internal server error",
-            "detail": "Internal server error",
-            "timestamp": datetime.now().isoformat(),
-        },
-    )
+    return JSONResponse(status_code=500, content=error_detail)
 
 
 # Application lifecycle events

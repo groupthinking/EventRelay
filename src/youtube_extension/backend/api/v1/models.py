@@ -124,47 +124,6 @@ class VideoJobStatusResponse(BaseModel):
     )
 
 
-class VideoPackRequest(BaseModel):
-    """Request to retrieve or synthesize a VideoPack."""
-
-    video_id: Optional[str] = Field(None, description="YouTube video identifier")
-    video_url: Optional[str] = Field(None, description="YouTube video URL")
-    job_id: Optional[str] = Field(None, description="Completed or queued job ID")
-
-    @validator("video_url")
-    def validate_video_url(cls, value: Optional[str]) -> Optional[str]:
-        if value is None:
-            return value
-        if not _YOUTUBE_URL_REGEX.match(value):
-            raise ValueError("Invalid YouTube URL format")
-        return value
-
-
-class BlueprintRequest(BaseModel):
-    """Request to generate a project blueprint from a video or job."""
-
-    job_id: Optional[str] = Field(None, description="Completed or queued job ID")
-    video_url: Optional[str] = Field(None, description="YouTube video URL")
-
-    @validator("video_url")
-    def validate_video_url(cls, value: Optional[str]) -> Optional[str]:
-        if value is None:
-            return value
-        if not _YOUTUBE_URL_REGEX.match(value):
-            raise ValueError("Invalid YouTube URL format")
-        return value
-
-
-class GenerateCodeRequest(BaseModel):
-    """Request to generate project code from a blueprint."""
-
-    blueprint: Optional[dict[str, Any]] = Field(
-        None, description="Blueprint or extracted project description"
-    )
-    project_type: str = Field("web-app", description="Target project type")
-    framework: str = Field("nextjs", description="Target application framework")
-
-
 # ============ Event Extraction ============
 
 

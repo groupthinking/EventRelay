@@ -22,7 +22,7 @@ workflow; this README is the index.
 | Phase Goal Tracker | `phase-goal-tracker.yml` | issue opened/edited/reopened; manual | Track phase checklist progress, comment status, auto-close when complete |
 | Bulk Issue Processor | `bulk-issue-processor.yml` | manual | Bulk label / summarize / close-stale across many issues |
 | Close stale issues | `stale.yml` | daily (00:00 UTC) | Mark and close stale issues and PRs |
-| Branch Cleanup | `branch-cleanup.yml` | manual; push sentinel on `claude/branch-cleanup-*` | Gated archive-then-delete of branches (dry-run by default); push `[restore-branch:<branch>]` sentinel to restore a deleted branch from its archive tag |
+| Branch Cleanup | `branch-cleanup.yml` | manual | Gated archive-then-delete of branches (dry-run by default) |
 | E2E Tests | `e2e-tests.yml` | push / PR to `main` | Run Vitest E2E pipeline tests against production or the PR's Vercel preview deployment and report results on the PR |
 | Autonomous Video Processing | `autonomous-video-processing.yml` | manual | Batch-process YouTube videos by category (matrix) |
 | Real Video Processing (Cloud) | `real-processing.yml` | manual | Process a single video: transcript and/or AI analysis |

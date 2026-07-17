@@ -2,14 +2,7 @@ name: Branch Cleanup
 
 # Manual, gated branch pruning driven by the branch-cleanup assessment.
 # Runs the archive-then-delete harness server-side, where the GITHUB_TOKEN has
-# the `contents: write` and `workflows: write` rights needed to delete/restore refs.
-#
-# Triggers:
-#   1. workflow_dispatch (from default branch): Actions UI, pick batch + dry_run.
-#   2. push sentinel (from any claude/branch-cleanup-* branch):
-#        [run-cleanup:safe|stale|review]   -> delete that batch (DRY_RUN=0)
-#        [restore-branch:<branch>]         -> recreate <branch> from archive/<branch>
-#      Normal pushes are a no-op.
+# the `contents: write` rights needed to delete refs.
 #
 # Usage: Actions tab -> Branch Cleanup -> Run workflow -> pick batch + dry_run.
 # Safety:
@@ -18,10 +11,11 @@ name: Branch Cleanup
 #     and refuses to delete any branch that is the head of an open PR, so a branch
 #     that became active after the assessment snapshot is never deleted.
 #   - every branch SHA is recorded + uploaded as an artifact, and an archive/<branch>
-#     tag is pushed.
-# Restore (via sentinel commit or workflow_dispatch restore mode):
-#   Push a commit with "[restore-branch:<branch>]" to any claude/branch-cleanup-* branch,
-#   or use: git push origin archive/<branch>:refs/heads/<branch>
+#     tag is pushed.  Restore:  git push origin <sha>:refs/heads/<branch>
+#
+# NOTE: restoring a deleted branch that contains .github/workflows/* CANNOT be done
+# by this token (GitHub blocks it without the `workflows` scope) — use the PR's
+# "Restore branch" button or a local push with a PAT.
 
 on:
   workflow_dispatch:
@@ -37,13 +31,10 @@ on:
         required: true
         default: true
         type: boolean
-  push:
-    branches: ["claude/branch-cleanup-*"]
 
 permissions:
   contents: write
   pull-requests: read
-  workflows: write
 
 jobs:
   cleanup:
@@ -53,53 +44,16 @@ jobs:
         with:
           fetch-depth: 0          # need all remote refs to tag/delete them
 
-      - id: decide
-        name: Decide action from trigger
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "mode=delete" >> "$GITHUB_OUTPUT"
-            echo "batch=${{ inputs.batch }}" >> "$GITHUB_OUTPUT"
-            echo "dry=${{ inputs.dry_run == true && '1' || '0' }}" >> "$GITHUB_OUTPUT"
-            echo "go=yes" >> "$GITHUB_OUTPUT"
-          else
-            msg=$(git log -1 --pretty=%B)
-            if echo "$msg" | grep -qE '\[restore-branch:[^]]+\]'; then
-              rb=$(echo "$msg" | sed -nE 's/.*\[restore-branch:([^]]+)\].*/\1/p' | head -1)
-              echo "mode=restore" >> "$GITHUB_OUTPUT"
-              echo "restore=$rb" >> "$GITHUB_OUTPUT"
-              echo "go=yes" >> "$GITHUB_OUTPUT"
-              echo "::notice::restore sentinel — recreating '$rb' from archive tag"
-            elif echo "$msg" | grep -qE '\[run-cleanup:(safe|stale|review)\]'; then
-              b=$(echo "$msg" | sed -nE 's/.*\[run-cleanup:(safe|stale|review)\].*/\1/p' | head -1)
-              echo "mode=delete" >> "$GITHUB_OUTPUT"
-              echo "batch=$b" >> "$GITHUB_OUTPUT"
-              echo "dry=0" >> "$GITHUB_OUTPUT"
-              echo "go=yes" >> "$GITHUB_OUTPUT"
-              echo "::notice::sentinel detected — executing '$b' batch (real delete)"
-            else
-              echo "go=no" >> "$GITHUB_OUTPUT"
-              echo "::notice::no sentinel in commit message — no-op"
-            fi
-          fi
-
-      - name: Restore branch from archive tag
-        if: steps.decide.outputs.go == 'yes' && steps.decide.outputs.mode == 'restore'
-        run: |
-          b="${{ steps.decide.outputs.restore }}"
-          git push origin "refs/tags/archive/$b:refs/heads/$b"
-          echo "::notice::restored $b -> $(git rev-parse refs/tags/archive/$b)"
-
-      - name: Run branch-cleanup delete (batch=${{ steps.decide.outputs.batch }}, dry_run=${{ steps.decide.outputs.dry }})
-        if: steps.decide.outputs.go == 'yes' && steps.decide.outputs.mode == 'delete'
+      - name: Run branch-cleanup delete (batch=${{ inputs.batch }}, dry_run=${{ inputs.dry_run }})
         env:
-          DRY_RUN: ${{ steps.decide.outputs.dry }}
+          DRY_RUN: ${{ inputs.dry_run == true && '1' || '0' }}
           GITHUB_TOKEN: ${{ github.token }}     # used for the live open-PR guard
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
           chmod +x scripts/maintenance/branch-cleanup-delete.sh
-          scripts/maintenance/branch-cleanup-delete.sh "${{ steps.decide.outputs.batch }}"
+          scripts/maintenance/branch-cleanup-delete.sh "${{ inputs.batch }}"
 
       - name: Upload recovery refs
         if: always()

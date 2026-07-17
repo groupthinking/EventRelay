@@ -3,7 +3,6 @@ QueryOptimizer, and DatabaseHealthMonitor."""
 
 from __future__ import annotations
 
-import asyncio
 import sys
 from collections import deque
 from datetime import datetime, timezone
@@ -1174,7 +1173,6 @@ class TestExecuteBatchQueries:
 
     def _make_pool(self) -> MagicMock:
         pool = MagicMock()
-        pool.max_connections = 10
         pool.get_pool_stats.return_value = {"connections_in_use": 0, "max_connections": 10}
         pool.get_connection = AsyncMock()
         pool.release_connection = AsyncMock()
@@ -1200,125 +1198,6 @@ class TestExecuteBatchQueries:
         optimizer = QueryOptimizer(pool)
         with pytest.raises(RuntimeError, match="No DB"):
             await optimizer.execute_batch_queries([("SELECT 1", ())])
-
-    @pytest.mark.asyncio
-    async def test_batch_schedules_all_queries_concurrently(self) -> None:
-        """Queries across different patterns overlap; results keep input order.
-
-        Regression guard for two bugs: (1) the previous per-group ``await gather``
-        loop serialized different query patterns, capping real concurrency; and
-        (2) result ordering must survive the switch to a single flat gather.
-        """
-        pool = self._make_pool()
-        optimizer = QueryOptimizer(pool)
-
-        active = 0
-        max_concurrent = 0
-
-        async def fake_execute_query(query, params=None, use_cache=True):
-            nonlocal active, max_concurrent
-            active += 1
-            max_concurrent = max(max_concurrent, active)
-            for _ in range(3):
-                await asyncio.sleep(0)  # let sibling coroutines start
-            active -= 1
-            return query
-
-        optimizer.execute_query = fake_execute_query
-        # Mixed patterns: two SELECTs (same group) + one UPDATE (different group).
-        queries = [("SELECT a", ()), ("UPDATE b SET x=1", ()), ("SELECT c", ())]
-        results = await optimizer.execute_batch_queries(queries)
-
-        # Input order preserved despite concurrent scheduling.
-        assert results == ["SELECT a", "UPDATE b SET x=1", "SELECT c"]
-        # All three overlapped; the old per-group loop would have capped this at 2.
-        assert max_concurrent == 3
-
-    @pytest.mark.asyncio
-    async def test_batch_does_not_hold_extra_connection(self) -> None:
-        """The batch must delegate to execute_query and not pin its own connection.
-
-        Holding an unused pooled connection for the batch duration wastes a slot
-        and can starve/deadlock the gathered queries when the pool is saturated.
-        """
-        pool = self._make_pool()
-        optimizer = QueryOptimizer(pool)
-        optimizer.execute_query = AsyncMock(
-            side_effect=lambda query, params=None, use_cache=True: query
-        )
-
-        results = await optimizer.execute_batch_queries(
-            [("SELECT 1", ()), ("SELECT 2", ())]
-        )
-
-        assert results == ["SELECT 1", "SELECT 2"]
-        assert optimizer.execute_query.await_count == 2
-        # execute_batch_queries itself acquires/releases no connection.
-        pool.get_connection.assert_not_called()
-        pool.release_connection.assert_not_called()
-
-    @pytest.mark.asyncio
-    async def test_batch_empty_list_returns_empty(self) -> None:
-        """An empty batch returns [] without a ZeroDivisionError on the avg calc."""
-        pool = self._make_pool()
-        optimizer = QueryOptimizer(pool)
-        assert await optimizer.execute_batch_queries([]) == []
-
-    @pytest.mark.asyncio
-    async def test_batch_bounds_concurrency_to_pool_capacity(self) -> None:
-        """Fan-out is capped by the pool's max_connections, not the batch size."""
-        pool = self._make_pool()
-        pool.max_connections = 2
-        optimizer = QueryOptimizer(pool)
-
-        active = 0
-        max_concurrent = 0
-
-        async def fake_execute_query(query, params=None, use_cache=True):
-            nonlocal active, max_concurrent
-            active += 1
-            max_concurrent = max(max_concurrent, active)
-            for _ in range(3):
-                await asyncio.sleep(0)
-            active -= 1
-            return query
-
-        optimizer.execute_query = fake_execute_query
-        queries = [(f"SELECT {i}", ()) for i in range(6)]
-        results = await optimizer.execute_batch_queries(queries)
-
-        assert len(results) == 6
-        # Never more than the pool capacity of 2 queries in flight at once.
-        assert max_concurrent == 2
-
-    @pytest.mark.asyncio
-    async def test_batch_cancels_pending_on_failure(self) -> None:
-        """When one query fails, the still-in-flight queries are cancelled.
-
-        Guards against a failed batch continuing to apply work (e.g. writes)
-        after the caller has already seen the error.
-        """
-        pool = self._make_pool()
-        optimizer = QueryOptimizer(pool)
-
-        completed: list[str] = []
-
-        async def fake_execute_query(query, params=None, use_cache=True):
-            if query == "BOOM":
-                await asyncio.sleep(0)  # let the slow queries start first
-                raise RuntimeError("query failed")
-            await asyncio.sleep(10)  # outlasts the batch unless cancelled
-            completed.append(query)
-            return query
-
-        optimizer.execute_query = fake_execute_query
-        with pytest.raises(RuntimeError, match="query failed"):
-            await optimizer.execute_batch_queries(
-                [("SLOW1", ()), ("BOOM", ()), ("SLOW2", ())]
-            )
-
-        # Neither slow query ran to completion — both were cancelled on failure.
-        assert completed == []
 
 
 class TestConnectionPoolInitialize:

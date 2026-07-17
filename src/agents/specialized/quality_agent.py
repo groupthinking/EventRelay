@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Optional
 
 # REMOVED: sys.path.append removed
-from agents.a2a_framework import A2AMessage, BaseAgent
+from ..a2a_framework import A2AMessage, BaseAgent
 
 # Configure logging
 logging.basicConfig(
