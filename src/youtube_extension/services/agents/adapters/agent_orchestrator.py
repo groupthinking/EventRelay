@@ -10,7 +10,6 @@ parallel processing, and intelligent routing.
 import asyncio
 import logging
 import uuid
-from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Optional
@@ -61,10 +60,7 @@ class AgentOrchestrator:
         self.logger = logging.getLogger("agent_orchestrator")
         self._agents: dict[str, BaseAgent] = {}
         self._agent_types: dict[str, type[BaseAgent]] = {}
-        # Bounded: the module-level `orchestrator` singleton lives for the whole
-        # process and every dispatch appends here, so an unbounded list would
-        # grow without limit. maxlen evicts the oldest entries automatically.
-        self._a2a_log: deque[A2AContextMessage] = deque(maxlen=1000)
+        self._a2a_log: list[A2AContextMessage] = []
         self._task_mappings: dict[str, list[str]] = {
             "video_analysis": [
                 "video_master",
@@ -304,132 +300,6 @@ class AgentOrchestrator:
         self._task_mappings[task_type] = agent_names
         self.logger.info(f"Added task mapping: {task_type} -> {agent_names}")
 
-    # --- Single-agent dispatch ---
-
-    async def execute_single(
-        self,
-        agent_type: str,
-        context: dict[str, Any],
-        config: Optional[dict[str, Any]] = None,
-    ) -> dict[str, Any]:
-        """
-        Execute a single agent by type with the given context.
-
-        Used by the agent dispatch system to run one agent against one event.
-        The agent is resolved via registered types or the global registry.
-
-        Args:
-            agent_type: The agent type/name to execute.
-            context: Context data (e.g. the extracted event) passed to the agent.
-            config: Optional agent-specific configuration.
-
-        Returns:
-            dict with the agent's output, or an error dict if execution fails.
-        """
-        agent = await self.get_agent(agent_type, config)
-        if not agent:
-            self.logger.warning(
-                "Agent type %s not found for execute_single", agent_type
-            )
-            # Record the failed dispatch so the session/audit trail is complete
-            # (matches the success, agent-failure, and exception paths below).
-            self._a2a_log.append(
-                A2AContextMessage(
-                    sender="orchestrator",
-                    recipient=agent_type,
-                    content={
-                        "type": "agent_dispatch",
-                        "agent_type": agent_type,
-                        "context": context,
-                        "status": "error",
-                        "error": "agent_not_found",
-                    },
-                )
-            )
-            return {"error": f"Agent type '{agent_type}' not found"}
-
-        try:
-            request = AgentRequest(task=agent_type, params=context)
-            result = await agent.run(request)
-
-            # Log execution in A2A log for session tracking
-            self._a2a_log.append(
-                A2AContextMessage(
-                    sender="orchestrator",
-                    recipient=agent_type,
-                    content={
-                        "type": "agent_dispatch",
-                        "agent_type": agent_type,
-                        "context": context,
-                        "status": result.status,
-                    },
-                )
-            )
-
-            if result.status == "ok":
-                return result.output
-            else:
-                error_msg = (
-                    "; ".join(result.logs) or "Agent execution failed"
-                )
-                return {"error": error_msg, "output": result.output}
-        except Exception as e:
-            self.logger.error("execute_single failed for %s: %s", agent_type, e)
-            self._a2a_log.append(
-                A2AContextMessage(
-                    sender="orchestrator",
-                    recipient=agent_type,
-                    content={
-                        "type": "agent_dispatch",
-                        "agent_type": agent_type,
-                        "context": context,
-                        "status": "error",
-                        "error": str(e),
-                    },
-                )
-            )
-            return {"error": str(e)}
-
-    def get_session_logs(
-        self,
-        agent_type: str | None = None,
-        limit: int = 50,
-    ) -> list[dict[str, Any]]:
-        """Return agent dispatch session logs, optionally filtered by agent type.
-
-        Session logs track which agents were dispatched, what context they received,
-        and their execution status. This enables the recursive feedback loop where
-        agent findings can be reviewed and re-dispatched.
-
-        Args:
-            agent_type: Filter to a specific agent type, or None for all.
-            limit: Maximum entries to return.
-
-        Returns:
-            List of session log entries.
-        """
-        dispatch_msgs = [
-            m for m in self._a2a_log
-            if m.content.get("type") == "agent_dispatch"
-        ]
-        if agent_type:
-            dispatch_msgs = [
-                m for m in dispatch_msgs
-                if m.content.get("agent_type") == agent_type
-            ]
-        return [
-            {
-                "sender": m.sender,
-                "recipient": m.recipient,
-                "agent_type": m.content.get("agent_type"),
-                "context": m.content.get("context"),
-                "status": m.content.get("status"),
-                "timestamp": m.timestamp,
-                "conversation_id": m.conversation_id,
-            }
-            for m in dispatch_msgs[-limit:]
-        ]
-
     # --- A2A messaging ---
 
     async def send_a2a_message(
@@ -464,9 +334,7 @@ class AgentOrchestrator:
         limit: int = 50,
     ) -> list[dict[str, Any]]:
         """Return recent A2A messages, optionally filtered by conversation."""
-        # Materialize to a list so `[-limit:]` slicing works (deque is not
-        # sliceable).
-        msgs = list(self._a2a_log)
+        msgs = self._a2a_log
         if conversation_id:
             msgs = [m for m in msgs if m.conversation_id == conversation_id]
         return [

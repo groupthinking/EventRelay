@@ -174,14 +174,9 @@ class InfrastructurePackagingAgent:
                                 'file': file_path,
                                 'issues': issues
                             })
-                            # For nested .env files with secrets, write sanitized version
-                            if file_name == '.env':
-                                sanitized_content = self._sanitize_env_file(content)
-                                with open(file_path, "w") as f:
-                                    f.write(sanitized_content)
-                            else:
-                                with open(file_path, "w") as f:
-                                    f.write(content)
+                            # Still write file but log security concerns
+                            with open(file_path, "w") as f:
+                                f.write(content)
 
             # Write flat files with validation
             for file_name, content in flat_files.items():

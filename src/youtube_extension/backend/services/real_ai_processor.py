@@ -723,14 +723,8 @@ Focus on accurate classification for content discovery.
             # Add transcript if available
             full_text = transcript.get("full_text", "")
             if full_text:
-                # Increase the transcript limit to a safe large context window (120k chars).
-                # This covers ~30k tokens, fitting easily into Gemini 2.0/Flash or GPT-4o.
-                limit = 120_000
-                truncated_text = full_text[:limit]
-                if len(full_text) > limit:
-                    logger.info("Transcript truncated from %d to %d chars for AI analysis", len(full_text), limit)
-                    truncated_text += "\n[... transcript truncated for length ...]"
-                content_parts.append(f"Transcript: {truncated_text}")
+                # Limit transcript to avoid token limits
+                content_parts.append(f"Transcript: {full_text[:8000]}")
 
             combined_content = "\n".join(content_parts)
 

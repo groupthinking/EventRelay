@@ -9,7 +9,6 @@ Handles video information retrieval, learning logs, feedback collection, and dat
 
 import json
 import logging
-import time
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -41,11 +40,6 @@ class DataService:
         self.enhanced_analysis_dir = Path(enhanced_analysis_dir)
         self.feedback_dir = Path(feedback_dir)
         self.knowledge_dir = Path(knowledge_dir)
-
-        # Cache for file list (rglob is expensive)
-        self._file_cache: list[tuple[Path, float]] = []
-        self._file_cache_timestamp: float = 0
-        self._file_cache_ttl = 60  # seconds
 
         # Ensure directories exist
         self.feedback_dir.mkdir(parents=True, exist_ok=True)
@@ -133,37 +127,15 @@ class DataService:
             logger.error(f"Error building learning log: {e}")
             return []
 
-    def _get_all_files_cached(self) -> list[tuple[Path, float]]:
-        """Get all enhanced analysis files with caching to avoid repeated rglob."""
-        now = time.time()
-        if now - self._file_cache_timestamp < self._file_cache_ttl:
-            return self._file_cache
-
-        try:
-            if not self.enhanced_analysis_dir.exists():
-                return []
-
-            all_files: list[tuple[Path, float]] = []
-            for md_file in self.enhanced_analysis_dir.rglob("*_enhanced.md"):
-                try:
-                    mtime = md_file.stat().st_mtime
-                    all_files.append((md_file, mtime))
-                except OSError:
-                    continue
-
-            # Sort by newest first
-            all_files.sort(key=lambda x: x[1], reverse=True)
-
-            self._file_cache = all_files
-            self._file_cache_timestamp = now
-            return all_files
-        except Exception as e:
-            logger.error(f"Error listing files: {e}")
-            return []
-
     def count_videos(self) -> int:
         """Return the total number of processed videos (fast — counts files only)."""
-        return len(self._get_all_files_cached())
+        try:
+            if not self.enhanced_analysis_dir.exists():
+                return 0
+            return sum(1 for _ in self.enhanced_analysis_dir.rglob("*_enhanced.md"))
+        except Exception as e:
+            logger.error(f"Error counting videos: {e}")
+            return 0
 
     def get_videos_summary(
         self,
@@ -192,8 +164,17 @@ class DataService:
                 )
                 return []
 
-            # ── Pass 1: collect file paths + mtimes (cached) ──────────
-            all_files = self._get_all_files_cached()
+            # ── Pass 1: collect file paths + mtimes (no JSON reads) ──────────
+            all_files: list[tuple[Path, float]] = []
+            for md_file in self.enhanced_analysis_dir.rglob("*_enhanced.md"):
+                try:
+                    mtime = md_file.stat().st_mtime
+                    all_files.append((md_file, mtime))
+                except OSError:
+                    continue
+
+            # Sort by newest first
+            all_files.sort(key=lambda x: x[1], reverse=True)
 
             # Apply pagination slice
             end = offset + limit if limit is not None else len(all_files)

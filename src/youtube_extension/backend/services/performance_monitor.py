@@ -30,10 +30,6 @@ from typing import Any
 
 import psutil
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
 # Import cleanup service for database maintenance
 try:
     from .database_cleanup_service import cleanup_service
@@ -41,6 +37,10 @@ try:
 except ImportError:
     CLEANUP_AVAILABLE = False
     logger.warning("Database cleanup service not available")
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 @dataclass
 class PerformanceMetric:
@@ -379,36 +379,9 @@ class PerformanceMonitor:
             logger.error(f"Failed to store alert in database: {e}")
 
     async def _send_alert_notification(self, alert: PerformanceAlert):
-        """Send alert notification via webhook if configured"""
-        webhook_url = os.environ.get("ALERT_WEBHOOK_URL") or os.environ.get("SLACK_WEBHOOK_URL")
-        if not webhook_url:
-            logger.debug("No webhook URL configured for alert notifications")
-            return
-
-        try:
-            import aiohttp
-        except ImportError:
-            logger.warning("aiohttp not installed, cannot send webhook notification")
-            return
-
-        payload = {
-            "text": f"🚨 *Performance Alert* 🚨\n"
-                    f"*Severity:* {alert.severity.upper()}\n"
-                    f"*Component:* {alert.component}\n"
-                    f"*Metric:* {alert.metric_name}\n"
-                    f"*Message:* {alert.message}\n"
-                    f"*Time:* {alert.timestamp.isoformat()}"
-        }
-
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.post(webhook_url, json=payload, timeout=5.0) as response:
-                    if response.status >= 400:
-                        logger.error(f"Failed to send webhook notification, status: {response.status}")
-                    else:
-                        logger.info(f"Successfully sent webhook notification for alert: {alert.alert_id}")
-        except Exception as e:
-            logger.error(f"Error sending webhook notification: {e}")
+        """Send alert notification (placeholder for integration)"""
+        # TODO: Implement actual notification system
+        pass
 
     async def _monitor_system_resources(self):
         """Monitor system resource usage"""
@@ -873,7 +846,7 @@ def performance_timer(component: str, metric_name: str):
             # Store for async processing
             try:
                 asyncio.get_running_loop()
-                asyncio.create_task(_get_performance_monitor().record_metric(component, metric_name, execution_time))
+                asyncio.create_task(performance_monitor.record_metric(component, metric_name, execution_time))
             except RuntimeError:
                 # No loop: skip async record to avoid import-time errors
                 pass

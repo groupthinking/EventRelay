@@ -15,23 +15,33 @@
 import type { FunctionDeclaration } from '@google/genai';
 import { backendHeaders } from '@/lib/pipeline-backend';
 
+// ── JSON Schema (shared by OpenAI strict tools + Gemini declarations) ──
+
 export interface JSONSchema {
   type: 'object';
   properties: Record<string, unknown>;
   required: string[];
   additionalProperties: false;
+  /** Index signature so the schema is assignable to the SDKs' parameter types. */
   [key: string]: unknown;
 }
 
 export interface ActionToolResult {
+  /** Short human-readable summary of what happened. */
   summary: string;
+  /** Structured payload produced by the tool (task object, resource, etc.). */
   data?: Record<string, unknown>;
+  /** True when the tool could not complete (e.g. backend unavailable). */
   isError?: boolean;
 }
 
+/** Runtime context handed to every tool execution. */
 export interface ToolContext {
+  /** Resolved FastAPI base URL, or null when no backend is configured. */
   backendBaseUrl: string | null;
+  /** Injectable fetch (defaults to global fetch) so tools are testable. */
   fetchImpl?: typeof fetch;
+  /** Correlates dispatched work with the originating prompt. */
   jobId?: string;
 }
 
@@ -42,16 +52,25 @@ export interface ActionTool {
   execute: (input: Record<string, unknown>, ctx: ToolContext) => Promise<ActionToolResult>;
 }
 
+// ── Helpers ──
+
 function str(input: Record<string, unknown>, key: string): string {
   const v = input[key];
   return typeof v === 'string' ? v : '';
 }
 
+/** Coerce a value to a string array, dropping non-string entries. */
 function strArray(input: Record<string, unknown>, key: string): string[] {
   const v = input[key];
   return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
 }
 
+/**
+ * Resolve the configured backend URL, or null when running frontend-only.
+ * Validates the URL and enforces an http(s) scheme so a malformed value can't
+ * produce a broken endpoint when concatenated; the trailing slash is trimmed so
+ * callers can safely append `/api/...`.
+ */
 export function resolveBackendBaseUrl(): string | null {
   const raw = (process.env.BACKEND_URL || '').trim();
   if (!raw) return null;
@@ -63,6 +82,8 @@ export function resolveBackendBaseUrl(): string | null {
     return null;
   }
 }
+
+// ── Tool definitions ──
 
 const createWorkflowTask: ActionTool = {
   name: 'create_workflow_task',
@@ -176,6 +197,8 @@ const dispatchAgent: ActionTool = {
     const agentType = str(input, 'agentType');
     const instruction = str(input, 'instruction');
 
+    // REAL_MODE_ONLY: the MCP orchestrator only exists behind the FastAPI
+    // backend. Report honestly rather than pretending the dispatch happened.
     if (!ctx.backendBaseUrl) {
       return {
         summary: `Cannot dispatch ${agentType} agent — no backend configured (set BACKEND_URL).`,
@@ -249,6 +272,8 @@ const addToKnowledgeBase: ActionTool = {
   },
 };
 
+// ── Registry ──
+
 export const ACTION_TOOLS: readonly ActionTool[] = [
   createWorkflowTask,
   saveResource,
@@ -257,10 +282,14 @@ export const ACTION_TOOLS: readonly ActionTool[] = [
   addToKnowledgeBase,
 ];
 
+/** Look up a tool by name. */
 export function getTool(name: string): ActionTool | undefined {
   return ACTION_TOOLS.find((t) => t.name === name);
 }
 
+// ── Provider adapters ──
+
+/** Tool definitions in OpenAI Responses-API function-tool format. */
 export function toOpenAITools(tools: readonly ActionTool[] = ACTION_TOOLS) {
   return tools.map((t) => ({
     type: 'function' as const,
@@ -271,12 +300,15 @@ export function toOpenAITools(tools: readonly ActionTool[] = ACTION_TOOLS) {
   }));
 }
 
+/** Tool definitions in Gemini `functionDeclarations` format. */
 export function toGeminiFunctionDeclarations(
   tools: readonly ActionTool[] = ACTION_TOOLS,
 ): FunctionDeclaration[] {
   return tools.map((t) => ({
     name: t.name,
     description: t.description,
+    // `parametersJsonSchema` accepts plain JSON Schema directly (unlike
+    // `parameters`, which expects Gemini's OpenAPI-style `Schema` type).
     parametersJsonSchema: t.parameters,
   }));
 }

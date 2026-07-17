@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback, useMemo, memo } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { clsx } from 'clsx';
 
 /* ═══════════════════════════════════════════
@@ -53,7 +53,7 @@ function formatTimestamp(seconds: number): string {
  * @param isPast - Whether this segment ends before the current playback position.
  * @param onSeek - Called with the segment start time when the row is activated.
  */
-const SegmentRow = memo(function SegmentRow({
+function SegmentRow({
   segment,
   isActive,
   isPast,
@@ -138,7 +138,7 @@ const SegmentRow = memo(function SegmentRow({
       </p>
     </div>
   );
-});
+}
 
 /**
  * Renders an interactive transcript with speaker filtering, search, and playback progress.

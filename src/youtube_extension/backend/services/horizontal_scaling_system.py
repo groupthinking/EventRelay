@@ -23,7 +23,6 @@ import hashlib
 import json
 import logging
 import random
-import statistics
 import time
 from collections import defaultdict, deque
 from dataclasses import dataclass, field

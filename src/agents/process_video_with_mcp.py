@@ -232,13 +232,11 @@ class RealVideoProcessor:
                 transcript_list = await loop.run_in_executor(
                     None, lambda: YouTubeTranscriptApi().list(video_id)  # type: ignore[union-attr]
                 )
-                fetch_tasks = [
-                    loop.run_in_executor(None, lambda t=t: t.fetch().to_raw_data())
-                    for t in transcript_list
-                ]
-                for task in asyncio.as_completed(fetch_tasks):
+                for t in transcript_list:
                     try:
-                        data = await task
+                        data = await loop.run_in_executor(
+                            None, lambda t=t: t.fetch().to_raw_data()
+                        )
                         if data:
                             return data
                     except Exception:
@@ -280,23 +278,17 @@ class RealVideoProcessor:
     async def _save_to_google_drive(self, video_id: str, content: dict[str, Any]) -> dict[str, Any]:
         # Emulate Drive by writing locally under CWD/gdrive_results
         folder = Path.cwd() / "gdrive_results" / content.get("category", "General")
+        folder.mkdir(parents=True, exist_ok=True)
+        file_path = folder / f"{video_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
 
-        def _ensure_dir_and_write():
-            folder.mkdir(parents=True, exist_ok=True)
-            file_path = folder / f"{video_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-
-            payload = {
-                "video_id": video_id,
-                "category": content.get("category"),
-                "content": content,
-                "real_processing_validated": True,
-                "saved_at": datetime.now().isoformat(),
-            }
-            file_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-            return file_path
-
-        # Run blocking I/O in a separate thread to keep the event loop free.
-        file_path = await asyncio.to_thread(_ensure_dir_and_write)
+        payload = {
+            "video_id": video_id,
+            "category": content.get("category"),
+            "content": content,
+            "real_processing_validated": True,
+            "saved_at": datetime.now().isoformat(),
+        }
+        file_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
         return {
             "success": True,
