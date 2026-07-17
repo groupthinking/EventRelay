@@ -7,7 +7,6 @@ Real-time API cost tracking, quota management, and optimization for UVAI platfor
 Monitors OpenAI, Anthropic, Gemini, YouTube Data API, and other service usage.
 """
 
-import aiohttp
 import asyncio
 import json
 import logging
@@ -20,6 +19,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
+
+import aiohttp
 
 # Default database location. Allow override via environment variable.
 _DEFAULT_DB_PATH_ENV = os.getenv("API_COST_MONITOR_DB_PATH")
@@ -340,28 +341,81 @@ class APICostMonitor:
 
         return record
 
+    # Columns on ``daily_budgets`` used to gate each alert to once per UTC day.
+    _ALERT_STATE_COLUMNS = {"threshold": "alert_sent", "exceeded": "budget_exceeded"}
+
     async def _check_budget_alerts(self):
-        """Check and send budget alerts if thresholds are exceeded"""
+        """Check and send budget alerts if thresholds are exceeded.
+
+        ``record_usage`` calls this after every usage record, so alerts must be
+        gated: each alert type is dispatched at most once per UTC day, the first
+        time that day's spend crosses the corresponding threshold. Without this,
+        every subsequent API call would re-send the webhook and flood recipients.
+        """
         try:
             today = datetime.now(timezone.utc).date().isoformat()
             daily_cost = await self.get_daily_cost(today)
 
-            if daily_cost >= self.alert_threshold:
+            if daily_cost >= self.alert_threshold and not self._alert_already_sent(
+                today, "threshold"
+            ):
                 await self._send_budget_alert(daily_cost, 'threshold')
+                self._mark_alert_sent(today, "threshold")
 
-            if daily_cost >= self.daily_budget:
+            if daily_cost >= self.daily_budget and not self._alert_already_sent(
+                today, "exceeded"
+            ):
                 await self._send_budget_alert(daily_cost, 'exceeded')
+                self._mark_alert_sent(today, "exceeded")
 
         except Exception as e:
             logger.error(f"Error checking budget alerts: {e}")
 
+    def _alert_already_sent(self, date: str, alert_type: str) -> bool:
+        """Return True if ``alert_type`` was already dispatched for ``date``."""
+        column = self._ALERT_STATE_COLUMNS[alert_type]  # KeyError on unknown type
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute(
+                f"SELECT {column} FROM daily_budgets WHERE date = ?", (date,)
+            )
+            row = cursor.fetchone()
+            conn.close()
+            return bool(row[0]) if row else False
+        except Exception as e:
+            logger.error(f"Error reading budget alert state: {e}")
+            # Fail open (report "not sent") so a transient DB error never
+            # permanently suppresses a real budget alert.
+            return False
+
+    def _mark_alert_sent(self, date: str, alert_type: str) -> None:
+        """Persist that ``alert_type`` has been dispatched for ``date``."""
+        column = self._ALERT_STATE_COLUMNS[alert_type]  # KeyError on unknown type
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute(
+                f"INSERT INTO daily_budgets (date, {column}) VALUES (?, 1) "
+                f"ON CONFLICT(date) DO UPDATE SET {column} = 1",
+                (date,),
+            )
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            logger.error(f"Error recording budget alert state: {e}")
+
     async def _send_webhook_notification(self, message: str):
-        """Send an async webhook notification if URL is configured."""
+        """Send an async webhook notification if URL is configured.
+
+        The payload carries both Slack's ``text`` and Discord's ``content``
+        field so a generic incoming webhook works for either provider.
+        """
         if not self.webhook_url:
             return
 
         try:
-            payload = {"text": message}
+            payload = {"text": message, "content": message}
             async with aiohttp.ClientSession() as session:
                 async with session.post(
                     self.webhook_url,
