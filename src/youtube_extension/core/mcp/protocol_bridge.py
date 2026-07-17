@@ -13,8 +13,11 @@ Key Responsibilities:
 - Protocol capability negotiation
 """
 
+import ipaddress
 import logging
+import socket
 from abc import ABC, abstractmethod
+from collections.abc import Mapping
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Callable, Optional
@@ -27,20 +30,58 @@ from .server_registry import ServerCapability
 logger = logging.getLogger(__name__)
 
 
-def _summarize_request(request: dict[str, Any]) -> dict[str, Any]:
-    """Build a non-sensitive summary of a request for history/logging.
+def _summarize_payload(payload: Any) -> dict[str, Any]:
+    """Build a non-sensitive structural summary for history/logging.
 
-    The raw request may carry API keys, tokens, prompts, or PII. Persisting it
-    verbatim would leak those into context history (which is serialized and
-    logged), so we record only structural metadata, never values.
+    Requests and responses may contain API keys, prompts, tokens, PII, or raw
+    model output. Persisting them verbatim would leak sensitive data into
+    serialized context history, so we record only structure, never values.
     """
+    if isinstance(payload, Mapping):
+        keys = sorted(str(k) for k in payload.keys())
+        return {"type": type(payload).__name__, "keys": keys, "key_count": len(keys)}
+    return {"type": type(payload).__name__}
+
+
+def _sanitize_exception(exc: Exception) -> dict[str, str]:
+    """Return non-sensitive exception metadata safe to persist."""
+    return {"type": type(exc).__name__}
+
+
+def _is_public_https_base_url(base_url: str) -> bool:
+    """Return True when the URL targets a publicly routable HTTPS endpoint."""
+    parsed = urlparse(base_url)
+    if parsed.scheme != "https" or not parsed.netloc:
+        return False
+
+    host = parsed.hostname
+    if not host:
+        return False
+
     try:
-        keys = sorted(str(k) for k in request.keys())
-    except AttributeError:
-        keys = []
-    # Strictly structural: never derive anything (size, hashes) from the
-    # values, since even a length can leak information (e.g. prompt size).
-    return {"keys": keys, "key_count": len(keys)}
+        ip = ipaddress.ip_address(host)
+        return ip.is_global
+    except ValueError:
+        pass
+
+    try:
+        resolved = socket.getaddrinfo(host, parsed.port or 443, type=socket.SOCK_STREAM)
+    except socket.gaierror:
+        return False
+
+    if not resolved:
+        return False
+
+    for family, _, _, _, sockaddr in resolved:
+        address = sockaddr[0]
+        try:
+            ip = ipaddress.ip_address(address)
+        except ValueError:
+            return False
+        if family not in (socket.AF_INET, socket.AF_INET6) or not ip.is_global:
+            return False
+
+    return True
 
 
 class ProtocolType(Enum):
@@ -201,32 +242,33 @@ class MCPProtocolBridge:
             context.metadata["protocol"] = protocol_type.value
             context.metadata["request_timestamp"] = datetime.now(timezone.utc).isoformat()
 
-            # Send request through adapter
+            # Store only non-sensitive structural summaries of the request and
+            # response — both may contain prompts, tokens, or echoed secrets.
             response = await self.adapters[protocol_type].send_request(request, context)
-
-            # Update context with response. Store only a non-sensitive summary of
-            # the request — the raw dict may contain API keys/tokens/PII.
             context.add_history_entry("protocol_request", {
                 "protocol": protocol_type.value,
-                "request_summary": _summarize_request(request),
-                "response": response,
-                "success": True
+                "request_summary": _summarize_payload(request),
+                "response_summary": _summarize_payload(response),
+                "success": True,
             })
 
             stats["success"] += 1
             return response
 
         except Exception as e:
-            # Update context with error
             context.add_history_entry("protocol_request", {
                 "protocol": protocol_type.value,
-                "request_summary": _summarize_request(request),
-                "error": str(e),
-                "success": False
+                "request_summary": _summarize_payload(request),
+                "error": _sanitize_exception(e),
+                "success": False,
             })
 
             stats["failure"] += 1
-            logger.error(f"Protocol request failed for {protocol_type.value}: {e}")
+            logger.error(
+                "Protocol request failed for %s with %s",
+                protocol_type.value,
+                type(e).__name__,
+            )
             raise
 
         finally:
@@ -447,15 +489,16 @@ class OpenAIAdapter(ProtocolAdapter):
             logger.error("OpenAI API key not provided")
             return False
 
-        # Reject non-HTTPS or hostless base URLs. An attacker-influenced config
-        # could otherwise point requests at internal targets such as the cloud
-        # metadata endpoint (http://169.254.169.254) or file:// URIs (SSRF).
+        # Reject endpoints that are not HTTPS or that resolve to non-public
+        # network ranges. This blocks localhost, link-local, private, and other
+        # internal destinations even when hidden behind DNS.
         if not isinstance(base_url, str):
             logger.error("OpenAI base_url must be a string; rejecting config")
             return False
-        parsed = urlparse(base_url)
-        if parsed.scheme != "https" or not parsed.netloc:
-            logger.error("Unsafe OpenAI base_url rejected (must be HTTPS with a host)")
+        if not _is_public_https_base_url(base_url):
+            logger.error(
+                "Unsafe OpenAI base_url rejected (must be HTTPS and publicly routable)"
+            )
             return False
         self.base_url = base_url
 
