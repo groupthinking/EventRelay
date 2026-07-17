@@ -652,6 +652,15 @@ class TestCloudApiEndpoints:
             )
         assert response.status_code == 500
 
+        # Regression lock for the persisted-error disclosure sink: the failed
+        # state must be recorded with a generic message. The status/result
+        # endpoints return `error_message` verbatim to clients, so the original
+        # exception text ("processing failed") must never reach Firestore.
+        mock_firestore.update_state.assert_awaited_once_with(
+            "auJzb1D-fag", status="failed", error_message="Internal server error"
+        )
+        assert "processing failed" not in str(mock_firestore.update_state.call_args)
+
     # -------- POST /api/v3/batch-process --------
 
     def test_batch_process_success(self):

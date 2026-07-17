@@ -442,15 +442,15 @@ class TestBatchProcessEndpoint:
         assert response.status_code == 200
 
     def test_batch_with_more_than_20_videos_returns_error(self, client):
-        """Source code raises HTTPException(400) inside a try block that
-        re-wraps it as 500. Test matches actual behaviour."""
+        """Batching more than 20 videos is rejected with HTTP 400. The handler
+        re-raises the HTTPException(400) via `except HTTPException: raise` instead
+        of masking it as a generic 500 (regression lock for that re-raise)."""
         urls = [f"https://youtube.com/watch?v=vid{i:05d}" for i in range(21)]
         response = client.post(
             "/api/v2/batch-process",
             json={"video_urls": urls, "max_concurrent": 3},
         )
-        # The HTTPException(400) is caught by the outer except -> HTTP 500
-        assert response.status_code in (400, 500)
+        assert response.status_code == 400
 
     def test_batch_response_contains_results(self, client):
         response = client.post(
@@ -802,10 +802,11 @@ class TestSearchVideosEndpoint:
         assert "youtube.com/watch?v=" in result["video_url"]
 
     def test_max_results_above_50_returns_error(self, client):
-        """Source code raises HTTPException(400) inside a try block that
-        catches Exception -> results in HTTP 500."""
+        """max_results above 50 is rejected with HTTP 400. The handler re-raises
+        the HTTPException(400) via `except HTTPException: raise` rather than
+        swallowing it into a generic 500 (regression lock for that re-raise)."""
         response = client.post("/api/v2/search-videos?query=python&max_results=51")
-        assert response.status_code in (400, 500)
+        assert response.status_code == 400
 
     def test_default_order_is_relevance(self, client, mock_youtube):
         client.post("/api/v2/search-videos?query=test")

@@ -17,6 +17,7 @@ validation errors, which are not internal-disclosure vectors.
 
 from __future__ import annotations
 
+import ast
 import re
 from pathlib import Path
 
@@ -24,40 +25,84 @@ import pytest
 
 _BACKEND = Path(__file__).resolve().parents[2] / "src" / "youtube_extension" / "backend"
 
-# Match a single `raise HTTPException(...)` call, capturing its argument list,
-# tolerant of the call spanning multiple lines.
-_HTTP_EXC = re.compile(r"HTTPException\((?P<args>.*?)\)", re.DOTALL)
-
-# A 500 `detail=` is safe only when it is an inline *static string literal*
-# (``detail="Internal server error"``). Anything else can carry internal state to
-# the client and is flagged:
-#   detail=str(e)          detail=f"... {e} ..."      (inline dynamic string)
-#   detail=error_msg       (a variable — may hold f"...{e}...")
-#   detail={...}           (a dict whose values embed the exception)
-# The value after ``detail=`` is dynamic unless its first non-space character
-# opens a plain string literal (``"`` or ``'``). A leading ``{`` (dict) or any
-# identifier char — ``f`` of an f-string, ``s`` of ``str(``, or a bare variable
-# name — means it is not a static literal.
-_DYNAMIC_DETAIL = re.compile(r"""detail\s*=\s*(?:\{|[A-Za-z_])""")
-
 
 def _backend_python_files() -> list[Path]:
     return sorted(_BACKEND.rglob("*.py"))
 
 
+# --- 500 `detail=` disclosure scan (AST-based) --------------------------------
+#
+# A 500 response is safe only when its ``detail`` is a *static* string literal
+# (``detail="Internal server error"``) — or is omitted entirely. Anything derived
+# from the caught exception can carry internal state to the client and is flagged.
+# A regex over ``detail=...`` misses two live shapes, so the scan parses the AST
+# and inspects every ``HTTPException(...)`` call, positional and keyword alike:
+#
+#   HTTPException(500, str(e))                 # positional status *and* detail
+#   HTTPException(status_code=500,
+#                 detail="failed: " + str(e))  # concat that *starts* with a literal
+#
+# Both the status code and the detail may be passed positionally
+# (``HTTPException(status, detail, headers)``) or by keyword; either form counts.
+
+
+def _is_static_str(node: ast.AST | None) -> bool:
+    """True iff ``node`` is a string literal, or a ``+`` concatenation of only
+    string literals. A concat with any non-literal operand (``"x " + str(e)``)
+    is dynamic and therefore not static."""
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return True
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+        return _is_static_str(node.left) and _is_static_str(node.right)
+    return False
+
+
+def _is_500(node: ast.AST | None) -> bool:
+    """True for a literal ``500`` or a ``status.HTTP_500_*`` attribute."""
+    if isinstance(node, ast.Constant) and node.value == 500:
+        return True
+    if isinstance(node, ast.Attribute) and "500" in node.attr:
+        return True
+    return False
+
+
+def _http_exception_calls(tree: ast.AST):
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            func = node.func
+            name = func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", None)
+            if name == "HTTPException":
+                yield node
+
+
+def _status_and_detail(call: ast.Call):
+    """Resolve (status_node, detail_node, detail_present) from positional and
+    keyword arguments. Signature is ``HTTPException(status_code, detail, ...)``."""
+    status = call.args[0] if len(call.args) >= 1 else None
+    detail = call.args[1] if len(call.args) >= 2 else None
+    detail_present = len(call.args) >= 2
+    for kw in call.keywords:
+        if kw.arg == "status_code":
+            status = kw.value
+        elif kw.arg == "detail":
+            detail = kw.value
+            detail_present = True
+    return status, detail, detail_present
+
+
 def _iter_500_dynamic_detail(text: str):
     """Yield (line_no, snippet) for each 500 HTTPException with a dynamic detail."""
-    for m in _HTTP_EXC.finditer(text):
-        args = m.group("args")
-        if "status_code=500" not in args.replace(" ", "").replace(
-            "status_code =", "status_code="
-        ):
-            # normalize minor spacing; only care about 500 responses
-            if "status_code=500" not in re.sub(r"\s+", "", args):
-                continue
-        if _DYNAMIC_DETAIL.search(args):
-            line_no = text.count("\n", 0, m.start()) + 1
-            yield line_no, " ".join(args.split())[:120]
+    tree = ast.parse(text)
+    for call in _http_exception_calls(tree):
+        status, detail, detail_present = _status_and_detail(call)
+        if not _is_500(status):
+            continue
+        if not detail_present:
+            # A 500 with no detail falls back to FastAPI's generic phrase — safe.
+            continue
+        if not _is_static_str(detail):
+            snippet = ast.get_source_segment(text, call) or ast.dump(detail)
+            yield call.lineno, " ".join(snippet.split())[:120]
 
 
 # FastAPI exception handlers are a second 500 sink the HTTPException scan above
@@ -189,21 +234,36 @@ def test_guard_detects_a_synthetic_leak() -> None:
         'raise HTTPException(status_code=500, detail=f"failed: {e}")',
         "raise HTTPException(status_code=500, detail=error_msg)",  # bare variable
         'raise HTTPException(status_code=500, detail={"message": error_msg})',  # dict
+        "raise HTTPException(500, str(e))",  # positional status *and* detail
+        "raise HTTPException(500, error_msg)",  # positional bare variable
+        'raise HTTPException(500, detail=f"{e}")',  # positional status, kw detail
+        'raise HTTPException(status_code=500, detail="failed: " + str(e))',  # concat w/ leading literal
     ]
     for leak in leaks:
         assert list(_iter_500_dynamic_detail(leak)), f"scanner missed a real 500 leak: {leak}"
 
-    # A static string literal is the only safe form.
-    safe = 'raise HTTPException(status_code=500, detail="Internal server error")'
-    assert not list(
-        _iter_500_dynamic_detail(safe)
-    ), "scanner false-positived a static detail"
+    # Static string literals — including a concatenation of only literals — are safe,
+    # as is a 500 with no detail at all (FastAPI supplies a generic phrase).
+    safe = [
+        'raise HTTPException(status_code=500, detail="Internal server error")',
+        'raise HTTPException(500, "Internal server error")',  # positional static
+        'raise HTTPException(status_code=500, detail="Internal " + "server error")',  # literal concat
+        "raise HTTPException(status_code=500)",  # no detail
+    ]
+    for ok in safe:
+        assert not list(
+            _iter_500_dynamic_detail(ok)
+        ), f"scanner false-positived a safe 500 detail: {ok}"
 
     # 4xx responses echo client-supplied input and are intentionally out of scope.
-    client_err = "raise HTTPException(status_code=400, detail=str(exc))"
-    assert not list(
-        _iter_500_dynamic_detail(client_err)
-    ), "scanner must ignore 4xx responses"
+    client_errs = [
+        "raise HTTPException(status_code=400, detail=str(exc))",
+        "raise HTTPException(404, str(exc))",  # positional 4xx
+    ]
+    for ce in client_errs:
+        assert not list(
+            _iter_500_dynamic_detail(ce)
+        ), f"scanner must ignore 4xx responses: {ce}"
 
 
 if __name__ == "__main__":  # pragma: no cover
