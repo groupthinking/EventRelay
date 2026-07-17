@@ -451,22 +451,27 @@ async def value_error_handler(request, exc):
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request, exc):
-    """Global exception handler with enhanced error details"""
-    logger.error(f"Unhandled exception: {exc}", exc_info=True)
+    """Global exception handler.
 
-    error_detail = {
-        "error": "Internal server error",
-        "detail": str(exc),
-        "timestamp": datetime.now().isoformat(),
-        "path": str(request.url) if hasattr(request, "url") else "unknown",
-        "version": "2.0.0",
-        "architecture": "service-oriented",
-    }
+    Returns a static body only. The exception type, message, traceback, and
+    request URL are recorded server-side via ``logger.error(..., exc_info=True)``
+    and never returned to the client, closing a CWE-209 information-disclosure
+    leak (the previous body echoed ``str(exc)``, ``exc.__class__.__name__``, and
+    the request URL).
+    """
+    request_path = str(request.url) if hasattr(request, "url") else "unknown"
+    logger.error(
+        f"Unhandled exception on {request_path}: {exc}", exc_info=True
+    )
 
-    if hasattr(exc, "__class__"):
-        error_detail["error_type"] = exc.__class__.__name__
-
-    return JSONResponse(status_code=500, content=error_detail)
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": "Internal server error",
+            "detail": "Internal server error",
+            "timestamp": datetime.now().isoformat(),
+        },
+    )
 
 
 # Application lifecycle events
