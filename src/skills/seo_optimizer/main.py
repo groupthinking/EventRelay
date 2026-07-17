@@ -1,28 +1,3 @@
-<<<<<<< HEAD
-#!/usr/bin/env python3
-"""Thin GTM skill wrapper."""
-
-import json
-import sys
-from typing import Any
-
-SKILL_ID = "seo-optimizer"
-
-
-def run(payload: dict[str, Any]) -> dict[str, Any]:
-    """Execute the skill wrapper with a JSON-serializable payload."""
-    return {
-        "status": "success",
-        "skill": SKILL_ID,
-        "payload": payload,
-    }
-
-
-if __name__ == "__main__":
-    raw = sys.stdin.read().strip()
-    request = json.loads(raw) if raw else {}
-    print(json.dumps(run(request)))
-=======
 """SEO Optimizer skill - optimizes video titles, descriptions, and tags."""
 
 from __future__ import annotations
@@ -81,4 +56,3 @@ class SEOOptimizerSkill(BaseSkill):
                 "message": f"SEO optimization queued for video {video_id}",
             },
         )
->>>>>>> origin/main
