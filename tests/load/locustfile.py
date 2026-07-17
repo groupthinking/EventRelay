@@ -1,9 +1,16 @@
+import os
 from locust import HttpUser, task, between
 import json
 
 class EventRelayUser(HttpUser):
     # Simulate users waiting between 1 to 5 seconds between tasks
     wait_time = between(1, 5)
+    
+    def on_start(self):
+        """Set up authentication headers for all requests"""
+        self.api_key = os.getenv("EVENTRELAY_API_KEY", "")
+        if self.api_key:
+            self.client.headers["X-API-Key"] = self.api_key
 
     @task(3)
     def test_health(self):
@@ -28,7 +35,15 @@ class EventRelayUser(HttpUser):
                 "temperature": 0.2
             }
         }
-        self.client.post("/api/v1/transcript-action", json=payload, headers=headers)
+        with self.client.post("/api/v1/transcript-action", json=payload, headers=headers, catch_response=True) as response:
+            if response.status_code == 200:
+                try:
+                    data = response.json()
+                    if not data.get("success", True):
+                        response.failure(f"Workflow failed: {data.get('error', 'Unknown error')}")
+                except (ValueError, KeyError):
+                    # If JSON parsing fails or success key is missing, let Locust handle the HTTP status
+                    pass
 
     @task(2)
     def test_process_video(self):
@@ -41,4 +56,11 @@ class EventRelayUser(HttpUser):
                 "transcribe": True
             }
         }
-        self.client.post("/api/v1/process-video", json=payload, headers=headers)
+        with self.client.post("/api/v1/process-video", json=payload, headers=headers, catch_response=True) as response:
+            if response.status_code == 200:
+                try:
+                    data = response.json()
+                    if not data.get("success", True):
+                        response.failure(f"Processing failed: {data.get('error', 'Unknown error')}")
+                except (ValueError, KeyError):
+                    pass
