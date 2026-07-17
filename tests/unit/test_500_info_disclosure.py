@@ -137,8 +137,12 @@ def test_guard_detects_synthetic_leaks() -> None:
         'raise HTTPException(500, "Internal server error")',
         'raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error")',
         "raise HTTPException(status_code=400, detail=str(exc))",  # 4xx echoes client input
-        "raise HTTPException(status_code=429, detail=f'Rate limit: {e}')",
+        'raise HTTPException(status_code=404, detail=f"No such video: {video_id}")',  # 4xx echoes client input
     ]
+    # NOTE: this guard covers 500 responses only. The 429/503 server-error
+    # branches in analyze_video are sanitized too, but their regression coverage
+    # lives in the endpoint tests (test_cloud_routes.py), which assert the exact
+    # static bodies and the absence of the exception text.
     for src in safe:
         assert not list(
             _iter_500_dynamic_detail(src)

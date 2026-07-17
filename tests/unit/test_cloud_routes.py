@@ -358,6 +358,9 @@ class TestCloudAIRoutes:
                 "analysis_types": ["label_detection"],
             })
         assert response.status_code == 503
+        # The 503 body must be static; the exception text must not leak (CWE-209).
+        assert response.json()["detail"] == "AI service temporarily unavailable"
+        assert "service down" not in response.text
 
     def test_analyze_video_rate_limit_error(self):
         # RateLimitError subclasses CloudAIError but is now caught before the base
@@ -374,6 +377,9 @@ class TestCloudAIRoutes:
                 "analysis_types": ["label_detection"],
             })
         assert response.status_code == 429
+        # The 429 body must be static; the exception text must not leak (CWE-209).
+        assert response.json()["detail"] == "Rate limit exceeded"
+        assert "too many requests" not in response.text
 
     def test_analyze_video_configuration_error(self):
         # ConfigurationError subclasses CloudAIError but is now caught before the
