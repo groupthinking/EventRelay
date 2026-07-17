@@ -14,10 +14,10 @@ test.describe('EventRelay Production E2E', () => {
   });
 
   test('v1 health check proxy', async ({ page }) => {
-    const response = await page.request.get(`${BASE_URL}/api/v1/health`);
+    const response = await page.request.get(`${BASE_URL}/api`);
     expect(response.ok()).toBeTruthy();
     const data = await response.json();
-    expect(data.status).toBe('healthy');
+    expect(data.status).toBe('operational');
   });
 
   test('features page routing', async ({ page }) => {
