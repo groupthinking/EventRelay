@@ -1,0 +1,371 @@
+{
+  "run_timestamp": "2026-06-10T23:35:48.878319+00:00",
+  "repo_root": "/Users/garvey/Dev/EventRelay",
+  "verdict": "Partial validation run completed. EventRelay baseline extraction ran, but Bitmovin AISA uplift could not be measured because no Bitmovin credentials/direct media inputs or AISA JSON outputs were available.",
+  "bitmovin_readiness": {
+    "api_key_present": false,
+    "output_id_present": false,
+    "live_aisa_status": "blocked_missing_bitmovin_credentials",
+    "required_live_inputs": [
+      "BITMOVIN_API_KEY",
+      "BITMOVIN_OUTPUT_ID",
+      "direct MP4, HLS, or DASH URLs for the same assets being evaluated"
+    ]
+  },
+  "videos": [
+    {
+      "video_id": "mjkecNwp1X0",
+      "url": "https://www.youtube.com/watch?v=mjkecNwp1X0",
+      "title": "ChatGPT Agent Builder Full Tutorial: Building AI Agents in 2025 for Beginners",
+      "category": "tutorial_demo",
+      "reason": "Representative of EventRelay's developer/tutorial workflow.",
+      "transcript": {
+        "source": "youtube_transcript_api",
+        "segment_count": 653,
+        "word_count": 4930
+      },
+      "eventrelay_baseline": {
+        "events_count": 5,
+        "actions_count": 3,
+        "topics_count": 5,
+        "timestamped_events_count": 0,
+        "high_priority_events_count": 3,
+        "event_titles": [
+          "ChatGPT Agent Builder",
+          "Agent Customization",
+          "Creating an Agent",
+          "Set Output Format",
+          "Building Classifier Logic"
+        ],
+        "action_titles": [
+          "Experiment with Agent Creation",
+          "Test Output Formats",
+          "Implement Advanced Features"
+        ],
+        "topics": [
+          "AI Agent Development",
+          "Workflow Creation",
+          "Custom Instructions",
+          "Output Formatting",
+          "Conditional Logic"
+        ]
+      },
+      "aisa": {
+        "status": "not_run",
+        "reason": "No local AISA JSON was supplied. Live Bitmovin run also requires BITMOVIN_API_KEY, BITMOVIN_OUTPUT_ID, and direct MP4/HLS/DASH input URLs."
+      },
+      "value_evaluation": {
+        "status": "blocked",
+        "decision": "Cannot evaluate Bitmovin uplift without real AISA JSON for the same assets.",
+        "next_step": "Provide BITMOVIN_API_KEY, BITMOVIN_OUTPUT_ID, and direct MP4/HLS/DASH media URLs, or place exported AISA JSON files in --aisa-json-dir."
+      },
+      "raw_eventrelay_extraction": {
+        "events": [
+          {
+            "type": "tool",
+            "title": "ChatGPT Agent Builder",
+            "description": "A visual tool designed to create agentic workflows.",
+            "timestamp": null,
+            "priority": "high"
+          },
+          {
+            "type": "insight",
+            "title": "Agent Customization",
+            "description": "Users can customize agents by giving them names and instructions tailored for specific tasks, such as classifying content.",
+            "timestamp": null,
+            "priority": "medium"
+          },
+          {
+            "type": "action",
+            "title": "Creating an Agent",
+            "description": "Follow the tutorial to drag and drop the agent component and customize it with specific instructions.",
+            "timestamp": null,
+            "priority": "high"
+          },
+          {
+            "type": "action",
+            "title": "Set Output Format",
+            "description": "Change the output format from text to JSON to ensure structured responses.",
+            "timestamp": null,
+            "priority": "medium"
+          },
+          {
+            "type": "action",
+            "title": "Building Classifier Logic",
+            "description": "Add if-else statements to define responses based on user input classifications.",
+            "timestamp": null,
+            "priority": "high"
+          }
+        ],
+        "actions": [
+          {
+            "title": "Experiment with Agent Creation",
+            "description": "Use the Agent Builder to experiment with creating different types of agents.",
+            "category": "build",
+            "estimatedMinutes": 30
+          },
+          {
+            "title": "Test Output Formats",
+            "description": "Test how changing the output format affects the responses of your agents.",
+            "category": "configure",
+            "estimatedMinutes": 15
+          },
+          {
+            "title": "Implement Advanced Features",
+            "description": "Explore and implement advanced features like web search or file search for your agents.",
+            "category": "build",
+            "estimatedMinutes": 45
+          }
+        ],
+        "summary": "The tutorial covers how to use the ChatGPT Agent Builder to create and customize AI agents for various tasks, focusing on practical implementation steps.",
+        "topics": [
+          "AI Agent Development",
+          "Workflow Creation",
+          "Custom Instructions",
+          "Output Formatting",
+          "Conditional Logic"
+        ]
+      }
+    },
+    {
+      "video_id": "rfonp8KiIso",
+      "url": "https://www.youtube.com/watch?v=rfonp8KiIso",
+      "title": "How to Build AI Agents Using Make.com (FREE COURSE 2025)",
+      "category": "workflow_automation",
+      "reason": "Representative of business workflow automation content.",
+      "transcript": {
+        "source": "youtube_transcript_api",
+        "segment_count": 1072,
+        "word_count": 8085
+      },
+      "eventrelay_baseline": {
+        "events_count": 6,
+        "actions_count": 4,
+        "topics_count": 5,
+        "timestamped_events_count": 0,
+        "high_priority_events_count": 4,
+        "event_titles": [
+          "Differences between Automation, AI Workflow, and AI Agents",
+          "Understanding AI Agents",
+          "Real World Example of AI Implementation",
+          "Task Manager Agent",
+          "Create a new Scenario in Make"
+        ],
+        "action_titles": [
+          "Create a Task Manager Agent in Make",
+          "Integrate Make with Notion",
+          "Explore Make's Integrations",
+          "Sign up for OpenAI"
+        ],
+        "topics": [
+          "AI Agents",
+          "Automation",
+          "Task Management",
+          "Integrations",
+          "Make.com"
+        ]
+      },
+      "aisa": {
+        "status": "not_run",
+        "reason": "No local AISA JSON was supplied. Live Bitmovin run also requires BITMOVIN_API_KEY, BITMOVIN_OUTPUT_ID, and direct MP4/HLS/DASH input URLs."
+      },
+      "value_evaluation": {
+        "status": "blocked",
+        "decision": "Cannot evaluate Bitmovin uplift without real AISA JSON for the same assets.",
+        "next_step": "Provide BITMOVIN_API_KEY, BITMOVIN_OUTPUT_ID, and direct MP4/HLS/DASH media URLs, or place exported AISA JSON files in --aisa-json-dir."
+      },
+      "raw_eventrelay_extraction": {
+        "events": [
+          {
+            "type": "topic",
+            "title": "Differences between Automation, AI Workflow, and AI Agents",
+            "description": "Explains the distinction among regular automations, AI workflows, and AI agents.",
+            "timestamp": null,
+            "priority": "high"
+          },
+          {
+            "type": "insight",
+            "title": "Understanding AI Agents",
+            "description": "An AI agent uses fuzzy logic to adapt its actions based on input rather than following a fixed path.",
+            "timestamp": null,
+            "priority": "high"
+          },
+          {
+            "type": "topic",
+            "title": "Real World Example of AI Implementation",
+            "description": "Illustrates how an AI agent can enhance lead research after initial data capture.",
+            "timestamp": null,
+            "priority": "medium"
+          },
+          {
+            "type": "resource",
+            "title": "Task Manager Agent",
+            "description": "A task manager agent that integrates with Telegram and Notion to help manage daily tasks.",
+            "timestamp": null,
+            "priority": "high"
+          },
+          {
+            "type": "action",
+            "title": "Create a new Scenario in Make",
+            "description": "Follow steps to create a new automation scenario in Make.",
+            "timestamp": null,
+            "priority": "medium"
+          },
+          {
+            "type": "action",
+            "title": "Setup AI Agent",
+            "description": "Create a new AI agent using OpenAI API from Make.",
+            "timestamp": null,
+            "priority": "high"
+          }
+        ],
+        "actions": [
+          {
+            "title": "Create a Task Manager Agent in Make",
+            "description": "Follow the tutorial to build a task manager agent that interacts via Telegram.",
+            "category": "build",
+            "estimatedMinutes": 30
+          },
+          {
+            "title": "Integrate Make with Notion",
+            "description": "Set up the connection between Make and Notion to manage tasks effectively.",
+            "category": "configure",
+            "estimatedMinutes": 15
+          },
+          {
+            "title": "Explore Make's Integrations",
+            "description": "Browse the available integrations within Make to see which apps can be connected.",
+            "category": "learn",
+            "estimatedMinutes": 20
+          },
+          {
+            "title": "Sign up for OpenAI",
+            "description": "Register or log in to obtain an API key necessary for creating AI agents.",
+            "category": "setup",
+            "estimatedMinutes": 10
+          }
+        ],
+        "summary": "The video provides a comprehensive tutorial on how to build AI agents using Make.com, detailing differences between standard automations and AI agents and showcasing a task manager agent for seamless task management.",
+        "topics": [
+          "AI Agents",
+          "Automation",
+          "Task Management",
+          "Integrations",
+          "Make.com"
+        ]
+      }
+    },
+    {
+      "video_id": "ftBWgcwvEk4",
+      "url": "https://www.youtube.com/watch?v=ftBWgcwvEk4",
+      "title": "8 Hour AI Agents Course in 30 Minutes (DeepLearning.AI)",
+      "category": "course_summary",
+      "reason": "Representative of long-form educational content compressed into actionable moments.",
+      "transcript": {
+        "source": "youtube_transcript_api",
+        "segment_count": 980,
+        "word_count": 6840
+      },
+      "eventrelay_baseline": {
+        "events_count": 4,
+        "actions_count": 4,
+        "topics_count": 4,
+        "timestamped_events_count": 4,
+        "high_priority_events_count": 3,
+        "event_titles": [
+          "Structure of the Agentic AI Course",
+          "Definition of Agentic AI Workflows",
+          "Spectrum of Autonomy in Agentic AI",
+          "Building Blocks of Agentic AI"
+        ],
+        "action_titles": [
+          "Review Course Modules",
+          "Implement a Simple Agentic Workflow",
+          "Explore Autonomy Levels",
+          "Research Agentic AI Tools"
+        ],
+        "topics": [
+          "Agentic AI Course Overview",
+          "Agentic Workflows",
+          "Autonomy in AI Systems",
+          "Building Blocks of AI"
+        ]
+      },
+      "aisa": {
+        "status": "not_run",
+        "reason": "No local AISA JSON was supplied. Live Bitmovin run also requires BITMOVIN_API_KEY, BITMOVIN_OUTPUT_ID, and direct MP4/HLS/DASH input URLs."
+      },
+      "value_evaluation": {
+        "status": "blocked",
+        "decision": "Cannot evaluate Bitmovin uplift without real AISA JSON for the same assets.",
+        "next_step": "Provide BITMOVIN_API_KEY, BITMOVIN_OUTPUT_ID, and direct MP4/HLS/DASH media URLs, or place exported AISA JSON files in --aisa-json-dir."
+      },
+      "raw_eventrelay_extraction": {
+        "events": [
+          {
+            "type": "topic",
+            "title": "Structure of the Agentic AI Course",
+            "description": "Overview of the five modules in Andrew Ng's Agentic AI course.",
+            "timestamp": "00:26",
+            "priority": "high"
+          },
+          {
+            "type": "insight",
+            "title": "Definition of Agentic AI Workflows",
+            "description": "An agentic AI workflow is defined as a process where an LLM based app executes multiple steps to complete a task.",
+            "timestamp": "01:24",
+            "priority": "high"
+          },
+          {
+            "type": "insight",
+            "title": "Spectrum of Autonomy in Agentic AI",
+            "description": "There is a spectrum of autonomy in agentic workflows, varying from predefined steps to more autonomous decision-making.",
+            "timestamp": "03:44",
+            "priority": "medium"
+          },
+          {
+            "type": "insight",
+            "title": "Building Blocks of Agentic AI",
+            "description": "The building blocks consist of models, tools, and capabilities that enable the AI system to perform various tasks.",
+            "timestamp": "04:39",
+            "priority": "high"
+          }
+        ],
+        "actions": [
+          {
+            "title": "Review Course Modules",
+            "description": "Review the content of all five modules of the Agentic AI course in detail.",
+            "category": "learn",
+            "estimatedMinutes": 120
+          },
+          {
+            "title": "Implement a Simple Agentic Workflow",
+            "description": "Create a basic agentic workflow based on the definition provided, using a large language model.",
+            "category": "build",
+            "estimatedMinutes": 90
+          },
+          {
+            "title": "Explore Autonomy Levels",
+            "description": "Experiment with creating workflows that differ in levels of autonomy to understand the impact on task completion.",
+            "category": "learn",
+            "estimatedMinutes": 60
+          },
+          {
+            "title": "Research Agentic AI Tools",
+            "description": "Investigate various tools that can be integrated into agentic workflows for enhanced functionality.",
+            "category": "research",
+            "estimatedMinutes": 45
+          }
+        ],
+        "summary": "The video summarizes the five modules of Andrew Ng's Agentic AI course, emphasizing the importance of understanding agentic workflows, the levels of autonomy, and the building blocks required for implementing agentic AI systems.",
+        "topics": [
+          "Agentic AI Course Overview",
+          "Agentic Workflows",
+          "Autonomy in AI Systems",
+          "Building Blocks of AI"
+        ]
+      }
+    }
+  ],
+  "interpretation": "The current run can judge EventRelay's transcript-first extraction behavior, but it cannot make a defensible yes/no call on Bitmovin uplift until real scene-level metadata exists for the same assets. Do not treat synthetic or model-generated scene descriptions as Bitmovin validation evidence."
+}

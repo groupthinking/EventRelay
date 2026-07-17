@@ -1000,6 +1000,60 @@ class TestAzureVisionPerformOCRStream:
 
         assert "read_result" in result
 
+    async def test_perform_ocr_stream_failed_status_raises(self):
+        import io
+        provider = _make_provider()
+        mock_client = MagicMock()
+        mock_read_resp = MagicMock()
+        mock_read_resp.headers = {"Operation-Location": "https://api/v1/operations/op-stream-fail"}
+        mock_client.read_in_stream.return_value = mock_read_resp
+        result_obj = MagicMock()
+        result_obj.status = "failed"
+        mock_client.get_read_result.return_value = result_obj
+        provider._vision_client = mock_client
+
+        mocks = _azure_sdk_mocks()
+        with patch.dict("sys.modules", mocks):
+            with pytest.raises(CloudAIError) as exc_info:
+                await provider._perform_ocr_stream(io.BytesIO(b"\xff\xd8\xff"))
+        assert "failed" in str(exc_info.value).lower()
+
+
+# ===========================================================================
+# _await_ocr_call (deadline / timeout enforcement)
+# ===========================================================================
+
+
+class TestAzureVisionAwaitOcrCall:
+    async def test_await_ocr_call_past_deadline_raises(self):
+        import asyncio
+
+        provider = _make_provider()
+        loop = asyncio.get_running_loop()
+        called = False
+
+        def _should_not_run():
+            nonlocal called
+            called = True
+            return "unused"
+
+        with pytest.raises(CloudAIError) as exc_info:
+            # Deadline already in the past -> remaining <= 0 branch.
+            await provider._await_ocr_call(loop.time() - 1, _should_not_run)
+        assert "timed out" in str(exc_info.value).lower()
+        assert called is False
+
+    async def test_await_ocr_call_slow_call_times_out(self):
+        import asyncio
+        import time as _time
+
+        provider = _make_provider()
+        loop = asyncio.get_running_loop()
+        # Tiny budget against a call that blocks longer -> wait_for TimeoutError branch.
+        with pytest.raises(CloudAIError) as exc_info:
+            await provider._await_ocr_call(loop.time() + 0.05, _time.sleep, 0.5)
+        assert "timed out" in str(exc_info.value).lower()
+
 
 # ===========================================================================
 # _analyze_image_content

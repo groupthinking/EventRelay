@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { backendHeaders } from '@/lib/pipeline-backend';
 
 /** Resolve the FastAPI backend base URL, or null if not configured. */
 function backendBaseUrl(): string | null {
@@ -25,6 +26,7 @@ export async function GET(request: Request) {
 
   try {
     const res = await fetch(`${base}/api/v1/agents/${encodeURIComponent(agentId)}/status`, {
+      headers: backendHeaders(),
       signal: AbortSignal.timeout(10_000),
     });
     if (!res.ok) {
