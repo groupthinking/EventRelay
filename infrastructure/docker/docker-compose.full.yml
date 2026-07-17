@@ -85,13 +85,14 @@ services:
       - APP_ENV=${APP_ENV:-production}
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_URL=redis://redis:6379/1
-      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
+      - MESSAGE_QUEUE_URL=redis://redis:6379/1
+      - ORCHESTRATOR_QUEUE_NAME=orchestrator_tasks
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - GOOGLE_AI_API_KEY=${GOOGLE_AI_API_KEY}
     depends_on:
       - backend
-      - rabbitmq
+      - redis
     networks:
       - uvai-network
 
