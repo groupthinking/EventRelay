@@ -28,6 +28,7 @@ import aiohttp
 # Google AI imports - using new google.genai SDK
 try:
     from google import genai
+    from google.genai import types
 
     GEMINI_AVAILABLE = True
 except ImportError:
@@ -282,7 +283,16 @@ class MultiLLMVideoProcessor:
             "temperature": 0.3,
         }
 
-        async with aiohttp.ClientSession() as session:
+        # Create SSL context to handle certificate issues
+        import ssl
+
+        ssl_context = ssl.create_default_context()
+        ssl_context.check_hostname = False
+        ssl_context.verify_mode = ssl.CERT_NONE
+
+        connector = aiohttp.TCPConnector(ssl=ssl_context)
+
+        async with aiohttp.ClientSession(connector=connector) as session:
             async with session.post(
                 "https://api.openai.com/v1/chat/completions",
                 headers=headers,
@@ -321,7 +331,16 @@ class MultiLLMVideoProcessor:
             ],
         }
 
-        async with aiohttp.ClientSession() as session:
+        # Create SSL context to handle certificate issues
+        import ssl
+
+        ssl_context = ssl.create_default_context()
+        ssl_context.check_hostname = False
+        ssl_context.verify_mode = ssl.CERT_NONE
+
+        connector = aiohttp.TCPConnector(ssl=ssl_context)
+
+        async with aiohttp.ClientSession(connector=connector) as session:
             async with session.post(
                 "https://api.anthropic.com/v1/messages",
                 headers=headers,
@@ -362,7 +381,16 @@ class MultiLLMVideoProcessor:
             "temperature": 0.3,
         }
 
-        async with aiohttp.ClientSession() as session:
+        # Create SSL context to handle certificate issues
+        import ssl
+
+        ssl_context = ssl.create_default_context()
+        ssl_context.check_hostname = False
+        ssl_context.verify_mode = ssl.CERT_NONE
+
+        connector = aiohttp.TCPConnector(ssl=ssl_context)
+
+        async with aiohttp.ClientSession(connector=connector) as session:
             async with session.post(
                 "https://api.x.ai/v1/chat/completions",
                 headers=headers,
@@ -392,7 +420,7 @@ class MultiLLMVideoProcessor:
             )
             return response.text
         except Exception as e:
-            raise Exception(f"Gemini execution failed: {e}") from e
+            raise Exception(f"Gemini execution failed: {e}")
 
     async def _generate_comprehensive_report(
         self,
@@ -517,15 +545,15 @@ async def main():
 
             print("\n💡 RECOMMENDATIONS:")
             for i, rec in enumerate(
-                result['comprehensive_result']['recommendations'], 1
+                result["comprehensive_result"]["recommendations"], 1
             ):
                 print(f"   {i}. {rec}")
 
             print("\n📋 TASK RESULTS:")
-            for task_name, task_data in result['comprehensive_result'][
-                'task_results'
+            for task_name, task_data in result["comprehensive_result"][
+                "task_results"
             ].items():
-                status = "✅" if task_data['success'] else "❌"
+                status = "✅" if task_data["success"] else "❌"
                 print(
                     f"   {status} {task_name}: {task_data['provider']} ({task_data['processing_time']:.2f}s)"
                 )
