@@ -6,11 +6,14 @@
 /** API routes that must stay reachable without a session when auth is enabled. */
 const PUBLIC_API_PREFIXES = [
   '/api/auth', // NextAuth sign-in / callback / csrf / session
-  '/api/health', // ops probes (if present)
+  '/api/health', // ops probes (liveness route at app/api/health)
 ] as const;
 
 /** Exact public API paths (prefix match would over-expose siblings). */
 const PUBLIC_API_EXACT = new Set([
+  // 308 redirect to the public /docs/api page — carries no data, so gating it
+  // behind a session only produces spurious 401s for docs links.
+  '/api/docs',
   // Stripe webhook verifies signature itself — must not require a user session.
   '/api/billing/webhook',
   // Free-tier status + acquisition checkout are pre-login surfaces.

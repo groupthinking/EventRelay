@@ -27,6 +27,17 @@ describe('auth path policy', () => {
     expect(needsAuthentication('/api/billing/renew')).toBe(false);
   });
 
+  it('keeps ops and docs surfaces public', () => {
+    // /api/health is a dependency-free liveness probe (app/api/health/route.ts);
+    // /api/docs only 308-redirects to the public /docs/api page.
+    expect(isPublicApiPath('/api/health')).toBe(true);
+    expect(needsAuthentication('/api/health')).toBe(false);
+    expect(isPublicApiPath('/api/docs')).toBe(true);
+    expect(needsAuthentication('/api/docs')).toBe(false);
+    // Exact-match only — siblings under /api/docs/* stay gated.
+    expect(needsAuthentication('/api/docs/internal')).toBe(true);
+  });
+
   it('still gates non-allowlisted billing routes', () => {
     // A sibling billing route with no explicit exemption stays protected —
     // guards against prefix-match over-exposure.
