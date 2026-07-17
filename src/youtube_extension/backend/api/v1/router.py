@@ -1709,8 +1709,8 @@ async def get_or_create_videopack(request: VideoPackRequest):
         )
         return ApiResponse.success(pack.model_dump())
     except Exception as e:
-        logger.error(f"Failed to create VideoPack: {e}")
-        raise HTTPException(status_code=500, detail=f"VideoPack generation failed: {e}")
+        logger.error(f"Failed to create VideoPack: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post(
@@ -1758,8 +1758,8 @@ async def generate_blueprint(request: BlueprintRequest):
         )
         return ApiResponse.success(blueprint)
     except Exception as e:
-        logger.error(f"Failed to generate blueprint: {e}")
-        raise HTTPException(status_code=500, detail=f"Blueprint generation failed: {e}")
+        logger.error(f"Failed to generate blueprint: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post(

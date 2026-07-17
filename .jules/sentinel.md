@@ -5,4 +5,4 @@
 ## 2026-07-15 - Prevent Information Disclosure in 500 Responses
 **Vulnerability:** API routes were returning internal server exceptions and stack traces directly to the client via `HTTPException(..., detail=str(e))`.
 **Learning:** Developers often unintentionally leak sensitive deployment context (e.g., paths, database errors) when relying on generic exception catching blocks.
-**Prevention:** Hardcode static error strings for unexpected 500 exceptions (e.g., `detail="Internal server error"`) while ensuring the full exception trace is securely logged to internal monitoring systems (e.g., via `logger.error(..., exc_info=True)`).
+**Prevention:** Hardcode static error strings for unexpected 500 exceptions (e.g., `detail="Internal server error"`). The exception is still recorded server-side via `logger.error(...)`; use `exc_info=True` on handlers where the full traceback aids debugging (this is not yet applied uniformly across every handler). Client responses must never echo `str(e)` — including via f-strings such as `detail=f"...: {e}"`, which leak the same internal detail as `detail=str(e)`.

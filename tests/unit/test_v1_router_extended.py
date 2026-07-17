@@ -336,13 +336,17 @@ class TestHealthEndpoint:
         assert data["status"] == "healthy"
 
     def test_health_check_service_error(self, client):
-        """When get_service raises, endpoint returns 500."""
+        """When get_service raises, endpoint returns a generic 500 (no detail leak)."""
         with patch(
             "youtube_extension.backend.api.v1.router.get_service",
-            side_effect=RuntimeError("boom"),
+            side_effect=RuntimeError("boom-secret-internal-detail"),
         ):
             resp = client.get("/api/v1/health")
         assert resp.status_code == 500
+        # Regression guard: the 500 body must be generic and must NOT echo the
+        # underlying exception message (information-disclosure hardening).
+        assert resp.json()["detail"] == "Internal server error"
+        assert "boom-secret-internal-detail" not in resp.text
 
     def test_detailed_health_success(self, client):
         with patch(
@@ -358,10 +362,12 @@ class TestHealthEndpoint:
     def test_detailed_health_error(self, client):
         with patch(
             "youtube_extension.backend.api.v1.router.get_service",
-            side_effect=RuntimeError("boom"),
+            side_effect=RuntimeError("boom-secret-internal-detail"),
         ):
             resp = client.get("/api/v1/health/detailed")
         assert resp.status_code == 500
+        assert resp.json()["detail"] == "Internal server error"
+        assert "boom-secret-internal-detail" not in resp.text
 
 
 # ===========================================================================
@@ -2311,3 +2317,61 @@ class TestRunAgentStatus:
             asyncio.run(router_module._run_agent(execution, [{"id": "e1"}]))
         assert execution.status == AgentStatus.complete
         assert execution.result == {"output": "done"}
+
+
+# ===========================================================================
+# Information-disclosure hardening: 500 responses must never echo str(e)
+# ===========================================================================
+
+
+class TestErrorDisclosureHardening:
+    """Regression guards for the sanitized 500 responses.
+
+    Each endpoint below previously returned the raw exception text (either
+    ``detail=str(e)`` or an f-string like ``detail=f"...: {e}"``). These tests
+    force a distinctive exception in the handler's try-block and assert the
+    client receives only the generic message — never the internal detail.
+    """
+
+    _LEAK = "SENSITIVE-LEAK-TOKEN-should-not-surface"
+
+    def test_blueprint_error_is_generic(self, client):
+        fake_mod = MagicMock()
+        fake_mod.EnhancedVideoProcessor.side_effect = RuntimeError(self._LEAK)
+        with patch.dict(
+            sys.modules,
+            {"youtube_extension.backend.enhanced_video_processor": fake_mod},
+        ):
+            resp = client.post(
+                "/api/v1/projects/blueprint",
+                json={"video_url": "https://youtu.be/auJzb1D-fag"},
+            )
+        assert resp.status_code == 500
+        assert resp.json()["detail"] == "Internal server error"
+        assert self._LEAK not in resp.text
+
+    def test_videopack_error_is_generic(self, client):
+        fake_schema = MagicMock()
+        fake_schema.VideoPackV0.side_effect = RuntimeError(self._LEAK)
+        with patch.dict(
+            sys.modules,
+            {"youtube_extension.videopack.schema": fake_schema},
+        ):
+            resp = client.post(
+                "/api/v1/video/pack", json={"video_id": "auJzb1D-fag"}
+            )
+        assert resp.status_code == 500
+        assert resp.json()["detail"] == "Internal server error"
+        assert self._LEAK not in resp.text
+
+    def test_generate_project_code_error_is_generic(self, client):
+        fake_mod = MagicMock()
+        fake_mod.AICodeGenerator.side_effect = RuntimeError(self._LEAK)
+        with patch.dict(
+            sys.modules,
+            {"youtube_extension.backend.ai_code_generator": fake_mod},
+        ):
+            resp = client.post("/api/v1/projects/generate", json={})
+        assert resp.status_code == 500
+        assert resp.json()["detail"] == "Internal server error"
+        assert self._LEAK not in resp.text
