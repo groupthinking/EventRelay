@@ -356,54 +356,52 @@ class APICostMonitor:
             today = datetime.now(timezone.utc).date().isoformat()
             daily_cost = await self.get_daily_cost(today)
 
-            if daily_cost >= self.alert_threshold and not self._alert_already_sent(
+            if daily_cost >= self.alert_threshold and self._claim_alert(
                 today, "threshold"
             ):
                 await self._send_budget_alert(daily_cost, 'threshold')
-                self._mark_alert_sent(today, "threshold")
 
-            if daily_cost >= self.daily_budget and not self._alert_already_sent(
+            if daily_cost >= self.daily_budget and self._claim_alert(
                 today, "exceeded"
             ):
                 await self._send_budget_alert(daily_cost, 'exceeded')
-                self._mark_alert_sent(today, "exceeded")
 
         except Exception as e:
             logger.error(f"Error checking budget alerts: {e}")
 
-    def _alert_already_sent(self, date: str, alert_type: str) -> bool:
-        """Return True if ``alert_type`` was already dispatched for ``date``."""
-        column = self._ALERT_STATE_COLUMNS[alert_type]  # KeyError on unknown type
-        try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            cursor.execute(
-                f"SELECT {column} FROM daily_budgets WHERE date = ?", (date,)
-            )
-            row = cursor.fetchone()
-            conn.close()
-            return bool(row[0]) if row else False
-        except Exception as e:
-            logger.error(f"Error reading budget alert state: {e}")
-            # Fail open (report "not sent") so a transient DB error never
-            # permanently suppresses a real budget alert.
-            return False
+    def _claim_alert(self, date: str, alert_type: str) -> bool:
+        """Atomically claim today's alert of ``alert_type``.
 
-    def _mark_alert_sent(self, date: str, alert_type: str) -> None:
-        """Persist that ``alert_type`` has been dispatched for ``date``."""
+        Returns True only for the caller that first flips the day's flag from
+        0 to 1, in a single ``INSERT ... ON CONFLICT ... DO UPDATE ... WHERE``
+        statement. Because the read and write are one atomic operation, two
+        callers racing on the same SQLite database (even across processes)
+        cannot both win, so each alert is dispatched at most once per UTC day.
+        """
         column = self._ALERT_STATE_COLUMNS[alert_type]  # KeyError on unknown type
         try:
             conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            cursor.execute(
-                f"INSERT INTO daily_budgets (date, {column}) VALUES (?, 1) "
-                f"ON CONFLICT(date) DO UPDATE SET {column} = 1",
-                (date,),
-            )
-            conn.commit()
-            conn.close()
+            try:
+                cursor = conn.cursor()
+                cursor.execute(
+                    f"INSERT INTO daily_budgets (date, {column}) VALUES (?, 1) "
+                    f"ON CONFLICT(date) DO UPDATE SET {column} = 1 "
+                    f"WHERE daily_budgets.{column} = 0",
+                    (date,),
+                )
+                conn.commit()
+                # rowcount is 1 when this caller inserted the row or flipped the
+                # flag 0->1, and 0 when the flag was already set (WHERE matched
+                # nothing) — i.e. another caller already claimed it.
+                return cursor.rowcount > 0
+            finally:
+                conn.close()
         except Exception as e:
-            logger.error(f"Error recording budget alert state: {e}")
+            logger.error(f"Error claiming budget alert: {e}")
+            # Fail closed: if we cannot prove we won the claim, do not send, so a
+            # transient DB error can never produce duplicate alerts. The alert
+            # condition is re-evaluated on the next usage record.
+            return False
 
     async def _send_webhook_notification(self, message: str):
         """Send an async webhook notification if URL is configured.

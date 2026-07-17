@@ -496,13 +496,16 @@ class TestBudgetAlerts:
         # Each alert type dispatched exactly once despite repeated checks.
         assert sorted(sent) == ["exceeded", "threshold"]
 
-    async def test_alert_state_persisted_per_type(self, monitor):
+    async def test_claim_alert_is_atomic_and_once(self, monitor):
         today = "2026-07-17"
-        assert monitor._alert_already_sent(today, "threshold") is False
-        monitor._mark_alert_sent(today, "threshold")
-        assert monitor._alert_already_sent(today, "threshold") is True
-        # Marking one type does not mark the other.
-        assert monitor._alert_already_sent(today, "exceeded") is False
+        # First caller wins the claim; the second (racing) caller loses.
+        assert monitor._claim_alert(today, "threshold") is True
+        assert monitor._claim_alert(today, "threshold") is False
+        # Each alert type is claimed independently.
+        assert monitor._claim_alert(today, "exceeded") is True
+        assert monitor._claim_alert(today, "exceeded") is False
+        # A different day starts fresh.
+        assert monitor._claim_alert("2026-07-18", "threshold") is True
 
     async def test_webhook_payload_supports_slack_and_discord(self, monitor, monkeypatch):
         """Webhook payload carries both Slack `text` and Discord `content`."""
