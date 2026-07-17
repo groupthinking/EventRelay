@@ -230,7 +230,13 @@ class CloudNativeVideoProcessor:
             # error_message is persisted to Firestore and returned in the sync
             # response, and get_video_status/get_video_result echo it back to
             # callers, so it must never carry raw exception text (CWE-209).
-            logger.error(f"Error processing video {video_id}: {str(e)}", exc_info=True)
+            # Neutralize CR/LF in user-controlled values before logging so they
+            # cannot forge or split log records (CWE-117 log injection).
+            safe_video_id = str(video_id).replace("\r", " ").replace("\n", " ")
+            safe_error = str(e).replace("\r", " ").replace("\n", " ")
+            logger.error(
+                "Error processing video %s: %s", safe_video_id, safe_error, exc_info=True
+            )
             client_safe_error = "Internal server error"
 
             # Update state with a user-safe message
