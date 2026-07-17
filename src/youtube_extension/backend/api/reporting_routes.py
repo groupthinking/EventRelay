@@ -40,7 +40,7 @@ async def generate_dashboard_url(
         )
         return DashboardEmbedResponse(embed_url=url)
     except Exception as e:
-        logger.error(f"Unhandled error in generate_dashboard_url: {e}", exc_info=True)
+        logger.error(f"Failed to generate dashboard embed URL: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.get("/dashboards")

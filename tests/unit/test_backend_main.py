@@ -283,6 +283,10 @@ class TestLegacyChatEndpoint:
                 json={"message": "Boom", "session_id": "err"},
             )
         assert response.status_code == 500
+        # Regression guard for information disclosure: the sanitized response
+        # must not leak the raw exception message back to the client.
+        assert response.json()["detail"] == "Internal server error"
+        assert "service broken" not in response.text
 
 
 # ===========================================================================

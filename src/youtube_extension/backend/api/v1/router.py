@@ -248,7 +248,7 @@ async def health_check_v1(
         )
         return HealthResponse(**health_status)
     except Exception as e:
-        logger.error(f"Health check failed: {e}")
+        logger.error(f"Health check failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -277,7 +277,7 @@ async def detailed_health_check_v1(
             "timestamp": datetime.now().isoformat(),
         }
     except Exception as e:
-        logger.error(f"Detailed health check failed: {e}")
+        logger.error(f"Detailed health check failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -760,7 +760,7 @@ async def process_video_markdown_v1(
         health_service.increment_metric("error_total")
         raise
     except Exception as e:
-        logger.error(f"Error in markdown processing: {e}")
+        logger.error(f"Error in markdown processing: {e}", exc_info=True)
         health_service.increment_metric("error_total")
         raise HTTPException(status_code=500, detail="Internal server error")
 
@@ -798,7 +798,7 @@ async def video_to_software_v1(
         return VideoToSoftwareResponse(**result)
 
     except Exception as e:
-        logger.error(f"Video-to-software processing failed: {e}")
+        logger.error(f"Video-to-software processing failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -822,7 +822,7 @@ async def get_cache_stats_v1(cache_service: CacheService = Depends(get_cache_ser
         _stats_cache_time = now
         return CacheStats(**stats)
     except Exception as e:
-        logger.error(f"Error getting cache stats: {e}")
+        logger.error(f"Error getting cache stats: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -851,7 +851,7 @@ async def get_cached_video_v1(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error retrieving cached video: {e}")
+        logger.error(f"Error retrieving cached video: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -874,7 +874,7 @@ async def clear_video_cache_v1(
             "timestamp": datetime.now().isoformat(),
         }
     except Exception as e:
-        logger.error(f"Error clearing video cache: {e}")
+        logger.error(f"Error clearing video cache: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -894,7 +894,7 @@ async def clear_all_cache_v1(cache_service: CacheService = Depends(get_cache_ser
             "timestamp": datetime.now().isoformat(),
         }
     except Exception as e:
-        logger.error(f"Error clearing all cache: {e}")
+        logger.error(f"Error clearing all cache: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -932,7 +932,7 @@ async def list_videos_v1(
         }
 
     except Exception as e:
-        logger.error(f"Error listing videos: {e}")
+        logger.error(f"Error listing videos: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -956,7 +956,7 @@ async def get_video_detail_v1(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error getting video detail: {e}")
+        logger.error(f"Error getting video detail: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -972,7 +972,7 @@ async def get_learning_log_v1(data_service: DataService = Depends(get_data_servi
         learning_log = data_service.get_learning_log()
         return learning_log
     except Exception as e:
-        logger.error(f"Error getting learning log: {e}")
+        logger.error(f"Error getting learning log: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -1023,7 +1023,7 @@ async def get_actions_by_video_v1(video_id: str):
         actions = repo.get_by_video_id(video_id)
         return actions
     except Exception as e:
-        logger.error(f"Error retrieving actions for {video_id}: {e}")
+        logger.error(f"Error retrieving actions for {video_id}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -1071,7 +1071,7 @@ async def update_action_v1(action_id: str, payload: dict[str, Any]):
                     logger.debug("Action feedback recording failed", exc_info=True)
         return {"success": bool(success)}
     except Exception as e:
-        logger.error(f"Error updating action {action_id}: {e}")
+        logger.error(f"Error updating action {action_id}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -1118,7 +1118,7 @@ async def submit_feedback_v1(
             raise HTTPException(status_code=500, detail="Failed to save feedback")
 
     except Exception as e:
-        logger.error(f"Error saving feedback: {e}")
+        logger.error(f"Error saving feedback: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -1138,7 +1138,7 @@ async def get_metrics_v1(
         metrics_lines = health_service.get_metrics_prometheus_format()
         return JSONResponse(content="\n".join(metrics_lines), media_type="text/plain")
     except Exception as e:
-        logger.error(f"Metrics endpoint failed: {e}")
+        logger.error(f"Metrics endpoint failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -1158,7 +1158,7 @@ async def ingest_performance_alert_v1(payload: dict[str, Any]):
         )
         return {"status": "ok", "recorded": metric_name}
     except Exception as e:
-        logger.error(f"Failed to ingest performance alert: {e}")
+        logger.error(f"Failed to ingest performance alert: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -1176,7 +1176,7 @@ async def ingest_performance_report_v1(report: dict[str, Any]):
                 )
         return {"status": "ok", "metrics_recorded": len(metrics)}
     except Exception as e:
-        logger.error(f"Failed to ingest performance report: {e}")
+        logger.error(f"Failed to ingest performance report: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -1709,7 +1709,7 @@ async def get_or_create_videopack(request: VideoPackRequest):
         )
         return ApiResponse.success(pack.model_dump())
     except Exception as e:
-        logger.error(f"Failed to create VideoPack: {e}")
+        logger.error(f"Failed to create VideoPack: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -1758,7 +1758,7 @@ async def generate_blueprint(request: BlueprintRequest):
         )
         return ApiResponse.success(blueprint)
     except Exception as e:
-        logger.error(f"Failed to generate blueprint: {e}")
+        logger.error(f"Failed to generate blueprint: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -1784,7 +1784,7 @@ async def generate_project_code(request: GenerateCodeRequest):
         )
         return ApiResponse.success(result)
     except Exception as e:
-        logger.error(f"Code generation failed: {e}")
+        logger.error(f"Code generation failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
