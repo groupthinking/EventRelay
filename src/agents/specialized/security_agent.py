@@ -256,7 +256,7 @@ class SecurityAgent(BaseAgent):
                         "file": str(py_file.relative_to(self.project_path)),
                         "description": "Debug mode enabled in code"
                     })
-            except:
+            except Exception:
                 pass
 
         return {
@@ -287,7 +287,7 @@ class SecurityAgent(BaseAgent):
                             "package": pkg,
                             "description": f"Potentially vulnerable package: {pkg}"
                         })
-            except:
+            except Exception:
                 pass
 
         # Check package.json
@@ -311,7 +311,7 @@ class SecurityAgent(BaseAgent):
                             "package": f"{dep_name}@{version}",
                             "description": "Outdated lodash version with known vulnerabilities"
                         })
-            except:
+            except Exception:
                 pass
 
         return {
@@ -407,7 +407,7 @@ class SecurityAgent(BaseAgent):
                     })
 
                 # Check for eval/exec with user input
-                if ("eval(" in content or "exec(" in content) and "input" in content:
+                if re.search(r"\b(?:eval|exec)\s*\(", content) and "input" in content:
                     validation_issues.append({
                         "type": "dangerous_eval",
                         "severity": "critical",
