@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback, useMemo, memo } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { clsx } from 'clsx';
 
 /* ═══════════════════════════════════════════
@@ -53,7 +53,7 @@ function formatTimestamp(seconds: number): string {
  * @param isPast - Whether this segment ends before the current playback position.
  * @param onSeek - Called with the segment start time when the row is activated.
  */
-const SegmentRow = memo(function SegmentRow({
+function SegmentRow({
   segment,
   isActive,
   isPast,
@@ -138,7 +138,7 @@ const SegmentRow = memo(function SegmentRow({
       </p>
     </div>
   );
-});
+}
 
 /**
  * Renders an interactive transcript with speaker filtering, search, and playback progress.
@@ -176,29 +176,10 @@ export default function InteractiveTranscript({
   }, [segments, filterSpeaker, searchQuery]);
 
   const activeSegmentId = useMemo(() => {
-    // Optimization: Use binary search (O(log N)) instead of Array.find() (O(N))
-    // This runs on every time update from the video player and prevents main thread blocking.
-    if (!segments || segments.length === 0) return null;
-
-    let low = 0;
-    let high = segments.length - 1;
-
-    while (low <= high) {
-      const mid = Math.floor((low + high) / 2);
-      const segment = segments[mid];
-
-      if (currentTime >= segment.startTime && currentTime < segment.endTime) {
-        return segment.id;
-      }
-
-      if (currentTime < segment.startTime) {
-        high = mid - 1;
-      } else {
-        low = mid + 1;
-      }
-    }
-
-    return null;
+    const active = segments.find(
+      (s) => currentTime >= s.startTime && currentTime < s.endTime,
+    );
+    return active?.id || null;
   }, [segments, currentTime]);
 
   return (

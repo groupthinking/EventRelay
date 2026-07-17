@@ -49,7 +49,7 @@ async def run_tests():
         # It calls get_enhanced_video_processor() which might fail if dependencies are missing
         # We expect 503 or 500 if dependencies fail, or 200 if working.
         # But we mostly care that the route exists.
-        response = await client.post("/process_video", json={"youtube_url": "https://www.youtube.com/watch?v=auJzb1D-fag", "include_transcript": False, "include_ai_analysis": False})
+        response = await client.post("/process_video", json={"youtube_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ", "include_transcript": False, "include_ai_analysis": False})
         print(f"Status: {response.status_code}")
         # print(f"Response: {response.json()}") # Might be error details
 

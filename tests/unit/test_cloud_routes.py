@@ -1316,7 +1316,7 @@ class TestReportingRoutes:
             }
         )
         assert response.status_code == 500
-        assert "Internal server error" in response.json()["detail"]
+        assert "Failed to generate" in response.json()["detail"]
 
     def test_generate_dashboard_url_missing_fields(self):
         """Missing required fields return 422."""

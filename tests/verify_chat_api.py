@@ -33,7 +33,7 @@ async def test_chat_endpoint():
     # Test case 2: Chat with video context (Rick Roll)
     payload_with_video = {
         "query": "What is this video about?",
-        "video_url": "https://www.youtube.com/watch?v=auJzb1D-fag",
+        "video_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
         "session_id": "test_session_2",
         "context": "universal-ask",
     }

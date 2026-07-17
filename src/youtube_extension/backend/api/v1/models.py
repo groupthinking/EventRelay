@@ -738,32 +738,6 @@ class FeedbackResponse(BaseModel):
         }
 
 
-class VideoPackRequest(BaseModel):
-    """Request to create or retrieve a VideoPack."""
-
-    video_url: Optional[str] = None
-    job_id: Optional[str] = None
-    video_id: Optional[str] = None
-
-
-class BlueprintRequest(BaseModel):
-    """Request to generate a project blueprint (build plan)."""
-
-    video_url: Optional[str] = None
-    job_id: Optional[str] = None
-    preferences: Optional[dict[str, Any]] = Field(default_factory=dict)
-
-
-class GenerateCodeRequest(BaseModel):
-    """Request to generate code from a blueprint or video analysis."""
-
-    video_url: Optional[str] = None
-    job_id: Optional[str] = None
-    project_type: str = Field("fullstack_app", description="Type of project to generate")
-    framework: str = Field("nextjs", description="Frontend/Backend framework")
-    blueprint: Optional[dict[str, Any]] = None
-
-
 class ErrorResponse(BaseModel):
     """Standard error response model"""
 
