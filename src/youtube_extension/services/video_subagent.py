@@ -7,6 +7,7 @@ Uses MCP tools to fetch and process YouTube videos with real data extraction.
 import asyncio
 import json
 import logging
+import os
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -23,10 +24,15 @@ class YouTubeVideoSubagent:
     """
 
     def __init__(self):
-        # Updated to point to the new Video Agent Server
-        self.mcp_server_path = "/Users/garvey/Dev/OpenAI_Hub/mcp-servers/servers/video_agent_server.py"
-        self.results_dir = Path("/Users/garvey/UVAI/youtube_processing_results")
-        self.results_dir.mkdir(exist_ok=True)
+        # Path to the MCP video agent server. Configurable via env var so the
+        # code never depends on a specific machine layout. Defaults to empty
+        # (caller must configure) rather than a hardcoded/non-existent path.
+        self.mcp_server_path = os.getenv("MCP_VIDEO_AGENT_SERVER_PATH", "")
+        # Results directory, configurable via env var with a repo-relative default.
+        self.results_dir = Path(
+            os.getenv("YOUTUBE_RESULTS_DIR", "youtube_processing_results")
+        )
+        self.results_dir.mkdir(parents=True, exist_ok=True)
 
     async def process_youtube_video(self, url: str) -> dict[str, Any]:
         """

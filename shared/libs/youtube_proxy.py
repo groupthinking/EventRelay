@@ -5,11 +5,15 @@ Prevents timeout errors and handles rate limiting for YouTube API calls
 Integrates sophisticated retry and rate limiting infrastructure
 """
 
+from __future__ import annotations
+
 import asyncio
 import json
 import logging
+import os
 import random
 import time
+import urllib.parse
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
@@ -25,12 +29,63 @@ try:
         CouldNotRetrieveTranscript,
         NoTranscriptFound,
     )
+    from youtube_transcript_api.proxies import GenericProxyConfig
     YOUTUBE_DEPS_AVAILABLE = True
 except ImportError as e:
     YOUTUBE_DEPS_AVAILABLE = False
+    GenericProxyConfig = None  # type: ignore[assignment,misc]
     logging.warning(f"YouTube dependencies not available: {e}")
 
 logger = logging.getLogger("youtube_api_proxy")
+
+
+def _get_webshare_proxy_url() -> str | None:
+    """Return the validated WEBSHARE_PROXY_URL, or None for direct connection."""
+    url = os.getenv("WEBSHARE_PROXY_URL", "").strip()
+    if not url:
+        return None
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme not in ("http", "https", "socks5") or not parsed.hostname:
+        logger.warning(
+            "WEBSHARE_PROXY_URL is set but malformed — falling back to direct connection"
+        )
+        return None
+    return url
+
+
+def _get_transcript_proxy_config() -> GenericProxyConfig | None:
+    """Return a youtube-transcript-api proxy config object, or None.
+
+    youtube-transcript-api >=1.0 replaced the ``proxies=`` keyword with a
+    ``proxy_config`` constructor argument accepting a proxy config object.
+    """
+    url = _get_webshare_proxy_url()
+    if not url:
+        return None
+    if GenericProxyConfig is None:
+        logger.warning(
+            "WEBSHARE_PROXY_URL is set but youtube-transcript-api proxy support "
+            "is unavailable (requires youtube-transcript-api>=1.0) — falling back "
+            "to direct connection"
+        )
+        return None
+    return GenericProxyConfig(http_url=url, https_url=url)
+
+
+def _redact_proxy_credentials(text: str) -> str:
+    """Strip user:pass credentials of the configured proxy URL from text."""
+    url = os.getenv("WEBSHARE_PROXY_URL", "").strip()
+    if not url or url not in text:
+        return text
+    try:
+        parsed = urllib.parse.urlparse(url)
+        netloc = parsed.hostname or ""
+        if parsed.port:
+            netloc = f"{netloc}:{parsed.port}"
+        redacted = parsed._replace(netloc=netloc).geturl()
+    except (ValueError, AttributeError):
+        redacted = "<proxy-url>"
+    return text.replace(url, redacted)
 
 class YouTubeErrorType(Enum):
     """YouTube API specific error types"""
@@ -282,20 +337,20 @@ class YouTubeAPIProxy:
 
                 # Check if we should retry
                 if attempt > self.retry_config.max_retries:
-                    logger.error(f"❌ {operation_name} failed after {attempt-1} retries: {error}")
+                    logger.error(f"❌ {operation_name} failed after {attempt-1} retries: {_redact_proxy_credentials(str(error))}")
                     self.circuit_breaker.record_failure()
                     self.consecutive_errors += 1
                     break
 
                 # Non-retryable errors
                 if error_type in [YouTubeErrorType.VIDEO_NOT_FOUND, YouTubeErrorType.PRIVATE_VIDEO]:
-                    logger.warning(f"⚠️ {operation_name} non-retryable error: {error}")
+                    logger.warning(f"⚠️ {operation_name} non-retryable error: {_redact_proxy_credentials(str(error))}")
                     break
 
                 # Calculate retry delay
                 retry_delay = self._calculate_retry_delay(attempt, error_type)
 
-                logger.warning(f"⚠️ {operation_name} attempt {attempt} failed ({error_type.value}), retrying in {retry_delay:.2f}s: {error}")
+                logger.warning(f"⚠️ {operation_name} attempt {attempt} failed ({error_type.value}), retrying in {retry_delay:.2f}s: {_redact_proxy_credentials(str(error))}")
 
                 self.stats["retries_executed"] += 1
                 await asyncio.sleep(retry_delay)
@@ -309,11 +364,24 @@ class YouTubeAPIProxy:
         """Get video transcript with retry logic and fallback methods"""
 
         async def _transcript_operation():
-            transcript_data = []
+            proxy_url = _get_webshare_proxy_url()
+            proxy_config = _get_transcript_proxy_config()
+            # youtube-transcript-api is synchronous/blocking network I/O; run it
+            # in an executor so it doesn't stall the event loop. (get_event_loop
+            # matches the convention used across the rest of this codebase.)
+            loop = asyncio.get_event_loop()
 
             # Method 1: Direct transcript API
+            # youtube-transcript-api >=1.0 replaced the ``get_transcript`` class
+            # method with an instance ``fetch`` that returns a FetchedTranscript;
+            # ``to_raw_data`` yields the list-of-dicts shape the rest of the
+            # pipeline expects. The ``proxies=`` kwarg was replaced by a
+            # ``proxy_config`` constructor argument.
             try:
-                transcript = YouTubeTranscriptApi.get_transcript(video_id)
+                yt_api = YouTubeTranscriptApi(proxy_config=proxy_config)
+                transcript = await loop.run_in_executor(
+                    None, lambda: yt_api.fetch(video_id).to_raw_data()
+                )
                 if transcript:
                     logger.info(f"✅ Direct transcript extraction: {len(transcript)} segments")
                     return transcript
@@ -321,10 +389,25 @@ class YouTubeAPIProxy:
                 logger.debug(f"Direct transcript failed: {e}")
 
             # Method 2: Alternative language codes
+            # ``list_transcripts`` class method is now the instance ``list``;
+            # each Transcript's ``fetch`` returns a FetchedTranscript, so
+            # ``to_raw_data`` restores the list-of-dicts.
             try:
-                transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+                yt_api = YouTubeTranscriptApi(proxy_config=proxy_config)
+                transcript_list = await loop.run_in_executor(
+                    None, lambda: yt_api.list(video_id)
+                )
                 for transcript_item in transcript_list:
-                    transcript = transcript_item.fetch()
+                    # A single language failing (disabled/blocked) must not abort
+                    # the whole loop — try the next available transcript.
+                    try:
+                        transcript = await loop.run_in_executor(
+                            None,
+                            lambda item=transcript_item: item.fetch().to_raw_data(),
+                        )
+                    except Exception as item_e:
+                        logger.debug(f"Alternative language item failed: {item_e}")
+                        continue
                     if transcript:
                         logger.info(f"✅ Alternative language transcript: {len(transcript)} segments")
                         return transcript
@@ -340,6 +423,8 @@ class YouTubeAPIProxy:
                     'quiet': True,
                     'socket_timeout': 30
                 }
+                if proxy_url:
+                    ydl_opts['proxy'] = proxy_url
 
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     info = ydl.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=False)
@@ -354,7 +439,9 @@ class YouTubeAPIProxy:
             except Exception as e:
                 logger.debug(f"yt-dlp extraction failed: {e}")
 
-            raise CouldNotRetrieveTranscript(f"All transcript extraction methods failed for {video_id}")
+            # CouldNotRetrieveTranscript(>=1.0) takes a bare video_id and builds
+            # its own message/URL; passing a sentence corrupts the generated URL.
+            raise CouldNotRetrieveTranscript(video_id)
 
         return await self._execute_with_retry(_transcript_operation, "transcript")
 

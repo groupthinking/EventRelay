@@ -1,3 +1,5 @@
+import 'server-only';
+
 /**
  * SSRF guard for server-side fetches of user-supplied URLs.
  *

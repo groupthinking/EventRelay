@@ -1,0 +1,309 @@
+name: "Hybrid Refactor Verification Gates"
+
+# Fallback for .github/agentic/verification-loop.aw.yml
+# Runs the same 4-layer verification on every PR targeting the refactor branch
+
+on:
+  pull_request:
+    branches:
+      - "refactor/hybrid-infra-v2"
+    types: [opened, synchronize, ready_for_review]
+  workflow_dispatch:
+    inputs:
+      skip_docker:
+        description: "Skip Docker build gate (for debugging)"
+        type: boolean
+        default: false
+
+concurrency:
+  group: verification-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}/eventrelay-test
+
+jobs:
+  # GATE 1: Docker Build (validates Dockerfile, ffmpeg, node)
+  docker-build:
+    name: "Gate 1: Docker Build"
+    runs-on: ubuntu-latest
+    if: ${{ !inputs.skip_docker }}
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: false
+          load: true
+          tags: eventrelay-test:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Verify ffmpeg installed
+        run: docker run --rm eventrelay-test:${{ github.sha }} ffmpeg -version
+
+      - name: Verify Node.js installed
+        run: docker run --rm eventrelay-test:${{ github.sha }} node --version
+
+      - name: Verify Python dependencies
+        run: docker run --rm eventrelay-test:${{ github.sha }} python -c "import uvicorn; import fastapi; print('OK')"
+
+      - name: Comment on failure
+        if: failure()
+        uses: actions/github-script@v9
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '## Gate 1 FAILED: Docker Build\n\nThe Dockerfile failed to build or is missing required dependencies (ffmpeg/node).\n\n**Self-correction hint (Tier 1):** Check the build logs above for the specific error.\n\n**Agent:** Please fix and push again.'
+            })
+
+  # GATE 2: Python Test Suite (6,900+ tests)
+  pytest:
+    name: "Gate 2: Python Test Suite"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio pytest-timeout pytest-cov
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: Run test suite
+        id: tests
+        run: |
+          pytest tests/ \
+            --timeout=300 \
+            --tb=short \
+            -x \
+            --junitxml=test-results.xml \
+            -q 2>&1 | tee test-output.txt
+        env:
+          PYTHONPATH: .
+          CI: true
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results
+          path: |
+            test-results.xml
+            test-output.txt
+
+      - name: Comment on failure
+        if: failure()
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const fs = require('fs');
+            let output = '';
+            try {
+              output = fs.readFileSync('test-output.txt', 'utf8').slice(-2000);
+            } catch(e) { output = 'Could not read test output'; }
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '## Gate 2 FAILED: Test Suite\n\nTests failed. Last 2000 chars:\n\n```\n' + output + '\n```\n\n**Self-correction hint:** Fix the specific regression shown above.'
+            })
+
+  # GATE 3: Security Scan (Bandit + SQL injection check)
+  security-scan:
+    name: "Gate 3: Security Scan"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install Bandit
+        run: pip install bandit[toml]
+
+      - name: Run Bandit (high severity)
+        id: bandit
+        run: |
+          bandit -r src/ -ll -f json -o bandit-results.json || true
+          HIGH_COUNT=$(python3 -c "
+          import json
+          with open('bandit-results.json') as f:
+              data = json.load(f)
+          high = [r for r in data.get('results', []) if r['issue_severity'] == 'HIGH']
+          print(len(high))
+          ")
+          echo "high_count=$HIGH_COUNT" >> $GITHUB_OUTPUT
+          if [ "$HIGH_COUNT" -gt "0" ]; then
+            echo "::error::Found $HIGH_COUNT high-severity security findings"
+            exit 1
+          fi
+
+      - name: Check for SQL injection patterns
+        run: |
+          FINDINGS=$(grep -rn 'f".*SELECT\|f".*INSERT\|f".*DELETE\|f".*UPDATE\|f".*DROP' src/youtube_extension/backend/ 2>/dev/null || true)
+          if [ -n "$FINDINGS" ]; then
+            echo "::error::SQL injection patterns detected:"
+            echo "$FINDINGS"
+            exit 1
+          fi
+          echo "No SQL injection patterns found."
+
+      - name: Upload Bandit results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: bandit-results
+          path: bandit-results.json
+
+      - name: Comment on failure
+        if: failure()
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const fs = require('fs');
+            let findings = '';
+            try {
+              const data = JSON.parse(fs.readFileSync('bandit-results.json', 'utf8'));
+              const high = data.results.filter(r => r.issue_severity === 'HIGH');
+              findings = high.map(r => '- ' + r.issue_text + ' at ' + r.filename + ':' + r.line_number).join('\n');
+            } catch(e) { findings = 'Could not parse bandit results'; }
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '## Gate 3 FAILED: Security Scan\n\nHigh-severity findings:\n\n' + findings + '\n\n**Agent:** Fix the specific findings above.'
+            })
+
+  # GATE 4: Async Pattern Validation
+  async-validation:
+    name: "Gate 4: Async Pattern Check"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Check for blocking sleep in async functions
+        run: |
+          python3 -c "
+          import ast, sys, pathlib
+
+          violations = []
+          for path in pathlib.Path('src').rglob('*.py'):
+              try:
+                  tree = ast.parse(path.read_text())
+              except:
+                  continue
+              for node in ast.walk(tree):
+                  if isinstance(node, ast.AsyncFunctionDef):
+                      for child in ast.walk(node):
+                          if isinstance(child, ast.Call):
+                              func = child.func
+                              if isinstance(func, ast.Attribute) and func.attr == 'sleep':
+                                  if isinstance(func.value, ast.Name) and func.value.id == 'time':
+                                      violations.append(f'{path}:{child.lineno}')
+          for v in violations:
+              print(v)
+          sys.exit(1 if violations else 0)
+          "
+
+      - name: Comment on failure
+        if: failure()
+        uses: actions/github-script@v9
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '## Gate 4 FAILED: Async Pattern Violation\n\ntime.sleep() detected inside async def functions. This blocks the event loop.\n\n**Fix:** Replace time.sleep(N) with await asyncio.sleep(N).\n\n**Agent:** See issue #408 for the full specification.'
+            })
+
+  # SUMMARY: Post consolidated status
+  verification-summary:
+    name: "Verification Summary"
+    runs-on: ubuntu-latest
+    needs: [docker-build, pytest, security-scan, async-validation]
+    if: always()
+    steps:
+      - name: Determine overall status
+        id: status
+        run: |
+          if [ "${{ needs.docker-build.result }}" == "success" ] && \
+             [ "${{ needs.pytest.result }}" == "success" ] && \
+             [ "${{ needs.security-scan.result }}" == "success" ] && \
+             [ "${{ needs.async-validation.result }}" == "success" ]; then
+            echo "overall=pass" >> $GITHUB_OUTPUT
+          else
+            echo "overall=fail" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Post summary comment
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const results = {
+              'Docker Build': '${{ needs.docker-build.result }}',
+              'Test Suite': '${{ needs.pytest.result }}',
+              'Security Scan': '${{ needs.security-scan.result }}',
+              'Async Validation': '${{ needs.async-validation.result }}'
+            };
+            const overall = '${{ steps.status.outputs.overall }}';
+            const icon = overall === 'pass' ? 'PASS' : 'FAIL';
+            const rows = Object.entries(results).map(([name, result]) => {
+              return '| ' + name + ' | ' + result + ' |';
+            }).join('\n');
+            const body = '## Verification Gates ' + icon + '\n\n| Gate | Result |\n|:---|:---|\n' + rows + '\n\n' + (overall === 'pass' ? '**All gates passed.** This PR is ready for merge.' : '**One or more gates failed.** See individual gate comments above.');
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            })
+
+      - name: Approve PR if all gates pass
+        if: steps.status.outputs.overall == 'pass'
+        uses: actions/github-script@v9
+        with:
+          script: |
+            github.rest.pulls.createReview({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+              event: 'APPROVE',
+              body: 'All 4 verification gates passed. Auto-approved by the verification workflow.'
+            })
