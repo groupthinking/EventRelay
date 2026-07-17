@@ -137,6 +137,11 @@ class APICostMonitor:
         self.session_costs = defaultdict(float)
         self.session_requests = defaultdict(int)
 
+        # Budget alert de-duplication state. Tracks which alert types have
+        # already been sent for a given day so we don't spam the webhook on
+        # every recorded API usage. Structure: {date_iso: set(alert_types)}.
+        self._alerts_sent: dict[str, set[str]] = {}
+
         # Lock for thread safety
         self._lock = threading.Lock()
 
@@ -338,19 +343,47 @@ class APICostMonitor:
         return record
 
     async def _check_budget_alerts(self):
-        """Check and send budget alerts if thresholds are exceeded"""
+        """Check and send budget alerts if thresholds are exceeded.
+
+        Each alert type is sent at most once per day to avoid spamming the
+        configured webhook on every recorded API usage. When the daily budget
+        is exceeded we only send the 'exceeded' alert (not the redundant
+        'threshold' alert) for that event.
+        """
         try:
             today = datetime.now(timezone.utc).date().isoformat()
             daily_cost = await self.get_daily_cost(today)
 
-            if daily_cost >= self.alert_threshold:
-                await self._send_budget_alert(daily_cost, 'threshold')
-
             if daily_cost >= self.daily_budget:
-                await self._send_budget_alert(daily_cost, 'exceeded')
+                if self._should_send_alert(today, 'exceeded'):
+                    await self._send_budget_alert(daily_cost, 'exceeded')
+            elif daily_cost >= self.alert_threshold:
+                if self._should_send_alert(today, 'threshold'):
+                    await self._send_budget_alert(daily_cost, 'threshold')
 
         except Exception as e:
             logger.error(f"Error checking budget alerts: {e}")
+
+    def _should_send_alert(self, date_iso: str, alert_type: str) -> bool:
+        """Return True if the given alert type has not yet been sent today.
+
+        Marks the alert as sent (per day) atomically so concurrent
+        ``record_usage`` calls cannot each trigger a duplicate webhook. Old
+        entries are pruned to keep the tracking state bounded.
+        """
+        with self._lock:
+            sent_today = self._alerts_sent.get(date_iso)
+            if sent_today is None:
+                # New day: drop stale state from previous days.
+                self._alerts_sent.clear()
+                sent_today = set()
+                self._alerts_sent[date_iso] = sent_today
+
+            if alert_type in sent_today:
+                return False
+
+            sent_today.add(alert_type)
+            return True
 
     async def _send_budget_alert(self, current_cost: float, alert_type: str):
         """Send budget alert (implement notification system)"""
