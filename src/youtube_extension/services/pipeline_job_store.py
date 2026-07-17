@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
@@ -27,7 +28,27 @@ class PipelineJobStore:
 
     def save(self, job_id: str, payload: dict[str, Any]) -> None:
         path = self._path(job_id)
-        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        data = json.dumps(payload, ensure_ascii=False, indent=2)
+        # Write atomically: serialize to a temp file in the same directory then
+        # os.replace() onto the target path. os.replace is atomic on POSIX and
+        # Windows, so concurrent persists and any concurrent reader
+        # (load()/list_recent()/expire_before()) never observe a truncated or
+        # partially written file.
+        fd, tmp_name = tempfile.mkstemp(
+            dir=str(path.parent), prefix=f".{path.stem}.", suffix=".tmp"
+        )
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                fh.write(data)
+                fh.flush()
+                os.fsync(fh.fileno())
+            os.replace(tmp_name, path)
+        except BaseException:
+            try:
+                os.unlink(tmp_name)
+            except OSError:
+                pass
+            raise
 
     def load(self, job_id: str) -> Optional[dict[str, Any]]:
         path = self._path(job_id)
