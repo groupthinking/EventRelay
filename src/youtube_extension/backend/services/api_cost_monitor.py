@@ -7,7 +7,6 @@ Real-time API cost tracking, quota management, and optimization for UVAI platfor
 Monitors OpenAI, Anthropic, Gemini, YouTube Data API, and other service usage.
 """
 
-import aiohttp
 import asyncio
 import json
 import logging
@@ -20,6 +19,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
+
+import aiohttp
 
 # Default database location. Allow override via environment variable.
 _DEFAULT_DB_PATH_ENV = os.getenv("API_COST_MONITOR_DB_PATH")
@@ -340,28 +341,87 @@ class APICostMonitor:
 
         return record
 
-    async def _check_budget_alerts(self):
-        """Check and send budget alerts if thresholds are exceeded"""
+    # Static, atomic claim statements per alert type. Keyed by a fixed allow-list
+    # so no caller-supplied value is ever interpolated into SQL, and the column
+    # name is a literal in each constant rather than an f-string at the call site.
+    _ALERT_CLAIM_SQL = {
+        "threshold": (
+            "INSERT INTO daily_budgets (date, alert_sent) VALUES (?, 1) "
+            "ON CONFLICT(date) DO UPDATE SET alert_sent = 1 "
+            "WHERE daily_budgets.alert_sent = 0"
+        ),
+        "exceeded": (
+            "INSERT INTO daily_budgets (date, budget_exceeded) VALUES (?, 1) "
+            "ON CONFLICT(date) DO UPDATE SET budget_exceeded = 1 "
+            "WHERE daily_budgets.budget_exceeded = 0"
+        ),
+    }
+
+    async def _check_budget_alerts(self) -> None:
+        """Check and send budget alerts if thresholds are exceeded.
+
+        ``record_usage`` calls this after every usage record, so alerts must be
+        gated: each alert type is dispatched at most once per UTC day, the first
+        time that day's spend crosses the corresponding threshold. Without this,
+        every subsequent API call would re-send the webhook and flood recipients.
+        """
         try:
             today = datetime.now(timezone.utc).date().isoformat()
             daily_cost = await self.get_daily_cost(today)
 
-            if daily_cost >= self.alert_threshold:
+            if daily_cost >= self.alert_threshold and self._claim_alert(
+                today, "threshold"
+            ):
                 await self._send_budget_alert(daily_cost, 'threshold')
 
-            if daily_cost >= self.daily_budget:
+            if daily_cost >= self.daily_budget and self._claim_alert(
+                today, "exceeded"
+            ):
                 await self._send_budget_alert(daily_cost, 'exceeded')
 
         except Exception as e:
             logger.error(f"Error checking budget alerts: {e}")
 
-    async def _send_webhook_notification(self, message: str):
-        """Send an async webhook notification if URL is configured."""
+    def _claim_alert(self, date: str, alert_type: str) -> bool:
+        """Atomically claim today's alert of ``alert_type``.
+
+        Returns True only for the caller that first flips the day's flag from
+        0 to 1, in a single ``INSERT ... ON CONFLICT ... DO UPDATE ... WHERE``
+        statement. Because the read and write are one atomic operation, two
+        callers racing on the same SQLite database (even across processes)
+        cannot both win, so each alert is dispatched at most once per UTC day.
+        """
+        sql = self._ALERT_CLAIM_SQL[alert_type]  # KeyError on unknown type
+        try:
+            conn = sqlite3.connect(self.db_path)
+            try:
+                cursor = conn.cursor()
+                cursor.execute(sql, (date,))
+                conn.commit()
+                # rowcount is 1 when this caller inserted the row or flipped the
+                # flag 0->1, and 0 when the flag was already set (WHERE matched
+                # nothing) — i.e. another caller already claimed it.
+                return cursor.rowcount > 0
+            finally:
+                conn.close()
+        except Exception as e:
+            logger.error(f"Error claiming budget alert: {e}")
+            # Fail closed: if we cannot prove we won the claim, do not send, so a
+            # transient DB error can never produce duplicate alerts. The alert
+            # condition is re-evaluated on the next usage record.
+            return False
+
+    async def _send_webhook_notification(self, message: str) -> None:
+        """Send an async webhook notification if URL is configured.
+
+        The payload carries both Slack's ``text`` and Discord's ``content``
+        field so a generic incoming webhook works for either provider.
+        """
         if not self.webhook_url:
             return
 
         try:
-            payload = {"text": message}
+            payload = {"text": message, "content": message}
             async with aiohttp.ClientSession() as session:
                 async with session.post(
                     self.webhook_url,

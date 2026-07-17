@@ -469,13 +469,78 @@ class TestBudgetAlerts:
         await monitor._check_budget_alerts()
 
     async def test_check_budget_alerts_with_high_cost(self, monitor, monkeypatch):
-        monkeypatch.setattr(monitor, "get_daily_cost", lambda date=None: __import__("asyncio").coroutine(lambda: 9.5)())
-
         async def fake_get_daily_cost(date=None):
             return 9.5
 
         monkeypatch.setattr(monitor, "get_daily_cost", fake_get_daily_cost)
         await monitor._check_budget_alerts()
+
+    async def test_alert_gated_to_once_per_day(self, monitor, monkeypatch):
+        """A crossed threshold must dispatch each alert only once per UTC day."""
+        async def fake_get_daily_cost(date=None):
+            return monitor.daily_budget + 5.0  # over both threshold and budget
+
+        monkeypatch.setattr(monitor, "get_daily_cost", fake_get_daily_cost)
+
+        sent: list[str] = []
+
+        async def fake_send(cost, alert_type):
+            sent.append(alert_type)
+
+        monkeypatch.setattr(monitor, "_send_budget_alert", fake_send)
+
+        # Simulate many usage records in the same day.
+        for _ in range(5):
+            await monitor._check_budget_alerts()
+
+        # Each alert type dispatched exactly once despite repeated checks.
+        assert sorted(sent) == ["exceeded", "threshold"]
+
+    async def test_claim_alert_is_atomic_and_once(self, monitor):
+        today = "2026-07-17"
+        # First caller wins the claim; the second (racing) caller loses.
+        assert monitor._claim_alert(today, "threshold") is True
+        assert monitor._claim_alert(today, "threshold") is False
+        # Each alert type is claimed independently.
+        assert monitor._claim_alert(today, "exceeded") is True
+        assert monitor._claim_alert(today, "exceeded") is False
+        # A different day starts fresh.
+        assert monitor._claim_alert("2026-07-18", "threshold") is True
+
+    async def test_webhook_payload_supports_slack_and_discord(self, monitor, monkeypatch):
+        """Webhook payload carries both Slack `text` and Discord `content`."""
+        monitor.webhook_url = "http://example.com/webhook"
+        captured: dict = {}
+
+        class _FakeResponse:
+            status = 200
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                return False
+
+        class _FakeSession:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                return False
+
+            def post(self, url, json=None, timeout=None):
+                captured["json"] = json
+                return _FakeResponse()
+
+        monkeypatch.setattr(
+            "youtube_extension.backend.services.api_cost_monitor.aiohttp.ClientSession",
+            lambda *a, **k: _FakeSession(),
+        )
+
+        await monitor._send_webhook_notification("hello")
+
+        assert captured["json"]["text"] == "hello"
+        assert captured["json"]["content"] == "hello"
 
 
 # ===========================================================================
