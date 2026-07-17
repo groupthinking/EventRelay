@@ -27,7 +27,7 @@ concrete reason, verified against the actual repository tree.
 | `mcp-optimization.yml` | **DELETE** | Entire workflow targets `mcp-servers/mcp-profiling/` (requirements.txt, investigator_client.py, profiling_server.py) which does not exist — every run fails. |
 | `phase-goal-tracker.yml` | KEEP | Tracks markdown checklists on phase issues, keeps a single status comment updated, and auto-closes the issue when all checklist goals are complete. |
 | `pr-checks.yml` | KEEP | Validates PR title/description; fork-safe comment handling. |
-| `real-processing.yml` | KEEP | Manual single-video processing; well-formed. |
+| `real-processing.yml` | KEEP | Manual single-video processing; well-formed. Fixed 2026-07-17: added Deno setup + `yt-dlp[default]` (EJS) because the runner had no JS runtime, so yt-dlp's YouTube extraction silently failed (run 29571943881) and the job went green with no transcript; a `::warning` annotation is now emitted when extraction yields nothing. |
 | `secret-scan.yml` | KEEP | gitleaks on the working tree; action pinned to SHA, checksum-verified install. |
 | `security.yml` | KEEP | npm audit, safety, bandit, trivy; uploads SARIF. |
 | `verify-litert-mcp.yml` | **DELETE** | Path-filtered smoke test of `mcp-servers/litert-mcp/server.py`; the `mcp-servers/` tree was removed in the dead-code cleanup, so the target no longer exists and every run fails. |

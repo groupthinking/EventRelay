@@ -37,10 +37,20 @@ jobs:
           python-version: '3.12'
           cache: pip
 
+      # yt-dlp requires a JavaScript runtime (Deno by default) for YouTube
+      # extraction; without one the transcript step silently produces nothing.
+      - name: Set up Deno (yt-dlp JS runtime)
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
       - name: Install dependencies
         run: |
           pip install -e .[youtube,ml] 2>/dev/null || \
-            pip install yt-dlp requests google-generativeai
+            pip install requests google-generativeai
+          # Ensure yt-dlp is installed with its EJS component (yt-dlp-ejs),
+          # required alongside the Deno runtime for YouTube extraction.
+          pip install "yt-dlp[default]"
 
       - name: Resolve video ID
         id: resolve
@@ -125,6 +135,10 @@ jobs:
               "transcript": transcript_text,
               "status": "success" if transcript_text else "no_transcript",
           }
+          if not transcript_text:
+              print(f"::warning title=No transcript extracted::"
+                    f"Transcript extraction produced no output for video {video_id}; "
+                    f"AI analysis will be skipped.")
           out_path = f"{results_dir}/transcript_{video_id}.json"
           with open(out_path, "w") as f:
               json.dump(output, f, indent=2)
