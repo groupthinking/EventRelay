@@ -617,6 +617,38 @@ class TestExceptionHandlers:
         assert "hunter2" not in raw
         assert "secret-internal-path" not in raw
 
+    async def test_global_exception_handler_log_omits_query_string(self):
+        """CWE-209: the server-side log line must record only the route path and
+        method, never the full URL/query string (which can carry secrets such as
+        ``?token=...`` that would then persist in centralized/Cloud Run logs).
+        Guards against a regression to ``str(request.url)`` while keeping
+        ``exc_info=True`` so the traceback is still captured."""
+        from unittest.mock import patch
+
+        class _URL:
+            path = "/api/process"
+
+            def __str__(self):  # what str(request.url) would leak
+                return "http://test/api/process?token=SECRET123"
+
+        class _Req:
+            url = _URL()
+            method = "POST"
+
+        with patch.object(main_module, "logger") as mock_logger:
+            response = await main_module.global_exception_handler(
+                _Req(), Exception("boom")
+            )
+
+        assert response.status_code == 500
+        mock_logger.error.assert_called_once()
+        args, kwargs = mock_logger.error.call_args
+        logged = " ".join(str(a) for a in args)
+        assert "SECRET123" not in logged
+        assert "token=" not in logged
+        assert "/api/process" in logged  # the bare path is safe to log
+        assert kwargs.get("exc_info") is True
+
     async def test_global_exception_handler_request_without_url(self):
         """Handler should not crash if request has no .url attribute."""
         mock_req = MagicMock(spec=[])  # no attributes

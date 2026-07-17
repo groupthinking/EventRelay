@@ -454,14 +454,20 @@ async def global_exception_handler(request, exc):
     """Global exception handler.
 
     Returns a static body only. The exception type, message, traceback, and
-    request URL are recorded server-side via ``logger.error(..., exc_info=True)``
+    request *path* are recorded server-side via ``logger.error(..., exc_info=True)``
     and never returned to the client, closing a CWE-209 information-disclosure
     leak (the previous body echoed ``str(exc)``, ``exc.__class__.__name__``, and
     the request URL).
+
+    The log line uses only ``request.url.path`` and the method — never the full
+    URL/query string, which can carry secrets (e.g. ``?token=...``) that must not
+    be persisted to centralized (Cloud Run) logs.
     """
-    request_path = str(request.url) if hasattr(request, "url") else "unknown"
+    url = getattr(request, "url", None)
+    request_path = getattr(url, "path", None) or "unknown"
+    method = getattr(request, "method", "unknown")
     logger.error(
-        f"Unhandled exception on {request_path}: {exc}", exc_info=True
+        f"Unhandled exception on {method} {request_path}: {exc}", exc_info=True
     )
 
     return JSONResponse(
