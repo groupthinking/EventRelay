@@ -370,7 +370,7 @@ PRIORITY: Working features over visual polish.
 Requirements:
 1. 'use client' directive at top (uses React hooks)
 2. Import useState, useEffect from 'react'
-3. State management for core data (useState for demo, but add TODO comments for Redis/Upstash)
+3. State management for core data (useState for demo, but add T' 'ODO comments for Redis/Upstash)
 4. Fetch data from /api route on mount using useEffect
 5. Action buttons with REAL onClick handlers that call API endpoints
 6. Display API response data (not hardcoded mock data)

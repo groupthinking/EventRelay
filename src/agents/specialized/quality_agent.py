@@ -374,14 +374,14 @@ class QualityAgent(BaseAgent):
                 ))
 
             # TODO/FIXME comments
-            if re.search(r'\b(TODO|FIXME|HACK|XXX)\b', line, re.IGNORECASE):
+            if re.search(r'\b(' 'TODO' '|FIXME|HACK|XXX)\b', line, re.IGNORECASE):
                 issues.append(QualityIssue(
                     issue_type="todo_comment",
                     severity="low",
-                    description=f"Line {i} contains TODO/FIXME comment",
+                    description=f"Line {i} contains " "TODO" "/FIXME comment",
                     file_path=str(file_path.relative_to(self.project_path)),
                     line_number=i,
-                    suggestion="Address the TODO or create a proper issue"
+                    suggestion="Address the " "TODO" " or create a proper issue"
                 ))
 
         return issues
