@@ -12,11 +12,11 @@ import os
 import sqlite3
 from typing import Any, Dict, List
 
-# Import our innovation pressure engine
-from innovation_pressure_engine import InnovationPressureEngine
-
 import mcp.server.stdio
 import mcp.types as types
+
+# Import our innovation pressure engine
+from innovation_pressure_engine import InnovationPressureEngine
 from mcp.server.lowlevel import Server
 
 logging.basicConfig(level=logging.INFO)
@@ -588,65 +588,70 @@ class YouTubeInnovationLearningDB:
 
         # Convert time range to SQL
         time_filters = {
-            "24h": "datetime('now', '-1 day')",
-            "7d": "datetime('now', '-7 days')",
-            "30d": "datetime('now', '-30 days')",
-            "all": "datetime('2020-01-01')"
+            "24h": "-1 day",
+            "7d": "-7 days",
+            "30d": "-30 days",
+            "all": None
         }
-        time_filter = time_filters.get(time_range, time_filters["7d"])
+        time_modifier = time_filters.get(time_range, time_filters["7d"])
 
         with sqlite3.connect(self.db_path) as conn:
+            if time_modifier is None:
+                time_filter_val = "2020-01-01 00:00:00"
+            else:
+                time_filter_val = conn.execute("SELECT datetime('now', ?)", (time_modifier,)).fetchone()[0]
+
             # Video intake metrics
-            video_stats = conn.execute(f"""
+            video_stats = conn.execute("""
                 SELECT COUNT(*) as total_videos,
                        COUNT(CASE WHEN status = 'analyzed' THEN 1 END) as analyzed_videos,
                        AVG(CASE WHEN status = 'analyzed' THEN 1.0 ELSE 0.0 END) as analysis_rate
                 FROM video_intakes
-                WHERE intake_timestamp >= {time_filter}
-            """).fetchone()
+                WHERE intake_timestamp >= ?
+            """, (time_filter_val,)).fetchone()
 
             # Innovation metrics
-            innovation_stats = conn.execute(f"""
+            innovation_stats = conn.execute("""
                 SELECT AVG(innovation_score) as avg_innovation_score,
                        MAX(innovation_score) as peak_innovation_score,
                        COUNT(CASE WHEN breakthrough_achieved = 1 THEN 1 END) as breakthrough_count,
                        COUNT(*) as total_analyses
                 FROM innovation_analyses
-                WHERE analysis_timestamp >= {time_filter}
-            """).fetchone()
+                WHERE analysis_timestamp >= ?
+            """, (time_filter_val,)).fetchone()
 
             # Implementation success rates
-            implementation_stats = conn.execute(f"""
+            implementation_stats = conn.execute("""
                 SELECT success_status,
                        COUNT(*) as count,
                        AVG(completion_percentage) as avg_completion,
                        AVG(ia.innovation_score) as avg_innovation_correlation
                 FROM implementations i
                 JOIN innovation_analyses ia ON i.innovation_analysis_id = ia.id
-                WHERE i.implementation_timestamp >= {time_filter}
+                WHERE i.implementation_timestamp >= ?
                 GROUP BY success_status
-            """).fetchall()
+            """, (time_filter_val,)).fetchall()
 
             # Pattern evolution
             if include_patterns:
-                pattern_stats = conn.execute(f"""
+                pattern_stats = conn.execute("""
                     SELECT pattern_type, COUNT(*) as count, AVG(success_rate) as avg_success_rate
                     FROM pattern_database
-                    WHERE updated_timestamp >= {time_filter}
+                    WHERE updated_timestamp >= ?
                     GROUP BY pattern_type
-                """).fetchall()
+                """, (time_filter_val,)).fetchall()
             else:
                 pattern_stats = []
 
             # Recent breakthroughs
             if include_breakthroughs:
-                recent_breakthroughs = conn.execute(f"""
+                recent_breakthroughs = conn.execute("""
                     SELECT breakthrough_title, innovation_score, practical_value, implementation_success
                     FROM breakthrough_tracker
-                    WHERE breakthrough_timestamp >= {time_filter}
+                    WHERE breakthrough_timestamp >= ?
                     ORDER BY innovation_score DESC
                     LIMIT 5
-                """).fetchall()
+                """, (time_filter_val,)).fetchall()
             else:
                 recent_breakthroughs = []
 
