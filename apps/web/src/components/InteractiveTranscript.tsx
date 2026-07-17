@@ -176,21 +176,34 @@ export default function InteractiveTranscript({
   }, [segments, filterSpeaker, searchQuery]);
 
   const activeSegmentId = useMemo(() => {
+    if (segments.length === 0) return null;
+
+    // Binary search requires startTime-ordered segments. Sort a shallow copy
+    // so the caller is not required to pre-sort and out-of-order / repeated
+    // timestamps from the transcript parser are handled correctly.
+    const sorted = [...segments].sort((a, b) => a.startTime - b.startTime);
+
     let low = 0;
-    let high = segments.length - 1;
+    let high = sorted.length - 1;
+    let result: string | null = null;
+
     while (low <= high) {
       const mid = (low + high) >> 1;
-      const s = segments[mid];
+      const s = sorted[mid];
       if (currentTime >= s.startTime && currentTime < s.endTime) {
-        return s.id;
-      }
-      if (currentTime < s.startTime) {
+        // Record candidate and keep searching left: when multiple segments
+        // share the same startTime (overlapping / duplicate timestamps), we
+        // always prefer the first one that appears in the sorted order.
+        result = s.id;
+        high = mid - 1;
+      } else if (currentTime < s.startTime) {
         high = mid - 1;
       } else {
         low = mid + 1;
       }
     }
-    return null;
+
+    return result;
   }, [segments, currentTime]);
 
   return (
