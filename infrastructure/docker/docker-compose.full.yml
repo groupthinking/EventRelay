@@ -79,7 +79,7 @@ services:
       context: .
       dockerfile: Dockerfile
     image: youtube-extension-orchestrator:dev
-    command: python -m youtube_extension.backend.services.phase3_integration_test
+    command: python -m youtube_extension.orchestrator.main
     restart: unless-stopped
     environment:
       - APP_ENV=${APP_ENV:-production}
