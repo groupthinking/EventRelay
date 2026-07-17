@@ -28,7 +28,6 @@ import aiohttp
 # Google AI imports - using new google.genai SDK
 try:
     from google import genai
-    from google.genai import types
 
     GEMINI_AVAILABLE = True
 except ImportError:
@@ -393,7 +392,7 @@ class MultiLLMVideoProcessor:
             )
             return response.text
         except Exception as e:
-            raise Exception(f"Gemini execution failed: {e}")
+            raise Exception(f"Gemini execution failed: {e}") from e
 
     async def _generate_comprehensive_report(
         self,

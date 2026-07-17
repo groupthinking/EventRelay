@@ -16,7 +16,7 @@ from dataclasses import asdict
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, status
 from fastapi.responses import JSONResponse
 
 from shared.youtube import RobustYouTubeMetadata
@@ -1127,7 +1127,7 @@ async def submit_feedback_v1(
     "/metrics",
     summary="Get Metrics",
     description="Get system metrics in Prometheus format",
-    response_class=JSONResponse,
+    response_class=Response,
     responses={200: {"content": {"text/plain": {}}}},
 )
 async def get_metrics_v1(
@@ -1136,7 +1136,7 @@ async def get_metrics_v1(
     """Get system metrics in Prometheus format"""
     try:
         metrics_lines = health_service.get_metrics_prometheus_format()
-        return JSONResponse(content="\n".join(metrics_lines), media_type="text/plain")
+        return Response(content="\n".join(metrics_lines), media_type="text/plain")
     except Exception as e:
         logger.error(f"Metrics endpoint failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
