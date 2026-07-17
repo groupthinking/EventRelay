@@ -31,17 +31,9 @@ if _REPO_ROOT not in sys.path:
 # those setdefault() calls no-ops, keeping `src` a proper package.
 # NOTE: we deliberately do NOT import src.agents — its __init__ is heavy and
 # some tests intentionally stub the src.agents namespace.
-#
-# We also pre-import src.integration.looker_embedded specifically: test_backend_main
-# stubs that submodule as a MagicMock in sys.modules (guarded by `if not in
-# sys.modules`), and it never restores it. Once real test_looker_security started
-# importing the real class, that leaked mock made it fail. Pre-importing the real
-# (cheap) submodule here turns the guarded stub into a no-op. It imports only
-# stdlib + pydantic, so it is safe to load eagerly.
 try:
     import src  # noqa: F401
     import src.integration  # noqa: F401
-    import src.integration.looker_embedded  # noqa: F401
 except Exception:
     pass
 
