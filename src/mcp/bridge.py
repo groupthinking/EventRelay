@@ -16,6 +16,8 @@ The brain of your production system that unifies:
 
 import asyncio
 import logging
+import os
+import re
 import time
 from dataclasses import dataclass
 from datetime import datetime
@@ -161,6 +163,13 @@ class MCPBridge:
             "consensus_building",
         ]
         logger.info("✅ A2A Communication Hub initialized")
+        self.VERCEL_MCP_TOOLS = [
+            "vercel_search_docs",
+            "vercel_list_projects",
+            "vercel_list_deployments",
+            "vercel_get_deployment_logs",
+            "vercel_check_domain_availability",
+        ]
 
     async def process_request(self, request: MCPBridgeRequest) -> dict[str, Any]:
         """
@@ -321,6 +330,10 @@ class MCPBridge:
             )  # Grok is better for real-time trends
             enhanced_plan["use_a2a"] = True  # Use multiple agents for trend analysis
 
+        request_text = str(request.content).lower()
+        if re.search(r"\b(vercel|deployment|preview)\b", request_text):
+            enhanced_plan["tools_used"].extend(self.VERCEL_MCP_TOOLS)
+
         return enhanced_plan
 
     async def _execute_processing_plan(
@@ -394,7 +407,7 @@ class MCPBridge:
                 "sources_found": len(search_results),
                 "augmented_content": augmented_content,
                 "queries_made": 1,
-                "status": "success",
+                "status": "success" if search_results else "unavailable",
             }
 
         except Exception as e:
@@ -418,10 +431,17 @@ class MCPBridge:
                 agents, request, primary_result
             )
 
+            # Reflect the real collaboration outcome instead of a blanket
+            # "success". Orchestration is currently unimplemented (returns
+            # "unavailable"), and reporting success here would earn an
+            # undeserved quality-score bonus in _calculate_quality_score for a
+            # collaboration that never ran (REAL_MODE_ONLY policy).
+            collaboration_status = collaboration_result.get("status", "unavailable")
+
             return {
                 "agents_involved": [agent.agent_id for agent in agents],
                 "collaboration_result": collaboration_result,
-                "status": "success",
+                "status": collaboration_status,
             }
 
         except Exception as e:
@@ -583,14 +603,34 @@ class MCPBridge:
     async def _orchestrate_collaboration(
         self, agents: list, request: MCPBridgeRequest, primary_result: AIResponse
     ) -> dict[str, Any]:
-        """Orchestrate agent collaboration"""
-        return {"status": "simulated", "agents": len(agents)}
+        """Orchestrate agent collaboration.
+
+        Not yet implemented. Reports an honest ``unavailable`` status rather
+        than a fabricated ``simulated`` result (REAL_MODE_ONLY policy).
+        """
+        if not agents:
+            return {"status": "unavailable", "reason": "No agents available", "agents": 0}
+        return {
+            "status": "unavailable",
+            "reason": "agent collaboration orchestration not implemented",
+            "agents": len(agents),
+        }
 
     async def _execute_mcp_tool(
         self, tool_name: str, request: MCPBridgeRequest
     ) -> dict[str, Any]:
-        """Execute MCP tool"""
-        return {"tool": tool_name, "status": "executed", "result": "simulated"}
+        """Execute an MCP tool.
+
+        Not yet implemented. Reports an honest ``unavailable`` status with a
+        null result rather than a fabricated ``executed``/``simulated`` result
+        (REAL_MODE_ONLY policy).
+        """
+        return {
+            "tool": tool_name,
+            "status": "unavailable",
+            "result": None,
+            "reason": "MCP tool execution not implemented",
+        }
 
     async def _attempt_fallback_processing(self, request: MCPBridgeRequest) -> bool:
         """Attempt fallback processing on failure"""

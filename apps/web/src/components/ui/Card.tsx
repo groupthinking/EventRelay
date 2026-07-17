@@ -25,7 +25,8 @@ const Card = forwardRef<HTMLDivElement, CardProps>(
   ) => {
     const baseStyles = clsx(
       'rounded-2xl',
-      'transition-all duration-300 ease-out'
+      'transition-[transform,box-shadow,background-color,border-color] duration-300 ease-out',
+      'motion-reduce:transition-none'
     );
 
     const variants = {
@@ -67,7 +68,7 @@ const Card = forwardRef<HTMLDivElement, CardProps>(
           'cursor-pointer',
           'hover:border-primary-500/40',
           'hover:shadow-xl hover:shadow-primary-500/15',
-          'hover:-translate-y-1.5',
+          'hover:-translate-y-1.5 motion-reduce:hover:translate-y-0',
           'active:translate-y-0 active:shadow-lg',
           'will-change-transform'
         )

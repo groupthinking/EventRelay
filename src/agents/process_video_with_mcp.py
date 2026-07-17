@@ -210,10 +210,17 @@ class RealVideoProcessor:
 
     # ---------- Core async ops ----------
     async def _extract_transcript_with_rotation(self, video_id: str) -> list[dict[str, Any]]:
+        # youtube_transcript_api is synchronous/blocking network I/O; run it in
+        # an executor so it doesn't stall the event loop for other coroutines.
+        loop = asyncio.get_event_loop()
+
         # 1) Direct transcript
         try:
             if YouTubeTranscriptApi is not None:
-                transcript = YouTubeTranscriptApi.get_transcript(video_id)
+                # youtube-transcript-api >=1.0 instance API
+                transcript = await loop.run_in_executor(
+                    None, lambda: YouTubeTranscriptApi().fetch(video_id).to_raw_data()
+                )
                 if transcript:
                     return transcript
         except Exception:
@@ -222,9 +229,16 @@ class RealVideoProcessor:
         # 2) List transcripts and fetch
         try:
             if YouTubeTranscriptApi is not None:
-                for t in YouTubeTranscriptApi.list_transcripts(video_id):  # type: ignore[union-attr]
+                transcript_list = await loop.run_in_executor(
+                    None, lambda: YouTubeTranscriptApi().list(video_id)  # type: ignore[union-attr]
+                )
+                fetch_tasks = [
+                    loop.run_in_executor(None, lambda t=t: t.fetch().to_raw_data())
+                    for t in transcript_list
+                ]
+                for task in asyncio.as_completed(fetch_tasks):
                     try:
-                        data = t.fetch()
+                        data = await task
                         if data:
                             return data
                     except Exception:
@@ -266,17 +280,23 @@ class RealVideoProcessor:
     async def _save_to_google_drive(self, video_id: str, content: dict[str, Any]) -> dict[str, Any]:
         # Emulate Drive by writing locally under CWD/gdrive_results
         folder = Path.cwd() / "gdrive_results" / content.get("category", "General")
-        folder.mkdir(parents=True, exist_ok=True)
-        file_path = folder / f"{video_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
 
-        payload = {
-            "video_id": video_id,
-            "category": content.get("category"),
-            "content": content,
-            "real_processing_validated": True,
-            "saved_at": datetime.now().isoformat(),
-        }
-        file_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        def _ensure_dir_and_write():
+            folder.mkdir(parents=True, exist_ok=True)
+            file_path = folder / f"{video_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+
+            payload = {
+                "video_id": video_id,
+                "category": content.get("category"),
+                "content": content,
+                "real_processing_validated": True,
+                "saved_at": datetime.now().isoformat(),
+            }
+            file_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+            return file_path
+
+        # Run blocking I/O in a separate thread to keep the event loop free.
+        file_path = await asyncio.to_thread(_ensure_dir_and_write)
 
         return {
             "success": True,
