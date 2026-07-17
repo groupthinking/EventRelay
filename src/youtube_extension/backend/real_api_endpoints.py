@@ -169,6 +169,9 @@ def setup_real_api_endpoints(app: FastAPI):
 
             return result
 
+        except HTTPException:
+            # Preserve intentional client errors (e.g. the 400 above).
+            raise
         except Exception as e:
             logger.error(f"Unhandled error in batch_process_videos: {e}", exc_info=True)
             raise HTTPException(
@@ -427,6 +430,9 @@ def setup_real_api_endpoints(app: FastAPI):
                 "timestamp": datetime.now(timezone.utc).isoformat()
             }
 
+        except HTTPException:
+            # Preserve intentional client errors (e.g. the 400 above).
+            raise
         except Exception as e:
             logger.error(f"Unhandled error in search_youtube_videos: {e}", exc_info=True)
             raise HTTPException(

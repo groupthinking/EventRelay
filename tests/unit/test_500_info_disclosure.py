@@ -60,6 +60,62 @@ def _iter_500_dynamic_detail(text: str):
             yield line_no, " ".join(args.split())[:120]
 
 
+# FastAPI exception handlers are a second 500 sink the HTTPException scan above
+# does not model: they build a response body directly (dict / JSONResponse) rather
+# than raising. A handler must not place the exception message (`str(exc)`) or its
+# class name (`exc.__class__.__name__`) into that body — both leak internal state.
+# Logging the exception server-side is fine; those tokens appear only in response
+# construction, never in a `logger.`/`log`/`raise`/comment line, so we exclude
+# those lines to avoid false positives.
+_HANDLER_DECORATOR = re.compile(r"^\s*@\w+\.exception_handler\(", re.MULTILINE)
+_HANDLER_DISCLOSURE = re.compile(r"str\(\s*(?:exc|e)\s*\)|__class__\.__name__")
+# Triple-quoted docstrings, so prose that *mentions* str(exc) is not mistaken for code.
+_TRIPLE_STR = re.compile(r'"""(?:.|\n)*?"""|\'\'\'(?:.|\n)*?\'\'\'')
+
+
+def _strip_docstrings(body: str) -> str:
+    """Blank triple-quoted blocks, preserving line count so line numbers stay aligned."""
+    return _TRIPLE_STR.sub(lambda m: "\n" * m.group(0).count("\n"), body)
+
+
+def _exception_handler_bodies(text: str):
+    """Yield (start_line, body_text) for each @<app>.exception_handler function."""
+    lines = text.splitlines(keepends=True)
+    for m in _HANDLER_DECORATOR.finditer(text):
+        start_line = text.count("\n", 0, m.start())
+        # Find the `def`/`async def` line that the decorator applies to.
+        i = start_line
+        while i < len(lines) and not lines[i].lstrip().startswith(("def ", "async def ")):
+            i += 1
+        if i >= len(lines):
+            continue
+        def_indent = len(lines[i]) - len(lines[i].lstrip())
+        j = i + 1
+        body: list[str] = []
+        while j < len(lines):
+            line = lines[j]
+            stripped = line.strip()
+            if stripped and (len(line) - len(line.lstrip())) <= def_indent:
+                break  # dedented back to <= the def's level: end of function
+            body.append(line)
+            j += 1
+        yield i + 1, "".join(body)
+
+
+def _iter_handler_disclosures(text: str):
+    """Yield (line_no, snippet) for exception-handler bodies that leak exc into the response."""
+    for start_line, body in _exception_handler_bodies(text):
+        if "status_code=500" not in re.sub(r"\s+", "", body):
+            continue
+        for offset, line in enumerate(_strip_docstrings(body).splitlines()):
+            code = line.split("#", 1)[0]  # ignore inline comments
+            bare = line.strip()
+            if bare.startswith(("logger", "log", "self.logger", "raise")):
+                continue
+            if _HANDLER_DISCLOSURE.search(code):
+                yield start_line + offset, bare[:120]
+
+
 def test_no_dynamic_detail_in_500_responses() -> None:
     offenders: list[str] = []
     for path in _backend_python_files():
@@ -74,6 +130,55 @@ def test_no_dynamic_detail_in_500_responses() -> None:
         "Log the full error server-side instead. Offending sites:\n  "
         + "\n  ".join(offenders)
     )
+
+
+def test_no_disclosure_in_500_exception_handlers() -> None:
+    offenders: list[str] = []
+    for path in _backend_python_files():
+        text = path.read_text(encoding="utf-8")
+        for line_no, snippet in _iter_handler_disclosures(text):
+            rel = path.relative_to(_BACKEND.parents[2])
+            offenders.append(f"{rel}:{line_no}: {snippet}")
+
+    assert not offenders, (
+        "A FastAPI exception handler that returns HTTP 500 must not place the "
+        "exception message (`str(exc)`) or its class name (`__class__.__name__`) "
+        "into the response body — log it server-side instead. Offending sites:\n  "
+        + "\n  ".join(offenders)
+    )
+
+
+def test_guard_detects_a_synthetic_handler_leak() -> None:
+    """The exception-handler scanner flags exc message/class-name disclosure in a 500 body."""
+    leaky = (
+        "@app.exception_handler(Exception)\n"
+        "async def h(request, exc):\n"
+        '    logger.error(f"boom: {exc}", exc_info=True)\n'
+        '    body = {"detail": str(exc), "error_type": exc.__class__.__name__}\n'
+        "    return JSONResponse(status_code=500, content=body)\n"
+    )
+    assert list(_iter_handler_disclosures(leaky)), "handler scanner missed a real leak"
+
+    safe = (
+        "@app.exception_handler(Exception)\n"
+        "async def h(request, exc):\n"
+        '    logger.error(f"boom: {exc}", exc_info=True)\n'
+        '    body = {"detail": "Internal server error"}\n'
+        "    return JSONResponse(status_code=500, content=body)\n"
+    )
+    assert not list(
+        _iter_handler_disclosures(safe)
+    ), "handler scanner false-positived a sanitized 500 handler"
+
+    # A 4xx handler may echo the exception (client-supplied validation input).
+    client_err = (
+        "@app.exception_handler(ValueError)\n"
+        "async def h(request, exc):\n"
+        '    return JSONResponse(status_code=400, content={"detail": str(exc)})\n'
+    )
+    assert not list(
+        _iter_handler_disclosures(client_err)
+    ), "handler scanner must ignore 4xx handlers"
 
 
 def test_guard_detects_a_synthetic_leak() -> None:

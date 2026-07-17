@@ -213,10 +213,12 @@ async def process_video_task_handler(
         # Update state with error
         try:
             firestore_service = await get_firestore_service()
+            # error_message is returned to clients by the status/result endpoints,
+            # so it must stay generic — the full error_msg is in the logs above only.
             await firestore_service.update_state(
                 payload.video_id,
                 status='failed',
-                error_message=error_msg
+                error_message="Internal server error"
             )
         except Exception as state_error:
             logger.error(f"Failed to update error state: {state_error}")
