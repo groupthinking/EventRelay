@@ -4,14 +4,23 @@ import type { NextAuthOptions } from 'next-auth';
 import GoogleProvider from 'next-auth/providers/google';
 
 const allowedDomain = process.env.AUTH_ALLOWED_EMAIL_DOMAIN?.trim().toLowerCase();
-const googleClientId = process.env.GOOGLE_OAUTH_CLIENT_ID?.trim() ?? '';
-const googleClientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET?.trim() ?? '';
+const googleClientId = (
+  process.env.GOOGLE_OAUTH_CLIENT_ID ||
+  process.env.GOOGLE_CLIENT_ID ||
+  ''
+).trim();
+const googleClientSecret = (
+  process.env.GOOGLE_OAUTH_CLIENT_SECRET ||
+  process.env.GOOGLE_CLIENT_SECRET ||
+  ''
+).trim();
 
 /**
  * NextAuth configuration (Google OAuth by default).
  *
  * Required env to activate login-gating: NEXTAUTH_SECRET, NEXTAUTH_URL,
  *   GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET.
+ * Also accepts NextAuth's common GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET names.
  * Optional: AUTH_ALLOWED_EMAIL_DOMAIN restricts sign-in to a single domain
  *   (e.g. `yourcompany.com` → only *@yourcompany.com).
  *
@@ -22,7 +31,7 @@ function buildProviders(): NextAuthOptions['providers'] {
   if (!googleClientId || !googleClientSecret) {
     if (process.env.NODE_ENV === 'production') {
       console.error(
-        '[auth] GOOGLE_OAUTH_CLIENT_ID / GOOGLE_OAUTH_CLIENT_SECRET missing — Google sign-in will fail.',
+        '[auth] Google OAuth client id/secret missing — set GOOGLE_OAUTH_CLIENT_ID / GOOGLE_OAUTH_CLIENT_SECRET or GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET.',
       );
     }
   }
@@ -64,11 +73,6 @@ export const authOptions: NextAuthOptions = {
   useSecureCookies:
     process.env.NODE_ENV === 'production' ||
     (process.env.NEXTAUTH_URL?.startsWith('https://') ?? false),
-  pages: {
-    // Keep default NextAuth UI for reliability; /login rewrites into this flow.
-    signIn: '/api/auth/signin',
-    error: '/api/auth/error',
-  },
   callbacks: {
     async signIn({ user, account }) {
       // Enforce the domain allowlist for every provider, not just Google, so a
