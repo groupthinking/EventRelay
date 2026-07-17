@@ -447,17 +447,16 @@ async def global_exception_handler(request, exc):
     """Global exception handler with enhanced error details"""
     logger.error(f"Unhandled exception: {exc}", exc_info=True)
 
+    # Do not leak internal exception text/type to clients (CWE-209); the full
+    # exception is logged above with exc_info. Client sees a generic body only.
     error_detail = {
         "error": "Internal server error",
-        "detail": str(exc),
+        "detail": "Internal server error",
         "timestamp": datetime.now().isoformat(),
         "path": str(request.url) if hasattr(request, "url") else "unknown",
         "version": "2.0.0",
         "architecture": "service-oriented",
     }
-
-    if hasattr(exc, "__class__"):
-        error_detail["error_type"] = exc.__class__.__name__
 
     return JSONResponse(status_code=500, content=error_detail)
 

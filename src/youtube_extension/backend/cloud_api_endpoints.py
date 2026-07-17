@@ -145,8 +145,17 @@ async def process_video_cloud(
         error_msg = f"Cloud processing failed: {str(e)}"
         logger.error(error_msg)
 
-        # detail is a static string; error_msg (with the exception) is logged above only
-        raise HTTPException(status_code=500, detail="Internal server error")
+        # message is static (no exception text); video_url is the caller's own
+        # input, not internal state. Full error is logged above only.
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "cloud_processing_failed",
+                "message": "Internal server error",
+                "video_url": request.video_url,
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
+        )
 
 @router.post("/api/v3/process-video-task")
 async def process_video_task_handler(
