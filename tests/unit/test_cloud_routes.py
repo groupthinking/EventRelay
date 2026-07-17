@@ -1421,14 +1421,34 @@ class TestReportingRoutes:
         assert set(response.json().keys()) == {"detail"}
 
     def test_generate_dashboard_url_success_after_prior_error(self):
-        """A subsequent successful call on a fresh client is unaffected by a
-        previous failure - the sanitized error path has no lingering state."""
+        """A subsequent successful call through the same client is unaffected by
+        a prior failure - the sanitized error path leaves no lingering state."""
         mock_service = MagicMock()
         mock_service.get_tenant_dashboard_url = MagicMock(
-            return_value="https://looker.example.com/embed/dashboards/2?sig=def"
+            side_effect=[
+                Exception("Looker unavailable"),
+                "https://looker.example.com/embed/dashboards/2?sig=def",
+            ]
         )
 
-        response = self._client_with_looker(mock_service).post(
+        client = self._client_with_looker(mock_service)
+
+        # First request: the service raises, so we expect a sanitized 500.
+        error_response = client.post(
+            "/api/v1/reporting/embed/dashboard",
+            json={
+                "dashboard_id": "cost_usage",
+                "tenant_id": "tenant-xyz",
+                "user_id": "user-001",
+                "user_email": "bob@example.com",
+            }
+        )
+        assert error_response.status_code == 500
+        assert error_response.json() == {"detail": "Internal server error"}
+
+        # Second request: the service now returns a URL - success must not be
+        # blocked by any state left over from the previous failure.
+        ok_response = client.post(
             "/api/v1/reporting/embed/dashboard",
             json={
                 "dashboard_id": "video_analytics",
@@ -1437,7 +1457,7 @@ class TestReportingRoutes:
                 "user_email": "carol@example.com",
             }
         )
-        assert response.status_code == 200
-        assert response.json() == {
+        assert ok_response.status_code == 200
+        assert ok_response.json() == {
             "embed_url": "https://looker.example.com/embed/dashboards/2?sig=def"
         }
