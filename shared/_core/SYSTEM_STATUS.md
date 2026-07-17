@@ -17,7 +17,7 @@
 | Open PRs | 33 |
 | Open issues | 3 (#808, #802, #153) |
 | Latest PR Checks run | ✅ Success |
-| Latest Security Scan run | ❌ Failure (branch-specific run observed) |
+| Latest Security Scan run | ❌ Failure on `claude/determined-maxwell-ostftd` (run `29549151403`) |
 | Code/secret scanning alert API | ⚠️ Not accessible to integration (403) |
 
 ## Current Focus
