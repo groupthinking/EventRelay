@@ -145,15 +145,8 @@ async def process_video_cloud(
         error_msg = f"Cloud processing failed: {str(e)}"
         logger.error(error_msg)
 
-        raise HTTPException(
-            status_code=500,
-            detail={
-                "error": "cloud_processing_failed",
-                "message": error_msg,
-                "video_url": request.video_url,
-                "timestamp": datetime.now(timezone.utc).isoformat()
-            }
-        )
+        # detail is a static string; error_msg (with the exception) is logged above only
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.post("/api/v3/process-video-task")
 async def process_video_task_handler(
@@ -229,7 +222,8 @@ async def process_video_task_handler(
         except Exception as state_error:
             logger.error(f"Failed to update error state: {state_error}")
 
-        raise HTTPException(status_code=500, detail=error_msg)
+        # detail is a static string; error_msg (with the exception) is logged above only
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.post("/api/v3/batch-process")
 async def batch_process_videos_cloud(request: BatchCloudProcessingRequest):
