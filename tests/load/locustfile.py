@@ -39,7 +39,8 @@ class EventRelayUser(HttpUser):
             if response.status_code == 200:
                 try:
                     data = response.json()
-                    if not data.get("success", True):
+                    # Explicitly check for success=False to mark workflow failures
+                    if data.get("success") is False:
                         response.failure(f"Workflow failed: {data.get('error', 'Unknown error')}")
                 except (ValueError, KeyError):
                     # If JSON parsing fails or success key is missing, let Locust handle the HTTP status
@@ -60,7 +61,8 @@ class EventRelayUser(HttpUser):
             if response.status_code == 200:
                 try:
                     data = response.json()
-                    if not data.get("success", True):
+                    # Explicitly check for success=False to mark processing failures
+                    if data.get("success") is False:
                         response.failure(f"Processing failed: {data.get('error', 'Unknown error')}")
                 except (ValueError, KeyError):
                     pass
