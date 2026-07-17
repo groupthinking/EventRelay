@@ -308,6 +308,9 @@ class TestCloudAIRoutes:
             client = TestClient(_make_cloud_ai_app())
             response = client.get("/api/v1/cloud-ai/providers/status")
         assert response.status_code == 500
+        # Information-disclosure hardening: generic body, no exception text.
+        assert response.json()["detail"] == "Internal server error"
+        assert "connection failed" not in response.text
 
     # -------- POST /api/v1/cloud-ai/analyze/video --------
 
@@ -404,6 +407,9 @@ class TestCloudAIRoutes:
                 "analysis_types": ["label_detection"],
             })
         assert response.status_code == 500
+        # Information-disclosure hardening: generic body, no exception text.
+        assert response.json()["detail"] == "Internal server error"
+        assert "unexpected" not in response.text
 
     def test_analyze_video_with_preferred_provider(self):
         mock_ai = AsyncMock()

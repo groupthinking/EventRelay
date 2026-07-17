@@ -590,14 +590,21 @@ class TestExceptionHandlers:
         response = await main_module.global_exception_handler(mock_req, RuntimeError("crash"))
         assert response.status_code == 500
 
-    async def test_global_exception_handler_includes_error_type(self):
+    async def test_global_exception_handler_does_not_leak_exception(self):
+        """The catch-all handler must not disclose the exception message or
+        class name to the client (information-disclosure hardening)."""
         import json as _json
 
         mock_req = MagicMock()
         mock_req.url = "http://test/api"
-        response = await main_module.global_exception_handler(mock_req, RuntimeError("crash"))
+        response = await main_module.global_exception_handler(
+            mock_req, RuntimeError("crash-secret-internal-detail")
+        )
         body = _json.loads(response.body)
-        assert body["error_type"] == "RuntimeError"
+        assert body["detail"] == "Internal server error"
+        # Neither the raised message nor the exception class name may appear.
+        assert "crash-secret-internal-detail" not in response.body.decode()
+        assert "RuntimeError" not in response.body.decode()
 
     async def test_global_exception_handler_includes_version(self):
         import json as _json
