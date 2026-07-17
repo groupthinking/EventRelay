@@ -205,8 +205,8 @@ async def legacy_chat(request: dict):
         }
 
     except Exception as e:
-        logger.error(f"Legacy chat endpoint error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Legacy chat endpoint error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @app.post("/api/process-video-markdown")
@@ -239,8 +239,8 @@ async def legacy_process_video_markdown(request: dict):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Legacy markdown processing error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Legacy markdown processing error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @app.post("/api/process-video")
@@ -296,8 +296,8 @@ async def legacy_process_video(request: dict):
         return result
 
     except Exception as e:
-        logger.error(f"Legacy video processing error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Legacy video processing error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # Other legacy endpoints with redirects
@@ -367,8 +367,8 @@ async def system_info():
         return system_info
 
     except Exception as e:
-        logger.error(f"System info error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"System info error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # Enhanced OpenAPI schema generation

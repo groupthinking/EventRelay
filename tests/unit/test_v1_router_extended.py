@@ -336,13 +336,20 @@ class TestHealthEndpoint:
         assert data["status"] == "healthy"
 
     def test_health_check_service_error(self, client):
-        """When get_service raises, endpoint returns 500."""
+        """When get_service raises, endpoint returns a sanitized 500.
+
+        Regression guard for information disclosure: the response body must
+        carry the generic message and must NOT echo the underlying exception
+        text (``boom``) back to the client.
+        """
         with patch(
             "youtube_extension.backend.api.v1.router.get_service",
             side_effect=RuntimeError("boom"),
         ):
             resp = client.get("/api/v1/health")
         assert resp.status_code == 500
+        assert resp.json()["detail"] == "Internal server error"
+        assert "boom" not in resp.text
 
     def test_detailed_health_success(self, client):
         with patch(
