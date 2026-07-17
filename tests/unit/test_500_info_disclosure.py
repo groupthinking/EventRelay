@@ -23,6 +23,7 @@ validation errors, which are not internal-disclosure vectors.
 
 from __future__ import annotations
 
+import ast
 import re
 from pathlib import Path
 
@@ -95,15 +96,22 @@ def _split_top_level_commas(s: str) -> list[str]:
 
 
 def _detail_is_dynamic(value: str) -> bool:
-    """A detail value is safe only if it is an inline static string literal.
+    """A detail value is safe only if it is a single static string literal.
 
-    Anything else — ``str(e)``, an f-string, a bare variable, or a ``{...}`` dict —
-    can carry internal state to the client, so it is dynamic.
+    Parse the expression and accept *only* an ``ast.Constant`` string. Everything
+    else is dynamic: ``str(e)`` (Call), an f-string (JoinedStr), a bare variable
+    (Name), a ``{...}`` dict (Dict), and — the subtle one — string concatenation
+    such as ``"Request failed: " + str(exc)`` (BinOp), which *starts* with a
+    literal but still leaks the exception.
     """
-    v = value.strip()
+    v = value.strip().rstrip(",").strip()
     if not v:
         return False
-    return not v.startswith(('"', "'"))
+    try:
+        node = ast.parse(v, mode="eval").body
+    except SyntaxError:
+        return True  # unparseable → treat as suspicious rather than safe
+    return not (isinstance(node, ast.Constant) and isinstance(node.value, str))
 
 
 # --- sink 1: HTTPException (keyword and positional) ------------------------
@@ -277,6 +285,8 @@ def test_guard_detects_a_synthetic_leak() -> None:
         'raise HTTPException(status_code=500, detail={"message": error_msg})',  # dict
         "raise HTTPException(500, str(e))",  # positional detail
         'raise HTTPException(500, f"boom: {e}")',  # positional f-string
+        'raise HTTPException(status_code=500, detail="Request failed: " + str(exc))',  # concat
+        'raise HTTPException(500, "boom: " + str(e))',  # positional concat
     ]
     for leak in leaks:
         assert list(_iter_500_dynamic_detail(leak)), f"scanner missed a real 500 leak: {leak}"
