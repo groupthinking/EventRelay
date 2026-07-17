@@ -1213,6 +1213,12 @@ class _TTLDict(dict[str, Any]):
     # ------------------------------------------------------------------
 
     def _touch(self, key: str) -> None:
+        # Delete-then-reinsert so the key moves to the *end* of the dict's
+        # insertion order. Plain re-assignment (`d[k] = v`) updates the value
+        # in place and leaves the key at its original position, which would
+        # make `_enforce_max_size` evict a freshly-touched entry instead of the
+        # least-recently-touched one.
+        self._timestamps.pop(key, None)
         self._timestamps[key] = time.monotonic()
 
     def _is_expired(self, key: str) -> bool:
@@ -1228,10 +1234,11 @@ class _TTLDict(dict[str, Any]):
             self._timestamps.pop(k, None)
 
     def _enforce_max_size(self) -> None:
-        """Drop the first-inserted entry when the dict exceeds *max_size*.
+        """Drop the least-recently-touched entry when the dict exceeds *max_size*.
 
-        Python 3.7+ dicts preserve insertion order, so ``next(iter(...))``
-        returns the oldest entry in O(1) without scanning all keys.
+        Python 3.7+ dicts preserve insertion order and ``_touch`` reinserts a
+        key on every access, so ``next(iter(...))`` returns the
+        least-recently-touched entry in O(1) without scanning all keys.
         """
         if len(self) > self._max_size:
             oldest = next(iter(self._timestamps), None)
