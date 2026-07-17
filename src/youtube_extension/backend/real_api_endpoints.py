@@ -117,11 +117,11 @@ def setup_real_api_endpoints(app: FastAPI):
 
             return response
 
+        except HTTPException:
+            raise
         except Exception as e:
-            error_msg = f"Real API processing failed: {str(e)}"
-            logger.error(error_msg)
-
-            # detail is a static string; error_msg (with the exception) is logged above only
+            # Exception text is logged server-side only; never returned to the client.
+            logger.error(f"Real API processing failed: {e}", exc_info=True)
             raise HTTPException(status_code=500, detail="Internal server error")
 
     @app.post("/api/v2/validate-video")
@@ -170,6 +170,8 @@ def setup_real_api_endpoints(app: FastAPI):
 
             return result
 
+        except HTTPException:
+            raise
         except Exception as e:
             logger.error(f"Unhandled error in batch_process_videos: {e}", exc_info=True)
             raise HTTPException(
@@ -428,6 +430,8 @@ def setup_real_api_endpoints(app: FastAPI):
                 "timestamp": datetime.now(timezone.utc).isoformat()
             }
 
+        except HTTPException:
+            raise
         except Exception as e:
             logger.error(f"Unhandled error in search_youtube_videos: {e}", exc_info=True)
             raise HTTPException(

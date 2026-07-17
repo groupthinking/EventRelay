@@ -228,7 +228,7 @@ async def get_provider_status():
             )
 
     except Exception as e:
-        logger.error(f"Failed to get provider status: {e}")
+        logger.error(f"Failed to get provider status: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -262,12 +262,12 @@ async def analyze_video(request: VideoAnalysisRequest):
         logger.warning(f"Rate limit exceeded: {e}")
         raise HTTPException(status_code=429, detail=f"Rate limit exceeded: {str(e)}")
     except ConfigurationError as e:
-        logger.error(f"Configuration error: {e}")
+        logger.error(f"Configuration error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Unexpected error during video analysis: {e}")
+        logger.error(f"Unexpected error during video analysis: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -300,7 +300,7 @@ async def analyze_batch_videos(request: BatchAnalysisRequest, background_tasks: 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to start batch analysis: {e}")
+        logger.error(f"Failed to start batch analysis: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -324,7 +324,7 @@ async def analyze_video_multi_provider(request: VideoAnalysisRequest):
             return formatted_results
 
     except Exception as e:
-        logger.error(f"Multi-provider analysis failed: {e}")
+        logger.error(f"Multi-provider analysis failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
