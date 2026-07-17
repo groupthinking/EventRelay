@@ -167,7 +167,7 @@ class APICostMonitor:
             "gemini-3-pro": {"input": 0.000875, "output": 0.0035},
             "gemini-3-flash": {"input": 0.000052, "output": 0.00021},
             "gemini-1.5-pro": {"input": 0.00125, "output": 0.005},
-            "gemini-1.5-flash": {"input": 0.000075, "output": 0.003},
+            "gemini-1.5-flash": {"input": 0.000075, "output": 0.0003},
         },
         "youtube": {
             "search": 100,  # quota units per request
