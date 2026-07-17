@@ -255,15 +255,19 @@ async def analyze_video(request: VideoAnalysisRequest):
             # Format and return response
             return format_analysis_result(result)
 
-    except CloudAIError as e:
-        logger.error(f"Cloud AI analysis failed: {e}")
-        raise HTTPException(status_code=503, detail=f"AI analysis failed: {str(e)}")
     except RateLimitError as e:
+        # Must precede CloudAIError: RateLimitError subclasses it, so catching
+        # the base first would shadow this handler and return a 503 instead.
         logger.warning(f"Rate limit exceeded: {e}")
         raise HTTPException(status_code=429, detail=f"Rate limit exceeded: {str(e)}")
     except ConfigurationError as e:
+        # Must precede CloudAIError (same subclassing reason) so configuration
+        # failures reach this sanitized 500 rather than the dynamic 503 below.
         logger.error(f"Configuration error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
+    except CloudAIError as e:
+        logger.error(f"Cloud AI analysis failed: {e}")
+        raise HTTPException(status_code=503, detail=f"AI analysis failed: {str(e)}")
     except HTTPException:
         raise
     except Exception as e:
