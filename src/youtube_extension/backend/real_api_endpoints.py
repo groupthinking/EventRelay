@@ -118,18 +118,10 @@ def setup_real_api_endpoints(app: FastAPI):
             return response
 
         except Exception as e:
-            error_msg = f"Real API processing failed: {str(e)}"
-            logger.error(error_msg)
+            logger.error(f"Real API processing failed: {e}", exc_info=True)
 
-            raise HTTPException(
-                status_code=500,
-                detail={
-                    "error": "video_processing_failed",
-                    "message": error_msg,
-                    "video_url": request.video_url,
-                    "timestamp": datetime.now(timezone.utc).isoformat()
-                }
-            )
+            # detail must be a static string — the exception is logged above only.
+            raise HTTPException(status_code=500, detail="Internal server error")
 
     @app.post("/api/v2/validate-video")
     async def validate_video_url(request: VideoValidationRequest):

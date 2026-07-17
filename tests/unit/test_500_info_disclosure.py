@@ -28,16 +28,17 @@ _BACKEND = Path(__file__).resolve().parents[2] / "src" / "youtube_extension" / "
 # tolerant of the call spanning multiple lines.
 _HTTP_EXC = re.compile(r"HTTPException\((?P<args>.*?)\)", re.DOTALL)
 
-# A `detail=` argument whose value is derived from a variable/exception:
-#   detail=str(e)              detail=str(exc)
-#   detail=f"... {e} ..."      detail=f"... {str(e)} ..."
-_DYNAMIC_DETAIL = re.compile(
-    r"""detail\s*=\s*(?:
-        str\(                         # detail=str(...)
-      | f["'][^"']*\{                 # detail=f"...{...}..."
-    )""",
-    re.VERBOSE,
-)
+# A 500 `detail=` is safe only when it is an inline *static string literal*
+# (``detail="Internal server error"``). Anything else can carry internal state to
+# the client and is flagged:
+#   detail=str(e)          detail=f"... {e} ..."      (inline dynamic string)
+#   detail=error_msg       (a variable — may hold f"...{e}...")
+#   detail={...}           (a dict whose values embed the exception)
+# The value after ``detail=`` is dynamic unless its first non-space character
+# opens a plain string literal (``"`` or ``'``). A leading ``{`` (dict) or any
+# identifier char — ``f`` of an f-string, ``s`` of ``str(``, or a bare variable
+# name — means it is not a static literal.
+_DYNAMIC_DETAIL = re.compile(r"""detail\s*=\s*(?:\{|[A-Za-z_])""")
 
 
 def _backend_python_files() -> list[Path]:
@@ -76,15 +77,25 @@ def test_no_dynamic_detail_in_500_responses() -> None:
 
 
 def test_guard_detects_a_synthetic_leak() -> None:
-    """Sanity check: the scanner actually flags a dynamic 500 detail."""
-    leaky = "raise HTTPException(status_code=500, detail=str(e))"
-    safe = 'raise HTTPException(status_code=500, detail="Internal server error")'
-    client_err = "raise HTTPException(status_code=400, detail=str(exc))"
+    """Sanity check: the scanner flags every dynamic-detail shape, not just str(e)."""
+    # Each of these leaks internal state and must be flagged.
+    leaks = [
+        "raise HTTPException(status_code=500, detail=str(e))",
+        'raise HTTPException(status_code=500, detail=f"failed: {e}")',
+        "raise HTTPException(status_code=500, detail=error_msg)",  # bare variable
+        'raise HTTPException(status_code=500, detail={"message": error_msg})',  # dict
+    ]
+    for leak in leaks:
+        assert list(_iter_500_dynamic_detail(leak)), f"scanner missed a real 500 leak: {leak}"
 
-    assert list(_iter_500_dynamic_detail(leaky)), "scanner missed a real 500 leak"
+    # A static string literal is the only safe form.
+    safe = 'raise HTTPException(status_code=500, detail="Internal server error")'
     assert not list(
         _iter_500_dynamic_detail(safe)
     ), "scanner false-positived a static detail"
+
+    # 4xx responses echo client-supplied input and are intentionally out of scope.
+    client_err = "raise HTTPException(status_code=400, detail=str(exc))"
     assert not list(
         _iter_500_dynamic_detail(client_err)
     ), "scanner must ignore 4xx responses"
