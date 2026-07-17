@@ -16,7 +16,7 @@ from dataclasses import asdict
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, status
 from fastapi.responses import JSONResponse
 
 from shared.youtube import RobustYouTubeMetadata
@@ -1135,7 +1135,6 @@ async def get_metrics_v1(
 ):
     """Get system metrics in Prometheus format"""
     try:
-        from fastapi import Response
         metrics_lines = health_service.get_metrics_prometheus_format()
         return Response(content="\n".join(metrics_lines), media_type="text/plain")
     except Exception as e:
