@@ -802,11 +802,13 @@ class TestSearchVideosEndpoint:
         result = response.json()["results"][0]
         assert "youtube.com/watch?v=" in result["video_url"]
 
-    def test_max_results_above_50_returns_error(self, client):
-        """Source code raises HTTPException(400) inside a try block that
-        catches Exception -> results in HTTP 500."""
+    def test_max_results_above_50_returns_400(self, client):
+        """A >50-result search must surface the explicit 400 validation error and
+        not be swallowed into a generic 500 by the broad exception handler
+        (the handler re-raises HTTPException before the catch-all)."""
         response = client.post("/api/v2/search-videos?query=python&max_results=51")
-        assert response.status_code in (400, 500)
+        assert response.status_code == 400
+        assert "Maximum 50 results" in response.json()["detail"]
 
     def test_default_order_is_relevance(self, client, mock_youtube):
         client.post("/api/v2/search-videos?query=test")
