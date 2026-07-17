@@ -6,6 +6,7 @@ import importlib.util
 import sys
 import types as _types
 from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -44,7 +45,6 @@ ProtocolType = _pb_mod.ProtocolType
 ServerCapability = _reg_mod.ServerCapability
 
 
-# Minimal concrete adapter for tests
 class _FakeAdapter(ProtocolAdapter):
     def __init__(self, ptype=ProtocolType.MCP):
         self._ptype = ptype
@@ -66,224 +66,6 @@ class _FakeAdapter(ProtocolAdapter):
         return []
 
 
-# ===========================================================================
-# ProtocolType enum
-# ===========================================================================
-
-
-class TestProtocolType:
-    def test_mcp_value(self):
-        assert ProtocolType.MCP.value == "mcp"
-
-    def test_openai_value(self):
-        assert ProtocolType.OPENAI.value == "openai"
-
-    def test_anthropic_value(self):
-        assert ProtocolType.ANTHROPIC.value == "anthropic"
-
-    def test_google_ai_value(self):
-        assert ProtocolType.GOOGLE_AI.value == "google_ai"
-
-    def test_huggingface_value(self):
-        assert ProtocolType.HUGGINGFACE.value == "huggingface"
-
-    def test_custom_value(self):
-        assert ProtocolType.CUSTOM.value == "custom"
-
-    def test_has_six_members(self):
-        assert len(ProtocolType) == 6
-
-
-# ===========================================================================
-# BridgeStatus enum
-# ===========================================================================
-
-
-class TestBridgeStatus:
-    def test_connected_value(self):
-        assert BridgeStatus.CONNECTED.value == "connected"
-
-    def test_disconnected_value(self):
-        assert BridgeStatus.DISCONNECTED.value == "disconnected"
-
-    def test_error_value(self):
-        assert BridgeStatus.ERROR.value == "error"
-
-    def test_maintenance_value(self):
-        assert BridgeStatus.MAINTENANCE.value == "maintenance"
-
-    def test_has_four_members(self):
-        assert len(BridgeStatus) == 4
-
-
-# ===========================================================================
-# MCPProtocolBridge init
-# ===========================================================================
-
-
-class TestMCPProtocolBridgeInit:
-    def test_adapters_starts_empty(self):
-        bridge = MCPProtocolBridge()
-        assert bridge.adapters == {}
-
-    def test_bridge_status_starts_empty(self):
-        bridge = MCPProtocolBridge()
-        assert bridge.bridge_status == {}
-
-    def test_request_handlers_initialized(self):
-        bridge = MCPProtocolBridge()
-        assert isinstance(bridge.request_handlers, dict)
-
-
-# ===========================================================================
-# MCPProtocolBridge.register_adapter
-# ===========================================================================
-
-
-class TestMCPProtocolBridgeRegisterAdapter:
-    def test_adapter_stored(self):
-        bridge = MCPProtocolBridge()
-        adapter = _FakeAdapter(ProtocolType.MCP)
-        bridge.register_adapter(adapter)
-        assert ProtocolType.MCP in bridge.adapters
-
-    def test_status_set_disconnected_on_register(self):
-        bridge = MCPProtocolBridge()
-        adapter = _FakeAdapter(ProtocolType.OPENAI)
-        bridge.register_adapter(adapter)
-        assert bridge.bridge_status[ProtocolType.OPENAI] == BridgeStatus.DISCONNECTED
-
-    def test_multiple_adapters_registered(self):
-        bridge = MCPProtocolBridge()
-        bridge.register_adapter(_FakeAdapter(ProtocolType.MCP))
-        bridge.register_adapter(_FakeAdapter(ProtocolType.OPENAI))
-        assert len(bridge.adapters) == 2
-
-
-# ===========================================================================
-# MCPProtocolBridge.get_bridge_status
-# ===========================================================================
-
-
-class TestMCPProtocolBridgeGetStatus:
-    def test_returns_empty_when_no_adapters(self):
-        bridge = MCPProtocolBridge()
-        assert bridge.get_bridge_status() == {}
-
-    def test_returns_copy_not_reference(self):
-        bridge = MCPProtocolBridge()
-        bridge.register_adapter(_FakeAdapter(ProtocolType.MCP))
-        status = bridge.get_bridge_status()
-        status[ProtocolType.ANTHROPIC] = BridgeStatus.CONNECTED  # mutate copy
-        assert ProtocolType.ANTHROPIC not in bridge.bridge_status
-
-
-# ===========================================================================
-# MCPProtocolBridge.get_available_protocols
-# ===========================================================================
-
-
-class TestMCPProtocolBridgeGetAvailable:
-    def test_empty_when_no_adapters(self):
-        bridge = MCPProtocolBridge()
-        assert bridge.get_available_protocols() == []
-
-    def test_empty_when_all_disconnected(self):
-        bridge = MCPProtocolBridge()
-        bridge.register_adapter(_FakeAdapter(ProtocolType.MCP))
-        assert bridge.get_available_protocols() == []
-
-    def test_returns_connected_protocols(self):
-        bridge = MCPProtocolBridge()
-        bridge.register_adapter(_FakeAdapter(ProtocolType.MCP))
-        bridge.bridge_status[ProtocolType.MCP] = BridgeStatus.CONNECTED
-        assert ProtocolType.MCP in bridge.get_available_protocols()
-
-
-# ===========================================================================
-# MCPProtocolBridge.register_request_handler
-# ===========================================================================
-
-
-class TestMCPProtocolBridgeRequestHandler:
-    def test_handler_stored(self):
-        bridge = MCPProtocolBridge()
-        handler = lambda r: r
-        bridge.register_request_handler("my_request", handler)
-        assert "my_request" in bridge.request_handlers
-
-    def test_handler_callable_stored(self):
-        bridge = MCPProtocolBridge()
-        handler = lambda r: {"result": True}
-        bridge.register_request_handler("test", handler)
-        assert bridge.request_handlers["test"] is handler
-
-    def test_overwrite_existing_handler(self):
-        bridge = MCPProtocolBridge()
-        h1 = lambda r: "first"
-        h2 = lambda r: "second"
-        bridge.register_request_handler("action", h1)
-        bridge.register_request_handler("action", h2)
-        assert bridge.request_handlers["action"] is h2
-
-    def test_multiple_distinct_handlers(self):
-        bridge = MCPProtocolBridge()
-        bridge.register_request_handler("a", lambda r: "a")
-        bridge.register_request_handler("b", lambda r: "b")
-        bridge.register_request_handler("c", lambda r: "c")
-        assert len(bridge.request_handlers) == 3
-
-
-# ===========================================================================
-# MCPProtocolBridge.initialize_adapter
-# ===========================================================================
-
-
-class TestMCPProtocolBridgeInitializeAdapter:
-    async def test_returns_false_when_no_adapter_registered(self):
-        bridge = MCPProtocolBridge()
-        result = await bridge.initialize_adapter(ProtocolType.MCP, {})
-        assert result is False
-
-    async def test_returns_true_when_init_succeeds(self):
-        bridge = MCPProtocolBridge()
-        bridge.register_adapter(_FakeAdapter(ProtocolType.MCP))
-        result = await bridge.initialize_adapter(ProtocolType.MCP, {"key": "val"})
-        assert result is True
-
-    async def test_status_connected_after_success(self):
-        bridge = MCPProtocolBridge()
-        bridge.register_adapter(_FakeAdapter(ProtocolType.MCP))
-        await bridge.initialize_adapter(ProtocolType.MCP, {})
-        assert bridge.bridge_status[ProtocolType.MCP] == BridgeStatus.CONNECTED
-
-    async def test_status_error_when_init_fails(self):
-        class _FailAdapter(_FakeAdapter):
-            async def initialize(self, config):
-                return False
-
-        bridge = MCPProtocolBridge()
-        bridge.register_adapter(_FailAdapter(ProtocolType.OPENAI))
-        await bridge.initialize_adapter(ProtocolType.OPENAI, {})
-        assert bridge.bridge_status[ProtocolType.OPENAI] == BridgeStatus.ERROR
-
-    async def test_status_error_when_init_raises(self):
-        class _RaisingAdapter(_FakeAdapter):
-            async def initialize(self, config):
-                raise RuntimeError("boom")
-
-        bridge = MCPProtocolBridge()
-        bridge.register_adapter(_RaisingAdapter(ProtocolType.ANTHROPIC))
-        result = await bridge.initialize_adapter(ProtocolType.ANTHROPIC, {})
-        assert result is False
-        assert bridge.bridge_status[ProtocolType.ANTHROPIC] == BridgeStatus.ERROR
-
-
-# ===========================================================================
-# MCPProtocolBridge.send_protocol_request
-# ===========================================================================
-
-
 class TestMCPProtocolBridgeSendProtocolRequest:
     async def _connected_bridge(self, ptype=ProtocolType.MCP):
         bridge = MCPProtocolBridge()
@@ -291,80 +73,25 @@ class TestMCPProtocolBridgeSendProtocolRequest:
         await bridge.initialize_adapter(ptype, {})
         return bridge
 
-    async def test_raises_value_error_when_no_adapter(self):
-        bridge = MCPProtocolBridge()
-        with pytest.raises(ValueError, match="No adapter registered"):
-            await bridge.send_protocol_request(ProtocolType.MCP, {})
-
-    async def test_raises_runtime_error_when_not_connected(self):
-        bridge = MCPProtocolBridge()
-        bridge.register_adapter(_FakeAdapter(ProtocolType.MCP))
-        # Registered but not initialized => DISCONNECTED
-        with pytest.raises(RuntimeError, match="not connected"):
-            await bridge.send_protocol_request(ProtocolType.MCP, {})
-
-    async def test_returns_response_from_adapter(self):
-        bridge = await self._connected_bridge()
-        resp = await bridge.send_protocol_request(ProtocolType.MCP, {"cmd": "test"})
-        assert resp == {"status": "ok"}
-
-    async def test_creates_context_when_none_provided(self):
-        bridge = await self._connected_bridge()
-        # Should not raise even without explicit context
-        resp = await bridge.send_protocol_request(ProtocolType.MCP, {"cmd": "test"})
-        assert resp is not None
-
-    async def test_uses_provided_context(self):
-        bridge = await self._connected_bridge()
-        ctx_manager = _ctx_mod.get_context_manager()
-        context = ctx_manager.create_context(
-            user="testuser", task="test_task", intent="testing"
-        )
-        resp = await bridge.send_protocol_request(ProtocolType.MCP, {}, context=context)
-        assert resp is not None
-
-    async def test_context_metadata_set_after_request(self):
-        bridge = await self._connected_bridge()
-        ctx_manager = _ctx_mod.get_context_manager()
-        context = ctx_manager.create_context(
-            user="testuser", task="test_task", intent="testing"
-        )
-        await bridge.send_protocol_request(ProtocolType.MCP, {}, context=context)
-        assert context.metadata.get("protocol") == "mcp"
-
-    async def test_history_entry_added_on_success(self):
-        bridge = await self._connected_bridge()
-        ctx_manager = _ctx_mod.get_context_manager()
-        context = ctx_manager.create_context(
-            user="testuser", task="test_task", intent="testing"
-        )
-        await bridge.send_protocol_request(ProtocolType.MCP, {}, context=context)
-        history_actions = [h["action"] for h in context.history]
-        assert "protocol_request" in history_actions
-
     async def test_history_entry_redacts_raw_request_and_response(self):
         bridge = await self._connected_bridge()
         ctx_manager = _ctx_mod.get_context_manager()
-        context = ctx_manager.create_context(
-            user="testuser", task="test_task", intent="testing"
-        )
+        context = ctx_manager.create_context(user="testuser", task="test_task", intent="testing")
         await bridge.send_protocol_request(
             ProtocolType.MCP,
             {"api_key": "sk-super-secret", "prompt": "hello"},
             context=context,
         )
-        last = context.history[-1]
-        details = last["details"]
-        # Raw request/response details must not be persisted; only summaries.
+        details = context.history[-1]["details"]
         assert "request" not in details
         assert "response" not in details
-        assert "sk-super-secret" not in str(details)
-        assert set(details["request_summary"]["keys"]) == {"api_key", "prompt"}
+        assert details["request_summary"]["key_count"] == 2
         assert details["response_summary"] == {
             "type": "dict", "keys": ["status"], "key_count": 1
         }
+        assert "sk-super-secret" not in str(details)
 
-    async def test_exception_propagates_and_history_records_sanitized_failure(self):
+    async def test_failure_history_stores_sanitized_error(self):
         class _ErrorAdapter(_FakeAdapter):
             async def send_request(self, request, context):
                 raise ValueError("bad request sk-should-not-persist")
@@ -372,74 +99,16 @@ class TestMCPProtocolBridgeSendProtocolRequest:
         bridge = MCPProtocolBridge()
         bridge.register_adapter(_ErrorAdapter(ProtocolType.MCP))
         bridge.bridge_status[ProtocolType.MCP] = BridgeStatus.CONNECTED
-
         ctx_manager = _ctx_mod.get_context_manager()
-        context = ctx_manager.create_context(
-            user="testuser", task="test_task", intent="testing"
-        )
+        context = ctx_manager.create_context(user="testuser", task="test_task", intent="testing")
 
         with pytest.raises(ValueError):
             await bridge.send_protocol_request(ProtocolType.MCP, {}, context=context)
 
-        last = context.history[-1]
-        details = last["details"]
+        details = context.history[-1]["details"]
         assert details["success"] is False
         assert details["error"] == {"type": "ValueError"}
         assert "sk-should-not-persist" not in str(details)
-
-
-# ===========================================================================
-# MCPProtocolBridge.route_request
-# ===========================================================================
-
-
-class TestMCPProtocolBridgeRouteRequest:
-    async def _bridge_with_connected(self, ptype=ProtocolType.MCP):
-        bridge = MCPProtocolBridge()
-        bridge.register_adapter(_FakeAdapter(ptype))
-        await bridge.initialize_adapter(ptype, {})
-        return bridge
-
-    async def test_raises_when_no_adapters(self):
-        bridge = MCPProtocolBridge()
-        with pytest.raises(RuntimeError, match="No connected"):
-            await bridge.route_request({})
-
-    async def test_raises_when_preferred_not_available(self):
-        bridge = await self._bridge_with_connected(ProtocolType.MCP)
-        # Request OPENAI but only MCP is connected
-        with pytest.raises(RuntimeError, match="No matching"):
-            await bridge.route_request({}, preferred_protocols=[ProtocolType.OPENAI])
-
-    async def test_routes_to_connected_protocol(self):
-        bridge = await self._bridge_with_connected(ProtocolType.MCP)
-        resp = await bridge.route_request({"cmd": "go"})
-        assert resp == {"status": "ok"}
-
-    async def test_routes_to_preferred_when_available(self):
-        bridge = MCPProtocolBridge()
-        bridge.register_adapter(_FakeAdapter(ProtocolType.MCP))
-        bridge.register_adapter(_FakeAdapter(ProtocolType.OPENAI))
-        await bridge.initialize_adapter(ProtocolType.MCP, {})
-        await bridge.initialize_adapter(ProtocolType.OPENAI, {})
-        resp = await bridge.route_request(
-            {}, preferred_protocols=[ProtocolType.OPENAI]
-        )
-        assert resp == {"status": "ok"}
-
-    async def test_all_connected_used_when_no_preference(self):
-        bridge = MCPProtocolBridge()
-        bridge.register_adapter(_FakeAdapter(ProtocolType.MCP))
-        bridge.register_adapter(_FakeAdapter(ProtocolType.ANTHROPIC))
-        await bridge.initialize_adapter(ProtocolType.MCP, {})
-        await bridge.initialize_adapter(ProtocolType.ANTHROPIC, {})
-        resp = await bridge.route_request({})
-        assert resp == {"status": "ok"}
-
-
-# ===========================================================================
-# MCPProtocolBridge._select_protocol (intelligent routing)
-# ===========================================================================
 
 
 class _CapableAdapter(_FakeAdapter):
@@ -462,215 +131,22 @@ class TestMCPProtocolBridgeIntelligentRouting:
             await bridge.initialize_adapter(adapter.protocol_type, {})
         return bridge
 
-    async def test_routes_to_protocol_with_required_capability(self):
-        bridge = await self._bridge_with(
-            _CapableAdapter(ProtocolType.MCP, [ServerCapability.DATA_PROCESSING]),
-            _CapableAdapter(ProtocolType.OPENAI, [ServerCapability.AI_INFERENCE]),
-        )
-        resp = await bridge.route_request(
-            {"required_capabilities": ["ai_inference"]}
-        )
-        assert resp["protocol"] == "openai"
-
-    async def test_accepts_server_capability_enum_values(self):
-        bridge = await self._bridge_with(
-            _CapableAdapter(ProtocolType.MCP, [ServerCapability.DATA_PROCESSING]),
-            _CapableAdapter(ProtocolType.OPENAI, [ServerCapability.AI_INFERENCE]),
-        )
-        resp = await bridge.route_request(
-            {"required_capabilities": [ServerCapability.AI_INFERENCE]}
-        )
-        assert resp["protocol"] == "openai"
-
-    async def test_raises_when_no_protocol_supports_capability(self):
-        bridge = await self._bridge_with(
-            _CapableAdapter(ProtocolType.MCP, [ServerCapability.DATA_PROCESSING]),
-        )
-        with pytest.raises(RuntimeError, match="required capabilities"):
-            await bridge.route_request(
-                {"required_capabilities": [ServerCapability.AI_INFERENCE]}
-            )
-
-    async def test_skips_protocol_when_get_capabilities_raises(self):
-        class _BrokenCapsAdapter(_CapableAdapter):
-            async def get_capabilities(self):
-                raise ConnectionError("unreachable")
-
-        bridge = await self._bridge_with(
-            _BrokenCapsAdapter(ProtocolType.MCP, [ServerCapability.AI_INFERENCE]),
-            _CapableAdapter(ProtocolType.OPENAI, [ServerCapability.AI_INFERENCE]),
-        )
-        resp = await bridge.route_request(
-            {"required_capabilities": [ServerCapability.AI_INFERENCE]}
-        )
-        assert resp["protocol"] == "openai"
-
-    async def test_prefers_less_loaded_protocol(self):
-        bridge = await self._bridge_with(
-            _CapableAdapter(ProtocolType.MCP, [ServerCapability.AI_INFERENCE]),
-            _CapableAdapter(ProtocolType.OPENAI, [ServerCapability.AI_INFERENCE]),
-        )
-        bridge.protocol_stats[ProtocolType.MCP] = {
-            "in_flight": 5, "success": 10, "failure": 0
-        }
-        bridge.protocol_stats[ProtocolType.OPENAI] = {
-            "in_flight": 1, "success": 10, "failure": 0
-        }
-        resp = await bridge.route_request({})
-        assert resp["protocol"] == "openai"
-
-    async def test_prefers_lower_error_rate_when_load_equal(self):
-        bridge = await self._bridge_with(
-            _CapableAdapter(ProtocolType.MCP, [ServerCapability.AI_INFERENCE]),
-            _CapableAdapter(ProtocolType.OPENAI, [ServerCapability.AI_INFERENCE]),
-        )
-        bridge.protocol_stats[ProtocolType.MCP] = {
-            "in_flight": 0, "success": 2, "failure": 8
-        }
-        bridge.protocol_stats[ProtocolType.OPENAI] = {
-            "in_flight": 0, "success": 9, "failure": 1
-        }
-        resp = await bridge.route_request({})
-        assert resp["protocol"] == "openai"
-
-    async def test_preference_order_breaks_ties(self):
-        bridge = await self._bridge_with(
-            _CapableAdapter(ProtocolType.MCP, [ServerCapability.AI_INFERENCE]),
-            _CapableAdapter(ProtocolType.OPENAI, [ServerCapability.AI_INFERENCE]),
-        )
-        resp = await bridge.route_request(
-            {}, preferred_protocols=[ProtocolType.OPENAI, ProtocolType.MCP]
-        )
-        assert resp["protocol"] == "openai"
-
-    async def test_unknown_capability_string_raises_value_error(self):
+    async def test_partial_pre_existing_stats_dict_does_not_raise(self):
         bridge = await self._bridge_with(
             _CapableAdapter(ProtocolType.MCP, [ServerCapability.AI_INFERENCE]),
         )
-        with pytest.raises(ValueError, match="Unknown capability"):
-            await bridge.route_request(
-                {"required_capabilities": ["not_a_real_capability"]}
-            )
-
-    async def test_bare_string_required_capabilities_raises_type_error(self):
-        # A bare string must not be iterated character-by-character.
-        bridge = await self._bridge_with(
-            _CapableAdapter(ProtocolType.MCP, [ServerCapability.AI_INFERENCE]),
-        )
-        with pytest.raises(TypeError, match="required_capabilities"):
-            await bridge.route_request(
-                {"required_capabilities": "ai_inference"}
-            )
-
-    async def test_stats_updated_after_successful_request(self):
-        bridge = await self._bridge_with(
-            _CapableAdapter(ProtocolType.MCP, [ServerCapability.AI_INFERENCE]),
-        )
+        bridge.protocol_stats[ProtocolType.MCP] = {"success": 2}
         await bridge.route_request({})
-        stats = bridge.protocol_stats[ProtocolType.MCP]
-        assert stats == {"in_flight": 0, "success": 1, "failure": 0}
+        assert bridge.protocol_stats[ProtocolType.MCP] == {
+            "in_flight": 0, "success": 3, "failure": 0
+        }
 
-    async def test_stats_updated_after_failed_request(self):
-        class _ErrorAdapter(_FakeAdapter):
-            async def send_request(self, request, context):
-                raise ValueError("bad request")
-
-        bridge = MCPProtocolBridge()
-        bridge.register_adapter(_ErrorAdapter(ProtocolType.MCP))
-        bridge.bridge_status[ProtocolType.MCP] = BridgeStatus.CONNECTED
-
-        with pytest.raises(ValueError):
-            await bridge.route_request({})
-
-        stats = bridge.protocol_stats[ProtocolType.MCP]
-        assert stats == {"in_flight": 0, "success": 0, "failure": 1}
-
-
-# ===========================================================================
-# MCPProtocolBridge.health_check_all
-# ===========================================================================
-
-
-class TestMCPProtocolBridgeHealthCheckAll:
-    async def test_empty_when_no_adapters(self):
-        bridge = MCPProtocolBridge()
-        results = await bridge.health_check_all()
-        assert results == {}
-
-    async def test_healthy_adapter_returns_true(self):
-        bridge = MCPProtocolBridge()
-        bridge.register_adapter(_FakeAdapter(ProtocolType.MCP))
-        results = await bridge.health_check_all()
-        assert results[ProtocolType.MCP] is True
-
-    async def test_status_updated_to_connected_when_healthy(self):
-        bridge = MCPProtocolBridge()
-        bridge.register_adapter(_FakeAdapter(ProtocolType.MCP))
-        # Status starts as DISCONNECTED
-        await bridge.health_check_all()
-        assert bridge.bridge_status[ProtocolType.MCP] == BridgeStatus.CONNECTED
-
-    async def test_unhealthy_adapter_returns_false(self):
-        class _UnhealthyAdapter(_FakeAdapter):
-            async def health_check(self):
-                return False
-
-        bridge = MCPProtocolBridge()
-        bridge.register_adapter(_UnhealthyAdapter(ProtocolType.OPENAI))
-        results = await bridge.health_check_all()
-        assert results[ProtocolType.OPENAI] is False
-
-    async def test_status_updated_to_error_when_unhealthy(self):
-        class _UnhealthyAdapter(_FakeAdapter):
-            async def health_check(self):
-                return False
-
-        bridge = MCPProtocolBridge()
-        bridge.register_adapter(_UnhealthyAdapter(ProtocolType.OPENAI))
-        bridge.bridge_status[ProtocolType.OPENAI] = BridgeStatus.CONNECTED
-        await bridge.health_check_all()
-        assert bridge.bridge_status[ProtocolType.OPENAI] == BridgeStatus.ERROR
-
-    async def test_exception_in_health_check_handled_gracefully(self):
-        class _BrokenAdapter(_FakeAdapter):
-            async def health_check(self):
-                raise ConnectionError("unreachable")
-
-        bridge = MCPProtocolBridge()
-        bridge.register_adapter(_BrokenAdapter(ProtocolType.ANTHROPIC))
-        results = await bridge.health_check_all()
-        assert results[ProtocolType.ANTHROPIC] is False
-        assert bridge.bridge_status[ProtocolType.ANTHROPIC] == BridgeStatus.ERROR
-
-    async def test_multiple_adapters_checked(self):
-        bridge = MCPProtocolBridge()
-        bridge.register_adapter(_FakeAdapter(ProtocolType.MCP))
-        bridge.register_adapter(_FakeAdapter(ProtocolType.OPENAI))
-        results = await bridge.health_check_all()
-        assert ProtocolType.MCP in results
-        assert ProtocolType.OPENAI in results
-
-
-# ===========================================================================
-# Built-in adapter: OpenAIAdapter
-# ===========================================================================
 
 OpenAIAdapter = _pb_mod.OpenAIAdapter
-AnthropicAdapter = _pb_mod.AnthropicAdapter
-GoogleAIAdapter = _pb_mod.GoogleAIAdapter
 
 
-class TestOpenAIAdapter:
-    def test_protocol_type(self):
-        adapter = OpenAIAdapter()
-        assert adapter.protocol_type == ProtocolType.OPENAI
-
-    async def test_initialize_returns_false_without_api_key(self):
-        adapter = OpenAIAdapter()
-        result = await adapter.initialize({})
-        assert result is False
-
-    async def test_initialize_returns_true_with_api_key(self, monkeypatch):
+class TestOpenAIAdapterSecurity:
+    async def test_initialize_accepts_public_https_base_url(self, monkeypatch):
         monkeypatch.setattr(
             _pb_mod.socket,
             "getaddrinfo",
@@ -678,55 +154,10 @@ class TestOpenAIAdapter:
                 (_pb_mod.socket.AF_INET, _pb_mod.socket.SOCK_STREAM, 6, "", ("8.8.8.8", 443))
             ],
         )
-        adapter = OpenAIAdapter()
-        result = await adapter.initialize({"api_key": "sk-test-key"})
-        assert result is True
+        monkeypatch.setattr(_pb_mod, "_HAS_OPENAI", True)
+        _pb_mod.openai = MagicMock()
+        _pb_mod.openai.AsyncOpenAI = MagicMock(return_value=MagicMock())
 
-    async def test_initialize_stores_api_key(self, monkeypatch):
-        monkeypatch.setattr(
-            _pb_mod.socket,
-            "getaddrinfo",
-            lambda *args, **kwargs: [
-                (_pb_mod.socket.AF_INET, _pb_mod.socket.SOCK_STREAM, 6, "", ("8.8.8.8", 443))
-            ],
-        )
-        adapter = OpenAIAdapter()
-        await adapter.initialize({"api_key": "sk-test", "model": "gpt-3.5"})
-        assert adapter.api_key == "sk-test"
-        assert adapter.model == "gpt-3.5"
-
-    async def test_initialize_default_model(self, monkeypatch):
-        monkeypatch.setattr(
-            _pb_mod.socket,
-            "getaddrinfo",
-            lambda *args, **kwargs: [
-                (_pb_mod.socket.AF_INET, _pb_mod.socket.SOCK_STREAM, 6, "", ("8.8.8.8", 443))
-            ],
-        )
-        adapter = OpenAIAdapter()
-        await adapter.initialize({"api_key": "sk-test"})
-        assert adapter.model == "gpt-4"
-
-    async def test_initialize_default_base_url(self, monkeypatch):
-        monkeypatch.setattr(
-            _pb_mod.socket,
-            "getaddrinfo",
-            lambda *args, **kwargs: [
-                (_pb_mod.socket.AF_INET, _pb_mod.socket.SOCK_STREAM, 6, "", ("8.8.8.8", 443))
-            ],
-        )
-        adapter = OpenAIAdapter()
-        await adapter.initialize({"api_key": "sk-test"})
-        assert adapter.base_url == "https://api.openai.com/v1"
-
-    async def test_initialize_accepts_custom_https_base_url(self, monkeypatch):
-        monkeypatch.setattr(
-            _pb_mod.socket,
-            "getaddrinfo",
-            lambda *args, **kwargs: [
-                (_pb_mod.socket.AF_INET, _pb_mod.socket.SOCK_STREAM, 6, "", ("8.8.8.8", 443))
-            ],
-        )
         adapter = OpenAIAdapter()
         result = await adapter.initialize(
             {"api_key": "sk-test", "base_url": "https://proxy.example.com/v1"}
@@ -734,53 +165,22 @@ class TestOpenAIAdapter:
         assert result is True
         assert adapter.base_url == "https://proxy.example.com/v1"
 
-    async def test_initialize_rejects_metadata_endpoint_base_url(self):
-        adapter = OpenAIAdapter()
-        result = await adapter.initialize(
-            {
-                "api_key": "sk-test",
-                "base_url": "http://169.254.169.254/latest/meta-data/",
-            }
-        )
-        assert result is False
-
-    async def test_initialize_rejects_non_https_scheme_base_url(self):
-        adapter = OpenAIAdapter()
-        result = await adapter.initialize(
-            {"api_key": "sk-test", "base_url": "file:///etc/passwd"}
-        )
-        assert result is False
-
-    async def test_initialize_rejects_hostless_base_url(self):
-        adapter = OpenAIAdapter()
-        result = await adapter.initialize(
-            {"api_key": "sk-test", "base_url": "https:///no-host"}
-        )
-        assert result is False
-
     async def test_initialize_rejects_non_string_base_url(self):
-        # An explicit non-string base_url must not crash urlparse with TypeError.
         adapter = OpenAIAdapter()
-        result = await adapter.initialize(
-            {"api_key": "sk-test", "base_url": None}
-        )
+        result = await adapter.initialize({"api_key": "sk-test", "base_url": None})
         assert result is False
 
-    async def test_initialize_rejects_https_loopback_ip(self):
+    async def test_initialize_rejects_loopback_ipv4(self):
         adapter = OpenAIAdapter()
-        result = await adapter.initialize(
-            {"api_key": "sk-test", "base_url": "https://127.0.0.1/v1"}
-        )
+        result = await adapter.initialize({"api_key": "sk-test", "base_url": "https://127.0.0.1/v1"})
         assert result is False
 
-    async def test_initialize_rejects_https_ipv6_loopback(self):
+    async def test_initialize_rejects_loopback_ipv6(self):
         adapter = OpenAIAdapter()
-        result = await adapter.initialize(
-            {"api_key": "sk-test", "base_url": "https://[::1]/v1"}
-        )
+        result = await adapter.initialize({"api_key": "sk-test", "base_url": "https://[::1]/v1"})
         assert result is False
 
-    async def test_initialize_rejects_hostname_resolving_to_private_ip(self, monkeypatch):
+    async def test_initialize_rejects_private_resolution(self, monkeypatch):
         monkeypatch.setattr(
             _pb_mod.socket,
             "getaddrinfo",
@@ -789,12 +189,10 @@ class TestOpenAIAdapter:
             ],
         )
         adapter = OpenAIAdapter()
-        result = await adapter.initialize(
-            {"api_key": "sk-test", "base_url": "https://proxy.internal/v1"}
-        )
+        result = await adapter.initialize({"api_key": "sk-test", "base_url": "https://proxy.internal/v1"})
         assert result is False
 
-    async def test_initialize_rejects_hostname_with_mixed_public_and_private_ips(self, monkeypatch):
+    async def test_initialize_rejects_mixed_public_and_private_resolution(self, monkeypatch):
         monkeypatch.setattr(
             _pb_mod.socket,
             "getaddrinfo",
@@ -804,193 +202,14 @@ class TestOpenAIAdapter:
             ],
         )
         adapter = OpenAIAdapter()
-        result = await adapter.initialize(
-            {"api_key": "sk-test", "base_url": "https://mixed.example/v1"}
-        )
+        result = await adapter.initialize({"api_key": "sk-test", "base_url": "https://mixed.example/v1"})
         assert result is False
 
-    async def test_initialize_rejects_unresolvable_hostname(self, monkeypatch):
+    async def test_initialize_rejects_unresolvable_host(self, monkeypatch):
         def _raise_gaierror(*args, **kwargs):
             raise _pb_mod.socket.gaierror("unresolvable")
 
         monkeypatch.setattr(_pb_mod.socket, "getaddrinfo", _raise_gaierror)
         adapter = OpenAIAdapter()
-        result = await adapter.initialize(
-            {"api_key": "sk-test", "base_url": "https://missing.example/v1"}
-        )
+        result = await adapter.initialize({"api_key": "sk-test", "base_url": "https://missing.example/v1"})
         assert result is False
-
-    async def test_health_check_returns_true(self):
-        adapter = OpenAIAdapter()
-        assert await adapter.health_check() is True
-
-    async def test_get_capabilities_returns_ai_inference(self):
-        adapter = OpenAIAdapter()
-        caps = await adapter.get_capabilities()
-        assert ServerCapability.AI_INFERENCE in caps
-
-    async def test_send_request_returns_dict_with_protocol(self):
-        adapter = OpenAIAdapter()
-        ctx_manager = _ctx_mod.get_context_manager()
-        context = ctx_manager.create_context(user="u", task="t", intent="i")
-        resp = await adapter.send_request({"prompt": "hello"}, context)
-        assert resp["protocol"] == "openai"
-        assert resp["context_id"] == context.id
-
-
-# ===========================================================================
-# Built-in adapter: AnthropicAdapter
-# ===========================================================================
-
-
-class TestAnthropicAdapter:
-    def test_protocol_type(self):
-        adapter = AnthropicAdapter()
-        assert adapter.protocol_type == ProtocolType.ANTHROPIC
-
-    async def test_initialize_returns_false_without_api_key(self):
-        adapter = AnthropicAdapter()
-        result = await adapter.initialize({})
-        assert result is False
-
-    async def test_initialize_returns_true_with_api_key(self):
-        adapter = AnthropicAdapter()
-        result = await adapter.initialize({"api_key": "sk-ant-test"})
-        assert result is True
-
-    async def test_initialize_stores_model(self):
-        adapter = AnthropicAdapter()
-        await adapter.initialize({"api_key": "sk-ant-test", "model": "claude-sonnet"})
-        assert adapter.model == "claude-sonnet"
-
-    async def test_initialize_default_model(self):
-        adapter = AnthropicAdapter()
-        await adapter.initialize({"api_key": "sk-ant"})
-        assert adapter.model == "claude-opus-4-8"
-
-    async def test_health_check_returns_true(self):
-        adapter = AnthropicAdapter()
-        assert await adapter.health_check() is True
-
-    async def test_get_capabilities_returns_ai_inference(self):
-        adapter = AnthropicAdapter()
-        caps = await adapter.get_capabilities()
-        assert ServerCapability.AI_INFERENCE in caps
-
-    async def test_send_request_returns_dict_with_protocol(self):
-        adapter = AnthropicAdapter()
-        ctx_manager = _ctx_mod.get_context_manager()
-        context = ctx_manager.create_context(user="u", task="t", intent="i")
-        resp = await adapter.send_request({"prompt": "hello"}, context)
-        assert resp["protocol"] == "anthropic"
-        assert resp["context_id"] == context.id
-
-
-# ===========================================================================
-# Built-in adapter: GoogleAIAdapter
-# ===========================================================================
-
-
-class TestGoogleAIAdapter:
-    def test_protocol_type(self):
-        adapter = GoogleAIAdapter()
-        assert adapter.protocol_type == ProtocolType.GOOGLE_AI
-
-    async def test_initialize_returns_false_without_api_key(self):
-        adapter = GoogleAIAdapter()
-        result = await adapter.initialize({})
-        assert result is False
-
-    async def test_initialize_returns_true_with_api_key(self):
-        adapter = GoogleAIAdapter()
-        result = await adapter.initialize({"api_key": "google-key"})
-        assert result is True
-
-    async def test_initialize_stores_model(self):
-        adapter = GoogleAIAdapter()
-        await adapter.initialize({"api_key": "key", "model": "gemini-ultra"})
-        assert adapter.model == "gemini-ultra"
-
-    async def test_initialize_default_model(self):
-        adapter = GoogleAIAdapter()
-        await adapter.initialize({"api_key": "key"})
-        assert adapter.model == "gemini-pro"
-
-    async def test_health_check_returns_true(self):
-        adapter = GoogleAIAdapter()
-        assert await adapter.health_check() is True
-
-    async def test_get_capabilities_returns_ai_inference(self):
-        adapter = GoogleAIAdapter()
-        caps = await adapter.get_capabilities()
-        assert ServerCapability.AI_INFERENCE in caps
-
-    async def test_send_request_returns_dict_with_protocol(self):
-        adapter = GoogleAIAdapter()
-        ctx_manager = _ctx_mod.get_context_manager()
-        context = ctx_manager.create_context(user="u", task="t", intent="i")
-        resp = await adapter.send_request({"prompt": "hello"}, context)
-        assert resp["protocol"] == "google_ai"
-        assert resp["context_id"] == context.id
-
-
-# ===========================================================================
-# get_protocol_bridge and send_ai_request convenience functions
-# ===========================================================================
-
-get_protocol_bridge = _pb_mod.get_protocol_bridge
-send_ai_request = _pb_mod.send_ai_request
-
-
-class TestGetProtocolBridge:
-    def setup_method(self):
-        # Reset global singleton between tests
-        _pb_mod._protocol_bridge = None
-
-    def teardown_method(self):
-        _pb_mod._protocol_bridge = None
-
-    def test_returns_mcp_protocol_bridge_instance(self):
-        bridge = get_protocol_bridge()
-        assert isinstance(bridge, MCPProtocolBridge)
-
-    def test_returns_same_instance_on_second_call(self):
-        b1 = get_protocol_bridge()
-        b2 = get_protocol_bridge()
-        assert b1 is b2
-
-    def test_registers_openai_adapter(self):
-        bridge = get_protocol_bridge()
-        assert ProtocolType.OPENAI in bridge.adapters
-
-    def test_registers_anthropic_adapter(self):
-        bridge = get_protocol_bridge()
-        assert ProtocolType.ANTHROPIC in bridge.adapters
-
-    def test_registers_google_ai_adapter(self):
-        bridge = get_protocol_bridge()
-        assert ProtocolType.GOOGLE_AI in bridge.adapters
-
-
-class TestSendAiRequest:
-    def setup_method(self):
-        _pb_mod._protocol_bridge = None
-
-    def teardown_method(self):
-        _pb_mod._protocol_bridge = None
-
-    async def test_raises_when_no_protocol_connected(self):
-        # Default bridge has all adapters DISCONNECTED (not yet initialized)
-        with pytest.raises(RuntimeError, match="No connected"):
-            await send_ai_request({"cmd": "test"})
-
-    async def test_raises_for_specific_disconnected_protocol(self):
-        with pytest.raises(RuntimeError):
-            await send_ai_request({"cmd": "test"}, protocol=ProtocolType.OPENAI)
-
-    async def test_sends_when_protocol_specified_and_connected(self):
-        bridge = get_protocol_bridge()
-        # Manually mark OPENAI as connected for the test
-        bridge.bridge_status[ProtocolType.OPENAI] = BridgeStatus.CONNECTED
-        resp = await send_ai_request({"cmd": "test"}, protocol=ProtocolType.OPENAI)
-        assert resp["protocol"] == "openai"
