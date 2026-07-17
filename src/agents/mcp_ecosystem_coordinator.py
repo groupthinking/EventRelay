@@ -292,6 +292,11 @@ class SkillRegistry:
         lock_file_path: Optional[str] = None,
         lock_file: Optional[str] = None,
     ):
+        """Initialize the registry.
+
+        The legacy ``lock_file`` alias is kept for backward compatibility with
+        older callers while newer code uses ``lock_file_path``.
+        """
         self._lock_path = Path(
             lock_file_path
             or lock_file
@@ -327,11 +332,15 @@ class SkillRegistry:
         if isinstance(skills_data, dict):
             skill_items = skills_data.items()
         else:
-            skill_items = (
-                (skill.get("id", ""), skill)
-                for skill in skills_data
-                if isinstance(skill, dict)
-            )
+            skill_items = []
+            for skill in skills_data:
+                if not isinstance(skill, dict):
+                    continue
+                skill_id = skill.get("id")
+                if not skill_id:
+                    logger.warning("Skipping skill entry without an id in %s", self._lock_path)
+                    continue
+                skill_items.append((skill_id, skill))
 
         for skill_id, meta in skill_items:
             if not skill_id:

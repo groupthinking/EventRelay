@@ -321,6 +321,19 @@ class TestEnvPassthrough:
         env = registry.get_env_for_skill("nonexistent")
         assert env == {}
 
+    def test_email_campaign_gets_expected_env_vars(
+        self, registry: SkillRegistry
+    ) -> None:
+        with patch.dict(
+            os.environ,
+            {"GEMINI_API_KEY": "gkey", "DATABASE_URL": "sqlite:///test.db"},
+        ):
+            env = registry.get_env_for_skill("email-campaign")
+            assert env == {
+                "GEMINI_API_KEY": "gkey",
+                "DATABASE_URL": "sqlite:///test.db",
+            }
+
 
 # ---------------------------------------------------------------------------
 # Lock file validation
@@ -356,3 +369,27 @@ class TestSkillsLockFile:
             assert "version" in meta, f"{skill_id} missing version"
             assert "triggers" in meta, f"{skill_id} missing triggers"
             assert "dependencies" in meta, f"{skill_id} missing dependencies"
+
+    def test_registry_supports_legacy_dict_lock_format(self, tmp_path: Path) -> None:
+        lock_path = tmp_path / "skills-lock.json"
+        lock_path.write_text(
+            json.dumps(
+                {
+                    "skills": {
+                        "content-generation": {
+                            "source": "uvai-skills",
+                            "sourceType": "local",
+                            "skillPath": "src/skills/content_generation/main.py",
+                            "entry_point": "src/skills/content_generation/main.py",
+                            "className": "ContentGenerationSkill",
+                            "version": "1.0.0",
+                            "triggers": ["video_published"],
+                            "dependencies": ["gemini_service"],
+                        }
+                    }
+                }
+            )
+        )
+
+        registry = SkillRegistry(lock_file_path=str(lock_path))
+        assert registry.get_skill("content-generation") is not None
