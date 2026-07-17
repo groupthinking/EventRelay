@@ -175,25 +175,28 @@ export default function InteractiveTranscript({
     });
   }, [segments, filterSpeaker, searchQuery]);
 
-  const activeSegmentId = useMemo(() => {
-    if (segments.length === 0) return null;
+  // Sorted view for binary search. Recomputed only when the segments array
+  // changes — not on every currentTime tick — so the O(N log N) sort cost is
+  // paid once per transcript load rather than multiple times per second.
+  const sortedSegments = useMemo(
+    () => [...segments].sort((a, b) => a.startTime - b.startTime),
+    [segments],
+  );
 
-    // Binary search requires startTime-ordered segments. Sort a shallow copy
-    // so the caller is not required to pre-sort and out-of-order / repeated
-    // timestamps from the transcript parser are handled correctly.
-    const sorted = [...segments].sort((a, b) => a.startTime - b.startTime);
+  const activeSegmentId = useMemo(() => {
+    if (sortedSegments.length === 0) return null;
 
     let low = 0;
-    let high = sorted.length - 1;
+    let high = sortedSegments.length - 1;
     let result: string | null = null;
 
     while (low <= high) {
       const mid = (low + high) >> 1;
-      const s = sorted[mid];
+      const s = sortedSegments[mid];
       if (currentTime >= s.startTime && currentTime < s.endTime) {
-        // Record candidate and keep searching left: when multiple segments
-        // share the same startTime (overlapping / duplicate timestamps), we
-        // always prefer the first one that appears in the sorted order.
+        // Record candidate and keep searching left: when duplicate startTimes
+        // produce segments that begin at the same instant, we always prefer
+        // the earliest one in sorted order as the defined tie-breaker.
         result = s.id;
         high = mid - 1;
       } else if (currentTime < s.startTime) {
@@ -204,7 +207,7 @@ export default function InteractiveTranscript({
     }
 
     return result;
-  }, [segments, currentTime]);
+  }, [sortedSegments, currentTime]);
 
   return (
     <div
