@@ -143,17 +143,10 @@ async def process_video_cloud(
 
     except Exception as e:
         error_msg = f"Cloud processing failed: {str(e)}"
-        logger.error(error_msg)
+        logger.error(error_msg, exc_info=True)
 
-        raise HTTPException(
-            status_code=500,
-            detail={
-                "error": "cloud_processing_failed",
-                "message": error_msg,
-                "video_url": request.video_url,
-                "timestamp": datetime.now(timezone.utc).isoformat()
-            }
-        )
+        # detail is a static string; error_msg (with the exception) is logged above only
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.post("/api/v3/process-video-task")
 async def process_video_task_handler(
@@ -215,21 +208,20 @@ async def process_video_task_handler(
         }
 
     except Exception as e:
-        error_msg = f"Task processing failed: {str(e)}"
-        logger.error(error_msg)
+        logger.error(f"Task processing failed: {e}", exc_info=True)
 
-        # Update state with error
+        # Update state with a static error message; raw exception is logged above only
         try:
             firestore_service = await get_firestore_service()
             await firestore_service.update_state(
                 payload.video_id,
                 status='failed',
-                error_message=error_msg
+                error_message="Task processing failed"
             )
         except Exception as state_error:
             logger.error(f"Failed to update error state: {state_error}")
 
-        raise HTTPException(status_code=500, detail=error_msg)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.post("/api/v3/batch-process")
 async def batch_process_videos_cloud(request: BatchCloudProcessingRequest):
@@ -260,9 +252,10 @@ async def batch_process_videos_cloud(request: BatchCloudProcessingRequest):
     except HTTPException:
         raise
     except Exception as e:
+        logger.error(f"Unhandled error in batch_process_videos_cloud: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail=f"Batch processing failed: {str(e)}"
+            detail="Internal server error"
         )
 
 @router.get("/api/v3/videos/{video_id}/status", response_model=VideoStatusResponse)
@@ -293,9 +286,10 @@ async def get_video_status(video_id: str):
     except HTTPException:
         raise
     except Exception as e:
+        logger.error(f"Unhandled error in get_video_status: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail=f"Error retrieving status: {str(e)}"
+            detail="Internal server error"
         )
 
 @router.get("/api/v3/videos/{video_id}/result")
@@ -330,9 +324,10 @@ async def get_video_result(video_id: str):
     except HTTPException:
         raise
     except Exception as e:
+        logger.error(f"Unhandled error in get_video_result: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail=f"Error retrieving result: {str(e)}"
+            detail="Internal server error"
         )
 
 @router.get("/api/v3/queue/stats")

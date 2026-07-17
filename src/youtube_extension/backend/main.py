@@ -132,6 +132,13 @@ app.add_middleware(
     expose_headers=["*"],
 )
 
+from .middleware.metrics import PrometheusMetricsMiddleware
+
+app.add_middleware(
+    PrometheusMetricsMiddleware,
+    exempt_paths=["/docs", "/redoc", "/openapi.json", "/metrics", "/api/v1/metrics"],
+)
+
 from .middleware.rate_limiting import RateLimitMiddleware
 
 app.add_middleware(
@@ -444,22 +451,33 @@ async def value_error_handler(request, exc):
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request, exc):
-    """Global exception handler with enhanced error details"""
-    logger.error(f"Unhandled exception: {exc}", exc_info=True)
+    """Global exception handler.
 
-    error_detail = {
-        "error": "Internal server error",
-        "detail": str(exc),
-        "timestamp": datetime.now().isoformat(),
-        "path": str(request.url) if hasattr(request, "url") else "unknown",
-        "version": "2.0.0",
-        "architecture": "service-oriented",
-    }
+    Returns a static body only. The exception type, message, traceback, and
+    request *path* are recorded server-side via ``logger.error(..., exc_info=True)``
+    and never returned to the client, closing a CWE-209 information-disclosure
+    leak (the previous body echoed ``str(exc)``, ``exc.__class__.__name__``, and
+    the request URL).
 
-    if hasattr(exc, "__class__"):
-        error_detail["error_type"] = exc.__class__.__name__
+    The log line uses only ``request.url.path`` and the method — never the full
+    URL/query string, which can carry secrets (e.g. ``?token=...``) that must not
+    be persisted to centralized (Cloud Run) logs.
+    """
+    url = getattr(request, "url", None)
+    request_path = getattr(url, "path", None) or "unknown"
+    method = getattr(request, "method", "unknown")
+    logger.error(
+        f"Unhandled exception on {method} {request_path}: {exc}", exc_info=True
+    )
 
-    return JSONResponse(status_code=500, content=error_detail)
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": "Internal server error",
+            "detail": "Internal server error",
+            "timestamp": datetime.now().isoformat(),
+        },
+    )
 
 
 # Application lifecycle events

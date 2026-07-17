@@ -344,14 +344,19 @@ class TestProcessVideoEndpoint:
         )
         assert response.status_code == 500
 
-    def test_error_response_includes_video_url(self, client, mock_processor):
+    def test_error_response_does_not_leak_internal_state(self, client, mock_processor):
         mock_processor.process_video = AsyncMock(side_effect=RuntimeError("crash"))
         response = client.post(
             "/api/v2/process-video",
             json={"video_url": "https://youtube.com/watch?v=auJzb1D-fag"},
         )
+        assert response.status_code == 500
+        # 500 responses must not disclose internal state (CWE-209):
+        # neither the request-supplied video_url nor the exception text.
         detail = response.json()["detail"]
-        assert "auJzb1D-fag" in str(detail)
+        assert detail == "Internal server error"
+        assert "auJzb1D-fag" not in str(detail)
+        assert "crash" not in str(detail)
 
     def test_missing_video_url_returns_422(self, client):
         response = client.post("/api/v2/process-video", json={})
@@ -436,16 +441,17 @@ class TestBatchProcessEndpoint:
         )
         assert response.status_code == 200
 
-    def test_batch_with_more_than_20_videos_returns_error(self, client):
-        """Source code raises HTTPException(400) inside a try block that
-        re-wraps it as 500. Test matches actual behaviour."""
+    def test_batch_with_more_than_20_videos_returns_400(self, client):
+        """A >20-video batch must surface the explicit 400 validation error and
+        not be swallowed into a generic 500 by the broad exception handler
+        (the handler re-raises HTTPException before the catch-all)."""
         urls = [f"https://youtube.com/watch?v=vid{i:05d}" for i in range(21)]
         response = client.post(
             "/api/v2/batch-process",
             json={"video_urls": urls, "max_concurrent": 3},
         )
-        # The HTTPException(400) is caught by the outer except -> HTTP 500
-        assert response.status_code in (400, 500)
+        assert response.status_code == 400
+        assert "Maximum 20 videos" in response.json()["detail"]
 
     def test_batch_response_contains_results(self, client):
         response = client.post(
@@ -796,11 +802,13 @@ class TestSearchVideosEndpoint:
         result = response.json()["results"][0]
         assert "youtube.com/watch?v=" in result["video_url"]
 
-    def test_max_results_above_50_returns_error(self, client):
-        """Source code raises HTTPException(400) inside a try block that
-        catches Exception -> results in HTTP 500."""
+    def test_max_results_above_50_returns_400(self, client):
+        """A >50-result search must surface the explicit 400 validation error and
+        not be swallowed into a generic 500 by the broad exception handler
+        (the handler re-raises HTTPException before the catch-all)."""
         response = client.post("/api/v2/search-videos?query=python&max_results=51")
-        assert response.status_code in (400, 500)
+        assert response.status_code == 400
+        assert "Maximum 50 results" in response.json()["detail"]
 
     def test_default_order_is_relevance(self, client, mock_youtube):
         client.post("/api/v2/search-videos?query=test")

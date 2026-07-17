@@ -768,14 +768,26 @@ class HealthMonitoringService:
         lines: list[str] = [
             '# HELP uvai_requests_total Total number of application-level requests',
             '# TYPE uvai_requests_total counter',
+            '# HELP uvai_request_duration_seconds Request duration in seconds',
+            '# TYPE uvai_request_duration_seconds histogram',
+            '# HELP uvai_active_connections Number of active HTTP connections',
+            '# TYPE uvai_active_connections gauge',
         ]
         for key, value in sorted(self._metrics.items()):
-            metric_name = key.replace('.', '_').replace('-', '_')
-            try:
-                lines.append(f"uvai_{metric_name} {float(value):.0f}")
-            except Exception:
-                # Skip non-numeric values
-                continue
+            if "{" in key and "}" in key:
+                base_name, labels_part = key.split("{", 1)
+                metric_name = base_name.replace('.', '_').replace('-', '_')
+                try:
+                    lines.append(f"uvai_{metric_name}{{{labels_part} {float(value)}")
+                except Exception:
+                    continue
+            else:
+                metric_name = key.replace('.', '_').replace('-', '_')
+                try:
+                    lines.append(f"uvai_{metric_name} {float(value)}")
+                except Exception:
+                    # Skip non-numeric values
+                    continue
         return lines
 
     def _load_config(self, config: Optional[dict[str, Any]]) -> dict[str, Any]:

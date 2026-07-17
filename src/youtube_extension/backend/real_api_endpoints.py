@@ -117,19 +117,12 @@ def setup_real_api_endpoints(app: FastAPI):
 
             return response
 
+        except HTTPException:
+            raise
         except Exception as e:
-            error_msg = f"Real API processing failed: {str(e)}"
-            logger.error(error_msg)
-
-            raise HTTPException(
-                status_code=500,
-                detail={
-                    "error": "video_processing_failed",
-                    "message": error_msg,
-                    "video_url": request.video_url,
-                    "timestamp": datetime.now(timezone.utc).isoformat()
-                }
-            )
+            # Exception text is logged server-side only; never returned to the client.
+            logger.error(f"Real API processing failed: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail="Internal server error")
 
     @app.post("/api/v2/validate-video")
     async def validate_video_url(request: VideoValidationRequest):
@@ -150,9 +143,10 @@ def setup_real_api_endpoints(app: FastAPI):
             }
 
         except Exception as e:
+            logger.error(f"Unhandled error in validate_video_url: {e}", exc_info=True)
             raise HTTPException(
                 status_code=500,
-                detail=f"Validation failed: {str(e)}"
+                detail="Internal server error"
             )
 
     @app.post("/api/v2/batch-process")
@@ -176,10 +170,14 @@ def setup_real_api_endpoints(app: FastAPI):
 
             return result
 
+        except HTTPException:
+            # Preserve explicit 4xx responses (e.g. the 400 batch-size guard above).
+            raise
         except Exception as e:
+            logger.error(f"Unhandled error in batch_process_videos: {e}", exc_info=True)
             raise HTTPException(
                 status_code=500,
-                detail=f"Batch processing failed: {str(e)}"
+                detail="Internal server error"
             )
 
     @app.get("/api/v2/videos/list")
@@ -252,9 +250,10 @@ def setup_real_api_endpoints(app: FastAPI):
         except HTTPException:
             raise
         except Exception as e:
+            logger.error(f"Unhandled error in get_video_analysis: {e}", exc_info=True)
             raise HTTPException(
                 status_code=500,
-                detail=f"Error retrieving video analysis: {str(e)}"
+                detail="Internal server error"
             )
 
     @app.get("/api/v2/cost-dashboard")
@@ -384,9 +383,10 @@ def setup_real_api_endpoints(app: FastAPI):
             }
 
         except Exception as e:
+            logger.error(f"Unhandled error in clear_processing_cache: {e}", exc_info=True)
             raise HTTPException(
                 status_code=500,
-                detail=f"Failed to clear cache: {str(e)}"
+                detail="Internal server error"
             )
 
     @app.post("/api/v2/search-videos")
@@ -431,10 +431,14 @@ def setup_real_api_endpoints(app: FastAPI):
                 "timestamp": datetime.now(timezone.utc).isoformat()
             }
 
+        except HTTPException:
+            # Preserve explicit 4xx responses (e.g. the 400 max-results guard above).
+            raise
         except Exception as e:
+            logger.error(f"Unhandled error in search_youtube_videos: {e}", exc_info=True)
             raise HTTPException(
                 status_code=500,
-                detail=f"Search failed: {str(e)}"
+                detail="Internal server error"
             )
 
     logger.info("🚀 Real API endpoints setup complete")
