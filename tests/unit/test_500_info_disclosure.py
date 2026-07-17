@@ -48,17 +48,28 @@ def _is_httpexception(call: ast.Call) -> bool:
     )
 
 
+def _is_500_status(node: ast.expr) -> bool:
+    """True if ``node`` denotes HTTP 500 as a literal (``500``) OR a symbolic
+    constant such as ``status.HTTP_500_INTERNAL_SERVER_ERROR`` or
+    ``HTTPStatus.INTERNAL_SERVER_ERROR`` — otherwise the guard could be bypassed
+    by the standard FastAPI symbolic form while still leaking a 500 detail."""
+    if isinstance(node, ast.Constant) and node.value == 500:
+        return True
+    if isinstance(node, ast.Attribute) and node.attr in (
+        "HTTP_500_INTERNAL_SERVER_ERROR",
+        "INTERNAL_SERVER_ERROR",
+    ):
+        return True
+    return False
+
+
 def _is_500(call: ast.Call) -> bool:
     # Positional form: HTTPException(500, ...)
-    if call.args and isinstance(call.args[0], ast.Constant) and call.args[0].value == 500:
+    if call.args and _is_500_status(call.args[0]):
         return True
     # Keyword form: HTTPException(status_code=500, ...)
     for kw in call.keywords:
-        if (
-            kw.arg == "status_code"
-            and isinstance(kw.value, ast.Constant)
-            and kw.value.value == 500
-        ):
+        if kw.arg == "status_code" and _is_500_status(kw.value):
             return True
     return False
 
@@ -117,6 +128,8 @@ def test_guard_detects_synthetic_leaks() -> None:
         'raise HTTPException(status_code=500, detail=f"failed: {e}")',
         "raise HTTPException(status_code=500, detail=error_msg)",  # bare variable
         'raise HTTPException(status_code=500, detail={"message": str(e)})',  # dict
+        # symbolic 500 must not be a blind spot:
+        "raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))",
     ]
     for src in leaky:
         assert list(_iter_500_dynamic_detail(src)), f"scanner missed a real leak: {src}"
@@ -126,6 +139,8 @@ def test_guard_detects_synthetic_leaks() -> None:
         'raise HTTPException(500, "Internal server error")',
         "raise HTTPException(status_code=400, detail=str(exc))",  # 4xx echoes client input
         "raise HTTPException(status_code=429, detail=f'Rate limit: {e}')",
+        # symbolic 500 with a static detail is still safe:
+        'raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error")',
     ]
     for src in safe:
         assert not list(

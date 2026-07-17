@@ -226,16 +226,20 @@ class CloudNativeVideoProcessor:
             )
 
         except Exception as e:
-            error_msg = f"Error processing video {video_id}: {str(e)}"
-            logger.error(error_msg)
+            # Full detail is logged server-side ONLY. The client-facing
+            # error_message is persisted to Firestore and returned in the sync
+            # response, and get_video_status/get_video_result echo it back to
+            # callers, so it must never carry raw exception text (CWE-209).
+            logger.error(f"Error processing video {video_id}: {str(e)}", exc_info=True)
+            client_safe_error = "Internal server error"
 
-            # Update state with error
+            # Update state with a user-safe message
             if self.enable_state:
                 firestore_service = await get_firestore_service()
                 await firestore_service.update_state(
                     video_id,
                     status='failed',
-                    error_message=error_msg
+                    error_message=client_safe_error
                 )
 
             processing_time = (datetime.now(timezone.utc) - start_time).total_seconds()
@@ -244,7 +248,7 @@ class CloudNativeVideoProcessor:
                 video_id=video_id,
                 video_url=video_url,
                 success=False,
-                error_message=error_msg,
+                error_message=client_safe_error,
                 processing_time=processing_time,
             )
 
