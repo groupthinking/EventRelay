@@ -132,6 +132,13 @@ app.add_middleware(
     expose_headers=["*"],
 )
 
+from .middleware.metrics import PrometheusMetricsMiddleware
+
+app.add_middleware(
+    PrometheusMetricsMiddleware,
+    exempt_paths=["/docs", "/redoc", "/openapi.json", "/metrics", "/api/v1/metrics"],
+)
+
 from .middleware.rate_limiting import RateLimitMiddleware
 
 app.add_middleware(
