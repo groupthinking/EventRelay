@@ -175,29 +175,18 @@ export default function InteractiveTranscript({
     });
   }, [segments, filterSpeaker, searchQuery]);
 
-  // Sorted view for binary search. Recomputed only when the segments array
-  // changes — not on every currentTime tick — so the O(N log N) sort cost is
-  // paid once per transcript load rather than multiple times per second.
-  const sortedSegments = useMemo(
-    () => [...segments].sort((a, b) => a.startTime - b.startTime),
-    [segments],
-  );
-
   const activeSegmentId = useMemo(() => {
-    if (sortedSegments.length === 0) return null;
-
     let low = 0;
-    let high = sortedSegments.length - 1;
-    let result: string | null = null;
+    let high = segments.length - 1;
+    let matchIdx = -1;
 
+    // Fast path: binary search assuming segments are mostly sorted by startTime
     while (low <= high) {
       const mid = (low + high) >> 1;
-      const s = sortedSegments[mid];
+      const s = segments[mid];
       if (currentTime >= s.startTime && currentTime < s.endTime) {
-        // Record candidate and keep searching left: when duplicate startTimes
-        // produce segments that begin at the same instant, we always prefer
-        // the earliest one in sorted order as the defined tie-breaker.
-        result = s.id;
+        matchIdx = mid;
+        // Keep searching left to find the earliest overlapping segment
         high = mid - 1;
       } else if (currentTime < s.startTime) {
         high = mid - 1;
@@ -206,8 +195,16 @@ export default function InteractiveTranscript({
       }
     }
 
-    return result;
-  }, [sortedSegments, currentTime]);
+    if (matchIdx !== -1) {
+      return segments[matchIdx].id;
+    }
+
+    // Fallback: linear scan if binary search missed due to out-of-order data
+    const active = segments.find(
+      (s) => currentTime >= s.startTime && currentTime < s.endTime,
+    );
+    return active?.id || null;
+  }, [segments, currentTime]);
 
   return (
     <div
