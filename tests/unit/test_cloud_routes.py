@@ -1316,7 +1316,11 @@ class TestReportingRoutes:
             }
         )
         assert response.status_code == 500
-        assert "Failed to generate" in response.json()["detail"]
+        # 500 responses are sanitized (CWE-209): the body must be the static
+        # generic message and must not leak the internal exception text.
+        detail = response.json()["detail"]
+        assert detail == "Internal server error"
+        assert "Looker unavailable" not in detail
 
     def test_generate_dashboard_url_missing_fields(self):
         """Missing required fields return 422."""
