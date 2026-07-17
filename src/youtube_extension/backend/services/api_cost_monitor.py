@@ -341,10 +341,23 @@ class APICostMonitor:
 
         return record
 
-    # Columns on ``daily_budgets`` used to gate each alert to once per UTC day.
-    _ALERT_STATE_COLUMNS = {"threshold": "alert_sent", "exceeded": "budget_exceeded"}
+    # Static, atomic claim statements per alert type. Keyed by a fixed allow-list
+    # so no caller-supplied value is ever interpolated into SQL, and the column
+    # name is a literal in each constant rather than an f-string at the call site.
+    _ALERT_CLAIM_SQL = {
+        "threshold": (
+            "INSERT INTO daily_budgets (date, alert_sent) VALUES (?, 1) "
+            "ON CONFLICT(date) DO UPDATE SET alert_sent = 1 "
+            "WHERE daily_budgets.alert_sent = 0"
+        ),
+        "exceeded": (
+            "INSERT INTO daily_budgets (date, budget_exceeded) VALUES (?, 1) "
+            "ON CONFLICT(date) DO UPDATE SET budget_exceeded = 1 "
+            "WHERE daily_budgets.budget_exceeded = 0"
+        ),
+    }
 
-    async def _check_budget_alerts(self):
+    async def _check_budget_alerts(self) -> None:
         """Check and send budget alerts if thresholds are exceeded.
 
         ``record_usage`` calls this after every usage record, so alerts must be
@@ -378,17 +391,12 @@ class APICostMonitor:
         callers racing on the same SQLite database (even across processes)
         cannot both win, so each alert is dispatched at most once per UTC day.
         """
-        column = self._ALERT_STATE_COLUMNS[alert_type]  # KeyError on unknown type
+        sql = self._ALERT_CLAIM_SQL[alert_type]  # KeyError on unknown type
         try:
             conn = sqlite3.connect(self.db_path)
             try:
                 cursor = conn.cursor()
-                cursor.execute(
-                    f"INSERT INTO daily_budgets (date, {column}) VALUES (?, 1) "
-                    f"ON CONFLICT(date) DO UPDATE SET {column} = 1 "
-                    f"WHERE daily_budgets.{column} = 0",
-                    (date,),
-                )
+                cursor.execute(sql, (date,))
                 conn.commit()
                 # rowcount is 1 when this caller inserted the row or flipped the
                 # flag 0->1, and 0 when the flag was already set (WHERE matched
@@ -403,7 +411,7 @@ class APICostMonitor:
             # condition is re-evaluated on the next usage record.
             return False
 
-    async def _send_webhook_notification(self, message: str):
+    async def _send_webhook_notification(self, message: str) -> None:
         """Send an async webhook notification if URL is configured.
 
         The payload carries both Slack's ``text`` and Discord's ``content``
