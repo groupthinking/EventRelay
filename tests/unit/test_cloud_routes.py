@@ -360,8 +360,8 @@ class TestCloudAIRoutes:
         assert response.status_code == 503
 
     def test_analyze_video_rate_limit_error(self):
-        # RateLimitError is a subclass of CloudAIError, so it's caught by the
-        # CloudAIError except clause first and returns 503 (not 429).
+        # RateLimitError subclasses CloudAIError but is now caught before the base
+        # class, so it correctly returns 429 (not 503).
         mock_ai = AsyncMock()
         mock_ai.__aenter__ = AsyncMock(return_value=mock_ai)
         mock_ai.__aexit__ = AsyncMock(return_value=False)
@@ -373,11 +373,12 @@ class TestCloudAIRoutes:
                 "video_url": "https://www.youtube.com/watch?v=auJzb1D-fag",
                 "analysis_types": ["label_detection"],
             })
-        assert response.status_code in (429, 503)
+        assert response.status_code == 429
 
     def test_analyze_video_configuration_error(self):
-        # ConfigurationError is a subclass of CloudAIError, so it's caught by
-        # the CloudAIError clause -> 503.
+        # ConfigurationError subclasses CloudAIError but is now caught before the
+        # base class, so it returns a sanitized 500 (not a 503 leaking the config
+        # message). The internal detail must never reach the client.
         mock_ai = AsyncMock()
         mock_ai.__aenter__ = AsyncMock(return_value=mock_ai)
         mock_ai.__aexit__ = AsyncMock(return_value=False)
@@ -389,7 +390,9 @@ class TestCloudAIRoutes:
                 "video_url": "https://www.youtube.com/watch?v=auJzb1D-fag",
                 "analysis_types": ["label_detection"],
             })
-        assert response.status_code in (500, 503)
+        assert response.status_code == 500
+        assert response.json()["detail"] == "Internal server error"
+        assert "missing key" not in response.text
 
     def test_analyze_video_generic_error(self):
         mock_ai = AsyncMock()
