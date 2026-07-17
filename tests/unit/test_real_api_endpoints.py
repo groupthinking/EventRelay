@@ -344,14 +344,19 @@ class TestProcessVideoEndpoint:
         )
         assert response.status_code == 500
 
-    def test_error_response_includes_video_url(self, client, mock_processor):
+    def test_error_response_does_not_leak_internal_state(self, client, mock_processor):
         mock_processor.process_video = AsyncMock(side_effect=RuntimeError("crash"))
         response = client.post(
             "/api/v2/process-video",
             json={"video_url": "https://youtube.com/watch?v=auJzb1D-fag"},
         )
+        assert response.status_code == 500
+        # 500 responses must not disclose internal state (CWE-209):
+        # neither the request-supplied video_url nor the exception text.
         detail = response.json()["detail"]
-        assert "auJzb1D-fag" in str(detail)
+        assert detail == "Internal server error"
+        assert "auJzb1D-fag" not in str(detail)
+        assert "crash" not in str(detail)
 
     def test_missing_video_url_returns_422(self, client):
         response = client.post("/api/v2/process-video", json={})
