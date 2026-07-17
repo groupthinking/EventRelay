@@ -15,6 +15,7 @@ import logging
 import os
 from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, FastAPI, HTTPException, BackgroundTasks, Request, Header
 from fastapi.responses import JSONResponse
@@ -33,6 +34,24 @@ from ..services.cloud.cloud_video_processor import get_cloud_video_processor
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _get_allowed_callback_hosts() -> set[str]:
+    raw_hosts = os.getenv("ALLOWED_CALLBACK_HOSTS", "")
+    return {host.strip().lower() for host in raw_hosts.split(",") if host.strip()}
+
+
+def _get_allowed_callback_url(callback_url: Optional[str]) -> Optional[str]:
+    if not callback_url:
+        return None
+
+    parsed = urlparse(callback_url)
+    hostname = (parsed.hostname or "").lower()
+    allowed_hosts = _get_allowed_callback_hosts()
+    if parsed.scheme != "https" or not hostname or hostname not in allowed_hosts:
+        return None
+
+    return callback_url
 
 
 
@@ -99,18 +118,24 @@ async def process_video_cloud(
     try:
         processor = get_cloud_video_processor()
         video_id = processor._extract_video_id(request.video_url)
+        callback_url = _get_allowed_callback_url(request.callback_url)
 
         logger.info(
             f"🎬 Cloud processing request: {request.video_url} "
             f"(async={request.async_processing}, priority={request.priority})"
         )
+        if request.callback_url and not callback_url:
+            logger.warning(
+                "Ignoring callback URL for video %s because the host is not allowlisted",
+                video_id,
+            )
 
         if request.async_processing:
             # Async processing via Cloud Tasks
             task_id = await processor.process_video_async(
                 video_url=request.video_url,
                 priority=request.priority,
-                callback_url=request.callback_url,
+                callback_url=callback_url,
             )
 
             return CloudVideoAnalysisResponse(
@@ -175,6 +200,7 @@ async def process_video_task_handler(
 
     try:
         processor = get_cloud_video_processor()
+        callback_url = _get_allowed_callback_url(payload.callback_url)
 
         # Process video synchronously
         result = await processor.process_video_sync(
@@ -183,12 +209,17 @@ async def process_video_task_handler(
         )
 
         # Call callback URL if provided
-        if payload.callback_url and result.success:
+        if payload.callback_url and not callback_url:
+            logger.warning(
+                "Skipping callback for task %s because the host is not allowlisted",
+                x_cloudtasks_taskname,
+            )
+        if callback_url and result.success:
             try:
                 import httpx
                 async with httpx.AsyncClient() as client:
                     await client.post(
-                        payload.callback_url,
+                        callback_url,
                         json={
                             'video_id': result.video_id,
                             'status': 'completed',
@@ -196,7 +227,7 @@ async def process_video_task_handler(
                         },
                         timeout=10.0
                     )
-                logger.info(f"✅ Callback sent to {payload.callback_url}")
+                logger.info("✅ Callback sent to allowlisted host for task %s", x_cloudtasks_taskname)
             except Exception as e:
                 logger.warning(f"⚠️ Callback failed: {e}")
 
@@ -349,7 +380,7 @@ async def get_queue_stats():
         logger.error(f"Error getting queue stats: {e}")
         return {
             "success": False,
-            "error": str(e),
+            "error": "queue_stats_unavailable",
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
@@ -375,7 +406,7 @@ async def get_cloud_status():
         except Exception as e:
             status["services"]["firestore"] = {
                 "status": "error",
-                "error": str(e),
+                "error": "firestore_unavailable",
             }
             status["overall_status"] = "degraded"
 
@@ -391,7 +422,7 @@ async def get_cloud_status():
         except Exception as e:
             status["services"]["cloud_tasks"] = {
                 "status": "error",
-                "error": str(e),
+                "error": "cloud_tasks_unavailable",
             }
             status["overall_status"] = "degraded"
 
@@ -405,7 +436,7 @@ async def get_cloud_status():
         except Exception as e:
             status["services"]["vertex_ai"] = {
                 "status": "error",
-                "error": str(e),
+                "error": "vertex_ai_unavailable",
             }
             status["overall_status"] = "degraded"
 
@@ -415,7 +446,7 @@ async def get_cloud_status():
         logger.error(f"Error getting cloud status: {e}")
         return {
             "overall_status": "error",
-            "error": str(e),
+            "error": "cloud_status_unavailable",
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 

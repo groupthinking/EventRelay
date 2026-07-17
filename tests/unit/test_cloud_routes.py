@@ -620,6 +620,28 @@ class TestCloudApiEndpoints:
         assert data["success"] is True
         assert data["video_id"] == "auJzb1D-fag"
 
+    def test_process_video_task_skips_disallowed_callback_url(self):
+        state = self._make_state()
+        mock_processor = AsyncMock()
+        mock_processor.process_video_sync = AsyncMock(return_value=state)
+
+        with patch("youtube_extension.backend.cloud_api_endpoints.get_cloud_video_processor",
+                   return_value=mock_processor), \
+             patch("httpx.AsyncClient") as mock_client_cls:
+            client = self._build_app()
+            response = client.post(
+                "/api/v3/process-video-task",
+                json={
+                    "video_id": "auJzb1D-fag",
+                    "video_url": "https://www.youtube.com/watch?v=auJzb1D-fag",
+                    "callback_url": "https://example.com/callback",
+                },
+                headers={"X-CloudTasks-TaskName": "task-abc-123"},
+            )
+
+        assert response.status_code == 200
+        mock_client_cls.assert_not_called()
+
     def test_process_video_task_exception(self):
         mock_processor = AsyncMock()
         mock_processor.process_video_sync = AsyncMock(side_effect=Exception("processing failed"))
@@ -781,6 +803,7 @@ class TestCloudApiEndpoints:
         assert response.status_code == 200  # returns degraded, not 500
         data = response.json()
         assert data["success"] is False
+        assert data["error"] == "queue_stats_unavailable"
 
     # -------- GET /api/v3/cloud-status --------
 
@@ -820,6 +843,7 @@ class TestCloudApiEndpoints:
         assert response.status_code == 200
         data = response.json()
         assert data["overall_status"] == "degraded"
+        assert data["services"]["firestore"]["error"] == "firestore_unavailable"
 
     def test_get_cloud_status_vertex_error(self):
         mock_firestore = AsyncMock()
@@ -837,6 +861,7 @@ class TestCloudApiEndpoints:
         assert response.status_code == 200
         data = response.json()
         assert data["overall_status"] == "degraded"
+        assert data["services"]["vertex_ai"]["error"] == "vertex_ai_unavailable"
 
 
 # ===========================================================================

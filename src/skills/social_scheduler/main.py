@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, Optional
 
 from skills.base import BaseSkill, SkillResult
 
@@ -16,8 +16,12 @@ class SocialSchedulerSkill(BaseSkill):
     skill_id = "social-scheduler"
     name = "Social Scheduler"
     version = "1.0.0"
-    triggers = ["content_generated"]
+    triggers = ["ai.content.generated"]
     required_env_vars = ["GEMINI_API_KEY"]
+
+    def __init__(self, dependencies: Optional[dict[str, Any]] = None):
+        super().__init__(dependencies)
+        self.social_api = self.dependencies.get("social_api_service")
 
     async def execute(self, payload: dict[str, Any]) -> SkillResult:
         """Schedule social media posts.
@@ -39,6 +43,9 @@ class SocialSchedulerSkill(BaseSkill):
             platforms,
             schedule_time or "immediate",
         )
+
+        if self.social_api:
+            logger.info("Using injected social_api_service for scheduling")
 
         return SkillResult(
             status="success",

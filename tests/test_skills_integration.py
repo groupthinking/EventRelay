@@ -111,7 +111,7 @@ class TestSkillDiscovery:
         assert skill["name"] == "Content Generation"
         assert skill["class_name"] == "ContentGenerationSkill"
         assert skill["version"] == "1.0.0"
-        assert "video_published" in skill["triggers"]
+        assert "youtube.video.published" in skill["triggers"]
 
     def test_get_nonexistent_skill_returns_none(self, registry: SkillRegistry) -> None:
         assert registry.get_skill("nonexistent-skill") is None
@@ -128,14 +128,14 @@ class TestSkillTriggerMatching:
     def test_video_published_triggers_content_generation(
         self, registry: SkillRegistry
     ) -> None:
-        skills = registry.get_skills_for_trigger("video_published")
+        skills = registry.get_skills_for_trigger("youtube.video.published")
         skill_ids = {s["id"] for s in skills}
         assert "content-generation" in skill_ids
 
     def test_video_uploaded_triggers_seo_and_ab(
         self, registry: SkillRegistry
     ) -> None:
-        skills = registry.get_skills_for_trigger("video_uploaded")
+        skills = registry.get_skills_for_trigger("youtube.video.uploaded")
         skill_ids = {s["id"] for s in skills}
         assert "seo-optimizer" in skill_ids
         assert "ab-testing" in skill_ids
@@ -143,33 +143,33 @@ class TestSkillTriggerMatching:
     def test_content_generated_triggers_social_scheduler(
         self, registry: SkillRegistry
     ) -> None:
-        skills = registry.get_skills_for_trigger("content_generated")
+        skills = registry.get_skills_for_trigger("ai.content.generated")
         skill_ids = {s["id"] for s in skills}
         assert "social-scheduler" in skill_ids
 
     def test_analytics_updated_triggers_lead_scorer(
         self, registry: SkillRegistry
     ) -> None:
-        skills = registry.get_skills_for_trigger("analytics_updated")
+        skills = registry.get_skills_for_trigger("youtube.analytics.updated")
         skill_ids = {s["id"] for s in skills}
         assert "lead-scorer" in skill_ids
 
     def test_lead_scored_triggers_email_campaign(
         self, registry: SkillRegistry
     ) -> None:
-        skills = registry.get_skills_for_trigger("lead_scored")
+        skills = registry.get_skills_for_trigger("crm.lead.scored")
         skill_ids = {s["id"] for s in skills}
         assert "email-campaign" in skill_ids
 
     def test_daily_cron_triggers_analytics_dashboard(
         self, registry: SkillRegistry
     ) -> None:
-        skills = registry.get_skills_for_trigger("daily_cron")
+        skills = registry.get_skills_for_trigger("system.cron.daily")
         skill_ids = {s["id"] for s in skills}
         assert "analytics-dashboard" in skill_ids
 
     def test_unknown_trigger_returns_empty(self, registry: SkillRegistry) -> None:
-        skills = registry.get_skills_for_trigger("unknown_event")
+        skills = registry.get_skills_for_trigger("unknown.event.type")
         assert skills == []
 
 
@@ -334,27 +334,26 @@ class TestSkillsLockFile:
         with open(LOCK_FILE) as f:
             data = json.load(f)
         assert "skills" in data
-        assert isinstance(data["skills"], list)
+        assert isinstance(data["skills"], dict)
 
     def test_lock_file_contains_gtm_skills(self) -> None:
         with open(LOCK_FILE) as f:
             data = json.load(f)
-        gtm_skills = [
-            entry
-            for entry in data["skills"]
-            if entry.get("source") == "uvai-skills"
-        ]
+        gtm_skills = {
+            k: v
+            for k, v in data["skills"].items()
+            if v.get("source") == "uvai-skills"
+        }
         assert len(gtm_skills) == 7
 
     def test_each_gtm_skill_has_required_fields(self) -> None:
         with open(LOCK_FILE) as f:
             data = json.load(f)
-        for entry in data["skills"]:
-            if entry.get("source") != "uvai-skills":
+        for skill_id, meta in data["skills"].items():
+            if meta.get("source") != "uvai-skills":
                 continue
-            skill_id = entry.get("id", "<unknown>")
-            assert "skillPath" in entry, f"{skill_id} missing skillPath"
-            assert "className" in entry, f"{skill_id} missing className"
-            assert "version" in entry, f"{skill_id} missing version"
-            assert "triggers" in entry, f"{skill_id} missing triggers"
-            assert "dependencies" in entry, f"{skill_id} missing dependencies"
+            assert "skillPath" in meta, f"{skill_id} missing skillPath"
+            assert "className" in meta, f"{skill_id} missing className"
+            assert "version" in meta, f"{skill_id} missing version"
+            assert "triggers" in meta, f"{skill_id} missing triggers"
+            assert "dependencies" in meta, f"{skill_id} missing dependencies"
