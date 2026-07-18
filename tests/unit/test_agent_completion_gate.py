@@ -60,7 +60,16 @@ def _valid_payload():
                 "src/youtube_extension/agent_lock/completion_gate.py"
             ],
             "focused_test_files": ["tests/unit/test_agent_completion_gate.py"],
-            "focused_tests_passed": True,
+            "focused_test_results": {
+                "tests/unit/test_agent_completion_gate.py": {
+                    "passed": 1,
+                    "failed": 0,
+                    "errors": 0,
+                    "skipped": 0,
+                    "xfailed": 0,
+                    "xpassed": 0,
+                }
+            },
             "copilot_current_head_reviewed": True,
             "copilot_rabbit_label": True,
         },
@@ -481,6 +490,7 @@ class CompletionGateTests(unittest.TestCase):
     def test_behavior_change_without_focused_test_evidence_is_blocked(self):
         payload = _valid_payload()
         payload["evidence"]["focused_test_files"] = []
+        payload["evidence"]["focused_test_results"] = {}
 
         result = _evaluate(payload)
 
@@ -492,7 +502,7 @@ class CompletionGateTests(unittest.TestCase):
         payload["pull_request"]["changed_files"] = []
         payload["evidence"]["behavior_changed_files"] = []
         payload["evidence"]["focused_test_files"] = []
-        payload["evidence"]["focused_tests_passed"] = False
+        payload["evidence"]["focused_test_results"] = {}
 
         result = _evaluate(payload)
 
@@ -500,13 +510,69 @@ class CompletionGateTests(unittest.TestCase):
         self.assertIn("empty_pr_diff", result["reasons"])
 
     def test_focused_tests_must_pass(self):
-        payload = _valid_payload()
-        payload["evidence"]["focused_tests_passed"] = False
+        for field, value in (("passed", 0), ("failed", 1), ("errors", 1)):
+            with self.subTest(field=field):
+                payload = _valid_payload()
+                results = payload["evidence"]["focused_test_results"]
+                results["tests/unit/test_agent_completion_gate.py"][field] = value
 
-        result = _evaluate(payload)
+                result = _evaluate(payload)
 
-        self.assertEqual(result["verdict"], "blocked")
-        self.assertIn("focused_tests_failed", result["reasons"])
+                self.assertEqual(result["verdict"], "blocked")
+                self.assertIn("focused_tests_failed", result["reasons"])
+
+    def test_focused_test_results_require_exact_declared_paths(self):
+        for results in (
+            {},
+            {
+                "tests/unit/test_agent_completion_gate.py": {
+                    "passed": 1,
+                    "failed": 0,
+                    "errors": 0,
+                    "skipped": 0,
+                    "xfailed": 0,
+                    "xpassed": 0,
+                },
+                "tests/unit/test_extra.py": {
+                    "passed": 1,
+                    "failed": 0,
+                    "errors": 0,
+                    "skipped": 0,
+                    "xfailed": 0,
+                    "xpassed": 0,
+                },
+            },
+        ):
+            with self.subTest(results=results):
+                payload = _valid_payload()
+                payload["evidence"]["focused_test_results"] = results
+
+                result = _evaluate(payload)
+
+                self.assertEqual(result["verdict"], "blocked")
+                self.assertIn("invalid_payload", result["reasons"])
+                self.assertIn(
+                    "evidence.focused_test_results",
+                    result["details"]["invalid_fields"],
+                )
+
+    def test_focused_test_result_counts_are_nonnegative_integers(self):
+        for count in (True, -1, 1.5, "1"):
+            with self.subTest(count=count):
+                payload = _valid_payload()
+                results = payload["evidence"]["focused_test_results"]
+                results["tests/unit/test_agent_completion_gate.py"][
+                    "passed"
+                ] = count
+
+                result = _evaluate(payload)
+
+                self.assertEqual(result["verdict"], "blocked")
+                self.assertIn("invalid_payload", result["reasons"])
+                self.assertIn(
+                    "evidence.focused_test_results",
+                    result["details"]["invalid_fields"],
+                )
 
     def test_unmerged_pr_can_be_ready_but_never_completed(self):
         payload = _valid_payload()
@@ -758,6 +824,24 @@ class CompletionGateTests(unittest.TestCase):
                     result["details"]["invalid_fields"],
                 )
 
+    def test_unhashable_focused_test_path_fails_closed(self):
+        payload = _valid_payload()
+        payload["evidence"]["focused_test_files"] = [{}]
+        payload["evidence"]["focused_test_results"] = {}
+
+        result = _evaluate(payload)
+
+        self.assertEqual(result["verdict"], "blocked")
+        self.assertIn("invalid_payload", result["reasons"])
+        self.assertIn(
+            "evidence.focused_test_files",
+            result["details"]["invalid_fields"],
+        )
+        self.assertIn(
+            "evidence.focused_test_results",
+            result["details"]["invalid_fields"],
+        )
+
     def test_non_boolean_policy_fields_cannot_bypass_rules(self):
         for section, field in (
             ("policy", "applicable"),
@@ -767,7 +851,6 @@ class CompletionGateTests(unittest.TestCase):
             ("pull_request", "title_valid"),
             ("pull_request", "required_checks_passed"),
             ("pull_request", "post_merge_checks_passed"),
-            ("evidence", "focused_tests_passed"),
             ("evidence", "copilot_current_head_reviewed"),
             ("evidence", "copilot_rabbit_label"),
         ):
@@ -1276,6 +1359,37 @@ for (const [values, expected] of rows) {
         self.assertIn("missing_intent_snapshot", workflow)
         self.assertIn("intent_changed_after_dispatch", workflow)
 
+    def test_snapshot_must_strictly_predate_pull(self):
+        workflow = self._workflow()
+        functions = _javascript_functions(
+            workflow,
+            "function snapshotPredatesPull(",
+        )
+        self.assertEqual(len(functions), 1)
+
+        assertions = r"""
+const rows = [
+  ['2026-07-18T03:00:00.000Z', '2026-07-18T03:00:01.000Z', true],
+  ['2026-07-18T03:00:00.000Z', '2026-07-18T03:00:00.000Z', false],
+  ['2026-07-18T03:00:01.000Z', '2026-07-18T03:00:00.000Z', false],
+  ['not-a-date', '2026-07-18T03:00:00.000Z', false],
+  ['2026-07-18T03:00:00.000Z', null, false]
+];
+for (const [snapshot, pull, expected] of rows) {
+  const actual = snapshotPredatesPull(snapshot, pull);
+  if (actual !== expected) {
+    throw new Error(`${snapshot}/${pull}: ${actual} !== ${expected}`);
+  }
+}
+"""
+        completed = subprocess.run(
+            ["node", "-e", functions[0] + assertions],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+
     def test_snapshot_authorizes_opening_author_or_privileged_relabel(self):
         workflow = self._workflow()
         header = workflow[
@@ -1309,6 +1423,85 @@ for (const [values, expected] of rows) {
         self.assertIn("run.name === 'CI'", workflow)
         self.assertIn("pr.merge_commit_sha", workflow)
         self.assertNotIn("getCombinedStatusForRef", workflow)
+
+    def test_focused_tests_require_per_path_passing_ci_log(self):
+        workflow = self._workflow()
+        functions = _javascript_functions(
+            workflow,
+            "function focusedTestResultsFromLog(",
+        )
+        self.assertEqual(len(functions), 1)
+
+        assertions = r"""
+const log = [
+  '2026-07-18T03:00:00Z tests/unit/test_alpha.py::test_one PASSED [33%]',
+  '2026-07-18T03:00:01Z tests/unit/test_beta.py::test_two SKIPPED [66%]',
+  '\u001b[32mtests/unit/test_beta.py::test_three PASSED\u001b[0m [100%]',
+  'tests/unit/test_alpha.py.evil::test_spoof PASSED [100%]',
+  'tests/unit/test_gamma.py::test_failure FAILED [100%]',
+  'tests/unit/test_only_skipped.py::test_skip SKIPPED [100%]',
+  'tests/unit/test_param.py::test_x[PASSED fake] SKIPPED [100%]'
+].join('\n');
+const actual = focusedTestResultsFromLog(log, [
+  'tests/unit/test_alpha.py',
+  'tests/unit/test_beta.py',
+  'tests/unit/test_gamma.py',
+  'tests/unit/test_only_skipped.py',
+  'tests/unit/test_param.py'
+]);
+const expected = {
+  'tests/unit/test_alpha.py': {passed: 1, failed: 0, errors: 0, skipped: 0, xfailed: 0, xpassed: 0},
+  'tests/unit/test_beta.py': {passed: 1, failed: 0, errors: 0, skipped: 1, xfailed: 0, xpassed: 0},
+  'tests/unit/test_gamma.py': {passed: 0, failed: 1, errors: 0, skipped: 0, xfailed: 0, xpassed: 0},
+  'tests/unit/test_only_skipped.py': {passed: 0, failed: 0, errors: 0, skipped: 1, xfailed: 0, xpassed: 0},
+  'tests/unit/test_param.py': {passed: 0, failed: 0, errors: 0, skipped: 1, xfailed: 0, xpassed: 0}
+};
+if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+  throw new Error(`${JSON.stringify(actual)} !== ${JSON.stringify(expected)}`);
+}
+"""
+        completed = subprocess.run(
+            ["node", "-e", functions[0] + assertions],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("listJobsForWorkflowRun", workflow)
+        self.assertIn("downloadJobLogsForWorkflowRun", workflow)
+        self.assertIn(
+            "focused_test_results: focusedTestResults",
+            workflow,
+        )
+        self.assertNotIn(
+            "focused_tests_passed: focusedTestFiles.length > 0 && "
+            "requiredChecksPassed",
+            workflow,
+        )
+
+    def test_scheduled_sweep_can_list_pull_requests(self):
+        workflow = self._workflow()
+        sweep = workflow[
+            workflow.index("  refresh-open-pull-requests:"):
+            workflow.index("  dispatch-evidence-refresh:")
+        ]
+
+        self.assertIn("pull-requests: read", sweep)
+
+    def test_validation_replaces_obsolete_failure_comment(self):
+        workflow = self._workflow()
+        validate = workflow[
+            workflow.index("  validate:"):
+            workflow.index("  truth-gate:")
+        ]
+
+        self.assertIn("✅ Current validation passed.", validate)
+        self.assertIn("comment.user.login === 'github-actions[bot]'", validate)
+        self.assertLess(
+            validate.index("const marker = '<!-- pr-validation:v1 -->'"),
+            validate.index("if (findings.length === 0)"),
+        )
+        self.assertIn("issues.updateComment", validate)
 
     def test_commented_review_does_not_clear_changes_requested(self):
         workflow = self._workflow()

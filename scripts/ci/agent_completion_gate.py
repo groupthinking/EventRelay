@@ -174,8 +174,41 @@ def evaluate(payload: Any) -> Dict[str, Any]:
                 isinstance(item, str) and bool(item.strip()) for item in value
             ):
                 invalid_fields.append("evidence." + field)
+        focused_test_files = evidence.get("focused_test_files")
+        focused_test_results = evidence.get("focused_test_results")
+        result_fields = {
+            "passed",
+            "failed",
+            "errors",
+            "skipped",
+            "xfailed",
+            "xpassed",
+        }
+        invalid_focused_results = not isinstance(focused_test_results, dict)
+        if isinstance(focused_test_results, dict):
+            focused_files_valid = isinstance(focused_test_files, list) and all(
+                isinstance(path, str) and bool(path.strip())
+                for path in focused_test_files
+            )
+            if not focused_files_valid or set(focused_test_results) != set(
+                focused_test_files
+            ):
+                invalid_focused_results = True
+            for path, counts in focused_test_results.items():
+                if not isinstance(path, str) or not path.strip():
+                    invalid_focused_results = True
+                    continue
+                if not isinstance(counts, dict) or set(counts) != result_fields:
+                    invalid_focused_results = True
+                    continue
+                if any(
+                    type(counts[field]) is not int or counts[field] < 0
+                    for field in result_fields
+                ):
+                    invalid_focused_results = True
+        if invalid_focused_results:
+            invalid_fields.append("evidence.focused_test_results")
         for field in (
-            "focused_tests_passed",
             "copilot_current_head_reviewed",
             "copilot_rabbit_label",
         ):
@@ -299,8 +332,18 @@ def evaluate(payload: Any) -> Dict[str, Any]:
     if evidence.get("behavior_changed_files"):
         if not evidence.get("focused_test_files"):
             reasons.append("missing_test_evidence")
-        elif evidence.get("focused_tests_passed") is not True:
-            reasons.append("focused_tests_failed")
+        else:
+            focused_test_results = evidence.get("focused_test_results") or {}
+            failing_focused_tests = sorted(
+                path
+                for path in evidence.get("focused_test_files") or []
+                if focused_test_results[path]["passed"] < 1
+                or focused_test_results[path]["failed"] > 0
+                or focused_test_results[path]["errors"] > 0
+            )
+            if failing_focused_tests:
+                reasons.append("focused_tests_failed")
+                details["focused_test_failures"] = failing_focused_tests
 
     if (
         pull_request.get("merged") is True

@@ -182,6 +182,7 @@ jobs:
     permissions:
       actions: write
       contents: read
+      pull-requests: read
     steps:
       - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
@@ -377,19 +378,29 @@ jobs:
             if (totalChanges > 500) {
               findings.push('⚠️ Large PR detected (' + totalChanges + ' lines changed)');
             }
-            if (findings.length === 0) {
-              return;
-            }
             const marker = '<!-- pr-validation:v1 -->';
-            const body = marker + '\n## 🔍 PR Validation\n\n' + findings.join('\n');
             const comments = await github.paginate(
               github.rest.issues.listComments,
               {owner: context.repo.owner, repo: context.repo.repo, issue_number: pr.number, per_page: 100}
             );
             const existing = comments.find(comment =>
-              comment.user && comment.user.type === 'Bot' &&
+              comment.user &&
+              comment.user.login === 'github-actions[bot]' &&
               comment.body && comment.body.includes(marker)
             );
+            if (findings.length === 0) {
+              if (existing) {
+                await github.rest.issues.updateComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: existing.id,
+                  body: marker + '\n## 🔍 PR Validation\n\n' +
+                    '✅ Current validation passed.'
+                });
+              }
+              return;
+            }
+            const body = marker + '\n## 🔍 PR Validation\n\n' + findings.join('\n');
             if (existing) {
               await github.rest.issues.updateComment({
                 owner: context.repo.owner,
@@ -539,6 +550,15 @@ jobs:
               return response.split(/\r?\n/).some(line =>
                 /^\s*[-*]\s*\[[xX]\]/.test(line)
               ) || /^(?:yes|true)$/i.test(response);
+            }
+            function snapshotPredatesPull(
+              snapshotCreatedAt,
+              pullCreatedAt
+            ) {
+              const snapshotTime = Date.parse(snapshotCreatedAt);
+              const pullTime = Date.parse(pullCreatedAt);
+              return Number.isFinite(snapshotTime) &&
+                Number.isFinite(pullTime) && snapshotTime < pullTime;
             }
 
             const prNumber = Number(process.env.INPUT_PR_NUMBER || 0);
@@ -725,8 +745,10 @@ jobs:
                   } else if (snapshot.body_sha256 !== currentHash) {
                     collectionErrors.push('intent_changed_after_dispatch');
                   }
-                  if (Date.parse(snapshotComment.created_at) >
-                      Date.parse(pr.created_at)) {
+                  if (!snapshotPredatesPull(
+                    snapshotComment.created_at,
+                    pr.created_at
+                  )) {
                     collectionErrors.push('intent_snapshot_after_dispatch');
                   }
                   if (Boolean(snapshot.scope_unrestricted_approved) !==
@@ -945,9 +967,51 @@ jobs:
               collectionErrors.push('review_threads_unavailable');
             }
 
-            async function ciPassedFor(sha, expectedEvent) {
+            function focusedTestResultsFromLog(log, expectedPaths) {
+              const outcomes = {
+                PASSED: 'passed',
+                FAILED: 'failed',
+                ERROR: 'errors',
+                SKIPPED: 'skipped',
+                XFAIL: 'xfailed',
+                XPASS: 'xpassed'
+              };
+              const results = Object.fromEntries(expectedPaths.map(path => [
+                path,
+                {
+                  passed: 0,
+                  failed: 0,
+                  errors: 0,
+                  skipped: 0,
+                  xfailed: 0,
+                  xpassed: 0
+                }
+              ]));
+              const lines = String(log || '')
+                .replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, '')
+                .split(/\r?\n/);
+              for (const rawLine of lines) {
+                const line = rawLine
+                  .replace(/^\d{4}-\d{2}-\d{2}T\S+\s+/, '')
+                  .trim();
+                for (const path of expectedPaths) {
+                  if (!line.startsWith(path + '::')) {
+                    continue;
+                  }
+                  const outcome = line.match(
+                    /\s(PASSED|FAILED|ERROR|SKIPPED|XFAIL|XPASS)(?:\s+\[\s*\d+%\])?\s*$/
+                  );
+                  if (outcome) {
+                    results[path][outcomes[outcome[1]]] += 1;
+                  }
+                  break;
+                }
+              }
+              return results;
+            }
+            async function ciRunFor(sha, expectedEvent) {
               if (!sha) {
-                return false;
+                return null;
               }
               const workflowRuns = (await github.rest.actions.listWorkflowRunsForRepo({
                 owner, repo, head_sha: sha, per_page: 100
@@ -966,16 +1030,82 @@ jobs:
                 .sort((left, right) =>
                   Date.parse(right.created_at) - Date.parse(left.created_at)
                 );
-              return ciRuns.length > 0 &&
-                ciRuns[0].status === 'completed' &&
-                ciRuns[0].conclusion === 'success';
+              return ciRuns[0] || null;
             }
-            const requiredChecksPassed = await ciPassedFor(
+            function ciRunPassed(run) {
+              return Boolean(run) && run.status === 'completed' &&
+                run.conclusion === 'success';
+            }
+            async function collectFocusedTestResults(run, expectedPaths) {
+              const emptyResults = focusedTestResultsFromLog(
+                '',
+                expectedPaths
+              );
+              if (expectedPaths.length === 0 || !ciRunPassed(run)) {
+                return emptyResults;
+              }
+              try {
+                const jobs = await github.paginate(
+                  github.rest.actions.listJobsForWorkflowRun,
+                  {
+                    owner,
+                    repo,
+                    run_id: run.id,
+                    filter: 'latest',
+                    per_page: 100
+                  }
+                );
+                const testJobs = jobs.filter(job => job.name === 'test');
+                if (testJobs.length !== 1 ||
+                    testJobs[0].status !== 'completed' ||
+                    testJobs[0].conclusion !== 'success') {
+                  collectionErrors.push(
+                    'focused_test_evidence_unavailable'
+                  );
+                  return emptyResults;
+                }
+                const logResponse =
+                  await github.rest.actions.downloadJobLogsForWorkflowRun({
+                    owner,
+                    repo,
+                    job_id: testJobs[0].id
+                  });
+                const logData = logResponse.data;
+                let logText = typeof logData === 'string'
+                  ? logData
+                  : logData && typeof logData.text === 'function'
+                    ? await logData.text()
+                    : Buffer.from(logData || []).toString('utf8');
+                const location = logResponse.headers &&
+                  logResponse.headers.location;
+                if (!logText && location) {
+                  const download = await fetch(location);
+                  if (!download.ok) {
+                    throw new Error('focused test log download failed');
+                  }
+                  logText = await download.text();
+                }
+                if (!logText) {
+                  collectionErrors.push(
+                    'focused_test_evidence_unavailable'
+                  );
+                  return emptyResults;
+                }
+                return focusedTestResultsFromLog(logText, expectedPaths);
+              } catch (error) {
+                collectionErrors.push('focused_test_evidence_unavailable');
+                return emptyResults;
+              }
+            }
+            const requiredCiRun = await ciRunFor(
               pr.head.sha,
               'pull_request'
             );
-            const postMergeChecksPassed = Boolean(pr.merged) &&
-              await ciPassedFor(pr.merge_commit_sha, 'push');
+            const requiredChecksPassed = ciRunPassed(requiredCiRun);
+            const postMergeCiRun = Boolean(pr.merged)
+              ? await ciRunFor(pr.merge_commit_sha, 'push')
+              : null;
+            const postMergeChecksPassed = ciRunPassed(postMergeCiRun);
             if (changedFiles.includes('.github/workflows/ci.yml')) {
               collectionErrors.push('trusted_ci_workflow_changed');
             }
@@ -999,6 +1129,10 @@ jobs:
               ciCollectedTests &&
               expectedTests.every(path => presentChangedFiles.has(path));
             const focusedTestFiles = allExpectedTestsChanged ? expectedTests : [];
+            const focusedTestResults = await collectFocusedTestResults(
+              requiredCiRun,
+              focusedTestFiles
+            );
             const titleValid = pr.title.length >= 10 &&
               /^(?:⚡\s*)?(?:feat|fix|docs|style|refactor|test|chore|perf|ci|build|revert)(?:\(.+\))?:/i.test(pr.title);
 
@@ -1031,7 +1165,7 @@ jobs:
               evidence: {
                 behavior_changed_files: behaviorChangedFiles,
                 focused_test_files: focusedTestFiles,
-                focused_tests_passed: focusedTestFiles.length > 0 && requiredChecksPassed,
+                focused_test_results: focusedTestResults,
                 copilot_current_head_reviewed: copilotCurrentHeadReviewed,
                 copilot_rabbit_label: copilotRabbitLabel
               },

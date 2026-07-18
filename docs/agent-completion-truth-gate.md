@@ -19,9 +19,11 @@ The workflow publishes all of the following:
 - an Actions summary;
 - gate-input.json and gate-verdict.json artifacts.
 
-For the normal trust model—agents cannot write default-branch workflows or forge repository statuses—configure branch protection or the repository ruleset to require agent-completion/truth-gate, the repository's Copilot review, at least one approving review, and conversation resolution. The gate also requires the maintainer-applied `copilot-rabbit` label, a non-dismissed Copilot review bound to the current head, every AI review thread resolved (including outdated threads), and committed focused unit tests that pass trusted CI. Human approval alone cannot satisfy those gates. Until the ruleset is configured, the workflow reports failures but cannot itself prevent a merge. Native review/conversation rules close the window between a new review comment and the scheduled refresh.
+For the normal trust model—agents cannot write default-branch workflows or forge repository statuses—configure branch protection or the repository ruleset to require agent-completion/truth-gate, the repository's Copilot review, at least one approving review, and conversation resolution. The gate also requires the maintainer-applied `copilot-rabbit` label, a non-dismissed Copilot review bound to the current head, every AI review thread resolved (including outdated threads), and committed focused unit tests. It binds to the exact-head trusted CI run, requires its `test` job to succeed, and requires that job's verbose pytest log to report at least one passing test for every declared path; an absent, deselected, or all-skipped path blocks. Human approval alone cannot satisfy those gates. Until the ruleset is configured, the workflow reports failures but cannot itself prevent a merge. Native review/conversation rules close the window between a new review comment and the scheduled refresh.
 
 Each serialized run first posts a pending status tied to its Actions run. It uploads evidence and updates the PR comment before publishing a terminal status. A compare-and-swap check rejects superseded publication; an always-running finalizer turns publication failures into a failure status. Actions are pinned to full commit SHAs. Only refresh-dispatch jobs receive actions: write.
+
+Per-path focused-test proof currently parses terminal pytest outcomes from the exact-head trusted CI `test` job log. End-anchored parsing prevents parameter text from masquerading as an outcome, but code executed by pytest can deliberately forge console lines. The required independent review remains part of the trust boundary. Follow-up #874 must move per-path evidence to a machine-readable report emitted and published by the protected CI workflow before this signal is treated as hostile-agent-resistant.
 
 If an agent has repository-write credentials that can create Actions workflows or post statuses/comments, github-actions[bot] and a status-context string are not independent provenance. In that threat model, keep this workflow advisory until snapshot and check publication move to a dedicated GitHub App (or an organization ruleset-required trusted workflow) and bind the required check to that identity.
 
@@ -74,7 +76,9 @@ The CLI accepts one JSON object:
       "evidence": {
         "behavior_changed_files": ["src/example.py"],
         "focused_test_files": ["tests/unit/test_example.py"],
-        "focused_tests_passed": true,
+        "focused_test_results": {
+          "tests/unit/test_example.py": {"passed": 1, "failed": 0, "errors": 0, "skipped": 0, "xfailed": 0, "xpassed": 0}
+        },
         "copilot_current_head_reviewed": true,
         "copilot_rabbit_label": true
       },
@@ -86,7 +90,7 @@ Run it with:
     python3 scripts/ci/agent_completion_gate.py gate-input.json
 
 The CLI prints JSON to standard output. Exit status 1 means blocked; ready, completed, and not_applicable return 0.
-An applicable policy must explicitly provide `applicable: true`, a nonblank `agent_login` and `run_id`, and a 40-character hexadecimal `head_sha`. Object sections must be JSON objects; every event requires an `author` exactly equal to `policy.agent_login`, a supported `kind`, and an integer `sequence`, with any supplied run/head metadata strictly typed; and every review requires a nonblank source plus JSON booleans for `blocking` and `resolved`. Every declared file is a required deliverable, while allowed-extra files remain optional; supplied criteria and path entries must contain non-whitespace text. `copilot_current_head_reviewed` means a non-dismissed submitted Copilot review (`APPROVED`, `COMMENTED`, or `CHANGES_REQUESTED`) whose `commit_id` equals the current PR head; it is evidence of a current-head review, not native GitHub approval. Missing evidence sections, falsey containers such as `[]`, and stringified booleans are invalid payloads; they never inherit defaults. A policy containing only `applicable: false` remains a valid non-agent exemption.
+An applicable policy must explicitly provide `applicable: true`, a nonblank `agent_login` and `run_id`, and a 40-character hexadecimal `head_sha`. Object sections must be JSON objects; every event requires an `author` exactly equal to `policy.agent_login`, a supported `kind`, and an integer `sequence`, with any supplied run/head metadata strictly typed; and every review requires a nonblank source plus JSON booleans for `blocking` and `resolved`. Every declared file is a required deliverable, while allowed-extra files remain optional; supplied criteria and path entries must contain non-whitespace text. Focused-test results must contain exactly one result object per declared focused-test path, with nonnegative integer counts for passed, failed, errors, skipped, xfailed, and xpassed; each path needs at least one pass and no failure or error. `copilot_current_head_reviewed` means a non-dismissed submitted Copilot review (`APPROVED`, `COMMENTED`, or `CHANGES_REQUESTED`) whose `commit_id` equals the current PR head; it is evidence of a current-head review, not native GitHub approval. Missing evidence sections, falsey containers such as `[]`, and stringified booleans are invalid payloads; they never inherit defaults. A policy containing only `applicable: false` remains a valid non-agent exemption.
 
 ## Verdict schema
 
@@ -109,7 +113,7 @@ Verdict meanings:
 
 ## Fail-closed rules
 
-The gate blocks a missing, late, or changed intent snapshot; agent/run/head identity mismatches; blank intent; missing acceptance criteria; missing scope; an empty PR diff; omitted declared files; undeclared paths (including a rename's previous path); unapproved unrestricted scope; failed evidence collection; missing current-run output; current-run agent errors; contradictory readiness/completion and error events; a missing current-head Copilot review or `copilot-rabbit` label; unresolved AI or other blocking reviews; failed required checks; draft or invalidly titled PRs; missing, deleted, or failing focused Python unit-test evidence; and merged work without passing post-merge checks on the merge SHA.
+The gate blocks a missing, late, or changed intent snapshot; agent/run/head identity mismatches; blank intent; missing acceptance criteria; missing scope; an empty PR diff; omitted declared files; undeclared paths (including a rename's previous path); unapproved unrestricted scope; failed evidence collection; missing current-run output; current-run agent errors; contradictory readiness/completion and error events; a missing current-head Copilot review or `copilot-rabbit` label; unresolved AI or other blocking reviews; failed required checks; draft or invalidly titled PRs; missing, deleted, deselected, all-skipped, or failing focused Python unit-test evidence; and merged work without passing post-merge checks on the merge SHA.
 
 Artifact ready is not completion. A Ready for review comment followed by an error is agent_run_failed. Generic green CI never overrides an unresolved review. An unmerged PR can be ready, but it can never be completed.
 
