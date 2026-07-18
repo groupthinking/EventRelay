@@ -76,6 +76,12 @@ class TestCalculateCost:
         expected = (1000 / 1000) * 0.0025 + (1000 / 1000) * 0.01
         assert pytest.approx(cost, rel=1e-6) == expected
 
+    def test_google_gemini_15_flash_cost(self, monitor):
+        cost = monitor.calculate_cost(
+            "google", "gemini-1.5-flash", input_tokens=1000, output_tokens=1000
+        )
+        assert pytest.approx(cost, rel=1e-6) == 0.000075 + 0.0003
+
     def test_youtube_quota_cost(self, monitor):
         cost = monitor.calculate_cost("youtube", "search", input_tokens=100)
         assert pytest.approx(cost, rel=1e-6) == 100 * 0.0001
