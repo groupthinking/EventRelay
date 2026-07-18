@@ -1282,6 +1282,84 @@ class CompletionGateWorkflowTests(unittest.TestCase):
             workflow.index("name: Publish stable status and comment"),
         )
 
+    def test_resolve_collect_and_publish_commits_must_match(self):
+        workflow = self._workflow()
+        collect_step = workflow[
+            workflow.index("name: Collect repository evidence"):
+            workflow.index("name: Evaluate completion evidence")
+        ]
+        publish_step = workflow[
+            workflow.index("name: Publish stable status and comment"):
+            workflow.index("name: Finalize failed gate publication")
+        ]
+        functions = _javascript_functions(
+            workflow,
+            "function commitEvidenceDisposition(",
+        )
+        self.assertEqual(len(functions), 1)
+        self.assertIn(
+            "COLLECTED_HEAD_SHA: ${{ steps.collect.outputs.head_sha }}",
+            publish_step,
+        )
+        self.assertIn(
+            "COLLECTED_BASE_SHA: ${{ steps.collect.outputs.base_sha }}",
+            publish_step,
+        )
+        self.assertIn(
+            "BASE_SHA: ${{ steps.resolve.outputs.base_sha }}",
+            publish_step,
+        )
+        self.assertIn(
+            "RESOLVED_HEAD_SHA: ${{ steps.resolve.outputs.head_sha }}",
+            collect_step,
+        )
+        self.assertIn(
+            "RESOLVED_BASE_SHA: ${{ steps.resolve.outputs.base_sha }}",
+            collect_step,
+        )
+        self.assertEqual(
+            collect_step.count("github.rest.pulls.get("),
+            2,
+        )
+        self.assertGreaterEqual(
+            collect_step.count("collectionErrors.push('stale_head')"),
+            2,
+        )
+        self.assertGreaterEqual(
+            collect_step.count("collectionErrors.push('stale_base')"),
+            2,
+        )
+        self.assertIn("compareCommitsWithBasehead", collect_step)
+        self.assertIn("basehead: pr.base.sha + '...' + pr.head.sha", collect_step)
+        self.assertNotIn("pulls.listFiles", collect_step)
+
+        assertions = r"""
+const a = 'a'.repeat(40);
+const b = 'b'.repeat(40);
+const rows = [
+  [a, a, a, 'current_commit'],
+  [a.toUpperCase(), a, a, 'current_commit'],
+  [a, b, a, 'stale_commit'],
+  [a, a, b, 'stale_commit'],
+  [a, b, b, 'stale_commit'],
+  [a, '', a, 'stale_commit'],
+  ['not-a-sha', a, a, 'stale_commit']
+];
+for (const [resolved, collected, current, expected] of rows) {
+  const actual = commitEvidenceDisposition(resolved, collected, current);
+  if (actual !== expected) {
+    throw new Error(`${resolved}/${collected}/${current}: ${actual} !== ${expected}`);
+  }
+}
+"""
+        completed = subprocess.run(
+            ["node", "-e", functions[0] + assertions],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+
     def test_workflow_reserves_status_capacity_for_finalization(self):
         workflow = self._workflow()
         resolve = workflow[
@@ -1771,11 +1849,13 @@ for (const [response, expected] of rows) {
         )
         self.assertIn("username: context.actor", snapshot)
         self.assertIn("roleName = result.data.role_name", snapshot)
-        self.assertIn("github.event.action == 'opened'", snapshot)
+        self.assertNotIn("github.event.action == 'opened'", snapshot)
         self.assertIn("github.event.action == 'labeled'", snapshot)
         self.assertIn("github.event.action == 'edited'", snapshot)
         self.assertIn("github.event.action == 'unlabeled'", snapshot)
         self.assertIn("agent-lock-intent-invalidated:v1", snapshot)
+        self.assertEqual(snapshot.count("workflow_run_id: workflowRunId"), 2)
+        self.assertIn("/^[1-9]\\d*$/.test(workflowRunId)", snapshot)
         self.assertIn("'scopeunrestrictedapproved'", snapshot)
         self.assertIn("'agenttask'", snapshot)
         self.assertIn("'mcpagent'", snapshot)
@@ -1784,27 +1864,32 @@ for (const [response, expected] of rows) {
             snapshot.index("getCollaboratorPermissionLevel"),
         )
 
-    def test_snapshot_invalidation_decision_table(self):
+    def test_snapshot_event_disposition_decision_table(self):
         workflow = self._workflow()
         functions = _javascript_functions(
             workflow,
-            "function shouldInvalidateIntent(",
+            "function snapshotEventDisposition(",
         )
         self.assertEqual(len(functions), 1)
 
         assertions = r"""
 const rows = [
-  [true, 'edited', true],
-  [true, 'labeled', true],
-  [true, 'unlabeled', true],
-  [true, 'opened', false],
-  [false, 'edited', false],
-  [false, 'labeled', false]
+  [false, 'opened', 'agenttask', '', '101', 'ignore'],
+  [false, 'labeled', 'agenttask', '', '101', 'snapshot'],
+  [false, 'labeled', 'mcpagent', '', '102', 'snapshot'],
+  [false, 'labeled', 'priority', '', '103', 'ignore'],
+  [true, 'labeled', 'agenttask', '101', '101', 'same_snapshot_run'],
+  [true, 'labeled', 'agenttask', '101', '102', 'invalidate'],
+  [true, 'edited', '', '101', '103', 'invalidate'],
+  [true, 'unlabeled', 'agenttask', '101', '104', 'invalidate'],
+  [true, 'opened', 'agenttask', '101', '105', 'ignore']
 ];
-for (const [snapshot, action, expected] of rows) {
-  const actual = shouldInvalidateIntent(snapshot, action);
+for (const [snapshot, action, label, sourceRun, run, expected] of rows) {
+  const actual = snapshotEventDisposition(
+    snapshot, action, label, sourceRun, run
+  );
   if (actual !== expected) {
-    throw new Error(`${action}: ${actual} !== ${expected}`);
+    throw new Error(`${JSON.stringify([snapshot, action, label, sourceRun, run])}: ${actual} !== ${expected}`);
   }
 }
 """
@@ -1930,7 +2015,7 @@ for (const [snapshot, pull, expected] of rows) {
         )
         self.assertEqual(completed.returncode, 0, completed.stderr)
 
-    def test_snapshot_requires_privileged_actor_for_open_or_relabel(self):
+    def test_snapshot_requires_privileged_actor_for_relabel(self):
         workflow = self._workflow()
         header = workflow[
             workflow.index("  snapshot-agent-task-intent:"):
@@ -1939,7 +2024,7 @@ for (const [snapshot, pull, expected] of rows) {
             ))
         ]
 
-        self.assertIn("(github.event.action == 'opened' ||", header)
+        self.assertNotIn("github.event.action == 'opened'", header)
         self.assertIn("github.event.action == 'labeled'", header)
         self.assertNotIn("author_association", header)
         self.assertIn("getCollaboratorPermissionLevel", workflow)
@@ -3208,6 +3293,16 @@ class CompletionGateDocumentationTests(unittest.TestCase):
             "independently head-bound required workflow",
             documentation,
         )
+        self.assertIn("Snapshot creation is label-event-only", documentation)
+        self.assertIn(
+            "does not recursively trigger `issue_comment`",
+            documentation,
+        )
+        self.assertIn(
+            "Resolve-time, collection-time, and publication-time PR base and head",
+            documentation,
+        )
+        self.assertIn("immutable resolved base/head commit comparison", documentation)
 
 
 if __name__ == "__main__":

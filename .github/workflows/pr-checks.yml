@@ -25,8 +25,7 @@ jobs:
   snapshot-agent-task-intent:
     if: >-
       github.event_name == 'issues' &&
-      (github.event.action == 'opened' ||
-       github.event.action == 'labeled' ||
+      (github.event.action == 'labeled' ||
        github.event.action == 'edited' ||
        github.event.action == 'unlabeled')
     concurrency:
@@ -42,6 +41,11 @@ jobs:
           script: |
             const crypto = require('crypto');
             const issue = context.payload.issue;
+            const workflowRunId = String(context.runId || '');
+            if (!/^[1-9]\d*$/.test(workflowRunId)) {
+              core.setFailed('invalid_workflow_run_id');
+              return;
+            }
             const labels = new Set((issue.labels || []).map(label =>
               String(typeof label === 'string' ? label : label.name)
                 .toLowerCase().replace(/[^a-z0-9 ]/g, '').trim()
@@ -49,6 +53,9 @@ jobs:
             const hasAgentTaskLabel = [...labels].some(label =>
               ['agenttask', 'mcpagent'].includes(label)
             );
+            const eventLabel = String(
+              context.payload.label && context.payload.label.name || ''
+            ).toLowerCase().replace(/[^a-z0-9 ]/g, '').trim();
             const snapshotMarker =
               '<!-- agent-lock-intent-snapshot:v1';
             const invalidationMarker =
@@ -66,21 +73,61 @@ jobs:
               comment.user && comment.user.login === 'github-actions[bot]' &&
               String(comment.body || '').includes(snapshotMarker)
             );
-            function shouldInvalidateIntent(
+            function snapshotEventDisposition(
               hasSnapshot,
-              action
+              action,
+              label,
+              snapshotRunId,
+              currentRunId
             ) {
-              return Boolean(hasSnapshot) &&
-                ['edited', 'labeled', 'unlabeled'].includes(action);
+              if (hasSnapshot) {
+                if (String(snapshotRunId || '') &&
+                    String(snapshotRunId) === String(currentRunId || '')) {
+                  return 'same_snapshot_run';
+                }
+                return ['edited', 'labeled', 'unlabeled'].includes(action)
+                  ? 'invalidate'
+                  : 'ignore';
+              }
+              if (action === 'labeled' &&
+                  ['agenttask', 'mcpagent'].includes(label)) {
+                return 'snapshot';
+              }
+              return 'ignore';
             }
-            if (shouldInvalidateIntent(
-              existing,
-              context.payload.action
-            )) {
+            let snapshotRunId = '';
+            if (existing) {
+              try {
+                const match = String(existing.body || '').match(
+                  /<!--\s*agent-lock-intent-snapshot:v1\s*([\s\S]*?)-->/i
+                );
+                if (match) {
+                  const payload = JSON.parse(match[1].trim());
+                  snapshotRunId = String(payload.workflow_run_id || '');
+                }
+              } catch (error) {
+                core.warning(
+                  'Could not read snapshot source run: ' + error.message
+                );
+              }
+            }
+            const disposition = snapshotEventDisposition(
+              Boolean(existing),
+              context.payload.action,
+              eventLabel,
+              snapshotRunId,
+              workflowRunId
+            );
+            if (disposition === 'same_snapshot_run') {
+              core.info('Snapshot already created by this workflow run');
+              return;
+            }
+            if (disposition === 'invalidate') {
               const invalidation = {
                 issue_number: issue.number,
                 event_action: context.payload.action,
                 actor: context.actor,
+                workflow_run_id: workflowRunId,
                 created_at: new Date().toISOString()
               };
               await github.rest.issues.createComment({
@@ -93,9 +140,7 @@ jobs:
               });
               return;
             }
-            if (existing ||
-                !hasAgentTaskLabel ||
-                !['opened', 'labeled'].includes(context.payload.action)) {
+            if (disposition !== 'snapshot' || !hasAgentTaskLabel) {
               return;
             }
             function hasTrustedSnapshotPermission(permission, roleName) {
@@ -197,6 +242,7 @@ jobs:
               issue_number: issue.number,
               body_sha256: bodySha256,
               scope_unrestricted_approved: unrestrictedApproved,
+              workflow_run_id: workflowRunId,
               created_at: new Date().toISOString()
             };
             await github.rest.issues.createComment({
@@ -1700,6 +1746,7 @@ jobs:
             if (!prNumber) {
               core.setOutput('pr_number', '');
               core.setOutput('head_sha', '');
+              core.setOutput('base_sha', '');
               return;
             }
             if (context.payload.pull_request &&
@@ -1717,6 +1764,7 @@ jobs:
             })).data;
             core.setOutput('pr_number', String(prNumber));
             core.setOutput('head_sha', pr.head.sha);
+            core.setOutput('base_sha', pr.base.sha);
             const gateContext =
               'agent-completion/truth-gate/pr-' + prNumber;
             const statuses = await github.paginate(
@@ -1761,6 +1809,8 @@ jobs:
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           INPUT_PR_NUMBER: ${{ steps.resolve.outputs.pr_number }}
+          RESOLVED_HEAD_SHA: ${{ steps.resolve.outputs.head_sha }}
+          RESOLVED_BASE_SHA: ${{ steps.resolve.outputs.base_sha }}
         with:
           script: |
             const crypto = require('crypto');
@@ -1873,10 +1923,36 @@ jobs:
             }
 
             const pr = (await github.rest.pulls.get({owner, repo, pull_number: prNumber})).data;
-            const changed = await github.paginate(
-              github.rest.pulls.listFiles,
-              {owner, repo, pull_number: prNumber, per_page: 100}
-            );
+            const resolvedHead = String(
+              process.env.RESOLVED_HEAD_SHA || ''
+            ).toLowerCase();
+            const resolvedBase = String(
+              process.env.RESOLVED_BASE_SHA || ''
+            ).toLowerCase();
+            const collectedHead = String(pr.head.sha || '').toLowerCase();
+            const collectedBase = String(pr.base.sha || '').toLowerCase();
+            core.setOutput('pr_number', String(prNumber));
+            core.setOutput('head_sha', collectedHead);
+            core.setOutput('base_sha', collectedBase);
+            if (!/^[a-f0-9]{40}$/.test(resolvedHead) ||
+                collectedHead !== resolvedHead) {
+              collectionErrors.push('stale_head');
+            }
+            if (!/^[a-f0-9]{40}$/.test(resolvedBase) ||
+                collectedBase !== resolvedBase) {
+              collectionErrors.push('stale_base');
+            }
+            const comparison = (await
+              github.rest.repos.compareCommitsWithBasehead({
+                owner,
+                repo,
+                basehead: pr.base.sha + '...' + pr.head.sha,
+                per_page: 100
+              })
+            ).data;
+            const changed = Array.isArray(comparison.files)
+              ? comparison.files
+              : [];
             if (changed.length !== pr.changed_files) {
               collectionErrors.push('changed_files_truncated');
             }
@@ -2532,6 +2608,19 @@ jobs:
             const titleValid = pr.title.length >= 10 &&
               /^(?:⚡\s*)?(?:feat|fix|docs|style|refactor|test|chore|perf|ci|build|revert)(?:\(.+\))?:/i.test(pr.title);
 
+            const finalPr = (await github.rest.pulls.get({
+              owner,
+              repo,
+              pull_number: prNumber
+            })).data;
+            if (String(finalPr.head.sha || '').toLowerCase() !==
+                collectedHead) {
+              collectionErrors.push('stale_head');
+            }
+            if (String(finalPr.base.sha || '').toLowerCase() !==
+                collectedBase) {
+              collectionErrors.push('stale_base');
+            }
             const payload = {
               policy: {
                 applicable,
@@ -2569,8 +2658,6 @@ jobs:
               collection_errors: collectionErrors
             };
             fs.writeFileSync('gate-input.json', JSON.stringify(payload, null, 2));
-            core.setOutput('pr_number', String(prNumber));
-            core.setOutput('head_sha', pr.head.sha);
 
       - name: Evaluate completion evidence
         id: gate
@@ -2600,6 +2687,9 @@ jobs:
         env:
           PR_NUMBER: ${{ steps.resolve.outputs.pr_number }}
           HEAD_SHA: ${{ steps.resolve.outputs.head_sha }}
+          BASE_SHA: ${{ steps.resolve.outputs.base_sha }}
+          COLLECTED_HEAD_SHA: ${{ steps.collect.outputs.head_sha }}
+          COLLECTED_BASE_SHA: ${{ steps.collect.outputs.base_sha }}
           PENDING_STATUS_ID: ${{ steps.resolve.outputs.pending_status_id }}
           COLLECT_OUTCOME: ${{ steps.collect.outcome }}
           GATE_OUTCOME: ${{ steps.gate.outcome }}
@@ -2717,6 +2807,27 @@ jobs:
               );
               return false;
             }
+            function commitEvidenceDisposition(
+              resolvedCommit,
+              collectedCommit,
+              currentCommit
+            ) {
+              const commits = [
+                resolvedCommit,
+                collectedCommit,
+                currentCommit
+              ].map(
+                commit => String(commit || '').toLowerCase()
+              );
+              if (commits.some(
+                commit => !/^[a-f0-9]{40}$/.test(commit)
+              )) {
+                return 'stale_commit';
+              }
+              return commits.every(commit => commit === commits[0])
+                ? 'current_commit'
+                : 'stale_commit';
+            }
             let verdict = {
               verdict: 'blocked',
               reasons: ['verdict_artifact_missing'],
@@ -2761,8 +2872,19 @@ jobs:
               repo,
               pull_number: Number(process.env.PR_NUMBER)
             })).data;
-            if (current.head.sha !== process.env.HEAD_SHA) {
+            if (commitEvidenceDisposition(
+              process.env.HEAD_SHA,
+              process.env.COLLECTED_HEAD_SHA,
+              current.head.sha
+            ) !== 'current_commit') {
               forcedReasons.push('stale_head');
+            }
+            if (commitEvidenceDisposition(
+              process.env.BASE_SHA,
+              process.env.COLLECTED_BASE_SHA,
+              current.base.sha
+            ) !== 'current_commit') {
+              forcedReasons.push('stale_base');
             }
             if (forcedReasons.length > 0) {
               verdict = {
