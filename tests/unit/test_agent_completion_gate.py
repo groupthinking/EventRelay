@@ -613,13 +613,16 @@ class CompletionGateWorkflowTests(unittest.TestCase):
         self.assertIn("file.previous_filename", workflow)
         self.assertIn("file.status !== 'removed'", workflow)
 
-    def test_gate_runs_are_serialized_by_resolved_pr_number(self):
+    def test_gate_runs_are_serialized_and_coalesced_by_pr_number(self):
         workflow = self._workflow()
 
         self.assertIn("dispatch-evidence-refresh:", workflow)
         self.assertIn("group: agent-completion-${{", workflow)
         self.assertIn("inputs.pull_request || github.event.pull_request.number", workflow)
-        self.assertIn("cancel-in-progress: false", workflow)
+        self.assertIn("cancel-in-progress: true", workflow)
+        self.assertIn("trustedCommentAssociations", workflow)
+        self.assertIn("comment.author_association", workflow)
+        self.assertIn("google-labs-jules[bot]", workflow)
 
     def test_collector_binds_structured_agent_event_to_head(self):
         workflow = self._workflow()

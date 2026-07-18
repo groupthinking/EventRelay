@@ -25,7 +25,10 @@ jobs:
   snapshot-agent-task-intent:
     if: >-
       github.event_name == 'issues' &&
-      (github.event.action == 'opened' || github.event.action == 'labeled')
+      (github.event.action == 'opened' || github.event.action == 'labeled') &&
+      (github.event.issue.author_association == 'OWNER' ||
+       github.event.issue.author_association == 'MEMBER' ||
+       github.event.issue.author_association == 'COLLABORATOR')
     concurrency:
       group: agent-intent-snapshot-${{ github.event.issue.number }}
       cancel-in-progress: false
@@ -184,6 +187,36 @@ jobs:
           script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;
+            const trustedCommentAssociations = new Set([
+              'OWNER', 'MEMBER', 'COLLABORATOR'
+            ]);
+            const knownAgentCommenters = new Set([
+              'google-labs-jules[bot]',
+              'github-copilot[bot]',
+              'copilot-swe-agent[bot]',
+              'openai-codex[bot]'
+            ]);
+            if (context.eventName === 'issue_comment') {
+              const comment = context.payload.comment || {};
+              const actor = comment.user && comment.user.login;
+              if (!trustedCommentAssociations.has(
+                comment.author_association
+              ) && !knownAgentCommenters.has(actor)) {
+                core.info('Ignoring untrusted issue-comment refresh');
+                return;
+              }
+            }
+            if (context.eventName === 'issues') {
+              const issue = context.payload.issue || {};
+              const actor = context.payload.sender &&
+                context.payload.sender.login;
+              if (!trustedCommentAssociations.has(
+                issue.author_association
+              ) && !knownAgentCommenters.has(actor)) {
+                core.info('Ignoring untrusted issue refresh');
+                return;
+              }
+            }
             const pullNumbers = new Set();
             if (context.payload.issue &&
                 context.payload.issue.pull_request) {
@@ -303,7 +336,7 @@ jobs:
        github.event_name == 'workflow_dispatch')
     concurrency:
       group: agent-completion-${{ inputs.pull_request || github.event.pull_request.number }}
-      cancel-in-progress: false
+      cancel-in-progress: true
     runs-on: ubuntu-latest
     permissions:
       actions: read
