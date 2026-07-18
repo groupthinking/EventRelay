@@ -7,6 +7,18 @@ from pathlib import Path
 from typing import Any, Dict
 
 
+def _object_or_empty(value: Any) -> Any:
+    """Return ``{}`` for an absent/``None`` field, else the value unchanged.
+
+    Unlike ``value or {}`` this preserves a supplied non-dict value (e.g. ``[]``
+    or ``0``) so the downstream ``isinstance`` checks can reject it with
+    ``invalid_payload`` instead of silently coercing malformed input to an empty
+    object and letting it pass validation.
+    """
+
+    return {} if value is None else value
+
+
 def evaluate(payload: Any) -> Dict[str, Any]:
     """Evaluate agent execution evidence and return a fail-closed verdict."""
 
@@ -17,7 +29,7 @@ def evaluate(payload: Any) -> Dict[str, Any]:
             "details": {},
         }
 
-    policy = payload.get("policy") or {}
+    policy = _object_or_empty(payload.get("policy"))
     if not isinstance(policy, dict):
         return {
             "verdict": "blocked",
@@ -33,9 +45,9 @@ def evaluate(payload: Any) -> Dict[str, Any]:
     if policy.get("applicable") is False:
         return {"verdict": "not_applicable", "reasons": [], "details": {}}
 
-    issue = payload.get("issue") or {}
-    pull_request = payload.get("pull_request") or {}
-    evidence = payload.get("evidence") or {}
+    issue = _object_or_empty(payload.get("issue"))
+    pull_request = _object_or_empty(payload.get("pull_request"))
+    evidence = _object_or_empty(payload.get("evidence"))
     invalid_fields = []
     for field, value in (
         ("issue", issue),
@@ -56,6 +68,14 @@ def evaluate(payload: Any) -> Dict[str, Any]:
             isinstance(item, dict) for item in value
         ):
             invalid_fields.append(field)
+    reviews_value = payload.get("reviews")
+    if isinstance(reviews_value, list):
+        for index, review in enumerate(reviews_value):
+            if not isinstance(review, dict):
+                continue
+            for field in ("blocking", "resolved"):
+                if field in review and type(review[field]) is not bool:
+                    invalid_fields.append("reviews[%d].%s" % (index, field))
     if isinstance(issue, dict):
         for field in (
             "acceptance_criteria",

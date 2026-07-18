@@ -82,10 +82,14 @@ jobs:
             const unrestrictedRequested =
               /-\s*\[[xX]\]/.test(unrestricted) ||
               /\b(?:yes|true)\b/i.test(unrestricted);
-            const declaredScope = section(
+            const declaredScopeRaw = section(
               issueBody,
               ['declared file scope', 'file scope', 'scope']
             );
+            const declaredScope =
+              declaredScopeRaw && declaredScopeRaw !== '_No response_'
+                ? declaredScopeRaw
+                : '';
             const confirmed = /-\s*\[[xX]\]/.test(section(
               issueBody,
               ['pre-dispatch confirmation']

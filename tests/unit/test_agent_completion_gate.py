@@ -414,6 +414,36 @@ class CompletionGateTests(unittest.TestCase):
                     result["details"]["invalid_fields"],
                 )
 
+    def test_falsey_non_dict_containers_are_not_masked(self):
+        for field in ("issue", "pull_request", "evidence", "policy"):
+            with self.subTest(field=field):
+                payload = _valid_payload()
+                payload[field] = []
+
+                result = _evaluate(payload)
+
+                self.assertEqual(result["verdict"], "blocked")
+                self.assertIn("invalid_payload", result["reasons"])
+                self.assertIn(field, result["details"]["invalid_fields"])
+
+    def test_non_boolean_review_flags_cannot_bypass_blocking(self):
+        for field in ("blocking", "resolved"):
+            with self.subTest(field=field):
+                payload = _valid_payload()
+                payload["reviews"] = [
+                    {"blocking": True, "resolved": False, "source": "r1"}
+                ]
+                payload["reviews"][0][field] = "true"
+
+                result = _evaluate(payload)
+
+                self.assertEqual(result["verdict"], "blocked")
+                self.assertIn("invalid_payload", result["reasons"])
+                self.assertIn(
+                    "reviews[0]." + field,
+                    result["details"]["invalid_fields"],
+                )
+
     def test_evidence_collection_errors_fail_closed(self):
         payload = _valid_payload()
         payload["collection_errors"] = ["invalid_agent_lock_manifest"]

@@ -15,7 +15,7 @@ workflow; this README is the index.
 | Dependency Review | `dependency-review.yml` | PR to `main`,`develop` | Review new dependencies for vulnerabilities and license policy |
 | Secret Scan | `secret-scan.yml` | push to `main`; all PRs | gitleaks scan of the working tree |
 | Dependabot Auto Merge | `dependabot-auto-merge.yml` | `pull_request_target`, `check_suite` | Approve and auto-merge patch/minor Dependabot PRs (majors excluded) |
-| PR Checks | `pr-checks.yml` | PR opened/edited/synchronize | Validate PR title (conventional commits) and description |
+| PR Checks & Agent Completion Truth Gate | `pr-checks.yml` | `pull_request_target`; `workflow_run` (CI); `issue_comment`; `issues`; `workflow_dispatch`; `schedule` | Validate PR title (conventional commits) and description; freeze pre-dispatch agent-task intent; publish the deterministic agent-completion truth-gate status (`agent-completion/truth-gate`) from trusted default-branch code (privileged `statuses`/`actions: write`, never checks out PR-head code) |
 | Auto Label | `auto-label.yml` | PR opened/reopened/synchronize | Label PRs by changed file type (docs, tests, python, etc.) |
 | Auto-Assign Issues | `auto-assign.yml` | issue opened | Assign new issues to the repository owner |
 | Issue Triage | `issue-triage.yml` | issue opened | Auto-label new issues by keyword and post a triage comment |

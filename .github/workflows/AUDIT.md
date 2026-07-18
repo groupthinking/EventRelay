@@ -26,7 +26,7 @@ concrete reason, verified against the actual repository tree.
 | `issue-triage.yml` | KEEP | Keyword auto-labeling + triage comment on new issues. |
 | `mcp-optimization.yml` | **DELETE** | Entire workflow targets `mcp-servers/mcp-profiling/` (requirements.txt, investigator_client.py, profiling_server.py) which does not exist — every run fails. |
 | `phase-goal-tracker.yml` | KEEP | Tracks markdown checklists on phase issues, keeps a single status comment updated, and auto-closes the issue when all checklist goals are complete. |
-| `pr-checks.yml` | KEEP | Validates PR title/description; fork-safe comment handling. |
+| `pr-checks.yml` | KEEP | Validates PR title/description (fork-safe comment handling) and runs the deterministic Agent Completion Truth Gate: freezes pre-dispatch issue intent, binds trusted CI/review evidence, and publishes a fail-closed `agent-completion/truth-gate` status. Triggers on `pull_request_target`/`workflow_run`/`issue_comment`/`issues`/`schedule`/`workflow_dispatch`; privileged (`statuses`/`actions: write`) but never checks out or executes PR-head code. |
 | `real-processing.yml` | KEEP | Manual single-video processing; well-formed. |
 | `secret-scan.yml` | KEEP | gitleaks on the working tree; action pinned to SHA, checksum-verified install. |
 | `security.yml` | KEEP | npm audit, safety, bandit, trivy; uploads SARIF. |
