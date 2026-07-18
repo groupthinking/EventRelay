@@ -1439,7 +1439,8 @@ const agents = new Set([
   'google-labs-jules[bot]',
   'github-copilot[bot]',
   'openai-codex[bot]',
-  'chatgpt-codex-connector[bot]'
+  'chatgpt-codex-connector[bot]',
+  'github-actions[bot]'
 ]);
 const rows = [
   ['OWNER', 'person', true],
@@ -1450,7 +1451,7 @@ const rows = [
   ['NONE', 'openai-codex[bot]', true],
   ['NONE', 'chatgpt-codex-connector[bot]', true],
   ['NONE', 'external-user', false],
-  ['NONE', 'github-actions[bot]', false],
+  ['NONE', 'github-actions[bot]', true],
   [null, null, false]
 ];
 for (const [association, actor, expected] of rows) {
@@ -1502,6 +1503,8 @@ const rows = [
     'Ready for a review! A PR has been created.', null, false],
   ['gate comment', pull, 'github-actions[bot]',
     '<!-- agent-completion-truth-gate:v1 -->', null, false],
+  ['intent invalidation', issue, 'github-actions[bot]',
+    '<!-- agent-lock-intent-invalidated:v1 -->', null, true],
   ['missing contract', {body: ''}, 'google-labs-jules[bot]',
     'Ready for a review! A PR has been created.', null, false]
 ];
@@ -1770,6 +1773,48 @@ for (const [response, expected] of rows) {
         self.assertIn("roleName = result.data.role_name", snapshot)
         self.assertIn("github.event.action == 'opened'", snapshot)
         self.assertIn("github.event.action == 'labeled'", snapshot)
+        self.assertIn("github.event.action == 'edited'", snapshot)
+        self.assertIn("github.event.action == 'unlabeled'", snapshot)
+        self.assertIn("agent-lock-intent-invalidated:v1", snapshot)
+        self.assertIn("'scopeunrestrictedapproved'", snapshot)
+        self.assertIn("'agenttask'", snapshot)
+        self.assertIn("'mcpagent'", snapshot)
+        self.assertLess(
+            snapshot.index("agent-lock-intent-invalidated:v1"),
+            snapshot.index("getCollaboratorPermissionLevel"),
+        )
+
+    def test_snapshot_invalidation_decision_table(self):
+        workflow = self._workflow()
+        functions = _javascript_functions(
+            workflow,
+            "function shouldInvalidateIntent(",
+        )
+        self.assertEqual(len(functions), 1)
+
+        assertions = r"""
+const rows = [
+  [true, 'edited', true],
+  [true, 'labeled', true],
+  [true, 'unlabeled', true],
+  [true, 'opened', false],
+  [false, 'edited', false],
+  [false, 'labeled', false]
+];
+for (const [snapshot, action, expected] of rows) {
+  const actual = shouldInvalidateIntent(snapshot, action);
+  if (actual !== expected) {
+    throw new Error(`${action}: ${actual} !== ${expected}`);
+  }
+}
+"""
+        completed = subprocess.run(
+            ["node", "-e", functions[0] + assertions],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
 
     def test_linked_issue_contract_decision_table(self):
         workflow = self._workflow()
@@ -1846,6 +1891,10 @@ for (const [values, expected] of rows) {
         self.assertIn("types: [opened, edited, labeled, unlabeled, closed, reopened]", workflow)
         self.assertIn("snapshot-agent-task-intent:", workflow)
         self.assertIn("agent-lock-intent-snapshot:v1", workflow)
+        self.assertGreaterEqual(
+            workflow.count("agent-lock-intent-invalidated:v1"),
+            3,
+        )
         self.assertIn("createHash('sha256')", workflow)
         self.assertIn("missing_intent_snapshot", workflow)
         self.assertIn("intent_changed_after_dispatch", workflow)
@@ -2441,10 +2490,24 @@ function snapshot(overrides = {}) {
       JSON.stringify(value) + '\n-->'
   };
 }
+function invalidation() {
+  return {
+    user: {login: 'github-actions[bot]'},
+    created_at: '2026-07-18T03:00:02Z',
+    body: '<!-- agent-lock-intent-invalidated:v1\n' +
+      JSON.stringify({
+        issue_number: 870,
+        event_action: 'edited',
+        actor: 'issue-author'
+      }) + '\n-->'
+  };
+}
 const rows = [
   ['valid', issue, [snapshot()], []],
   ['missing', issue, [], ['missing_intent_snapshot']],
   ['changed body', {...issue, body: body + ' changed'}, [snapshot()],
+    ['intent_changed_after_dispatch']],
+  ['restored body after edit', issue, [snapshot(), invalidation()],
     ['intent_changed_after_dispatch']],
   ['approval changed', {
     ...issue,

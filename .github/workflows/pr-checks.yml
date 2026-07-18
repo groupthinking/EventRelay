@@ -26,7 +26,9 @@ jobs:
     if: >-
       github.event_name == 'issues' &&
       (github.event.action == 'opened' ||
-       github.event.action == 'labeled')
+       github.event.action == 'labeled' ||
+       github.event.action == 'edited' ||
+       github.event.action == 'unlabeled')
     concurrency:
       group: agent-intent-snapshot-${{ github.event.issue.number }}
       cancel-in-progress: false
@@ -44,9 +46,56 @@ jobs:
               String(typeof label === 'string' ? label : label.name)
                 .toLowerCase().replace(/[^a-z0-9 ]/g, '').trim()
             ));
-            if (![...labels].some(label =>
+            const hasAgentTaskLabel = [...labels].some(label =>
               ['agenttask', 'mcpagent'].includes(label)
+            );
+            const snapshotMarker =
+              '<!-- agent-lock-intent-snapshot:v1';
+            const invalidationMarker =
+              '<!-- agent-lock-intent-invalidated:v1';
+            const comments = await github.paginate(
+              github.rest.issues.listComments,
+              {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                per_page: 100
+              }
+            );
+            const existing = comments.find(comment =>
+              comment.user && comment.user.login === 'github-actions[bot]' &&
+              String(comment.body || '').includes(snapshotMarker)
+            );
+            function shouldInvalidateIntent(
+              hasSnapshot,
+              action
+            ) {
+              return Boolean(hasSnapshot) &&
+                ['edited', 'labeled', 'unlabeled'].includes(action);
+            }
+            if (shouldInvalidateIntent(
+              existing,
+              context.payload.action
             )) {
+              const invalidation = {
+                issue_number: issue.number,
+                event_action: context.payload.action,
+                actor: context.actor,
+                created_at: new Date().toISOString()
+              };
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                body: invalidationMarker + '\n' +
+                  JSON.stringify(invalidation) + '\n-->' +
+                  '\n\nFrozen agent-task intent was invalidated; create a new task.'
+              });
+              return;
+            }
+            if (existing ||
+                !hasAgentTaskLabel ||
+                !['opened', 'labeled'].includes(context.payload.action)) {
               return;
             }
             function hasTrustedSnapshotPermission(permission, roleName) {
@@ -140,23 +189,6 @@ jobs:
               core.setFailed('incomplete_agent_task_contract');
               return;
             }
-            const marker = '<!-- agent-lock-intent-snapshot:v1';
-            const comments = await github.paginate(
-              github.rest.issues.listComments,
-              {
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: issue.number,
-                per_page: 100
-              }
-            );
-            const existing = comments.find(comment =>
-              comment.user && comment.user.login === 'github-actions[bot]' &&
-              String(comment.body || '').includes(marker)
-            );
-            if (existing) {
-              return;
-            }
             const normalisedBody = issueBody
               .replace(/\r\n/g, '\n').trim();
             const bodySha256 = crypto.createHash('sha256')
@@ -171,7 +203,7 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: issue.number,
-              body: marker + '\n' + JSON.stringify(snapshot) + '\n-->' +
+              body: snapshotMarker + '\n' + JSON.stringify(snapshot) + '\n-->' +
                 '\n\nAgent task intent frozen for completion-gate evaluation.'
             });
 
@@ -601,6 +633,13 @@ jobs:
                 errors.push('missing_intent_snapshot');
                 return [...new Set(errors)].sort();
               }
+              const intentInvalidated = comments.some(comment =>
+                comment.user &&
+                comment.user.login === 'github-actions[bot]' &&
+                /<!--\s*agent-lock-intent-invalidated:v1/i.test(
+                  String(comment.body || '')
+                )
+              );
               const snapshotMatch = String(
                 snapshotComment.body || ''
               ).match(
@@ -635,6 +674,9 @@ jobs:
                   errors.push(
                     'unrestricted_approval_changed_after_dispatch'
                   );
+                }
+                if (intentInvalidated) {
+                  errors.push('intent_changed_after_dispatch');
                 }
               } catch (error) {
                 errors.push('invalid_intent_snapshot');
@@ -1352,7 +1394,8 @@ jobs:
               'github-copilot[bot]',
               'copilot-swe-agent[bot]',
               'openai-codex[bot]',
-              'chatgpt-codex-connector[bot]'
+              'chatgpt-codex-connector[bot]',
+              'github-actions[bot]'
             ]);
             const trustedIssuePermissions = new Set([
               'admin', 'maintain', 'write', 'triage'
@@ -1406,6 +1449,14 @@ jobs:
                 return output.join('\n').trim()
                   .replace(/^\x60|\x60$/g, '');
               }
+              const actor = comment && comment.user && comment.user.login;
+              const invalidationPattern =
+                /<!--\s*agent-lock-intent-invalidated:v1/i;
+              if (actor === 'github-actions[bot]' &&
+                  (invalidationPattern.test(String(comment.body || '')) ||
+                   invalidationPattern.test(String(previousBody || '')))) {
+                return true;
+              }
               let expectedAgent = '';
               const manifest = String(issue && issue.body || '').match(
                 /<!--\s*agent-lock-manifest\s*([\s\S]*?)-->/i
@@ -1424,7 +1475,6 @@ jobs:
                   'agent login'
                 );
               }
-              const actor = comment && comment.user && comment.user.login;
               if (!expectedAgent || actor !== expectedAgent) {
                 return false;
               }
@@ -1972,6 +2022,13 @@ jobs:
               if (!snapshotComment) {
                 collectionErrors.push('missing_intent_snapshot');
               } else {
+                const intentInvalidated = issueComments.some(comment =>
+                  comment.user &&
+                  comment.user.login === 'github-actions[bot]' &&
+                  /<!--\s*agent-lock-intent-invalidated:v1/i.test(
+                    String(comment.body || '')
+                  )
+                );
                 const snapshotMatch = String(snapshotComment.body || '').match(
                   /<!--\s*agent-lock-intent-snapshot:v1\s*([\s\S]*?)-->/i
                 );
@@ -1997,6 +2054,12 @@ jobs:
                     collectionErrors.push(
                       'unrestricted_approval_changed_after_dispatch'
                     );
+                  }
+                  if (intentInvalidated &&
+                      !collectionErrors.includes(
+                        'intent_changed_after_dispatch'
+                      )) {
+                    collectionErrors.push('intent_changed_after_dispatch');
                   }
                 } catch (error) {
                   collectionErrors.push('invalid_intent_snapshot');
