@@ -740,7 +740,7 @@ class TestDurableWebhookOutbox:
 
         # Attempt 2, 3, 4, 5
         for expected_retry in [2, 3, 4, 5]:
-            await monitor.process_outbox()
+            await monitor.process_outbox(force=True)
             session = monitor.Session()
             try:
                 item = (
@@ -754,7 +754,7 @@ class TestDurableWebhookOutbox:
                 session.close()
 
         # Attempt 6 (should not be retried because retry count reached 5)
-        await monitor.process_outbox()
+        await monitor.process_outbox(force=True)
         session = monitor.Session()
         try:
             item = (
