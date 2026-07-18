@@ -6,6 +6,7 @@ Provides the core API endpoints and integrates all services including cloud AI
 
 import logging
 import os
+from contextlib import asynccontextmanager
 from urllib.parse import urlparse
 
 import uvicorn
@@ -16,6 +17,8 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from slowapi.util import get_remote_address
 from starlette.middleware.base import BaseHTTPMiddleware
+
+from .backend.services.api_cost_monitor import cost_monitor
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -43,6 +46,27 @@ if _sentry_dsn:
     except Exception as exc:
         logger.warning("Sentry init skipped: %s", exc)
 
+
+# Keep the outbox worker tied to the lifetime of the process that serves the
+# production app.  Failed startup still performs cleanup, and a cleanup failure
+# in that path is logged without replacing the original startup exception.
+@asynccontextmanager
+async def _app_lifespan(_: FastAPI):
+    try:
+        await cost_monitor.start()
+    except BaseException:
+        try:
+            await cost_monitor.close()
+        except Exception:
+            logger.exception("API cost monitor cleanup failed after startup error")
+        raise
+
+    try:
+        yield
+    finally:
+        await cost_monitor.close()
+
+
 # Create FastAPI application
 app = FastAPI(
     title="EventRelay API",
@@ -50,6 +74,7 @@ app = FastAPI(
     version="1.1.0",
     docs_url="/docs",
     redoc_url="/redoc",
+    lifespan=_app_lifespan,
 )
 
 # Configure CORS.
