@@ -6,6 +6,7 @@ Provides the core API endpoints and integrates all services including cloud AI
 
 import logging
 import os
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from urllib.parse import urlparse
 
@@ -33,7 +34,9 @@ if _sentry_dsn:
 
         sentry_sdk.init(
             dsn=_sentry_dsn,
-            environment=os.getenv("ENVIRONMENT", os.getenv("VERCEL_ENV", "development")),
+            environment=os.getenv(
+                "ENVIRONMENT", os.getenv("VERCEL_ENV", "development")
+            ),
             traces_sample_rate=float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.1")),
             integrations=[StarletteIntegration(), FastApiIntegration()],
             # Do not attach request headers/cookies/body/user IP to events.
@@ -51,7 +54,7 @@ if _sentry_dsn:
 # production app.  Failed startup still performs cleanup, and a cleanup failure
 # in that path is logged without replacing the original startup exception.
 @asynccontextmanager
-async def _app_lifespan(_: FastAPI):
+async def _app_lifespan(_: FastAPI) -> AsyncIterator[None]:
     try:
         await cost_monitor.start()
     except BaseException:
@@ -64,7 +67,10 @@ async def _app_lifespan(_: FastAPI):
     try:
         yield
     finally:
-        await cost_monitor.close()
+        try:
+            await cost_monitor.close()
+        except Exception:
+            logger.exception("API cost monitor cleanup failed during shutdown")
 
 
 # Create FastAPI application
@@ -136,14 +142,17 @@ for _origin in os.getenv("CORS_ALLOWED_ORIGINS", "").split(","):
         continue
     if _IS_PRODUCTION and _is_loopback_origin(_origin):
         logger.warning(
-            "Ignoring loopback origin %r from CORS_ALLOWED_ORIGINS in production", _origin
+            "Ignoring loopback origin %r from CORS_ALLOWED_ORIGINS in production",
+            _origin,
         )
         continue
     _EXTRA_ORIGINS.append(_origin)
 
-_allowed_origins = list(dict.fromkeys(
-    _PRODUCTION_ORIGINS + _EXTRA_ORIGINS + ([] if _IS_PRODUCTION else _DEV_ORIGINS)
-))
+_allowed_origins = list(
+    dict.fromkeys(
+        _PRODUCTION_ORIGINS + _EXTRA_ORIGINS + ([] if _IS_PRODUCTION else _DEV_ORIGINS)
+    )
+)
 logger.info("CORS allow_origins configured for %s: %s", _ENVIRONMENT, _allowed_origins)
 
 app.add_middleware(
@@ -177,7 +186,9 @@ app.add_middleware(SecurityHeadersMiddleware)
 
 # API key auth middleware
 try:
-    from .backend.middleware.api_key_auth import APIKeyAuthMiddleware as APIKeyMiddleware
+    from .backend.middleware.api_key_auth import (
+        APIKeyAuthMiddleware as APIKeyMiddleware,
+    )
 
     app.add_middleware(APIKeyMiddleware)
     logger.info("API key auth middleware loaded")
