@@ -11,3 +11,6 @@
 ## 2026-07-16 - Fast transcript syncing with binary search
 **Learning:** In frontend components, frequent render cycles linked to chronological time-series data (like synchronizing active transcript segments with video playback time) can become a performance bottleneck if handled naively. Using `Array.find()` is an O(N) operation that blocks the main thread during continuous state updates like `currentTime` changes.
 **Action:** Use a binary search algorithm (O(log N)) to find the active segment in chronological lists. When dealing with sorted sequential data tied to high-frequency events (like timeupdates or scroll events), prefer binary search over linear searches to maintain performance.
+## 2026-07-28 - Memoize text processing in React
+**Learning:** Performing expensive string manipulations like splitting long texts (`transcript.split('\n')`) or generating dynamic Regex expressions inside a component body causes significant CPU overhead on every re-render (like keystroke updates in a search box).
+**Action:** Extract pure transformation logic on static/infrequent data into `useMemo` hooks (e.g., memoizing the paragraph split on `transcript` and precomputing search `RegExp` based on `searchQuery`).
