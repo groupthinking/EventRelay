@@ -894,6 +894,49 @@ class CompletionGateWorkflowTests(unittest.TestCase):
             _repo_root() / ".github" / "workflows" / "pr-checks.yml"
         ).read_text(encoding="utf-8")
 
+    def test_refresh_job_is_authorized_to_list_pull_requests(self):
+        # Regression: the scheduled sweep paginates github.rest.pulls.list, so
+        # its job token must carry pull-requests:read or the call 403s and the
+        # convergence/refresh path never dispatches.
+        workflow = self._workflow()
+        refresh = workflow[
+            workflow.index("  refresh-open-pull-requests:"):
+            workflow.index("  dispatch-evidence-refresh:")
+        ]
+        self.assertIn("github.rest.pulls.list", refresh)
+        self.assertIn("pull-requests: read", refresh)
+
+    def test_intent_snapshot_equal_timestamp_fails_closed(self):
+        # Regression: GitHub timestamps are second-granular, so an equal
+        # snapshot/PR created_at cannot prove pre-dispatch ordering and must be
+        # rejected as late.
+        compact = " ".join(self._workflow().split())
+        self.assertIn(
+            "Date.parse(snapshotComment.created_at) >= "
+            "Date.parse(pr.created_at)",
+            compact,
+        )
+        self.assertNotIn(
+            "Date.parse(snapshotComment.created_at) > "
+            "Date.parse(pr.created_at)",
+            compact,
+        )
+
+    def test_validate_clears_stale_validation_comment_on_pass(self):
+        # Regression: when a PR fixes every finding the validate job must remove
+        # any prior pr-validation:v1 failure comment instead of returning early
+        # and leaving obsolete errors displayed.
+        workflow = self._workflow()
+        validate = workflow[
+            workflow.index("const findings = [];"):
+            workflow.index("  truth-gate:")
+        ]
+        self.assertIn("issues.deleteComment", validate)
+        self.assertLess(
+            validate.index("const existing = comments.find"),
+            validate.index("if (findings.length === 0)"),
+        )
+
     def test_workflow_runs_from_trusted_default_branch(self):
         workflow = self._workflow()
 
