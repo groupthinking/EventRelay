@@ -50,7 +50,7 @@ body:
     id: declared_scope
     attributes:
       label: Declared file scope
-      description: List every required repository-relative path, one per line. Every declared path must appear in the PR; leave empty only when Unrestricted scope is checked.
+      description: List every required repository-relative path, one per line. Every declared path must be touched and remain present at that exact path; for a rename, declare the destination and list the source under Allowed extra files. Leave empty only when Unrestricted scope is checked.
       placeholder: |
         src/example.py
         tests/unit/test_example.py

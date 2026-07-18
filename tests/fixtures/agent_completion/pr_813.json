@@ -24,6 +24,13 @@
       "src/youtube_extension/backend/ai_code_generator.py",
       "tests/unit/test_cloud_routes.py"
     ],
+    "present_changed_files": [
+      "apps/web/package.json",
+      "package-lock.json",
+      "src/agents/specialized/quality_agent.py",
+      "src/youtube_extension/backend/ai_code_generator.py",
+      "tests/unit/test_cloud_routes.py"
+    ],
     "merged": false,
     "draft": true,
     "title_valid": false,

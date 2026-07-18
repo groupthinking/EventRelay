@@ -430,8 +430,9 @@ jobs:
        github.event_name == 'workflow_dispatch')
     concurrency:
       group: agent-completion-${{ inputs.pull_request || github.event.pull_request.number }}
-      cancel-in-progress: true
+      cancel-in-progress: false
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       actions: read
       contents: read
@@ -439,7 +440,7 @@ jobs:
       pull-requests: read
       statuses: write
     steps:
-      - name: Resolve pull request and mark the gate pending
+      - name: Resolve pull request
         id: resolve
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
@@ -448,8 +449,6 @@ jobs:
           script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;
-            const runUrl = context.serverUrl + '/' + owner + '/' + repo +
-              '/actions/runs/' + context.runId;
             let prNumber = Number(process.env.INPUT_PR_NUMBER || 0);
             if (!prNumber && context.payload.pull_request) {
               prNumber = context.payload.pull_request.number;
@@ -474,19 +473,6 @@ jobs:
             })).data;
             core.setOutput('pr_number', String(prNumber));
             core.setOutput('head_sha', pr.head.sha);
-            const pendingStatus = await github.rest.repos.createCommitStatus({
-              owner,
-              repo,
-              sha: pr.head.sha,
-              state: 'pending',
-              context: 'agent-completion/truth-gate',
-              description: 'collecting repository evidence',
-              target_url: runUrl
-            });
-            core.setOutput(
-              'pending_status_id',
-              String(pendingStatus.data.id)
-            );
 
       - name: Check out trusted gate from the default branch
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -996,24 +982,64 @@ jobs:
                   xpassed: 0
                 }
               ]));
+              const expected = new Set(expectedPaths);
+              let activePath = null;
+              const terminal =
+                '(PASSED|FAILED|ERROR|SKIPPED|XFAIL|XPASS)';
+              const terminalSuffix =
+                '(?:\\s+\\([^\\r\\n]*\\))?' +
+                '(?:\\s+\\[\\s*\\d+%\\])?\\s*$';
+              const inlineOutcome = new RegExp(
+                '\\s' + terminal + terminalSuffix
+              );
+              const bareOutcome = new RegExp(
+                '^' + terminal + terminalSuffix
+              );
+              function record(path, token) {
+                results[path][outcomes[token]] += 1;
+              }
               const lines = String(log || '')
                 .replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, '')
-                .split(/\r?\n/);
+                .split(/\r\n|\n|\r/);
               for (const rawLine of lines) {
                 const line = rawLine
+                  .replace(/^\uFEFF/, '')
                   .replace(/^\d{4}-\d{2}-\d{2}T\S+\s+/, '')
-                  .trim();
-                for (const path of expectedPaths) {
-                  if (!line.startsWith(path + '::')) {
-                    continue;
+                  .trimEnd();
+                const separator = line.indexOf('::');
+                const candidate = separator > 0
+                  ? line.slice(0, separator)
+                  : '';
+                const tail = separator > 0
+                  ? line.slice(separator + 2)
+                  : '';
+                const nodePath =
+                  candidate === candidate.trimStart() &&
+                  candidate.endsWith('.py') &&
+                  tail && !/^\s/.test(tail)
+                    ? candidate
+                    : null;
+                if (nodePath !== null) {
+                  activePath = expected.has(nodePath) ? nodePath : null;
+                  const outcome = line.match(inlineOutcome);
+                  if (outcome && activePath) {
+                    record(activePath, outcome[1]);
                   }
-                  const outcome = line.match(
-                    /\s(PASSED|FAILED|ERROR|SKIPPED|XFAIL|XPASS)(?:\s+\[\s*\d+%\])?\s*$/
-                  );
                   if (outcome) {
-                    results[path][outcomes[outcome[1]]] += 1;
+                    activePath = null;
                   }
-                  break;
+                  continue;
+                }
+                const outcome = line.match(bareOutcome);
+                if (outcome) {
+                  if (activePath) {
+                    record(activePath, outcome[1]);
+                  }
+                  activePath = null;
+                  continue;
+                }
+                if (/^=+.*=+$/.test(line) || /^##\[/.test(line)) {
+                  activePath = null;
                 }
               }
               return results;
@@ -1163,6 +1189,7 @@ jobs:
               pull_request: {
                 number: prNumber,
                 changed_files: changedFiles,
+                present_changed_files: [...presentChangedFiles],
                 merged: Boolean(pr.merged),
                 draft: Boolean(pr.draft),
                 title_valid: titleValid,
@@ -1205,18 +1232,265 @@ jobs:
             gate-verdict.json
           if-no-files-found: error
 
-      - name: Publish stable status and comment
-        id: publish
+      - name: Acquire publication lease
+        id: lease
         if: always() && steps.resolve.outputs.pr_number != ''
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           PR_NUMBER: ${{ steps.resolve.outputs.pr_number }}
           HEAD_SHA: ${{ steps.resolve.outputs.head_sha }}
-          PENDING_STATUS_ID: ${{ steps.resolve.outputs.pending_status_id }}
           COLLECT_OUTCOME: ${{ steps.collect.outcome }}
           GATE_OUTCOME: ${{ steps.gate.outcome }}
           GATE_EXIT_CODE: ${{ steps.gate.outputs.exit_code }}
           ARTIFACT_OUTCOME: ${{ steps.upload.outcome }}
+        with:
+          script: |
+            const crypto = require('crypto');
+            const fs = require('fs');
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const statusContext = 'agent-completion/truth-gate';
+            const commentMarker =
+              '<!-- agent-completion-truth-gate:v1 -->';
+            const runUrlPrefix = context.serverUrl + '/' + owner + '/' +
+              repo + '/actions/runs/';
+            const runUrl = runUrlPrefix + context.runId;
+            function statusEvidenceSha(status) {
+              const match = String(status && status.description || '').match(
+                /\bgate-evidence:([a-f0-9]{64})(?:\s|$)/
+              );
+              return match ? match[1] : null;
+            }
+            function statusEvidenceResult(status) {
+              const match = String(status && status.description || '').match(
+                /\bgate-result:(blocked|ready|completed|not_applicable)(?:\s|$)/
+              );
+              return match ? match[1] : null;
+            }
+            function commentEvidenceSha(comment) {
+              const match = String(comment && comment.body || '').match(
+                /<!-- gate-evidence:([a-f0-9]{64}) -->/
+              );
+              return match ? match[1] : null;
+            }
+            function shouldPublishEvidence(
+              status,
+              expectedSha,
+              expectedState,
+              expectedResult,
+              publishedCommentSha,
+              targetPrefix
+            ) {
+              if (!status ||
+                  !['success', 'failure'].includes(status.state) ||
+                  status.state !== expectedState ||
+                  statusEvidenceResult(status) !== expectedResult ||
+                  publishedCommentSha !== expectedSha ||
+                  !/^gate-owner:\d+(?:\s|$)/.test(
+                    String(status.description || '')
+                  )) {
+                return true;
+              }
+              const target = String(status.target_url || '');
+              if (!target.startsWith(targetPrefix) ||
+                  !/^\d+$/.test(target.slice(targetPrefix.length))) {
+                return true;
+              }
+              return statusEvidenceSha(status) !== expectedSha;
+            }
+            function canonicalize(value) {
+              if (Array.isArray(value)) {
+                return value.map(canonicalize);
+              }
+              if (value && typeof value === 'object') {
+                return Object.fromEntries(
+                  Object.keys(value).sort().map(key => [
+                    key,
+                    canonicalize(value[key])
+                  ])
+                );
+              }
+              return value;
+            }
+            function sha256(value) {
+              return crypto.createHash('sha256').update(value).digest('hex');
+            }
+            function evidenceFingerprint(record) {
+              return sha256(JSON.stringify(canonicalize({
+                publication_schema: 2,
+                head_sha: record.head_sha,
+                gate_input: record.gate_input,
+                gate_verdict: record.gate_verdict,
+                evaluator_sha256: record.evaluator_sha256,
+                collect_outcome: record.collect_outcome,
+                gate_outcome: record.gate_outcome,
+                gate_exit_code: record.gate_exit_code,
+                artifact_outcome: record.artifact_outcome
+              })));
+            }
+            function readText(path) {
+              try {
+                return fs.readFileSync(path, 'utf8');
+              } catch (error) {
+                return '<missing:' + path + '>';
+              }
+            }
+            function jsonEvidence(text) {
+              try {
+                return canonicalize(JSON.parse(text));
+              } catch (error) {
+                return {unreadable_sha256: sha256(text)};
+              }
+            }
+            function validVerdict(candidate) {
+              const verdicts = new Set([
+                'blocked', 'ready', 'completed', 'not_applicable'
+              ]);
+              return Boolean(candidate) && typeof candidate === 'object' &&
+                !Array.isArray(candidate) &&
+                verdicts.has(candidate.verdict) &&
+                Array.isArray(candidate.reasons) &&
+                candidate.reasons.every(reason => typeof reason === 'string') &&
+                candidate.details && typeof candidate.details === 'object' &&
+                !Array.isArray(candidate.details);
+            }
+            const inputText = readText('gate-input.json');
+            const verdictText = readText('gate-verdict.json');
+            const evaluatorText = readText(
+              '.trusted/scripts/ci/agent_completion_gate.py'
+            );
+            const evidenceSha256 = evidenceFingerprint({
+              head_sha: process.env.HEAD_SHA,
+              gate_input: jsonEvidence(inputText),
+              gate_verdict: jsonEvidence(verdictText),
+              evaluator_sha256: sha256(evaluatorText),
+              collect_outcome: process.env.COLLECT_OUTCOME,
+              gate_outcome: process.env.GATE_OUTCOME,
+              gate_exit_code: process.env.GATE_EXIT_CODE,
+              artifact_outcome: process.env.ARTIFACT_OUTCOME
+            });
+            core.setOutput('evidence_sha256', evidenceSha256);
+
+            let verdict = null;
+            try {
+              verdict = JSON.parse(verdictText);
+            } catch (error) {
+              core.warning('Could not parse the gate verdict for publication');
+            }
+            let currentHeadMatches = false;
+            try {
+              const current = (await github.rest.pulls.get({
+                owner,
+                repo,
+                pull_number: Number(process.env.PR_NUMBER)
+              })).data;
+              currentHeadMatches = current.head.sha === process.env.HEAD_SHA;
+            } catch (error) {
+              core.warning('Could not confirm the current pull request head');
+            }
+            const expectedExitCode = validVerdict(verdict)
+              ? (verdict.verdict === 'blocked' ? '1' : '0')
+              : null;
+            const evidenceValid =
+              process.env.COLLECT_OUTCOME === 'success' &&
+              process.env.GATE_OUTCOME === 'success' &&
+              process.env.ARTIFACT_OUTCOME === 'success' &&
+              expectedExitCode !== null &&
+              process.env.GATE_EXIT_CODE === expectedExitCode &&
+              currentHeadMatches;
+            const expectedState = evidenceValid &&
+              verdict.verdict !== 'blocked'
+                ? 'success'
+                : 'failure';
+            const expectedResult = evidenceValid
+              ? verdict.verdict
+              : 'blocked';
+            core.setOutput('evidence_valid', String(evidenceValid));
+            core.setOutput('expected_state', expectedState);
+            core.setOutput('expected_result', expectedResult);
+
+            const statuses = await github.paginate(
+              github.rest.repos.listCommitStatusesForRef,
+              {
+                owner,
+                repo,
+                ref: process.env.HEAD_SHA,
+                per_page: 100
+              }
+            );
+            const latest = statuses
+              .filter(status => status.context === statusContext)
+              .sort((left, right) =>
+                Date.parse(right.created_at) - Date.parse(left.created_at) ||
+                right.id - left.id
+              )[0];
+            const comments = await github.paginate(
+              github.rest.issues.listComments,
+              {
+                owner,
+                repo,
+                issue_number: Number(process.env.PR_NUMBER),
+                per_page: 100
+              }
+            );
+            const publishedComment = comments.find(comment =>
+              comment.user &&
+              comment.user.login === 'github-actions[bot]' &&
+              String(comment.body || '').includes(commentMarker)
+            );
+            const publishedCommentSha = commentEvidenceSha(publishedComment);
+            if (!shouldPublishEvidence(
+              latest,
+              evidenceSha256,
+              expectedState,
+              expectedResult,
+              publishedCommentSha,
+              runUrlPrefix
+            )) {
+              core.setOutput('publication_needed', 'false');
+              core.info(
+                'Evidence fingerprint unchanged; reusing terminal status'
+              );
+              await core.summary
+                .addHeading('Agent Completion Truth Gate')
+                .addRaw('Unchanged evidence; reused the existing status.')
+                .write();
+              return;
+            }
+            const pendingStatus = await github.rest.repos.createCommitStatus({
+              owner,
+              repo,
+              sha: process.env.HEAD_SHA,
+              state: 'pending',
+              context: statusContext,
+              description: (
+                'gate-evidence:' + evidenceSha256 + ' publication pending'
+              ).slice(0, 140),
+              target_url: runUrl
+            });
+            core.setOutput(
+              'pending_status_id',
+              String(pendingStatus.data.id)
+            );
+            core.setOutput('publication_needed', 'true');
+
+      - name: Publish stable status and comment
+        id: publish
+        if: >-
+          always() &&
+          steps.resolve.outputs.pr_number != '' &&
+          steps.lease.outputs.publication_needed == 'true'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          PR_NUMBER: ${{ steps.resolve.outputs.pr_number }}
+          HEAD_SHA: ${{ steps.resolve.outputs.head_sha }}
+          PENDING_STATUS_ID: ${{ steps.lease.outputs.pending_status_id }}
+          EVIDENCE_SHA256: ${{ steps.lease.outputs.evidence_sha256 }}
+          COLLECT_OUTCOME: ${{ steps.collect.outcome }}
+          GATE_OUTCOME: ${{ steps.gate.outcome }}
+          GATE_EXIT_CODE: ${{ steps.gate.outputs.exit_code }}
+          ARTIFACT_OUTCOME: ${{ steps.upload.outcome }}
+          LEASE_EVIDENCE_VALID: ${{ steps.lease.outputs.evidence_valid }}
         with:
           script: |
             const fs = require('fs');
@@ -1290,9 +1564,11 @@ jobs:
               }
               return 'fail_closed';
             }
-            function ownedDescription(message) {
+            function ownedDescription(result, message) {
               return (
                 'gate-owner:' + process.env.PENDING_STATUS_ID + ' ' +
+                'gate-evidence:' + process.env.EVIDENCE_SHA256 + ' ' +
+                'gate-result:' + String(result || '') + ' ' +
                 String(message || '')
               ).slice(0, 140);
             }
@@ -1362,6 +1638,9 @@ jobs:
             if (process.env.ARTIFACT_OUTCOME !== 'success') {
               forcedReasons.push('evidence_artifact_failed');
             }
+            if (process.env.LEASE_EVIDENCE_VALID !== 'true') {
+              forcedReasons.push('lease_evidence_invalid');
+            }
             if (verdict.verdict !== 'blocked' &&
                 process.env.GATE_EXIT_CODE !== '0') {
               forcedReasons.push('gate_exit_code_mismatch');
@@ -1411,7 +1690,9 @@ jobs:
               .replace(/&/g, '&amp;')
               .replace(/</g, '&lt;')
               .replace(/>/g, '&gt;');
-            const body = marker + '\n## Agent Completion Truth Gate: ' +
+            const body = marker + '\n' +
+              '<!-- gate-evidence:' + process.env.EVIDENCE_SHA256 + ' -->\n' +
+              '## Agent Completion Truth Gate: ' +
               verdict.verdict.toUpperCase() + '\n\n' +
               (reasons.length > 0
                 ? '**Reasons:** ' + reasons
@@ -1456,7 +1737,9 @@ jobs:
             if (!await currentRunMayPublish(latest)) {
               return;
             }
-            const passed = verdict.verdict !== 'blocked';
+            const passed =
+              process.env.LEASE_EVIDENCE_VALID === 'true' &&
+              verdict.verdict !== 'blocked';
             const summary = reasons.length > 0
               ? reasons.join(', ')
               : verdict.verdict + ': all rules passed';
@@ -1466,7 +1749,7 @@ jobs:
               sha: process.env.HEAD_SHA,
               state: passed ? 'success' : 'failure',
               context: 'agent-completion/truth-gate',
-              description: ownedDescription(summary),
+              description: ownedDescription(verdict.verdict, summary),
               target_url: runUrl
             });
             if (!passed) {
@@ -1477,11 +1760,13 @@ jobs:
         if: >-
           always() &&
           steps.resolve.outputs.pr_number != '' &&
+          steps.lease.outputs.publication_needed == 'true' &&
           steps.publish.outcome != 'success'
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           HEAD_SHA: ${{ steps.resolve.outputs.head_sha }}
-          PENDING_STATUS_ID: ${{ steps.resolve.outputs.pending_status_id }}
+          PENDING_STATUS_ID: ${{ steps.lease.outputs.pending_status_id }}
+          EVIDENCE_SHA256: ${{ steps.lease.outputs.evidence_sha256 }}
         with:
           script: |
             const owner = context.repo.owner;
@@ -1601,6 +1886,7 @@ jobs:
             }
             const description = (
               'gate-owner:' + process.env.PENDING_STATUS_ID + ' ' +
+              'gate-evidence:' + process.env.EVIDENCE_SHA256 + ' ' +
               'gate publication failed'
             ).slice(0, 140);
             await github.rest.repos.createCommitStatus({
@@ -1620,5 +1906,8 @@ jobs:
           (steps.collect.outcome != 'success' ||
            steps.gate.outputs.exit_code != '0' ||
            steps.upload.outcome != 'success' ||
-           steps.publish.outcome != 'success')
+           steps.lease.outcome != 'success' ||
+           steps.lease.outputs.evidence_valid != 'true' ||
+           (steps.lease.outputs.publication_needed == 'true' &&
+            steps.publish.outcome != 'success'))
         run: exit 1

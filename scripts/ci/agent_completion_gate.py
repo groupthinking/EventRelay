@@ -148,13 +148,24 @@ def evaluate(payload: Any) -> Dict[str, Any]:
             invalid_fields.append("issue.scope_unrestricted")
 
     if isinstance(pull_request, dict):
-        value = pull_request.get("changed_files")
-        if not isinstance(value, list):
-            invalid_fields.append("pull_request.changed_files")
-        elif isinstance(value, list) and not all(
-            isinstance(item, str) and bool(item.strip()) for item in value
+        for field in ("changed_files", "present_changed_files"):
+            value = pull_request.get(field)
+            if not isinstance(value, list):
+                invalid_fields.append("pull_request." + field)
+            elif not all(
+                isinstance(item, str) and bool(item.strip()) for item in value
+            ):
+                invalid_fields.append("pull_request." + field)
+        changed_files = pull_request.get("changed_files")
+        present_changed_files = pull_request.get("present_changed_files")
+        if (
+            isinstance(changed_files, list)
+            and all(isinstance(item, str) for item in changed_files)
+            and isinstance(present_changed_files, list)
+            and all(isinstance(item, str) for item in present_changed_files)
+            and not set(present_changed_files).issubset(changed_files)
         ):
-            invalid_fields.append("pull_request.changed_files")
+            invalid_fields.append("pull_request.present_changed_files")
         for field in (
             "merged",
             "draft",
@@ -249,7 +260,7 @@ def evaluate(payload: Any) -> Dict[str, Any]:
 
     missing_declared = sorted(
         set(issue.get("declared_files") or [])
-        - set(pull_request.get("changed_files") or [])
+        - set(pull_request.get("present_changed_files") or [])
     )
     if missing_declared:
         reasons.append("missing_declared_files")

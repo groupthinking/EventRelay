@@ -39,6 +39,10 @@ def _valid_payload():
                 "src/youtube_extension/agent_lock/completion_gate.py",
                 "tests/unit/test_agent_completion_gate.py",
             ],
+            "present_changed_files": [
+                "src/youtube_extension/agent_lock/completion_gate.py",
+                "tests/unit/test_agent_completion_gate.py",
+            ],
             "merged": False,
             "draft": False,
             "title_valid": True,
@@ -195,6 +199,9 @@ class CompletionGateTests(unittest.TestCase):
             "src/youtube_extension/backend/ai_code_generator.py",
             "tests/unit/test_cloud_routes.py",
         ]
+        payload["pull_request"]["present_changed_files"] = list(
+            payload["pull_request"]["changed_files"]
+        )
 
         result = _evaluate(payload)
 
@@ -214,6 +221,9 @@ class CompletionGateTests(unittest.TestCase):
         payload["pull_request"]["changed_files"] = [
             "tests/unit/test_agent_completion_gate.py"
         ]
+        payload["pull_request"]["present_changed_files"] = [
+            "tests/unit/test_agent_completion_gate.py"
+        ]
         payload["evidence"]["behavior_changed_files"] = []
 
         result = _evaluate(payload)
@@ -224,6 +234,63 @@ class CompletionGateTests(unittest.TestCase):
             result["details"]["missing_declared_files"],
             ["src/youtube_extension/agent_lock/completion_gate.py"],
         )
+
+    def test_deleted_declared_file_is_missing_even_when_touched(self):
+        payload = _valid_payload()
+        payload["pull_request"]["present_changed_files"] = [
+            "tests/unit/test_agent_completion_gate.py"
+        ]
+
+        result = _evaluate(payload)
+
+        self.assertEqual(result["verdict"], "blocked")
+        self.assertIn("missing_declared_files", result["reasons"])
+        self.assertEqual(
+            result["details"]["missing_declared_files"],
+            ["src/youtube_extension/agent_lock/completion_gate.py"],
+        )
+
+    def test_renamed_declared_file_is_missing_when_destination_is_allowed(self):
+        payload = _valid_payload()
+        old_path = "src/youtube_extension/agent_lock/completion_gate.py"
+        new_path = "src/youtube_extension/agent_lock/truth_gate.py"
+        payload["issue"]["allowed_extra_files"] = [new_path]
+        payload["pull_request"]["changed_files"] = [
+            old_path,
+            new_path,
+            "tests/unit/test_agent_completion_gate.py",
+        ]
+        payload["pull_request"]["present_changed_files"] = [
+            new_path,
+            "tests/unit/test_agent_completion_gate.py",
+        ]
+
+        result = _evaluate(payload)
+
+        self.assertEqual(result["verdict"], "blocked")
+        self.assertIn("missing_declared_files", result["reasons"])
+        self.assertEqual(result["details"]["missing_declared_files"], [old_path])
+        self.assertNotIn("scope_drift", result["reasons"])
+
+    def test_rename_is_valid_when_destination_is_declared(self):
+        payload = _valid_payload()
+        old_path = "src/youtube_extension/agent_lock/completion_gate.py"
+        new_path = "src/youtube_extension/agent_lock/truth_gate.py"
+        payload["issue"]["declared_files"][0] = new_path
+        payload["issue"]["allowed_extra_files"] = [old_path]
+        payload["pull_request"]["changed_files"] = [
+            old_path,
+            new_path,
+            "tests/unit/test_agent_completion_gate.py",
+        ]
+        payload["pull_request"]["present_changed_files"] = [
+            new_path,
+            "tests/unit/test_agent_completion_gate.py",
+        ]
+
+        result = _evaluate(payload)
+
+        self.assertEqual(result["verdict"], "ready")
 
     def test_allowed_extra_files_remain_optional(self):
         payload = _valid_payload()
@@ -238,6 +305,9 @@ class CompletionGateTests(unittest.TestCase):
         payload["issue"]["declared_files"] = []
         payload["issue"]["scope_unrestricted"] = True
         payload["pull_request"]["changed_files"].append("docs/extra.md")
+        payload["pull_request"]["present_changed_files"].append(
+            "docs/extra.md"
+        )
 
         result = _evaluate(payload)
 
@@ -248,6 +318,10 @@ class CompletionGateTests(unittest.TestCase):
         payload = _valid_payload()
         payload["issue"]["scope_unrestricted"] = True
         payload["pull_request"]["changed_files"] = [
+            "tests/unit/test_agent_completion_gate.py",
+            "docs/extra.md",
+        ]
+        payload["pull_request"]["present_changed_files"] = [
             "tests/unit/test_agent_completion_gate.py",
             "docs/extra.md",
         ]
@@ -500,6 +574,7 @@ class CompletionGateTests(unittest.TestCase):
     def test_empty_pr_diff_cannot_be_ready(self):
         payload = _valid_payload()
         payload["pull_request"]["changed_files"] = []
+        payload["pull_request"]["present_changed_files"] = []
         payload["evidence"]["behavior_changed_files"] = []
         payload["evidence"]["focused_test_files"] = []
         payload["evidence"]["focused_test_results"] = {}
@@ -789,15 +864,45 @@ class CompletionGateTests(unittest.TestCase):
         )
 
     def test_non_string_path_entries_return_a_verdict(self):
+        for field in ("changed_files", "present_changed_files"):
+            with self.subTest(field=field):
+                payload = _valid_payload()
+                payload["pull_request"][field] = [{}]
+
+                result = _evaluate(payload)
+
+                self.assertEqual(result["verdict"], "blocked")
+                self.assertIn("invalid_payload", result["reasons"])
+                self.assertIn(
+                    f"pull_request.{field}",
+                    result["details"]["invalid_fields"],
+                )
+
+    def test_present_changed_files_is_required(self):
         payload = _valid_payload()
-        payload["pull_request"]["changed_files"] = [{}]
+        del payload["pull_request"]["present_changed_files"]
 
         result = _evaluate(payload)
 
         self.assertEqual(result["verdict"], "blocked")
         self.assertIn("invalid_payload", result["reasons"])
         self.assertIn(
-            "pull_request.changed_files",
+            "pull_request.present_changed_files",
+            result["details"]["invalid_fields"],
+        )
+
+    def test_present_changed_files_must_be_touched(self):
+        payload = _valid_payload()
+        payload["pull_request"]["present_changed_files"].append(
+            "docs/not-touched.md"
+        )
+
+        result = _evaluate(payload)
+
+        self.assertEqual(result["verdict"], "blocked")
+        self.assertIn("invalid_payload", result["reasons"])
+        self.assertIn(
+            "pull_request.present_changed_files",
             result["details"]["invalid_fields"],
         )
 
@@ -807,6 +912,7 @@ class CompletionGateTests(unittest.TestCase):
             ("issue", "declared_files"),
             ("issue", "allowed_extra_files"),
             ("pull_request", "changed_files"),
+            ("pull_request", "present_changed_files"),
             ("evidence", "behavior_changed_files"),
             ("evidence", "focused_test_files"),
         )
@@ -992,6 +1098,14 @@ class CompletionGateWorkflowTests(unittest.TestCase):
 
     def test_workflow_cannot_leave_a_stale_green_status(self):
         workflow = self._workflow()
+        resolve_step = workflow[
+            workflow.index("name: Resolve pull request"):
+            workflow.index("name: Check out trusted gate")
+        ]
+        lease_step = workflow[
+            workflow.index("name: Acquire publication lease"):
+            workflow.index("name: Publish stable status and comment")
+        ]
         publish_step = workflow[
             workflow.index("name: Publish stable status and comment"):
             workflow.index("name: Finalize failed gate publication")
@@ -1002,7 +1116,12 @@ class CompletionGateWorkflowTests(unittest.TestCase):
         ]
 
         self.assertIn("id: resolve", workflow)
-        self.assertIn("state: 'pending'", workflow)
+        self.assertNotIn("createCommitStatus", resolve_step)
+        self.assertIn("state: 'pending'", lease_step)
+        self.assertEqual(
+            lease_step.count("github.rest.repos.createCommitStatus({"),
+            1,
+        )
         self.assertEqual(
             publish_step.count("description: ownedDescription("),
             1,
@@ -1017,10 +1136,31 @@ class CompletionGateWorkflowTests(unittest.TestCase):
         self.assertIn("'pending_status_id'", workflow)
         self.assertIn("String(pendingStatus.data.id)", workflow)
         self.assertIn(
-            "PENDING_STATUS_ID: ${{ steps.resolve.outputs.pending_status_id }}",
+            "PENDING_STATUS_ID: ${{ steps.lease.outputs.pending_status_id }}",
             workflow,
         )
-        self.assertIn("if: always() && steps.resolve.outputs.pr_number != ''", workflow)
+        self.assertIn("id: lease", workflow)
+        self.assertIn("steps.lease.outputs.publication_needed == 'true'", workflow)
+        self.assertIn("steps.lease.outcome != 'success'", workflow)
+        self.assertIn(
+            "LEASE_EVIDENCE_VALID: "
+            "${{ steps.lease.outputs.evidence_valid }}",
+            publish_step,
+        )
+        self.assertIn(
+            "process.env.LEASE_EVIDENCE_VALID !== 'true'",
+            publish_step,
+        )
+        self.assertIn("lease_evidence_invalid", publish_step)
+        self.assertIn(
+            "process.env.LEASE_EVIDENCE_VALID === 'true' &&",
+            publish_step,
+        )
+        self.assertIn("EVIDENCE_SHA256", workflow)
+        self.assertIn("'gate-evidence:' + process.env.EVIDENCE_SHA256", publish_step)
+        self.assertIn("'gate-evidence:' + process.env.EVIDENCE_SHA256", finalizer_step)
+        self.assertIn("'gate-result:' + String(result || '')", publish_step)
+        self.assertNotIn("gate-result:", finalizer_step)
         self.assertIn("id: upload", workflow)
         self.assertIn("steps.upload.outcome", workflow)
         self.assertIn("id: publish", workflow)
@@ -1050,8 +1190,177 @@ class CompletionGateWorkflowTests(unittest.TestCase):
         )
         self.assertLess(
             workflow.index("name: Upload gate evidence"),
+            workflow.index("name: Acquire publication lease"),
+        )
+        self.assertLess(
+            workflow.index("name: Acquire publication lease"),
             workflow.index("name: Publish stable status and comment"),
         )
+
+    def test_unchanged_evidence_does_not_consume_statuses(self):
+        workflow = self._workflow()
+        evidence_functions = _javascript_functions(
+            workflow,
+            "function statusEvidenceSha(",
+        )
+        publish_functions = _javascript_functions(
+            workflow,
+            "function shouldPublishEvidence(",
+        )
+        result_functions = _javascript_functions(
+            workflow,
+            "function statusEvidenceResult(",
+        )
+        comment_functions = _javascript_functions(
+            workflow,
+            "function commentEvidenceSha(",
+        )
+        self.assertEqual(len(evidence_functions), 1)
+        self.assertEqual(len(publish_functions), 1)
+        self.assertEqual(len(result_functions), 1)
+        self.assertEqual(len(comment_functions), 1)
+
+        assertions = r"""
+const current = 'a'.repeat(64);
+const other = 'b'.repeat(64);
+const prefix = 'https://github.com/acme/repo/actions/runs/';
+const rows = [
+  [null, 'success', 'ready', current, true],
+  [{state: 'pending', description: `gate-evidence:${current}`}, 'success', 'ready', current, true],
+  [{state: 'success', description: 'ready'}, 'success', 'ready', current, true],
+  [{state: 'success', target_url: prefix + '1', description: `gate-owner:1 gate-evidence:${other} gate-result:ready`}, 'success', 'ready', current, true],
+  [{state: 'success', target_url: prefix + '1', description: `gate-owner:1 gate-evidence:${current} gate-result:ready`}, 'success', 'ready', current, false],
+  [{state: 'failure', target_url: prefix + '2', description: `gate-owner:2 gate-evidence:${current} gate-result:blocked`}, 'failure', 'blocked', current, false],
+  [{state: 'failure', target_url: prefix + '2', description: `gate-owner:2 gate-evidence:${current} gate-result:blocked`}, 'success', 'ready', current, true],
+  [{state: 'failure', target_url: prefix + '2', description: `gate-owner:2 gate-evidence:${current} gate publication failed`}, 'failure', 'blocked', current, true],
+  [{state: 'error', target_url: prefix + '3', description: `gate-owner:3 gate-evidence:${current} gate-result:blocked`}, 'failure', 'blocked', current, true],
+  [{state: 'success', target_url: 'https://example.test/1', description: `gate-owner:1 gate-evidence:${current} gate-result:ready`}, 'success', 'ready', current, true],
+  [{state: 'success', target_url: prefix + '1', description: `gate-owner:1 gate-evidence:${current} gate-result:ready`}, 'success', 'ready', null, true]
+];
+for (const [status, expectedState, expectedResult, commentSha, expected] of rows) {
+  const actual = shouldPublishEvidence(
+    status, current, expectedState, expectedResult, commentSha, prefix
+  );
+  if (actual !== expected) {
+    throw new Error(`${JSON.stringify(status)}: ${actual} !== ${expected}`);
+  }
+}
+const reusable = rows[4][0];
+for (let sweep = 0; sweep < 10000; sweep += 1) {
+  if (shouldPublishEvidence(
+    reusable, current, 'success', 'ready', current, prefix
+  )) {
+    throw new Error('unchanged sweep requested another status');
+  }
+}
+if (statusEvidenceSha({description: `gate-evidence:${current}`}) !== current) {
+  throw new Error('evidence hash was not parsed');
+}
+if (statusEvidenceSha({description: 'gate-evidence:short'}) !== null) {
+  throw new Error('malformed evidence hash was accepted');
+}
+if (statusEvidenceResult(reusable) !== 'ready') {
+  throw new Error('terminal result was not parsed');
+}
+if (commentEvidenceSha({body: `<!-- gate-evidence:${current} -->`}) !== current) {
+  throw new Error('comment evidence hash was not parsed');
+}
+"""
+        completed = subprocess.run(
+            [
+                "node",
+                "-e",
+                evidence_functions[0]
+                + result_functions[0]
+                + comment_functions[0]
+                + publish_functions[0]
+                + assertions,
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+
+        lease_step = workflow[
+            workflow.index("name: Acquire publication lease"):
+            workflow.index("name: Publish stable status and comment")
+        ]
+        self.assertIn("Evidence fingerprint unchanged", lease_step)
+        self.assertIn("publication_needed", lease_step)
+        self.assertIn("gate-input.json", lease_step)
+        self.assertIn("gate-verdict.json", lease_step)
+        self.assertIn("agent_completion_gate.py", lease_step)
+        self.assertIn("publication_schema: 2", lease_step)
+        self.assertIn("github.rest.issues.listComments", lease_step)
+
+    def test_evidence_fingerprint_is_canonical_and_run_independent(self):
+        workflow = self._workflow()
+        canonical_functions = _javascript_functions(
+            workflow,
+            "function canonicalize(",
+        )
+        hash_functions = _javascript_functions(
+            workflow,
+            "function sha256(",
+        )
+        fingerprint_functions = _javascript_functions(
+            workflow,
+            "function evidenceFingerprint(",
+        )
+        self.assertEqual(len(canonical_functions), 1)
+        self.assertEqual(len(hash_functions), 1)
+        self.assertEqual(len(fingerprint_functions), 1)
+
+        assertions = r"""
+const base = {
+  head_sha: 'a'.repeat(40),
+  gate_input: {issue: {description: 'ship it'}, reviews: []},
+  gate_verdict: {verdict: 'ready', reasons: [], details: {}},
+  evaluator_sha256: 'b'.repeat(64),
+  collect_outcome: 'success',
+  gate_outcome: 'success',
+  gate_exit_code: '0',
+  artifact_outcome: 'success'
+};
+const reordered = {
+  artifact_outcome: 'success',
+  gate_exit_code: '0',
+  gate_outcome: 'success',
+  collect_outcome: 'success',
+  evaluator_sha256: 'b'.repeat(64),
+  gate_verdict: {details: {}, reasons: [], verdict: 'ready'},
+  gate_input: {reviews: [], issue: {description: 'ship it'}},
+  head_sha: 'a'.repeat(40),
+  run_id: 'different-run',
+  run_url: 'https://example.test/actions/runs/999'
+};
+const first = evidenceFingerprint(base);
+const second = evidenceFingerprint(reordered);
+if (first !== second) {
+  throw new Error('key order or run metadata changed the fingerprint');
+}
+const changed = JSON.parse(JSON.stringify(base));
+changed.gate_input.reviews.push({blocking: true, resolved: false});
+if (evidenceFingerprint(changed) === first) {
+  throw new Error('decision-relevant evidence did not change the fingerprint');
+}
+"""
+        completed = subprocess.run(
+            [
+                "node",
+                "-e",
+                "const crypto = require('crypto');"
+                + canonical_functions[0]
+                + hash_functions[0]
+                + fingerprint_functions[0]
+                + assertions,
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
 
     def test_finalizer_publishes_only_with_proven_lease(self):
         workflow = self._workflow()
@@ -1460,7 +1769,7 @@ for (const [values, expected] of rows) {
 
     def test_every_github_script_body_compiles(self):
         scripts = _github_script_bodies(self._workflow())
-        self.assertEqual(len(scripts), 8)
+        self.assertEqual(len(scripts), 9)
         compiler = (
             "const AsyncFunction = Object.getPrototypeOf("
             "async function(){}).constructor;"
@@ -1576,25 +1885,43 @@ for (const [snapshot, pull, expected] of rows) {
 const log = [
   '2026-07-18T03:00:00Z tests/unit/test_alpha.py::test_one PASSED [33%]',
   '2026-07-18T03:00:01Z tests/unit/test_beta.py::test_two SKIPPED [66%]',
-  '\u001b[32mtests/unit/test_beta.py::test_three PASSED\u001b[0m [100%]',
+  '2026-07-18T03:00:02Z tests/unit/test_beta.py::test_three',
+  '2026-07-18T03:00:03Z -------------------------------- live log call ---------------------------------',
+  '2026-07-18T03:00:04Z application emitted a diagnostic',
+  '2026-07-18T03:00:05Z \u001b[32mPASSED\u001b[0m [100%]',
   'tests/unit/test_alpha.py.evil::test_spoof PASSED [100%]',
   'tests/unit/test_gamma.py::test_failure FAILED [100%]',
   'tests/unit/test_only_skipped.py::test_skip SKIPPED [100%]',
-  'tests/unit/test_param.py::test_x[PASSED fake] SKIPPED [100%]'
+  'tests/unit/test_param.py::test_x[PASSED fake] SKIPPED [100%]',
+  'tests/unit/test_live.py::test_with_logs',
+  '-------------------------------- live log call ---------------------------------',
+  'structured log message',
+  'PASSED [100%]',
+  'tests/unit/test_interrupted.py::test_one',
+  'tests/unit/test_unrelated.py::test_two',
+  'PASSED [100%]',
+  'tests/unit/test_xpass.py::test_known_bug',
+  'XPASS (known bug: issue 42) [100%]'
 ].join('\n');
 const actual = focusedTestResultsFromLog(log, [
   'tests/unit/test_alpha.py',
   'tests/unit/test_beta.py',
   'tests/unit/test_gamma.py',
   'tests/unit/test_only_skipped.py',
-  'tests/unit/test_param.py'
+  'tests/unit/test_param.py',
+  'tests/unit/test_live.py',
+  'tests/unit/test_interrupted.py',
+  'tests/unit/test_xpass.py'
 ]);
 const expected = {
   'tests/unit/test_alpha.py': {passed: 1, failed: 0, errors: 0, skipped: 0, xfailed: 0, xpassed: 0},
   'tests/unit/test_beta.py': {passed: 1, failed: 0, errors: 0, skipped: 1, xfailed: 0, xpassed: 0},
   'tests/unit/test_gamma.py': {passed: 0, failed: 1, errors: 0, skipped: 0, xfailed: 0, xpassed: 0},
   'tests/unit/test_only_skipped.py': {passed: 0, failed: 0, errors: 0, skipped: 1, xfailed: 0, xpassed: 0},
-  'tests/unit/test_param.py': {passed: 0, failed: 0, errors: 0, skipped: 1, xfailed: 0, xpassed: 0}
+  'tests/unit/test_param.py': {passed: 0, failed: 0, errors: 0, skipped: 1, xfailed: 0, xpassed: 0},
+  'tests/unit/test_live.py': {passed: 1, failed: 0, errors: 0, skipped: 0, xfailed: 0, xpassed: 0},
+  'tests/unit/test_interrupted.py': {passed: 0, failed: 0, errors: 0, skipped: 0, xfailed: 0, xpassed: 0},
+  'tests/unit/test_xpass.py': {passed: 0, failed: 0, errors: 0, skipped: 0, xfailed: 0, xpassed: 1}
 };
 if (JSON.stringify(actual) !== JSON.stringify(expected)) {
   throw new Error(`${JSON.stringify(actual)} !== ${JSON.stringify(expected)}`);
@@ -1686,6 +2013,10 @@ if (JSON.stringify(actual) !== JSON.stringify(expected)) {
         self.assertIn("trusted_ci_workflow_changed", workflow)
         self.assertIn("file.previous_filename", workflow)
         self.assertIn("file.status !== 'removed'", workflow)
+        self.assertIn(
+            "present_changed_files: [...presentChangedFiles]",
+            workflow,
+        )
 
     def test_gate_runs_are_serialized_and_coalesced_by_pr_number(self):
         workflow = self._workflow()
@@ -1701,7 +2032,7 @@ if (JSON.stringify(actual) !== JSON.stringify(expected)) {
         self.assertIn("dispatch-evidence-refresh:", workflow)
         self.assertIn("group: agent-completion-${{", workflow)
         self.assertIn("inputs.pull_request || github.event.pull_request.number", workflow)
-        self.assertIn("cancel-in-progress: true", workflow)
+        self.assertIn("cancel-in-progress: false", workflow)
         self.assertIn("trustedCommentAssociations", workflow)
         self.assertIn("comment.author_association", workflow)
         self.assertIn("google-labs-jules[bot]", workflow)
