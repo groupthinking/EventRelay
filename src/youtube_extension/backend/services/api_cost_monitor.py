@@ -217,7 +217,7 @@ class APICostMonitor:
         self.webhook_stale_timeout_seconds = max(
             1, int(os.getenv("API_COST_WEBHOOK_STALE_SECONDS", "30"))
         )
-        self._worker_task: Optional[asyncio.Task] = None
+        self._worker_task: Optional[asyncio.Task[None]] = None
         self._worker_wake_event: Optional[asyncio.Event] = None
 
         # Rate limiters for different services
@@ -578,7 +578,7 @@ class APICostMonitor:
         if self._worker_wake_event is not None:
             self._worker_wake_event.set()
 
-    async def start(self) -> asyncio.Task:
+    async def start(self) -> asyncio.Task[None]:
         """Start the monitor's single managed outbox worker."""
         if self._worker_task is not None and not self._worker_task.done():
             return self._worker_task
@@ -651,7 +651,15 @@ class APICostMonitor:
     async def recover_stale_deliveries(
         self, stale_timeout_seconds: Optional[int] = None
     ) -> None:
-        """Recover processing claims abandoned by a crash or cancellation."""
+        """Recover abandoned claims without blocking the application event loop."""
+        await asyncio.to_thread(
+            self._recover_stale_deliveries_sync, stale_timeout_seconds
+        )
+
+    def _recover_stale_deliveries_sync(
+        self, stale_timeout_seconds: Optional[int] = None
+    ) -> None:
+        """Recover processing claims in a worker thread."""
         if stale_timeout_seconds is None:
             stale_timeout_seconds = self.webhook_stale_timeout_seconds
 
@@ -829,6 +837,36 @@ class APICostMonitor:
         finally:
             session.close()
 
+    def _select_outbox_item_ids(self, *, now: datetime, force: bool) -> list[int]:
+        """Return due outbox IDs using a short worker-thread transaction."""
+        session = self.Session()
+        try:
+            filters = [
+                WebhookOutbox.status.in_(["pending", "failed"]),
+                WebhookOutbox.retry_count < self.webhook_max_attempts,
+            ]
+            if not force:
+                filters.append(
+                    or_(
+                        WebhookOutbox.next_attempt_at.is_(None),
+                        WebhookOutbox.next_attempt_at <= now,
+                    )
+                )
+            return [
+                row[0]
+                for row in (
+                    session.query(WebhookOutbox.id)
+                    .filter(*filters)
+                    .order_by(WebhookOutbox.next_attempt_at, WebhookOutbox.id)
+                    .all()
+                )
+            ]
+        except Exception as e:
+            logger.error("Error selecting webhook outbox items: %s", e)
+            return []
+        finally:
+            session.close()
+
     async def process_outbox(self, *, force: bool = False) -> int:
         """Deliver eligible items, honoring persisted due times by default.
 
@@ -842,38 +880,16 @@ class APICostMonitor:
         if not self.webhook_url:
             return 0
 
-        session = self.Session()
-        try:
-            now = datetime.now(timezone.utc)
-            filters = [
-                WebhookOutbox.status.in_(["pending", "failed"]),
-                WebhookOutbox.retry_count < self.webhook_max_attempts,
-            ]
-            if not force:
-                filters.append(
-                    or_(
-                        WebhookOutbox.next_attempt_at.is_(None),
-                        WebhookOutbox.next_attempt_at <= now,
-                    )
-                )
-            item_ids = [
-                row[0]
-                for row in (
-                    session.query(WebhookOutbox.id)
-                    .filter(*filters)
-                    .order_by(WebhookOutbox.next_attempt_at, WebhookOutbox.id)
-                    .all()
-                )
-            ]
-        except Exception as e:
-            logger.error("Error selecting webhook outbox items: %s", e)
-            return 0
-        finally:
-            session.close()
+        item_ids = await asyncio.to_thread(
+            self._select_outbox_item_ids,
+            now=datetime.now(timezone.utc),
+            force=force,
+        )
 
         completed = 0
         for item_id in item_ids:
-            claim = self._try_claim_outbox_item(
+            claim = await asyncio.to_thread(
+                self._try_claim_outbox_item,
                 item_id,
                 datetime.now(timezone.utc),
                 respect_schedule=not force,
@@ -886,7 +902,8 @@ class APICostMonitor:
             try:
                 success = await self._send_webhook_notification(claim["payload"])
             except asyncio.CancelledError:
-                self._complete_outbox_claim(
+                await asyncio.to_thread(
+                    self._complete_outbox_claim,
                     claim,
                     success=False,
                     error_message="Delivery cancelled during worker shutdown",
@@ -898,7 +915,9 @@ class APICostMonitor:
             finally:
                 _WEBHOOK_EVENT_ID.reset(token)
 
-            if self._complete_outbox_claim(claim, success=success):
+            if await asyncio.to_thread(
+                self._complete_outbox_claim, claim, success=success
+            ):
                 completed += 1
 
         return completed
