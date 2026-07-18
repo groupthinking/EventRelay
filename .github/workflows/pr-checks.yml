@@ -1,65 +1,3139 @@
 name: PR Checks
 
 on:
-  pull_request:
-    types: [opened, reopened, synchronize, edited]
+  pull_request_target:
+    types: [opened, reopened, synchronize, edited, ready_for_review, converted_to_draft, labeled, unlabeled, closed]
+  issue_comment:
+    types: [created, edited, deleted]
+  issues:
+    types: [opened, edited, labeled, unlabeled, closed, reopened]
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+    inputs:
+      pull_request:
+        description: Pull request number to re-evaluate
+        required: true
+        type: number
 
-permissions:
-  pull-requests: write
-  issues: write
+permissions: {}
 
 jobs:
-  validate:
+  snapshot-agent-task-intent:
+    if: >-
+      github.event_name == 'issues' &&
+      (github.event.action == 'labeled' ||
+       github.event.action == 'edited' ||
+       github.event.action == 'unlabeled')
+    concurrency:
+      group: agent-intent-snapshot-${{ github.event.issue.number }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
+    permissions:
+      issues: write
     steps:
-      - uses: actions/github-script@v9
+      - name: Freeze the delegated issue body
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const crypto = require('crypto');
+            const issue = context.payload.issue;
+            const workflowRunId = String(context.runId || '');
+            if (!/^[1-9]\d*$/.test(workflowRunId)) {
+              core.setFailed('invalid_workflow_run_id');
+              return;
+            }
+            const labels = new Set((issue.labels || []).map(label =>
+              String(typeof label === 'string' ? label : label.name)
+                .toLowerCase().replace(/[^a-z0-9 ]/g, '').trim()
+            ));
+            const hasAgentTaskLabel = [...labels].some(label =>
+              ['agenttask', 'mcpagent'].includes(label)
+            );
+            const eventLabel = String(
+              context.payload.label && context.payload.label.name || ''
+            ).toLowerCase().replace(/[^a-z0-9 ]/g, '').trim();
+            const snapshotMarker =
+              '<!-- agent-lock-intent-snapshot:v1';
+            const invalidationMarker =
+              '<!-- agent-lock-intent-invalidated:v1';
+            const comments = await github.paginate(
+              github.rest.issues.listComments,
+              {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                per_page: 100
+              }
+            );
+            const existing = comments.find(comment =>
+              comment.user && comment.user.login === 'github-actions[bot]' &&
+              String(comment.body || '').includes(snapshotMarker)
+            );
+            function snapshotEventDisposition(
+              hasSnapshot,
+              action,
+              label,
+              snapshotRunId,
+              currentRunId
+            ) {
+              if (hasSnapshot) {
+                if (String(snapshotRunId || '') &&
+                    String(snapshotRunId) === String(currentRunId || '')) {
+                  return 'same_snapshot_run';
+                }
+                return ['edited', 'labeled', 'unlabeled'].includes(action)
+                  ? 'invalidate'
+                  : 'ignore';
+              }
+              if (action === 'labeled' &&
+                  ['agenttask', 'mcpagent'].includes(label)) {
+                return 'snapshot';
+              }
+              return 'ignore';
+            }
+            let snapshotRunId = '';
+            if (existing) {
+              try {
+                const match = String(existing.body || '').match(
+                  /<!--\s*agent-lock-intent-snapshot:v1\s*([\s\S]*?)-->/i
+                );
+                if (match) {
+                  const payload = JSON.parse(match[1].trim());
+                  snapshotRunId = String(payload.workflow_run_id || '');
+                }
+              } catch (error) {
+                core.warning(
+                  'Could not read snapshot source run: ' + error.message
+                );
+              }
+            }
+            const disposition = snapshotEventDisposition(
+              Boolean(existing),
+              context.payload.action,
+              eventLabel,
+              snapshotRunId,
+              workflowRunId
+            );
+            if (disposition === 'same_snapshot_run') {
+              core.info('Snapshot already created by this workflow run');
+              return;
+            }
+            if (disposition === 'invalidate') {
+              const invalidation = {
+                issue_number: issue.number,
+                event_action: context.payload.action,
+                actor: context.actor,
+                workflow_run_id: workflowRunId,
+                created_at: new Date().toISOString()
+              };
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                body: invalidationMarker + '\n' +
+                  JSON.stringify(invalidation) + '\n-->' +
+                  '\n\nFrozen agent-task intent was invalidated; create a new task.'
+              });
+              return;
+            }
+            if (disposition !== 'snapshot' || !hasAgentTaskLabel) {
+              return;
+            }
+            function hasTrustedSnapshotPermission(permission, roleName) {
+              const trustedPermissions = new Set([
+                'admin', 'maintain', 'write', 'triage'
+              ]);
+              return trustedPermissions.has(permission) ||
+                trustedPermissions.has(roleName);
+            }
+            let permission = '';
+            let roleName = '';
+            try {
+              const result =
+                await github.rest.repos.getCollaboratorPermissionLevel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  username: context.actor
+                });
+              permission = result.data.permission;
+              roleName = result.data.role_name;
+            } catch (error) {
+              core.warning(
+                'Could not verify snapshot actor permission: ' +
+                error.message
+              );
+              return;
+            }
+            if (!hasTrustedSnapshotPermission(permission, roleName)) {
+              core.info('Ignoring an untrusted agent-task snapshot');
+              return;
+            }
+            function normaliseHeading(value) {
+              return value.toLowerCase().replace(/[^a-z0-9 ]/g, '').trim();
+            }
+            function section(body, headings) {
+              const wanted = new Set(headings.map(normaliseHeading));
+              const lines = String(body || '').split(/\r?\n/);
+              const output = [];
+              let collecting = false;
+              for (const line of lines) {
+                const heading = line.match(/^#{2,6}\s+(.+?)\s*$/);
+                if (heading) {
+                  if (collecting) {
+                    break;
+                  }
+                  collecting = wanted.has(normaliseHeading(heading[1]));
+                  continue;
+                }
+                if (collecting) {
+                  output.push(line);
+                }
+              }
+              return output.join('\n').trim();
+            }
+            function hasResponse(value) {
+              const response = String(value || '').trim();
+              return Boolean(response && response !== '_No response_');
+            }
+            function checkboxChecked(value) {
+              const response = String(value || '').trim();
+              return response.split(/\r?\n/).some(line =>
+                /^\s*[-*]\s*\[[xX]\]/.test(line)
+              ) || /^(?:yes|true)$/i.test(response);
+            }
+            const issueBody = String(issue.body || '');
+            const unrestricted = section(
+              issueBody,
+              ['unrestricted scope', 'scope unrestricted']
+            );
+            const unrestrictedRequested = checkboxChecked(unrestricted);
+            const declaredScope = section(
+              issueBody,
+              ['declared file scope', 'file scope', 'scope']
+            );
+            const confirmed = /-\s*\[[xX]\]/.test(section(
+              issueBody,
+              ['pre-dispatch confirmation']
+            ));
+            const complete = [
+              section(issueBody, ['agent login']),
+              section(issueBody, ['agent run id', 'run id']),
+              section(issueBody, ['objective', 'description']),
+              section(issueBody, ['acceptance criteria', 'acceptance tests'])
+            ].every(hasResponse) &&
+              Boolean(hasResponse(declaredScope) || unrestrictedRequested) &&
+              confirmed;
+            const unrestrictedApproved =
+              labels.has('scopeunrestrictedapproved');
+            if (!complete ||
+                (unrestrictedRequested && !unrestrictedApproved)) {
+              core.setFailed('incomplete_agent_task_contract');
+              return;
+            }
+            const normalisedBody = issueBody
+              .replace(/\r\n/g, '\n').trim();
+            const bodySha256 = crypto.createHash('sha256')
+              .update(normalisedBody, 'utf8').digest('hex');
+            const snapshot = {
+              issue_number: issue.number,
+              body_sha256: bodySha256,
+              scope_unrestricted_approved: unrestrictedApproved,
+              workflow_run_id: workflowRunId,
+              created_at: new Date().toISOString()
+            };
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issue.number,
+              body: snapshotMarker + '\n' + JSON.stringify(snapshot) + '\n-->' +
+                '\n\nAgent task intent frozen for completion-gate evaluation.'
+            });
+
+  refresh-open-pull-requests:
+    if: github.event_name == 'schedule'
+    concurrency:
+      group: agent-completion-scheduled-scan
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    permissions:
+      actions: write
+      contents: read
+      issues: read
+      pull-requests: read
+      statuses: write
+    steps:
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const crypto = require('crypto');
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const runTargetPrefix = context.serverUrl + '/' + owner + '/' +
+              repo + '/actions/runs/';
+            function gateStatusContext(pullNumber) {
+              return 'agent-completion/truth-gate/pr-' + pullNumber;
+            }
+            function scheduledRefreshDecision(evidence) {
+              const statusCapacityFloor = 998;
+              if (!evidence.apiComplete) {
+                return 'retry';
+              }
+              if (!evidence.latestState) {
+                return 'dispatch';
+              }
+              const latestTime = Date.parse(evidence.latestCreatedAt);
+              const pendingTime = Date.parse(evidence.ownerPendingAt);
+              if (evidence.latestState === 'pending') {
+                if (!Number.isFinite(latestTime) ||
+                    !Number.isFinite(pendingTime) ||
+                    !evidence.pendingLeaseValid) {
+                  return evidence.statusCount >= statusCapacityFloor
+                    ? 'at_capacity'
+                    : 'dispatch';
+                }
+                if (['completed', 'missing'].includes(
+                  evidence.ownerRunState
+                )) {
+                  return evidence.statusCount < 1000
+                    ? 'finalize_pending'
+                    : 'at_capacity';
+                }
+                if (!['queued', 'in_progress'].includes(
+                  evidence.ownerRunState
+                )) {
+                  return 'retry';
+                }
+                const now = Date.parse(evidence.now);
+                if (Number.isFinite(now) &&
+                    now - latestTime > 60 * 60 * 1000) {
+                  return evidence.statusCount < 1000
+                    ? 'finalize_pending'
+                    : 'at_capacity';
+                }
+                return 'skip';
+              }
+              if (!['success', 'failure', 'error'].includes(
+                evidence.latestState
+              ) || !Number.isFinite(latestTime) ||
+                  !Number.isFinite(pendingTime)) {
+                return evidence.statusCount >= statusCapacityFloor
+                  ? 'at_capacity'
+                  : 'dispatch';
+              }
+              function isAfter(candidate, baseline) {
+                const candidateTime = Date.parse(candidate);
+                return Number.isFinite(candidateTime) &&
+                  candidateTime > baseline;
+              }
+              const evidenceChanged =
+                evidence.reviewProjectionChanged ||
+                  evidence.intentProjectionChanged ||
+                  evidence.policyProjectionChanged ||
+                  isAfter(evidence.commentUpdatedAt, pendingTime) ||
+                  isAfter(evidence.ciUpdatedAt, pendingTime);
+              if (evidenceChanged) {
+                if (evidence.statusCount < statusCapacityFloor) {
+                  return 'dispatch';
+                }
+                if (evidence.latestState !== 'success' ||
+                    evidence.terminalAlreadyInvalidated ||
+                    evidence.statusCount >= 1000) {
+                  return 'at_capacity';
+                }
+                return 'invalidate_terminal';
+              }
+              if (evidence.statusCount >= statusCapacityFloor) {
+                return 'at_capacity';
+              }
+              return 'skip';
+            }
+            function latestIso(values) {
+              const times = values
+                .map(value => Date.parse(value))
+                .filter(Number.isFinite);
+              return times.length > 0
+                ? new Date(Math.max(...times)).toISOString()
+                : null;
+            }
+            function workflowRunId(targetUrl) {
+              const target = String(targetUrl || '');
+              if (!target.startsWith(runTargetPrefix)) {
+                return null;
+              }
+              const suffix = target.slice(runTargetPrefix.length);
+              return /^\d+$/.test(suffix) ? suffix : null;
+            }
+            function terminalOwnerId(status) {
+              const match = String(status.description || '').match(
+                /^gate-owner:(\d+)(?:\s|$)/
+              );
+              return match ? match[1] : null;
+            }
+            function verdictProjection(comments) {
+              const marker = '<!-- agent-completion-truth-gate:v1 -->';
+              const comment = comments.find(candidate =>
+                candidate.user &&
+                candidate.user.login === 'github-actions[bot]' &&
+                String(candidate.body || '').includes(marker)
+              );
+              const encoded = String((comment && comment.body) || '').match(
+                /<pre>([\s\S]*?)<\/pre>/
+              );
+              if (!encoded) {
+                return null;
+              }
+              try {
+                const verdict = JSON.parse(encoded[1]
+                  .replace(/&lt;/g, '<')
+                  .replace(/&gt;/g, '>')
+                  .replace(/&amp;/g, '&'));
+                if (!verdict || !Array.isArray(verdict.reasons) ||
+                    !verdict.details ||
+                    typeof verdict.details !== 'object') {
+                  return null;
+                }
+                const unknownProjectionReasons = new Set([
+                  'invalid_payload',
+                  'invalid_json',
+                  'input_read_failed',
+                  'verdict_artifact_missing',
+                  'evidence_collection_failed',
+                  'evidence_collection_step_failed',
+                  'gate_evaluation_step_failed',
+                  'evidence_artifact_failed',
+                  'gate_exit_code_mismatch'
+                ]);
+                const unusableProjectionReasons = new Set([
+                  'invalid_payload',
+                  'invalid_json',
+                  'input_read_failed',
+                  'verdict_artifact_missing',
+                  'evidence_collection_step_failed',
+                  'gate_evaluation_step_failed',
+                  'evidence_artifact_failed',
+                  'gate_exit_code_mismatch'
+                ]);
+                const collectionErrors = Array.isArray(
+                  verdict.details.collection_errors
+                )
+                  ? [...new Set(
+                    verdict.details.collection_errors
+                  )].sort()
+                  : [];
+                const mutablePolicyErrorNames = new Set([
+                  'draft_pr',
+                  'invalid_pr_title',
+                  'missing_copilot_rabbit_label',
+                  'invalid_agent_lock_manifest',
+                  'missing_agent_run_id',
+                  'agent_run_id_mismatch',
+                  'missing_agent_login',
+                  'agent_login_mismatch'
+                ]);
+                const rawIdentity = verdict.details.identity_projection;
+                const identityProjection = rawIdentity &&
+                  typeof rawIdentity === 'object'
+                    ? {
+                      issue_number:
+                        Number.isSafeInteger(rawIdentity.issue_number) &&
+                        rawIdentity.issue_number > 0
+                          ? rawIdentity.issue_number
+                          : null,
+                      agent_login:
+                        typeof rawIdentity.agent_login === 'string' &&
+                        rawIdentity.agent_login.trim()
+                          ? rawIdentity.agent_login.trim()
+                          : null,
+                      run_id:
+                        typeof rawIdentity.run_id === 'string' &&
+                        rawIdentity.run_id.trim()
+                          ? rawIdentity.run_id.trim()
+                          : null
+                    }
+                    : null;
+                return {
+                  notApplicable: verdict.verdict === 'not_applicable',
+                  projectionKnown:
+                    verdict.verdict === 'not_applicable' ||
+                    !verdict.reasons.some(reason =>
+                      unknownProjectionReasons.has(reason)
+                    ),
+                  projectionUsable:
+                    verdict.verdict === 'not_applicable' || (
+                      !verdict.reasons.some(reason =>
+                        unusableProjectionReasons.has(reason)
+                      ) && (
+                        !verdict.reasons.includes(
+                          'evidence_collection_failed'
+                        ) || Array.isArray(
+                          verdict.details.collection_errors
+                        )
+                      )
+                    ),
+                  copilotCurrentHeadReviewed: !verdict.reasons.includes(
+                    'missing_copilot_current_head_review'
+                  ),
+                  unresolved: Array.isArray(
+                    verdict.details.unresolved_reviews
+                  )
+                    ? [...new Set(
+                      verdict.details.unresolved_reviews
+                    )].sort()
+                    : [],
+                  collectionErrors,
+                  identityProjection,
+                  mutablePolicyErrors: [
+                    ...verdict.reasons,
+                    ...collectionErrors
+                  ].filter(error =>
+                    mutablePolicyErrorNames.has(error)
+                  ).filter((error, index, errors) =>
+                    errors.indexOf(error) === index
+                  ).sort()
+                };
+              } catch (error) {
+                return null;
+              }
+            }
+            function normaliseScheduledBotLogin(login) {
+              return String(login || '').toLowerCase()
+                .replace(/\[bot\]$/, '');
+            }
+            function scheduledCommentAffectsEvidence(
+              comment,
+              expectedAgents
+            ) {
+              const actor = comment && comment.user && comment.user.login;
+              if (!actor || !expectedAgents.has(actor)) {
+                return false;
+              }
+              const body = String(comment.body || '');
+              return /<!--\s*agent-lock-event\b/i.test(body) ||
+                /unexpected error|unable to complete|wasn.t able to complete|run failed|failed to complete/i.test(body) ||
+                /ready for (?:a )?review|pull request is ready|created (?:a )?pull request|\[PR\]\([^)]*\)\s+has been created/i.test(body) ||
+                /\b(?:task|work|implementation)\s+(?:is\s+)?complete(?:d)?\b/i.test(body);
+            }
+            function scheduledAgentLogin(body) {
+              const value = String(body || '');
+              const manifest = value.match(
+                /<!--\s*agent-lock-manifest\s*([\s\S]*?)-->/i
+              );
+              if (manifest) {
+                try {
+                  return String(
+                    JSON.parse(manifest[1].trim()).agent_login || ''
+                  ).trim();
+                } catch (error) {
+                  return '';
+                }
+              }
+              const lines = value.split(/\r?\n/);
+              const output = [];
+              let collecting = false;
+              for (const line of lines) {
+                const heading = line.match(/^#{2,6}\s+(.+?)\s*$/);
+                if (heading) {
+                  if (collecting) {
+                    break;
+                  }
+                  collecting = heading[1].toLowerCase()
+                    .replace(/[^a-z0-9 ]/g, '').trim() === 'agent login';
+                  continue;
+                }
+                if (collecting) {
+                  output.push(line);
+                }
+              }
+              return output.join('\n').trim()
+                .replace(/^\x60|\x60$/g, '');
+            }
+            function scheduledLinkProjection(pull, linkedIssues) {
+              const body = String(pull && pull.body || '');
+              let manifest = {};
+              const errors = [];
+              const manifestMatch = body.match(
+                /<!--\s*agent-lock-manifest\s*([\s\S]*?)-->/i
+              );
+              if (manifestMatch) {
+                try {
+                  manifest = JSON.parse(manifestMatch[1].trim());
+                } catch (error) {
+                  manifest = {};
+                  errors.push('invalid_agent_lock_manifest');
+                }
+              }
+              const manifestNumber =
+                Number.isSafeInteger(manifest.issue_number) &&
+                manifest.issue_number > 0
+                  ? manifest.issue_number
+                  : 0;
+              const referenceNumbers = [...new Set(
+                (linkedIssues || []).map(issue => issue.number)
+                  .filter(number =>
+                    Number.isSafeInteger(number) && number > 0
+                  )
+              )];
+              const authoritativeNumber = referenceNumbers.length === 1
+                ? referenceNumbers[0]
+                : 0;
+              const textualMatch = body.match(
+                /(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#(\d+)/i
+              );
+              const textualNumber = textualMatch
+                ? Number(textualMatch[1])
+                : 0;
+              if (referenceNumbers.length !== 1) {
+                errors.push('missing_closing_issue_reference');
+              }
+              if (referenceNumbers.length > 1) {
+                errors.push('multiple_closing_issues');
+              }
+              const contractValues = [
+                manifest.issue_number,
+                textualNumber,
+                authoritativeNumber
+              ];
+              if (!contractValues.every(value =>
+                Number.isSafeInteger(value) && value > 0
+              )) {
+                errors.push('incomplete_linked_issue_contract');
+              } else if (new Set(contractValues).size !== 1) {
+                errors.push('conflicting_linked_issue');
+              }
+              return {
+                selectedIssueNumber:
+                  manifestNumber || authoritativeNumber || textualNumber,
+                closingIssueCount: referenceNumbers.length,
+                errors: [...new Set(errors)].sort()
+              };
+            }
+            function agentTaskApplicable(pull, selectedIssue) {
+              function normaliseLabel(value) {
+                return String(value || '').toLowerCase()
+                  .replace(/[^a-z0-9 ]/g, '').trim();
+              }
+              const login = String(
+                pull && pull.user && pull.user.login || ''
+              );
+              const knownAgents = new Set([
+                'google-labs-jules[bot]',
+                'github-copilot[bot]',
+                'copilot-swe-agent[bot]',
+                'openai-codex[bot]',
+                'chatgpt-codex-connector[bot]'
+              ]);
+              const labels = [
+                ...((pull && pull.labels) || []).map(label =>
+                  typeof label === 'string' ? label : label.name
+                ),
+                ...(selectedIssue && selectedIssue.labels
+                  ? Array.isArray(selectedIssue.labels)
+                    ? selectedIssue.labels
+                    : selectedIssue.labels.nodes || []
+                  : []).map(label =>
+                    typeof label === 'string' ? label : label.name
+                  )
+              ].map(normaliseLabel);
+              const agentLabel = labels.some(label =>
+                ['agent', 'agenttask', 'mcpagent'].includes(label)
+              );
+              const agentBranch =
+                /^(?:agent|claude|codex|copilot|jules)[/-]/i.test(
+                  String(pull && pull.head && pull.head.ref || '')
+                );
+              const manifestPresent =
+                /<!--\s*agent-lock-manifest\s*[\s\S]*?-->/i.test(
+                  String(pull && pull.body || '')
+                );
+              return login !== 'dependabot[bot]' && (
+                knownAgents.has(login) || agentBranch || agentLabel ||
+                  manifestPresent
+              );
+            }
+            function intentContractErrors(issue, comments, pullCreatedAt) {
+              const errors = [];
+              const labels = new Set(
+                ((issue.labels && issue.labels.nodes) || []).map(label =>
+                  String(label.name || '').toLowerCase()
+                    .replace(/[^a-z0-9 ]/g, '').trim()
+                )
+              );
+              if (![...labels].some(label =>
+                ['agenttask', 'mcpagent'].includes(label)
+              )) {
+                errors.push('linked_issue_not_agent_task');
+              }
+              const snapshotComment = comments.find(comment =>
+                comment.user &&
+                comment.user.login === 'github-actions[bot]' &&
+                /<!--\s*agent-lock-intent-snapshot:v1/i.test(
+                  String(comment.body || '')
+                )
+              );
+              if (!snapshotComment) {
+                errors.push('missing_intent_snapshot');
+                return [...new Set(errors)].sort();
+              }
+              const intentInvalidated = comments.some(comment =>
+                comment.user &&
+                comment.user.login === 'github-actions[bot]' &&
+                /<!--\s*agent-lock-intent-invalidated:v1/i.test(
+                  String(comment.body || '')
+                )
+              );
+              const snapshotMatch = String(
+                snapshotComment.body || ''
+              ).match(
+                /<!--\s*agent-lock-intent-snapshot:v1\s*([\s\S]*?)-->/i
+              );
+              try {
+                if (!snapshotMatch) {
+                  throw new Error('missing snapshot payload');
+                }
+                const snapshot = JSON.parse(snapshotMatch[1].trim());
+                const currentHash = crypto.createHash('sha256')
+                  .update(String(issue.body || '')
+                    .replace(/\r\n/g, '\n').trim(), 'utf8')
+                  .digest('hex');
+                if (snapshot.issue_number !== issue.number ||
+                    !/^[a-f0-9]{64}$/.test(String(
+                      snapshot.body_sha256 || ''
+                    ))) {
+                  errors.push('invalid_intent_snapshot');
+                } else if (snapshot.body_sha256 !== currentHash) {
+                  errors.push('intent_changed_after_dispatch');
+                }
+                const snapshotTime = Date.parse(snapshotComment.created_at);
+                const pullTime = Date.parse(pullCreatedAt);
+                if (!Number.isFinite(snapshotTime) ||
+                    !Number.isFinite(pullTime) ||
+                    snapshotTime >= pullTime) {
+                  errors.push('intent_snapshot_after_dispatch');
+                }
+                if (Boolean(snapshot.scope_unrestricted_approved) !==
+                    labels.has('scopeunrestrictedapproved')) {
+                  errors.push(
+                    'unrestricted_approval_changed_after_dispatch'
+                  );
+                }
+                if (intentInvalidated) {
+                  errors.push('intent_changed_after_dispatch');
+                }
+              } catch (error) {
+                errors.push('invalid_intent_snapshot');
+              }
+              return [...new Set(errors)].sort();
+            }
+            function scheduledIntentProjectionChanged(
+              previousProjection,
+              currentErrors,
+              closingIssueCount,
+              currentApplicable
+            ) {
+              if (!previousProjection) {
+                return false;
+              }
+              if (previousProjection.projectionUsable === false) {
+                return false;
+              }
+              if (previousProjection.notApplicable) {
+                return currentApplicable;
+              }
+              if (!currentApplicable) {
+                return true;
+              }
+              const relevantErrors = new Set([
+                'invalid_agent_lock_manifest',
+                'missing_closing_issue_reference',
+                'multiple_closing_issues',
+                'incomplete_linked_issue_contract',
+                'conflicting_linked_issue',
+                'linked_issue_unavailable',
+                'missing_linked_issue'
+              ]);
+              if (closingIssueCount === 1) {
+                for (const error of [
+                  'missing_intent_snapshot',
+                  'invalid_intent_snapshot',
+                  'intent_changed_after_dispatch',
+                  'intent_snapshot_after_dispatch',
+                  'unrestricted_approval_changed_after_dispatch',
+                  'linked_issue_not_agent_task'
+                ]) {
+                  relevantErrors.add(error);
+                }
+              }
+              const previousErrors = previousProjection.collectionErrors
+                .filter(error => relevantErrors.has(error)).sort();
+              const projectedCurrent = currentErrors
+                .filter(error => relevantErrors.has(error)).sort();
+              return JSON.stringify(projectedCurrent) !==
+                JSON.stringify(previousErrors);
+            }
+            function scheduledMutablePolicyErrors(
+              pull,
+              selectedIssue,
+              currentApplicable
+            ) {
+              if (!currentApplicable) {
+                return [];
+              }
+              function normaliseHeading(value) {
+                return String(value || '').toLowerCase()
+                  .replace(/[^a-z0-9 ]/g, '').trim();
+              }
+              function section(body, headings) {
+                const wanted = new Set(headings.map(normaliseHeading));
+                const lines = String(body || '').split(/\r?\n/);
+                const output = [];
+                let collecting = false;
+                for (const line of lines) {
+                  const heading = line.match(/^#{2,6}\s+(.+?)\s*$/);
+                  if (heading) {
+                    if (collecting) {
+                      break;
+                    }
+                    collecting = wanted.has(normaliseHeading(heading[1]));
+                    continue;
+                  }
+                  if (collecting) {
+                    output.push(line);
+                  }
+                }
+                return output.join('\n').trim();
+              }
+              const errors = [];
+              const title = String(pull && pull.title || '');
+              if (pull && pull.draft === true) {
+                errors.push('draft_pr');
+              }
+              if (title.length < 10 ||
+                  !/^(?:⚡\s*)?(?:feat|fix|docs|style|refactor|test|chore|perf|ci|build|revert)(?:\(.+\))?:/i.test(title)) {
+                errors.push('invalid_pr_title');
+              }
+              const labels = (pull && pull.labels) || [];
+              if (!labels.some(label =>
+                String(typeof label === 'string' ? label : label.name)
+                  .toLowerCase() === 'copilot-rabbit'
+              )) {
+                errors.push('missing_copilot_rabbit_label');
+              }
+              const body = String(pull && pull.body || '');
+              const manifestMatch = body.match(
+                /<!--\s*agent-lock-manifest\s*([\s\S]*?)-->/i
+              );
+              let manifest = {};
+              if (manifestMatch) {
+                try {
+                  manifest = JSON.parse(manifestMatch[1]);
+                } catch (error) {
+                  errors.push('invalid_agent_lock_manifest');
+                }
+              }
+              const issueBody = String(
+                selectedIssue && selectedIssue.body || ''
+              );
+              const expectedRunId = section(
+                issueBody,
+                ['agent run id', 'run id']
+              ).replace(/^\x60|\x60$/g, '').trim();
+              const expectedAgentLogin = section(
+                issueBody,
+                ['agent login']
+              ).replace(/^\x60|\x60$/g, '').trim();
+              if (!expectedRunId) {
+                errors.push('missing_agent_run_id');
+              } else if (String(manifest.run_id || '') !== expectedRunId) {
+                errors.push('agent_run_id_mismatch');
+              }
+              if (!expectedAgentLogin) {
+                errors.push('missing_agent_login');
+              } else if (String(manifest.agent_login || '') !==
+                  expectedAgentLogin) {
+                errors.push('agent_login_mismatch');
+              }
+              return [...new Set(errors)].sort();
+            }
+            function scheduledContractIdentity(
+              selectedIssueNumber,
+              selectedIssue,
+              currentApplicable
+            ) {
+              if (!currentApplicable) {
+                return null;
+              }
+              function normaliseHeading(value) {
+                return String(value || '').toLowerCase()
+                  .replace(/[^a-z0-9 ]/g, '').trim();
+              }
+              function section(body, headings) {
+                const wanted = new Set(headings.map(normaliseHeading));
+                const lines = String(body || '').split(/\r?\n/);
+                const output = [];
+                let collecting = false;
+                for (const line of lines) {
+                  const heading = line.match(/^#{2,6}\s+(.+?)\s*$/);
+                  if (heading) {
+                    if (collecting) {
+                      break;
+                    }
+                    collecting = wanted.has(normaliseHeading(heading[1]));
+                    continue;
+                  }
+                  if (collecting) {
+                    output.push(line);
+                  }
+                }
+                return output.join('\n').trim();
+              }
+              const issueBody = String(
+                selectedIssue && selectedIssue.body || ''
+              );
+              const agentLogin = section(
+                issueBody,
+                ['agent login']
+              ).replace(/^\x60|\x60$/g, '').trim();
+              const runId = section(
+                issueBody,
+                ['agent run id', 'run id']
+              ).replace(/^\x60|\x60$/g, '').trim();
+              return {
+                issue_number:
+                  Number.isSafeInteger(selectedIssueNumber) &&
+                  selectedIssueNumber > 0
+                    ? selectedIssueNumber
+                    : null,
+                agent_login: agentLogin || null,
+                run_id: runId || null
+              };
+            }
+            function scheduledIdentityProjectionChanged(
+              previousProjection,
+              currentIdentity,
+              currentApplicable
+            ) {
+              if (!previousProjection ||
+                  previousProjection.projectionUsable === false ||
+                  previousProjection.notApplicable ||
+                  !currentApplicable) {
+                return false;
+              }
+              return JSON.stringify(currentIdentity) !== JSON.stringify(
+                previousProjection.identityProjection
+              );
+            }
+            function scheduledMutablePolicyProjectionChanged(
+              previousProjection,
+              currentErrors,
+              currentApplicable
+            ) {
+              if (!previousProjection ||
+                  previousProjection.projectionUsable === false ||
+                  previousProjection.notApplicable ||
+                  !currentApplicable) {
+                return false;
+              }
+              return JSON.stringify(currentErrors) !== JSON.stringify(
+                previousProjection.mutablePolicyErrors || []
+              );
+            }
+            async function currentReviewProjection(pull) {
+              const submitted = await github.paginate(
+                github.rest.pulls.listReviews,
+                {owner, repo, pull_number: pull.number, per_page: 100}
+              );
+              const copilotReviewerLogins = new Set([
+                'copilot-pull-request-reviewer[bot]',
+                'copilot-pull-request-reviewer'
+              ]);
+              const copilotStates = new Set([
+                'APPROVED', 'COMMENTED', 'CHANGES_REQUESTED'
+              ]);
+              const copilotCurrentHeadReviewed = submitted.some(review =>
+                review && review.user &&
+                copilotReviewerLogins.has(review.user.login) &&
+                copilotStates.has(review.state) &&
+                review.commit_id === pull.head.sha
+              );
+              const latestByAuthor = new Map();
+              for (const review of submitted) {
+                if (!review.user ||
+                    !['APPROVED', 'CHANGES_REQUESTED', 'DISMISSED'].includes(
+                      review.state
+                    )) {
+                  continue;
+                }
+                const previous = latestByAuthor.get(review.user.login);
+                if (!previous ||
+                    Date.parse(review.submitted_at || 0) >=
+                      Date.parse(previous.submitted_at || 0)) {
+                  latestByAuthor.set(review.user.login, review);
+                }
+              }
+              const unresolved = [];
+              for (const review of latestByAuthor.values()) {
+                if (review.state === 'CHANGES_REQUESTED') {
+                  unresolved.push('review:' + review.id);
+                }
+              }
+              const reviewResult = await github.graphql(
+                'query($owner:String!,$repo:String!,$number:Int!){' +
+                'repository(owner:$owner,name:$repo){pullRequest(number:$number){' +
+                'reviewDecision reviewThreads(first:100){nodes{id isResolved ' +
+                'comments(first:100){nodes{body author{login}} ' +
+                'pageInfo{hasNextPage}}} pageInfo{hasNextPage}}}}}',
+                {owner, repo, number: pull.number}
+              );
+              const pullReview = reviewResult.repository.pullRequest;
+              if (pullReview.reviewDecision === 'CHANGES_REQUESTED') {
+                unresolved.push('reviewDecision');
+              }
+              const aiReviewers = new Set([
+                'google-labs-jules[bot]',
+                'github-copilot[bot]',
+                'copilot-swe-agent[bot]',
+                'openai-codex[bot]',
+                'chatgpt-codex-connector[bot]',
+                ...copilotReviewerLogins,
+                'coderabbitai[bot]',
+                'vercel[bot]'
+              ].map(normaliseScheduledBotLogin));
+              const threads = pullReview.reviewThreads;
+              if (threads.pageInfo.hasNextPage ||
+                  threads.nodes.some(thread =>
+                    thread.comments.pageInfo.hasNextPage
+                  )) {
+                throw new Error('review_projection_truncated');
+              }
+              for (const thread of threads.nodes) {
+                const blocking = thread.comments.nodes.some(comment =>
+                  (comment.author && aiReviewers.has(
+                    normaliseScheduledBotLogin(comment.author.login)
+                  )) ||
+                  /VADE-RECOMMENDATION:\s*FIX|\b(?:blocking|must fix|regression)\b/i.test(
+                    String(comment.body || '')
+                  )
+                );
+                if (!thread.isResolved && blocking) {
+                  unresolved.push(thread.id);
+                }
+              }
+              return {
+                notApplicable: false,
+                copilotCurrentHeadReviewed,
+                unresolved: [...new Set(unresolved)].sort()
+              };
+            }
+            const pulls = await github.paginate(
+              github.rest.pulls.list,
+              {
+                owner,
+                repo,
+                state: 'open',
+                per_page: 100
+              }
+            );
+            for (const pull of pulls) {
+              let decision = 'retry';
+              let pendingRecovery = null;
+              let terminalInvalidation = null;
+              let observedLatestId = null;
+              const pullGateContext = gateStatusContext(pull.number);
+              try {
+                const gateContext = pullGateContext;
+                const statuses = await github.paginate(
+                  github.rest.repos.listCommitStatusesForRef,
+                  {owner, repo, ref: pull.head.sha, per_page: 100}
+                );
+                const gateStatuses = statuses
+                  .filter(status => status.context === gateContext)
+                  .sort((left, right) =>
+                    Date.parse(right.created_at) -
+                      Date.parse(left.created_at) ||
+                    right.id - left.id
+                  );
+                const latest = gateStatuses[0] || null;
+                observedLatestId = latest ? String(latest.id) : null;
+                if (!latest) {
+                  decision = scheduledRefreshDecision({
+                    apiComplete: true,
+                    statusCount: gateStatuses.length,
+                    latestState: latest && latest.state
+                  });
+                } else if (latest.state === 'pending') {
+                  let ownerRunState = 'missing';
+                  const runId = workflowRunId(latest.target_url);
+                  let pendingLeaseValid = Boolean(runId);
+                  if (runId) {
+                    try {
+                      const run = await github.rest.actions.getWorkflowRun({
+                        owner, repo, run_id: runId
+                      });
+                      ownerRunState = run.data.status;
+                      pendingLeaseValid =
+                        run.data.name === 'PR Checks' &&
+                        run.data.path === '.github/workflows/pr-checks.yml' &&
+                        ['pull_request_target', 'workflow_dispatch'].includes(
+                          run.data.event
+                        );
+                    } catch (error) {
+                      if (error.status !== 404) {
+                        throw error;
+                      }
+                    }
+                  }
+                  decision = scheduledRefreshDecision({
+                    apiComplete: true,
+                    statusCount: gateStatuses.length,
+                    latestState: latest.state,
+                    latestCreatedAt: latest.created_at,
+                    ownerPendingAt: latest.created_at,
+                    ownerRunState,
+                    pendingLeaseValid,
+                    now: new Date().toISOString()
+                  });
+                  if (decision === 'finalize_pending') {
+                    pendingRecovery = {latest, gateContext, ownerRunState};
+                  }
+                } else {
+                  const ownerId = terminalOwnerId(latest);
+                  const ownerPending = ownerId && gateStatuses.find(status =>
+                    String(status.id) === ownerId &&
+                    status.state === 'pending'
+                  );
+                  const ownerRunId = ownerPending && workflowRunId(
+                    ownerPending.target_url
+                  );
+                  const terminalRunId = workflowRunId(latest.target_url);
+                  if (!ownerPending || !ownerRunId || !terminalRunId ||
+                      ownerRunId !== terminalRunId) {
+                    decision = gateStatuses.length >= 998
+                      ? 'at_capacity'
+                      : 'dispatch';
+                  } else {
+                    const comments = await github.paginate(
+                      github.rest.issues.listComments,
+                      {owner, repo, issue_number: pull.number, per_page: 100}
+                    );
+                    const previousProjection = verdictProjection(comments);
+                    let reviewProjectionChanged = Boolean(
+                      (!previousProjection ||
+                        !previousProjection.projectionKnown) &&
+                      latest.state === 'success'
+                    );
+                    if (previousProjection &&
+                        previousProjection.projectionKnown &&
+                        !previousProjection.notApplicable) {
+                      const currentProjection =
+                        await currentReviewProjection(pull);
+                      reviewProjectionChanged =
+                        currentProjection.copilotCurrentHeadReviewed !==
+                          previousProjection.copilotCurrentHeadReviewed ||
+                        JSON.stringify(currentProjection.unresolved) !==
+                        JSON.stringify(previousProjection.unresolved);
+                    }
+                    const closingResult = await github.graphql(
+                      'query($owner:String!,$repo:String!,$number:Int!){' +
+                      'repository(owner:$owner,name:$repo){pullRequest(number:$number){' +
+                      'closingIssuesReferences(first:20){nodes{number body ' +
+                      'repository{nameWithOwner} labels(first:100){nodes{name} ' +
+                      'pageInfo{hasNextPage}}} pageInfo{hasNextPage}}}}}',
+                      {owner, repo, number: pull.number}
+                    );
+                    const references = closingResult.repository.pullRequest
+                      .closingIssuesReferences;
+                    if (references.pageInfo.hasNextPage) {
+                      throw new Error('closing_issues_truncated');
+                    }
+                    const linkedIssues = references.nodes.filter(issue =>
+                      issue.repository.nameWithOwner === owner + '/' + repo
+                    );
+                    if (linkedIssues.some(issue =>
+                      issue.labels.pageInfo.hasNextPage
+                    )) {
+                      throw new Error('issue_labels_truncated');
+                    }
+                    const linkProjection = scheduledLinkProjection(
+                      pull,
+                      linkedIssues
+                    );
+                    const selectedIssueNumber =
+                      linkProjection.selectedIssueNumber;
+                    let selectedIssue = linkedIssues.find(issue =>
+                      issue.number === selectedIssueNumber
+                    ) || null;
+                    let selectedIssueUnavailable = false;
+                    const applicableWithoutSelectedIssue =
+                      agentTaskApplicable(pull, null);
+                    if (selectedIssueNumber && !selectedIssue) {
+                      try {
+                        const selectedResponse =
+                          await github.rest.issues.get({
+                            owner,
+                            repo,
+                            issue_number: selectedIssueNumber
+                          });
+                        selectedIssue = {
+                          ...selectedResponse.data,
+                          labels: {
+                            nodes: (selectedResponse.data.labels || []).map(
+                              label => typeof label === 'string'
+                                ? {name: label}
+                                : {name: label.name}
+                            )
+                          }
+                        };
+                      } catch (error) {
+                        if (error.status !== 404 &&
+                            !(applicableWithoutSelectedIssue &&
+                              linkProjection.errors.length > 0)) {
+                          throw error;
+                        }
+                        selectedIssueUnavailable = true;
+                      }
+                    }
+                    const issueComments = selectedIssue
+                      ? await github.paginate(
+                        github.rest.issues.listComments,
+                        {
+                          owner,
+                          repo,
+                          issue_number: selectedIssue.number,
+                          per_page: 100
+                        }
+                      )
+                      : [];
+                    const currentApplicable = agentTaskApplicable(
+                      pull,
+                      selectedIssue
+                    );
+                    const currentIntentErrors = [
+                      ...linkProjection.errors,
+                      ...(selectedIssueUnavailable
+                        ? ['linked_issue_unavailable']
+                        : []),
+                      ...(currentApplicable && !selectedIssue
+                        ? ['missing_linked_issue']
+                        : []),
+                      ...(linkProjection.closingIssueCount === 1 &&
+                          selectedIssue
+                        ? intentContractErrors(
+                          selectedIssue,
+                          issueComments,
+                          pull.created_at
+                        )
+                        : [])
+                    ].filter((value, index, values) =>
+                      values.indexOf(value) === index
+                    ).sort();
+                    const currentMutablePolicyErrors =
+                      scheduledMutablePolicyErrors(
+                        pull,
+                        selectedIssue,
+                        currentApplicable
+                      );
+                    const currentContractIdentity =
+                      scheduledContractIdentity(
+                        selectedIssueNumber,
+                        selectedIssue,
+                        currentApplicable
+                      );
+                    const policyProjectionChanged =
+                      scheduledMutablePolicyProjectionChanged(
+                        previousProjection,
+                        currentMutablePolicyErrors,
+                        currentApplicable
+                      ) || scheduledIdentityProjectionChanged(
+                        previousProjection,
+                        currentContractIdentity,
+                        currentApplicable
+                      );
+                    const intentProjectionChanged =
+                      scheduledIntentProjectionChanged(
+                        previousProjection,
+                        currentIntentErrors,
+                        linkProjection.closingIssueCount,
+                        currentApplicable
+                      );
+                    const expectedAgents = new Set([
+                      scheduledAgentLogin(pull.body),
+                      scheduledAgentLogin(
+                        selectedIssue && selectedIssue.body
+                      )
+                    ].filter(Boolean));
+                    const evidenceComments = [
+                      ...comments,
+                      ...issueComments
+                    ].filter(comment =>
+                      scheduledCommentAffectsEvidence(
+                        comment,
+                        expectedAgents
+                      )
+                    );
+                    const ciRuns = await github.paginate(
+                      github.rest.actions.listWorkflowRunsForRepo,
+                      {owner, repo, head_sha: pull.head.sha, per_page: 100}
+                    );
+                    const exactCiRuns = ciRuns.filter(run =>
+                      run.name === 'CI' &&
+                      run.path === '.github/workflows/ci.yml' &&
+                      run.event === 'pull_request' &&
+                      run.head_sha === pull.head.sha &&
+                      (run.pull_requests || []).some(
+                        attached => attached.number === pull.number
+                      )
+                    );
+                    decision = scheduledRefreshDecision({
+                      apiComplete: true,
+                      statusCount: gateStatuses.length,
+                      latestState: latest.state,
+                      latestCreatedAt: latest.created_at,
+                      ownerPendingAt: ownerPending.created_at,
+                      ownerRunState: 'completed',
+                      now: new Date().toISOString(),
+                      commentUpdatedAt: latestIso(evidenceComments.map(comment =>
+                        comment.updated_at || comment.created_at
+                      )),
+                      ciUpdatedAt: latestIso(exactCiRuns.map(run =>
+                        run.updated_at || run.created_at
+                      )),
+                      reviewProjectionChanged,
+                      intentProjectionChanged,
+                      policyProjectionChanged,
+                      terminalAlreadyInvalidated: String(
+                        latest.description || ''
+                      ).includes('scheduled-evidence-invalidated')
+                    });
+                    if (decision === 'invalidate_terminal') {
+                      terminalInvalidation = {
+                        latest,
+                        gateContext,
+                        ownerId
+                      };
+                    }
+                  }
+                }
+              } catch (error) {
+                core.warning(
+                  'Evidence scan for PR #' + pull.number +
+                  ' will retry: ' + error.message
+                );
+                decision = scheduledRefreshDecision({
+                  apiComplete: false,
+                  statusCount: 0,
+                  latestState: null
+                });
+              }
+              if (decision === 'at_capacity') {
+                core.warning(
+                  'PR #' + pull.number + ' reached the safe status limit; ' +
+                  'push a new head or complete #874'
+                );
+              }
+              if ([
+                'dispatch',
+                'finalize_pending',
+                'invalidate_terminal'
+              ].includes(decision)) {
+                try {
+                  const currentStatuses = await github.paginate(
+                    github.rest.repos.listCommitStatusesForRef,
+                    {owner, repo, ref: pull.head.sha, per_page: 100}
+                  );
+                  const currentLatest = currentStatuses
+                    .filter(status => status.context === pullGateContext)
+                    .sort((left, right) =>
+                      Date.parse(right.created_at) -
+                        Date.parse(left.created_at) ||
+                      right.id - left.id
+                    )[0] || null;
+                  const currentLatestId = currentLatest
+                    ? String(currentLatest.id)
+                    : null;
+                  if (currentLatestId !== observedLatestId) {
+                    core.info(
+                      'Skipping stale scheduled decision for PR #' +
+                      pull.number
+                    );
+                    continue;
+                  }
+                } catch (error) {
+                  core.warning(
+                    'Could not recheck PR #' + pull.number + ': ' +
+                    error.message
+                  );
+                  continue;
+                }
+              }
+              if (decision === 'finalize_pending' && pendingRecovery) {
+                const latest = pendingRecovery.latest;
+                await github.rest.repos.createCommitStatus({
+                  owner,
+                  repo,
+                  sha: pull.head.sha,
+                  state: 'failure',
+                  context: pendingRecovery.gateContext,
+                  description: (
+                    'gate-owner:' + latest.id +
+                    ' scheduled recovery: ' +
+                    pendingRecovery.ownerRunState
+                  ).slice(0, 140),
+                  target_url: latest.target_url
+                });
+              }
+              if (decision === 'invalidate_terminal' &&
+                  terminalInvalidation) {
+                const latest = terminalInvalidation.latest;
+                await github.rest.repos.createCommitStatus({
+                  owner,
+                  repo,
+                  sha: pull.head.sha,
+                  state: 'failure',
+                  context: terminalInvalidation.gateContext,
+                  description: (
+                    'gate-owner:' + terminalInvalidation.ownerId +
+                    ' scheduled-evidence-invalidated'
+                  ).slice(0, 140),
+                  target_url: latest.target_url
+                });
+              }
+              if (decision === 'dispatch') {
+                await github.rest.actions.createWorkflowDispatch({
+                  owner,
+                  repo,
+                  workflow_id: 'pr-checks.yml',
+                  ref: context.payload.repository.default_branch,
+                  inputs: {pull_request: String(pull.number)}
+                });
+              }
+            }
+
+  dispatch-evidence-refresh:
+    needs: snapshot-agent-task-intent
+    if: >-
+      always() &&
+      (github.event_name == 'issue_comment' ||
+       github.event_name == 'issues' ||
+       github.event_name == 'workflow_run')
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Queue the affected pull requests
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const trustedCommentAssociations = new Set([
+              'OWNER', 'MEMBER', 'COLLABORATOR'
+            ]);
+            const knownAgentCommenters = new Set([
+              'google-labs-jules[bot]',
+              'github-copilot[bot]',
+              'copilot-swe-agent[bot]',
+              'openai-codex[bot]',
+              'chatgpt-codex-connector[bot]',
+              'github-actions[bot]'
+            ]);
+            const trustedIssuePermissions = new Set([
+              'admin', 'maintain', 'write', 'triage'
+            ]);
+            function mayDispatchEvidenceRefresh(
+              authorAssociation,
+              actor,
+              trustedAssociations,
+              knownAgents
+            ) {
+              return trustedAssociations.has(authorAssociation) ||
+                knownAgents.has(actor);
+            }
+            function mayDispatchIssueRefresh(
+              actor,
+              permission,
+              roleName,
+              trustedPermissions
+            ) {
+              return Boolean(actor) && (
+                trustedPermissions.has(permission) ||
+                trustedPermissions.has(roleName)
+              );
+            }
+            function issueCommentAffectsEvidence(
+              issue,
+              comment,
+              previousBody
+            ) {
+              function normaliseHeading(value) {
+                return String(value || '').toLowerCase()
+                  .replace(/[^a-z0-9 ]/g, '').trim();
+              }
+              function section(body, heading) {
+                const lines = String(body || '').split(/\r?\n/);
+                const output = [];
+                let collecting = false;
+                for (const line of lines) {
+                  const match = line.match(/^#{2,6}\s+(.+?)\s*$/);
+                  if (match) {
+                    if (collecting) {
+                      break;
+                    }
+                    collecting = normaliseHeading(match[1]) === heading;
+                    continue;
+                  }
+                  if (collecting) {
+                    output.push(line);
+                  }
+                }
+                return output.join('\n').trim()
+                  .replace(/^\x60|\x60$/g, '');
+              }
+              const actor = comment && comment.user && comment.user.login;
+              const invalidationPattern =
+                /<!--\s*agent-lock-intent-invalidated:v1/i;
+              if (actor === 'github-actions[bot]' &&
+                  (invalidationPattern.test(String(comment.body || '')) ||
+                   invalidationPattern.test(String(previousBody || '')))) {
+                return true;
+              }
+              let expectedAgent = '';
+              const manifest = String(issue && issue.body || '').match(
+                /<!--\s*agent-lock-manifest\s*([\s\S]*?)-->/i
+              );
+              if (manifest) {
+                try {
+                  expectedAgent = String(
+                    JSON.parse(manifest[1].trim()).agent_login || ''
+                  ).trim();
+                } catch (error) {
+                  return false;
+                }
+              } else {
+                expectedAgent = section(
+                  issue && issue.body,
+                  'agent login'
+                );
+              }
+              if (!expectedAgent || actor !== expectedAgent) {
+                return false;
+              }
+              function isAgentEventBody(body) {
+                const value = String(body || '');
+                return /<!--\s*agent-lock-event\b/i.test(value) ||
+                  /unexpected error|unable to complete|wasn.t able to complete|run failed|failed to complete/i.test(value) ||
+                  /ready for (?:a )?review|pull request is ready|created (?:a )?pull request|\[PR\]\([^)]*\)\s+has been created/i.test(value) ||
+                  /\b(?:task|work|implementation)\s+(?:is\s+)?complete(?:d)?\b/i.test(value);
+              }
+              return isAgentEventBody(comment && comment.body) ||
+                isAgentEventBody(previousBody);
+            }
+            if (context.eventName === 'issue_comment') {
+              const comment = context.payload.comment || {};
+              const changes = context.payload.changes || {};
+              const previousBody = changes.body && changes.body.from;
+              if (!issueCommentAffectsEvidence(
+                context.payload.issue || {},
+                comment,
+                previousBody
+              )) {
+                core.info('Ignoring evidence-neutral issue comment');
+                return;
+              }
+              const actor = comment.user && comment.user.login;
+              if (!mayDispatchEvidenceRefresh(
+                comment.author_association,
+                actor,
+                trustedCommentAssociations,
+                knownAgentCommenters
+              )) {
+                core.info('Ignoring untrusted issue-comment refresh');
+                return;
+              }
+            }
+            if (context.eventName === 'issues') {
+              const actor = context.payload.sender &&
+                context.payload.sender.login;
+              let permission = '';
+              let roleName = '';
+              if (actor) {
+                try {
+                  const result =
+                    await github.rest.repos.getCollaboratorPermissionLevel({
+                      owner,
+                      repo,
+                      username: actor
+                    });
+                  permission = result.data.permission;
+                  roleName = result.data.role_name;
+                } catch (error) {
+                  core.warning(
+                    'Could not verify issue-event sender: ' + error.message
+                  );
+                  return;
+                }
+              }
+              if (!mayDispatchIssueRefresh(
+                actor,
+                permission,
+                roleName,
+                trustedIssuePermissions
+              )) {
+                core.info('Ignoring untrusted issue refresh');
+                return;
+              }
+            }
+            const pullNumbers = new Set();
+            if (context.payload.issue &&
+                context.payload.issue.pull_request) {
+              pullNumbers.add(context.payload.issue.number);
+            } else if (context.payload.issue) {
+              const issueNumber = context.payload.issue.number;
+              const pulls = await github.paginate(
+                github.rest.pulls.list,
+                {owner, repo, state: 'open', per_page: 100}
+              );
+              const closingPattern = new RegExp(
+                '(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\\s+#' +
+                issueNumber + '\\b',
+                'i'
+              );
+              const manifestPattern = new RegExp(
+                '"issue_number"\\s*:\\s*' + issueNumber + '\\b'
+              );
+              for (const pull of pulls) {
+                if (closingPattern.test(String(pull.body || '')) ||
+                    manifestPattern.test(String(pull.body || ''))) {
+                  pullNumbers.add(pull.number);
+                }
+              }
+            }
+            if (context.eventName === 'workflow_run') {
+              const attached = context.payload.workflow_run.pull_requests || [];
+              for (const pull of attached) {
+                pullNumbers.add(pull.number);
+              }
+              if (attached.length === 0) {
+                const associated =
+                  await github.rest.repos.listPullRequestsAssociatedWithCommit({
+                    owner,
+                    repo,
+                    commit_sha: context.payload.workflow_run.head_sha,
+                    per_page: 100
+                  });
+                for (const pull of associated.data) {
+                  pullNumbers.add(pull.number);
+                }
+              }
+            }
+            for (const pullNumber of pullNumbers) {
+              await github.rest.actions.createWorkflowDispatch({
+                owner,
+                repo,
+                workflow_id: 'pr-checks.yml',
+                ref: context.payload.repository.default_branch,
+                inputs: {pull_request: String(pullNumber)}
+              });
+            }
+
+  validate:
+    if: github.event_name == 'pull_request_target'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: read
+    steps:
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const pr = context.payload.pull_request;
-            if (!pr) {
-              core.info('Not a pull_request event — skipping validation.');
+            const findings = [];
+            if (pr.title.length < 10) {
+              findings.push('❌ PR title too short (minimum 10 characters)');
+            }
+            if (!/^(?:⚡\s*)?(feat|fix|docs|style|refactor|test|chore|perf|ci|build|revert)(\(.+\))?:/i.test(pr.title)) {
+              findings.push('⚠️ PR title should follow conventional commits format');
+            }
+            if (!pr.body || pr.body.length < 20) {
+              findings.push('❌ PR description is required (minimum 20 characters)');
+            }
+            const totalChanges = (pr.additions || 0) + (pr.deletions || 0);
+            if (totalChanges > 500) {
+              findings.push('⚠️ Large PR detected (' + totalChanges + ' lines changed)');
+            }
+            const marker = '<!-- pr-validation:v1 -->';
+            const comments = await github.paginate(
+              github.rest.issues.listComments,
+              {owner: context.repo.owner, repo: context.repo.repo, issue_number: pr.number, per_page: 100}
+            );
+            const existing = comments.find(comment =>
+              comment.user &&
+              comment.user.login === 'github-actions[bot]' &&
+              comment.body && comment.body.includes(marker)
+            );
+            if (findings.length === 0) {
+              if (existing) {
+                await github.rest.issues.updateComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: existing.id,
+                  body: marker + '\n## 🔍 PR Validation\n\n' +
+                    '✅ Current validation passed.'
+                });
+              }
               return;
             }
-            const issues = [];
-
-            if (pr.title.length < 10) {
-              issues.push('❌ PR title too short (minimum 10 characters)');
+            const body = marker + '\n## 🔍 PR Validation\n\n' + findings.join('\n');
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+                body
+              });
             }
-            if (!/^(?:⚡\s*)?(feat|fix|docs|style|refactor|test|chore|perf|ci|build|revert)(\(.+\))?:/i.test(pr.title) && !pr.title.startsWith('⚡')) {
-              issues.push('⚠️ PR title should follow conventional commits format');
+            if (findings.some(finding => finding.startsWith('❌'))) {
+              core.setFailed('PR validation failed');
             }
 
-            if (!pr.body || pr.body.length < 20) {
-              issues.push('❌ PR description is required (minimum 20 characters)');
+  truth-gate:
+    name: agent-completion/truth-gate
+    needs: [validate, snapshot-agent-task-intent]
+    if: >-
+      !cancelled() &&
+      (github.event_name == 'pull_request_target' ||
+       github.event_name == 'workflow_dispatch')
+    concurrency:
+      group: agent-completion-${{ inputs.pull_request || github.event.pull_request.number }}
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      actions: read
+      contents: read
+      issues: write
+      pull-requests: read
+      statuses: write
+    steps:
+      - name: Resolve pull request and mark the gate pending
+        id: resolve
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          INPUT_PR_NUMBER: ${{ inputs.pull_request || '' }}
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const runUrl = context.serverUrl + '/' + owner + '/' + repo +
+              '/actions/runs/' + context.runId;
+            let prNumber = Number(process.env.INPUT_PR_NUMBER || 0);
+            if (!prNumber && context.payload.pull_request) {
+              prNumber = context.payload.pull_request.number;
             }
-
-            const totalChanges = (pr.additions || 0) + (pr.deletions || 0);
-            const errors = issues.filter(issue => issue.startsWith('❌'));
-            const warnings = issues.filter(issue => issue.startsWith('⚠️'));
-
-            if (totalChanges > 500) {
-              warnings.push(`⚠️ Large PR detected (${totalChanges} lines changed)`);
+            if (!prNumber) {
+              core.setOutput('pr_number', '');
+              core.setOutput('head_sha', '');
+              core.setOutput('base_sha', '');
+              return;
             }
+            if (context.payload.pull_request &&
+                context.payload.pull_request.head) {
+              core.setOutput('pr_number', String(prNumber));
+              core.setOutput(
+                'head_sha',
+                context.payload.pull_request.head.sha
+              );
+            }
+            const pr = (await github.rest.pulls.get({
+              owner,
+              repo,
+              pull_number: prNumber
+            })).data;
+            core.setOutput('pr_number', String(prNumber));
+            core.setOutput('head_sha', pr.head.sha);
+            core.setOutput('base_sha', pr.base.sha);
+            const gateContext =
+              'agent-completion/truth-gate/pr-' + prNumber;
+            const statuses = await github.paginate(
+              github.rest.repos.listCommitStatusesForRef,
+              {owner, repo, ref: pr.head.sha, per_page: 100}
+            );
+            const gateStatuses = statuses.filter(status =>
+              status.context === gateContext
+            );
+            if (gateStatuses.length >= 998) {
+              core.setOutput('pending_status_id', '');
+              core.setFailed(
+                'status_capacity_exhausted: push a new head or complete #874'
+              );
+              return;
+            }
+            const pendingStatus = await github.rest.repos.createCommitStatus({
+              owner,
+              repo,
+              sha: pr.head.sha,
+              state: 'pending',
+              context: gateContext,
+              description: 'collecting repository evidence',
+              target_url: runUrl
+            });
+            core.setOutput(
+              'pending_status_id',
+              String(pendingStatus.data.id)
+            );
 
-            if (errors.length > 0 || warnings.length > 0) {
-              const allIssues = [...errors, ...warnings];
-              if (pr.head.repo.full_name === pr.base.repo.full_name) {
-                const comment = `## 🔍 PR Validation\n\n${allIssues.join('\n')}`;
-                try {
-                  await github.rest.issues.createComment({
-                    owner: context.repo.owner,
-                    repo: context.repo.repo,
-                    issue_number: pr.number,
-                    body: comment
-                  });
-                } catch (commentError) {
-                  core.warning(`Could not post validation comment: ${commentError.message}`);
+      - name: Check out trusted gate from the default branch
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          path: .trusted
+          persist-credentials: false
+          sparse-checkout: scripts/ci/agent_completion_gate.py
+          sparse-checkout-cone-mode: false
+
+      - name: Collect repository evidence
+        id: collect
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          INPUT_PR_NUMBER: ${{ steps.resolve.outputs.pr_number }}
+          RESOLVED_HEAD_SHA: ${{ steps.resolve.outputs.head_sha }}
+          RESOLVED_BASE_SHA: ${{ steps.resolve.outputs.base_sha }}
+        with:
+          script: |
+            const crypto = require('crypto');
+            const fs = require('fs');
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const collectionErrors = [];
+
+            function normaliseHeading(value) {
+              return value.toLowerCase().replace(/[^a-z0-9 ]/g, '').trim();
+            }
+            function section(body, headings) {
+              const wanted = new Set(headings.map(normaliseHeading));
+              const lines = String(body || '').split(/\r?\n/);
+              const output = [];
+              let collecting = false;
+              for (const line of lines) {
+                const heading = line.match(/^#{2,6}\s+(.+?)\s*$/);
+                if (heading) {
+                  if (collecting) {
+                    break;
+                  }
+                  collecting = wanted.has(normaliseHeading(heading[1]));
+                  continue;
                 }
-              } else {
-                core.warning('Skipping PR comment for fork PR (read-only token)');
-                allIssues.forEach(issue => core.warning(issue));
+                if (collecting) {
+                  output.push(line);
+                }
               }
-              if (errors.length > 0) {
-                core.setFailed('PR validation failed');
+              return output.join('\n').trim();
+            }
+            function listItems(value) {
+              return String(value || '')
+                .split(/\r?\n/)
+                .map(line => line
+                  .replace(/^\s*[-*]\s*/, '')
+                  .replace(/^\[[ xX]\]\s*/, '')
+                  .replace(/^\x60|\x60$/g, '')
+                  .trim())
+                .filter(line =>
+                  line && line !== '_No response_' &&
+                  !/^\x60{3}/.test(line) && !line.startsWith('<!--')
+                );
+            }
+            function checkboxChecked(value) {
+              const response = String(value || '').trim();
+              return response.split(/\r?\n/).some(line =>
+                /^\s*[-*]\s*\[[xX]\]/.test(line)
+              ) || /^(?:yes|true)$/i.test(response);
+            }
+            function snapshotPredatesPull(
+              snapshotCreatedAt,
+              pullCreatedAt
+            ) {
+              const snapshotTime = Date.parse(snapshotCreatedAt);
+              const pullTime = Date.parse(pullCreatedAt);
+              return Number.isFinite(snapshotTime) &&
+                Number.isFinite(pullTime) && snapshotTime < pullTime;
+            }
+            function agentTaskApplicable(pull, selectedIssue) {
+              function normaliseLabel(value) {
+                return String(value || '').toLowerCase()
+                  .replace(/[^a-z0-9 ]/g, '').trim();
+              }
+              const login = String(
+                pull && pull.user && pull.user.login || ''
+              );
+              const knownAgents = new Set([
+                'google-labs-jules[bot]',
+                'github-copilot[bot]',
+                'copilot-swe-agent[bot]',
+                'openai-codex[bot]',
+                'chatgpt-codex-connector[bot]'
+              ]);
+              const labels = [
+                ...((pull && pull.labels) || []).map(label =>
+                  typeof label === 'string' ? label : label.name
+                ),
+                ...(selectedIssue && selectedIssue.labels
+                  ? Array.isArray(selectedIssue.labels)
+                    ? selectedIssue.labels
+                    : selectedIssue.labels.nodes || []
+                  : []).map(label =>
+                    typeof label === 'string' ? label : label.name
+                  )
+              ].map(normaliseLabel);
+              const agentLabel = labels.some(label =>
+                ['agent', 'agenttask', 'mcpagent'].includes(label)
+              );
+              const agentBranch =
+                /^(?:agent|claude|codex|copilot|jules)[/-]/i.test(
+                  String(pull && pull.head && pull.head.ref || '')
+                );
+              const manifestPresent =
+                /<!--\s*agent-lock-manifest\s*[\s\S]*?-->/i.test(
+                  String(pull && pull.body || '')
+                );
+              return login !== 'dependabot[bot]' && (
+                knownAgents.has(login) || agentBranch || agentLabel ||
+                  manifestPresent
+              );
+            }
+
+            const prNumber = Number(process.env.INPUT_PR_NUMBER || 0);
+            if (!prNumber) {
+              fs.writeFileSync('gate-input.json', JSON.stringify({policy: {applicable: false}}, null, 2));
+              core.setOutput('pr_number', '');
+              core.setOutput('head_sha', '');
+              return;
+            }
+
+            const pr = (await github.rest.pulls.get({owner, repo, pull_number: prNumber})).data;
+            const resolvedHead = String(
+              process.env.RESOLVED_HEAD_SHA || ''
+            ).toLowerCase();
+            const resolvedBase = String(
+              process.env.RESOLVED_BASE_SHA || ''
+            ).toLowerCase();
+            const collectedHead = String(pr.head.sha || '').toLowerCase();
+            const collectedBase = String(pr.base.sha || '').toLowerCase();
+            core.setOutput('pr_number', String(prNumber));
+            core.setOutput('head_sha', collectedHead);
+            core.setOutput('base_sha', collectedBase);
+            if (!/^[a-f0-9]{40}$/.test(resolvedHead) ||
+                collectedHead !== resolvedHead) {
+              collectionErrors.push('stale_head');
+            }
+            if (!/^[a-f0-9]{40}$/.test(resolvedBase) ||
+                collectedBase !== resolvedBase) {
+              collectionErrors.push('stale_base');
+            }
+            const comparison = (await
+              github.rest.repos.compareCommitsWithBasehead({
+                owner,
+                repo,
+                basehead: pr.base.sha + '...' + pr.head.sha,
+                per_page: 100
+              })
+            ).data;
+            const changed = Array.isArray(comparison.files)
+              ? comparison.files
+              : [];
+            if (changed.length !== pr.changed_files) {
+              collectionErrors.push('changed_files_truncated');
+            }
+            const changedFiles = [...new Set(changed.flatMap(file => [
+              file.filename,
+              file.previous_filename
+            ].filter(Boolean)))];
+            const presentChangedFiles = new Set(
+              changed
+                .filter(file => file.status !== 'removed')
+                .map(file => file.filename)
+            );
+            const prBody = String(pr.body || '');
+            const manifestMatch = prBody.match(/<!--\s*agent-lock-manifest\s*([\s\S]*?)-->/i);
+            let manifest = {};
+            if (manifestMatch) {
+              try {
+                manifest = JSON.parse(manifestMatch[1]);
+              } catch (error) {
+                collectionErrors.push('invalid_agent_lock_manifest');
               }
             }
+            let closingReferenceNumbers = [];
+            try {
+              const closingResult = await github.graphql(
+                'query($owner:String!,$repo:String!,$number:Int!){' +
+                'repository(owner:$owner,name:$repo){pullRequest(number:$number){' +
+                'closingIssuesReferences(first:20){nodes{number repository{' +
+                'nameWithOwner}} pageInfo{hasNextPage}}}}}',
+                {owner, repo, number: prNumber}
+              );
+              const references =
+                closingResult.repository.pullRequest.closingIssuesReferences;
+              closingReferenceNumbers = [...new Set(references.nodes
+                .filter(reference =>
+                  reference.repository.nameWithOwner === owner + '/' + repo
+                )
+                .map(reference => reference.number))];
+              if (references.pageInfo.hasNextPage) {
+                collectionErrors.push('closing_issues_truncated');
+              }
+              if (closingReferenceNumbers.length > 1) {
+                collectionErrors.push('multiple_closing_issues');
+              }
+            } catch (error) {
+              collectionErrors.push('closing_issues_unavailable');
+            }
+            const closing = prBody.match(
+              /(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#(\d+)/i
+            );
+            const closingIssueNumber = closing ? Number(closing[1]) : 0;
+            const referencedIssueNumber =
+              closingReferenceNumbers.length === 1
+                ? closingReferenceNumbers[0]
+                : 0;
+            function linkedIssueContract(
+              manifestNumber,
+              textualNumber,
+              authoritativeNumber
+            ) {
+              const values = [
+                manifestNumber,
+                textualNumber,
+                authoritativeNumber
+              ];
+              if (!values.every(value =>
+                Number.isSafeInteger(value) && value > 0
+              )) {
+                return 'missing';
+              }
+              return new Set(values).size === 1 ? 'ok' : 'conflicting';
+            }
+            const linkContract = linkedIssueContract(
+              manifest.issue_number,
+              closingIssueNumber,
+              referencedIssueNumber
+            );
+            if (linkContract === 'missing') {
+              collectionErrors.push('incomplete_linked_issue_contract');
+            } else if (linkContract === 'conflicting') {
+              collectionErrors.push('conflicting_linked_issue');
+            }
+            const manifestIssueNumber =
+              Number.isSafeInteger(manifest.issue_number) &&
+              manifest.issue_number > 0
+                ? manifest.issue_number
+                : 0;
+            const issueNumber = manifestIssueNumber ||
+              referencedIssueNumber || closingIssueNumber;
+            let issue = null;
+            let issueComments = [];
+            let prComments = [];
+            if (issueNumber) {
+              try {
+                issue = (await github.rest.issues.get({owner, repo, issue_number: issueNumber})).data;
+              } catch (error) {
+                collectionErrors.push('linked_issue_unavailable');
+              }
+              try {
+                issueComments = await github.paginate(
+                  github.rest.issues.listComments,
+                  {owner, repo, issue_number: issueNumber, per_page: 100}
+                );
+              } catch (error) {
+                collectionErrors.push('issue_comments_unavailable');
+              }
+            }
+            try {
+              prComments = await github.paginate(
+                github.rest.issues.listComments,
+                {owner, repo, issue_number: prNumber, per_page: 100}
+              );
+            } catch (error) {
+              collectionErrors.push('pr_comments_unavailable');
+            }
+
+            const prLabels = new Set((pr.labels || []).map(label =>
+              normaliseHeading(typeof label === 'string' ? label : label.name)
+            ));
+            const issueLabels = new Set(((issue && issue.labels) || []).map(label =>
+              normaliseHeading(typeof label === 'string' ? label : label.name)
+            ));
+            const applicable = agentTaskApplicable(pr, issue);
+            if (applicable && !issue) {
+              collectionErrors.push('missing_linked_issue');
+            }
+            if (applicable && closingReferenceNumbers.length !== 1) {
+              collectionErrors.push('missing_closing_issue_reference');
+            }
+            if (applicable && issue &&
+                !['agenttask', 'mcpagent'].some(label => issueLabels.has(label))) {
+              collectionErrors.push('linked_issue_not_agent_task');
+            }
+
+            const issueBody = String((issue && issue.body) || '');
+            if (applicable && issue) {
+              const snapshotComment = issueComments.find(comment =>
+                comment.user && comment.user.login === 'github-actions[bot]' &&
+                /<!--\s*agent-lock-intent-snapshot:v1/i.test(
+                  String(comment.body || '')
+                )
+              );
+              if (!snapshotComment) {
+                collectionErrors.push('missing_intent_snapshot');
+              } else {
+                const intentInvalidated = issueComments.some(comment =>
+                  comment.user &&
+                  comment.user.login === 'github-actions[bot]' &&
+                  /<!--\s*agent-lock-intent-invalidated:v1/i.test(
+                    String(comment.body || '')
+                  )
+                );
+                const snapshotMatch = String(snapshotComment.body || '').match(
+                  /<!--\s*agent-lock-intent-snapshot:v1\s*([\s\S]*?)-->/i
+                );
+                try {
+                  const snapshot = JSON.parse(snapshotMatch[1].trim());
+                  const currentHash = crypto.createHash('sha256')
+                    .update(issueBody.replace(/\r\n/g, '\n').trim(), 'utf8')
+                    .digest('hex');
+                  if (snapshot.issue_number !== issueNumber ||
+                      !/^[a-f0-9]{64}$/.test(String(snapshot.body_sha256 || ''))) {
+                    collectionErrors.push('invalid_intent_snapshot');
+                  } else if (snapshot.body_sha256 !== currentHash) {
+                    collectionErrors.push('intent_changed_after_dispatch');
+                  }
+                  if (!snapshotPredatesPull(
+                    snapshotComment.created_at,
+                    pr.created_at
+                  )) {
+                    collectionErrors.push('intent_snapshot_after_dispatch');
+                  }
+                  if (Boolean(snapshot.scope_unrestricted_approved) !==
+                      issueLabels.has('scopeunrestrictedapproved')) {
+                    collectionErrors.push(
+                      'unrestricted_approval_changed_after_dispatch'
+                    );
+                  }
+                  if (intentInvalidated &&
+                      !collectionErrors.includes(
+                        'intent_changed_after_dispatch'
+                      )) {
+                    collectionErrors.push('intent_changed_after_dispatch');
+                  }
+                } catch (error) {
+                  collectionErrors.push('invalid_intent_snapshot');
+                }
+              }
+            }
+            const objectiveSection = section(issueBody, ['objective', 'description']);
+            const hasObjectiveHeading = /^#{2,6}\s+(objective|description)\s*$/im.test(issueBody);
+            const description = objectiveSection || (hasObjectiveHeading ? '' : issueBody.trim());
+            const acceptance = listItems(section(issueBody, ['acceptance criteria', 'acceptance tests']));
+            const declaredFiles = listItems(section(issueBody, ['declared file scope', 'file scope', 'scope']));
+            const allowedExtraFiles = listItems(section(issueBody, ['allowed extra files', 'scope allowlist']));
+            const unrestrictedSection = section(issueBody, ['unrestricted scope', 'scope unrestricted']);
+            const unrestrictedRequested = checkboxChecked(
+              unrestrictedSection
+            );
+            const scopeUnrestricted = unrestrictedRequested &&
+              issueLabels.has('scopeunrestrictedapproved');
+            if (applicable && unrestrictedRequested && !scopeUnrestricted) {
+              collectionErrors.push('unrestricted_scope_not_approved');
+            }
+            const expectedTests = listItems(section(issueBody, ['focused test paths', 'focused tests', 'test scope']));
+            const expectedRunId = section(issueBody, ['agent run id', 'run id'])
+              .replace(/^\x60|\x60$/g, '').trim();
+            const expectedAgentLogin = section(issueBody, ['agent login'])
+              .replace(/^\x60|\x60$/g, '').trim();
+            if (applicable && !expectedRunId) {
+              collectionErrors.push('missing_agent_run_id');
+            } else if (applicable && String(manifest.run_id || '') !== expectedRunId) {
+              collectionErrors.push('agent_run_id_mismatch');
+            }
+            if (applicable && !expectedAgentLogin) {
+              collectionErrors.push('missing_agent_login');
+            } else if (applicable &&
+                       String(manifest.agent_login || '') !== expectedAgentLogin) {
+              collectionErrors.push('agent_login_mismatch');
+            }
+
+            const eventAuthors = new Set(
+              expectedAgentLogin ? [expectedAgentLogin] : []
+            );
+            const events = [];
+            function legacyRunId(value) {
+              const match = String(value || '').match(
+                /(?:\b(?:run|task)[ _-]?id\s*[:=\/]\s*|\btasks?\/)([A-Za-z0-9][A-Za-z0-9._:-]{0,127})/i
+              );
+              return match
+                ? match[1].replace(/[.,;:]+$/, '')
+                : null;
+            }
+            if (issueNumber) {
+              const eventComments = [...new Map(
+                [...issueComments, ...prComments].map(comment => [
+                  comment.id,
+                  comment
+                ])
+              ).values()];
+              for (const comment of eventComments) {
+                if (!comment.user || !eventAuthors.has(comment.user.login)) {
+                  continue;
+                }
+                const body = String(comment.body || '');
+                const structuredMatch = body.match(
+                  /<!--\s*agent-lock-event\s*([\s\S]*?)-->/i
+                );
+                if (structuredMatch) {
+                  try {
+                    const structuredEvent = JSON.parse(
+                      structuredMatch[1].trim()
+                    );
+                    if (!['artifact_ready', 'completed', 'error'].includes(
+                      structuredEvent.kind
+                    ) || typeof structuredEvent.run_id !== 'string' ||
+                        typeof structuredEvent.head_sha !== 'string' ||
+                        !/^[a-f0-9]{40}$/i.test(structuredEvent.head_sha)) {
+                      throw new Error('invalid structured event');
+                    }
+                    events.push({
+                      kind: structuredEvent.kind,
+                      sequence: Date.parse(comment.created_at) || comment.id,
+                      comment_id: comment.id,
+                      author: comment.user.login,
+                      run_id: structuredEvent.run_id,
+                      head_sha: structuredEvent.head_sha.toLowerCase()
+                    });
+                  } catch (error) {
+                    collectionErrors.push('invalid_agent_event');
+                  }
+                  continue;
+                }
+                let kind = '';
+                if (/unexpected error|unable to complete|wasn.t able to complete|run failed|failed to complete/i.test(body)) {
+                  kind = 'error';
+                } else if (/ready for (?:a )?review|pull request is ready|created (?:a )?pull request|\[PR\]\([^)]*\)\s+has been created/i.test(body)) {
+                  kind = 'artifact_ready';
+                } else if (/\b(?:task|work|implementation)\s+(?:is\s+)?complete(?:d)?\b/i.test(body)) {
+                  kind = 'completed';
+                }
+                if (kind) {
+                  const headMatch = body.match(/\b[a-f0-9]{40}\b/i);
+                  events.push({
+                    kind,
+                    sequence: Date.parse(comment.created_at) || comment.id,
+                    comment_id: comment.id,
+                    author: comment.user.login,
+                    run_id: legacyRunId(body),
+                    head_sha: headMatch ? headMatch[0].toLowerCase() : null
+                  });
+                }
+              }
+              events.sort((left, right) => left.sequence - right.sequence);
+            }
+
+            const reviews = [];
+            const submitted = await github.paginate(
+              github.rest.pulls.listReviews,
+              {owner, repo, pull_number: prNumber, per_page: 100}
+            );
+            const copilotReviewerLogins = new Set([
+              'copilot-pull-request-reviewer[bot]',
+              'copilot-pull-request-reviewer'
+            ]);
+            const submittedCopilotStates = new Set([
+              'APPROVED', 'COMMENTED', 'CHANGES_REQUESTED'
+            ]);
+            function normaliseBotLogin(login) {
+              return String(login || '').toLowerCase()
+                .replace(/\[bot\]$/, '');
+            }
+            function aiReviewerLoginSet() {
+              return new Set([
+                'google-labs-jules[bot]',
+                'github-copilot[bot]',
+                'copilot-swe-agent[bot]',
+                'openai-codex[bot]',
+                'chatgpt-codex-connector[bot]',
+                'copilot-pull-request-reviewer[bot]',
+                'copilot-pull-request-reviewer',
+                'coderabbitai[bot]',
+                'vercel[bot]'
+              ].map(login => String(login || '').toLowerCase()
+                .replace(/\[bot\]$/, '')));
+            }
+            const aiReviewerLogins = aiReviewerLoginSet();
+            function isCurrentCopilotReview(
+              review,
+              reviewerLogins,
+              submittedStates,
+              headSha
+            ) {
+              return Boolean(
+                review && review.user &&
+                reviewerLogins.has(review.user.login) &&
+                submittedStates.has(review.state) &&
+                review.commit_id === headSha
+              );
+            }
+            const copilotCurrentHeadReviewed = submitted.some(review =>
+              isCurrentCopilotReview(
+                review,
+                copilotReviewerLogins,
+                submittedCopilotStates,
+                pr.head.sha
+              )
+            );
+            const copilotRabbitLabel = (pr.labels || []).some(label =>
+              String(typeof label === 'string' ? label : label.name)
+                .toLowerCase() === 'copilot-rabbit'
+            );
+            const latestByAuthor = new Map();
+            for (const review of submitted) {
+              if (!review.user ||
+                  !['APPROVED', 'CHANGES_REQUESTED', 'DISMISSED'].includes(
+                    review.state
+                  )) {
+                continue;
+              }
+              const previous = latestByAuthor.get(review.user.login);
+              if (!previous || Date.parse(review.submitted_at || 0) >= Date.parse(previous.submitted_at || 0)) {
+                latestByAuthor.set(review.user.login, review);
+              }
+            }
+            for (const review of latestByAuthor.values()) {
+              if (review.state === 'CHANGES_REQUESTED') {
+                reviews.push({blocking: true, resolved: false, source: 'review:' + review.id});
+              }
+            }
+            try {
+              const result = await github.graphql(
+                'query($owner:String!,$repo:String!,$number:Int!){' +
+                'repository(owner:$owner,name:$repo){pullRequest(number:$number){' +
+                'reviewDecision reviewThreads(first:100){nodes{id isResolved comments(first:100){' +
+                'nodes{body author{login}} pageInfo{hasNextPage}}} pageInfo{hasNextPage}}}}}',
+                {owner, repo, number: prNumber}
+              );
+              if (result.repository.pullRequest.reviewDecision ===
+                  'CHANGES_REQUESTED') {
+                reviews.push({
+                  blocking: true,
+                  resolved: false,
+                  source: 'reviewDecision'
+                });
+              }
+              const threads = result.repository.pullRequest.reviewThreads;
+              for (const thread of threads.nodes) {
+                if (thread.comments.pageInfo.hasNextPage) {
+                  collectionErrors.push(
+                    'review_thread_comments_truncated'
+                  );
+                }
+                const blocking = thread.comments.nodes.some(comment =>
+                  (comment.author &&
+                    aiReviewerLogins.has(
+                      normaliseBotLogin(comment.author.login)
+                    )) ||
+                  /VADE-RECOMMENDATION:\s*FIX|\b(?:blocking|must fix|regression)\b/i.test(
+                    String(comment.body || '')
+                  )
+                );
+                if (!thread.isResolved && blocking) {
+                  reviews.push({blocking: true, resolved: false, source: thread.id});
+                }
+              }
+              if (threads.pageInfo.hasNextPage) {
+                collectionErrors.push('review_threads_truncated');
+              }
+            } catch (error) {
+              collectionErrors.push('review_threads_unavailable');
+            }
+
+            function focusedTestResultsFromLog(log, expectedPaths) {
+              const outcomes = {
+                PASSED: 'passed',
+                FAILED: 'failed',
+                ERROR: 'errors',
+                SKIPPED: 'skipped',
+                XFAIL: 'xfailed',
+                XPASS: 'xpassed'
+              };
+              const results = Object.fromEntries(expectedPaths.map(path => [
+                path,
+                {
+                  passed: 0,
+                  failed: 0,
+                  errors: 0,
+                  skipped: 0,
+                  xfailed: 0,
+                  xpassed: 0
+                }
+              ]));
+              const lines = String(log || '')
+                .replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, '')
+                .split(/\r\n|\n|\r/);
+              let activePath = null;
+              let sawLiveLog = false;
+              let pendingCombined = null;
+              function record(path, outcome) {
+                results[path][outcomes[outcome]] += 1;
+              }
+              function commitPendingCombined() {
+                if (pendingCombined) {
+                  record(
+                    pendingCombined.path,
+                    pendingCombined.outcome
+                  );
+                  pendingCombined = null;
+                }
+              }
+              for (const rawLine of lines) {
+                const line = rawLine
+                  .replace(/^\uFEFF/, '')
+                  .replace(/^\d{4}-\d{2}-\d{2}T\S+\s+/, '')
+                  .trimEnd();
+                if (!line.trim()) {
+                  continue;
+                }
+                const liveLogHeader =
+                  /^-+\s+live log (?:setup|call|teardown)\s+-+$/i.test(
+                    line
+                  );
+                if (pendingCombined) {
+                  if (liveLogHeader) {
+                    activePath = pendingCombined.path;
+                    sawLiveLog = true;
+                    pendingCombined = null;
+                    continue;
+                  }
+                  commitPendingCombined();
+                }
+                const standaloneOutcome = line.match(
+                  /^(PASSED|FAILED|ERROR|SKIPPED|XFAIL|XPASS)(?:\s+\(.*\))?(?:\s+\[\s*\d+%\])?$/
+                );
+                if (standaloneOutcome) {
+                  if (activePath && sawLiveLog) {
+                    record(activePath, standaloneOutcome[1]);
+                  }
+                  activePath = null;
+                  sawLiveLog = false;
+                  continue;
+                }
+                if (/^=+/.test(line) || /^##\[/.test(line)) {
+                  activePath = null;
+                  sawLiveLog = false;
+                  continue;
+                }
+                const separator = line.indexOf('::');
+                const candidate = separator > 0
+                  ? line.slice(0, separator)
+                  : '';
+                const tail = separator > 0
+                  ? line.slice(separator + 2)
+                  : '';
+                const nodePath =
+                  candidate === candidate.trimStart() &&
+                  candidate.endsWith('.py') &&
+                  tail && !/^\s/.test(tail)
+                    ? candidate
+                    : null;
+                if (nodePath !== null) {
+                  activePath = expectedPaths.includes(nodePath)
+                    ? nodePath
+                    : null;
+                  sawLiveLog = false;
+                  if (!activePath) {
+                    continue;
+                  }
+                  const combinedOutcome = line.match(
+                    /\s(PASSED|FAILED|ERROR|SKIPPED|XFAIL|XPASS)(?:\s+\(.*\))?(?:\s+\[\s*\d+%\])?\s*$/
+                  );
+                  if (combinedOutcome) {
+                    pendingCombined = {
+                      path: activePath,
+                      outcome: combinedOutcome[1]
+                    };
+                    activePath = null;
+                  }
+                  continue;
+                }
+                if (liveLogHeader && activePath) {
+                  sawLiveLog = true;
+                }
+              }
+              commitPendingCombined();
+              return results;
+            }
+            async function ciRunFor(sha, expectedEvent) {
+              if (!sha) {
+                return null;
+              }
+              const workflowRuns = (await github.rest.actions.listWorkflowRunsForRepo({
+                owner, repo, head_sha: sha, per_page: 100
+              })).data.workflow_runs;
+              const ciRuns = workflowRuns
+                .filter(run =>
+                  run.name === 'CI' &&
+                  run.path === '.github/workflows/ci.yml' &&
+                  run.event === expectedEvent &&
+                  run.head_sha === sha &&
+                  (expectedEvent !== 'pull_request' ||
+                    (run.pull_requests || []).some(
+                      pull => pull.number === prNumber
+                    ))
+                )
+                .sort((left, right) =>
+                  Date.parse(right.created_at) - Date.parse(left.created_at)
+                );
+              return ciRuns[0] || null;
+            }
+            function ciRunPassed(run) {
+              return Boolean(run) && run.status === 'completed' &&
+                run.conclusion === 'success';
+            }
+            async function collectFocusedTestResults(run, expectedPaths) {
+              const emptyResults = focusedTestResultsFromLog(
+                '',
+                expectedPaths
+              );
+              if (expectedPaths.length === 0 || !ciRunPassed(run)) {
+                return emptyResults;
+              }
+              try {
+                const jobs = await github.paginate(
+                  github.rest.actions.listJobsForWorkflowRun,
+                  {
+                    owner,
+                    repo,
+                    run_id: run.id,
+                    filter: 'latest',
+                    per_page: 100
+                  }
+                );
+                const testJobs = jobs.filter(job => job.name === 'test');
+                if (testJobs.length !== 1 ||
+                    testJobs[0].status !== 'completed' ||
+                    testJobs[0].conclusion !== 'success') {
+                  collectionErrors.push(
+                    'focused_test_evidence_unavailable'
+                  );
+                  return emptyResults;
+                }
+                const logResponse =
+                  await github.rest.actions.downloadJobLogsForWorkflowRun({
+                    owner,
+                    repo,
+                    job_id: testJobs[0].id
+                  });
+                const logData = logResponse.data;
+                let logText = typeof logData === 'string'
+                  ? logData
+                  : logData && typeof logData.text === 'function'
+                    ? await logData.text()
+                    : Buffer.from(logData || []).toString('utf8');
+                const location = logResponse.headers &&
+                  logResponse.headers.location;
+                if (!logText && location) {
+                  const download = await fetch(location);
+                  if (!download.ok) {
+                    throw new Error('focused test log download failed');
+                  }
+                  logText = await download.text();
+                }
+                if (!logText) {
+                  collectionErrors.push(
+                    'focused_test_evidence_unavailable'
+                  );
+                  return emptyResults;
+                }
+                return focusedTestResultsFromLog(logText, expectedPaths);
+              } catch (error) {
+                collectionErrors.push('focused_test_evidence_unavailable');
+                return emptyResults;
+              }
+            }
+            const requiredCiRun = await ciRunFor(
+              pr.head.sha,
+              'pull_request'
+            );
+            const requiredChecksPassed = ciRunPassed(requiredCiRun);
+            const postMergeCiRun = Boolean(pr.merged)
+              ? await ciRunFor(pr.merge_commit_sha, 'push')
+              : null;
+            const postMergeChecksPassed = ciRunPassed(postMergeCiRun);
+            if (changedFiles.includes('.github/workflows/ci.yml')) {
+              collectionErrors.push('trusted_ci_workflow_changed');
+            }
+
+            const behaviorChangedFiles = changedFiles.filter(path => {
+              const explicitlyNonBehavioral =
+                /(?:^|\/)(?:test|tests|__tests__)(?:\/|_)/i.test(path) ||
+                /(?:\.spec\.|\.test\.)/i.test(path) ||
+                /^docs\//i.test(path) ||
+                /\.md$/i.test(path) ||
+                /^\.github\/ISSUE_TEMPLATE\//i.test(path) ||
+                /^\.github\/pull_request_template\.md$/i.test(path);
+              return !explicitlyNonBehavioral;
+            });
+            const ciCollectedTests = expectedTests.every(path =>
+              /^tests\/unit\/(?:test_.*|.*_test)\.py$/.test(path) &&
+              path !== 'tests/unit/test_transcript_action_workflow.py'
+            );
+            const allExpectedTestsChanged =
+              expectedTests.length > 0 &&
+              ciCollectedTests &&
+              expectedTests.every(path => presentChangedFiles.has(path));
+            const focusedTestFiles = allExpectedTestsChanged ? expectedTests : [];
+            const focusedTestResults = await collectFocusedTestResults(
+              requiredCiRun,
+              focusedTestFiles
+            );
+            const titleValid = pr.title.length >= 10 &&
+              /^(?:⚡\s*)?(?:feat|fix|docs|style|refactor|test|chore|perf|ci|build|revert)(?:\(.+\))?:/i.test(pr.title);
+
+            const finalPr = (await github.rest.pulls.get({
+              owner,
+              repo,
+              pull_number: prNumber
+            })).data;
+            if (String(finalPr.head.sha || '').toLowerCase() !==
+                collectedHead) {
+              collectionErrors.push('stale_head');
+            }
+            if (String(finalPr.base.sha || '').toLowerCase() !==
+                collectedBase) {
+              collectionErrors.push('stale_base');
+            }
+            const payload = {
+              policy: {
+                applicable,
+                agent_login: expectedAgentLogin || null,
+                run_id: expectedRunId || null,
+                head_sha: pr.head.sha
+              },
+              issue: {
+                number: issueNumber || null,
+                description,
+                acceptance_criteria: acceptance,
+                declared_files: declaredFiles,
+                allowed_extra_files: allowedExtraFiles,
+                scope_unrestricted: scopeUnrestricted
+              },
+              pull_request: {
+                number: prNumber,
+                changed_files: changedFiles,
+                present_changed_files: [...presentChangedFiles],
+                merged: Boolean(pr.merged),
+                draft: Boolean(pr.draft),
+                title_valid: titleValid,
+                required_checks_passed: requiredChecksPassed,
+                post_merge_checks_passed: postMergeChecksPassed
+              },
+              events,
+              reviews,
+              evidence: {
+                behavior_changed_files: behaviorChangedFiles,
+                focused_test_files: focusedTestFiles,
+                focused_test_results: focusedTestResults,
+                copilot_current_head_reviewed: copilotCurrentHeadReviewed,
+                copilot_rabbit_label: copilotRabbitLabel
+              },
+              collection_errors: collectionErrors
+            };
+            fs.writeFileSync('gate-input.json', JSON.stringify(payload, null, 2));
+
+      - name: Evaluate completion evidence
+        id: gate
+        shell: bash
+        run: |
+          set +e
+          python3 .trusted/scripts/ci/agent_completion_gate.py gate-input.json > gate-verdict.json
+          code=$?
+          set -e
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+
+      - name: Upload gate evidence
+        id: upload
+        if: always() && steps.resolve.outputs.pr_number != ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: agent-completion-verdict-${{ steps.resolve.outputs.pr_number }}
+          path: |
+            gate-input.json
+            gate-verdict.json
+          if-no-files-found: error
+
+      - name: Publish stable status and comment
+        id: publish
+        if: always() && steps.resolve.outputs.pr_number != ''
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          PR_NUMBER: ${{ steps.resolve.outputs.pr_number }}
+          HEAD_SHA: ${{ steps.resolve.outputs.head_sha }}
+          BASE_SHA: ${{ steps.resolve.outputs.base_sha }}
+          COLLECTED_HEAD_SHA: ${{ steps.collect.outputs.head_sha }}
+          COLLECTED_BASE_SHA: ${{ steps.collect.outputs.base_sha }}
+          PENDING_STATUS_ID: ${{ steps.resolve.outputs.pending_status_id }}
+          COLLECT_OUTCOME: ${{ steps.collect.outcome }}
+          GATE_OUTCOME: ${{ steps.gate.outcome }}
+          GATE_EXIT_CODE: ${{ steps.gate.outputs.exit_code }}
+          ARTIFACT_OUTCOME: ${{ steps.upload.outcome }}
+        with:
+          script: |
+            const fs = require('fs');
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const marker = '<!-- agent-completion-truth-gate:v1 -->';
+            const runUrlPrefix = context.serverUrl + '/' + owner + '/' +
+              repo + '/actions/runs/';
+            const runUrl = runUrlPrefix + context.runId;
+            const gateContext = 'agent-completion/truth-gate/pr-' +
+              process.env.PR_NUMBER;
+            function gateStatusDisposition(
+              status,
+              expectedPendingId,
+              currentRunUrl,
+              targetPrefix
+            ) {
+              if (!/^\d+$/.test(String(expectedPendingId || '')) ||
+                  !status || !/^\d+$/.test(String(status.id || ''))) {
+                return 'fail_closed';
+              }
+              const target = String(
+                (status && status.target_url) || ''
+              );
+              const expectedId = BigInt(String(expectedPendingId));
+              const statusId = BigInt(String(status.id));
+              function validRunTarget(targetUrl) {
+                const value = String(targetUrl || '');
+                if (!value.startsWith(targetPrefix)) {
+                  return false;
+                }
+                const suffix = value.slice(targetPrefix.length);
+                return /^\d+$/.test(suffix);
+              }
+              function statusOwnerId(candidate) {
+                if (candidate.state === 'pending') {
+                  return BigInt(String(candidate.id));
+                }
+                const owner = String(candidate.description || '').match(
+                  /^gate-owner:(\d+)(?:\s|$)/
+                );
+                return owner ? BigInt(owner[1]) : null;
+              }
+              if (!validRunTarget(currentRunUrl) ||
+                  !validRunTarget(target)) {
+                return 'fail_closed';
+              }
+              const ownerId = statusOwnerId(status);
+              if (ownerId === null) {
+                return 'fail_closed';
+              }
+              if (ownerId === expectedId && target === currentRunUrl) {
+                if (statusId === expectedId &&
+                    status.state === 'pending') {
+                  return 'current_pending';
+                }
+                if (['failure', 'error'].includes(status.state)) {
+                  return 'already_failed';
+                }
+                if (status.state === 'success') {
+                  return 'already_succeeded';
+                }
+                return 'fail_closed';
+              }
+              if (target === currentRunUrl) {
+                return 'fail_closed';
+              }
+              if (ownerId > expectedId) {
+                return 'successor';
+              }
+              if (ownerId < expectedId) {
+                return 'predecessor';
+              }
+              return 'fail_closed';
+            }
+            function ownedDescription(message) {
+              return (
+                'gate-owner:' + process.env.PENDING_STATUS_ID + ' ' +
+                String(message || '')
+              ).slice(0, 140);
+            }
+            async function currentRunMayPublish(status) {
+              const disposition = gateStatusDisposition(
+                status,
+                process.env.PENDING_STATUS_ID,
+                runUrl,
+                runUrlPrefix
+              );
+              if (disposition === 'current_pending') {
+                return true;
+              }
+              if (disposition === 'predecessor') {
+                core.warning('Overriding a late predecessor publication');
+                return true;
+              }
+              if (disposition === 'successor') {
+                core.warning('Skipping superseded gate publication');
+                return false;
+              }
+              if (disposition === 'already_succeeded') {
+                core.warning('Current run already published success');
+                return false;
+              }
+              if (disposition === 'already_failed') {
+                core.setFailed('Current gate status is already failed');
+                return false;
+              }
+              core.setFailed(
+                'Current run has no proven gate-status lease'
+              );
+              return false;
+            }
+            function commitEvidenceDisposition(
+              resolvedCommit,
+              collectedCommit,
+              currentCommit
+            ) {
+              const commits = [
+                resolvedCommit,
+                collectedCommit,
+                currentCommit
+              ].map(
+                commit => String(commit || '').toLowerCase()
+              );
+              if (commits.some(
+                commit => !/^[a-f0-9]{40}$/.test(commit)
+              )) {
+                return 'stale_commit';
+              }
+              return commits.every(commit => commit === commits[0])
+                ? 'current_commit'
+                : 'stale_commit';
+            }
+            let verdict = {
+              verdict: 'blocked',
+              reasons: ['verdict_artifact_missing'],
+              details: {}
+            };
+            try {
+              const candidate = JSON.parse(
+                fs.readFileSync('gate-verdict.json', 'utf8')
+              );
+              const validVerdicts = new Set([
+                'blocked', 'ready', 'completed', 'not_applicable'
+              ]);
+              if (!candidate || typeof candidate !== 'object' ||
+                  !validVerdicts.has(candidate.verdict) ||
+                  !Array.isArray(candidate.reasons) ||
+                  candidate.reasons.some(reason => typeof reason !== 'string') ||
+                  !candidate.details || typeof candidate.details !== 'object' ||
+                  Array.isArray(candidate.details)) {
+                throw new Error('invalid verdict schema');
+              }
+              verdict = candidate;
+            } catch (error) {
+              core.warning('Could not validate gate verdict: ' + error.message);
+            }
+
+            const forcedReasons = [];
+            if (process.env.COLLECT_OUTCOME !== 'success') {
+              forcedReasons.push('evidence_collection_step_failed');
+            }
+            if (process.env.GATE_OUTCOME !== 'success') {
+              forcedReasons.push('gate_evaluation_step_failed');
+            }
+            if (process.env.ARTIFACT_OUTCOME !== 'success') {
+              forcedReasons.push('evidence_artifact_failed');
+            }
+            if (verdict.verdict !== 'blocked' &&
+                process.env.GATE_EXIT_CODE !== '0') {
+              forcedReasons.push('gate_exit_code_mismatch');
+            }
+            const current = (await github.rest.pulls.get({
+              owner,
+              repo,
+              pull_number: Number(process.env.PR_NUMBER)
+            })).data;
+            if (commitEvidenceDisposition(
+              process.env.HEAD_SHA,
+              process.env.COLLECTED_HEAD_SHA,
+              current.head.sha
+            ) !== 'current_commit') {
+              forcedReasons.push('stale_head');
+            }
+            if (commitEvidenceDisposition(
+              process.env.BASE_SHA,
+              process.env.COLLECTED_BASE_SHA,
+              current.base.sha
+            ) !== 'current_commit') {
+              forcedReasons.push('stale_base');
+            }
+            if (forcedReasons.length > 0) {
+              verdict = {
+                verdict: 'blocked',
+                reasons: [...new Set([...verdict.reasons, ...forcedReasons])],
+                details: verdict.details
+              };
+            }
+
+            async function latestGateStatus() {
+              const statuses = await github.paginate(
+                github.rest.repos.listCommitStatusesForRef,
+                {
+                  owner,
+                  repo,
+                  ref: process.env.HEAD_SHA,
+                  per_page: 100
+                }
+              );
+              return statuses
+                .filter(status =>
+                  status.context === gateContext
+                )
+                .sort((left, right) =>
+                  Date.parse(right.created_at) - Date.parse(left.created_at) ||
+                  right.id - left.id
+                )[0];
+            }
+            let latest = await latestGateStatus();
+            if (!await currentRunMayPublish(latest)) {
+              return;
+            }
+
+            const reasons = verdict.reasons;
+            const escaped = JSON.stringify(verdict, null, 2)
+              .replace(/&/g, '&amp;')
+              .replace(/</g, '&lt;')
+              .replace(/>/g, '&gt;');
+            const body = marker + '\n## Agent Completion Truth Gate: ' +
+              verdict.verdict.toUpperCase() + '\n\n' +
+              (reasons.length > 0
+                ? '**Reasons:** ' + reasons
+                  .map(reason => '<code>' + reason + '</code>').join(', ')
+                : '**Evidence agrees.**') +
+              '\n\n<details><summary>Machine-readable verdict</summary><pre>' +
+              escaped + '</pre></details>\n\n[Workflow evidence](' + runUrl + ')';
+            const comments = await github.paginate(
+              github.rest.issues.listComments,
+              {
+                owner,
+                repo,
+                issue_number: Number(process.env.PR_NUMBER),
+                per_page: 100
+              }
+            );
+            const existing = comments.find(comment =>
+              comment.user && comment.user.login === 'github-actions[bot]' &&
+              String(comment.body || '').includes(marker)
+            );
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existing.id,
+                body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: Number(process.env.PR_NUMBER),
+                body
+              });
+            }
+            await core.summary
+              .addHeading('Agent Completion Truth Gate')
+              .addCodeBlock(JSON.stringify(verdict, null, 2), 'json')
+              .write();
+
+            latest = await latestGateStatus();
+            if (!await currentRunMayPublish(latest)) {
+              return;
+            }
+            const passed = verdict.verdict !== 'blocked';
+            const summary = reasons.length > 0
+              ? reasons.join(', ')
+              : verdict.verdict + ': all rules passed';
+            await github.rest.repos.createCommitStatus({
+              owner,
+              repo,
+              sha: process.env.HEAD_SHA,
+              state: passed ? 'success' : 'failure',
+              context: gateContext,
+              description: ownedDescription(summary),
+              target_url: runUrl
+            });
+            if (!passed) {
+              core.setFailed('Agent completion evidence is blocked');
+            }
+
+      - name: Finalize failed gate publication
+        if: >-
+          always() &&
+          steps.resolve.outputs.pr_number != '' &&
+          steps.publish.outcome != 'success'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          PR_NUMBER: ${{ steps.resolve.outputs.pr_number }}
+          HEAD_SHA: ${{ steps.resolve.outputs.head_sha }}
+          PENDING_STATUS_ID: ${{ steps.resolve.outputs.pending_status_id }}
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const runUrlPrefix = context.serverUrl + '/' + owner + '/' +
+              repo + '/actions/runs/';
+            const runUrl = runUrlPrefix + context.runId;
+            const gateContext = 'agent-completion/truth-gate/pr-' +
+              process.env.PR_NUMBER;
+            function gateStatusDisposition(
+              status,
+              expectedPendingId,
+              currentRunUrl,
+              targetPrefix
+            ) {
+              if (!/^\d+$/.test(String(expectedPendingId || '')) ||
+                  !status || !/^\d+$/.test(String(status.id || ''))) {
+                return 'fail_closed';
+              }
+              const target = String(
+                (status && status.target_url) || ''
+              );
+              const expectedId = BigInt(String(expectedPendingId));
+              const statusId = BigInt(String(status.id));
+              function validRunTarget(targetUrl) {
+                const value = String(targetUrl || '');
+                if (!value.startsWith(targetPrefix)) {
+                  return false;
+                }
+                const suffix = value.slice(targetPrefix.length);
+                return /^\d+$/.test(suffix);
+              }
+              function statusOwnerId(candidate) {
+                if (candidate.state === 'pending') {
+                  return BigInt(String(candidate.id));
+                }
+                const owner = String(candidate.description || '').match(
+                  /^gate-owner:(\d+)(?:\s|$)/
+                );
+                return owner ? BigInt(owner[1]) : null;
+              }
+              if (!validRunTarget(currentRunUrl) ||
+                  !validRunTarget(target)) {
+                return 'fail_closed';
+              }
+              const ownerId = statusOwnerId(status);
+              if (ownerId === null) {
+                return 'fail_closed';
+              }
+              if (ownerId === expectedId && target === currentRunUrl) {
+                if (statusId === expectedId &&
+                    status.state === 'pending') {
+                  return 'current_pending';
+                }
+                if (['failure', 'error'].includes(status.state)) {
+                  return 'already_failed';
+                }
+                if (status.state === 'success') {
+                  return 'already_succeeded';
+                }
+                return 'fail_closed';
+              }
+              if (target === currentRunUrl) {
+                return 'fail_closed';
+              }
+              if (ownerId > expectedId) {
+                return 'successor';
+              }
+              if (ownerId < expectedId) {
+                return 'predecessor';
+              }
+              return 'fail_closed';
+            }
+            function mayFinalizeFailure(disposition) {
+              return new Set([
+                'current_pending',
+                'predecessor',
+                'already_succeeded'
+              ]).has(disposition);
+            }
+            const statuses = await github.paginate(
+              github.rest.repos.listCommitStatusesForRef,
+              {
+                owner,
+                repo,
+                ref: process.env.HEAD_SHA,
+                per_page: 100
+              }
+            );
+            const latest = statuses
+              .filter(status =>
+                status.context === gateContext
+              )
+              .sort((left, right) =>
+                Date.parse(right.created_at) - Date.parse(left.created_at) ||
+                right.id - left.id
+              )[0];
+            const disposition = gateStatusDisposition(
+              latest,
+              process.env.PENDING_STATUS_ID,
+              runUrl,
+              runUrlPrefix
+            );
+            if (disposition === 'successor') {
+              core.warning('A successor owns the gate status');
+              return;
+            }
+            if (disposition === 'already_failed') {
+              return;
+            }
+            if (!mayFinalizeFailure(disposition)) {
+              core.warning('No proven lease for failure publication');
+              return;
+            }
+            if (disposition === 'already_succeeded') {
+              core.warning(
+                'Overriding success after failed gate publication'
+              );
+            }
+            const description = (
+              'gate-owner:' + process.env.PENDING_STATUS_ID + ' ' +
+              'gate publication failed'
+            ).slice(0, 140);
+            await github.rest.repos.createCommitStatus({
+              owner,
+              repo,
+              sha: process.env.HEAD_SHA,
+              state: 'failure',
+              context: gateContext,
+              description,
+              target_url: runUrl
+            });
+
+      - name: Enforce verdict
+        if: >-
+          always() &&
+          steps.resolve.outputs.pr_number != '' &&
+          (steps.collect.outcome != 'success' ||
+           steps.gate.outputs.exit_code != '0' ||
+           steps.upload.outcome != 'success' ||
+           steps.publish.outcome != 'success')
+        run: exit 1
