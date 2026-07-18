@@ -5,10 +5,10 @@ import json
 import re
 import sys
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 
-def evaluate(payload: Any) -> Dict[str, Any]:
+def evaluate(payload: Any) -> dict[str, Any]:
     """Evaluate agent execution evidence and return a fail-closed verdict."""
 
     if not isinstance(payload, dict):
