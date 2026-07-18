@@ -27,6 +27,8 @@ jobs:
           ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
       - name: Require a trusted, append-only publication
+        id: verify
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ inputs.pull_request || github.event.pull_request.number }}
@@ -39,5 +41,54 @@ jobs:
           # output/artifact. This workflow never executes PR-controlled code or
           # accepts an artifact produced by a pull_request workflow.
           gh api "repos/$REPO/commits/$head/check-runs" --jq '.check_runs[] | select(.name == "Agent Lock trusted publication") | .output.text' > trusted-report.json
-          test -s trusted-report.json
-          python3 scripts/ci/agent_completion_enforcement.py trusted-report.json .github/agent-lock/trusted-publishers.json "$head" "$PR"
+          if test -s trusted-report.json; then
+            python3 scripts/ci/agent_completion_enforcement.py trusted-report.json .github/agent-lock/trusted-publishers.json "$head" "$PR" > enforcement-verdict.json
+          else
+            printf '%s\n' '{"conclusion":"failure","reason":"missing_trusted_publication","details":{}}' > enforcement-verdict.json
+          fi
+      - name: Publish the required head-bound Check run
+        if: always()
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          PR: ${{ inputs.pull_request || github.event.pull_request.number }}
+        with:
+          script: |
+            const fs = require('fs');
+            const pull = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: Number(process.env.PR)
+            });
+            let verdict = {
+              conclusion: 'failure',
+              reason: 'verifier_did_not_publish',
+              details: {}
+            };
+            try {
+              verdict = JSON.parse(fs.readFileSync(
+                'enforcement-verdict.json', 'utf8'
+              ));
+            } catch (error) {
+              core.warning(error.message);
+            }
+            const conclusion = verdict.conclusion === 'success'
+              ? 'success'
+              : 'failure';
+            const summary = JSON.stringify(verdict);
+            await github.rest.checks.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              name: 'Agent completion enforcement',
+              head_sha: pull.data.head.sha,
+              status: 'completed',
+              conclusion,
+              output: {
+                title: conclusion === 'success'
+                  ? 'Trusted evidence verified'
+                  : 'Trusted evidence blocked',
+                summary: summary.slice(0, 60000)
+              }
+            });
+            if (conclusion !== 'success') {
+              core.setFailed(verdict.reason || 'trusted evidence blocked');
+            }
