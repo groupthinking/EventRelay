@@ -233,6 +233,9 @@ jobs:
               'copilot-swe-agent[bot]',
               'openai-codex[bot]'
             ]);
+            const trustedIssuePermissions = new Set([
+              'admin', 'maintain', 'write', 'triage'
+            ]);
             function mayDispatchEvidenceRefresh(
               authorAssociation,
               actor,
@@ -241,6 +244,17 @@ jobs:
             ) {
               return trustedAssociations.has(authorAssociation) ||
                 knownAgents.has(actor);
+            }
+            function mayDispatchIssueRefresh(
+              actor,
+              permission,
+              trustedPermissions,
+              knownAgents
+            ) {
+              return Boolean(actor) && (
+                knownAgents.has(actor) ||
+                trustedPermissions.has(permission)
+              );
             }
             if (context.eventName === 'issue_comment') {
               const comment = context.payload.comment || {};
@@ -256,13 +270,29 @@ jobs:
               }
             }
             if (context.eventName === 'issues') {
-              const issue = context.payload.issue || {};
               const actor = context.payload.sender &&
                 context.payload.sender.login;
-              if (!mayDispatchEvidenceRefresh(
-                issue.author_association,
+              let permission = '';
+              if (actor && !knownAgentCommenters.has(actor)) {
+                try {
+                  const result =
+                    await github.rest.repos.getCollaboratorPermissionLevel({
+                      owner,
+                      repo,
+                      username: actor
+                    });
+                  permission = result.data.permission;
+                } catch (error) {
+                  core.warning(
+                    'Could not verify issue-event sender: ' + error.message
+                  );
+                  return;
+                }
+              }
+              if (!mayDispatchIssueRefresh(
                 actor,
-                trustedCommentAssociations,
+                permission,
+                trustedIssuePermissions,
                 knownAgentCommenters
               )) {
                 core.info('Ignoring untrusted issue refresh');

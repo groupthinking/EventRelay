@@ -1079,6 +1079,53 @@ for (const [association, actor, expected] of rows) {
         )
         self.assertEqual(completed.returncode, 0, completed.stderr)
 
+    def test_issue_refresh_uses_sender_permission_decision_table(self):
+        workflow = self._workflow()
+        functions = _javascript_functions(
+            workflow,
+            "function mayDispatchIssueRefresh(",
+        )
+        self.assertEqual(len(functions), 1)
+
+        assertions = r"""
+const agents = new Set([
+  'google-labs-jules[bot]',
+  'github-copilot[bot]',
+  'openai-codex[bot]'
+]);
+const trustedPermissions = new Set([
+  'admin', 'maintain', 'write', 'triage'
+]);
+const rows = [
+  ['maintainer', 'admin', true],
+  ['maintainer', 'maintain', true],
+  ['maintainer', 'write', true],
+  ['triager', 'triage', true],
+  ['external-user', 'read', false],
+  ['external-user', 'none', false],
+  ['github-actions[bot]', 'none', false],
+  ['google-labs-jules[bot]', 'none', true],
+  ['github-copilot[bot]', 'none', true],
+  ['openai-codex[bot]', 'none', true],
+  [null, 'admin', false]
+];
+for (const [actor, permission, expected] of rows) {
+  const actual = mayDispatchIssueRefresh(
+    actor, permission, trustedPermissions, agents
+  );
+  if (actual !== expected) {
+    throw new Error(`${actor}/${permission}: ${actual} !== ${expected}`);
+  }
+}
+"""
+        completed = subprocess.run(
+            ["node", "-e", functions[0] + assertions],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+
     def test_unrestricted_scope_checkbox_decision_table(self):
         workflow = self._workflow()
         functions = _javascript_functions(
@@ -1300,6 +1347,10 @@ for (const [values, expected] of rows) {
 
     def test_gate_runs_are_serialized_and_coalesced_by_pr_number(self):
         workflow = self._workflow()
+        dispatch = workflow[
+            workflow.index("  dispatch-evidence-refresh:"):
+            workflow.index("  validate:")
+        ]
         truth_gate_header = workflow[
             workflow.index("  truth-gate:"):
             workflow.index("    steps:", workflow.index("  truth-gate:"))
@@ -1312,6 +1363,9 @@ for (const [values, expected] of rows) {
         self.assertIn("trustedCommentAssociations", workflow)
         self.assertIn("comment.author_association", workflow)
         self.assertIn("google-labs-jules[bot]", workflow)
+        self.assertIn("getCollaboratorPermissionLevel", dispatch)
+        self.assertIn("context.payload.sender", dispatch)
+        self.assertNotIn("issue.author_association", dispatch)
         self.assertIn("!cancelled()", truth_gate_header)
         self.assertNotIn("always()", truth_gate_header)
 
