@@ -25,10 +25,7 @@ jobs:
   snapshot-agent-task-intent:
     if: >-
       github.event_name == 'issues' &&
-      ((github.event.action == 'opened' &&
-        (github.event.issue.author_association == 'OWNER' ||
-         github.event.issue.author_association == 'MEMBER' ||
-         github.event.issue.author_association == 'COLLABORATOR')) ||
+      (github.event.action == 'opened' ||
        github.event.action == 'labeled')
     concurrency:
       group: agent-intent-snapshot-${{ github.event.issue.number }}
@@ -52,32 +49,34 @@ jobs:
             )) {
               return;
             }
-            function hasTrustedLabelPermission(permission) {
-              return new Set([
+            function hasTrustedSnapshotPermission(permission, roleName) {
+              const trustedPermissions = new Set([
                 'admin', 'maintain', 'write', 'triage'
-              ]).has(permission);
+              ]);
+              return trustedPermissions.has(permission) ||
+                trustedPermissions.has(roleName);
             }
-            if (context.payload.action === 'labeled') {
-              let permission = '';
-              try {
-                const result =
-                  await github.rest.repos.getCollaboratorPermissionLevel({
-                    owner: context.repo.owner,
-                    repo: context.repo.repo,
-                    username: context.actor
-                  });
-                permission = result.data.permission;
-              } catch (error) {
-                core.warning(
-                  'Could not verify label actor permission: ' +
-                  error.message
-                );
-                return;
-              }
-              if (!hasTrustedLabelPermission(permission)) {
-                core.info('Ignoring an untrusted agent-task relabel');
-                return;
-              }
+            let permission = '';
+            let roleName = '';
+            try {
+              const result =
+                await github.rest.repos.getCollaboratorPermissionLevel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  username: context.actor
+                });
+              permission = result.data.permission;
+              roleName = result.data.role_name;
+            } catch (error) {
+              core.warning(
+                'Could not verify snapshot actor permission: ' +
+                error.message
+              );
+              return;
+            }
+            if (!hasTrustedSnapshotPermission(permission, roleName)) {
+              core.info('Ignoring an untrusted agent-task snapshot');
+              return;
             }
             function normaliseHeading(value) {
               return value.toLowerCase().replace(/[^a-z0-9 ]/g, '').trim();
@@ -249,12 +248,12 @@ jobs:
             function mayDispatchIssueRefresh(
               actor,
               permission,
-              trustedPermissions,
-              knownAgents
+              roleName,
+              trustedPermissions
             ) {
               return Boolean(actor) && (
-                knownAgents.has(actor) ||
-                trustedPermissions.has(permission)
+                trustedPermissions.has(permission) ||
+                trustedPermissions.has(roleName)
               );
             }
             if (context.eventName === 'issue_comment') {
@@ -274,7 +273,8 @@ jobs:
               const actor = context.payload.sender &&
                 context.payload.sender.login;
               let permission = '';
-              if (actor && !knownAgentCommenters.has(actor)) {
+              let roleName = '';
+              if (actor) {
                 try {
                   const result =
                     await github.rest.repos.getCollaboratorPermissionLevel({
@@ -283,6 +283,7 @@ jobs:
                       username: actor
                     });
                   permission = result.data.permission;
+                  roleName = result.data.role_name;
                 } catch (error) {
                   core.warning(
                     'Could not verify issue-event sender: ' + error.message
@@ -293,8 +294,8 @@ jobs:
               if (!mayDispatchIssueRefresh(
                 actor,
                 permission,
-                trustedIssuePermissions,
-                knownAgentCommenters
+                roleName,
+                trustedIssuePermissions
               )) {
                 core.info('Ignoring untrusted issue refresh');
                 return;
@@ -700,7 +701,8 @@ jobs:
               'google-labs-jules[bot]',
               'github-copilot[bot]',
               'copilot-swe-agent[bot]',
-              'openai-codex[bot]'
+              'openai-codex[bot]',
+              'chatgpt-codex-connector[bot]'
             ]);
             const agentBranch = /^(?:agent|claude|codex|copilot|jules)[/-]/i.test(pr.head.ref);
             const agentLabel = ['agent', 'agenttask', 'mcpagent'].some(label =>
@@ -878,11 +880,16 @@ jobs:
             const submittedCopilotStates = new Set([
               'APPROVED', 'COMMENTED', 'CHANGES_REQUESTED'
             ]);
+            function normaliseBotLogin(login) {
+              return String(login || '').toLowerCase()
+                .replace(/\[bot\]$/, '');
+            }
             const aiReviewerLogins = new Set([
+              ...knownAgents,
               ...copilotReviewerLogins,
               'coderabbitai[bot]',
-              'coderabbitai'
-            ]);
+              'vercel[bot]'
+            ].map(normaliseBotLogin));
             function isCurrentCopilotReview(
               review,
               reviewerLogins,
@@ -951,7 +958,9 @@ jobs:
                 }
                 const blocking = thread.comments.nodes.some(comment =>
                   (comment.author &&
-                    aiReviewerLogins.has(comment.author.login)) ||
+                    aiReviewerLogins.has(
+                      normaliseBotLogin(comment.author.login)
+                    )) ||
                   /VADE-RECOMMENDATION:\s*FIX|\b(?:blocking|must fix|regression)\b/i.test(
                     String(comment.body || '')
                   )
@@ -1582,9 +1591,13 @@ jobs:
               core.warning('A successor owns the gate status');
               return;
             }
-            if (disposition === 'already_failed' ||
-                disposition === 'already_succeeded') {
+            if (disposition === 'already_failed') {
               return;
+            }
+            if (disposition === 'already_succeeded') {
+              core.warning(
+                'Overriding success after failed gate publication'
+              );
             }
             const description = (
               'gate-owner:' + process.env.PENDING_STATUS_ID + ' ' +

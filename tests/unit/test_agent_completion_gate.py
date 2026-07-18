@@ -1030,6 +1030,15 @@ class CompletionGateWorkflowTests(unittest.TestCase):
         self.assertIn("core.setFailed", publish_step)
         self.assertIn("disposition === 'successor'", finalizer_step)
         self.assertIn("disposition === 'already_failed'", finalizer_step)
+        self.assertIn(
+            "Overriding success after failed gate publication",
+            finalizer_step,
+        )
+        self.assertNotRegex(
+            finalizer_step,
+            r"already_failed'\s*\|\|\s*"
+            r"disposition === 'already_succeeded",
+        )
         self.assertIn("state: 'failure'", finalizer_step)
         self.assertLess(
             workflow.index("name: Upload gate evidence"),
@@ -1171,33 +1180,29 @@ for (const [association, actor, expected] of rows) {
         self.assertEqual(len(functions), 1)
 
         assertions = r"""
-const agents = new Set([
-  'google-labs-jules[bot]',
-  'github-copilot[bot]',
-  'openai-codex[bot]'
-]);
 const trustedPermissions = new Set([
   'admin', 'maintain', 'write', 'triage'
 ]);
 const rows = [
-  ['maintainer', 'admin', true],
-  ['maintainer', 'maintain', true],
-  ['maintainer', 'write', true],
-  ['triager', 'triage', true],
-  ['external-user', 'read', false],
-  ['external-user', 'none', false],
-  ['github-actions[bot]', 'none', false],
-  ['google-labs-jules[bot]', 'none', true],
-  ['github-copilot[bot]', 'none', true],
-  ['openai-codex[bot]', 'none', true],
-  [null, 'admin', false]
+  ['maintainer', {permission: 'admin', role_name: 'admin'}, true],
+  ['maintainer', {permission: 'write', role_name: 'maintain'}, true],
+  ['maintainer', {permission: 'write', role_name: 'write'}, true],
+  ['custom-writer', {permission: 'write', role_name: 'release'}, true],
+  ['triager', {permission: 'read', role_name: 'triage'}, true],
+  ['external-user', {permission: 'read', role_name: 'read'}, false],
+  ['custom-reader', {permission: 'read', role_name: 'observe'}, false],
+  ['github-actions[bot]', {permission: 'none', role_name: 'none'}, false],
+  ['google-labs-jules[bot]', {permission: 'none', role_name: 'none'}, false],
+  ['github-copilot[bot]', {permission: 'read', role_name: 'read'}, false],
+  ['openai-codex[bot]', {permission: 'write', role_name: 'write'}, true],
+  [null, {permission: 'admin', role_name: 'admin'}, false]
 ];
-for (const [actor, permission, expected] of rows) {
+for (const [actor, response, expected] of rows) {
   const actual = mayDispatchIssueRefresh(
-    actor, permission, trustedPermissions, agents
+    actor, response.permission, response.role_name, trustedPermissions
   );
   if (actual !== expected) {
-    throw new Error(`${actor}/${permission}: ${actual} !== ${expected}`);
+    throw new Error(`${actor}/${JSON.stringify(response)}: ${actual} !== ${expected}`);
   }
 }
 """
@@ -1208,6 +1213,79 @@ for (const [actor, permission, expected] of rows) {
             text=True,
         )
         self.assertEqual(completed.returncode, 0, completed.stderr)
+
+        dispatch = workflow[
+            workflow.index("  dispatch-evidence-refresh:"):
+            workflow.index("  validate:")
+        ]
+        self.assertNotIn("!knownAgentCommenters.has(actor)", dispatch)
+        self.assertIn("roleName = result.data.role_name", dispatch)
+
+    def test_every_known_agent_is_treated_as_an_ai_reviewer(self):
+        workflow = self._workflow()
+        reviewer_set = workflow[
+            workflow.index("const aiReviewerLogins = new Set("):
+            workflow.index("function isCurrentCopilotReview(")
+        ]
+
+        self.assertIn("...knownAgents", reviewer_set)
+        self.assertIn("'vercel[bot]'", reviewer_set)
+        self.assertIn(".map(normaliseBotLogin)", reviewer_set)
+
+        functions = _javascript_functions(
+            workflow,
+            "function normaliseBotLogin(",
+        )
+        self.assertEqual(len(functions), 1)
+        assertions = r"""
+const reviewers = new Set([
+  'google-labs-jules[bot]',
+  'github-copilot[bot]',
+  'copilot-swe-agent[bot]',
+  'openai-codex[bot]',
+  'chatgpt-codex-connector[bot]',
+  'copilot-pull-request-reviewer[bot]',
+  'coderabbitai[bot]',
+  'vercel[bot]'
+].map(normaliseBotLogin));
+const rows = [
+  ['google-labs-jules', true],
+  ['google-labs-jules[bot]', true],
+  ['github-copilot', true],
+  ['copilot-swe-agent', true],
+  ['openai-codex', true],
+  ['chatgpt-codex-connector', true],
+  ['copilot-pull-request-reviewer', true],
+  ['coderabbitai', true],
+  ['vercel', true],
+  ['human-reviewer', false],
+  ['', false],
+  [null, false]
+];
+for (const [login, expected] of rows) {
+  const actual = reviewers.has(normaliseBotLogin(login));
+  if (actual !== expected) {
+    throw new Error(`${login}: ${actual} !== ${expected}`);
+  }
+}
+"""
+        completed = subprocess.run(
+            ["node", "-e", functions[0] + assertions],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+
+        thread_collector = workflow[
+            workflow.index("const threads ="):
+            workflow.index("function focusedTestResultsFromLog(")
+        ]
+        self.assertRegex(
+            thread_collector,
+            r"aiReviewerLogins\.has\(\s*"
+            r"normaliseBotLogin\(comment\.author\.login\)\s*\)",
+        )
 
     def test_unrestricted_scope_checkbox_decision_table(self):
         workflow = self._workflow()
@@ -1248,27 +1326,35 @@ for (const [value, expected] of rows) {
 
     def test_snapshot_label_actor_permission_decision_table(self):
         workflow = self._workflow()
+        snapshot = workflow[
+            workflow.index("  snapshot-agent-task-intent:"):
+            workflow.index("  refresh-open-pull-requests:")
+        ]
         functions = _javascript_functions(
             workflow,
-            "function hasTrustedLabelPermission(",
+            "function hasTrustedSnapshotPermission(",
         )
         self.assertEqual(len(functions), 1)
 
         assertions = r"""
 const rows = [
-  ['admin', true],
-  ['maintain', true],
-  ['write', true],
-  ['triage', true],
-  ['read', false],
-  ['none', false],
-  ['', false],
-  [null, false]
+  [{permission: 'admin', role_name: 'admin'}, true],
+  [{permission: 'write', role_name: 'maintain'}, true],
+  [{permission: 'write', role_name: 'write'}, true],
+  [{permission: 'write', role_name: 'release'}, true],
+  [{permission: 'read', role_name: 'triage'}, true],
+  [{permission: 'read', role_name: 'read'}, false],
+  [{permission: 'read', role_name: 'observe'}, false],
+  [{permission: 'none', role_name: 'none'}, false],
+  [{permission: '', role_name: ''}, false],
+  [{permission: null, role_name: null}, false]
 ];
-for (const [permission, expected] of rows) {
-  const actual = hasTrustedLabelPermission(permission);
+for (const [response, expected] of rows) {
+  const actual = hasTrustedSnapshotPermission(
+    response.permission, response.role_name
+  );
   if (actual !== expected) {
-    throw new Error(`${permission}: ${actual} !== ${expected}`);
+    throw new Error(`${JSON.stringify(response)}: ${actual} !== ${expected}`);
   }
 }
 """
@@ -1279,6 +1365,15 @@ for (const [permission, expected] of rows) {
             text=True,
         )
         self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertNotIn("author_association", snapshot)
+        self.assertNotIn(
+            "if (context.payload.action === 'labeled')",
+            snapshot,
+        )
+        self.assertIn("username: context.actor", snapshot)
+        self.assertIn("roleName = result.data.role_name", snapshot)
+        self.assertIn("github.event.action == 'opened'", snapshot)
+        self.assertIn("github.event.action == 'labeled'", snapshot)
 
     def test_linked_issue_contract_decision_table(self):
         workflow = self._workflow()
@@ -1390,7 +1485,7 @@ for (const [snapshot, pull, expected] of rows) {
         )
         self.assertEqual(completed.returncode, 0, completed.stderr)
 
-    def test_snapshot_authorizes_opening_author_or_privileged_relabel(self):
+    def test_snapshot_requires_privileged_actor_for_open_or_relabel(self):
         workflow = self._workflow()
         header = workflow[
             workflow.index("  snapshot-agent-task-intent:"):
@@ -1399,15 +1494,11 @@ for (const [snapshot, pull, expected] of rows) {
             ))
         ]
 
-        self.assertIn("github.event.action == 'opened' &&", header)
+        self.assertIn("(github.event.action == 'opened' ||", header)
         self.assertIn("github.event.action == 'labeled'", header)
+        self.assertNotIn("author_association", header)
         self.assertIn("getCollaboratorPermissionLevel", workflow)
         self.assertIn("context.actor", workflow)
-        self.assertNotIn(
-            "(github.event.action == 'opened' || "
-            "github.event.action == 'labeled') &&",
-            header,
-        )
 
     def test_workflow_publishes_one_machine_readable_gate(self):
         workflow = self._workflow()
@@ -1487,6 +1578,15 @@ if (JSON.stringify(actual) !== JSON.stringify(expected)) {
         ]
 
         self.assertIn("pull-requests: read", sweep)
+        self.assertIn("github.paginate(", sweep)
+        self.assertIn("github.rest.pulls.list", sweep)
+        self.assertIn("state: 'open'", sweep)
+        self.assertIn("github.rest.actions.createWorkflowDispatch", sweep)
+        self.assertIn("workflow_id: 'pr-checks.yml'", sweep)
+        self.assertIn("ref: context.payload.repository.default_branch", sweep)
+        self.assertIn("inputs: {pull_request: String(pull.number)}", sweep)
+
+        self.assertIn('cron: "*/15 * * * *"', workflow)
 
     def test_validation_replaces_obsolete_failure_comment(self):
         workflow = self._workflow()
