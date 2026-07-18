@@ -223,6 +223,19 @@ def evaluate(payload: Any) -> Dict[str, Any]:
                     invalid_focused_results = True
         if invalid_focused_results:
             invalid_fields.append("evidence.focused_test_results")
+        present_changed_files = (
+            pull_request.get("present_changed_files")
+            if isinstance(pull_request, dict)
+            else None
+        )
+        if (
+            isinstance(focused_test_files, list)
+            and isinstance(present_changed_files, list)
+            and all(isinstance(path, str) for path in focused_test_files)
+            and all(isinstance(path, str) for path in present_changed_files)
+            and not set(focused_test_files).issubset(set(present_changed_files))
+        ):
+            invalid_fields.append("evidence.focused_test_files")
         for field in (
             "copilot_current_head_reviewed",
             "copilot_rabbit_label",
@@ -281,7 +294,7 @@ def evaluate(payload: Any) -> Dict[str, Any]:
     events = payload.get("events") or []
     active_run_id = str(policy.get("run_id") or "").strip()
     if active_run_id:
-        active_head_sha = str(policy.get("head_sha") or "").strip()
+        active_head_sha = str(policy.get("head_sha") or "").strip().lower()
         scoped_events = [
             event
             for event in events
@@ -292,7 +305,8 @@ def evaluate(payload: Any) -> Dict[str, Any]:
             for event in scoped_events
             if str(event.get("kind") or "").lower() == "error"
             or not active_head_sha
-            or str(event.get("head_sha") or "").strip() == active_head_sha
+            or str(event.get("head_sha") or "").strip().lower()
+            == active_head_sha
         ]
         unscoped_errors = [
             event
@@ -304,10 +318,11 @@ def evaluate(payload: Any) -> Dict[str, Any]:
             str(event.get("kind") or "").lower() == "error"
             for event in scoped_events
         )
+        error_evidence_exists = scoped_error_exists or bool(unscoped_errors)
         legacy_positive_evidence = [
             event
             for event in events
-            if scoped_error_exists
+            if error_evidence_exists
             and not str(event.get("run_id") or "").strip()
             and str(event.get("kind") or "").lower()
             in {"artifact_ready", "completed"}

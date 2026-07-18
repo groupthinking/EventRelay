@@ -203,6 +203,9 @@ class CompletionGateTests(unittest.TestCase):
         payload["pull_request"]["present_changed_files"] = list(
             payload["pull_request"]["changed_files"]
         )
+        payload["evidence"]["behavior_changed_files"] = []
+        payload["evidence"]["focused_test_files"] = []
+        payload["evidence"]["focused_test_results"] = {}
 
         result = _evaluate(payload)
 
@@ -519,6 +522,15 @@ class CompletionGateTests(unittest.TestCase):
         self.assertEqual(result["verdict"], "blocked")
         self.assertIn("missing_agent_result", result["reasons"])
 
+    def test_head_sha_comparison_is_case_insensitive(self):
+        payload = _valid_payload()
+        payload["policy"]["head_sha"] = "A" * 40
+        payload["events"][0]["head_sha"] = "a" * 40
+
+        result = _evaluate(payload)
+
+        self.assertEqual(result["verdict"], "ready")
+
     def test_legacy_ready_plus_correlated_error_is_contradictory(self):
         payload = _valid_payload()
         payload["policy"]["run_id"] = "1892762060881911102"
@@ -540,6 +552,27 @@ class CompletionGateTests(unittest.TestCase):
         result = _evaluate(payload)
 
         self.assertEqual(result["verdict"], "blocked")
+        self.assertIn("contradictory_terminal_events", result["reasons"])
+
+    def test_legacy_ready_plus_unscoped_error_is_contradictory(self):
+        payload = _valid_payload()
+        payload["events"] = [
+            {
+                "kind": "artifact_ready",
+                "sequence": 1,
+                "author": "example-agent[bot]",
+            },
+            {
+                "kind": "error",
+                "sequence": 2,
+                "author": "example-agent[bot]",
+            },
+        ]
+
+        result = _evaluate(payload)
+
+        self.assertEqual(result["verdict"], "blocked")
+        self.assertIn("agent_run_failed", result["reasons"])
         self.assertIn("contradictory_terminal_events", result["reasons"])
 
     def test_unscoped_error_still_blocks_a_correlated_run(self):
@@ -681,6 +714,30 @@ class CompletionGateTests(unittest.TestCase):
                     "evidence.focused_test_results",
                     result["details"]["invalid_fields"],
                 )
+
+    def test_focused_test_path_must_be_present_in_the_pr(self):
+        payload = _valid_payload()
+        missing_path = "tests/unit/test_not_changed.py"
+        payload["evidence"]["focused_test_files"] = [missing_path]
+        payload["evidence"]["focused_test_results"] = {
+            missing_path: {
+                "passed": 1,
+                "failed": 0,
+                "errors": 0,
+                "skipped": 0,
+                "xfailed": 0,
+                "xpassed": 0,
+            }
+        }
+
+        result = _evaluate(payload)
+
+        self.assertEqual(result["verdict"], "blocked")
+        self.assertEqual(result["reasons"], ["invalid_payload"])
+        self.assertIn(
+            "evidence.focused_test_files",
+            result["details"]["invalid_fields"],
+        )
 
     def test_focused_test_result_counts_are_nonnegative_integers(self):
         for count in (True, -1, 1.5, "1"):
