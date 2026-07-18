@@ -50,10 +50,12 @@ body:
     id: declared_scope
     attributes:
       label: Declared file scope
-      description: List every required repository-relative path, one per line. Every declared path must be touched and remain present at that exact path; for a rename, declare the destination, and list the source or any intentional deletion under Allowed extra files. Leave empty only when Unrestricted scope is checked.
+      description: List every required repository-relative path, one per line. Every declared path must be touched and remain present at that exact path; for a rename, declare the destination, and list the source or any intentional deletion under Allowed extra files. Exact scope is required until the protected unrestricted-scope rollout in #874.
       placeholder: |
         src/example.py
         tests/unit/test_example.py
+    validations:
+      required: true
 
   - type: textarea
     id: allowed_extra
@@ -66,14 +68,6 @@ body:
     attributes:
       label: Focused test paths
       description: For behavior changes, list Python unit-test paths collected by CI. Each path must also be in declared/allowed scope, remain present in the diff, and pass in CI.
-
-  - type: checkboxes
-    id: unrestricted
-    attributes:
-      label: Unrestricted scope
-      description: Use only when an exact file list cannot be known before dispatch. Enforcement also requires the protected scope-unrestricted-approved label.
-      options:
-        - label: Yes, this task explicitly permits repository-wide changes.
 
   - type: checkboxes
     id: frozen

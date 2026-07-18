@@ -3084,6 +3084,44 @@ for (const [name, prior, current, applicable, expected] of rows) {
         self.assertIn("ready for (?:a )?review", workflow)
         self.assertIn("\\[PR\\]", workflow)
 
+    def test_legacy_run_id_requires_an_unambiguous_delimiter(self):
+        workflow = self._workflow()
+        functions = _javascript_functions(
+            workflow,
+            "function legacyRunId(",
+        )
+        self.assertEqual(len(functions), 1)
+
+        assertions = r"""
+const rows = [
+  ['Run failed', null],
+  ['failed to complete task because the worker stopped', null],
+  ['run id: provider-123', 'provider-123'],
+  ['run_id=provider.456', 'provider.456'],
+  ['task-id/abc:789', 'abc:789'],
+  ['https://jules.google.com/task/1892762060881911102',
+    '1892762060881911102'],
+  ['https://example.test/tasks/task-42.', 'task-42'],
+  ['Run: failed', null],
+  ['Task: failed', null],
+  ['runner:wrong', null],
+  ['', null]
+];
+for (const [body, expected] of rows) {
+  const actual = legacyRunId(body);
+  if (actual !== expected) {
+    throw new Error(`${body}: ${actual} !== ${expected}`);
+  }
+}
+"""
+        completed = subprocess.run(
+            ["node", "-e", functions[0] + assertions],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+
     def test_collector_uses_authoritative_closing_issue_references(self):
         workflow = self._workflow()
 
@@ -3133,9 +3171,16 @@ class CompletionGateDocumentationTests(unittest.TestCase):
             "Acceptance criteria",
             "Declared file scope",
             "Focused test paths",
-            "Unrestricted scope",
         ):
             self.assertIn(field, template)
+        declared_scope = template[
+            template.index("    id: declared_scope"):
+            template.index("    id: allowed_extra")
+        ]
+        self.assertIn("validations:", declared_scope)
+        self.assertIn("required: true", declared_scope)
+        self.assertNotIn("id: unrestricted", template)
+        self.assertNotIn("scope-unrestricted-approved", template)
 
     def test_pr_template_uses_an_inert_example_marker(self):
         template = (

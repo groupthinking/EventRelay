@@ -2102,6 +2102,14 @@ jobs:
               expectedAgentLogin ? [expectedAgentLogin] : []
             );
             const events = [];
+            function legacyRunId(value) {
+              const match = String(value || '').match(
+                /(?:\b(?:run|task)[ _-]?id\s*[:=\/]\s*|\btasks?\/)([A-Za-z0-9][A-Za-z0-9._:-]{0,127})/i
+              );
+              return match
+                ? match[1].replace(/[.,;:]+$/, '')
+                : null;
+            }
             if (issueNumber) {
               const eventComments = [...new Map(
                 [...issueComments, ...prComments].map(comment => [
@@ -2151,18 +2159,13 @@ jobs:
                   kind = 'completed';
                 }
                 if (kind) {
-                  const runMatch = body.match(
-                    /(?:run(?:[ _-]?id)?|tasks?)[\/:=\s-]+([A-Za-z0-9._:-]{1,128})/i
-                  );
                   const headMatch = body.match(/\b[a-f0-9]{40}\b/i);
                   events.push({
                     kind,
                     sequence: Date.parse(comment.created_at) || comment.id,
                     comment_id: comment.id,
                     author: comment.user.login,
-                    run_id: runMatch
-                      ? runMatch[1].replace(/[.,;:]+$/, '')
-                      : null,
+                    run_id: legacyRunId(body),
                     head_sha: headMatch ? headMatch[0].toLowerCase() : null
                   });
                 }
