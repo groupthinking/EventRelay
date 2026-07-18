@@ -444,6 +444,17 @@ class CompletionGateTests(unittest.TestCase):
                     result["details"]["invalid_fields"],
                 )
 
+    def test_review_items_must_carry_boolean_blocking_and_resolved(self):
+        payload = _valid_payload()
+        payload["reviews"] = [{"source": "r1"}]
+
+        result = _evaluate(payload)
+
+        self.assertEqual(result["verdict"], "blocked")
+        self.assertIn("invalid_payload", result["reasons"])
+        self.assertIn("reviews[0].blocking", result["details"]["invalid_fields"])
+        self.assertIn("reviews[0].resolved", result["details"]["invalid_fields"])
+
     def test_evidence_collection_errors_fail_closed(self):
         payload = _valid_payload()
         payload["collection_errors"] = ["invalid_agent_lock_manifest"]

@@ -74,7 +74,7 @@ def evaluate(payload: Any) -> Dict[str, Any]:
             if not isinstance(review, dict):
                 continue
             for field in ("blocking", "resolved"):
-                if field in review and type(review[field]) is not bool:
+                if field not in review or type(review[field]) is not bool:
                     invalid_fields.append("reviews[%d].%s" % (index, field))
     if isinstance(issue, dict):
         for field in (
