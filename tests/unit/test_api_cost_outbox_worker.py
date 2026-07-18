@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import sqlite3
 import sys
+import threading
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -413,3 +414,37 @@ async def test_every_attempt_uses_stable_idempotency_headers_and_sent_is_termina
     item = _get_item(monitor, "2026-07-24")
     assert item.status == "sent"
     assert item.retry_count == 2
+
+
+async def test_worker_database_transactions_run_off_event_loop(tmp_path, monkeypatch):
+    monitor = APICostMonitor(db_path=str(tmp_path / "off-loop.db"))
+    monitor.webhook_url = "https://example.test/hook"
+    assert monitor._claim_alert("2026-07-27", "threshold", 8.5)
+
+    event_loop_thread = threading.get_ident()
+    observed_threads: list[tuple[str, int]] = []
+    helper_names = (
+        "_recover_stale_deliveries_sync",
+        "_select_outbox_item_ids",
+        "_try_claim_outbox_item",
+        "_complete_outbox_claim",
+    )
+
+    for helper_name in helper_names:
+        original = getattr(monitor, helper_name)
+
+        def record_thread(*args, _name=helper_name, _original=original, **kwargs):
+            observed_threads.append((_name, threading.get_ident()))
+            return _original(*args, **kwargs)
+
+        monkeypatch.setattr(monitor, helper_name, record_thread)
+
+    async def succeed(message):
+        return True
+
+    monkeypatch.setattr(monitor, "_send_webhook_notification", succeed)
+
+    assert await monitor.process_outbox(force=True) == 1
+    assert _get_item(monitor, "2026-07-27").status == "sent"
+    assert {name for name, _ in observed_threads} == set(helper_names)
+    assert all(thread_id != event_loop_thread for _, thread_id in observed_threads)
