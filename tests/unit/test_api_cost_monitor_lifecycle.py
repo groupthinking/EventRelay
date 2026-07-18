@@ -46,3 +46,17 @@ async def test_startup_error_is_not_masked_when_cleanup_also_fails(monitor) -> N
 
     assert raised.value is startup_error
     monitor.close.assert_awaited_once_with()
+
+
+async def test_application_error_is_not_masked_when_shutdown_cleanup_fails(
+    monitor,
+) -> None:
+    application_error = RuntimeError("application failed")
+    monitor.close.side_effect = RuntimeError("monitor cleanup failed")
+
+    with pytest.raises(RuntimeError, match="application failed") as raised:
+        async with main_module.app.router.lifespan_context(main_module.app):
+            raise application_error
+
+    assert raised.value is application_error
+    monitor.close.assert_awaited_once_with()
