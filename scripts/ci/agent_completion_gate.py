@@ -59,6 +59,10 @@ def evaluate(payload: Any) -> Dict[str, Any]:
     ):
         if not isinstance(value, dict):
             invalid_fields.append(field)
+    if isinstance(issue, dict) and (
+        type(issue.get("number")) is not int or issue.get("number") <= 0
+    ):
+        invalid_fields.append("issue.number")
     for field, value in (
         ("events", events),
         ("reviews", reviews),
@@ -160,10 +164,10 @@ def evaluate(payload: Any) -> Dict[str, Any]:
         present_changed_files = pull_request.get("present_changed_files")
         if (
             isinstance(changed_files, list)
-            and all(isinstance(item, str) for item in changed_files)
             and isinstance(present_changed_files, list)
+            and all(isinstance(item, str) for item in changed_files)
             and all(isinstance(item, str) for item in present_changed_files)
-            and not set(present_changed_files).issubset(changed_files)
+            and not set(present_changed_files).issubset(set(changed_files))
         ):
             invalid_fields.append("pull_request.present_changed_files")
         for field in (
@@ -233,7 +237,12 @@ def evaluate(payload: Any) -> Dict[str, Any]:
         }
 
     reasons = []
-    details = {}
+    identity_projection = {
+        "issue_number": issue.get("number"),
+        "agent_login": str(policy.get("agent_login") or "").strip() or None,
+        "run_id": str(policy.get("run_id") or "").strip() or None,
+    }
+    details = {"identity_projection": identity_projection}
     collection_errors = [
         str(error)
         for error in (payload.get("collection_errors") or [])
@@ -366,9 +375,9 @@ def evaluate(payload: Any) -> Dict[str, Any]:
         return {"verdict": "blocked", "reasons": reasons, "details": details}
 
     if pull_request.get("merged") is True:
-        return {"verdict": "completed", "reasons": [], "details": {}}
+        return {"verdict": "completed", "reasons": [], "details": details}
 
-    return {"verdict": "ready", "reasons": [], "details": {}}
+    return {"verdict": "ready", "reasons": [], "details": details}
 
 
 def main(argv: Any = None) -> int:

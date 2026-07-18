@@ -26,6 +26,7 @@ def _valid_payload():
     head_sha = "a" * 40
     return {
         "issue": {
+            "number": 813,
             "description": "Add a deterministic completion gate.",
             "acceptance_criteria": ["Reject incomplete agent output."],
             "declared_files": [
@@ -235,62 +236,113 @@ class CompletionGateTests(unittest.TestCase):
             ["src/youtube_extension/agent_lock/completion_gate.py"],
         )
 
-    def test_deleted_declared_file_is_missing_even_when_touched(self):
+    def test_deleted_or_renamed_declared_file_is_missing(self):
+        required = "src/youtube_extension/agent_lock/completion_gate.py"
+        test_path = "tests/unit/test_agent_completion_gate.py"
+        replacement = "src/youtube_extension/agent_lock/replacement.py"
+        cases = (
+            ([required, test_path], [test_path], []),
+            (
+                [required, replacement, test_path],
+                [replacement, test_path],
+                [replacement],
+            ),
+        )
+        for changed, present, allowed_extras in cases:
+            with self.subTest(changed=changed, present=present):
+                payload = _valid_payload()
+                payload["pull_request"]["changed_files"] = changed
+                payload["pull_request"]["present_changed_files"] = present
+                payload["issue"]["allowed_extra_files"] = allowed_extras
+                payload["evidence"]["behavior_changed_files"] = present
+
+                result = _evaluate(payload)
+
+                self.assertEqual(result["verdict"], "blocked")
+                self.assertIn("missing_declared_files", result["reasons"])
+                self.assertEqual(
+                    result["details"]["missing_declared_files"],
+                    [required],
+                )
+                self.assertNotIn("scope_drift", result["reasons"])
+
+    def test_rename_source_still_counts_toward_scope_drift(self):
         payload = _valid_payload()
-        payload["pull_request"]["present_changed_files"] = [
-            "tests/unit/test_agent_completion_gate.py"
+        replacement = "src/youtube_extension/agent_lock/replacement.py"
+        payload["issue"]["declared_files"] = [
+            replacement,
+            "tests/unit/test_agent_completion_gate.py",
         ]
+        payload["pull_request"]["changed_files"] = [
+            "src/youtube_extension/agent_lock/completion_gate.py",
+            replacement,
+            "tests/unit/test_agent_completion_gate.py",
+        ]
+        payload["pull_request"]["present_changed_files"] = [
+            replacement,
+            "tests/unit/test_agent_completion_gate.py",
+        ]
+        payload["evidence"]["behavior_changed_files"] = [replacement]
 
         result = _evaluate(payload)
 
         self.assertEqual(result["verdict"], "blocked")
-        self.assertIn("missing_declared_files", result["reasons"])
+        self.assertIn("scope_drift", result["reasons"])
         self.assertEqual(
-            result["details"]["missing_declared_files"],
+            result["details"]["undeclared_files"],
             ["src/youtube_extension/agent_lock/completion_gate.py"],
         )
 
-    def test_renamed_declared_file_is_missing_when_destination_is_allowed(self):
+    def test_declared_rename_with_allowed_previous_path_is_ready(self):
         payload = _valid_payload()
-        old_path = "src/youtube_extension/agent_lock/completion_gate.py"
-        new_path = "src/youtube_extension/agent_lock/truth_gate.py"
-        payload["issue"]["allowed_extra_files"] = [new_path]
+        previous = "src/youtube_extension/agent_lock/completion_gate.py"
+        replacement = "src/youtube_extension/agent_lock/replacement.py"
+        test_path = "tests/unit/test_agent_completion_gate.py"
+        payload["issue"]["declared_files"] = [replacement, test_path]
+        payload["issue"]["allowed_extra_files"] = [previous]
         payload["pull_request"]["changed_files"] = [
-            old_path,
-            new_path,
-            "tests/unit/test_agent_completion_gate.py",
+            previous,
+            replacement,
+            test_path,
         ]
         payload["pull_request"]["present_changed_files"] = [
-            new_path,
-            "tests/unit/test_agent_completion_gate.py",
+            replacement,
+            test_path,
         ]
-
-        result = _evaluate(payload)
-
-        self.assertEqual(result["verdict"], "blocked")
-        self.assertIn("missing_declared_files", result["reasons"])
-        self.assertEqual(result["details"]["missing_declared_files"], [old_path])
-        self.assertNotIn("scope_drift", result["reasons"])
-
-    def test_rename_is_valid_when_destination_is_declared(self):
-        payload = _valid_payload()
-        old_path = "src/youtube_extension/agent_lock/completion_gate.py"
-        new_path = "src/youtube_extension/agent_lock/truth_gate.py"
-        payload["issue"]["declared_files"][0] = new_path
-        payload["issue"]["allowed_extra_files"] = [old_path]
-        payload["pull_request"]["changed_files"] = [
-            old_path,
-            new_path,
-            "tests/unit/test_agent_completion_gate.py",
-        ]
-        payload["pull_request"]["present_changed_files"] = [
-            new_path,
-            "tests/unit/test_agent_completion_gate.py",
-        ]
+        payload["evidence"]["behavior_changed_files"] = [replacement]
 
         result = _evaluate(payload)
 
         self.assertEqual(result["verdict"], "ready")
+        self.assertEqual(result["reasons"], [])
+
+    def test_present_changed_files_must_be_subset_of_all_changed_files(self):
+        payload = _valid_payload()
+        payload["pull_request"]["present_changed_files"].append(
+            "src/not-in-the-diff.py"
+        )
+
+        result = _evaluate(payload)
+
+        self.assertEqual(result["verdict"], "blocked")
+        self.assertEqual(result["reasons"], ["invalid_payload"])
+        self.assertIn(
+            "pull_request.present_changed_files",
+            result["details"]["invalid_fields"],
+        )
+
+    def test_present_changed_files_is_required(self):
+        payload = _valid_payload()
+        del payload["pull_request"]["present_changed_files"]
+
+        result = _evaluate(payload)
+
+        self.assertEqual(result["verdict"], "blocked")
+        self.assertEqual(result["reasons"], ["invalid_payload"])
+        self.assertIn(
+            "pull_request.present_changed_files",
+            result["details"]["invalid_fields"],
+        )
 
     def test_allowed_extra_files_remain_optional(self):
         payload = _valid_payload()
@@ -321,10 +373,9 @@ class CompletionGateTests(unittest.TestCase):
             "tests/unit/test_agent_completion_gate.py",
             "docs/extra.md",
         ]
-        payload["pull_request"]["present_changed_files"] = [
-            "tests/unit/test_agent_completion_gate.py",
-            "docs/extra.md",
-        ]
+        payload["pull_request"]["present_changed_files"] = list(
+            payload["pull_request"]["changed_files"]
+        )
         payload["evidence"]["behavior_changed_files"] = []
 
         result = _evaluate(payload)
@@ -674,7 +725,16 @@ class CompletionGateTests(unittest.TestCase):
 
         result = _evaluate(payload)
 
-        self.assertEqual(result, {"verdict": "completed", "reasons": [], "details": {}})
+        self.assertEqual(result["verdict"], "completed")
+        self.assertEqual(result["reasons"], [])
+        self.assertEqual(
+            result["details"]["identity_projection"],
+            {
+                "issue_number": 813,
+                "agent_login": "example-agent[bot]",
+                "run_id": "agent-run-123",
+            },
+        )
 
     def test_draft_agent_pr_is_blocked(self):
         payload = _valid_payload()
@@ -864,38 +924,20 @@ class CompletionGateTests(unittest.TestCase):
         )
 
     def test_non_string_path_entries_return_a_verdict(self):
-        for field in ("changed_files", "present_changed_files"):
-            with self.subTest(field=field):
-                payload = _valid_payload()
-                payload["pull_request"][field] = [{}]
-
-                result = _evaluate(payload)
-
-                self.assertEqual(result["verdict"], "blocked")
-                self.assertIn("invalid_payload", result["reasons"])
-                self.assertIn(
-                    f"pull_request.{field}",
-                    result["details"]["invalid_fields"],
-                )
-
-    def test_present_changed_files_is_required(self):
         payload = _valid_payload()
-        del payload["pull_request"]["present_changed_files"]
+        payload["pull_request"]["changed_files"] = [{}]
 
         result = _evaluate(payload)
 
         self.assertEqual(result["verdict"], "blocked")
         self.assertIn("invalid_payload", result["reasons"])
         self.assertIn(
-            "pull_request.present_changed_files",
+            "pull_request.changed_files",
             result["details"]["invalid_fields"],
         )
 
-    def test_present_changed_files_must_be_touched(self):
         payload = _valid_payload()
-        payload["pull_request"]["present_changed_files"].append(
-            "docs/not-touched.md"
-        )
+        payload["pull_request"]["present_changed_files"] = [{}]
 
         result = _evaluate(payload)
 
@@ -970,6 +1012,21 @@ class CompletionGateTests(unittest.TestCase):
                 self.assertIn("invalid_payload", result["reasons"])
                 self.assertIn(
                     f"{section}.{field}",
+                    result["details"]["invalid_fields"],
+                )
+
+    def test_applicable_issue_number_must_be_a_positive_json_integer(self):
+        for value in ("813", 0, -1, True, None, [], {}):
+            with self.subTest(value=value):
+                payload = _valid_payload()
+                payload["issue"]["number"] = value
+
+                result = _evaluate(payload)
+
+                self.assertEqual(result["verdict"], "blocked")
+                self.assertIn("invalid_payload", result["reasons"])
+                self.assertIn(
+                    "issue.number",
                     result["details"]["invalid_fields"],
                 )
 
@@ -1098,14 +1155,6 @@ class CompletionGateWorkflowTests(unittest.TestCase):
 
     def test_workflow_cannot_leave_a_stale_green_status(self):
         workflow = self._workflow()
-        resolve_step = workflow[
-            workflow.index("name: Resolve pull request"):
-            workflow.index("name: Check out trusted gate")
-        ]
-        lease_step = workflow[
-            workflow.index("name: Acquire publication lease"):
-            workflow.index("name: Publish stable status and comment")
-        ]
         publish_step = workflow[
             workflow.index("name: Publish stable status and comment"):
             workflow.index("name: Finalize failed gate publication")
@@ -1116,12 +1165,7 @@ class CompletionGateWorkflowTests(unittest.TestCase):
         ]
 
         self.assertIn("id: resolve", workflow)
-        self.assertNotIn("createCommitStatus", resolve_step)
-        self.assertIn("state: 'pending'", lease_step)
-        self.assertEqual(
-            lease_step.count("github.rest.repos.createCommitStatus({"),
-            1,
-        )
+        self.assertIn("state: 'pending'", workflow)
         self.assertEqual(
             publish_step.count("description: ownedDescription("),
             1,
@@ -1132,35 +1176,23 @@ class CompletionGateWorkflowTests(unittest.TestCase):
         )
         self.assertIn("'gate-owner:' + process.env.PENDING_STATUS_ID", publish_step)
         self.assertIn("'gate-owner:' + process.env.PENDING_STATUS_ID", finalizer_step)
+        self.assertIn(
+            "PR_NUMBER: ${{ steps.resolve.outputs.pr_number }}",
+            finalizer_step,
+        )
+        self.assertIn(
+            "'agent-completion/truth-gate/pr-' +\n"
+            "              process.env.PR_NUMBER",
+            finalizer_step,
+        )
         self.assertIn("description,", finalizer_step)
         self.assertIn("'pending_status_id'", workflow)
         self.assertIn("String(pendingStatus.data.id)", workflow)
         self.assertIn(
-            "PENDING_STATUS_ID: ${{ steps.lease.outputs.pending_status_id }}",
+            "PENDING_STATUS_ID: ${{ steps.resolve.outputs.pending_status_id }}",
             workflow,
         )
-        self.assertIn("id: lease", workflow)
-        self.assertIn("steps.lease.outputs.publication_needed == 'true'", workflow)
-        self.assertIn("steps.lease.outcome != 'success'", workflow)
-        self.assertIn(
-            "LEASE_EVIDENCE_VALID: "
-            "${{ steps.lease.outputs.evidence_valid }}",
-            publish_step,
-        )
-        self.assertIn(
-            "process.env.LEASE_EVIDENCE_VALID !== 'true'",
-            publish_step,
-        )
-        self.assertIn("lease_evidence_invalid", publish_step)
-        self.assertIn(
-            "process.env.LEASE_EVIDENCE_VALID === 'true' &&",
-            publish_step,
-        )
-        self.assertIn("EVIDENCE_SHA256", workflow)
-        self.assertIn("'gate-evidence:' + process.env.EVIDENCE_SHA256", publish_step)
-        self.assertIn("'gate-evidence:' + process.env.EVIDENCE_SHA256", finalizer_step)
-        self.assertIn("'gate-result:' + String(result || '')", publish_step)
-        self.assertNotIn("gate-result:", finalizer_step)
+        self.assertIn("if: always() && steps.resolve.outputs.pr_number != ''", workflow)
         self.assertIn("id: upload", workflow)
         self.assertIn("steps.upload.outcome", workflow)
         self.assertIn("id: publish", workflow)
@@ -1190,177 +1222,27 @@ class CompletionGateWorkflowTests(unittest.TestCase):
         )
         self.assertLess(
             workflow.index("name: Upload gate evidence"),
-            workflow.index("name: Acquire publication lease"),
-        )
-        self.assertLess(
-            workflow.index("name: Acquire publication lease"),
             workflow.index("name: Publish stable status and comment"),
         )
 
-    def test_unchanged_evidence_does_not_consume_statuses(self):
+    def test_workflow_reserves_status_capacity_for_finalization(self):
         workflow = self._workflow()
-        evidence_functions = _javascript_functions(
-            workflow,
-            "function statusEvidenceSha(",
-        )
-        publish_functions = _javascript_functions(
-            workflow,
-            "function shouldPublishEvidence(",
-        )
-        result_functions = _javascript_functions(
-            workflow,
-            "function statusEvidenceResult(",
-        )
-        comment_functions = _javascript_functions(
-            workflow,
-            "function commentEvidenceSha(",
-        )
-        self.assertEqual(len(evidence_functions), 1)
-        self.assertEqual(len(publish_functions), 1)
-        self.assertEqual(len(result_functions), 1)
-        self.assertEqual(len(comment_functions), 1)
-
-        assertions = r"""
-const current = 'a'.repeat(64);
-const other = 'b'.repeat(64);
-const prefix = 'https://github.com/acme/repo/actions/runs/';
-const rows = [
-  [null, 'success', 'ready', current, true],
-  [{state: 'pending', description: `gate-evidence:${current}`}, 'success', 'ready', current, true],
-  [{state: 'success', description: 'ready'}, 'success', 'ready', current, true],
-  [{state: 'success', target_url: prefix + '1', description: `gate-owner:1 gate-evidence:${other} gate-result:ready`}, 'success', 'ready', current, true],
-  [{state: 'success', target_url: prefix + '1', description: `gate-owner:1 gate-evidence:${current} gate-result:ready`}, 'success', 'ready', current, false],
-  [{state: 'failure', target_url: prefix + '2', description: `gate-owner:2 gate-evidence:${current} gate-result:blocked`}, 'failure', 'blocked', current, false],
-  [{state: 'failure', target_url: prefix + '2', description: `gate-owner:2 gate-evidence:${current} gate-result:blocked`}, 'success', 'ready', current, true],
-  [{state: 'failure', target_url: prefix + '2', description: `gate-owner:2 gate-evidence:${current} gate publication failed`}, 'failure', 'blocked', current, true],
-  [{state: 'error', target_url: prefix + '3', description: `gate-owner:3 gate-evidence:${current} gate-result:blocked`}, 'failure', 'blocked', current, true],
-  [{state: 'success', target_url: 'https://example.test/1', description: `gate-owner:1 gate-evidence:${current} gate-result:ready`}, 'success', 'ready', current, true],
-  [{state: 'success', target_url: prefix + '1', description: `gate-owner:1 gate-evidence:${current} gate-result:ready`}, 'success', 'ready', null, true]
-];
-for (const [status, expectedState, expectedResult, commentSha, expected] of rows) {
-  const actual = shouldPublishEvidence(
-    status, current, expectedState, expectedResult, commentSha, prefix
-  );
-  if (actual !== expected) {
-    throw new Error(`${JSON.stringify(status)}: ${actual} !== ${expected}`);
-  }
-}
-const reusable = rows[4][0];
-for (let sweep = 0; sweep < 10000; sweep += 1) {
-  if (shouldPublishEvidence(
-    reusable, current, 'success', 'ready', current, prefix
-  )) {
-    throw new Error('unchanged sweep requested another status');
-  }
-}
-if (statusEvidenceSha({description: `gate-evidence:${current}`}) !== current) {
-  throw new Error('evidence hash was not parsed');
-}
-if (statusEvidenceSha({description: 'gate-evidence:short'}) !== null) {
-  throw new Error('malformed evidence hash was accepted');
-}
-if (statusEvidenceResult(reusable) !== 'ready') {
-  throw new Error('terminal result was not parsed');
-}
-if (commentEvidenceSha({body: `<!-- gate-evidence:${current} -->`}) !== current) {
-  throw new Error('comment evidence hash was not parsed');
-}
-"""
-        completed = subprocess.run(
-            [
-                "node",
-                "-e",
-                evidence_functions[0]
-                + result_functions[0]
-                + comment_functions[0]
-                + publish_functions[0]
-                + assertions,
-            ],
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-        self.assertEqual(completed.returncode, 0, completed.stderr)
-
-        lease_step = workflow[
-            workflow.index("name: Acquire publication lease"):
-            workflow.index("name: Publish stable status and comment")
+        resolve = workflow[
+            workflow.index("      - name: Resolve pull request"):
+            workflow.index("      - name: Check out trusted gate")
         ]
-        self.assertIn("Evidence fingerprint unchanged", lease_step)
-        self.assertIn("publication_needed", lease_step)
-        self.assertIn("gate-input.json", lease_step)
-        self.assertIn("gate-verdict.json", lease_step)
-        self.assertIn("agent_completion_gate.py", lease_step)
-        self.assertIn("publication_schema: 2", lease_step)
-        self.assertIn("github.rest.issues.listComments", lease_step)
 
-    def test_evidence_fingerprint_is_canonical_and_run_independent(self):
-        workflow = self._workflow()
-        canonical_functions = _javascript_functions(
-            workflow,
-            "function canonicalize(",
+        self.assertIn("listCommitStatusesForRef", resolve)
+        self.assertIn(
+            "status.context === gateContext",
+            resolve,
         )
-        hash_functions = _javascript_functions(
-            workflow,
-            "function sha256(",
+        self.assertIn("gateStatuses.length >= 998", resolve)
+        self.assertIn("status_capacity_exhausted", resolve)
+        self.assertLess(
+            resolve.index("gateStatuses.length >= 998"),
+            resolve.index("createCommitStatus"),
         )
-        fingerprint_functions = _javascript_functions(
-            workflow,
-            "function evidenceFingerprint(",
-        )
-        self.assertEqual(len(canonical_functions), 1)
-        self.assertEqual(len(hash_functions), 1)
-        self.assertEqual(len(fingerprint_functions), 1)
-
-        assertions = r"""
-const base = {
-  head_sha: 'a'.repeat(40),
-  gate_input: {issue: {description: 'ship it'}, reviews: []},
-  gate_verdict: {verdict: 'ready', reasons: [], details: {}},
-  evaluator_sha256: 'b'.repeat(64),
-  collect_outcome: 'success',
-  gate_outcome: 'success',
-  gate_exit_code: '0',
-  artifact_outcome: 'success'
-};
-const reordered = {
-  artifact_outcome: 'success',
-  gate_exit_code: '0',
-  gate_outcome: 'success',
-  collect_outcome: 'success',
-  evaluator_sha256: 'b'.repeat(64),
-  gate_verdict: {details: {}, reasons: [], verdict: 'ready'},
-  gate_input: {reviews: [], issue: {description: 'ship it'}},
-  head_sha: 'a'.repeat(40),
-  run_id: 'different-run',
-  run_url: 'https://example.test/actions/runs/999'
-};
-const first = evidenceFingerprint(base);
-const second = evidenceFingerprint(reordered);
-if (first !== second) {
-  throw new Error('key order or run metadata changed the fingerprint');
-}
-const changed = JSON.parse(JSON.stringify(base));
-changed.gate_input.reviews.push({blocking: true, resolved: false});
-if (evidenceFingerprint(changed) === first) {
-  throw new Error('decision-relevant evidence did not change the fingerprint');
-}
-"""
-        completed = subprocess.run(
-            [
-                "node",
-                "-e",
-                "const crypto = require('crypto');"
-                + canonical_functions[0]
-                + hash_functions[0]
-                + fingerprint_functions[0]
-                + assertions,
-            ],
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-        self.assertEqual(completed.returncode, 0, completed.stderr)
 
     def test_finalizer_publishes_only_with_proven_lease(self):
         workflow = self._workflow()
@@ -1499,7 +1381,8 @@ const associations = new Set(['OWNER', 'MEMBER', 'COLLABORATOR']);
 const agents = new Set([
   'google-labs-jules[bot]',
   'github-copilot[bot]',
-  'openai-codex[bot]'
+  'openai-codex[bot]',
+  'chatgpt-codex-connector[bot]'
 ]);
 const rows = [
   ['OWNER', 'person', true],
@@ -1508,6 +1391,7 @@ const rows = [
   ['NONE', 'google-labs-jules[bot]', true],
   ['NONE', 'github-copilot[bot]', true],
   ['NONE', 'openai-codex[bot]', true],
+  ['NONE', 'chatgpt-codex-connector[bot]', true],
   ['NONE', 'external-user', false],
   ['NONE', 'github-actions[bot]', false],
   [null, null, false]
@@ -1528,6 +1412,67 @@ for (const [association, actor, expected] of rows) {
             text=True,
         )
         self.assertEqual(completed.returncode, 0, completed.stderr)
+
+    def test_comment_refresh_requires_declared_agent_result_evidence(self):
+        workflow = self._workflow()
+        functions = _javascript_functions(
+            workflow,
+            "function issueCommentAffectsEvidence(",
+        )
+        self.assertEqual(len(functions), 1)
+
+        assertions = r"""
+const pull = {
+  pull_request: {},
+  body: '<!-- agent-lock-manifest\n' +
+    '{"agent_login":"google-labs-jules[bot]"}\n-->'
+};
+const issue = {
+  body: '## Agent login\n\ngoogle-labs-jules[bot]\n\n## Objective\nTest'
+};
+const rows = [
+  ['declared ready', pull, 'google-labs-jules[bot]',
+    'Ready for a review! A PR has been created.', null, true],
+  ['declared structured', issue, 'google-labs-jules[bot]',
+    '<!-- agent-lock-event {bad-json} -->', null, true],
+  ['event edited away', pull, 'google-labs-jules[bot]',
+    'ordinary update', 'Jules encountered an unexpected error', true],
+  ['declared chatter', pull, 'google-labs-jules[bot]',
+    'ordinary update', null, false],
+  ['human discussion', pull, 'maintainer',
+    'Ready for a review! A PR has been created.', null, false],
+  ['unrelated known bot', pull, 'openai-codex[bot]',
+    'Ready for a review! A PR has been created.', null, false],
+  ['gate comment', pull, 'github-actions[bot]',
+    '<!-- agent-completion-truth-gate:v1 -->', null, false],
+  ['missing contract', {body: ''}, 'google-labs-jules[bot]',
+    'Ready for a review! A PR has been created.', null, false]
+];
+for (const [name, target, actor, body, previousBody, expected] of rows) {
+  const actual = issueCommentAffectsEvidence(
+    target,
+    {user: {login: actor}, body},
+    previousBody
+  );
+  if (actual !== expected) {
+    throw new Error(`${name}: ${actual} !== ${expected}`);
+  }
+}
+"""
+        completed = subprocess.run(
+            ["node", "-e", functions[0] + assertions],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+
+        dispatch = workflow[
+            workflow.index("  dispatch-evidence-refresh:"):
+            workflow.index("  validate:")
+        ]
+        self.assertIn("issueCommentAffectsEvidence(", dispatch)
+        self.assertIn("context.payload.changes", dispatch)
 
     def test_issue_refresh_uses_sender_permission_decision_table(self):
         workflow = self._workflow()
@@ -1582,13 +1527,49 @@ for (const [actor, response, expected] of rows) {
     def test_every_known_agent_is_treated_as_an_ai_reviewer(self):
         workflow = self._workflow()
         reviewer_set = workflow[
-            workflow.index("const aiReviewerLogins = new Set("):
+            workflow.index("function aiReviewerLoginSet("):
             workflow.index("function isCurrentCopilotReview(")
         ]
 
-        self.assertIn("...knownAgents", reviewer_set)
+        self.assertNotIn("...knownAgents", reviewer_set)
+        self.assertIn("'google-labs-jules[bot]'", reviewer_set)
+        self.assertIn("'chatgpt-codex-connector[bot]'", reviewer_set)
         self.assertIn("'vercel[bot]'", reviewer_set)
-        self.assertIn(".map(normaliseBotLogin)", reviewer_set)
+        self.assertIn("const aiReviewerLogins = aiReviewerLoginSet()", reviewer_set)
+
+        set_functions = _javascript_functions(
+            workflow,
+            "function aiReviewerLoginSet(",
+        )
+        self.assertEqual(len(set_functions), 1)
+        set_assertions = r"""
+const reviewers = aiReviewerLoginSet();
+const required = [
+  'google-labs-jules',
+  'github-copilot',
+  'copilot-swe-agent',
+  'openai-codex',
+  'chatgpt-codex-connector',
+  'copilot-pull-request-reviewer',
+  'coderabbitai',
+  'vercel'
+];
+for (const login of required) {
+  if (!reviewers.has(login)) {
+    throw new Error(`missing reviewer alias: ${login}`);
+  }
+}
+if (reviewers.has('human-reviewer')) {
+  throw new Error('human reviewer must not be treated as an AI reviewer');
+}
+"""
+        completed = subprocess.run(
+            ["node", "-e", set_functions[0] + set_assertions],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
 
         functions = _javascript_functions(
             workflow,
@@ -1769,7 +1750,7 @@ for (const [values, expected] of rows) {
 
     def test_every_github_script_body_compiles(self):
         scripts = _github_script_bodies(self._workflow())
-        self.assertEqual(len(scripts), 9)
+        self.assertEqual(len(scripts), 8)
         compiler = (
             "const AsyncFunction = Object.getPrototypeOf("
             "async function(){}).constructor;"
@@ -1866,6 +1847,27 @@ for (const [snapshot, pull, expected] of rows) {
         self.assertIn("agent-completion-truth-gate:v1", workflow)
         self.assertIn("actions/upload-artifact@", workflow)
 
+    def test_status_context_is_bound_to_the_pull_request(self):
+        workflow = self._workflow()
+
+        self.assertIn(
+            "return 'agent-completion/truth-gate/pr-' + pullNumber",
+            workflow,
+        )
+        self.assertGreaterEqual(
+            workflow.count(
+                "'agent-completion/truth-gate/pr-' + prNumber"
+            ),
+            1,
+        )
+        self.assertEqual(workflow.count("context: gateContext"), 3)
+        self.assertIn("context: pendingRecovery.gateContext", workflow)
+        self.assertIn("context: terminalInvalidation.gateContext", workflow)
+        self.assertNotRegex(
+            workflow,
+            r"context:\s*'agent-completion/truth-gate'",
+        )
+
     def test_workflow_uses_required_ci_and_separate_post_merge_evidence(self):
         workflow = self._workflow()
 
@@ -1883,25 +1885,46 @@ for (const [snapshot, pull, expected] of rows) {
 
         assertions = r"""
 const log = [
+  'PASSED [1%]',
   '2026-07-18T03:00:00Z tests/unit/test_alpha.py::test_one PASSED [33%]',
   '2026-07-18T03:00:01Z tests/unit/test_beta.py::test_two SKIPPED [66%]',
-  '2026-07-18T03:00:02Z tests/unit/test_beta.py::test_three',
-  '2026-07-18T03:00:03Z -------------------------------- live log call ---------------------------------',
-  '2026-07-18T03:00:04Z application emitted a diagnostic',
-  '2026-07-18T03:00:05Z \u001b[32mPASSED\u001b[0m [100%]',
+  '\u001b[32mtests/unit/test_beta.py::test_three PASSED\u001b[0m [100%]',
   'tests/unit/test_alpha.py.evil::test_spoof PASSED [100%]',
   'tests/unit/test_gamma.py::test_failure FAILED [100%]',
   'tests/unit/test_only_skipped.py::test_skip SKIPPED [100%]',
   'tests/unit/test_param.py::test_x[PASSED fake] SKIPPED [100%]',
-  'tests/unit/test_live.py::test_with_logs',
+  'tests/unit/test_live.py::test_pass',
   '-------------------------------- live log call ---------------------------------',
-  'structured log message',
-  'PASSED [100%]',
-  'tests/unit/test_interrupted.py::test_one',
-  'tests/unit/test_unrelated.py::test_two',
-  'PASSED [100%]',
-  'tests/unit/test_xpass.py::test_known_bug',
-  'XPASS (known bug: issue 42) [100%]'
+  'INFO     example:test_live.py:10 still running',
+  '\u001b[32m2026-07-18T03:00:02Z PASSED\u001b[0m [10%]',
+  'tests/unit/test_live_failed.py::test_fail',
+  '-------------------------------- live log call ---------------------------------',
+  'WARNING  example:test_live.py:20 log says PASSED [99%]',
+  'FAILED [20%]',
+  'tests/unit/test_live_xpass.py::test_expected_failure',
+  '-------------------------------- live log call ---------------------------------',
+  'XPASS (known bug: now passing) [25%]',
+  'tests/unit/test_shadowed.py::test_pending',
+  '-------------------------------- live log call ---------------------------------',
+  'tests/unit/untracked file.py::test_other',
+  '-------------------------------- live log call ---------------------------------',
+  'PASSED [30%]',
+  'tests/unit/test_boundary.py::test_pending',
+  '-------------------------------- live log call ---------------------------------',
+  '============================= test session summary =============================',
+  'PASSED [40%]',
+  'tests/unit/test_param_spoof.py::test_x[value] PASSED [42%]',
+  '-------------------------------- live log call ---------------------------------',
+  'SKIPPED [50%]',
+  '\uFEFF2026-07-18T03:00:03Z tests/unit/test_bom.py::test_pass PASSED [55%]',
+  ' tests/unit/test_indented.py::test_spoof',
+  '-------------------------------- live log call ---------------------------------',
+  'PASSED [60%]',
+  'tests/unit/test_blank_tail.py:: PASSED [65%]',
+  'tests/unit/test_actions_boundary.py::test_pending',
+  '-------------------------------- live log call ---------------------------------',
+  '##[group]post-test diagnostics',
+  'PASSED [70%]'
 ].join('\n');
 const actual = focusedTestResultsFromLog(log, [
   'tests/unit/test_alpha.py',
@@ -1910,8 +1933,15 @@ const actual = focusedTestResultsFromLog(log, [
   'tests/unit/test_only_skipped.py',
   'tests/unit/test_param.py',
   'tests/unit/test_live.py',
-  'tests/unit/test_interrupted.py',
-  'tests/unit/test_xpass.py'
+  'tests/unit/test_live_failed.py',
+  'tests/unit/test_live_xpass.py',
+  'tests/unit/test_shadowed.py',
+  'tests/unit/test_boundary.py',
+  'tests/unit/test_param_spoof.py',
+  'tests/unit/test_bom.py',
+  'tests/unit/test_indented.py',
+  'tests/unit/test_blank_tail.py',
+  'tests/unit/test_actions_boundary.py'
 ]);
 const expected = {
   'tests/unit/test_alpha.py': {passed: 1, failed: 0, errors: 0, skipped: 0, xfailed: 0, xpassed: 0},
@@ -1920,11 +1950,29 @@ const expected = {
   'tests/unit/test_only_skipped.py': {passed: 0, failed: 0, errors: 0, skipped: 1, xfailed: 0, xpassed: 0},
   'tests/unit/test_param.py': {passed: 0, failed: 0, errors: 0, skipped: 1, xfailed: 0, xpassed: 0},
   'tests/unit/test_live.py': {passed: 1, failed: 0, errors: 0, skipped: 0, xfailed: 0, xpassed: 0},
-  'tests/unit/test_interrupted.py': {passed: 0, failed: 0, errors: 0, skipped: 0, xfailed: 0, xpassed: 0},
-  'tests/unit/test_xpass.py': {passed: 0, failed: 0, errors: 0, skipped: 0, xfailed: 0, xpassed: 1}
+  'tests/unit/test_live_failed.py': {passed: 0, failed: 1, errors: 0, skipped: 0, xfailed: 0, xpassed: 0},
+  'tests/unit/test_live_xpass.py': {passed: 0, failed: 0, errors: 0, skipped: 0, xfailed: 0, xpassed: 1},
+  'tests/unit/test_shadowed.py': {passed: 0, failed: 0, errors: 0, skipped: 0, xfailed: 0, xpassed: 0},
+  'tests/unit/test_boundary.py': {passed: 0, failed: 0, errors: 0, skipped: 0, xfailed: 0, xpassed: 0},
+  'tests/unit/test_param_spoof.py': {passed: 0, failed: 0, errors: 0, skipped: 1, xfailed: 0, xpassed: 0},
+  'tests/unit/test_bom.py': {passed: 1, failed: 0, errors: 0, skipped: 0, xfailed: 0, xpassed: 0},
+  'tests/unit/test_indented.py': {passed: 0, failed: 0, errors: 0, skipped: 0, xfailed: 0, xpassed: 0},
+  'tests/unit/test_blank_tail.py': {passed: 0, failed: 0, errors: 0, skipped: 0, xfailed: 0, xpassed: 0},
+  'tests/unit/test_actions_boundary.py': {passed: 0, failed: 0, errors: 0, skipped: 0, xfailed: 0, xpassed: 0}
 };
 if (JSON.stringify(actual) !== JSON.stringify(expected)) {
   throw new Error(`${JSON.stringify(actual)} !== ${JSON.stringify(expected)}`);
+}
+const crOnly = focusedTestResultsFromLog(
+  [
+    'tests/unit/test_cr.py::test_pass',
+    '-------------------------------- live log call ---------------------------------',
+    'PASSED [100%]'
+  ].join('\r'),
+  ['tests/unit/test_cr.py']
+);
+if (crOnly['tests/unit/test_cr.py'].passed !== 1) {
+  throw new Error(`CR-only parsing failed: ${JSON.stringify(crOnly)}`);
 }
 """
         completed = subprocess.run(
@@ -1953,16 +2001,879 @@ if (JSON.stringify(actual) !== JSON.stringify(expected)) {
             workflow.index("  dispatch-evidence-refresh:")
         ]
 
+        self.assertIn("issues: read", sweep)
         self.assertIn("pull-requests: read", sweep)
+        self.assertIn("statuses: write", sweep)
         self.assertIn("github.paginate(", sweep)
         self.assertIn("github.rest.pulls.list", sweep)
         self.assertIn("state: 'open'", sweep)
+        self.assertIn("github.rest.repos.listCommitStatusesForRef", sweep)
+        self.assertIn("closingIssuesReferences", sweep)
+        self.assertIn("github.rest.issues.listComments", sweep)
+        self.assertIn("github.rest.pulls.listReviews", sweep)
+        self.assertIn("github.rest.actions.listWorkflowRunsForRepo", sweep)
+        self.assertIn("github.rest.actions.getWorkflowRun", sweep)
+        self.assertIn("run.data.name === 'PR Checks'", sweep)
+        self.assertIn(
+            "run.data.path === '.github/workflows/pr-checks.yml'",
+            sweep,
+        )
+        self.assertIn("ownerRunId !== terminalRunId", sweep)
+        self.assertIn("scheduledRefreshDecision(", sweep)
+        self.assertIn("if (decision === 'dispatch')", sweep)
+        self.assertIn("group: agent-completion-scheduled-scan", sweep)
+        self.assertIn("timeout-minutes: 14", sweep)
+        self.assertIn("Skipping stale scheduled decision", sweep)
+        self.assertGreaterEqual(
+            sweep.count("listCommitStatusesForRef"),
+            2,
+        )
         self.assertIn("github.rest.actions.createWorkflowDispatch", sweep)
         self.assertIn("workflow_id: 'pr-checks.yml'", sweep)
         self.assertIn("ref: context.payload.repository.default_branch", sweep)
         self.assertIn("inputs: {pull_request: String(pull.number)}", sweep)
 
         self.assertIn('cron: "*/15 * * * *"', workflow)
+
+    def test_scheduled_sweep_dispatches_only_for_evidence_delta(self):
+        workflow = self._workflow()
+        functions = _javascript_functions(
+            workflow,
+            "function scheduledRefreshDecision(",
+        )
+        self.assertEqual(len(functions), 1)
+
+        assertions = r"""
+const base = {
+  apiComplete: true,
+  statusCount: 2,
+  latestState: 'success',
+  latestCreatedAt: '2026-07-18T04:30:00Z',
+  ownerPendingAt: '2026-07-18T04:20:00Z',
+  ownerRunState: 'completed',
+  now: '2026-07-18T05:00:00Z',
+  pullUpdatedAt: '2026-07-18T04:25:00Z',
+  issueUpdatedAt: '2026-07-18T04:15:00Z',
+  commentUpdatedAt: '2026-07-18T04:15:00Z',
+  ciUpdatedAt: '2026-07-18T04:15:00Z',
+  reviewProjectionChanged: false,
+  intentProjectionChanged: false,
+  policyProjectionChanged: false,
+  terminalAlreadyInvalidated: false
+};
+const rows = [
+  ['no status', {...base, latestState: null}, 'dispatch'],
+  ['unchanged terminal', base, 'skip'],
+  ['status capacity', {...base, statusCount: 998}, 'at_capacity'],
+  ['capacity evidence delta', {
+    ...base,
+    statusCount: 998,
+    commentUpdatedAt: '2026-07-18T04:21:00Z'
+  }, 'invalidate_terminal'],
+  ['last-slot evidence delta', {
+    ...base,
+    statusCount: 999,
+    reviewProjectionChanged: true
+  }, 'invalidate_terminal'],
+  ['capacity failure evidence delta', {
+    ...base,
+    statusCount: 998,
+    latestState: 'failure',
+    commentUpdatedAt: '2026-07-18T04:21:00Z'
+  }, 'at_capacity'],
+  ['scheduled recovery failure evidence delta', {
+    ...base,
+    statusCount: 999,
+    latestState: 'failure',
+    reviewProjectionChanged: true
+  }, 'at_capacity'],
+  ['settled capacity invalidation', {
+    ...base,
+    statusCount: 999,
+    reviewProjectionChanged: true,
+    terminalAlreadyInvalidated: true
+  }, 'at_capacity'],
+  ['exhausted evidence delta', {
+    ...base,
+    statusCount: 1000,
+    reviewProjectionChanged: true
+  }, 'at_capacity'],
+  ['API uncertainty', {...base, apiComplete: false}, 'retry'],
+  ['malformed terminal lease', {...base, ownerPendingAt: null}, 'dispatch'],
+  ['irrelevant PR timestamp', {...base, pullUpdatedAt: '2026-07-18T04:31:00Z'}, 'skip'],
+  ['irrelevant issue timestamp', {...base, issueUpdatedAt: '2026-07-18T04:21:00Z'}, 'skip'],
+  ['comment delta', {...base, commentUpdatedAt: '2026-07-18T04:21:00Z'}, 'dispatch'],
+  ['CI delta', {...base, ciUpdatedAt: '2026-07-18T04:21:00Z'}, 'dispatch'],
+  ['review delta', {...base, reviewProjectionChanged: true}, 'dispatch'],
+  ['intent delta', {...base, intentProjectionChanged: true}, 'dispatch'],
+  ['policy delta', {...base, policyProjectionChanged: true}, 'dispatch'],
+  ['fresh pending', {
+    ...base,
+    latestState: 'pending',
+    latestCreatedAt: '2026-07-18T04:30:00Z',
+    ownerPendingAt: '2026-07-18T04:30:00Z',
+    ownerRunState: 'in_progress',
+    pendingLeaseValid: true
+  }, 'skip'],
+  ['stale pending', {
+    ...base,
+    latestState: 'pending',
+    latestCreatedAt: '2026-07-18T03:59:59Z',
+    ownerPendingAt: '2026-07-18T03:59:59Z',
+    ownerRunState: 'in_progress',
+    pendingLeaseValid: true
+  }, 'finalize_pending'],
+  ['completed pending', {
+    ...base,
+    latestState: 'pending',
+    ownerPendingAt: '2026-07-18T04:30:00Z',
+    ownerRunState: 'completed',
+    pendingLeaseValid: true
+  }, 'finalize_pending'],
+  ['missing pending run', {
+    ...base,
+    latestState: 'pending',
+    ownerPendingAt: '2026-07-18T04:30:00Z',
+    ownerRunState: 'missing',
+    pendingLeaseValid: true
+  }, 'finalize_pending'],
+  ['pending 998 recovery', {
+    ...base,
+    statusCount: 998,
+    latestState: 'pending',
+    latestCreatedAt: '2026-07-18T04:30:00Z',
+    ownerPendingAt: '2026-07-18T04:30:00Z',
+    ownerRunState: 'completed',
+    pendingLeaseValid: true
+  }, 'finalize_pending'],
+  ['malformed pending at capacity', {
+    ...base,
+    statusCount: 998,
+    latestState: 'pending',
+    latestCreatedAt: '2026-07-18T04:30:00Z',
+    ownerPendingAt: '2026-07-18T04:30:00Z',
+    ownerRunState: 'missing',
+    pendingLeaseValid: false
+  }, 'at_capacity']
+];
+for (const [name, input, expected] of rows) {
+  const actual = scheduledRefreshDecision(input);
+  if (actual !== expected) {
+    throw new Error(`${name}: ${actual} !== ${expected}`);
+  }
+}
+"""
+        completed = subprocess.run(
+            ["node", "-e", functions[0] + assertions],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+
+    def test_scheduled_review_projection_fails_safe_without_churning(self):
+        workflow = self._workflow()
+        functions = _javascript_functions(
+            workflow,
+            "function verdictProjection(",
+        )
+        self.assertEqual(len(functions), 1)
+
+        assertions = r"""
+function comment(verdict) {
+  return {
+    user: {login: 'github-actions[bot]'},
+    body: '<!-- agent-completion-truth-gate:v1 -->' +
+      '<pre>' + JSON.stringify(verdict) + '</pre>'
+  };
+}
+const invalid = verdictProjection([comment({
+  verdict: 'blocked',
+  reasons: ['invalid_payload'],
+  details: {}
+})]);
+if (!invalid || invalid.projectionKnown !== false ||
+    invalid.projectionUsable !== false) {
+  throw new Error('invalid payload projection must be unknown');
+}
+const failedCollection = verdictProjection([comment({
+  verdict: 'blocked',
+  reasons: ['evidence_collection_failed'],
+  details: {unresolved_reviews: ['thread-b']}
+})]);
+if (!failedCollection || failedCollection.projectionKnown !== false ||
+    failedCollection.projectionUsable !== false) {
+  throw new Error('partial collection projection must be unknown');
+}
+const recordedCollection = verdictProjection([comment({
+  verdict: 'blocked',
+  reasons: ['evidence_collection_failed'],
+  details: {
+    collection_errors: ['conflicting_linked_issue'],
+    identity_projection: {
+      issue_number: 870,
+      agent_login: 'example-agent[bot]',
+      run_id: 'run-1'
+    }
+  }
+})]);
+if (!recordedCollection || recordedCollection.projectionKnown !== false ||
+    recordedCollection.projectionUsable !== true ||
+    JSON.stringify(recordedCollection.collectionErrors) !==
+      JSON.stringify(['conflicting_linked_issue']) ||
+    recordedCollection.identityProjection.issue_number !== 870) {
+  throw new Error('recorded collection projection must remain usable');
+}
+const partialIdentity = verdictProjection([comment({
+  verdict: 'blocked',
+  reasons: ['evidence_collection_failed'],
+  details: {
+    collection_errors: ['missing_agent_login'],
+    identity_projection: {
+      issue_number: 870,
+      agent_login: null,
+      run_id: 'run-1'
+    }
+  }
+})]);
+if (!partialIdentity ||
+    JSON.stringify(partialIdentity.identityProjection) !== JSON.stringify({
+      issue_number: 870,
+      agent_login: null,
+      run_id: 'run-1'
+    })) {
+  throw new Error('partial identity projection must be preserved');
+}
+const evaluated = verdictProjection([comment({
+  verdict: 'blocked',
+  reasons: [
+    'missing_copilot_current_head_review',
+    'unresolved_review',
+    'draft_pr',
+    'missing_copilot_rabbit_label'
+  ],
+  details: {
+    unresolved_reviews: ['thread-b', 'thread-a'],
+    collection_errors: ['agent_login_mismatch'],
+    identity_projection: {
+      issue_number: 870,
+      agent_login: 'example-agent[bot]',
+      run_id: 'run-1'
+    }
+  }
+})]);
+if (!evaluated || evaluated.projectionKnown !== true ||
+    evaluated.projectionUsable !== true ||
+    evaluated.copilotCurrentHeadReviewed !== false ||
+    JSON.stringify(evaluated.unresolved) !==
+      JSON.stringify(['thread-a', 'thread-b']) ||
+    JSON.stringify(evaluated.mutablePolicyErrors) !== JSON.stringify([
+      'agent_login_mismatch',
+      'draft_pr',
+      'missing_copilot_rabbit_label'
+    ]) || evaluated.identityProjection.run_id !== 'run-1') {
+  throw new Error('evaluated projection was not preserved');
+}
+const exempt = verdictProjection([comment({
+  verdict: 'not_applicable',
+  reasons: [],
+  details: {}
+})]);
+if (!exempt || exempt.projectionKnown !== true ||
+    exempt.projectionUsable !== true ||
+    exempt.notApplicable !== true) {
+  throw new Error('not-applicable projection must be stable');
+}
+if (verdictProjection([]) !== null) {
+  throw new Error('missing verdict comment must remain unknown');
+}
+"""
+        completed = subprocess.run(
+            ["node", "-e", functions[0] + assertions],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+
+        sweep = workflow[
+            workflow.index("  refresh-open-pull-requests:"):
+            workflow.index("  dispatch-evidence-refresh:")
+        ]
+        self.assertIn("latest.state === 'success'", sweep)
+        self.assertIn("previousProjection.projectionKnown", sweep)
+
+    def test_scheduled_scanner_ignores_ordinary_comments(self):
+        workflow = self._workflow()
+        functions = _javascript_functions(
+            workflow,
+            "function scheduledCommentAffectsEvidence(",
+        )
+        self.assertEqual(len(functions), 1)
+
+        assertions = r"""
+const agents = new Set(['google-labs-jules[bot]']);
+const rows = [
+  ['structured', 'google-labs-jules[bot]',
+    '<!-- agent-lock-event {bad-json} -->', true],
+  ['ready', 'google-labs-jules[bot]',
+    'Ready for a review! A PR has been created.', true],
+  ['error', 'google-labs-jules[bot]',
+    "Jules wasn't able to complete the task", true],
+  ['ordinary agent chatter', 'google-labs-jules[bot]',
+    'Here is a progress update.', false],
+  ['maintainer discussion', 'maintainer',
+    'Ready for a review! A PR has been created.', false],
+  ['gate publication', 'github-actions[bot]',
+    '<!-- agent-completion-truth-gate:v1 -->', false]
+];
+for (const [name, actor, body, expected] of rows) {
+  const actual = scheduledCommentAffectsEvidence(
+    {user: {login: actor}, body},
+    agents
+  );
+  if (actual !== expected) {
+    throw new Error(`${name}: ${actual} !== ${expected}`);
+  }
+}
+"""
+        completed = subprocess.run(
+            ["node", "-e", functions[0] + assertions],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+
+        sweep = workflow[
+            workflow.index("  refresh-open-pull-requests:"):
+            workflow.index("  dispatch-evidence-refresh:")
+        ]
+        self.assertIn("const evidenceComments =", sweep)
+        self.assertNotIn("externalPullComments", sweep)
+
+    def test_scheduled_scanner_detects_frozen_intent_changes(self):
+        workflow = self._workflow()
+        functions = _javascript_functions(
+            workflow,
+            "function intentContractErrors(",
+        )
+        self.assertEqual(len(functions), 1)
+
+        assertions = r"""
+const crypto = require('crypto');
+const body = '## Objective\n\nKeep immutable intent.';
+const digest = crypto.createHash('sha256')
+  .update(body, 'utf8').digest('hex');
+const issue = {
+  number: 870,
+  body,
+  labels: {nodes: [{name: 'agent-task'}]}
+};
+function snapshot(overrides = {}) {
+  const value = {
+    issue_number: 870,
+    body_sha256: digest,
+    scope_unrestricted_approved: false,
+    ...overrides
+  };
+  return {
+    user: {login: 'github-actions[bot]'},
+    created_at: '2026-07-18T03:00:00Z',
+    body: '<!-- agent-lock-intent-snapshot:v1\n' +
+      JSON.stringify(value) + '\n-->'
+  };
+}
+const rows = [
+  ['valid', issue, [snapshot()], []],
+  ['missing', issue, [], ['missing_intent_snapshot']],
+  ['changed body', {...issue, body: body + ' changed'}, [snapshot()],
+    ['intent_changed_after_dispatch']],
+  ['approval changed', {
+    ...issue,
+    labels: {nodes: [
+      {name: 'agent-task'},
+      {name: 'scope-unrestricted-approved'}
+    ]}
+  }, [snapshot()], ['unrestricted_approval_changed_after_dispatch']],
+  ['label and snapshot missing', {
+    ...issue,
+    labels: {nodes: []}
+  }, [], ['linked_issue_not_agent_task', 'missing_intent_snapshot']],
+  ['bad issue number', issue, [snapshot({issue_number: 999})],
+    ['invalid_intent_snapshot']]
+];
+for (const [name, candidate, comments, expected] of rows) {
+  const actual = intentContractErrors(
+    candidate,
+    comments,
+    '2026-07-18T03:00:01Z'
+  );
+  if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+    throw new Error(`${name}: ${JSON.stringify(actual)} !== ` +
+      JSON.stringify(expected));
+  }
+}
+"""
+        completed = subprocess.run(
+            ["node", "-e", functions[0] + assertions],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+
+        sweep = workflow[
+            workflow.index("  refresh-open-pull-requests:"):
+            workflow.index("  dispatch-evidence-refresh:")
+        ]
+        self.assertIn("intentProjectionChanged", sweep)
+        self.assertIn("previousProjection.collectionErrors", sweep)
+
+        projection_functions = _javascript_functions(
+            workflow,
+            "function scheduledIntentProjectionChanged(",
+        )
+        self.assertEqual(len(projection_functions), 1)
+        projection_assertions = r"""
+const rows = [
+  ['N/A remains N/A', {notApplicable: true, collectionErrors: []},
+    ['missing_closing_issue_reference'], 0, false, false],
+  ['N/A becomes applicable', {notApplicable: true, collectionErrors: []},
+    [], 1, true, true],
+  ['applicable becomes N/A', {notApplicable: false, collectionErrors: []},
+    [], 1, false, true],
+  ['new missing link', {notApplicable: false, collectionErrors: []},
+    ['missing_closing_issue_reference'], 0, true, true],
+  ['settled missing link', {
+    notApplicable: false,
+    collectionErrors: ['missing_closing_issue_reference']
+  }, ['missing_closing_issue_reference'], 0, true, false],
+  ['settled multiple links', {
+    notApplicable: false,
+    collectionErrors: [
+      'missing_closing_issue_reference',
+      'multiple_closing_issues',
+      'missing_intent_snapshot'
+    ]
+  }, [
+    'missing_closing_issue_reference',
+    'multiple_closing_issues'
+  ], 2, true, false],
+  ['link repaired', {
+    notApplicable: false,
+    collectionErrors: ['missing_closing_issue_reference']
+  }, [], 1, true, true],
+  ['body changed', {notApplicable: false, collectionErrors: []},
+    ['intent_changed_after_dispatch'], 1, true, true],
+  ['body failure settled', {
+    notApplicable: false,
+    collectionErrors: ['intent_changed_after_dispatch']
+  }, ['intent_changed_after_dispatch'], 1, true, false],
+  ['new conflicting contract', {
+    notApplicable: false,
+    collectionErrors: []
+  }, ['conflicting_linked_issue'], 1, true, true],
+  ['settled conflicting contract', {
+    notApplicable: false,
+    collectionErrors: ['conflicting_linked_issue']
+  }, ['conflicting_linked_issue'], 1, true, false],
+  ['contract repaired', {
+    notApplicable: false,
+    collectionErrors: ['incomplete_linked_issue_contract']
+  }, [], 1, true, true],
+  ['settled unavailable conflicting target', {
+    notApplicable: false,
+    collectionErrors: [
+      'conflicting_linked_issue',
+      'linked_issue_unavailable',
+      'missing_linked_issue'
+    ]
+  }, [
+    'conflicting_linked_issue',
+    'linked_issue_unavailable',
+    'missing_linked_issue'
+  ], 1, true, false],
+  ['hard unknown failure stays settled', {
+    notApplicable: false,
+    projectionUsable: false,
+    collectionErrors: []
+  }, ['conflicting_linked_issue'], 1, true, false]
+];
+for (const [name, previous, current, count, applicable, expected] of rows) {
+  const actual = scheduledIntentProjectionChanged(
+    previous, current, count, applicable
+  );
+  if (actual !== expected) {
+    throw new Error(`${name}: ${actual} !== ${expected}`);
+  }
+}
+"""
+        completed = subprocess.run(
+            [
+                "node",
+                "-e",
+                projection_functions[0] + projection_assertions,
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+
+        sweep = workflow[
+            workflow.index("  refresh-open-pull-requests:"):
+            workflow.index("  dispatch-evidence-refresh:")
+        ]
+        self.assertIn("const applicableWithoutSelectedIssue =", sweep)
+        self.assertIn("linkProjection.errors.length > 0", sweep)
+        self.assertIn("if (error.status !== 404", sweep)
+        self.assertIn("selectedIssueUnavailable = true", sweep)
+        self.assertIn("['linked_issue_unavailable']", sweep)
+        self.assertNotIn("selectedIssue || linkedIssues[0]", sweep)
+        self.assertLess(
+            sweep.index("const linkProjection = scheduledLinkProjection("),
+            sweep.index("await github.rest.issues.get("),
+        )
+
+        applicable_functions = _javascript_functions(
+            workflow,
+            "function agentTaskApplicable(",
+        )
+        self.assertEqual(len(applicable_functions), 2)
+        self.assertEqual(applicable_functions[0], applicable_functions[1])
+        applicable_assertions = r"""
+const issue = (number, labels) => ({
+  number,
+  labels: {nodes: labels.map(name => ({name}))}
+});
+const base = {
+  user: {login: 'maintainer'},
+  head: {ref: 'feature/ordinary'},
+  labels: [],
+  body: ''
+};
+const rows = [
+  ['human', base, null, false],
+  ['PR label', {...base, labels: [{name: 'agent-task'}]}, null, true],
+  ['issue label', base, issue(1, ['mcp/agent']), true],
+  ['branch', {...base, head: {ref: 'codex/fix'}}, null, true],
+  ['manifest', {...base, body: '<!-- agent-lock-manifest {bad} -->'}, null, true],
+  ['known agent', {...base, user: {login: 'google-labs-jules[bot]'}}, null, true],
+  ['dependabot excluded', {
+    ...base,
+    user: {login: 'dependabot[bot]'},
+    labels: [{name: 'agent-task'}]
+  }, issue(1, ['agent-task']), false]
+];
+for (const [name, pull, selected, expected] of rows) {
+  const actual = agentTaskApplicable(pull, selected);
+  if (actual !== expected) {
+    throw new Error(`${name}: ${actual} !== ${expected}`);
+  }
+}
+"""
+        for function in applicable_functions:
+            completed = subprocess.run(
+                ["node", "-e", function + applicable_assertions],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+
+        selection_functions = _javascript_functions(
+            workflow,
+            "function scheduledLinkProjection(",
+        )
+        self.assertEqual(len(selection_functions), 1)
+        selection_assertions = r"""
+const issue = number => ({number});
+const rows = [
+  ['valid contract', {
+    body: '<!-- agent-lock-manifest {"issue_number":7} -->\nFixes #7'
+  }, [issue(7)], 7, []],
+  ['multi authoritative uses textual first', {
+    body: 'Fixes #7\nFixes #8'
+  }, [issue(7), issue(8)], 7, [
+    'incomplete_linked_issue_contract',
+    'missing_closing_issue_reference',
+    'multiple_closing_issues'
+  ]],
+  ['textual non-authoritative fallback', {
+    body: 'Fixes #9'
+  }, [], 9, [
+    'incomplete_linked_issue_contract',
+    'missing_closing_issue_reference'
+  ]],
+  ['manifest wins', {
+    body: '<!-- agent-lock-manifest {"issue_number":10} -->\nFixes #9'
+  }, [issue(9)], 10, ['conflicting_linked_issue']],
+  ['invalid manifest falls back', {
+    body: '<!-- agent-lock-manifest {bad} -->\nFixes #11'
+  }, [], 11, [
+    'incomplete_linked_issue_contract',
+    'invalid_agent_lock_manifest',
+    'missing_closing_issue_reference'
+  ]],
+  ['no issue', {body: ''}, [], 0, [
+    'incomplete_linked_issue_contract',
+    'missing_closing_issue_reference'
+  ]]
+];
+for (const [name, pull, issues, expectedNumber, expectedErrors] of rows) {
+  const actual = scheduledLinkProjection(pull, issues);
+  if (actual.selectedIssueNumber !== expectedNumber ||
+      JSON.stringify(actual.errors) !== JSON.stringify(expectedErrors)) {
+    throw new Error(`${name}: ${JSON.stringify(actual)}`);
+  }
+}
+"""
+        completed = subprocess.run(
+            ["node", "-e", selection_functions[0] + selection_assertions],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+
+        combined_assertions = r"""
+const first = {number: 1, labels: {nodes: []}};
+const second = {number: 2, labels: {nodes: [{name: 'agent-task'}]}};
+const multi = {
+  user: {login: 'maintainer'},
+  head: {ref: 'feature/ordinary'},
+  labels: [],
+  body: 'Fixes #1\nFixes #2'
+};
+const selected = scheduledLinkProjection(multi, [first, second]);
+if (selected.selectedIssueNumber !== 1 ||
+    agentTaskApplicable(multi, first) !== false) {
+  throw new Error('multi-link applicability must use selected issue only');
+}
+const textual = {...multi, body: 'Fixes #2'};
+if (scheduledLinkProjection(textual, []).selectedIssueNumber !== 2 ||
+    agentTaskApplicable(textual, second) !== true) {
+  throw new Error('textual fallback issue label must affect applicability');
+}
+"""
+        completed = subprocess.run(
+            [
+                "node",
+                "-e",
+                selection_functions[0] + applicable_functions[0] +
+                combined_assertions,
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+
+        policy_functions = _javascript_functions(
+            workflow,
+            "function scheduledMutablePolicyErrors(",
+        )
+        self.assertEqual(len(policy_functions), 1)
+        policy_assertions = r"""
+const issue = {
+  body: '## Agent login\nexample-agent[bot]\n' +
+    '## Agent run id\nrun-1'
+};
+const manifest = '<!-- agent-lock-manifest ' + JSON.stringify({
+  issue_number: 870,
+  agent_login: 'example-agent[bot]',
+  run_id: 'run-1'
+}) + ' -->';
+const base = {
+  title: 'ci: enforce agent truth gate',
+  draft: false,
+  labels: [{name: 'copilot-rabbit'}],
+  body: manifest + '\nFixes #870'
+};
+const rows = [
+  ['valid', base, issue, true, []],
+  ['draft', {...base, draft: true}, issue, true, ['draft_pr']],
+  ['invalid title', {...base, title: 'bad'}, issue, true,
+    ['invalid_pr_title']],
+  ['label removed', {...base, labels: []}, issue, true,
+    ['missing_copilot_rabbit_label']],
+  ['invalid manifest', {
+    ...base,
+    body: '<!-- agent-lock-manifest {bad} -->\nFixes #870'
+  }, issue, true, [
+    'agent_login_mismatch',
+    'agent_run_id_mismatch',
+    'invalid_agent_lock_manifest'
+  ]],
+  ['run mismatch', {
+    ...base,
+    body: '<!-- agent-lock-manifest ' + JSON.stringify({
+      issue_number: 870,
+      agent_login: 'example-agent[bot]',
+      run_id: 'other-run'
+    }) + ' -->\nFixes #870'
+  }, issue, true, ['agent_run_id_mismatch']],
+  ['login mismatch', {
+    ...base,
+    body: '<!-- agent-lock-manifest ' + JSON.stringify({
+      issue_number: 870,
+      agent_login: 'other-agent[bot]',
+      run_id: 'run-1'
+    }) + ' -->\nFixes #870'
+  }, issue, true, ['agent_login_mismatch']],
+  ['missing headings', base, {body: ''}, true, [
+    'missing_agent_login',
+    'missing_agent_run_id'
+  ]],
+  ['not applicable', {...base, draft: true, labels: []}, issue, false, []]
+];
+for (const [name, pull, selected, applicable, expected] of rows) {
+  const actual = scheduledMutablePolicyErrors(
+    pull, selected, applicable
+  );
+  if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+    throw new Error(`${name}: ${JSON.stringify(actual)} !== ` +
+      JSON.stringify(expected));
+  }
+}
+"""
+        completed = subprocess.run(
+            ["node", "-e", policy_functions[0] + policy_assertions],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+
+        policy_projection_functions = _javascript_functions(
+            workflow,
+            "function scheduledMutablePolicyProjectionChanged(",
+        )
+        self.assertEqual(len(policy_projection_functions), 1)
+        policy_projection_assertions = r"""
+const ready = {notApplicable: false, mutablePolicyErrors: []};
+const blocked = {
+  notApplicable: false,
+  mutablePolicyErrors: ['missing_copilot_rabbit_label']
+};
+const rows = [
+  ['success to violation', ready,
+    ['missing_copilot_rabbit_label'], true, true],
+  ['settled violation', blocked,
+    ['missing_copilot_rabbit_label'], true, false],
+  ['violation repaired', blocked, [], true, true],
+  ['not applicable', {notApplicable: true, mutablePolicyErrors: []},
+    ['draft_pr'], true, false],
+  ['currently exempt', ready, ['draft_pr'], false, false],
+  ['hard unknown failure', {
+    notApplicable: false,
+    projectionUsable: false,
+    mutablePolicyErrors: []
+  }, ['missing_copilot_rabbit_label'], true, false]
+];
+for (const [name, previous, current, applicable, expected] of rows) {
+  const actual = scheduledMutablePolicyProjectionChanged(
+    previous, current, applicable
+  );
+  if (actual !== expected) {
+    throw new Error(`${name}: ${actual} !== ${expected}`);
+  }
+}
+"""
+        completed = subprocess.run(
+            [
+                "node",
+                "-e",
+                policy_projection_functions[0] +
+                policy_projection_assertions,
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+
+        identity_functions = _javascript_functions(
+            workflow,
+            "function scheduledContractIdentity(",
+        )
+        identity_projection_functions = _javascript_functions(
+            workflow,
+            "function scheduledIdentityProjectionChanged(",
+        )
+        self.assertEqual(len(identity_functions), 1)
+        self.assertEqual(len(identity_projection_functions), 1)
+        identity_assertions = r"""
+const issueA = {
+  body: '## Agent login\nexample-agent[bot]\n' +
+    '## Agent run id\nrun-a'
+};
+const issueB = {
+  body: '## Agent login\nexample-agent[bot]\n' +
+    '## Agent run id\nrun-b'
+};
+const identityA = scheduledContractIdentity(870, issueA, true);
+const identityB = scheduledContractIdentity(871, issueB, true);
+const allNull = scheduledContractIdentity(0, null, true);
+const missingLogin = scheduledContractIdentity(870, {
+  body: '## Agent run id\nrun-a'
+}, true);
+const missingRun = scheduledContractIdentity(870, {
+  body: '## Agent login\nexample-agent[bot]'
+}, true);
+if (JSON.stringify(identityA) !== JSON.stringify({
+  issue_number: 870,
+  agent_login: 'example-agent[bot]',
+  run_id: 'run-a'
+}) || scheduledContractIdentity(870, issueA, false) !== null) {
+  throw new Error('contract identity extraction failed');
+}
+const previous = {
+  notApplicable: false,
+  projectionUsable: true,
+  identityProjection: identityA
+};
+const rows = [
+  ['unchanged', previous, identityA, true, false],
+  ['issue and run switched', previous, identityB, true, true],
+  ['missing baseline', {...previous, identityProjection: null},
+    identityA, true, true],
+  ['settled all-null identity', {...previous, identityProjection: allNull},
+    allNull, true, false],
+  ['settled missing login', {...previous, identityProjection: missingLogin},
+    missingLogin, true, false],
+  ['settled missing run', {...previous, identityProjection: missingRun},
+    missingRun, true, false],
+  ['partial identity repaired', {...previous, identityProjection: missingRun},
+    identityA, true, true],
+  ['hard unknown', {...previous, projectionUsable: false},
+    identityB, true, false],
+  ['not applicable', {...previous, notApplicable: true},
+    identityB, true, false],
+  ['currently exempt', previous, null, false, false]
+];
+for (const [name, prior, current, applicable, expected] of rows) {
+  const actual = scheduledIdentityProjectionChanged(
+    prior, current, applicable
+  );
+  if (actual !== expected) {
+    throw new Error(`${name}: ${actual} !== ${expected}`);
+  }
+}
+"""
+        completed = subprocess.run(
+            [
+                "node",
+                "-e",
+                identity_functions[0] + identity_projection_functions[0] +
+                identity_assertions,
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
 
     def test_validation_replaces_obsolete_failure_comment(self):
         workflow = self._workflow()
@@ -2032,7 +2943,9 @@ if (JSON.stringify(actual) !== JSON.stringify(expected)) {
         self.assertIn("dispatch-evidence-refresh:", workflow)
         self.assertIn("group: agent-completion-${{", workflow)
         self.assertIn("inputs.pull_request || github.event.pull_request.number", workflow)
-        self.assertIn("cancel-in-progress: false", workflow)
+        self.assertIn("cancel-in-progress: false", truth_gate_header)
+        self.assertNotIn("cancel-in-progress: true", truth_gate_header)
+        self.assertIn("timeout-minutes: 20", truth_gate_header)
         self.assertIn("trustedCommentAssociations", workflow)
         self.assertIn("comment.author_association", workflow)
         self.assertIn("google-labs-jules[bot]", workflow)
