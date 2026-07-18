@@ -1005,7 +1005,11 @@ class CompletionGateWorkflowTests(unittest.TestCase):
         self.assertIn("state: 'pending'", workflow)
         self.assertEqual(
             publish_step.count("description: ownedDescription("),
-            2,
+            1,
+        )
+        self.assertEqual(
+            publish_step.count("github.rest.repos.createCommitStatus({"),
+            1,
         )
         self.assertIn("'gate-owner:' + process.env.PENDING_STATUS_ID", publish_step)
         self.assertIn("'gate-owner:' + process.env.PENDING_STATUS_ID", finalizer_step)
@@ -1026,7 +1030,7 @@ class CompletionGateWorkflowTests(unittest.TestCase):
             publish_step.count("if (!await currentRunMayPublish(latest))"),
             2,
         )
-        self.assertIn("gate pending status missing", publish_step)
+        self.assertIn("Current run has no proven gate-status lease", publish_step)
         self.assertIn("core.setFailed", publish_step)
         self.assertIn("disposition === 'successor'", finalizer_step)
         self.assertIn("disposition === 'already_failed'", finalizer_step)
@@ -1040,10 +1044,55 @@ class CompletionGateWorkflowTests(unittest.TestCase):
             r"disposition === 'already_succeeded",
         )
         self.assertIn("state: 'failure'", finalizer_step)
+        self.assertEqual(
+            finalizer_step.count("github.rest.repos.createCommitStatus({"),
+            1,
+        )
         self.assertLess(
             workflow.index("name: Upload gate evidence"),
             workflow.index("name: Publish stable status and comment"),
         )
+
+    def test_finalizer_publishes_only_with_proven_lease(self):
+        workflow = self._workflow()
+        functions = _javascript_functions(
+            workflow,
+            "function mayFinalizeFailure(",
+        )
+        self.assertEqual(len(functions), 1)
+
+        assertions = r"""
+const rows = [
+  ['current_pending', true],
+  ['predecessor', true],
+  ['already_succeeded', true],
+  ['already_failed', false],
+  ['successor', false],
+  ['fail_closed', false],
+  ['', false],
+  [null, false]
+];
+for (const [disposition, expected] of rows) {
+  const actual = mayFinalizeFailure(disposition);
+  if (actual !== expected) {
+    throw new Error(`${disposition}: ${actual} !== ${expected}`);
+  }
+}
+"""
+        completed = subprocess.run(
+            ["node", "-e", functions[0] + assertions],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+
+        finalizer_step = workflow[
+            workflow.index("name: Finalize failed gate publication"):
+            workflow.index("name: Enforce verdict")
+        ]
+        self.assertIn("if (!mayFinalizeFailure(disposition))", finalizer_step)
+        self.assertIn("No proven lease for failure publication", finalizer_step)
 
     def test_gate_status_disposition_decision_table(self):
         workflow = self._workflow()
@@ -1742,6 +1791,14 @@ class CompletionGateDocumentationTests(unittest.TestCase):
         self.assertIn("Fail-closed", documentation)
         self.assertIn("agent-completion/truth-gate", documentation)
         self.assertIn("branch protection", documentation.lower())
+        self.assertIn(
+            "previous successful status can remain visible",
+            documentation,
+        )
+        self.assertIn(
+            "independently head-bound required workflow",
+            documentation,
+        )
 
 
 if __name__ == "__main__":

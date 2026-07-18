@@ -1322,19 +1322,8 @@ jobs:
                 core.setFailed('Current gate status is already failed');
                 return false;
               }
-              await github.rest.repos.createCommitStatus({
-                owner,
-                repo,
-                sha: process.env.HEAD_SHA,
-                state: 'failure',
-                context: 'agent-completion/truth-gate',
-                description: ownedDescription(
-                  'gate pending status missing'
-                ),
-                target_url: runUrl
-              });
               core.setFailed(
-                'Current run never acquired the pending gate status'
+                'Current run has no proven gate-status lease'
               );
               return false;
             }
@@ -1564,6 +1553,13 @@ jobs:
               }
               return 'fail_closed';
             }
+            function mayFinalizeFailure(disposition) {
+              return new Set([
+                'current_pending',
+                'predecessor',
+                'already_succeeded'
+              ]).has(disposition);
+            }
             const statuses = await github.paginate(
               github.rest.repos.listCommitStatusesForRef,
               {
@@ -1592,6 +1588,10 @@ jobs:
               return;
             }
             if (disposition === 'already_failed') {
+              return;
+            }
+            if (!mayFinalizeFailure(disposition)) {
+              core.warning('No proven lease for failure publication');
               return;
             }
             if (disposition === 'already_succeeded') {
