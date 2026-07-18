@@ -77,7 +77,8 @@ def evaluate(payload: Any) -> Dict[str, Any]:
             if not isinstance(event, dict):
                 invalid_fields.append("events")
                 continue
-            if event.get("kind") not in {
+            event_kind = event.get("kind")
+            if type(event_kind) is not str or event_kind not in {
                 "artifact_ready",
                 "completed",
                 "error",

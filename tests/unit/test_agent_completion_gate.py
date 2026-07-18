@@ -864,8 +864,14 @@ class CompletionGateTests(unittest.TestCase):
         )
 
     def test_event_fields_are_strictly_validated(self):
+        class UnhashableString(str):
+            __hash__ = None
+
         cases = (
             ("kind", "unknown", "events[0].kind"),
+            ("kind", [], "events[0].kind"),
+            ("kind", {}, "events[0].kind"),
+            ("kind", UnhashableString("completed"), "events[0].kind"),
             ("sequence", "first", "events[0].sequence"),
             ("run_id", 123, "events[0].run_id"),
             ("head_sha", "short", "events[0].head_sha"),
