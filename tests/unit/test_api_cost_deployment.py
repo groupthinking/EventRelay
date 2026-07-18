@@ -9,6 +9,7 @@ import yaml
 ROOT = Path(__file__).resolve().parents[2]
 DEPLOY = ROOT / ".github/workflows/deploy-cloud-run.yml"
 POSTGRES_CI = ROOT / ".github/workflows/api-cost-postgres.yml"
+DOCKERFILE = ROOT / "Dockerfile"
 
 
 def _text(path: Path) -> str:
@@ -276,3 +277,11 @@ def test_postgres_ci_runs_real_migration_matrix_and_runtime_tests() -> None:
     assert text.count("alembic upgrade head") >= 2
     assert "tests/integration/test_api_cost_postgres.py" in text
     assert 'API_COST_TEST_DISPOSABLE_DATABASE: "true"' in text
+
+
+def test_container_prepares_writable_runtime_logs_before_nonroot_start() -> None:
+    text = _text(DOCKERFILE)
+    provision = text.index("mkdir -p /app/logs")
+    assert "chown appuser:appuser /app/logs" in text
+    assert text.index("COPY --chown=appuser:appuser . .") < provision
+    assert provision < text.index("USER appuser")
