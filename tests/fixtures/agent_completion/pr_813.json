@@ -2,7 +2,8 @@
   "policy": {
     "applicable": true,
     "agent_login": "google-labs-jules[bot]",
-    "run_id": "1892762060881911102"
+    "run_id": "1892762060881911102",
+    "head_sha": "5a6d203958bd90d5ba88e51f18b9244140d1b0a3"
   },
   "issue": {
     "number": 802,
@@ -34,6 +35,7 @@
       "kind": "artifact_ready",
       "sequence": 1,
       "comment_id": 4998315522,
+      "author": "google-labs-jules[bot]",
       "run_id": null,
       "raw_body": "Ready for a review! A [PR](https://github.com/groupthinking/EventRelay/pull/813) has been created."
     },
@@ -41,6 +43,7 @@
       "kind": "error",
       "sequence": 2,
       "comment_id": 4998316692,
+      "author": "google-labs-jules[bot]",
       "run_id": "1892762060881911102",
       "raw_body": "Jules encountered an unexpected error and wasn't able to complete task/1892762060881911102."
     }
@@ -58,6 +61,9 @@
       "src/youtube_extension/backend/ai_code_generator.py"
     ],
     "focused_test_files": [],
-    "focused_tests_passed": false
-  }
+    "focused_tests_passed": false,
+    "copilot_current_head_reviewed": false,
+    "copilot_rabbit_label": false
+  },
+  "collection_errors": []
 }

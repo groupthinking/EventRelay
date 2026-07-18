@@ -6,7 +6,7 @@ The truth gate converts repository evidence into one deterministic verdict. It n
 
 Before delegation, create the task with the Agent task issue form. Agent login, run ID, objective, acceptance criteria, exact file scope, allowed extras, and focused test paths are the intent contract. Unrestricted scope also requires the maintainer-controlled scope-unrestricted-approved label.
 
-When a complete agent task is opened or first labeled, the default-branch workflow writes a github-actions[bot] comment containing the SHA-256 digest of the normalized issue body and the unrestricted-scope approval state. The collector requires that snapshot, requires it to predate the PR, and blocks if the issue body or approval state later changes. Existing tasks must be labeled again by a maintainer to create their one-time snapshot before dispatch. Create a new task for materially changed intent; do not broaden a dispatched task in place.
+When a complete agent task is opened by a trusted repository member or first labeled by a user with repository label permission, the default-branch workflow writes a github-actions[bot] comment containing the SHA-256 digest of the normalized issue body and the unrestricted-scope approval state. The collector requires that snapshot, requires it to predate the PR, and blocks if the issue body or approval state later changes. Existing tasks must be labeled again by a trusted user to create their one-time snapshot before dispatch. Create a new task for materially changed intent; do not broaden a dispatched task in place.
 
 Agent pull requests link exactly one task with a closing keyword and include the agent-lock-manifest comment shown in the PR template. GitHub's authoritative closingIssuesReferences, the textual link, and the manifest must agree. The manifest login and run ID must exactly match the snapshotted issue. The declared agent publishes structured result evidence containing that run ID and the current PR head SHA; legacy unstructured readiness is never sufficient by itself.
 
@@ -19,7 +19,7 @@ The workflow publishes all of the following:
 - an Actions summary;
 - gate-input.json and gate-verdict.json artifacts.
 
-For the normal trust model—agents cannot write default-branch workflows or forge repository statuses—configure branch protection or the repository ruleset to require agent-completion/truth-gate, at least one approving review, and conversation resolution. Until those rules are configured, the workflow reports failures but cannot itself prevent a merge. Native review/conversation rules close the window between a new review comment and the scheduled refresh.
+For the normal trust model—agents cannot write default-branch workflows or forge repository statuses—configure branch protection or the repository ruleset to require agent-completion/truth-gate, the repository's Copilot review, at least one approving review, and conversation resolution. The gate also requires the maintainer-applied `copilot-rabbit` label, a non-dismissed Copilot review bound to the current head, every AI review thread resolved (including outdated threads), and committed focused unit tests that pass trusted CI. Human approval alone cannot satisfy those gates. Until the ruleset is configured, the workflow reports failures but cannot itself prevent a merge. Native review/conversation rules close the window between a new review comment and the scheduled refresh.
 
 Each serialized run first posts a pending status tied to its Actions run. It uploads evidence and updates the PR comment before publishing a terminal status. A compare-and-swap check rejects superseded publication; an always-running finalizer turns publication failures into a failure status. Actions are pinned to full commit SHAs. Only refresh-dispatch jobs receive actions: write.
 
@@ -65,8 +65,8 @@ The CLI accepts one JSON object:
         "post_merge_checks_passed": false
       },
       "events": [
-        {"kind": "artifact_ready", "sequence": 1, "run_id": "provider-run-id", "head_sha": "1111111111111111111111111111111111111111"},
-        {"kind": "error", "sequence": 2, "run_id": "provider-run-id", "head_sha": "1111111111111111111111111111111111111111"}
+        {"kind": "artifact_ready", "sequence": 1, "author": "google-labs-jules[bot]", "run_id": "provider-run-id", "head_sha": "1111111111111111111111111111111111111111"},
+        {"kind": "error", "sequence": 2, "author": "google-labs-jules[bot]", "run_id": "provider-run-id", "head_sha": "1111111111111111111111111111111111111111"}
       ],
       "reviews": [
         {"blocking": true, "resolved": false, "source": "thread-id"}
@@ -74,7 +74,9 @@ The CLI accepts one JSON object:
       "evidence": {
         "behavior_changed_files": ["src/example.py"],
         "focused_test_files": ["tests/unit/test_example.py"],
-        "focused_tests_passed": true
+        "focused_tests_passed": true,
+        "copilot_current_head_reviewed": true,
+        "copilot_rabbit_label": true
       },
       "collection_errors": []
     }
@@ -84,6 +86,7 @@ Run it with:
     python3 scripts/ci/agent_completion_gate.py gate-input.json
 
 The CLI prints JSON to standard output. Exit status 1 means blocked; ready, completed, and not_applicable return 0.
+An applicable policy must explicitly provide `applicable: true`, a nonblank `agent_login` and `run_id`, and a 40-character hexadecimal `head_sha`. Object sections must be JSON objects; every event requires an `author` exactly equal to `policy.agent_login`, a supported `kind`, and an integer `sequence`, with any supplied run/head metadata strictly typed; and every review requires a nonblank source plus JSON booleans for `blocking` and `resolved`. Every declared file is a required deliverable, while allowed-extra files remain optional; supplied criteria and path entries must contain non-whitespace text. `copilot_current_head_reviewed` means a non-dismissed submitted Copilot review (`APPROVED`, `COMMENTED`, or `CHANGES_REQUESTED`) whose `commit_id` equals the current PR head; it is evidence of a current-head review, not native GitHub approval. Missing evidence sections, falsey containers such as `[]`, and stringified booleans are invalid payloads; they never inherit defaults. A policy containing only `applicable: false` remains a valid non-agent exemption.
 
 ## Verdict schema
 
@@ -106,8 +109,8 @@ Verdict meanings:
 
 ## Fail-closed rules
 
-The gate blocks a missing, late, or changed intent snapshot; agent/run/head identity mismatches; blank intent; missing acceptance criteria; missing scope; undeclared paths (including a rename's previous path); unapproved unrestricted scope; failed evidence collection; missing current-run output; current-run agent errors; contradictory readiness/completion and error events; unresolved blocking reviews; failed required checks; draft or invalidly titled PRs; missing, deleted, or failing focused Python unit-test evidence; and merged work without passing post-merge checks on the merge SHA.
+The gate blocks a missing, late, or changed intent snapshot; agent/run/head identity mismatches; blank intent; missing acceptance criteria; missing scope; an empty PR diff; omitted declared files; undeclared paths (including a rename's previous path); unapproved unrestricted scope; failed evidence collection; missing current-run output; current-run agent errors; contradictory readiness/completion and error events; a missing current-head Copilot review or `copilot-rabbit` label; unresolved AI or other blocking reviews; failed required checks; draft or invalidly titled PRs; missing, deleted, or failing focused Python unit-test evidence; and merged work without passing post-merge checks on the merge SHA.
 
 Artifact ready is not completion. A Ready for review comment followed by an error is agent_run_failed. Generic green CI never overrides an unresolved review. An unmerged PR can be ready, but it can never be completed.
 
-The workflow also fails closed if checkout, evidence collection, evaluation, evidence upload, comment publication, or final status publication fails. The snapshot assumes repository write access and the default branch are trusted; organizations that delegate repository-write credentials to agents should move snapshot creation behind a protected environment or an independently authenticated GitHub App.
+The workflow also fails closed if checkout, evidence collection, evaluation, evidence upload, comment publication, or final status publication fails. Every terminal status carries the immutable pending-status ID that acquired its publication lease; status handoff compares those owner IDs so a newer lease overrides a late predecessor while an older lease yields to a successor. Unknown or malformed ownership fails closed. The snapshot assumes repository write access and the default branch are trusted; organizations that delegate repository-write credentials to agents should move snapshot creation behind a protected environment or an independently authenticated GitHub App.

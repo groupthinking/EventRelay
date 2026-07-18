@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any, Dict
@@ -17,14 +18,14 @@ def evaluate(payload: Any) -> Dict[str, Any]:
             "details": {},
         }
 
-    policy = payload.get("policy") or {}
+    policy = payload.get("policy")
     if not isinstance(policy, dict):
         return {
             "verdict": "blocked",
             "reasons": ["invalid_payload"],
             "details": {"invalid_fields": ["policy"]},
         }
-    if "applicable" in policy and type(policy["applicable"]) is not bool:
+    if "applicable" not in policy or type(policy["applicable"]) is not bool:
         return {
             "verdict": "blocked",
             "reasons": ["invalid_payload"],
@@ -33,10 +34,24 @@ def evaluate(payload: Any) -> Dict[str, Any]:
     if policy.get("applicable") is False:
         return {"verdict": "not_applicable", "reasons": [], "details": {}}
 
-    issue = payload.get("issue") or {}
-    pull_request = payload.get("pull_request") or {}
-    evidence = payload.get("evidence") or {}
+    issue = payload.get("issue")
+    pull_request = payload.get("pull_request")
+    evidence = payload.get("evidence")
+    events = payload.get("events")
+    reviews = payload.get("reviews")
+    collection_errors = payload.get("collection_errors")
     invalid_fields = []
+
+    for field in ("agent_login", "run_id"):
+        value = policy.get(field)
+        if not isinstance(value, str) or not value.strip():
+            invalid_fields.append("policy." + field)
+    head_sha = policy.get("head_sha")
+    if not isinstance(head_sha, str) or not re.fullmatch(
+        r"[a-fA-F0-9]{40}", head_sha
+    ):
+        invalid_fields.append("policy.head_sha")
+
     for field, value in (
         ("issue", issue),
         ("pull_request", pull_request),
@@ -44,42 +59,100 @@ def evaluate(payload: Any) -> Dict[str, Any]:
     ):
         if not isinstance(value, dict):
             invalid_fields.append(field)
-    for field in ("events", "reviews", "collection_errors"):
-        value = payload.get(field)
-        if value is not None and not isinstance(value, list):
-            invalid_fields.append(field)
     for field, value in (
-        ("events", payload.get("events") or []),
-        ("reviews", payload.get("reviews") or []),
+        ("events", events),
+        ("reviews", reviews),
+        ("collection_errors", collection_errors),
     ):
-        if isinstance(value, list) and not all(
-            isinstance(item, dict) for item in value
-        ):
+        if not isinstance(value, list):
             invalid_fields.append(field)
+
+    if isinstance(events, list):
+        expected_agent_login = str(policy.get("agent_login") or "").strip()
+        for index, event in enumerate(events):
+            if not isinstance(event, dict):
+                invalid_fields.append("events")
+                continue
+            if event.get("kind") not in {
+                "artifact_ready",
+                "completed",
+                "error",
+            }:
+                invalid_fields.append(f"events[{index}].kind")
+            if type(event.get("sequence")) is not int:
+                invalid_fields.append(f"events[{index}].sequence")
+            run_id = event.get("run_id")
+            if run_id is not None and (
+                not isinstance(run_id, str) or not run_id.strip()
+            ):
+                invalid_fields.append(f"events[{index}].run_id")
+            event_head_sha = event.get("head_sha")
+            if event_head_sha is not None and (
+                not isinstance(event_head_sha, str)
+                or not re.fullmatch(r"[a-fA-F0-9]{40}", event_head_sha)
+            ):
+                invalid_fields.append(f"events[{index}].head_sha")
+            if "comment_id" in event and type(event["comment_id"]) is not int:
+                invalid_fields.append(f"events[{index}].comment_id")
+            author = event.get("author")
+            if (
+                not isinstance(author, str)
+                or not author.strip()
+                or author != expected_agent_login
+            ):
+                invalid_fields.append(f"events[{index}].author")
+            if "raw_body" in event and not isinstance(event["raw_body"], str):
+                invalid_fields.append(f"events[{index}].raw_body")
+
+    if isinstance(reviews, list):
+        for index, review in enumerate(reviews):
+            if not isinstance(review, dict):
+                invalid_fields.append("reviews")
+                continue
+            for field in ("blocking", "resolved"):
+                if type(review.get(field)) is not bool:
+                    invalid_fields.append(f"reviews[{index}].{field}")
+            source = review.get("source")
+            if not isinstance(source, str) or not source.strip():
+                invalid_fields.append(f"reviews[{index}].source")
+
+    if isinstance(collection_errors, list) and not all(
+        isinstance(error, str) and error.strip()
+        for error in collection_errors
+    ):
+        invalid_fields.append("collection_errors")
+
     if isinstance(issue, dict):
-        for field in (
-            "acceptance_criteria",
-            "declared_files",
-            "allowed_extra_files",
+        if issue.get("description") is not None and not isinstance(
+            issue.get("description"), str
         ):
+            invalid_fields.append("issue.description")
+        for field in ("acceptance_criteria", "declared_files"):
             value = issue.get(field)
-            if value is not None and not isinstance(value, list):
+            if not isinstance(value, list):
                 invalid_fields.append("issue." + field)
             elif isinstance(value, list) and not all(
-                isinstance(item, str) for item in value
+                isinstance(item, str) and bool(item.strip()) for item in value
             ):
                 invalid_fields.append("issue." + field)
-        if (
-            "scope_unrestricted" in issue
-            and type(issue["scope_unrestricted"]) is not bool
+        allowed_extra_files = issue.get("allowed_extra_files", [])
+        if not isinstance(allowed_extra_files, list) or (
+            isinstance(allowed_extra_files, list)
+            and not all(
+                isinstance(item, str) and bool(item.strip())
+                for item in allowed_extra_files
+            )
         ):
+            invalid_fields.append("issue.allowed_extra_files")
+        if type(issue.get("scope_unrestricted")) is not bool:
             invalid_fields.append("issue.scope_unrestricted")
+
     if isinstance(pull_request, dict):
         value = pull_request.get("changed_files")
-        if value is not None and not isinstance(value, list):
+        if not isinstance(value, list):
             invalid_fields.append("pull_request.changed_files")
         elif isinstance(value, list) and not all(
-            isinstance(item, str) for item in value
+            isinstance(item, str) and bool(item.strip()) for item in value
         ):
             invalid_fields.append("pull_request.changed_files")
         for field in (
@@ -89,22 +162,25 @@ def evaluate(payload: Any) -> Dict[str, Any]:
             "required_checks_passed",
             "post_merge_checks_passed",
         ):
-            if field in pull_request and type(pull_request[field]) is not bool:
+            if type(pull_request.get(field)) is not bool:
                 invalid_fields.append("pull_request." + field)
+
     if isinstance(evidence, dict):
         for field in ("behavior_changed_files", "focused_test_files"):
             value = evidence.get(field)
-            if value is not None and not isinstance(value, list):
+            if not isinstance(value, list):
                 invalid_fields.append("evidence." + field)
             elif isinstance(value, list) and not all(
-                isinstance(item, str) for item in value
+                isinstance(item, str) and bool(item.strip()) for item in value
             ):
                 invalid_fields.append("evidence." + field)
-        if (
-            "focused_tests_passed" in evidence
-            and type(evidence["focused_tests_passed"]) is not bool
+        for field in (
+            "focused_tests_passed",
+            "copilot_current_head_reviewed",
+            "copilot_rabbit_label",
         ):
-            invalid_fields.append("evidence.focused_tests_passed")
+            if type(evidence.get(field)) is not bool:
+                invalid_fields.append("evidence." + field)
     if invalid_fields:
         return {
             "verdict": "blocked",
@@ -137,6 +213,17 @@ def evaluate(payload: Any) -> Dict[str, Any]:
         if undeclared:
             reasons.append("scope_drift")
             details["undeclared_files"] = undeclared
+
+    missing_declared = sorted(
+        set(issue.get("declared_files") or [])
+        - set(pull_request.get("changed_files") or [])
+    )
+    if missing_declared:
+        reasons.append("missing_declared_files")
+        details["missing_declared_files"] = missing_declared
+
+    if not pull_request.get("changed_files"):
+        reasons.append("empty_pr_diff")
 
     events = payload.get("events") or []
     active_run_id = str(policy.get("run_id") or "").strip()
@@ -196,6 +283,11 @@ def evaluate(payload: Any) -> Dict[str, Any]:
     if unresolved_reviews:
         reasons.append("unresolved_review")
         details["unresolved_reviews"] = unresolved_reviews
+
+    if evidence.get("copilot_current_head_reviewed") is not True:
+        reasons.append("missing_copilot_current_head_review")
+    if evidence.get("copilot_rabbit_label") is not True:
+        reasons.append("missing_copilot_rabbit_label")
 
     if pull_request.get("required_checks_passed") is not True:
         reasons.append("required_checks_failed")

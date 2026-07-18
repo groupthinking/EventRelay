@@ -25,10 +25,11 @@ jobs:
   snapshot-agent-task-intent:
     if: >-
       github.event_name == 'issues' &&
-      (github.event.action == 'opened' || github.event.action == 'labeled') &&
-      (github.event.issue.author_association == 'OWNER' ||
-       github.event.issue.author_association == 'MEMBER' ||
-       github.event.issue.author_association == 'COLLABORATOR')
+      ((github.event.action == 'opened' &&
+        (github.event.issue.author_association == 'OWNER' ||
+         github.event.issue.author_association == 'MEMBER' ||
+         github.event.issue.author_association == 'COLLABORATOR')) ||
+       github.event.action == 'labeled')
     concurrency:
       group: agent-intent-snapshot-${{ github.event.issue.number }}
       cancel-in-progress: false
@@ -50,6 +51,33 @@ jobs:
               ['agenttask', 'mcpagent'].includes(label)
             )) {
               return;
+            }
+            function hasTrustedLabelPermission(permission) {
+              return new Set([
+                'admin', 'maintain', 'write', 'triage'
+              ]).has(permission);
+            }
+            if (context.payload.action === 'labeled') {
+              let permission = '';
+              try {
+                const result =
+                  await github.rest.repos.getCollaboratorPermissionLevel({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    username: context.actor
+                  });
+                permission = result.data.permission;
+              } catch (error) {
+                core.warning(
+                  'Could not verify label actor permission: ' +
+                  error.message
+                );
+                return;
+              }
+              if (!hasTrustedLabelPermission(permission)) {
+                core.info('Ignoring an untrusted agent-task relabel');
+                return;
+              }
             }
             function normaliseHeading(value) {
               return value.toLowerCase().replace(/[^a-z0-9 ]/g, '').trim();
@@ -74,14 +102,22 @@ jobs:
               }
               return output.join('\n').trim();
             }
+            function hasResponse(value) {
+              const response = String(value || '').trim();
+              return Boolean(response && response !== '_No response_');
+            }
+            function checkboxChecked(value) {
+              const response = String(value || '').trim();
+              return response.split(/\r?\n/).some(line =>
+                /^\s*[-*]\s*\[[xX]\]/.test(line)
+              ) || /^(?:yes|true)$/i.test(response);
+            }
             const issueBody = String(issue.body || '');
             const unrestricted = section(
               issueBody,
               ['unrestricted scope', 'scope unrestricted']
             );
-            const unrestrictedRequested =
-              /-\s*\[[xX]\]/.test(unrestricted) ||
-              /\b(?:yes|true)\b/i.test(unrestricted);
+            const unrestrictedRequested = checkboxChecked(unrestricted);
             const declaredScope = section(
               issueBody,
               ['declared file scope', 'file scope', 'scope']
@@ -95,8 +131,9 @@ jobs:
               section(issueBody, ['agent run id', 'run id']),
               section(issueBody, ['objective', 'description']),
               section(issueBody, ['acceptance criteria', 'acceptance tests'])
-            ].every(value => value && value !== '_No response_') &&
-              Boolean(declaredScope || unrestrictedRequested) && confirmed;
+            ].every(hasResponse) &&
+              Boolean(hasResponse(declaredScope) || unrestrictedRequested) &&
+              confirmed;
             const unrestrictedApproved =
               labels.has('scopeunrestrictedapproved');
             if (!complete ||
@@ -196,12 +233,24 @@ jobs:
               'copilot-swe-agent[bot]',
               'openai-codex[bot]'
             ]);
+            function mayDispatchEvidenceRefresh(
+              authorAssociation,
+              actor,
+              trustedAssociations,
+              knownAgents
+            ) {
+              return trustedAssociations.has(authorAssociation) ||
+                knownAgents.has(actor);
+            }
             if (context.eventName === 'issue_comment') {
               const comment = context.payload.comment || {};
               const actor = comment.user && comment.user.login;
-              if (!trustedCommentAssociations.has(
-                comment.author_association
-              ) && !knownAgentCommenters.has(actor)) {
+              if (!mayDispatchEvidenceRefresh(
+                comment.author_association,
+                actor,
+                trustedCommentAssociations,
+                knownAgentCommenters
+              )) {
                 core.info('Ignoring untrusted issue-comment refresh');
                 return;
               }
@@ -210,9 +259,12 @@ jobs:
               const issue = context.payload.issue || {};
               const actor = context.payload.sender &&
                 context.payload.sender.login;
-              if (!trustedCommentAssociations.has(
-                issue.author_association
-              ) && !knownAgentCommenters.has(actor)) {
+              if (!mayDispatchEvidenceRefresh(
+                issue.author_association,
+                actor,
+                trustedCommentAssociations,
+                knownAgentCommenters
+              )) {
                 core.info('Ignoring untrusted issue refresh');
                 return;
               }
@@ -331,7 +383,7 @@ jobs:
     name: agent-completion/truth-gate
     needs: [validate, snapshot-agent-task-intent]
     if: >-
-      always() &&
+      !cancelled() &&
       (github.event_name == 'pull_request_target' ||
        github.event_name == 'workflow_dispatch')
     concurrency:
@@ -380,7 +432,7 @@ jobs:
             })).data;
             core.setOutput('pr_number', String(prNumber));
             core.setOutput('head_sha', pr.head.sha);
-            await github.rest.repos.createCommitStatus({
+            const pendingStatus = await github.rest.repos.createCommitStatus({
               owner,
               repo,
               sha: pr.head.sha,
@@ -389,6 +441,10 @@ jobs:
               description: 'collecting repository evidence',
               target_url: runUrl
             });
+            core.setOutput(
+              'pending_status_id',
+              String(pendingStatus.data.id)
+            );
 
       - name: Check out trusted gate from the default branch
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -447,6 +503,12 @@ jobs:
                   line && line !== '_No response_' &&
                   !/^\x60{3}/.test(line) && !line.startsWith('<!--')
                 );
+            }
+            function checkboxChecked(value) {
+              const response = String(value || '').trim();
+              return response.split(/\r?\n/).some(line =>
+                /^\s*[-*]\s*\[[xX]\]/.test(line)
+              ) || /^(?:yes|true)$/i.test(response);
             }
 
             const prNumber = Number(process.env.INPUT_PR_NUMBER || 0);
@@ -517,15 +579,38 @@ jobs:
               closingReferenceNumbers.length === 1
                 ? closingReferenceNumbers[0]
                 : 0;
-            const manifestIssueNumber = Number(manifest.issue_number || 0);
-            const linkedIssueNumbers = new Set([
-              manifestIssueNumber,
+            function linkedIssueContract(
+              manifestNumber,
+              textualNumber,
+              authoritativeNumber
+            ) {
+              const values = [
+                manifestNumber,
+                textualNumber,
+                authoritativeNumber
+              ];
+              if (!values.every(value =>
+                Number.isSafeInteger(value) && value > 0
+              )) {
+                return 'missing';
+              }
+              return new Set(values).size === 1 ? 'ok' : 'conflicting';
+            }
+            const linkContract = linkedIssueContract(
+              manifest.issue_number,
               closingIssueNumber,
               referencedIssueNumber
-            ].filter(Boolean));
-            if (linkedIssueNumbers.size > 1) {
+            );
+            if (linkContract === 'missing') {
+              collectionErrors.push('incomplete_linked_issue_contract');
+            } else if (linkContract === 'conflicting') {
               collectionErrors.push('conflicting_linked_issue');
             }
+            const manifestIssueNumber =
+              Number.isSafeInteger(manifest.issue_number) &&
+              manifest.issue_number > 0
+                ? manifest.issue_number
+                : 0;
             const issueNumber = manifestIssueNumber ||
               referencedIssueNumber || closingIssueNumber;
             let issue = null;
@@ -632,8 +717,9 @@ jobs:
             const declaredFiles = listItems(section(issueBody, ['declared file scope', 'file scope', 'scope']));
             const allowedExtraFiles = listItems(section(issueBody, ['allowed extra files', 'scope allowlist']));
             const unrestrictedSection = section(issueBody, ['unrestricted scope', 'scope unrestricted']);
-            const unrestrictedRequested =
-              /-\s*\[[xX]\]/.test(unrestrictedSection) || /\b(?:yes|true)\b/i.test(unrestrictedSection);
+            const unrestrictedRequested = checkboxChecked(
+              unrestrictedSection
+            );
             const scopeUnrestricted = unrestrictedRequested &&
               issueLabels.has('scopeunrestrictedapproved');
             if (applicable && unrestrictedRequested && !scopeUnrestricted) {
@@ -733,6 +819,43 @@ jobs:
               github.rest.pulls.listReviews,
               {owner, repo, pull_number: prNumber, per_page: 100}
             );
+            const copilotReviewerLogins = new Set([
+              'copilot-pull-request-reviewer[bot]',
+              'copilot-pull-request-reviewer'
+            ]);
+            const submittedCopilotStates = new Set([
+              'APPROVED', 'COMMENTED', 'CHANGES_REQUESTED'
+            ]);
+            const aiReviewerLogins = new Set([
+              ...copilotReviewerLogins,
+              'coderabbitai[bot]',
+              'coderabbitai'
+            ]);
+            function isCurrentCopilotReview(
+              review,
+              reviewerLogins,
+              submittedStates,
+              headSha
+            ) {
+              return Boolean(
+                review && review.user &&
+                reviewerLogins.has(review.user.login) &&
+                submittedStates.has(review.state) &&
+                review.commit_id === headSha
+              );
+            }
+            const copilotCurrentHeadReviewed = submitted.some(review =>
+              isCurrentCopilotReview(
+                review,
+                copilotReviewerLogins,
+                submittedCopilotStates,
+                pr.head.sha
+              )
+            );
+            const copilotRabbitLabel = (pr.labels || []).some(label =>
+              String(typeof label === 'string' ? label : label.name)
+                .toLowerCase() === 'copilot-rabbit'
+            );
             const latestByAuthor = new Map();
             for (const review of submitted) {
               if (!review.user ||
@@ -756,7 +879,7 @@ jobs:
                 'query($owner:String!,$repo:String!,$number:Int!){' +
                 'repository(owner:$owner,name:$repo){pullRequest(number:$number){' +
                 'reviewDecision reviewThreads(first:100){nodes{id isResolved comments(first:100){' +
-                'nodes{body} pageInfo{hasNextPage}}} pageInfo{hasNextPage}}}}}',
+                'nodes{body author{login}} pageInfo{hasNextPage}}} pageInfo{hasNextPage}}}}}',
                 {owner, repo, number: prNumber}
               );
               if (result.repository.pullRequest.reviewDecision ===
@@ -775,6 +898,8 @@ jobs:
                   );
                 }
                 const blocking = thread.comments.nodes.some(comment =>
+                  (comment.author &&
+                    aiReviewerLogins.has(comment.author.login)) ||
                   /VADE-RECOMMENDATION:\s*FIX|\b(?:blocking|must fix|regression)\b/i.test(
                     String(comment.body || '')
                   )
@@ -876,7 +1001,9 @@ jobs:
               evidence: {
                 behavior_changed_files: behaviorChangedFiles,
                 focused_test_files: focusedTestFiles,
-                focused_tests_passed: focusedTestFiles.length > 0 && requiredChecksPassed
+                focused_tests_passed: focusedTestFiles.length > 0 && requiredChecksPassed,
+                copilot_current_head_reviewed: copilotCurrentHeadReviewed,
+                copilot_rabbit_label: copilotRabbitLabel
               },
               collection_errors: collectionErrors
             };
@@ -912,6 +1039,7 @@ jobs:
         env:
           PR_NUMBER: ${{ steps.resolve.outputs.pr_number }}
           HEAD_SHA: ${{ steps.resolve.outputs.head_sha }}
+          PENDING_STATUS_ID: ${{ steps.resolve.outputs.pending_status_id }}
           COLLECT_OUTCOME: ${{ steps.collect.outcome }}
           GATE_OUTCOME: ${{ steps.gate.outcome }}
           GATE_EXIT_CODE: ${{ steps.gate.outputs.exit_code }}
@@ -922,8 +1050,121 @@ jobs:
             const owner = context.repo.owner;
             const repo = context.repo.repo;
             const marker = '<!-- agent-completion-truth-gate:v1 -->';
-            const runUrl = context.serverUrl + '/' + owner + '/' + repo +
-              '/actions/runs/' + context.runId;
+            const runUrlPrefix = context.serverUrl + '/' + owner + '/' +
+              repo + '/actions/runs/';
+            const runUrl = runUrlPrefix + context.runId;
+            function gateStatusDisposition(
+              status,
+              expectedPendingId,
+              currentRunUrl,
+              targetPrefix
+            ) {
+              if (!/^\d+$/.test(String(expectedPendingId || '')) ||
+                  !status || !/^\d+$/.test(String(status.id || ''))) {
+                return 'fail_closed';
+              }
+              const target = String(
+                (status && status.target_url) || ''
+              );
+              const expectedId = BigInt(String(expectedPendingId));
+              const statusId = BigInt(String(status.id));
+              function validRunTarget(targetUrl) {
+                const value = String(targetUrl || '');
+                if (!value.startsWith(targetPrefix)) {
+                  return false;
+                }
+                const suffix = value.slice(targetPrefix.length);
+                return /^\d+$/.test(suffix);
+              }
+              function statusOwnerId(candidate) {
+                if (candidate.state === 'pending') {
+                  return BigInt(String(candidate.id));
+                }
+                const owner = String(candidate.description || '').match(
+                  /^gate-owner:(\d+)(?:\s|$)/
+                );
+                return owner ? BigInt(owner[1]) : null;
+              }
+              if (!validRunTarget(currentRunUrl) ||
+                  !validRunTarget(target)) {
+                return 'fail_closed';
+              }
+              const ownerId = statusOwnerId(status);
+              if (ownerId === null) {
+                return 'fail_closed';
+              }
+              if (ownerId === expectedId && target === currentRunUrl) {
+                if (statusId === expectedId &&
+                    status.state === 'pending') {
+                  return 'current_pending';
+                }
+                if (['failure', 'error'].includes(status.state)) {
+                  return 'already_failed';
+                }
+                if (status.state === 'success') {
+                  return 'already_succeeded';
+                }
+                return 'fail_closed';
+              }
+              if (target === currentRunUrl) {
+                return 'fail_closed';
+              }
+              if (ownerId > expectedId) {
+                return 'successor';
+              }
+              if (ownerId < expectedId) {
+                return 'predecessor';
+              }
+              return 'fail_closed';
+            }
+            function ownedDescription(message) {
+              return (
+                'gate-owner:' + process.env.PENDING_STATUS_ID + ' ' +
+                String(message || '')
+              ).slice(0, 140);
+            }
+            async function currentRunMayPublish(status) {
+              const disposition = gateStatusDisposition(
+                status,
+                process.env.PENDING_STATUS_ID,
+                runUrl,
+                runUrlPrefix
+              );
+              if (disposition === 'current_pending') {
+                return true;
+              }
+              if (disposition === 'predecessor') {
+                core.warning('Overriding a late predecessor publication');
+                return true;
+              }
+              if (disposition === 'successor') {
+                core.warning('Skipping superseded gate publication');
+                return false;
+              }
+              if (disposition === 'already_succeeded') {
+                core.warning('Current run already published success');
+                return false;
+              }
+              if (disposition === 'already_failed') {
+                core.setFailed('Current gate status is already failed');
+                return false;
+              }
+              await github.rest.repos.createCommitStatus({
+                owner,
+                repo,
+                sha: process.env.HEAD_SHA,
+                state: 'failure',
+                context: 'agent-completion/truth-gate',
+                description: ownedDescription(
+                  'gate pending status missing'
+                ),
+                target_url: runUrl
+              });
+              core.setFailed(
+                'Current run never acquired the pending gate status'
+              );
+              return false;
+            }
             let verdict = {
               verdict: 'blocked',
               reasons: ['verdict_artifact_missing'],
@@ -999,9 +1240,7 @@ jobs:
                 )[0];
             }
             let latest = await latestGateStatus();
-            if (!(latest && latest.state === 'pending' &&
-                  latest.target_url === runUrl)) {
-              core.warning('Skipping stale gate publication');
+            if (!await currentRunMayPublish(latest)) {
               return;
             }
 
@@ -1052,9 +1291,7 @@ jobs:
               .write();
 
             latest = await latestGateStatus();
-            if (!(latest && latest.state === 'pending' &&
-                  latest.target_url === runUrl)) {
-              core.warning('Skipping stale gate publication');
+            if (!await currentRunMayPublish(latest)) {
               return;
             }
             const passed = verdict.verdict !== 'blocked';
@@ -1067,7 +1304,7 @@ jobs:
               sha: process.env.HEAD_SHA,
               state: passed ? 'success' : 'failure',
               context: 'agent-completion/truth-gate',
-              description: summary.slice(0, 140),
+              description: ownedDescription(summary),
               target_url: runUrl
             });
             if (!passed) {
@@ -1082,12 +1319,78 @@ jobs:
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           HEAD_SHA: ${{ steps.resolve.outputs.head_sha }}
+          PENDING_STATUS_ID: ${{ steps.resolve.outputs.pending_status_id }}
         with:
           script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;
-            const runUrl = context.serverUrl + '/' + owner + '/' + repo +
-              '/actions/runs/' + context.runId;
+            const runUrlPrefix = context.serverUrl + '/' + owner + '/' +
+              repo + '/actions/runs/';
+            const runUrl = runUrlPrefix + context.runId;
+            function gateStatusDisposition(
+              status,
+              expectedPendingId,
+              currentRunUrl,
+              targetPrefix
+            ) {
+              if (!/^\d+$/.test(String(expectedPendingId || '')) ||
+                  !status || !/^\d+$/.test(String(status.id || ''))) {
+                return 'fail_closed';
+              }
+              const target = String(
+                (status && status.target_url) || ''
+              );
+              const expectedId = BigInt(String(expectedPendingId));
+              const statusId = BigInt(String(status.id));
+              function validRunTarget(targetUrl) {
+                const value = String(targetUrl || '');
+                if (!value.startsWith(targetPrefix)) {
+                  return false;
+                }
+                const suffix = value.slice(targetPrefix.length);
+                return /^\d+$/.test(suffix);
+              }
+              function statusOwnerId(candidate) {
+                if (candidate.state === 'pending') {
+                  return BigInt(String(candidate.id));
+                }
+                const owner = String(candidate.description || '').match(
+                  /^gate-owner:(\d+)(?:\s|$)/
+                );
+                return owner ? BigInt(owner[1]) : null;
+              }
+              if (!validRunTarget(currentRunUrl) ||
+                  !validRunTarget(target)) {
+                return 'fail_closed';
+              }
+              const ownerId = statusOwnerId(status);
+              if (ownerId === null) {
+                return 'fail_closed';
+              }
+              if (ownerId === expectedId && target === currentRunUrl) {
+                if (statusId === expectedId &&
+                    status.state === 'pending') {
+                  return 'current_pending';
+                }
+                if (['failure', 'error'].includes(status.state)) {
+                  return 'already_failed';
+                }
+                if (status.state === 'success') {
+                  return 'already_succeeded';
+                }
+                return 'fail_closed';
+              }
+              if (target === currentRunUrl) {
+                return 'fail_closed';
+              }
+              if (ownerId > expectedId) {
+                return 'successor';
+              }
+              if (ownerId < expectedId) {
+                return 'predecessor';
+              }
+              return 'fail_closed';
+            }
             const statuses = await github.paginate(
               github.rest.repos.listCommitStatusesForRef,
               {
@@ -1105,18 +1408,33 @@ jobs:
                 Date.parse(right.created_at) - Date.parse(left.created_at) ||
                 right.id - left.id
               )[0];
-            if (latest && latest.state === 'pending' &&
-                latest.target_url === runUrl) {
-              await github.rest.repos.createCommitStatus({
-                owner,
-                repo,
-                sha: process.env.HEAD_SHA,
-                state: 'failure',
-                context: 'agent-completion/truth-gate',
-                description: 'gate publication failed',
-                target_url: runUrl
-              });
+            const disposition = gateStatusDisposition(
+              latest,
+              process.env.PENDING_STATUS_ID,
+              runUrl,
+              runUrlPrefix
+            );
+            if (disposition === 'successor') {
+              core.warning('A successor owns the gate status');
+              return;
             }
+            if (disposition === 'already_failed' ||
+                disposition === 'already_succeeded') {
+              return;
+            }
+            const description = (
+              'gate-owner:' + process.env.PENDING_STATUS_ID + ' ' +
+              'gate publication failed'
+            ).slice(0, 140);
+            await github.rest.repos.createCommitStatus({
+              owner,
+              repo,
+              sha: process.env.HEAD_SHA,
+              state: 'failure',
+              context: 'agent-completion/truth-gate',
+              description,
+              target_url: runUrl
+            });
 
       - name: Enforce verdict
         if: >-

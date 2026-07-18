@@ -1,6 +1,7 @@
 import importlib
 import io
 import json
+import subprocess
 import tempfile
 import unittest
 from contextlib import redirect_stdout
@@ -21,6 +22,8 @@ def _evaluate(payload):
 
 
 def _valid_payload():
+    run_id = "agent-run-123"
+    head_sha = "a" * 40
     return {
         "issue": {
             "description": "Add a deterministic completion gate.",
@@ -42,7 +45,15 @@ def _valid_payload():
             "required_checks_passed": True,
             "post_merge_checks_passed": False,
         },
-        "events": [{"kind": "completed", "sequence": 1}],
+        "events": [
+            {
+                "kind": "completed",
+                "sequence": 1,
+                "author": "example-agent[bot]",
+                "run_id": run_id,
+                "head_sha": head_sha,
+            }
+        ],
         "reviews": [],
         "evidence": {
             "behavior_changed_files": [
@@ -50,8 +61,16 @@ def _valid_payload():
             ],
             "focused_test_files": ["tests/unit/test_agent_completion_gate.py"],
             "focused_tests_passed": True,
+            "copilot_current_head_reviewed": True,
+            "copilot_rabbit_label": True,
         },
-        "policy": {"applicable": True},
+        "collection_errors": [],
+        "policy": {
+            "applicable": True,
+            "agent_login": "example-agent[bot]",
+            "run_id": run_id,
+            "head_sha": head_sha,
+        },
     }
 
 
@@ -70,6 +89,60 @@ def _repo_root():
         if (candidate / "scripts" / "ci" / "agent_completion_gate.py").exists():
             return candidate
     raise AssertionError("repository root not found")
+
+
+def _javascript_functions(source, signature):
+    """Extract repeated JavaScript function declarations with balanced braces."""
+
+    functions = []
+    cursor = 0
+    while True:
+        start = source.find(signature, cursor)
+        if start < 0:
+            return functions
+        opening = source.index("{", start)
+        depth = 0
+        for index in range(opening, len(source)):
+            if source[index] == "{":
+                depth += 1
+            elif source[index] == "}":
+                depth -= 1
+                if depth == 0:
+                    functions.append(source[start:index + 1])
+                    cursor = index + 1
+                    break
+        else:
+            raise AssertionError(f"unclosed JavaScript function: {signature}")
+
+
+def _github_script_bodies(workflow):
+    """Extract YAML literal bodies assigned to github-script's script input."""
+
+    lines = workflow.splitlines()
+    bodies = []
+    for index, line in enumerate(lines):
+        if line.lstrip() != "script: |":
+            continue
+        key_indent = len(line) - len(line.lstrip())
+        body_lines = []
+        for candidate in lines[index + 1:]:
+            if candidate.strip():
+                indent = len(candidate) - len(candidate.lstrip())
+                if indent <= key_indent:
+                    break
+            body_lines.append(candidate)
+        content_indents = [
+            len(candidate) - len(candidate.lstrip())
+            for candidate in body_lines
+            if candidate.strip()
+        ]
+        if content_indents:
+            content_indent = min(content_indents)
+            bodies.append("\n".join(
+                candidate[content_indent:] if candidate.strip() else ""
+                for candidate in body_lines
+            ))
+    return bodies
 
 
 class CompletionGateTests(unittest.TestCase):
@@ -127,6 +200,30 @@ class CompletionGateTests(unittest.TestCase):
             ],
         )
 
+    def test_declared_files_are_required_not_only_allowed(self):
+        payload = _valid_payload()
+        payload["pull_request"]["changed_files"] = [
+            "tests/unit/test_agent_completion_gate.py"
+        ]
+        payload["evidence"]["behavior_changed_files"] = []
+
+        result = _evaluate(payload)
+
+        self.assertEqual(result["verdict"], "blocked")
+        self.assertIn("missing_declared_files", result["reasons"])
+        self.assertEqual(
+            result["details"]["missing_declared_files"],
+            ["src/youtube_extension/agent_lock/completion_gate.py"],
+        )
+
+    def test_allowed_extra_files_remain_optional(self):
+        payload = _valid_payload()
+        payload["issue"]["allowed_extra_files"] = ["docs/optional.md"]
+
+        result = _evaluate(payload)
+
+        self.assertEqual(result["verdict"], "ready")
+
     def test_explicit_unrestricted_scope_allows_undeclared_files(self):
         payload = _valid_payload()
         payload["issue"]["declared_files"] = []
@@ -138,11 +235,38 @@ class CompletionGateTests(unittest.TestCase):
         self.assertEqual(result["verdict"], "ready")
         self.assertNotIn("scope_drift", result["reasons"])
 
+    def test_unrestricted_scope_does_not_waive_declared_deliverables(self):
+        payload = _valid_payload()
+        payload["issue"]["scope_unrestricted"] = True
+        payload["pull_request"]["changed_files"] = [
+            "tests/unit/test_agent_completion_gate.py",
+            "docs/extra.md",
+        ]
+        payload["evidence"]["behavior_changed_files"] = []
+
+        result = _evaluate(payload)
+
+        self.assertEqual(result["verdict"], "blocked")
+        self.assertIn("missing_declared_files", result["reasons"])
+        self.assertNotIn("scope_drift", result["reasons"])
+
     def test_completion_followed_by_error_is_contradictory(self):
         payload = _valid_payload()
         payload["events"] = [
-            {"kind": "completed", "sequence": 1},
-            {"kind": "error", "sequence": 2},
+            {
+                "kind": "completed",
+                "sequence": 1,
+                "author": "example-agent[bot]",
+                "run_id": "agent-run-123",
+                "head_sha": "a" * 40,
+            },
+            {
+                "kind": "error",
+                "sequence": 2,
+                "author": "example-agent[bot]",
+                "run_id": "agent-run-123",
+                "head_sha": "a" * 40,
+            },
         ]
 
         result = _evaluate(payload)
@@ -153,8 +277,20 @@ class CompletionGateTests(unittest.TestCase):
     def test_artifact_ready_followed_by_error_is_failed_not_completed(self):
         payload = _valid_payload()
         payload["events"] = [
-            {"kind": "artifact_ready", "sequence": 1},
-            {"kind": "error", "sequence": 2},
+            {
+                "kind": "artifact_ready",
+                "sequence": 1,
+                "author": "example-agent[bot]",
+                "run_id": "agent-run-123",
+                "head_sha": "a" * 40,
+            },
+            {
+                "kind": "error",
+                "sequence": 2,
+                "author": "example-agent[bot]",
+                "run_id": "agent-run-123",
+                "head_sha": "a" * 40,
+            },
         ]
 
         result = _evaluate(payload)
@@ -175,8 +311,20 @@ class CompletionGateTests(unittest.TestCase):
         payload = _valid_payload()
         payload["policy"]["run_id"] = "new-run"
         payload["events"] = [
-            {"kind": "error", "run_id": "old-run", "sequence": 1},
-            {"kind": "completed", "run_id": "new-run", "sequence": 2},
+            {
+                "kind": "error",
+                "author": "example-agent[bot]",
+                "run_id": "old-run",
+                "head_sha": "a" * 40,
+                "sequence": 1,
+            },
+            {
+                "kind": "completed",
+                "author": "example-agent[bot]",
+                "run_id": "new-run",
+                "head_sha": "a" * 40,
+                "sequence": 2,
+            },
         ]
 
         result = _evaluate(payload)
@@ -187,7 +335,13 @@ class CompletionGateTests(unittest.TestCase):
         payload = _valid_payload()
         payload["policy"]["run_id"] = "new-run"
         payload["events"] = [
-            {"kind": "completed", "run_id": "old-run", "sequence": 1},
+            {
+                "kind": "completed",
+                "author": "example-agent[bot]",
+                "run_id": "old-run",
+                "head_sha": "a" * 40,
+                "sequence": 1,
+            },
         ]
 
         result = _evaluate(payload)
@@ -199,7 +353,11 @@ class CompletionGateTests(unittest.TestCase):
         payload = _valid_payload()
         payload["policy"]["run_id"] = "new-run"
         payload["events"] = [
-            {"kind": "completed", "sequence": 1},
+            {
+                "kind": "completed",
+                "sequence": 1,
+                "author": "example-agent[bot]",
+            },
         ]
 
         result = _evaluate(payload)
@@ -215,6 +373,7 @@ class CompletionGateTests(unittest.TestCase):
         payload["events"] = [
             {
                 "kind": "completed",
+                "author": "example-agent[bot]",
                 "run_id": "new-run",
                 "head_sha": "a" * 40,
                 "sequence": 1,
@@ -230,11 +389,17 @@ class CompletionGateTests(unittest.TestCase):
         payload = _valid_payload()
         payload["policy"]["run_id"] = "1892762060881911102"
         payload["events"] = [
-            {"kind": "artifact_ready", "run_id": None, "sequence": 1},
+            {
+                "kind": "artifact_ready",
+                "run_id": None,
+                "sequence": 1,
+                "author": "example-agent[bot]",
+            },
             {
                 "kind": "error",
                 "run_id": "1892762060881911102",
                 "sequence": 2,
+                "author": "example-agent[bot]",
             },
         ]
 
@@ -247,8 +412,18 @@ class CompletionGateTests(unittest.TestCase):
         payload = _valid_payload()
         payload["policy"]["run_id"] = "new-run"
         payload["events"] = [
-            {"kind": "error", "sequence": 1},
-            {"kind": "completed", "run_id": "new-run", "sequence": 2},
+            {
+                "kind": "error",
+                "sequence": 1,
+                "author": "example-agent[bot]",
+            },
+            {
+                "kind": "completed",
+                "author": "example-agent[bot]",
+                "run_id": "new-run",
+                "head_sha": "a" * 40,
+                "sequence": 2,
+            },
         ]
 
         result = _evaluate(payload)
@@ -276,6 +451,24 @@ class CompletionGateTests(unittest.TestCase):
             ["discussion_r3599972900"],
         )
 
+    def test_agent_pr_requires_copilot_review_contract(self):
+        cases = (
+            (
+                "copilot_current_head_reviewed",
+                "missing_copilot_current_head_review",
+            ),
+            ("copilot_rabbit_label", "missing_copilot_rabbit_label"),
+        )
+        for field, reason in cases:
+            with self.subTest(field=field):
+                payload = _valid_payload()
+                payload["evidence"][field] = False
+
+                result = _evaluate(payload)
+
+                self.assertEqual(result["verdict"], "blocked")
+                self.assertIn(reason, result["reasons"])
+
     def test_failed_required_checks_are_blocked(self):
         payload = _valid_payload()
         payload["pull_request"]["required_checks_passed"] = False
@@ -293,6 +486,18 @@ class CompletionGateTests(unittest.TestCase):
 
         self.assertEqual(result["verdict"], "blocked")
         self.assertIn("missing_test_evidence", result["reasons"])
+
+    def test_empty_pr_diff_cannot_be_ready(self):
+        payload = _valid_payload()
+        payload["pull_request"]["changed_files"] = []
+        payload["evidence"]["behavior_changed_files"] = []
+        payload["evidence"]["focused_test_files"] = []
+        payload["evidence"]["focused_tests_passed"] = False
+
+        result = _evaluate(payload)
+
+        self.assertEqual(result["verdict"], "blocked")
+        self.assertIn("empty_pr_diff", result["reasons"])
 
     def test_focused_tests_must_pass(self):
         payload = _valid_payload()
@@ -365,6 +570,101 @@ class CompletionGateTests(unittest.TestCase):
         self.assertEqual(result["verdict"], "blocked")
         self.assertIn("invalid_payload", result["reasons"])
 
+    def test_applicable_policy_requires_bound_identity(self):
+        cases = (
+            ("applicable", None, "policy.applicable"),
+            ("agent_login", None, "policy.agent_login"),
+            ("run_id", None, "policy.run_id"),
+            ("head_sha", None, "policy.head_sha"),
+            ("agent_login", "   ", "policy.agent_login"),
+            ("run_id", 123, "policy.run_id"),
+            ("head_sha", "not-a-sha", "policy.head_sha"),
+        )
+        for field, value, invalid_field in cases:
+            with self.subTest(field=field, value=value):
+                payload = _valid_payload()
+                if value is None:
+                    del payload["policy"][field]
+                else:
+                    payload["policy"][field] = value
+
+                result = _evaluate(payload)
+
+                self.assertEqual(result["verdict"], "blocked")
+                self.assertIn("invalid_payload", result["reasons"])
+                self.assertIn(
+                    invalid_field,
+                    result["details"]["invalid_fields"],
+                )
+
+    def test_explicit_false_policy_remains_not_applicable(self):
+        result = _evaluate({"policy": {"applicable": False}})
+
+        self.assertEqual(
+            result,
+            {"verdict": "not_applicable", "reasons": [], "details": {}},
+        )
+
+    def test_event_fields_are_strictly_validated(self):
+        cases = (
+            ("kind", "unknown", "events[0].kind"),
+            ("sequence", "first", "events[0].sequence"),
+            ("run_id", 123, "events[0].run_id"),
+            ("head_sha", "short", "events[0].head_sha"),
+            ("comment_id", "123", "events[0].comment_id"),
+        )
+        for field, value, invalid_field in cases:
+            with self.subTest(field=field):
+                payload = _valid_payload()
+                payload["events"][0][field] = value
+
+                result = _evaluate(payload)
+
+                self.assertEqual(result["verdict"], "blocked")
+                self.assertIn("invalid_payload", result["reasons"])
+                self.assertIn(
+                    invalid_field,
+                    result["details"]["invalid_fields"],
+                )
+
+    def test_event_author_must_match_policy_agent(self):
+        cases = (None, "", "attacker[bot]", 123)
+        for author in cases:
+            with self.subTest(author=author):
+                payload = _valid_payload()
+                if author is None:
+                    del payload["events"][0]["author"]
+                else:
+                    payload["events"][0]["author"] = author
+
+                result = _evaluate(payload)
+
+                self.assertEqual(result["verdict"], "blocked")
+                self.assertIn("invalid_payload", result["reasons"])
+                self.assertIn(
+                    "events[0].author",
+                    result["details"]["invalid_fields"],
+                )
+
+    def test_missing_evidence_sections_are_invalid(self):
+        for field in (
+            "issue",
+            "pull_request",
+            "events",
+            "reviews",
+            "evidence",
+            "collection_errors",
+        ):
+            with self.subTest(field=field):
+                payload = _valid_payload()
+                del payload[field]
+
+                result = _evaluate(payload)
+
+                self.assertEqual(result["verdict"], "blocked")
+                self.assertIn("invalid_payload", result["reasons"])
+                self.assertIn(field, result["details"]["invalid_fields"])
+
     def test_malformed_nested_fields_return_a_verdict(self):
         payload = _valid_payload()
         payload["events"] = ["not-an-event"]
@@ -376,6 +676,51 @@ class CompletionGateTests(unittest.TestCase):
 
         self.assertEqual(result["verdict"], "blocked")
         self.assertIn("invalid_payload", result["reasons"])
+
+    def test_falsey_malformed_object_sections_fail_closed(self):
+        for field in ("policy", "issue", "pull_request", "evidence"):
+            with self.subTest(field=field):
+                payload = _valid_payload()
+                payload[field] = []
+
+                result = _evaluate(payload)
+
+                self.assertEqual(result["verdict"], "blocked")
+                self.assertIn("invalid_payload", result["reasons"])
+                self.assertIn(field, result["details"]["invalid_fields"])
+
+    def test_review_flags_must_be_booleans(self):
+        for field in ("blocking", "resolved"):
+            with self.subTest(field=field):
+                payload = _valid_payload()
+                payload["reviews"] = [
+                    {"blocking": True, "resolved": False, "source": "thread-1"}
+                ]
+                payload["reviews"][0][field] = "false"
+
+                result = _evaluate(payload)
+
+                self.assertEqual(result["verdict"], "blocked")
+                self.assertIn("invalid_payload", result["reasons"])
+                self.assertIn(
+                    f"reviews[0].{field}",
+                    result["details"]["invalid_fields"],
+                )
+
+    def test_review_source_must_be_nonempty_text(self):
+        payload = _valid_payload()
+        payload["reviews"] = [
+            {"blocking": True, "resolved": False, "source": ""}
+        ]
+
+        result = _evaluate(payload)
+
+        self.assertEqual(result["verdict"], "blocked")
+        self.assertIn("invalid_payload", result["reasons"])
+        self.assertIn(
+            "reviews[0].source",
+            result["details"]["invalid_fields"],
+        )
 
     def test_non_string_path_entries_return_a_verdict(self):
         payload = _valid_payload()
@@ -390,6 +735,29 @@ class CompletionGateTests(unittest.TestCase):
             result["details"]["invalid_fields"],
         )
 
+    def test_blank_list_entries_fail_closed(self):
+        cases = (
+            ("issue", "acceptance_criteria"),
+            ("issue", "declared_files"),
+            ("issue", "allowed_extra_files"),
+            ("pull_request", "changed_files"),
+            ("evidence", "behavior_changed_files"),
+            ("evidence", "focused_test_files"),
+        )
+        for section, field in cases:
+            with self.subTest(section=section, field=field):
+                payload = _valid_payload()
+                payload[section][field] = ["   "]
+
+                result = _evaluate(payload)
+
+                self.assertEqual(result["verdict"], "blocked")
+                self.assertIn("invalid_payload", result["reasons"])
+                self.assertIn(
+                    f"{section}.{field}",
+                    result["details"]["invalid_fields"],
+                )
+
     def test_non_boolean_policy_fields_cannot_bypass_rules(self):
         for section, field in (
             ("policy", "applicable"),
@@ -400,6 +768,8 @@ class CompletionGateTests(unittest.TestCase):
             ("pull_request", "required_checks_passed"),
             ("pull_request", "post_merge_checks_passed"),
             ("evidence", "focused_tests_passed"),
+            ("evidence", "copilot_current_head_reviewed"),
+            ("evidence", "copilot_rabbit_label"),
         ):
             with self.subTest(section=section, field=field):
                 payload = _valid_payload()
@@ -443,6 +813,8 @@ class CompletionGateTests(unittest.TestCase):
                 "draft_pr",
                 "invalid_pr_title",
                 "missing_test_evidence",
+                "missing_copilot_current_head_review",
+                "missing_copilot_rabbit_label",
             },
         )
         self.assertEqual(
@@ -537,19 +909,298 @@ class CompletionGateWorkflowTests(unittest.TestCase):
 
     def test_workflow_cannot_leave_a_stale_green_status(self):
         workflow = self._workflow()
+        publish_step = workflow[
+            workflow.index("name: Publish stable status and comment"):
+            workflow.index("name: Finalize failed gate publication")
+        ]
+        finalizer_step = workflow[
+            workflow.index("name: Finalize failed gate publication"):
+            workflow.index("name: Enforce verdict")
+        ]
 
         self.assertIn("id: resolve", workflow)
         self.assertIn("state: 'pending'", workflow)
+        self.assertEqual(
+            publish_step.count("description: ownedDescription("),
+            2,
+        )
+        self.assertIn("'gate-owner:' + process.env.PENDING_STATUS_ID", publish_step)
+        self.assertIn("'gate-owner:' + process.env.PENDING_STATUS_ID", finalizer_step)
+        self.assertIn("description,", finalizer_step)
+        self.assertIn("'pending_status_id'", workflow)
+        self.assertIn("String(pendingStatus.data.id)", workflow)
+        self.assertIn(
+            "PENDING_STATUS_ID: ${{ steps.resolve.outputs.pending_status_id }}",
+            workflow,
+        )
         self.assertIn("if: always() && steps.resolve.outputs.pr_number != ''", workflow)
         self.assertIn("id: upload", workflow)
         self.assertIn("steps.upload.outcome", workflow)
         self.assertIn("id: publish", workflow)
         self.assertIn("steps.publish.outcome != 'success'", workflow)
-        self.assertIn("latest.target_url === runUrl", workflow)
+        self.assertIn("target === currentRunUrl", workflow)
+        self.assertEqual(
+            publish_step.count("if (!await currentRunMayPublish(latest))"),
+            2,
+        )
+        self.assertIn("gate pending status missing", publish_step)
+        self.assertIn("core.setFailed", publish_step)
+        self.assertIn("disposition === 'successor'", finalizer_step)
+        self.assertIn("disposition === 'already_failed'", finalizer_step)
+        self.assertIn("state: 'failure'", finalizer_step)
         self.assertLess(
             workflow.index("name: Upload gate evidence"),
             workflow.index("name: Publish stable status and comment"),
         )
+
+    def test_gate_status_disposition_decision_table(self):
+        workflow = self._workflow()
+        functions = _javascript_functions(
+            workflow,
+            "function gateStatusDisposition(",
+        )
+        self.assertEqual(len(functions), 2)
+
+        assertions = r"""
+const prefix = 'https://github.com/acme/repo/actions/runs/';
+const runUrl = prefix + '100';
+const rows = [
+  [null, '', 'fail_closed'],
+  [{id: 100, state: 'pending', target_url: runUrl}, '100', 'current_pending'],
+  [{id: 99, state: 'failure', target_url: runUrl}, '100', 'fail_closed'],
+  [{id: 101, state: 'failure', target_url: runUrl, description: 'gate-owner:100 blocked'}, '100', 'already_failed'],
+  [{id: 101, state: 'success', target_url: runUrl, description: 'gate-owner:100 ready'}, '100', 'already_succeeded'],
+  [{id: 101, state: 'pending', target_url: runUrl}, '100', 'fail_closed'],
+  [{id: 101, state: 'pending', target_url: prefix + '101'}, '100', 'successor'],
+  [{id: 900, state: 'success', target_url: prefix + '500', description: 'gate-owner:101 ready'}, '100', 'successor'],
+  [{id: 101, state: 'success', target_url: prefix + '99', description: 'gate-owner:99 ready'}, '100', 'predecessor'],
+  [{id: 103, state: 'success', target_url: prefix + '900', description: 'gate-owner:100 stale'}, '102', 'predecessor', prefix + '101'],
+  [{id: 103, state: 'success', target_url: prefix + '100'}, '102', 'fail_closed', prefix + '101'],
+  [{id: 101, state: 'pending', target_url: 'https://example.test/101'}, '100', 'fail_closed'],
+  [{id: 101, state: 'success', target_url: prefix + '101?attempt=2', description: 'gate-owner:101 ready'}, '100', 'fail_closed'],
+  [{id: 101, state: 'pending', target_url: prefix + '101'}, '', 'fail_closed']
+];
+for (const [status, pendingId, expected, currentUrl = runUrl] of rows) {
+  const actual = gateStatusDisposition(status, pendingId, currentUrl, prefix);
+  if (actual !== expected) {
+    throw new Error(`${JSON.stringify(status)}: ${actual} !== ${expected}`);
+  }
+}
+"""
+        for function in functions:
+            with self.subTest(function=function):
+                completed = subprocess.run(
+                    ["node", "-e", function + assertions],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                )
+                self.assertEqual(completed.returncode, 0, completed.stderr)
+
+    def test_copilot_review_must_be_current_head_and_submitted(self):
+        workflow = self._workflow()
+        functions = _javascript_functions(
+            workflow,
+            "function isCurrentCopilotReview(",
+        )
+        self.assertEqual(len(functions), 1)
+
+        assertions = r"""
+const reviewers = new Set(['copilot-pull-request-reviewer[bot]']);
+const submittedStates = new Set(['APPROVED', 'COMMENTED', 'CHANGES_REQUESTED']);
+const head = 'a'.repeat(40);
+const rows = [
+  [{user: {login: 'copilot-pull-request-reviewer[bot]'}, state: 'COMMENTED', commit_id: head}, true],
+  [{user: {login: 'copilot-pull-request-reviewer[bot]'}, state: 'APPROVED', commit_id: head}, true],
+  [{user: {login: 'copilot-pull-request-reviewer[bot]'}, state: 'CHANGES_REQUESTED', commit_id: head}, true],
+  [{user: {login: 'copilot-pull-request-reviewer[bot]'}, state: 'DISMISSED', commit_id: head}, false],
+  [{user: {login: 'copilot-pull-request-reviewer[bot]'}, state: 'PENDING', commit_id: head}, false],
+  [{user: {login: 'copilot-pull-request-reviewer[bot]'}, state: 'COMMENTED', commit_id: 'b'.repeat(40)}, false],
+  [{user: {login: 'someone-else[bot]'}, state: 'COMMENTED', commit_id: head}, false],
+  [null, false]
+];
+for (const [review, expected] of rows) {
+  const actual = isCurrentCopilotReview(
+    review, reviewers, submittedStates, head
+  );
+  if (actual !== expected) {
+    throw new Error(`${JSON.stringify(review)}: ${actual} !== ${expected}`);
+  }
+}
+"""
+        completed = subprocess.run(
+            ["node", "-e", functions[0] + assertions],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+
+    def test_refresh_dispatch_trust_decision_table(self):
+        workflow = self._workflow()
+        functions = _javascript_functions(
+            workflow,
+            "function mayDispatchEvidenceRefresh(",
+        )
+        self.assertEqual(len(functions), 1)
+
+        assertions = r"""
+const associations = new Set(['OWNER', 'MEMBER', 'COLLABORATOR']);
+const agents = new Set([
+  'google-labs-jules[bot]',
+  'github-copilot[bot]',
+  'openai-codex[bot]'
+]);
+const rows = [
+  ['OWNER', 'person', true],
+  ['MEMBER', 'person', true],
+  ['COLLABORATOR', 'person', true],
+  ['NONE', 'google-labs-jules[bot]', true],
+  ['NONE', 'github-copilot[bot]', true],
+  ['NONE', 'openai-codex[bot]', true],
+  ['NONE', 'external-user', false],
+  ['NONE', 'github-actions[bot]', false],
+  [null, null, false]
+];
+for (const [association, actor, expected] of rows) {
+  const actual = mayDispatchEvidenceRefresh(
+    association, actor, associations, agents
+  );
+  if (actual !== expected) {
+    throw new Error(`${association}/${actor}: ${actual} !== ${expected}`);
+  }
+}
+"""
+        completed = subprocess.run(
+            ["node", "-e", functions[0] + assertions],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+
+    def test_unrestricted_scope_checkbox_decision_table(self):
+        workflow = self._workflow()
+        functions = _javascript_functions(
+            workflow,
+            "function checkboxChecked(",
+        )
+        self.assertEqual(len(functions), 2)
+
+        assertions = r"""
+const rows = [
+  ['- [ ] Yes, this task explicitly permits repository-wide changes.', false],
+  ['- [x] Yes, this task explicitly permits repository-wide changes.', true],
+  ['- [X] Yes, this task explicitly permits repository-wide changes.', true],
+  ['yes', true],
+  [' true ', true],
+  ['no', false],
+  ['_No response_', false],
+  ['The word yes in prose is not approval.', false],
+  ['', false]
+];
+for (const [value, expected] of rows) {
+  const actual = checkboxChecked(value);
+  if (actual !== expected) {
+    throw new Error(`${JSON.stringify(value)}: ${actual} !== ${expected}`);
+  }
+}
+"""
+        for function in functions:
+            with self.subTest(function=function):
+                completed = subprocess.run(
+                    ["node", "-e", function + assertions],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                )
+                self.assertEqual(completed.returncode, 0, completed.stderr)
+
+    def test_snapshot_label_actor_permission_decision_table(self):
+        workflow = self._workflow()
+        functions = _javascript_functions(
+            workflow,
+            "function hasTrustedLabelPermission(",
+        )
+        self.assertEqual(len(functions), 1)
+
+        assertions = r"""
+const rows = [
+  ['admin', true],
+  ['maintain', true],
+  ['write', true],
+  ['triage', true],
+  ['read', false],
+  ['none', false],
+  ['', false],
+  [null, false]
+];
+for (const [permission, expected] of rows) {
+  const actual = hasTrustedLabelPermission(permission);
+  if (actual !== expected) {
+    throw new Error(`${permission}: ${actual} !== ${expected}`);
+  }
+}
+"""
+        completed = subprocess.run(
+            ["node", "-e", functions[0] + assertions],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+
+    def test_linked_issue_contract_decision_table(self):
+        workflow = self._workflow()
+        functions = _javascript_functions(
+            workflow,
+            "function linkedIssueContract(",
+        )
+        self.assertEqual(len(functions), 1)
+
+        assertions = r"""
+const rows = [
+  [[870, 870, 870], 'ok'],
+  [[0, 870, 870], 'missing'],
+  [[870, 0, 870], 'missing'],
+  [[870, 870, 0], 'missing'],
+  [[870, 871, 870], 'conflicting'],
+  [[870, 870, 871], 'conflicting'],
+  [['870', 870, 870], 'missing'],
+  [[-1, 870, 870], 'missing']
+];
+for (const [values, expected] of rows) {
+  const actual = linkedIssueContract(...values);
+  if (actual !== expected) {
+    throw new Error(`${JSON.stringify(values)}: ${actual} !== ${expected}`);
+  }
+}
+"""
+        completed = subprocess.run(
+            ["node", "-e", functions[0] + assertions],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+
+    def test_every_github_script_body_compiles(self):
+        scripts = _github_script_bodies(self._workflow())
+        self.assertEqual(len(scripts), 8)
+        compiler = (
+            "const AsyncFunction = Object.getPrototypeOf("
+            "async function(){}).constructor;"
+            "new AsyncFunction('github','context','core','require',"
+        )
+        for index, script in enumerate(scripts):
+            with self.subTest(index=index):
+                completed = subprocess.run(
+                    ["node", "-e", compiler + json.dumps(script) + ");"],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                )
+                self.assertEqual(completed.returncode, 0, completed.stderr)
 
     def test_workflow_pins_every_third_party_action(self):
         workflow = self._workflow()
@@ -578,6 +1229,25 @@ class CompletionGateWorkflowTests(unittest.TestCase):
         self.assertIn("missing_intent_snapshot", workflow)
         self.assertIn("intent_changed_after_dispatch", workflow)
 
+    def test_snapshot_authorizes_opening_author_or_privileged_relabel(self):
+        workflow = self._workflow()
+        header = workflow[
+            workflow.index("  snapshot-agent-task-intent:"):
+            workflow.index("    concurrency:", workflow.index(
+                "  snapshot-agent-task-intent:"
+            ))
+        ]
+
+        self.assertIn("github.event.action == 'opened' &&", header)
+        self.assertIn("github.event.action == 'labeled'", header)
+        self.assertIn("getCollaboratorPermissionLevel", workflow)
+        self.assertIn("context.actor", workflow)
+        self.assertNotIn(
+            "(github.event.action == 'opened' || "
+            "github.event.action == 'labeled') &&",
+            header,
+        )
+
     def test_workflow_publishes_one_machine_readable_gate(self):
         workflow = self._workflow()
 
@@ -602,6 +1272,21 @@ class CompletionGateWorkflowTests(unittest.TestCase):
         )
         self.assertIn("reviewDecision", workflow)
 
+    def test_workflow_requires_copilot_review_label_and_committed_tests(self):
+        workflow = self._workflow()
+
+        self.assertIn("copilot-pull-request-reviewer[bot]", workflow)
+        self.assertIn("function isCurrentCopilotReview(", workflow)
+        self.assertIn("copilot-rabbit", workflow)
+        self.assertNotIn("!thread.isOutdated", workflow)
+        self.assertIn(
+            "copilot_current_head_reviewed: copilotCurrentHeadReviewed",
+            workflow,
+        )
+        self.assertIn("copilot_rabbit_label: copilotRabbitLabel", workflow)
+        self.assertIn("expectedTests.every", workflow)
+        self.assertIn("presentChangedFiles.has(path)", workflow)
+
     def test_adapter_fails_closed_on_pagination_and_binds_trusted_ci(self):
         workflow = self._workflow()
 
@@ -615,6 +1300,10 @@ class CompletionGateWorkflowTests(unittest.TestCase):
 
     def test_gate_runs_are_serialized_and_coalesced_by_pr_number(self):
         workflow = self._workflow()
+        truth_gate_header = workflow[
+            workflow.index("  truth-gate:"):
+            workflow.index("    steps:", workflow.index("  truth-gate:"))
+        ]
 
         self.assertIn("dispatch-evidence-refresh:", workflow)
         self.assertIn("group: agent-completion-${{", workflow)
@@ -623,6 +1312,8 @@ class CompletionGateWorkflowTests(unittest.TestCase):
         self.assertIn("trustedCommentAssociations", workflow)
         self.assertIn("comment.author_association", workflow)
         self.assertIn("google-labs-jules[bot]", workflow)
+        self.assertIn("!cancelled()", truth_gate_header)
+        self.assertNotIn("always()", truth_gate_header)
 
     def test_collector_binds_structured_agent_event_to_head(self):
         workflow = self._workflow()
@@ -637,6 +1328,7 @@ class CompletionGateWorkflowTests(unittest.TestCase):
         workflow = self._workflow()
 
         self.assertIn("closingIssuesReferences", workflow)
+        self.assertIn("incomplete_linked_issue_contract", workflow)
         self.assertIn("multiple_closing_issues", workflow)
 
     def test_snapshot_validates_contract_and_freezes_approval_state(self):
@@ -646,6 +1338,12 @@ class CompletionGateWorkflowTests(unittest.TestCase):
         self.assertIn("incomplete_agent_task_contract", workflow)
         self.assertIn("scope_unrestricted_approved", workflow)
         self.assertIn("intent_snapshot_after_dispatch", workflow)
+        self.assertIn("function hasResponse(value)", workflow)
+        self.assertIn("response !== '_No response_'", workflow)
+        self.assertIn(
+            "Boolean(hasResponse(declaredScope) || unrestrictedRequested)",
+            workflow,
+        )
 
     def test_adapter_recognizes_agent_labels_scripts_and_blocking_threads(self):
         workflow = self._workflow()
