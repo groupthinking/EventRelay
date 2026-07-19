@@ -34,9 +34,17 @@ class OpenAIDevTaskManager:
     """MCP-first dev task manager to operationalize YouTube video capabilities."""
 
     def __init__(self, workspace_root: Optional[str] = None):
-        self.workspace_root = Path(
-            workspace_root or "/Users/garvey/UVAI/src/core/youtube_extension"
-        )
+        default_root = "/Users/garvey/UVAI/src/core/youtube_extension"
+        path_str = workspace_root or os.getenv("WORKSPACE_ROOT")
+        if not path_str:
+            try:
+                candidate = Path(default_root)
+                candidate.mkdir(parents=True, exist_ok=True)
+                path_str = default_root
+            except Exception:
+                path_str = str(Path.cwd() / "workflow_workspace")
+
+        self.workspace_root = Path(path_str)
         self.output_root = self.workspace_root / "workflow_output"
         self.output_root.mkdir(parents=True, exist_ok=True)
 

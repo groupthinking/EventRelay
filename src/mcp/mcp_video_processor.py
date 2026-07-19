@@ -202,10 +202,14 @@ class MCPConfig:
     """Configuration management for MCP video processor"""
 
     def __init__(self, config_path: str = None):
-        self.config_path = (
-            config_path
-            or "/Users/garvey/UVAI/10_MCP_ECOSYSTEM/MCP/mcp_detailed_config.json"
-        )
+        default_path = "/Users/garvey/UVAI/10_MCP_ECOSYSTEM/MCP/mcp_detailed_config.json"
+        if not config_path:
+            if os.path.exists(default_path):
+                self.config_path = default_path
+            else:
+                self.config_path = str(Path.cwd() / "mcp_detailed_config.json")
+        else:
+            self.config_path = config_path
         self.config = self._load_config()
 
     def _load_config(self) -> dict[str, Any]:
@@ -1156,7 +1160,13 @@ class MCPVideoProcessor:
         """Save results with MCP metadata and analytics"""
 
         # Create enhanced results directory
-        results_dir = Path("/Users/garvey/UVAI/10_MCP_ECOSYSTEM/mcp_results")
+        default_dir = "/Users/garvey/UVAI/10_MCP_ECOSYSTEM/mcp_results"
+        try:
+            results_dir = Path(default_dir)
+            results_dir.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            results_dir = Path.cwd() / "mcp_results"
+
         category_dir = results_dir / content["category"]
         category_dir.mkdir(parents=True, exist_ok=True)
 

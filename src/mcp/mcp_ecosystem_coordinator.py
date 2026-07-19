@@ -177,7 +177,14 @@ class MCPEcosystemCoordinator:
     """
 
     def __init__(self, config_path: str = None):
-        self.config_path = config_path or "/Users/garvey/UVAI/10_MCP_ECOSYSTEM"
+        default_path = "/Users/garvey/UVAI/10_MCP_ECOSYSTEM"
+        if not config_path:
+            if os.path.exists(default_path):
+                self.config_path = default_path
+            else:
+                self.config_path = str(Path.cwd() / "mcp_ecosystem")
+        else:
+            self.config_path = config_path
         self.coordination_config = self._load_coordination_config()
 
         # MCP node registry
