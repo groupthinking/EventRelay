@@ -384,11 +384,11 @@ class TestEnvPassthrough:
 class TestSkillLoading:
     """Verify that real skill modules load cleanly with declared dependencies."""
 
-    def test_load_skill_instance_injects_declared_dependencies(
-        self, registry: SkillRegistry
-    ) -> None:
+    def test_load_skill_instance_injects_declared_dependencies(self) -> None:
         gemini_service = object()
-        registry._dependencies = {"gemini_service": gemini_service}
+        registry = SkillRegistry(
+            lock_file_path=LOCK_FILE, dependencies={"gemini_service": gemini_service}
+        )
 
         instance = registry._load_skill_instance("content-generation")
 
@@ -397,8 +397,6 @@ class TestSkillLoading:
     def test_load_skill_instance_fails_when_required_dependency_missing(
         self, registry: SkillRegistry
     ) -> None:
-        registry._dependencies = {}
-
         with pytest.raises(ValueError, match="Missing required skill dependencies"):
             registry._load_skill_instance("content-generation")
 

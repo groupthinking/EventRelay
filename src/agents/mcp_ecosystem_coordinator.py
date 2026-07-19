@@ -285,7 +285,11 @@ class SkillRegistry:
 
     _LOCK_FILE = "skills-lock.json"
 
-    def __init__(self, lock_file_path: Optional[str] = None):
+    def __init__(
+        self,
+        lock_file_path: Optional[str] = None,
+        dependencies: Optional[dict[str, Any]] = None,
+    ):
         self._lock_path = Path(
             lock_file_path
             or os.environ.get("SKILLS_LOCK_PATH", "")
@@ -293,7 +297,7 @@ class SkillRegistry:
         )
         self._skills: dict[str, dict[str, Any]] = {}
         self._instances: dict[str, Any] = {}
-        self._dependencies: dict[str, Any] = {}
+        self._dependencies: dict[str, Any] = dict(dependencies or {})
         self._load_skills()
 
     def _find_lock_file(self) -> str:
