@@ -166,11 +166,14 @@ export default function InteractiveTranscript({
   );
 
   const filteredSegments = useMemo(() => {
+    // Optimization: Cache lowercase search query outside the filter loop
+    // to prevent redundant string manipulation on every segment.
+    const searchLower = searchQuery?.toLowerCase() ?? '';
     return segments.filter((seg) => {
       const matchesSpeaker = !filterSpeaker || seg.speaker === filterSpeaker;
       const matchesSearch =
         !searchQuery ||
-        seg.text.toLowerCase().includes(searchQuery.toLowerCase());
+        seg.text.toLowerCase().includes(searchLower);
       return matchesSpeaker && matchesSearch;
     });
   }, [segments, filterSpeaker, searchQuery]);
