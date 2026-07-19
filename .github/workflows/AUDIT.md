@@ -26,7 +26,7 @@ concrete reason, verified against the actual repository tree.
 | `issue-triage.yml` | KEEP | Keyword auto-labeling + triage comment on new issues. |
 | `mcp-optimization.yml` | **DELETE** | Entire workflow targets `mcp-servers/mcp-profiling/` (requirements.txt, investigator_client.py, profiling_server.py) which does not exist — every run fails. |
 | `phase-goal-tracker.yml` | KEEP | Tracks markdown checklists on phase issues, keeps a single status comment updated, and auto-closes the issue when all checklist goals are complete. |
-| `pr-checks.yml` | KEEP | Validates PR title/description; fork-safe comment handling. |
+| `pr-checks.yml` | **FIX** | Granted the `truth-gate` job `pull-requests: write` (was `read`): every `workflow_dispatch` gate run failed with 403 `Resource not accessible by integration` when publishing the verdict comment on the PR (e.g. run 29638150917), even for passing `not_applicable` verdicts. Title/description validation retained; fork-safe comment handling. |
 | `real-processing.yml` | KEEP | Manual single-video processing; well-formed. |
 | `secret-scan.yml` | KEEP | gitleaks on the working tree; action pinned to SHA, checksum-verified install. |
 | `security.yml` | KEEP | npm audit, safety, bandit, trivy; uploads SARIF. |
