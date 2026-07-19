@@ -28,19 +28,23 @@ billing/auth vars go in `apps/web/.env.local` (or your Vercel project settings),
 
 ## 1. Launch-gating blockers (must do)
 
-### 1.1 Stripe products & prices — ✅ DONE (LIVE mode, 2026-07-02)
-Created via the Stripe API on the UVAI account (`acct_1ScN2hAmTgsI2zgN`):
-- Product **EventRelay Pro**: `prod_UoUsOjo63AUHAk`
-- **$19/mo** recurring Price: `price_1Tos02AmTgsI2zgNWx7onroJ`
-- **$180/yr** recurring Price: `price_1Tos0AAmTgsI2zgNSu5lwBv6`
+### 1.1 Stripe products & prices — ⛔ BLOCKER (price IDs unverified)
+A 2026-07-14 production probe returned `No such price` for the IDs below;
+do **not** set these values in production until fresh live-mode IDs are
+provisioned and verified against the live Stripe account.
 
-Set in the Vercel project env (Production):
+To provision:
+1. Log into the Stripe Dashboard (live mode) for the UVAI account.
+2. Create a Product named **EventRelay Pro**.
+3. Add a **$19/mo** recurring price and a **$180/yr** recurring price.
+4. Copy the resulting `price_*` IDs and set them in Vercel (Production):
+
   ```
   STRIPE_SECRET_KEY=sk_live_...          # Dashboard → Developers → API keys
   NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_live_...
   STRIPE_WEBHOOK_SECRET=whsec_...        # from step 1.2
-  STRIPE_PRICE_PRO_MONTHLY=price_1Tos02AmTgsI2zgNWx7onroJ
-  STRIPE_PRICE_PRO_ANNUAL=price_1Tos0AAmTgsI2zgNSu5lwBv6
+  STRIPE_PRICE_PRO_MONTHLY=price_<verified-monthly-id>
+  STRIPE_PRICE_PRO_ANNUAL=price_<verified-annual-id>
   ```
 - Without the two `STRIPE_PRICE_*` IDs, `requireStripePriceId()` throws and
   checkout 500s. Price IDs are not secrets (they appear in checkout URLs);

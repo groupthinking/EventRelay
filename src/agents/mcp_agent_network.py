@@ -79,7 +79,7 @@ class MCPAgentNetwork:
                 },
                 "skill-builder": {
                     "endpoint": "internal://skill_builder",
-                    "tools": ["validate_build", "get_error_patterns", "learn_from_error", "suggest_fix"]
+                    "tools": ["validate_build"]
                 },
                 "knowledge-base": {
                     "endpoint": "internal://knowledge_base",
@@ -105,14 +105,14 @@ class MCPAgentNetwork:
                     "id": "code-gen",
                     "name": "Code Generation Agent",
                     "role": "Generate application code from specifications",
-                    "tools": ["generate_fullstack", "generate_files", "get_error_patterns"],
+                    "tools": ["generate_fullstack", "generate_files"],
                     "capabilities": ["code_generation", "fullstack_apps", "template_application"]
                 },
                 {
                     "id": "build-validator",
                     "name": "Build Validator Agent",
                     "role": "Test builds and fix errors",
-                    "tools": ["validate_build", "get_error_patterns", "learn_from_error", "suggest_fix"],
+                    "tools": ["validate_build"],
                     "capabilities": ["build_testing", "error_resolution", "skill_learning"]
                 },
                 {
@@ -126,7 +126,7 @@ class MCPAgentNetwork:
                     "id": "knowledge-capture",
                     "name": "Knowledge Capture Agent",
                     "role": "Learn from each pipeline run",
-                    "tools": ["capture_technology", "get_capabilities", "learn_from_error"],
+                    "tools": ["capture_technology", "get_capabilities"],
                     "capabilities": ["continuous_learning", "pattern_recognition", "capability_generation"]
                 }
             ]
