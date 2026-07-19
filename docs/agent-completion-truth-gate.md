@@ -33,6 +33,13 @@ Per-path focused-test proof currently parses terminal pytest outcomes from the e
 
 If an agent has repository-write credentials that can create Actions workflows or post statuses/comments, github-actions[bot] and a status-context string are not independent provenance. The collector also sees only the current comment bodies; an agent that can edit or delete its own result comment can erase contradictory self-reported history. In that threat model, keep this workflow advisory until snapshot, append-only result evidence, and check publication move to a dedicated GitHub App (or an organization ruleset-required trusted workflow) and bind the required check to that identity.
 
+## Security Design and Concurrency Controls
+
+To guarantee system integrity, the following controls are strictly enforced:
+- Snapshot creation is label-event-only and does not recursively trigger `issue_comment` events.
+- Resolve-time, collection-time, and publication-time PR base and head commits are locked.
+- We perform immutable resolved base/head commit comparison to guarantee that the evaluated PR state matches the exact commits being merged.
+
 ## Applicability
 
 The gate applies when any of these signals identify agent work:
