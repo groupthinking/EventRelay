@@ -293,6 +293,7 @@ class SkillRegistry:
         )
         self._skills: dict[str, dict[str, Any]] = {}
         self._instances: dict[str, Any] = {}
+        self._dependencies: dict[str, Any] = {}
         self._load_skills()
 
     def _find_lock_file(self) -> str:
@@ -370,6 +371,10 @@ class SkillRegistry:
             if event_type in meta.get("triggers", [])
         ]
 
+    def register_dependency(self, name: str, dependency: Any) -> None:
+        """Register a named dependency for future skill instantiation."""
+        self._dependencies[name] = dependency
+
     def _load_skill_instance(self, skill_id: str) -> Any:
         """Dynamically import and instantiate a skill class."""
         if skill_id in self._instances:
@@ -381,6 +386,17 @@ class SkillRegistry:
 
         skill_path = meta["skillPath"]
         class_name = meta["className"]
+        required_dependencies = meta.get("dependencies", [])
+        missing_dependencies = [
+            dependency
+            for dependency in required_dependencies
+            if dependency not in self._dependencies
+        ]
+        if missing_dependencies:
+            missing = ", ".join(missing_dependencies)
+            raise ValueError(
+                f"Missing required skill dependencies for {skill_id}: {missing}"
+            )
 
         module_path = skill_path.replace("/", ".").removesuffix(".py")
         if module_path.startswith("src."):
@@ -388,7 +404,11 @@ class SkillRegistry:
 
         module = importlib.import_module(module_path)
         skill_class = getattr(module, class_name)
-        instance = skill_class()
+        dependency_kwargs = {
+            dependency: self._dependencies[dependency]
+            for dependency in required_dependencies
+        }
+        instance = skill_class(**dependency_kwargs)
         self._instances[skill_id] = instance
         return instance
 

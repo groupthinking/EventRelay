@@ -37,6 +37,12 @@ class BaseSkill(abc.ABC):
     triggers: list[str]
     required_env_vars: list[str] = []
 
+    def __init__(self, **dependencies: Any) -> None:
+        """Store injected service dependencies on the skill instance."""
+        self._dependencies = dict(dependencies)
+        for name, dependency in dependencies.items():
+            setattr(self, name, dependency)
+
     def get_env(self) -> dict[str, str]:
         """Collect required environment variables for subprocess pass-through.
 
