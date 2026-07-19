@@ -83,13 +83,16 @@ def _refs_exception_or_request(node: ast.AST) -> bool:
     return False
 
 
-def _status_is_500(call: ast.Call) -> bool:
+def _status_is_500(call: ast.Call, name: str) -> bool:
     for kw in call.keywords:
         if kw.arg == "status_code" and isinstance(kw.value, ast.Constant):
             return kw.value.value == 500
-    # positional status_code (JSONResponse(500, ...) / HTTPException(500, ...))
-    if call.args and isinstance(call.args[0], ast.Constant):
-        return call.args[0].value == 500
+    # The positional slot of ``status_code`` differs by constructor:
+    #   HTTPException(status_code, detail, ...)  -> args[0]
+    #   JSONResponse(content, status_code, ...)  -> args[1]
+    idx = 1 if name == "JSONResponse" else 0
+    if len(call.args) > idx and isinstance(call.args[idx], ast.Constant):
+        return call.args[idx].value == 500
     return False
 
 
@@ -107,7 +110,7 @@ def _iter_500_leaks(text: str):
         name = _call_name(node)
         if name not in ("HTTPException", "JSONResponse"):
             continue
-        if not _status_is_500(node):
+        if not _status_is_500(node, name):
             continue
         # Check keyword arguments
         for kw in node.keywords:
@@ -122,13 +125,11 @@ def _iter_500_leaks(text: str):
         if name == "HTTPException" and len(node.args) >= 2:
             if not _is_static_string(node.args[1]):
                 yield node.lineno, "HTTPException 500 detail is not a static string"
-        # Positional JSONResponse body: JSONResponse(<body>, status_code=500).
-        # args[0] is the content (a 500 literal there would be a nonsensical body,
-        # so skip it — that shape is only meaningful for the HTTPException form).
+        # Positional JSONResponse body: JSONResponse(<body>, status_code=500) and
+        # the fully positional JSONResponse(<body>, 500). The content is always
+        # args[0] for JSONResponse, regardless of how status_code is passed.
         if name == "JSONResponse" and node.args:
-            body = node.args[0]
-            is_status_literal = isinstance(body, ast.Constant) and body.value == 500
-            if not is_status_literal and _refs_exception_or_request(body):
+            if _refs_exception_or_request(node.args[0]):
                 yield node.lineno, "JSONResponse 500 body references the exception/request"
 
 
@@ -173,6 +174,10 @@ def test_guard_detects_every_known_leak_shape() -> None:
         'raise HTTPException(500, str(e))',
         'raise HTTPException(500, f"internal: {exc}")',
         'raise HTTPException(500, error_msg)',
+        # JSONResponse with a positional body (the real ml_serve leak shape) —
+        # status via keyword and fully positional (body=args[0], status=args[1]).
+        'return JSONResponse({"error": str(exc)}, status_code=500)',
+        'return JSONResponse({"error": str(exc)}, 500)',
     ]
     for sample in leaky_samples:
         assert list(_iter_500_leaks(sample)), f"scanner missed a real leak: {sample}"
