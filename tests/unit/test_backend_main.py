@@ -590,23 +590,64 @@ class TestExceptionHandlers:
         response = await main_module.global_exception_handler(mock_req, RuntimeError("crash"))
         assert response.status_code == 500
 
-    async def test_global_exception_handler_includes_error_type(self):
+    async def test_global_exception_handler_does_not_leak_exception_type(self):
+        """CWE-209: the 500 body must not disclose the exception class name."""
         import json as _json
 
         mock_req = MagicMock()
         mock_req.url = "http://test/api"
         response = await main_module.global_exception_handler(mock_req, RuntimeError("crash"))
         body = _json.loads(response.body)
-        assert body["error_type"] == "RuntimeError"
+        assert "error_type" not in body
+        assert "RuntimeError" not in response.body.decode()
 
-    async def test_global_exception_handler_includes_version(self):
+    async def test_global_exception_handler_body_is_static(self):
+        """CWE-209: the 500 body must not echo the exception message or request URL."""
         import json as _json
 
         mock_req = MagicMock()
-        mock_req.url = "http://test/api"
-        response = await main_module.global_exception_handler(mock_req, Exception("e"))
+        mock_req.url = "http://test/secret-internal-path?token=abc"
+        response = await main_module.global_exception_handler(
+            mock_req, Exception("db password is hunter2")
+        )
         body = _json.loads(response.body)
-        assert body["version"] == "2.0.0"
+        assert body["error"] == "Internal server error"
+        assert body["detail"] == "Internal server error"
+        raw = response.body.decode()
+        assert "hunter2" not in raw
+        assert "secret-internal-path" not in raw
+
+    async def test_global_exception_handler_log_omits_query_string(self):
+        """CWE-209: the server-side log line must record only the route path and
+        method, never the full URL/query string (which can carry secrets such as
+        ``?token=...`` that would then persist in centralized/Cloud Run logs).
+        Guards against a regression to ``str(request.url)`` while keeping
+        ``exc_info=True`` so the traceback is still captured."""
+        from unittest.mock import patch
+
+        class _URL:
+            path = "/api/process"
+
+            def __str__(self):  # what str(request.url) would leak
+                return "http://test/api/process?token=SECRET123"
+
+        class _Req:
+            url = _URL()
+            method = "POST"
+
+        with patch.object(main_module, "logger") as mock_logger:
+            response = await main_module.global_exception_handler(
+                _Req(), Exception("boom")
+            )
+
+        assert response.status_code == 500
+        mock_logger.error.assert_called_once()
+        args, kwargs = mock_logger.error.call_args
+        logged = " ".join(str(a) for a in args)
+        assert "SECRET123" not in logged
+        assert "token=" not in logged
+        assert "/api/process" in logged  # the bare path is safe to log
+        assert kwargs.get("exc_info") is True
 
     async def test_global_exception_handler_request_without_url(self):
         """Handler should not crash if request has no .url attribute."""

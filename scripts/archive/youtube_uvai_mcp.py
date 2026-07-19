@@ -5,6 +5,7 @@ Integrates with shared state coordination system and provides comprehensive vide
 """
 
 import asyncio
+import importlib.util
 import json
 import logging
 import os
@@ -30,12 +31,11 @@ from mcp.types import (
 
 # Video processing imports
 try:
-    import yt_dlp
     from googleapiclient.discovery import build
     from googleapiclient.errors import HttpError
     from youtube_transcript_api import TranscriptsRetrievalError, YouTubeTranscriptApi
 
-    HAS_VIDEO_DEPS = True
+    HAS_VIDEO_DEPS = importlib.util.find_spec("yt_dlp") is not None
 except ImportError:
     HAS_VIDEO_DEPS = False
     logging.warning(
@@ -45,10 +45,10 @@ except ImportError:
 # AI/ML imports
 try:
     import openai
-    import torch
-    from transformers import pipeline
 
-    HAS_AI_DEPS = True
+    _has_torch = importlib.util.find_spec("torch") is not None
+    _has_transformers = importlib.util.find_spec("transformers") is not None
+    HAS_AI_DEPS = _has_torch and _has_transformers
 except ImportError:
     HAS_AI_DEPS = False
     logging.warning("AI dependencies not installed. Some features will be unavailable.")
@@ -249,13 +249,14 @@ class EnhancedYouTubeProcessor:
         self, video_id: str, result_type: str
     ) -> Optional[dict[str, Any]]:
         """Get cached processing result"""
-        if result_type not in {
+        allowed_types = {
             "metadata",
             "transcript_data",
             "content_analysis",
             "tutorial_steps",
-        }:
-            raise ValueError(f"Invalid result_type: {result_type}")
+        }
+        if result_type not in allowed_types:
+            raise ValueError(f"Invalid result type: {result_type}")
 
         conn = sqlite3.connect(self.cache_db_path)
         cursor = conn.cursor()
@@ -283,13 +284,14 @@ class EnhancedYouTubeProcessor:
         self, video_id: str, result_type: str, data: dict[str, Any]
     ) -> None:
         """Cache processing result"""
-        if result_type not in {
+        allowed_types = {
             "metadata",
             "transcript_data",
             "content_analysis",
             "tutorial_steps",
-        }:
-            raise ValueError(f"Invalid result_type: {result_type}")
+        }
+        if result_type not in allowed_types:
+            raise ValueError(f"Invalid result type: {result_type}")
 
         conn = sqlite3.connect(self.cache_db_path)
         cursor = conn.cursor()

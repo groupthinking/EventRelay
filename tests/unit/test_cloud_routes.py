@@ -1300,7 +1300,7 @@ class TestReportingRoutes:
         assert "looker.example.com" in data["embed_url"]
 
     def test_generate_dashboard_url_service_error(self):
-        """Service error propagates as HTTP 500."""
+        """Service error propagates as a sanitized HTTP 500 (no internal detail leaked)."""
         mock_service = MagicMock()
         mock_service.get_tenant_dashboard_url = MagicMock(
             side_effect=Exception("Looker unavailable")
@@ -1316,7 +1316,12 @@ class TestReportingRoutes:
             }
         )
         assert response.status_code == 500
-        assert response.json()["detail"] == "Internal server error"
+        # The handler sanitizes 500 bodies to a static string (CWE-209 hardening);
+        # the full exception is logged server-side, never returned to the client.
+        detail = response.json()["detail"]
+        assert detail == "Internal server error"
+        assert "Looker unavailable" not in detail
+        assert "Failed to generate" not in detail
 
     def test_generate_dashboard_url_missing_fields(self):
         """Missing required fields return 422."""
@@ -1330,3 +1335,130 @@ class TestReportingRoutes:
                 # missing tenant_id, user_id, user_email
             })
         assert response.status_code == 422
+
+    # -------- CWE-209: additional coverage for sanitized 500 detail --------
+
+    @pytest.mark.parametrize(
+        "exc",
+        [
+            Exception("Looker unavailable"),
+            ValueError("db_password=super-secret-123"),
+            KeyError("client_secret"),
+            RuntimeError("Traceback (most recent call last): connection to 10.0.0.5:5432 refused"),
+            Exception(""),
+        ],
+        ids=["generic", "value_error_with_secret", "key_error", "runtime_error_with_internals", "empty_message"],
+    )
+    def test_generate_dashboard_url_error_detail_always_sanitized(self, exc):
+        """Regardless of exception type or message content, the 500 detail
+        returned to the client must always be the static generic string and
+        must never contain any fragment of the original exception text."""
+        mock_service = MagicMock()
+        mock_service.get_tenant_dashboard_url = MagicMock(side_effect=exc)
+
+        response = self._client_with_looker(mock_service).post(
+            "/api/v1/reporting/embed/dashboard",
+            json={
+                "dashboard_id": "cost_usage",
+                "tenant_id": "tenant-xyz",
+                "user_id": "user-001",
+                "user_email": "bob@example.com",
+            }
+        )
+        assert response.status_code == 500
+        body = response.json()
+        assert body == {"detail": "Internal server error"}
+        exc_text = str(exc)
+        if exc_text:
+            assert exc_text not in body["detail"]
+
+    def test_generate_dashboard_url_error_logs_original_exception(self):
+        """The original exception must still be logged server-side (with
+        traceback) even though it is withheld from the HTTP response, so
+        operators retain the ability to debug failures."""
+        mock_service = MagicMock()
+        mock_service.get_tenant_dashboard_url = MagicMock(
+            side_effect=Exception("Looker unavailable")
+        )
+
+        import youtube_extension.backend.api.reporting_routes as _reporting_mod
+
+        with patch.object(_reporting_mod, "logger") as mock_logger:
+            response = self._client_with_looker(mock_service).post(
+                "/api/v1/reporting/embed/dashboard",
+                json={
+                    "dashboard_id": "cost_usage",
+                    "tenant_id": "tenant-xyz",
+                    "user_id": "user-001",
+                    "user_email": "bob@example.com",
+                }
+            )
+
+        assert response.status_code == 500
+        assert response.json()["detail"] == "Internal server error"
+        mock_logger.error.assert_called_once()
+        args, kwargs = mock_logger.error.call_args
+        assert "Looker unavailable" in args[0]
+        assert kwargs.get("exc_info") is True
+
+    def test_generate_dashboard_url_error_response_has_no_extra_keys(self):
+        """The sanitized error body must only expose the `detail` field and
+        must not leak `embed_url` or any other internal data on failure."""
+        mock_service = MagicMock()
+        mock_service.get_tenant_dashboard_url = MagicMock(
+            side_effect=Exception("Looker unavailable")
+        )
+
+        response = self._client_with_looker(mock_service).post(
+            "/api/v1/reporting/embed/dashboard",
+            json={
+                "dashboard_id": "cost_usage",
+                "tenant_id": "tenant-xyz",
+                "user_id": "user-001",
+                "user_email": "bob@example.com",
+            }
+        )
+        assert response.status_code == 500
+        assert set(response.json().keys()) == {"detail"}
+
+    def test_generate_dashboard_url_success_after_prior_error(self):
+        """A subsequent successful call through the same client is unaffected by
+        a prior failure - the sanitized error path leaves no lingering state."""
+        mock_service = MagicMock()
+        mock_service.get_tenant_dashboard_url = MagicMock(
+            side_effect=[
+                Exception("Looker unavailable"),
+                "https://looker.example.com/embed/dashboards/2?sig=def",
+            ]
+        )
+
+        client = self._client_with_looker(mock_service)
+
+        # First request: the service raises, so we expect a sanitized 500.
+        error_response = client.post(
+            "/api/v1/reporting/embed/dashboard",
+            json={
+                "dashboard_id": "cost_usage",
+                "tenant_id": "tenant-xyz",
+                "user_id": "user-001",
+                "user_email": "bob@example.com",
+            }
+        )
+        assert error_response.status_code == 500
+        assert error_response.json() == {"detail": "Internal server error"}
+
+        # Second request: the service now returns a URL - success must not be
+        # blocked by any state left over from the previous failure.
+        ok_response = client.post(
+            "/api/v1/reporting/embed/dashboard",
+            json={
+                "dashboard_id": "video_analytics",
+                "tenant_id": "tenant-xyz",
+                "user_id": "user-002",
+                "user_email": "carol@example.com",
+            }
+        )
+        assert ok_response.status_code == 200
+        assert ok_response.json() == {
+            "embed_url": "https://looker.example.com/embed/dashboards/2?sig=def"
+        }

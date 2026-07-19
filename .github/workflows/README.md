@@ -22,11 +22,12 @@ workflow; this README is the index.
 | Phase Goal Tracker | `phase-goal-tracker.yml` | issue opened/edited/reopened; manual | Track phase checklist progress, comment status, auto-close when complete |
 | Bulk Issue Processor | `bulk-issue-processor.yml` | manual | Bulk label / summarize / close-stale across many issues |
 | Close stale issues | `stale.yml` | daily (00:00 UTC) | Mark and close stale issues and PRs |
-| Branch Cleanup | `branch-cleanup.yml` | manual | Gated archive-then-delete of branches (dry-run by default) |
+| Branch Cleanup | `branch-cleanup.yml` | manual; push sentinel on `claude/branch-cleanup-*` | Gated archive-then-delete of branches (dry-run by default); push `[restore-branch:<branch>]` sentinel to restore a deleted branch from its archive tag |
 | E2E Tests | `e2e-tests.yml` | push / PR to `main` | Run Vitest E2E pipeline tests against production or the PR's Vercel preview deployment and report results on the PR |
 | Autonomous Video Processing | `autonomous-video-processing.yml` | manual | Batch-process YouTube videos by category (matrix) |
 | Real Video Processing (Cloud) | `real-processing.yml` | manual | Process a single video: transcript and/or AI analysis |
-| Deploy to Google Cloud Run | `deploy-cloud-run.yml` | manual | Build, push, and deploy the API image to Cloud Run |
+| API-cost PostgreSQL | `api-cost-postgres.yml` | push / PR when substrate changes; manual | Exercise fresh, upgrade-from-002, and round-trip migrations plus runtime-role integration tests on PostgreSQL 16 |
+| Deploy to Google Cloud Run | `deploy-cloud-run.yml` | manual | Run migrations, deploy the bounded delivery-disabled worker, then promote a tested API candidate |
 | Emergency Stop | `emergency-stop.yml` | manual (typed confirmation) | Operational kill-switch announcement for running automation |
 
 ## Key Workflows
@@ -71,10 +72,12 @@ Generates pytest coverage and uploads lcov to Qlty.
 
 ### Deploy to Google Cloud Run — `deploy-cloud-run.yml`
 
-The production deployment path. Manual (`workflow_dispatch`) only — it was
-converted away from automatic triggers to avoid failing runs when Google Cloud
-auth inputs are absent. Re-enable automatic deploys by restoring the `on:`
-triggers after configuring `GCP_SA_KEY` / Workload Identity Federation.
+The only backend deployment path. It remains manual (`workflow_dispatch`) so a
+protected-environment reviewer can approve the exact tested SHA. The workflow
+requires all three PostgreSQL migration checks, authenticates only through
+Workload Identity Federation, pins numeric secret versions, migrates before
+either runtime, promotes the API only after candidate readiness succeeds, and
+reuses the latest successful staging run's exact image digest in production.
 
 ## Adding More Workflows
 
@@ -115,3 +118,12 @@ A full audit of this directory was performed (see
 - [CodeQL Action](https://github.com/github/codeql-action)
 - [Qlty Coverage Action](https://github.com/qltysh/qlty-action)
 - [pytest-cov Documentation](https://pytest-cov.readthedocs.io/)
+
+
+| Agent completion enforcement | `agent-completion-enforcement.yml` | `pull_request_target`; manual | Creates the independent, head-bound `Agent completion enforcement` Check from protected default-branch code. |
+
+## Agent-completion enforcement
+
+`pr-checks.yml` retains the advisory `agent-completion/truth-gate/pr-<number>` status; it is never required. `agent-completion-enforcement.yml` runs protected default-branch code, does not execute PR code, and creates the separate **Agent completion enforcement** Check directly on the PR head SHA. It accepts only an exact-head, machine-readable report published by the configured dedicated GitHub App. Missing, stale, edited/deleted, ambiguous, or untrusted evidence fails closed.
+
+Before enabling the rule, provision `.github/agent-lock/trusted-publishers.json` through protected review with the trusted App and actor allowlists. Empty lists intentionally block. Configure the repository ruleset to require **Agent completion enforcement**, one independent approval, and resolved conversations. Do not require `agent-completion/truth-gate`.

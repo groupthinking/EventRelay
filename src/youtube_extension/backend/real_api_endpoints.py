@@ -171,6 +171,7 @@ def setup_real_api_endpoints(app: FastAPI):
             return result
 
         except HTTPException:
+            # Preserve explicit 4xx responses (e.g. the 400 batch-size guard above).
             raise
         except Exception as e:
             logger.error(f"Unhandled error in batch_process_videos: {e}", exc_info=True)
@@ -431,6 +432,7 @@ def setup_real_api_endpoints(app: FastAPI):
             }
 
         except HTTPException:
+            # Preserve explicit 4xx responses (e.g. the 400 max-results guard above).
             raise
         except Exception as e:
             logger.error(f"Unhandled error in search_youtube_videos: {e}", exc_info=True)

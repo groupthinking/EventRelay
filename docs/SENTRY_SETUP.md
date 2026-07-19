@@ -156,13 +156,11 @@ VITE_RELEASE=${GIT_COMMIT_SHA}
 
 ### Backend Production Config
 
-Set in Cloud Run environment variables:
-```bash
-gcloud run deploy eventrelay-backend \
-  --update-env-vars SENTRY_DSN=https://YOUR_BACKEND_DSN@sentry.io/PROJECT_ID,\
-ENVIRONMENT=production,\
-APP_VERSION=${GIT_COMMIT_SHA}
-```
+Add the Sentry secret/environment mapping to the reviewed protected workflow,
+then release the exact tested SHA through
+`.github/workflows/deploy-cloud-run.yml`. Do not update the Cloud Run service
+directly; a direct revision would bypass database, identity, smoke and rollback
+gates.
 
 ---
 

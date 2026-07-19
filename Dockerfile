@@ -68,6 +68,11 @@ COPY --from=builder /app/apps/web/src/dataconnect-generated ./apps/web/src/datac
 # Copy application code with correct ownership
 COPY --chown=appuser:appuser . .
 
+# Imported API services persist local diagnostic files under ./logs. Prepare
+# that ephemeral path before dropping privileges so application import cannot
+# fail on Cloud Run's non-root runtime.
+RUN mkdir -p /app/logs && chown appuser:appuser /app/logs
+
 # Environment variables
 ENV PORT=8080
 ENV HOST=0.0.0.0

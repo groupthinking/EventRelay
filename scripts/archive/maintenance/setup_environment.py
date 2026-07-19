@@ -13,7 +13,7 @@ def run_command(command, description):
     """Run a command and handle errors"""
     print(f"🔧 {description}...")
     try:
-        result = subprocess.run(command, shell=True, check=True, capture_output=True, text=True)
+        subprocess.run(command, shell=False, check=True, capture_output=True, text=True)
         print(f"   ✅ {description} completed successfully")
         return True
     except subprocess.CalledProcessError as e:
@@ -24,27 +24,37 @@ def run_command(command, description):
             print(f"   STDERR: {e.stderr}")
         return False
 
+
 def check_python_version():
     """Check if Python version is compatible"""
     print("🐍 Checking Python version...")
     version = sys.version_info
     if version.major < 3 or (version.major == 3 and version.minor < 8):
-        print(f"   ❌ Python {version.major}.{version.minor} detected. Python 3.8+ required.")
+        print(
+            f"   ❌ Python {version.major}.{version.minor} detected. Python 3.8+ required."
+        )
         return False
     else:
-        print(f"   ✅ Python {version.major}.{version.minor}.{version.micro} - Compatible")
+        print(
+            f"   ✅ Python {version.major}.{version.minor}.{version.micro} - Compatible"
+        )
         return True
+
 
 def install_dependencies():
     """Install required dependencies via pyproject extras"""
     print("\n📦 Installing dependencies...")
     # Prefer editable install with extras
-    success = run_command("pip install -e .[youtube,ml,postgres]", "Installing project with extras")
+    success = run_command(
+        [sys.executable, "-m", "pip", "install", "-e", ".[youtube,ml,postgres]"],
+        "Installing project with extras",
+    )
     if not success:
         print("   💡 Try running: pip install --upgrade pip")
         print("   💡 Then run: pip install -e .[youtube,ml,postgres]")
         return False
     return True
+
 
 def create_env_file():
     """Create .env file template"""
@@ -75,13 +85,13 @@ MIN_PROCESSING_TIME=0.5
 RATE_LIMIT_DELAY=1.0
 """
 
-    env_file = Path('.env')
+    env_file = Path(".env")
     if env_file.exists():
         print("   ⚠️ .env file already exists")
         return True
 
     try:
-        with open(env_file, 'w') as f:
+        with open(env_file, "w") as f:
             f.write(env_content)
         print("   ✅ .env file created")
         print("   📝 Please edit .env file and add your API keys")
@@ -90,15 +100,12 @@ RATE_LIMIT_DELAY=1.0
         print(f"   ❌ Failed to create .env file: {e}")
         return False
 
+
 def create_directories():
     """Create necessary directories"""
     print("\n📁 Creating directories...")
 
-    directories = [
-        'batch_test_results',
-        'gdrive_results',
-        'logs'
-    ]
+    directories = ["batch_test_results", "gdrive_results", "logs"]
 
     for directory in directories:
         dir_path = Path(directory)
@@ -108,18 +115,12 @@ def create_directories():
         else:
             print(f"   ⚠️ {directory}/ already exists")
 
+
 def test_imports():
     """Test if key modules can be imported"""
     print("\n🧪 Testing imports...")
 
-    modules = [
-        'asyncio',
-        'json',
-        'logging',
-        'pathlib',
-        'typing',
-        'datetime'
-    ]
+    modules = ["asyncio", "json", "logging", "pathlib", "typing", "datetime"]
 
     failed_imports = []
     for module in modules:
@@ -135,6 +136,7 @@ def test_imports():
         return False
 
     return True
+
 
 def main():
     """Main setup function"""
@@ -171,7 +173,9 @@ def main():
     print("   3. Run: python run_comprehensive_test.py --mode quick")
     print("   4. Run: python run_comprehensive_test.py --mode full")
     print("\n🔑 Required API Keys:")
-    print("   • YouTube Data API v3: https://console.developers.google.com/apis/credentials")
+    print(
+        "   • YouTube Data API v3: https://console.developers.google.com/apis/credentials"
+    )
     print("   • OpenAI API: https://platform.openai.com/api-keys")
     print("\n📚 Documentation:")
     print("   • README.md - Project overview")
@@ -179,6 +183,7 @@ def main():
     print("   • test_100_technical_videos.py - Batch testing")
 
     return True
+
 
 if __name__ == "__main__":
     success = main()

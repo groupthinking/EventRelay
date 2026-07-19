@@ -27,6 +27,11 @@ const PUBLIC_API_EXACT = new Set([
   // (or anonymous), not a NextAuth session; it only opens a Stripe checkout, so
   // it is the same pre-payment surface class as /api/billing/checkout.
   '/api/billing/renew',
+  // Core pipeline SSE endpoint — the primary public entry point for the
+  // EventRelay workflow (YouTube link → transcript → events → agents).
+  // Must be accessible without a session so anonymous users can run the
+  // pipeline; the route handler applies its own rate limiting via proxy.ts.
+  '/api/pipeline/stream',
 ]);
 
 /** App routes that require a session when NEXTAUTH_SECRET is configured. */
