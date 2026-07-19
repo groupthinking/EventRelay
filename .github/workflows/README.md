@@ -115,3 +115,12 @@ A full audit of this directory was performed (see
 - [CodeQL Action](https://github.com/github/codeql-action)
 - [Qlty Coverage Action](https://github.com/qltysh/qlty-action)
 - [pytest-cov Documentation](https://pytest-cov.readthedocs.io/)
+
+
+| Agent completion enforcement | `agent-completion-enforcement.yml` | `pull_request_target`; manual | Creates the independent, head-bound `Agent completion enforcement` Check from protected default-branch code. |
+
+## Agent-completion enforcement
+
+`pr-checks.yml` retains the advisory `agent-completion/truth-gate/pr-<number>` status; it is never required. `agent-completion-enforcement.yml` runs protected default-branch code, does not execute PR code, and creates the separate **Agent completion enforcement** Check directly on the PR head SHA. It accepts only an exact-head, machine-readable report published by the configured dedicated GitHub App. Missing, stale, edited/deleted, ambiguous, or untrusted evidence fails closed.
+
+Before enabling the rule, provision `.github/agent-lock/trusted-publishers.json` through protected review with the trusted App and actor allowlists. Empty lists intentionally block. Configure the repository ruleset to require **Agent completion enforcement**, one independent approval, and resolved conversations. Do not require `agent-completion/truth-gate`.
