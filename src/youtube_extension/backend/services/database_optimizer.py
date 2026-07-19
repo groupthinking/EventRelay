@@ -439,7 +439,7 @@ class QueryOptimizer:
 
                     coroutines = [
                         self.execute_query(query, params, use_cache=True)
-                        for _, query, params in group_queries
+                        for original_index, query, params in group_queries
                     ]
                     group_results = await asyncio.gather(*coroutines)
                     for (original_index, _, _), result in zip(group_queries, group_results):

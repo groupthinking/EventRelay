@@ -47,7 +47,7 @@ async function checkRateLimit(ip: string): Promise<boolean> {
       const pipelineRes = await fetch(`${creds.url}/pipeline`, {
         method: 'POST',
         headers: {
-          Authorization: `******
+          Authorization: 'Bearer ' + creds.token,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify([
@@ -61,8 +61,8 @@ async function checkRateLimit(ip: string): Promise<boolean> {
         const count: number = results?.[0]?.result ?? 1;
         return count <= RATE_LIMIT_MAX;
       }
-    } catch {
-      // Fall through to in-memory on Upstash error
+    } catch (err) {
+      console.error('[video/generate] Upstash rate-limit error, falling back to in-memory:', err);
     }
   }
   return checkRateLimitInMemory(ip);

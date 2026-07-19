@@ -22,6 +22,8 @@ vi.mock('ai', () => ({
 import { POST } from '@/app/api/video/generate/route';
 import { experimental_generateVideo } from 'ai';
 
+type VideoResult = Awaited<ReturnType<typeof experimental_generateVideo>>;
+
 /** Build a POST request with a per-test client IP so the module-scoped rate
  *  limiter doesn't bleed between tests. Pass `raw` to send a non-JSON body. */
 function postReq(body: unknown, ip = '10.0.0.1', raw = false) {
@@ -81,7 +83,7 @@ describe('POST /api/video/generate', () => {
   });
 
   it('enforces the per-IP rate limit (4th request within window → 429)', async () => {
-    vi.mocked(experimental_generateVideo).mockResolvedValue(makeVideoResult() as never);
+    vi.mocked(experimental_generateVideo).mockResolvedValue(makeVideoResult() as unknown as VideoResult);
     const ip = '10.9.9.9';
     for (let i = 0; i < 3; i++) {
       const ok = await POST(postReq(validBody, ip));
@@ -93,7 +95,7 @@ describe('POST /api/video/generate', () => {
 
   it('returns 200 with video bytes on success', async () => {
     // 'QkFTRTY0' is base64 for 'BASE64'
-    vi.mocked(experimental_generateVideo).mockResolvedValue(makeVideoResult('QkFTRTY0') as never);
+    vi.mocked(experimental_generateVideo).mockResolvedValue(makeVideoResult('QkFTRTY0') as unknown as VideoResult);
     const res = await POST(postReq(validBody, '10.0.0.10'));
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toBe('video/mp4');
@@ -115,7 +117,7 @@ describe('POST /api/video/generate', () => {
   });
 
   it('calls experimental_generateVideo with correct model and prompt', async () => {
-    vi.mocked(experimental_generateVideo).mockResolvedValue(makeVideoResult() as never);
+    vi.mocked(experimental_generateVideo).mockResolvedValue(makeVideoResult() as unknown as VideoResult);
     await POST(postReq(validBody, '10.0.0.13'));
     expect(experimental_generateVideo).toHaveBeenCalledWith(
       expect.objectContaining({
