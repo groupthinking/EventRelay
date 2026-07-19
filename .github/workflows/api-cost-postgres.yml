@@ -1,0 +1,187 @@
+name: API cost PostgreSQL
+
+on:
+  pull_request:
+    paths:
+      - Dockerfile
+      - alembic.ini
+      - pyproject.toml
+      - requirements.txt
+      - src/youtube_extension/main.py
+      - src/youtube_extension/backend/api_cost_migrate.py
+      - src/youtube_extension/backend/api_cost_worker.py
+      - src/youtube_extension/backend/config/database.py
+      - src/youtube_extension/backend/middleware/api_key_auth.py
+      - src/youtube_extension/backend/migrations/**
+      - src/youtube_extension/backend/models/api_cost.py
+      - src/youtube_extension/backend/services/api_cost_monitor.py
+      - tests/integration/test_api_cost_postgres.py
+      - tests/unit/test_api_cost_*.py
+      - .github/workflows/api-cost-postgres.yml
+      - .github/workflows/deploy-cloud-run.yml
+      - infrastructure/cloudrun/**
+      - scripts/deployment/deploy-cloud-run.sh
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  migration-matrix:
+    name: PostgreSQL migration matrix (${{ matrix.scenario }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario:
+          - fresh
+          - from-002
+          - round-trip
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      ENVIRONMENT: test
+      API_COST_PERSISTENCE_ENABLED: "true"
+      API_COST_RUNTIME_DB_ROLE: api_cost_runtime
+      DATABASE_URL: postgresql+psycopg://api_cost_ddl:ddl_ci@localhost:5432/eventrelay
+      API_COST_TEST_RUNTIME_DATABASE_URL: postgresql+psycopg://api_cost_app:runtime_ci@localhost:5432/eventrelay
+      API_COST_TEST_ROTATED_RUNTIME_DATABASE_URL: postgresql+psycopg://api_cost_app_rotated:rotated_ci@localhost:5432/eventrelay
+      API_COST_TEST_UNSAFE_RUNTIME_DATABASE_URL: postgresql+psycopg://api_cost_app_unsafe:unsafe_ci@localhost:5432/eventrelay
+      API_COST_TEST_ADMIN_DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/eventrelay
+      API_COST_TEST_DISPOSABLE_DATABASE: "true"
+      PGPASSWORD: postgres
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Verify exact checked-out SHA
+        run: test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install focused migration and runtime dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install \
+            'alembic>=1.12' \
+            'sqlalchemy>=2.0' \
+            'psycopg[binary]>=3.2,<4' \
+            'pydantic>=2.5' \
+            'pydantic-settings>=2.1' \
+            'aiohttp>=3.8' \
+            'fastapi>=0.110' \
+            'httpx>=0.25' \
+            'PyYAML>=6' \
+            'slowapi>=0.1.8' \
+            'uvicorn>=0.24' \
+            'pytest>=7.4' \
+            'pytest-asyncio>=0.21' \
+            'pytest-cov>=4.1'
+
+      - name: Provision separate DDL, runtime group, and rotating logins
+        run: |
+          set -euo pipefail
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE ROLE api_cost_ddl LOGIN PASSWORD 'ddl_ci'
+            NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION;
+          CREATE ROLE api_cost_runtime NOLOGIN
+            NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION;
+          CREATE ROLE api_cost_app LOGIN PASSWORD 'runtime_ci'
+            NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION
+            IN ROLE api_cost_runtime;
+          CREATE ROLE api_cost_app_rotated LOGIN PASSWORD 'rotated_ci'
+            NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION
+            IN ROLE api_cost_runtime;
+          CREATE ROLE api_cost_app_unsafe LOGIN PASSWORD 'unsafe_ci'
+            NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION
+            IN ROLE api_cost_runtime;
+          CREATE DATABASE eventrelay OWNER api_cost_ddl;
+          SQL
+
+      - name: Exercise migration starting state
+        run: |
+          set -euo pipefail
+          case "${{ matrix.scenario }}" in
+            fresh)
+              PYTHONPATH=src alembic upgrade head
+              PYTHONPATH=src python -m youtube_extension.backend.api_cost_migrate
+              PYTHONPATH=src python -m youtube_extension.backend.api_cost_migrate
+              ;;
+            from-002)
+              PYTHONPATH=src alembic upgrade 002_secure_alembic
+              PYTHONPATH=src python -m youtube_extension.backend.api_cost_migrate
+              PYTHONPATH=src alembic upgrade head
+              ;;
+            round-trip)
+              PYTHONPATH=src python -m youtube_extension.backend.api_cost_migrate
+              PYTHONPATH=src alembic downgrade 002_secure_alembic
+              PYTHONPATH=src alembic upgrade head
+              PYTHONPATH=src python -m youtube_extension.backend.api_cost_migrate
+              ;;
+            *)
+              exit 2
+              ;;
+          esac
+
+      - name: Verify head, model drift, runtime grants, and login rotation
+        run: |
+          set -euo pipefail
+          PYTHONPATH=src alembic current
+          PYTHONPATH=src alembic heads
+          PYTHONPATH=src alembic check
+          PYTHONPATH=src python -m pytest \
+            tests/integration/test_api_cost_postgres.py \
+            --no-cov -q
+
+      # The production deploy gate requires every matrix check for this SHA.
+      # Keeping the non-PostgreSQL gates inside the required `fresh` check makes
+      # those checks part of the same exact-SHA decision without building the
+      # production container three times.
+      - name: Run focused runtime, readiness, and deployment unit gates
+        if: matrix.scenario == 'fresh'
+        run: |
+          PYTHONPATH=src python -m pytest \
+            tests/unit/test_api_cost_database_substrate.py \
+            tests/unit/test_api_cost_schema.py \
+            tests/unit/test_api_cost_migrate.py \
+            tests/unit/test_api_cost_worker.py \
+            tests/unit/test_api_cost_main_readiness.py \
+            tests/unit/test_api_cost_deployment.py \
+            tests/unit/test_api_key_auth.py \
+            --no-cov -q
+
+      - name: Build exact-SHA container and smoke production imports
+        if: matrix.scenario == 'fresh'
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          image="eventrelay-api-cost:${GITHUB_SHA}"
+          docker build --pull --file Dockerfile --tag "${image}" .
+          docker run --rm --entrypoint python \
+            --env ENVIRONMENT=production \
+            --env API_COST_TRACKING=false \
+            --env API_COST_DELIVERY_ENABLED=false \
+            "${image}" \
+            -c "from youtube_extension import main; from youtube_extension.backend.api_cost_worker import WorkerConfig; from youtube_extension.backend.api_cost_migrate import normalize_database_url; assert main._API_V1_ROUTER_LOADED; assert any(getattr(route, 'path', None) == '/readyz' for route in main.app.routes); assert WorkerConfig().delivery_enabled is False; assert normalize_database_url('postgres://u:p@db/app').startswith('postgresql+psycopg://')"

@@ -26,7 +26,8 @@ workflow; this README is the index.
 | E2E Tests | `e2e-tests.yml` | push / PR to `main` | Run Vitest E2E pipeline tests against production or the PR's Vercel preview deployment and report results on the PR |
 | Autonomous Video Processing | `autonomous-video-processing.yml` | manual | Batch-process YouTube videos by category (matrix) |
 | Real Video Processing (Cloud) | `real-processing.yml` | manual | Process a single video: transcript and/or AI analysis |
-| Deploy to Google Cloud Run | `deploy-cloud-run.yml` | manual | Build, push, and deploy the API image to Cloud Run |
+| API-cost PostgreSQL | `api-cost-postgres.yml` | push / PR when substrate changes; manual | Exercise fresh, upgrade-from-002, and round-trip migrations plus runtime-role integration tests on PostgreSQL 16 |
+| Deploy to Google Cloud Run | `deploy-cloud-run.yml` | manual | Run migrations, deploy the bounded delivery-disabled worker, then promote a tested API candidate |
 | Emergency Stop | `emergency-stop.yml` | manual (typed confirmation) | Operational kill-switch announcement for running automation |
 
 ## Key Workflows
@@ -71,10 +72,12 @@ Generates pytest coverage and uploads lcov to Qlty.
 
 ### Deploy to Google Cloud Run — `deploy-cloud-run.yml`
 
-The production deployment path. Manual (`workflow_dispatch`) only — it was
-converted away from automatic triggers to avoid failing runs when Google Cloud
-auth inputs are absent. Re-enable automatic deploys by restoring the `on:`
-triggers after configuring `GCP_SA_KEY` / Workload Identity Federation.
+The only backend deployment path. It remains manual (`workflow_dispatch`) so a
+protected-environment reviewer can approve the exact tested SHA. The workflow
+requires all three PostgreSQL migration checks, authenticates only through
+Workload Identity Federation, pins numeric secret versions, migrates before
+either runtime, promotes the API only after candidate readiness succeeds, and
+reuses the latest successful staging run's exact image digest in production.
 
 ## Adding More Workflows
 

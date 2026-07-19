@@ -12,6 +12,11 @@ This directory contains comprehensive guides for deploying and managing EventRel
   - Total time: 20 minutes + DNS propagation
 
 ### 📚 Complete Guides
+- **[API_COST_POSTGRESQL_RUNBOOK.md](./API_COST_POSTGRESQL_RUNBOOK.md)** - Canonical Cloud Run backend runbook
+  - Shared PostgreSQL and distinct DDL/DML roles
+  - Dedicated disabled worker and migration-first rollout
+  - WIF, immutable secrets, health gates and rollback
+
 - **[VERCEL_PRODUCTION_RUNBOOK.md](./VERCEL_PRODUCTION_RUNBOOK.md)** - Current UVAI launch-readiness runbook
   - Vercel project and production domains
   - Incident response and rollback path
@@ -100,16 +105,9 @@ git push origin main
 # Go to: Actions → Deploy to Google Cloud Run → Run workflow
 ```
 
-### Manual Deployments
-
-```bash
-# Frontend
-cd apps/web
-vercel --prod
-
-# Backend
-./infrastructure/cloudrun/deploy.sh
-```
+There is no supported manual backend deployment. Direct deploy entrypoints are
+retired because they bypass database and rollout gates. Use the protected
+workflow and follow `API_COST_POSTGRESQL_RUNBOOK.md`.
 
 ## Environment Setup
 
@@ -142,6 +140,7 @@ vercel --prod
 3. Trigger workflow: `.github/workflows/deploy-cloud-run.yml`
 4. Monitor deployment in Cloud Console
 5. Verify health check: `curl https://api.uvai.io/api/v1/health`
+6. Verify database readiness: `curl https://api.uvai.io/readyz`
 
 ### Configure Redirects
 - **Vercel**: Edit `apps/web/vercel.json` and `apps/web/next.config.js`

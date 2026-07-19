@@ -7,8 +7,6 @@ import types
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
 from typer.testing import CliRunner
@@ -21,6 +19,7 @@ runner = CliRunner()
 # ---------------------------------------------------------------------------
 # callback / root invocation
 # ---------------------------------------------------------------------------
+
 
 class TestCallback:
     def test_help_flag_exits_zero(self):
@@ -40,6 +39,7 @@ class TestCallback:
 # main command
 # ---------------------------------------------------------------------------
 
+
 class TestMainCommand:
     def test_main_prints_header(self):
         result = runner.invoke(app, ["main"])
@@ -54,6 +54,7 @@ class TestMainCommand:
 # ---------------------------------------------------------------------------
 # serve command
 # ---------------------------------------------------------------------------
+
 
 class TestServeCommand:
     def test_serve_default_options(self):
@@ -81,6 +82,7 @@ class TestServeCommand:
 
     def test_serve_passes_reload_flag_by_default(self):
         captured = {}
+
         def fake_run(cmd, **kwargs):
             captured["cmd"] = cmd
             return MagicMock(returncode=0)
@@ -92,6 +94,7 @@ class TestServeCommand:
 
     def test_serve_no_reload_omits_flag(self):
         captured = {}
+
         def fake_run(cmd, **kwargs):
             captured["cmd"] = cmd
             return MagicMock(returncode=0)
@@ -115,6 +118,7 @@ class TestServeCommand:
 
     def test_serve_invokes_uvicorn_module(self):
         captured = {}
+
         def fake_run(cmd, **kwargs):
             captured["cmd"] = cmd
             return MagicMock(returncode=0)
@@ -130,6 +134,7 @@ class TestServeCommand:
 # test command
 # ---------------------------------------------------------------------------
 
+
 class TestTestCommand:
     def test_test_basic_run(self):
         with patch("subprocess.run") as mock_run:
@@ -140,6 +145,7 @@ class TestTestCommand:
 
     def test_test_verbose_flag(self):
         captured = {}
+
         def fake_run(cmd, **kwargs):
             captured["cmd"] = cmd
             return MagicMock(returncode=0)
@@ -151,6 +157,7 @@ class TestTestCommand:
 
     def test_test_coverage_flag(self):
         captured = {}
+
         def fake_run(cmd, **kwargs):
             captured["cmd"] = cmd
             return MagicMock(returncode=0)
@@ -169,6 +176,7 @@ class TestTestCommand:
 
     def test_test_no_verbose_no_extra_flag(self):
         captured = {}
+
         def fake_run(cmd, **kwargs):
             captured["cmd"] = cmd
             return MagicMock(returncode=0)
@@ -183,6 +191,7 @@ class TestTestCommand:
 # ---------------------------------------------------------------------------
 # migrate command
 # ---------------------------------------------------------------------------
+
 
 class TestMigrateCommand:
     def test_migrate_success(self):
@@ -216,7 +225,6 @@ class TestMigrateCommand:
         original = sys.modules.pop(mod_name, None)
         try:
             # Force ImportError by inserting a module that raises on attribute access
-            broken = MagicMock()
             broken_attr = MagicMock(side_effect=ImportError("no module"))
             sys.modules[mod_name] = MagicMock(run_migrations=broken_attr)
             result = runner.invoke(app, ["migrate"])
@@ -261,8 +269,43 @@ class TestMigrateCommand:
 
 
 # ---------------------------------------------------------------------------
+# api-cost-worker command
+# ---------------------------------------------------------------------------
+
+
+class TestAPICostWorkerCommand:
+    def test_api_cost_worker_runs_dedicated_entrypoint(self):
+        worker_main = MagicMock()
+        worker_module = types.SimpleNamespace(main=worker_main)
+
+        with patch.dict(
+            sys.modules,
+            {"youtube_extension.backend.api_cost_worker": worker_module},
+        ):
+            result = runner.invoke(app, ["api-cost-worker"])
+
+        assert result.exit_code == 0
+        worker_main.assert_called_once_with()
+
+    def test_api_cost_worker_reports_startup_failure(self):
+        worker_module = types.SimpleNamespace(
+            main=MagicMock(side_effect=ValueError("DATABASE_URL is required"))
+        )
+
+        with patch.dict(
+            sys.modules,
+            {"youtube_extension.backend.api_cost_worker": worker_module},
+        ):
+            result = runner.invoke(app, ["api-cost-worker"])
+
+        assert result.exit_code == 1
+        assert "DATABASE_URL is required" in result.output
+
+
+# ---------------------------------------------------------------------------
 # lint command
 # ---------------------------------------------------------------------------
+
 
 class TestLintCommand:
     def test_lint_all_pass(self):
@@ -274,6 +317,7 @@ class TestLintCommand:
 
     def test_lint_ruff_failure_exits_1(self):
         call_count = 0
+
         def fake_run(cmd, **kwargs):
             nonlocal call_count
             call_count += 1
@@ -288,6 +332,7 @@ class TestLintCommand:
 
     def test_lint_mypy_failure_exits_1(self):
         call_count = 0
+
         def fake_run(cmd, **kwargs):
             nonlocal call_count
             call_count += 1
@@ -302,6 +347,7 @@ class TestLintCommand:
 
     def test_lint_runs_ruff_and_mypy(self):
         calls = []
+
         def fake_run(cmd, **kwargs):
             calls.append(cmd)
             return MagicMock(returncode=0)
@@ -318,9 +364,11 @@ class TestLintCommand:
 # format command
 # ---------------------------------------------------------------------------
 
+
 class TestFormatCommand:
     def test_format_runs_black_and_isort(self):
         calls = []
+
         def fake_run(cmd, **kwargs):
             calls.append(cmd)
             return MagicMock(returncode=0)
@@ -352,6 +400,7 @@ class TestFormatCommand:
 # install command
 # ---------------------------------------------------------------------------
 
+
 class TestInstallCommand:
     def test_install_success(self):
         with patch("subprocess.run") as mock_run:
@@ -369,6 +418,7 @@ class TestInstallCommand:
 
     def test_install_uses_pip_install_editable(self):
         captured = {}
+
         def fake_run(cmd, **kwargs):
             captured["cmd"] = cmd
             return MagicMock(returncode=0)
@@ -391,6 +441,7 @@ class TestInstallCommand:
 # health command
 # ---------------------------------------------------------------------------
 
+
 class TestHealthCommand:
     def test_health_all_pass(self):
         """When all imports succeed and VIRTUAL_ENV is set, exits 0."""
@@ -407,6 +458,7 @@ class TestHealthCommand:
     def test_health_no_venv_shows_not_active(self):
         """Without VIRTUAL_ENV, reports venv as inactive."""
         import os as _os
+
         # Stub youtube_extension.main so health's internal import is a no-op and
         # does not reconfigure logging/stdout mid-invoke (a fresh import runs
         # setup_logging, which would break CliRunner output capture). Mirrors
@@ -432,9 +484,8 @@ class TestHealthCommand:
         try:
             with patch.dict("os.environ", {"VIRTUAL_ENV": "/fake/venv"}):
                 # Patch the import so youtube_extension itself raises ImportError
-                original_import = __builtins__.__import__ if hasattr(__builtins__, "__import__") else __import__
-
                 import builtins
+
                 real_import = builtins.__import__
 
                 def broken_import(name, *args, **kwargs):
@@ -444,7 +495,9 @@ class TestHealthCommand:
                     # a real `import youtube_extension`, so health re-imported
                     # youtube_extension.main, whose module-level logging setup
                     # reconfigured stdout and broke CliRunner's output capture.
-                    if name == "youtube_extension" or name.startswith("youtube_extension."):
+                    if name == "youtube_extension" or name.startswith(
+                        "youtube_extension."
+                    ):
                         raise ImportError("forced")
                     return real_import(name, *args, **kwargs)
 
@@ -473,9 +526,11 @@ class TestHealthCommand:
     def test_health_some_fail_shows_warning(self):
         """If any check fails, warns instead of celebrating."""
         import os as _os
+
         _os.environ.pop("VIRTUAL_ENV", None)
 
         import builtins
+
         real_import = builtins.__import__
 
         def broken_import(name, *args, **kwargs):
