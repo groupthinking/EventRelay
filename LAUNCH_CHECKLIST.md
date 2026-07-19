@@ -43,8 +43,8 @@ To provision:
   STRIPE_SECRET_KEY=sk_live_...          # Dashboard → Developers → API keys
   NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_live_...
   STRIPE_WEBHOOK_SECRET=whsec_...        # from step 1.2
-  STRIPE_PRICE_PRO_MONTHLY=price_<verified-monthly-id>
-  STRIPE_PRICE_PRO_ANNUAL=price_<verified-annual-id>
+  STRIPE_PRICE_PRO_MONTHLY=price_REPLACE_WITH_VERIFIED_MONTHLY_ID
+  STRIPE_PRICE_PRO_ANNUAL=price_REPLACE_WITH_VERIFIED_ANNUAL_ID
   ```
 - Without the two `STRIPE_PRICE_*` IDs, `requireStripePriceId()` throws and
   checkout 500s. Price IDs are not secrets (they appear in checkout URLs);
