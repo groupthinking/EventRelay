@@ -174,14 +174,9 @@ class InfrastructurePackagingAgent:
                                 'file': file_path,
                                 'issues': issues
                             })
-                            # Sanitize .env files to prevent credential leakage
-                            write_content = (
-                                self._sanitize_env_file(content)
-                                if file_name == '.env'
-                                else content
-                            )
+                            # Still write file but log security concerns
                             with open(file_path, "w") as f:
-                                f.write(write_content)
+                                f.write(content)
 
             # Write flat files with validation
             for file_name, content in flat_files.items():

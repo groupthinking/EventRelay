@@ -434,16 +434,19 @@ class QueryOptimizer:
             # Execute each group
             for pattern, group_queries in query_groups.items():
                 if len(group_queries) > 1 and hasattr(connection, "executemany"):
-                    # Use batch execution: run all queries in the group concurrently
+                    # Use batch execution if available
                     batch_start = time.time()
 
-                    coroutines = [
-                        self.execute_query(query, params, use_cache=True)
-                        for original_index, query, params in group_queries
-                    ]
-                    group_results = await asyncio.gather(*coroutines)
-                    for (original_index, _, _), result in zip(group_queries, group_results):
-                        results[original_index] = result
+                    # Extract queries and params
+                    [q[1] for q in group_queries]
+                    [q[2] for q in group_queries]
+
+                    # Execute batch (simplified - real implementation would be more complex)
+                    for i, (original_index, query, params) in enumerate(group_queries):
+                        query_result = await self.execute_query(
+                            query, params, use_cache=True
+                        )
+                        results[original_index] = query_result
 
                     batch_time = (time.time() - batch_start) * 1000
                     logger.debug(
