@@ -214,10 +214,12 @@ except ImportError as e:
     logger.error(f"Failed to load event routes: {e}")
 
 # Include API v1 Router (production endpoints - transcript-action, health, etc.)
+_API_V1_ROUTER_LOADED = False
 try:
     from .backend.api.v1.router import router as api_v1_router
 
     app.include_router(api_v1_router)
+    _API_V1_ROUTER_LOADED = True
     logger.info("API v1 router loaded successfully")
 except Exception as e:
     logger.error(f"Failed to load API v1 router: {type(e).__name__}: {e}")
@@ -228,6 +230,29 @@ except Exception as e:
 async def health_check():
     """Health check endpoint"""
     return {"status": "healthy", "service": "uvai-youtube-extension"}
+
+
+async def ensure_api_cost_ready() -> None:
+    """Validate the shared API-cost schema and runtime DML permissions."""
+    from .backend.services.api_cost_monitor import ensure_api_cost_database_ready
+
+    await ensure_api_cost_database_ready()
+
+
+@app.get("/readyz")
+async def readiness_check():
+    """Traffic readiness includes the shared PostgreSQL substrate."""
+    if not _API_V1_ROUTER_LOADED:
+        raise HTTPException(status_code=503, detail="API v1 router is not ready")
+    try:
+        await ensure_api_cost_ready()
+    except Exception:
+        logger.exception("API cost database readiness check failed")
+        raise HTTPException(
+            status_code=503,
+            detail="API cost database is not ready",
+        ) from None
+    return {"status": "ready", "service": "uvai-backend"}
 
 
 @app.post("/test-sentry")

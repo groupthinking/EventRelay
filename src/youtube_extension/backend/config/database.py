@@ -23,11 +23,17 @@ except ImportError:
     from pydantic import BaseSettings
 
 from pydantic import Field
-from sqlalchemy import MetaData, create_engine, event, text
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.orm import DeclarativeBase, sessionmaker
+from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import QueuePool
+
+from youtube_extension.backend.models.base import Base as ModelBase
+
+# Compatibility export: all runtime and migration code imports the same
+# declarative base, regardless of whether it enters through config or models.
+Base = ModelBase
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -103,37 +109,35 @@ class DatabaseSettings(BaseSettings):
     def sync_database_url(self) -> str:
         """Construct synchronous database URL"""
         if os.getenv('DATABASE_URL'):
-            # Convert asyncpg URL to sync psycopg2/default URL if needed
             url = os.getenv('DATABASE_URL')
-            return url.replace('+asyncpg', '')
+            replacements = (
+                ('postgresql+asyncpg://', 'postgresql+psycopg://'),
+                ('postgresql+psycopg2://', 'postgresql+psycopg://'),
+                ('postgresql://', 'postgresql+psycopg://'),
+                ('postgres://', 'postgresql+psycopg://'),
+            )
+            if url.startswith('postgresql+psycopg://'):
+                return url
+            for prefix, replacement in replacements:
+                if url.startswith(prefix):
+                    return replacement + url[len(prefix):]
+            return url
 
         if self.thenile_host.startswith('/'):
             return (
-                f"postgresql://{self.thenile_username}:{self.thenile_password}"
+                f"postgresql+psycopg://{self.thenile_username}:{self.thenile_password}"
                 f"@/{self.thenile_database}"
                 f"?host={self.thenile_host}"
             )
 
         return (
-            f"postgresql://{self.thenile_username}:{self.thenile_password}"
+            f"postgresql+psycopg://{self.thenile_username}:{self.thenile_password}"
             f"@{self.thenile_host}:{self.thenile_port}/{self.thenile_database}"
             f"?sslmode={self.thenile_ssl_mode}"
         )
 
 # Global settings instance
 db_settings = DatabaseSettings()
-
-class Base(DeclarativeBase):
-    """Base class for all database models"""
-    metadata = MetaData(
-        naming_convention={
-            "ix": "ix_%(column_0_label)s",
-            "uq": "uq_%(table_name)s_%(column_0_name)s",
-            "ck": "ck_%(table_name)s_%(constraint_name)s",
-            "fk": "fk_%(table_name)s_%(column_0_name)s_%(referred_table_name)s",
-            "pk": "pk_%(table_name)s"
-        }
-    )
 
 class DatabaseManager:
     """
