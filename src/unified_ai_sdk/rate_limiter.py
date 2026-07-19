@@ -67,6 +67,28 @@ class RateLimiter:
             wait_time = 60 - (current_time - oldest_request)
             if wait_time > 0:
                 await asyncio.sleep(wait_time)
+            # Refresh current_time after waiting
+            current_time = time.time()
+
+        # Check token rate limit
+        max_tokens = provider_config.get("tokens_per_minute", 0)
+        if max_tokens > 0 and tokens > 0:
+            recent_tokens_used = sum(
+                t_count
+                for t, t_count in self._token_usage[provider_name]
+                if t > current_time - 60
+            )
+            if recent_tokens_used + tokens > max_tokens:
+                # Wait until the oldest token-budget entry expires
+                token_times = [
+                    t for t, _ in self._token_usage[provider_name] if t > current_time - 60
+                ]
+                if token_times:
+                    oldest_token_time = token_times[0]
+                    wait_time = 60 - (current_time - oldest_token_time)
+                    if wait_time > 0:
+                        await asyncio.sleep(wait_time)
+                    current_time = time.time()
 
         # Record this request
         self._request_times[provider_name].append(current_time)
