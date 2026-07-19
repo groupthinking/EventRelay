@@ -19,7 +19,6 @@ Configuration
 The key comparison uses :func:`hmac.compare_digest` (constant-time) to avoid a
 timing side-channel.
 """
-
 import hmac
 import logging
 import os
@@ -42,7 +41,8 @@ PUBLIC_PREFIXES: tuple[str, ...] = (
 _TRUTHY = {"1", "true", "yes", "on"}
 
 _UNAUTHORIZED_BODY = (
-    b'{"error":"Authentication required",' b'"hint":"Send a valid X-API-Key header"}'
+    b'{"error":"Authentication required",'
+    b'"hint":"Send a valid X-API-Key header"}'
 )
 _MISCONFIGURED_BODY = (
     b'{"error":"Service unavailable",'
@@ -56,9 +56,7 @@ class APIKeyAuthMiddleware(BaseHTTPMiddleware):
 
     def __init__(self, app, api_key: str | None = None) -> None:
         super().__init__(app)
-        self.api_key = (
-            api_key if api_key is not None else os.getenv("EVENTRELAY_API_KEY")
-        )
+        self.api_key = api_key if api_key is not None else os.getenv("EVENTRELAY_API_KEY")
         self.allow_unauthenticated = (
             os.getenv("ALLOW_UNAUTHENTICATED", "").strip().lower() in _TRUTHY
         )
@@ -78,10 +76,7 @@ class APIKeyAuthMiddleware(BaseHTTPMiddleware):
 
     @staticmethod
     def _is_public(path: str) -> bool:
-        # `/readyz` intentionally exposes only a boolean health signal so Cloud
-        # Run can gate traffic on database readiness without storing an API key
-        # in the probe. Do not make it a prefix: diagnostic children stay private.
-        if path in {"/", "/readyz"}:
+        if path == "/":
             return True
         return any(path == p or path.startswith(p + "/") for p in PUBLIC_PREFIXES)
 

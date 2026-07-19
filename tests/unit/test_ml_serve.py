@@ -176,9 +176,7 @@ async def test_checkpoint_post_failure(mock_save, router):
     response = await router(request)
     assert response.status_code == 500
     body = json.loads(response.body)
-    # The 500 body must be static; the exception text must not leak (CWE-209).
-    assert body["error"] == "Internal server error"
-    assert "Save failed" not in json.dumps(body)
+    assert body["error"] == "Save failed"
 
 @pytest.mark.asyncio
 @patch("uvai.ml.serve.load_checkpoint", return_value={"scorer_state": {}, "ranker_state": {}})

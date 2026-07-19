@@ -27,14 +27,6 @@ describe('auth path policy', () => {
     expect(needsAuthentication('/api/billing/renew')).toBe(false);
   });
 
-  it('keeps /api/pipeline/stream public (core EventRelay pipeline entry point)', () => {
-    // The pipeline/stream SSE endpoint is the primary unauthenticated entry
-    // point for the YouTube → transcript → agents workflow. Gating it behind
-    // a session would block the E2E smoke tests and anonymous end-users.
-    expect(isPublicApiPath('/api/pipeline/stream')).toBe(true);
-    expect(needsAuthentication('/api/pipeline/stream')).toBe(false);
-  });
-
   it('still gates non-allowlisted billing routes', () => {
     // A sibling billing route with no explicit exemption stays protected —
     // guards against prefix-match over-exposure.

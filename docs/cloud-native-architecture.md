@@ -169,27 +169,63 @@ result = await processor.process_video_sync(
 3. **Docker** installed
 4. **Required APIs** enabled (done by setup script)
 
-### Set up infrastructure
+### Setup Infrastructure
 
-Provision resources through reviewed infrastructure changes and the manual
-prerequisites in `docs/deployment/API_COST_POSTGRESQL_RUNBOOK.md`. The former
-setup script is retired because it granted project-wide secret access and could
-silently change a production identity. Existing Firestore, Cloud Tasks, Vertex
-AI, service-account, and Cloud SQL configuration must be inventoried before the
-first substrate release.
+```bash
+# Set your project ID
+export GOOGLE_CLOUD_PROJECT="your-project-id"
+
+# Run setup script (creates all required resources)
+./infrastructure/cloudrun/setup.sh
+```
+
+This script:
+- Enables required Google Cloud APIs
+- Creates service account with appropriate IAM roles
+- Initializes Firestore
+- Creates Cloud Tasks queue
+- Creates secrets in Secret Manager
 
 ### Deploy to Cloud Run
 
-Run the protected `.github/workflows/deploy-cloud-run.yml` workflow for an
-exact tested SHA. Direct builds and deploys are retired because the canonical
-workflow must migrate shared PostgreSQL before deploying the dedicated worker
-and API. See `docs/deployment/API_COST_POSTGRESQL_RUNBOOK.md`.
+```bash
+# Deploy the service
+./infrastructure/cloudrun/deploy.sh
+```
+
+This script:
+- Builds Docker image (`Dockerfile`)
+- Pushes to Google Container Registry
+- Deploys to Cloud Run with auto-scaling configuration
+
+### Manual Deployment
+
+```bash
+# Build and tag image
+docker build -t gcr.io/PROJECT_ID/uvai-backend:latest .
+
+# Push to GCR
+docker push gcr.io/PROJECT_ID/uvai-backend:latest
+
+# Deploy to Cloud Run
+gcloud run deploy uvai-backend \
+  --image gcr.io/PROJECT_ID/uvai-backend:latest \
+  --platform managed \
+  --region us-central1 \
+  --allow-unauthenticated \
+  --cpu 2 \
+  --memory 4Gi \
+  --timeout 300 \
+  --concurrency 80 \
+  --min-instances 0 \
+  --max-instances 100
+```
 
 ## Configuration
 
 ### Environment Variables
 
-Set through the protected deployment workflow and Secret Manager:
+Set in `infrastructure/cloudrun/service.yaml` or via `gcloud run deploy`:
 
 ```bash
 # Google Cloud
@@ -216,7 +252,7 @@ VERTEX_AI_MODEL=gemini-2.0-flash-exp
 
 ### Auto-Scaling Configuration
 
-In the protected Cloud Run deployment workflow:
+In `infrastructure/cloudrun/service.yaml`:
 
 ```yaml
 annotations:

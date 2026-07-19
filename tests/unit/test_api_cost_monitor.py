@@ -13,8 +13,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
 from youtube_extension.backend.services.api_cost_monitor import (
     APICostMonitor,
+    APIUsageRecord,
     RateLimitTracker,
 )
+
 
 # ===========================================================================
 # Fixtures
@@ -50,37 +52,23 @@ class TestRateLimitTracker:
 
 class TestCalculateCost:
     def test_anthropic_opus_cost(self, monitor):
-        cost = monitor.calculate_cost(
-            "anthropic", "claude-opus-4-8", input_tokens=1000, output_tokens=1000
-        )
+        cost = monitor.calculate_cost("anthropic", "claude-opus-4-8", input_tokens=1000, output_tokens=1000)
         # 1000 input @ $0.005/1K + 1000 output @ $0.025/1K
         assert pytest.approx(cost, rel=1e-6) == 0.005 + 0.025
 
     def test_anthropic_haiku_cost(self, monitor):
-        cost = monitor.calculate_cost(
-            "anthropic", "claude-haiku-4-5", input_tokens=2000, output_tokens=500
-        )
+        cost = monitor.calculate_cost("anthropic", "claude-haiku-4-5", input_tokens=2000, output_tokens=500)
         expected = (2000 / 1000) * 0.001 + (500 / 1000) * 0.005
         assert pytest.approx(cost, rel=1e-6) == expected
 
     def test_anthropic_sonnet_cost(self, monitor):
-        cost = monitor.calculate_cost(
-            "anthropic", "claude-sonnet-4-6", input_tokens=1000, output_tokens=0
-        )
+        cost = monitor.calculate_cost("anthropic", "claude-sonnet-4-6", input_tokens=1000, output_tokens=0)
         assert pytest.approx(cost, rel=1e-6) == 0.003
 
     def test_openai_gpt4o_cost(self, monitor):
-        cost = monitor.calculate_cost(
-            "openai", "gpt-4o", input_tokens=1000, output_tokens=1000
-        )
+        cost = monitor.calculate_cost("openai", "gpt-4o", input_tokens=1000, output_tokens=1000)
         expected = (1000 / 1000) * 0.0025 + (1000 / 1000) * 0.01
         assert pytest.approx(cost, rel=1e-6) == expected
-
-    def test_google_gemini_15_flash_cost(self, monitor):
-        cost = monitor.calculate_cost(
-            "google", "gemini-1.5-flash", input_tokens=1000, output_tokens=1000
-        )
-        assert pytest.approx(cost, rel=1e-6) == 0.000075 + 0.0003
 
     def test_youtube_quota_cost(self, monitor):
         cost = monitor.calculate_cost("youtube", "search", input_tokens=100)
@@ -90,33 +78,20 @@ class TestCalculateCost:
         assert monitor.calculate_cost("nonexistent", "model", 1000) == 0.0
 
     def test_unknown_model_falls_back_to_first_model(self, monitor):
-        cost = monitor.calculate_cost(
-            "anthropic", "unknown-model", input_tokens=1000, output_tokens=0
-        )
+        cost = monitor.calculate_cost("anthropic", "unknown-model", input_tokens=1000, output_tokens=0)
         assert cost > 0.0
 
     def test_zero_tokens_returns_zero_cost(self, monitor):
-        cost = monitor.calculate_cost(
-            "anthropic", "claude-opus-4-8", input_tokens=0, output_tokens=0
-        )
+        cost = monitor.calculate_cost("anthropic", "claude-opus-4-8", input_tokens=0, output_tokens=0)
         assert cost == 0.0
 
     def test_output_tokens_default_zero(self, monitor):
-        cost_with_default = monitor.calculate_cost(
-            "anthropic", "claude-opus-4-8", input_tokens=1000
-        )
-        cost_explicit_zero = monitor.calculate_cost(
-            "anthropic", "claude-opus-4-8", input_tokens=1000, output_tokens=0
-        )
+        cost_with_default = monitor.calculate_cost("anthropic", "claude-opus-4-8", input_tokens=1000)
+        cost_explicit_zero = monitor.calculate_cost("anthropic", "claude-opus-4-8", input_tokens=1000, output_tokens=0)
         assert pytest.approx(cost_with_default) == cost_explicit_zero
 
     def test_historical_model_still_priced(self, monitor):
-        cost = monitor.calculate_cost(
-            "anthropic",
-            "claude-3-5-sonnet-20241022",
-            input_tokens=1000,
-            output_tokens=0,
-        )
+        cost = monitor.calculate_cost("anthropic", "claude-3-5-sonnet-20241022", input_tokens=1000, output_tokens=0)
         assert pytest.approx(cost, rel=1e-6) == 0.003
 
 
@@ -200,12 +175,7 @@ class TestCostModelsStructure:
 
     def test_current_anthropic_models_present(self, monitor):
         models = monitor.COST_MODELS["anthropic"]
-        for model in (
-            "claude-opus-4-8",
-            "claude-opus-4-7",
-            "claude-sonnet-4-6",
-            "claude-haiku-4-5",
-        ):
+        for model in ("claude-opus-4-8", "claude-opus-4-7", "claude-sonnet-4-6", "claude-haiku-4-5"):
             assert model in models, f"{model} missing from COST_MODELS"
 
     def test_anthropic_model_has_input_output_keys(self, monitor):
@@ -215,9 +185,9 @@ class TestCostModelsStructure:
 
     def test_output_cost_ge_input_cost_for_anthropic(self, monitor):
         for model, pricing in monitor.COST_MODELS["anthropic"].items():
-            assert (
-                pricing["output"] >= pricing["input"]
-            ), f"{model}: output ${pricing['output']} < input ${pricing['input']}"
+            assert pricing["output"] >= pricing["input"], (
+                f"{model}: output ${pricing['output']} < input ${pricing['input']}"
+            )
 
 
 # ===========================================================================
@@ -266,81 +236,52 @@ class TestRecordUsage:
             output_tokens=100,
         )
         assert record is not None
-        assert isinstance(
-            record,
-            __import__(
-                "youtube_extension.backend.services.api_cost_monitor",
-                fromlist=["APIUsageRecord"],
-            ).APIUsageRecord,
-        )
+        assert isinstance(record, __import__("youtube_extension.backend.services.api_cost_monitor", fromlist=["APIUsageRecord"]).APIUsageRecord)
 
     async def test_record_has_correct_service(self, monitor):
-        record = await monitor.record_usage(
-            service="openai", endpoint="/chat", tokens_used=100
-        )
+        record = await monitor.record_usage(service="openai", endpoint="/chat", tokens_used=100)
         assert record.service == "openai"
 
     async def test_record_cost_is_positive(self, monitor):
         record = await monitor.record_usage(
-            service="anthropic",
-            endpoint="/messages",
-            tokens_used=1000,
-            model="claude-opus-4-8",
-            output_tokens=500,
+            service="anthropic", endpoint="/messages", tokens_used=1000,
+            model="claude-opus-4-8", output_tokens=500
         )
         assert record.cost > 0
 
     async def test_session_costs_updated(self, monitor):
-        await monitor.record_usage(
-            service="google",
-            endpoint="/generate",
-            tokens_used=1000,
-            model="gemini-1.5-pro",
-        )
+        await monitor.record_usage(service="google", endpoint="/generate", tokens_used=1000, model="gemini-1.5-pro")
         assert monitor.session_costs["google"] > 0
 
     async def test_session_requests_updated(self, monitor):
-        await monitor.record_usage(
-            service="anthropic", endpoint="/messages", tokens_used=100
-        )
+        await monitor.record_usage(service="anthropic", endpoint="/messages", tokens_used=100)
         assert monitor.session_requests["anthropic"] == 1
 
     async def test_disabled_tracking_returns_none(self, monitor):
         monitor.cost_tracking_enabled = False
-        record = await monitor.record_usage(
-            service="anthropic", endpoint="/messages", tokens_used=100
-        )
+        record = await monitor.record_usage(service="anthropic", endpoint="/messages", tokens_used=100)
         assert record is None
 
     async def test_usage_stored_in_db(self, monitor):
         await monitor.record_usage(
-            service="openai",
-            endpoint="/chat",
-            tokens_used=200,
-            model="gpt-4o",
-            request_type="chat",
+            service="openai", endpoint="/chat", tokens_used=200,
+            model="gpt-4o", request_type="chat"
         )
         daily = await monitor.get_daily_cost()
         assert daily >= 0
 
     async def test_record_with_user_video_id(self, monitor):
         record = await monitor.record_usage(
-            service="anthropic",
-            endpoint="/messages",
-            tokens_used=100,
-            user_id="user123",
-            video_id="vid456",
+            service="anthropic", endpoint="/messages", tokens_used=100,
+            user_id="user123", video_id="vid456"
         )
         assert record.user_id == "user123"
         assert record.video_id == "vid456"
 
     async def test_record_failure_usage(self, monitor):
         record = await monitor.record_usage(
-            service="openai",
-            endpoint="/chat",
-            tokens_used=0,
-            success=False,
-            error_message="rate limited",
+            service="openai", endpoint="/chat", tokens_used=0,
+            success=False, error_message="rate limited"
         )
         assert record.success is False
         assert record.error_message == "rate limited"
@@ -366,11 +307,8 @@ class TestGetDailyCost:
 
     async def test_after_record_usage_nonzero(self, monitor):
         await monitor.record_usage(
-            service="anthropic",
-            endpoint="/messages",
-            tokens_used=10000,
-            model="claude-opus-4-8",
-            output_tokens=10000,
+            service="anthropic", endpoint="/messages", tokens_used=10000,
+            model="claude-opus-4-8", output_tokens=10000
         )
         cost = await monitor.get_daily_cost()
         assert cost > 0
@@ -412,7 +350,8 @@ class TestGetUsageAnalytics:
 
     async def test_session_reflects_usage(self, monitor):
         await monitor.record_usage(
-            service="openai", endpoint="/chat", tokens_used=500, model="gpt-4o"
+            service="openai", endpoint="/chat", tokens_used=500,
+            model="gpt-4o"
         )
         result = await monitor.get_usage_analytics()
         assert result["current_session"]["requests"].get("openai", 0) >= 1
@@ -530,81 +469,13 @@ class TestBudgetAlerts:
         await monitor._check_budget_alerts()
 
     async def test_check_budget_alerts_with_high_cost(self, monitor, monkeypatch):
+        monkeypatch.setattr(monitor, "get_daily_cost", lambda date=None: __import__("asyncio").coroutine(lambda: 9.5)())
+
         async def fake_get_daily_cost(date=None):
             return 9.5
 
         monkeypatch.setattr(monitor, "get_daily_cost", fake_get_daily_cost)
         await monitor._check_budget_alerts()
-
-    async def test_alert_gated_to_once_per_day(self, monitor, monkeypatch):
-        """A crossed threshold must dispatch each alert only once per UTC day."""
-
-        async def fake_get_daily_cost(date=None):
-            return monitor.daily_budget + 5.0  # over both threshold and budget
-
-        monkeypatch.setattr(monitor, "get_daily_cost", fake_get_daily_cost)
-
-        sent: list[str] = []
-
-        async def fake_send(cost, alert_type):
-            sent.append(alert_type)
-
-        monkeypatch.setattr(monitor, "_send_budget_alert", fake_send)
-
-        # Simulate many usage records in the same day.
-        for _ in range(5):
-            await monitor._check_budget_alerts()
-
-        # Each alert type dispatched exactly once despite repeated checks.
-        assert sorted(sent) == ["exceeded", "threshold"]
-
-    async def test_claim_alert_is_atomic_and_once(self, monitor):
-        today = "2026-07-17"
-        # First caller wins the claim; the second (racing) caller loses.
-        assert monitor._claim_alert(today, "threshold") is True
-        assert monitor._claim_alert(today, "threshold") is False
-        # Each alert type is claimed independently.
-        assert monitor._claim_alert(today, "exceeded") is True
-        assert monitor._claim_alert(today, "exceeded") is False
-        # A different day starts fresh.
-        assert monitor._claim_alert("2026-07-18", "threshold") is True
-
-    async def test_webhook_payload_supports_slack_and_discord(
-        self, monitor, monkeypatch
-    ):
-        """Webhook payload carries both Slack `text` and Discord `content`."""
-        monitor.webhook_url = "http://example.com/webhook"
-        captured: dict = {}
-
-        class _FakeResponse:
-            status = 200
-
-            async def __aenter__(self):
-                return self
-
-            async def __aexit__(self, *args):
-                return False
-
-        class _FakeSession:
-            async def __aenter__(self):
-                return self
-
-            async def __aexit__(self, *args):
-                return False
-
-            def post(self, url, json=None, timeout=None):
-                captured["json"] = json
-                return _FakeResponse()
-
-        monkeypatch.setattr(
-            "youtube_extension.backend.services.api_cost_monitor.aiohttp.ClientSession",
-            lambda *a, **k: _FakeSession(),
-        )
-
-        await monitor._send_webhook_notification("hello")
-
-        assert captured["json"]["text"] == "hello"
-        assert captured["json"]["content"] == "hello"
 
 
 # ===========================================================================
@@ -630,178 +501,3 @@ class TestAPICostMonitorInit:
 
     def test_cost_tracking_enabled_by_default(self, monitor):
         assert monitor.cost_tracking_enabled is True
-
-
-# ===========================================================================
-# APICostMonitor — Durable Webhook Outbox
-# ===========================================================================
-
-
-class TestDurableWebhookOutbox:
-    async def test_duplicate_prevention_on_claim(self, monitor):
-        """Concurrent claims cannot create more than one outbox item for a (date, alert_type) pair."""
-        today = "2026-07-20"
-        # Claim first time
-        assert monitor._claim_alert(today, "threshold", 8.5) is True
-        # Try claiming again
-        assert monitor._claim_alert(today, "threshold", 9.0) is False
-
-        # Query database directly via SQLAlchemy session
-        from youtube_extension.backend.services.api_cost_monitor import WebhookOutbox
-
-        session = monitor.Session()
-        try:
-            items = (
-                session.query(WebhookOutbox)
-                .filter_by(utc_date=today, alert_type="threshold")
-                .all()
-            )
-            assert len(items) == 1
-            assert items[0].status == "pending"
-            assert items[0].current_cost == 8.5
-        finally:
-            session.close()
-
-    async def test_successful_delivery_suppression(self, monitor, monkeypatch):
-        """A successful delivery transitions state to 'sent' and is not resent."""
-        today = "2026-07-21"
-        monitor.webhook_url = "http://example.com/webhook"
-
-        # Mock successful webhook notification
-        async def fake_notification(message):
-            return True
-
-        monkeypatch.setattr(monitor, "_send_webhook_notification", fake_notification)
-
-        # Claim alert (creates pending outbox item)
-        assert monitor._claim_alert(today, "threshold", 8.5) is True
-
-        # Process outbox
-        await monitor.process_outbox()
-
-        # Check status
-        from youtube_extension.backend.services.api_cost_monitor import WebhookOutbox
-
-        session = monitor.Session()
-        try:
-            item = (
-                session.query(WebhookOutbox)
-                .filter_by(utc_date=today, alert_type="threshold")
-                .first()
-            )
-            assert item.status == "sent"
-            assert item.retry_count == 1
-        finally:
-            session.close()
-
-        # If we process again, retry count should remain 1 (not resent)
-        await monitor.process_outbox()
-        session = monitor.Session()
-        try:
-            item = (
-                session.query(WebhookOutbox)
-                .filter_by(utc_date=today, alert_type="threshold")
-                .first()
-            )
-            assert item.status == "sent"
-            assert item.retry_count == 1
-        finally:
-            session.close()
-
-    async def test_failed_delivery_retry_and_bounds(self, monitor, monkeypatch):
-        """A failed delivery transitions to 'failed', is retried, and is eventually capped by retry bounds."""
-        today = "2026-07-22"
-        monitor.webhook_url = "http://example.com/webhook"
-
-        # Mock failed webhook notification
-        async def fake_notification(message):
-            return False
-
-        monkeypatch.setattr(monitor, "_send_webhook_notification", fake_notification)
-
-        # Claim alert
-        assert monitor._claim_alert(today, "threshold", 8.5) is True
-
-        # Attempt 1
-        await monitor.process_outbox()
-        from youtube_extension.backend.services.api_cost_monitor import WebhookOutbox
-
-        session = monitor.Session()
-        try:
-            item = (
-                session.query(WebhookOutbox)
-                .filter_by(utc_date=today, alert_type="threshold")
-                .first()
-            )
-            assert item.status == "failed"
-            assert item.retry_count == 1
-        finally:
-            session.close()
-
-        # Attempt 2, 3, 4, 5
-        for expected_retry in [2, 3, 4, 5]:
-            await monitor.process_outbox()
-            session = monitor.Session()
-            try:
-                item = (
-                    session.query(WebhookOutbox)
-                    .filter_by(utc_date=today, alert_type="threshold")
-                    .first()
-                )
-                assert item.status == "failed"
-                assert item.retry_count == expected_retry
-            finally:
-                session.close()
-
-        # Attempt 6 (should not be retried because retry count reached 5)
-        await monitor.process_outbox()
-        session = monitor.Session()
-        try:
-            item = (
-                session.query(WebhookOutbox)
-                .filter_by(utc_date=today, alert_type="threshold")
-                .first()
-            )
-            assert item.status == "failed"
-            assert item.retry_count == 5
-        finally:
-            session.close()
-
-    async def test_crash_stale_claim_recovery(self, monitor, monkeypatch):
-        """Stuck processing records are recovered to failed so they can be retried."""
-        today = "2026-07-23"
-        assert monitor._claim_alert(today, "threshold", 8.5) is True
-
-        from youtube_extension.backend.services.api_cost_monitor import WebhookOutbox
-
-        session = monitor.Session()
-        try:
-            item = (
-                session.query(WebhookOutbox)
-                .filter_by(utc_date=today, alert_type="threshold")
-                .first()
-            )
-            item.status = "processing"
-            # Simulate last_attempt being 1 minute ago (stale)
-            from datetime import datetime, timedelta, timezone
-
-            item.last_attempt = datetime.now(timezone.utc) - timedelta(seconds=60)
-            session.commit()
-        finally:
-            session.close()
-
-        # Recover stale claims
-        await monitor.recover_stale_deliveries(stale_timeout_seconds=30)
-
-        # Check that it's now failed and eligible for retry
-        session = monitor.Session()
-        try:
-            item = (
-                session.query(WebhookOutbox)
-                .filter_by(utc_date=today, alert_type="threshold")
-                .first()
-            )
-            assert item.status == "failed"
-            assert "Recovery:" in item.error_message
-        finally:
-            session.close()

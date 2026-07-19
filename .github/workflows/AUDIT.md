@@ -12,7 +12,7 @@ concrete reason, verified against the actual repository tree.
 | `auto-assign.yml` | **FIX** | Replaced `gh issue edit` with the REST assignees endpoint. The CLI command used GraphQL `replaceActorsForAssignable`, which fails for this repository's GitHub App token when assigning the issue owner. |
 | `auto-label.yml` | KEEP | Labels PRs by changed file type; guarded with try/catch. |
 | `autonomous-video-processing.yml` | KEEP | Manual matrix batch processor; well-formed, scoped permissions. |
-| `branch-cleanup.yml` | **FIX** | Added `workflows: write` permission (missing permission caused push of restored branch to fail with "refusing to allow a GitHub App to create or update workflow ... without `workflows` permission"). Also restored push-sentinel trigger for `claude/branch-cleanup-*` branches and the restore-branch step, and removed the incorrect NOTE claiming restoration of workflow-containing branches is impossible with this token. |
+| `branch-cleanup.yml` | KEEP | Gated manual prune; `scripts/maintenance/branch-cleanup-delete.sh` exists; dry-run default. |
 | `bulk-issue-processor.yml` | KEEP | Manual bulk issue ops via `gh` + Python; dry-run default. |
 | `ci.yml` | **FIX** | Added blocking `apps/web` type-check and ESLint steps before the build so CI fails fast on TypeScript or lint regressions. |
 | `codeql-analysis.yml` | **FIX** | Removed the OWASP `dependency-check` job — pinned to unstable `@main` and pointed at dead paths (`frontend/node_modules`, `src/mcp-bridge.py`); produced no usable SARIF. Switched the Node cache from the dead `frontend/node_modules` path to the npm download cache (`~/.npm`), which is correct for this npm-workspaces repo. CodeQL analysis itself retained. Dependency coverage already lives in `dependency-review.yml` + `security.yml`. |
@@ -59,10 +59,3 @@ valid. Referenced paths were checked against the working tree:
 - Recent run logs checked: `auto-assign.yml` failed on issue #392 because
   `gh issue edit` used a GraphQL mutation unsupported by GitHub App
   installation tokens; the workflow now calls the REST assignees endpoint.
-
-
-## Agent completion enforcement
-
-| `agent-completion-enforcement.yml` | **ADD** | Protected-default-branch verifier that creates the independent **Agent completion enforcement** Check directly against the PR head SHA. It accepts only an exact-head machine-readable report from the configured dedicated GitHub App; missing/stale/mutable evidence, untrusted label provenance, and custom roles all fail closed. The existing `agent-completion/truth-gate` status stays advisory and must not be made required. |
-
-The protected policy at `.github/agent-lock/trusted-publishers.json` starts with empty allowlists and therefore blocks until a repository administrator provisions the dedicated App and trusted actor identities through protected review. The repository ruleset must then require **Agent completion enforcement**, one independent approval, and resolved conversations.

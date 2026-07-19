@@ -987,14 +987,11 @@ class TestAPICostMonitorCleanup:
         result = await monitor.trigger_manual_cleanup()
         assert isinstance(result, dict)
 
-    async def test_trigger_manual_cleanup_returns_error_on_failure(self, tmp_path):
+    async def test_trigger_manual_cleanup_when_unavailable(self, tmp_path):
         monitor = APICostMonitor(db_path=str(tmp_path / "m2.db"))
-        # The cleanup path was rewritten to use SQLAlchemy sessions directly and
-        # no longer relies on an external cleanup service / CLEANUP_AVAILABLE flag.
-        # Force the session factory to fail and assert the error path still
-        # returns a dict carrying an "error" key rather than raising.
-        with patch.object(
-            monitor, "Session", side_effect=RuntimeError("session unavailable")
+        with patch(
+            "youtube_extension.backend.services.api_cost_monitor.CLEANUP_AVAILABLE",
+            False
         ):
             result = await monitor.trigger_manual_cleanup()
             assert "error" in result

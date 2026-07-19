@@ -14,7 +14,7 @@ from pathlib import Path
 import psutil
 
 # REMOVED: sys.path.append removed
-from agents.a2a_framework import A2AMessage, BaseAgent
+from a2a_framework import A2AMessage, BaseAgent
 
 # Configure logging
 logging.basicConfig(

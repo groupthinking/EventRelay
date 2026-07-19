@@ -142,10 +142,8 @@ async def process_video_cloud(
             )
 
     except Exception as e:
-        error_msg = f"Cloud processing failed: {str(e)}"
-        logger.error(error_msg, exc_info=True)
-
-        # detail is a static string; error_msg (with the exception) is logged above only
+        # Exception text is logged server-side only; never returned to the client.
+        logger.error(f"Cloud processing failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.post("/api/v3/process-video-task")
@@ -208,18 +206,21 @@ async def process_video_task_handler(
         }
 
     except Exception as e:
+        # Exception text is logged server-side only. It must NOT be persisted to
+        # task state: get_video_status / get_video_result echo error_message back
+        # to clients, so a raw str(e) there would re-expose internal detail (CWE-209).
         logger.error(f"Task processing failed: {e}", exc_info=True)
 
-        # Update state with a static error message; raw exception is logged above only
+        # Update state with a user-safe message
         try:
             firestore_service = await get_firestore_service()
             await firestore_service.update_state(
                 payload.video_id,
                 status='failed',
-                error_message="Task processing failed"
+                error_message="Internal server error"
             )
         except Exception as state_error:
-            logger.error(f"Failed to update error state: {state_error}")
+            logger.error(f"Failed to update error state: {state_error}", exc_info=True)
 
         raise HTTPException(status_code=500, detail="Internal server error")
 

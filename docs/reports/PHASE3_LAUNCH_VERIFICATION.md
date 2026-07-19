@@ -124,10 +124,20 @@ EventRelay implements a **Nightly Audit Agent** script at `scripts/nightly_audit
 EventRelay deploys to **GCP Cloud Run** via `.github/workflows/deploy-cloud-run.yml`.
 
 ### Current Deployment Procedure
-1. Run `.github/workflows/deploy-cloud-run.yml` for an exact tested SHA in the
-   protected staging environment.
-2. Retain the migration, image, worker, candidate and smoke evidence.
-3. Run the same SHA in production only after the staging deployment succeeds.
+1. Build the production Docker container:
+   ```bash
+   docker build -t eventrelay:latest .
+   ```
+2. Deploy to GCP Cloud Run with automatic traffic routing:
+   ```bash
+   gcloud run deploy uvai-backend \
+     --image $IMAGE_TAG \
+     --region us-central1 \
+     --memory 2Gi \
+     --cpu 2 \
+     --timeout 300
+   ```
+3. Health check verification at `/api/v1/health` (retries up to 2 minutes).
 
 ### Rollback Procedure
 If post-deployment smoke tests fail or error rate spikes:
@@ -137,9 +147,10 @@ If post-deployment smoke tests fail or error rate spikes:
      --to-revisions=<previous-revision>=100 \
      --region us-central1
    ```
-2. Do not downgrade the additive shared-PostgreSQL migration during an
-   application rollback; preserve pending outbox data and the compatibility
-   boundary.
+2. Roll back database migrations if necessary:
+   ```bash
+   alembic downgrade -1
+   ```
 3. Root-cause the failure in staging before re-deploying.
 
 ### Blue-Green Deployment (Future Enhancement)

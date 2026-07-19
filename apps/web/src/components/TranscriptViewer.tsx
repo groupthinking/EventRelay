@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useId, useMemo } from 'react';
+import { useState, useId } from 'react';
 import { ChevronUp, ChevronDown } from 'lucide-react';
 import { clsx } from 'clsx';
 
@@ -20,29 +20,17 @@ export default function TranscriptViewer({ transcript, className }: TranscriptVi
   const [searchQuery, setSearchQuery] = useState('');
   const searchId = useId();
 
-  // Memoize splitting and filtering since transcript can be large and static
-  const paragraphs = useMemo(() => {
-    return transcript.split('\n').filter((p) => p.trim().length > 0);
-  }, [transcript]);
-
+  const paragraphs = transcript.split('\n').filter((p) => p.trim().length > 0);
   const displayParagraphs = expanded ? paragraphs : paragraphs.slice(0, 8);
 
-  // Precompute search regex and lowercase query to avoid recreating them for every paragraph
-  const searchConfig = useMemo(() => {
-    if (!searchQuery) return null;
+  const highlight = (text: string) => {
+    if (!searchQuery) return text;
     const escaped = searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     // Capturing split regex (no global flag) so `.test()` lastIndex state can't desync.
-    return {
-      regex: new RegExp(`(${escaped})`, 'i'),
-      lower: searchQuery.toLowerCase(),
-    };
-  }, [searchQuery]);
-
-  const highlight = (text: string) => {
-    if (!searchConfig) return text;
-    const parts = text.split(searchConfig.regex);
+    const parts = text.split(new RegExp(`(${escaped})`, 'i'));
+    const lower = searchQuery.toLowerCase();
     return parts.map((part, i) =>
-      part.toLowerCase() === searchConfig.lower ? (
+      part.toLowerCase() === lower ? (
         <mark key={i} className="bg-primary-500/30 text-primary-300 rounded px-0.5">
           {part}
         </mark>

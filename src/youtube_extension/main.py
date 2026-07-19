@@ -30,9 +30,7 @@ if _sentry_dsn:
 
         sentry_sdk.init(
             dsn=_sentry_dsn,
-            environment=os.getenv(
-                "ENVIRONMENT", os.getenv("VERCEL_ENV", "development")
-            ),
+            environment=os.getenv("ENVIRONMENT", os.getenv("VERCEL_ENV", "development")),
             traces_sample_rate=float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.1")),
             integrations=[StarletteIntegration(), FastApiIntegration()],
             # Do not attach request headers/cookies/body/user IP to events.
@@ -113,17 +111,14 @@ for _origin in os.getenv("CORS_ALLOWED_ORIGINS", "").split(","):
         continue
     if _IS_PRODUCTION and _is_loopback_origin(_origin):
         logger.warning(
-            "Ignoring loopback origin %r from CORS_ALLOWED_ORIGINS in production",
-            _origin,
+            "Ignoring loopback origin %r from CORS_ALLOWED_ORIGINS in production", _origin
         )
         continue
     _EXTRA_ORIGINS.append(_origin)
 
-_allowed_origins = list(
-    dict.fromkeys(
-        _PRODUCTION_ORIGINS + _EXTRA_ORIGINS + ([] if _IS_PRODUCTION else _DEV_ORIGINS)
-    )
-)
+_allowed_origins = list(dict.fromkeys(
+    _PRODUCTION_ORIGINS + _EXTRA_ORIGINS + ([] if _IS_PRODUCTION else _DEV_ORIGINS)
+))
 logger.info("CORS allow_origins configured for %s: %s", _ENVIRONMENT, _allowed_origins)
 
 app.add_middleware(
@@ -157,9 +152,7 @@ app.add_middleware(SecurityHeadersMiddleware)
 
 # API key auth middleware
 try:
-    from .backend.middleware.api_key_auth import (
-        APIKeyAuthMiddleware as APIKeyMiddleware,
-    )
+    from .backend.middleware.api_key_auth import APIKeyAuthMiddleware as APIKeyMiddleware
 
     app.add_middleware(APIKeyMiddleware)
     logger.info("API key auth middleware loaded")
@@ -185,12 +178,10 @@ except ImportError as e:
     logger.error(f"Failed to load event routes: {e}")
 
 # Include API v1 Router (production endpoints - transcript-action, health, etc.)
-_API_V1_ROUTER_LOADED = False
 try:
     from .backend.api.v1.router import router as api_v1_router
 
     app.include_router(api_v1_router)
-    _API_V1_ROUTER_LOADED = True
     logger.info("API v1 router loaded successfully")
 except Exception as e:
     logger.error(f"Failed to load API v1 router: {type(e).__name__}: {e}")
@@ -201,29 +192,6 @@ except Exception as e:
 async def health_check():
     """Health check endpoint"""
     return {"status": "healthy", "service": "uvai-youtube-extension"}
-
-
-async def ensure_api_cost_ready() -> None:
-    """Validate the shared API-cost schema and runtime DML permissions."""
-    from .backend.services.api_cost_monitor import ensure_api_cost_database_ready
-
-    await ensure_api_cost_database_ready()
-
-
-@app.get("/readyz")
-async def readiness_check():
-    """Traffic readiness includes the shared PostgreSQL substrate."""
-    if not _API_V1_ROUTER_LOADED:
-        raise HTTPException(status_code=503, detail="API v1 router is not ready")
-    try:
-        await ensure_api_cost_ready()
-    except Exception:
-        logger.exception("API cost database readiness check failed")
-        raise HTTPException(
-            status_code=503,
-            detail="API cost database is not ready",
-        ) from None
-    return {"status": "ready", "service": "uvai-backend"}
 
 
 @app.post("/test-sentry")

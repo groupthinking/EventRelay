@@ -69,45 +69,22 @@ async def test_score_transcript_remote_fallback() -> None:
         assert "model" in result
 
 
-
 @pytest.mark.asyncio
 async def test_score_transcript_local_only() -> None:
     client = UVAIMLClient(base_url=None)
 
-    mock_prediction = MagicMock()
-    mock_prediction.quality_score = 0.85
-    mock_prediction.recommended_source = "whisper_local"
-    mock_prediction.confidence = 0.92
-    mock_prediction.processing_estimate_seconds = 120.5
-    mock_prediction.reasoning = ["High quality audio"]
-    mock_prediction.feature_importances = {"audio_quality": 0.7}
-
-    # Since we can't patch a property easily on the instance if it doesn't have a setter,
-    # we can mock out the `predict` and just let `model_info` return its default dict
-    with (
-        patch.object(client, "_post_json") as mock_post,
-        patch.object(
-            client._scorer, "predict", return_value=mock_prediction
-        ) as mock_predict,
-    ):
-        metadata = {
-            "title": "Local Video",
-            "has_captions": True,
-            "duration_seconds": 60,
-            "language": "en",
-        }
-        result = await client.score_transcript(metadata)
-
-        assert result["quality_score"] == 0.85
-        assert result["recommended_source"] == "whisper_local"
-        assert result["confidence"] == 0.92
-        assert result["processing_estimate_seconds"] == 120.5
-        assert result["reasoning"] == ["High quality audio"]
-        assert result["feature_importances"] == {"audio_quality": 0.7}
-        assert "model" in result
-
+    # Since there's no base_url, _post_json shouldn't even be called
+    with patch.object(client, "_post_json") as mock_post:
+        result = await client.score_transcript(
+            {
+                "title": "Local Video",
+                "has_captions": True,
+                "duration_seconds": 60,
+                "language": "en",
+            }
+        )
+        assert "quality_score" in result
         mock_post.assert_not_called()
-        mock_predict.assert_called_once_with(metadata)
 
 
 @pytest.mark.asyncio

@@ -399,11 +399,8 @@ class UVAIMLRouter:
                         "ranker_samples": ranker_state.get("training_samples", 0),
                     })
                 except Exception as exc:
-                    # Log the full error server-side; return a static body so the
-                    # exception text does not leak to the client (CWE-209).
-                    logger.error("Checkpoint save failed: %s", exc, exc_info=True)
                     return JSONResponse(
-                        {"error": "Internal server error"},
+                        {"error": str(exc)},
                         status_code=500,
                     )
             else:
