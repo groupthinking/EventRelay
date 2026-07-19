@@ -40,7 +40,11 @@ from pathlib import Path
 
 import pytest
 
-_BACKEND = Path(__file__).resolve().parents[2] / "src" / "youtube_extension" / "backend"
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_BACKEND = _REPO_ROOT / "src" / "youtube_extension" / "backend"
+# The Ray Serve ML surface returns raw ``JSONResponse(...)`` bodies and lives
+# outside ``backend/``; it must be scanned too or 500 leaks there go unguarded.
+_ML_SERVE = _REPO_ROOT / "src" / "uvai" / "ml"
 
 # Identifiers that, when referenced inside a 500 body, indicate a leak of the
 # caught exception or the inbound request.
@@ -118,22 +122,34 @@ def _iter_500_leaks(text: str):
         if name == "HTTPException" and len(node.args) >= 2:
             if not _is_static_string(node.args[1]):
                 yield node.lineno, "HTTPException 500 detail is not a static string"
+        # Positional JSONResponse body: JSONResponse(<body>, status_code=500).
+        # args[0] is the content (a 500 literal there would be a nonsensical body,
+        # so skip it — that shape is only meaningful for the HTTPException form).
+        if name == "JSONResponse" and node.args:
+            body = node.args[0]
+            is_status_literal = isinstance(body, ast.Constant) and body.value == 500
+            if not is_status_literal and _refs_exception_or_request(body):
+                yield node.lineno, "JSONResponse 500 body references the exception/request"
 
 
-def _backend_python_files() -> list[Path]:
-    return sorted(_BACKEND.rglob("*.py"))
+def _guarded_python_files() -> list[Path]:
+    files: list[Path] = []
+    for root in (_BACKEND, _ML_SERVE):
+        if root.exists():
+            files.extend(root.rglob("*.py"))
+    return sorted(files)
 
 
 def test_no_information_disclosure_in_500_responses() -> None:
     offenders: list[str] = []
-    for path in _backend_python_files():
+    for path in _guarded_python_files():
         text = path.read_text(encoding="utf-8")
         try:
             leaks = list(_iter_500_leaks(text))
         except SyntaxError as exc:  # pragma: no cover - source is valid Python
             raise AssertionError(f"could not parse {path}: {exc}") from exc
         for line_no, reason in leaks:
-            rel = path.relative_to(_BACKEND.parents[2])
+            rel = path.relative_to(_REPO_ROOT)
             offenders.append(f"{rel}:{line_no}: {reason}")
 
     assert not offenders, (
