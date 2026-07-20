@@ -166,11 +166,12 @@ export default function InteractiveTranscript({
   );
 
   const filteredSegments = useMemo(() => {
+    const searchLower = searchQuery ? searchQuery.toLowerCase() : '';
     return segments.filter((seg) => {
       const matchesSpeaker = !filterSpeaker || seg.speaker === filterSpeaker;
       const matchesSearch =
-        !searchQuery ||
-        seg.text.toLowerCase().includes(searchQuery.toLowerCase());
+        !searchLower ||
+        seg.text.toLowerCase().includes(searchLower);
       return matchesSpeaker && matchesSearch;
     });
   }, [segments, filterSpeaker, searchQuery]);

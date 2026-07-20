@@ -14,3 +14,6 @@
 ## 2026-07-28 - Memoize text processing in React
 **Learning:** Performing expensive string manipulations like splitting long texts (`transcript.split('\n')`) or generating dynamic Regex expressions inside a component body causes significant CPU overhead on every re-render (like keystroke updates in a search box).
 **Action:** Extract pure transformation logic on static/infrequent data into `useMemo` hooks (e.g., memoizing the paragraph split on `transcript` and precomputing search `RegExp` based on `searchQuery`).
+## 2026-07-28 - Safely hoist string methods in React memo hooks
+**Learning:** Hoisting string methods like `.toLowerCase()` outside of `.filter` loops inside `useMemo` correctly prevents N+1 string operations. However, if the hoisted string was originally evaluated lazily inside a `!string || string.toLowerCase()` guard, lifting it without a guard will cause a runtime crash if the string is undefined or null.
+**Action:** Always include a safety check (e.g. `val ? val.toLowerCase() : ''`) when hoisting operations out of conditional evaluation loops to preserve the previous fallback safety.
