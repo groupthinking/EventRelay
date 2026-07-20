@@ -101,14 +101,14 @@ production `assertEntitlementDurability()` **throws on boot** without Upstash.
 
 ### 1.5 Google OAuth + NextAuth (sign-in) — ✅ LIVE (providers 200)
 Verified 2026-07-14: `/api/auth/providers` returns Google and `/api/auth/csrf` returns a token, so `NEXTAUTH_SECRET` + Google creds are set in Production. Auth is Google-only and stays **off until `NEXTAUTH_SECRET` is set**.
-- Create a Google OAuth app (Authorized redirect URI:
-  `https://<domain>/api/auth/callback/google`).
+- Create a Google OAuth app and set Authorized redirect URI to the canonical
+  production callback: `https://uvai.io/api/auth/callback/google`.
 - Set in `apps/web/.env.local`:
   ```
   NEXTAUTH_SECRET=...            # openssl rand -base64 32
   NEXTAUTH_URL=https://<domain>
-  GOOGLE_OAUTH_CLIENT_ID=...
-  GOOGLE_OAUTH_CLIENT_SECRET=...
+  GOOGLE_CLIENT_ID=...
+  GOOGLE_CLIENT_SECRET=...
   ```
 - Decision: confirm Google-only sign-up is acceptable for paying customers
   (no email/password path exists today).

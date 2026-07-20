@@ -15,12 +15,16 @@ describe('auth configuration source safety', () => {
     expect(source).not.toContain("signIn: '/api/auth/signin'");
   });
 
-  it('accepts both project-specific and common Google OAuth env names', () => {
+  it('uses a single Google OAuth env naming convention', () => {
     const source = readSource('lib/auth.ts');
-    expect(source).toContain('GOOGLE_OAUTH_CLIENT_ID');
-    expect(source).toContain('GOOGLE_CLIENT_ID');
-    expect(source).toContain('GOOGLE_OAUTH_CLIENT_SECRET');
-    expect(source).toContain('GOOGLE_CLIENT_SECRET');
+    expect(source).toContain("const googleClientId = (process.env.GOOGLE_CLIENT_ID || '').trim();");
+    expect(source).toContain(
+      "const googleClientSecret = (process.env.GOOGLE_CLIENT_SECRET || '').trim();",
+    );
+    expect(source).not.toContain('process.env.GOOGLE_OAUTH_CLIENT_ID || process.env.GOOGLE_CLIENT_ID');
+    expect(source).not.toContain(
+      'process.env.GOOGLE_OAUTH_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET',
+    );
   });
 
   it('keeps the root route as a landing page instead of redirecting to the app', () => {
