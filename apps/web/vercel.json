@@ -1,6 +1,7 @@
 {
   "framework": "nextjs",
   "installCommand": "cd ../.. && npm install --legacy-peer-deps",
+  "ignoreCommand": "bash ../../scripts/deployment/vercel-ignore-command.sh",
   "buildCommand": "npm run build",
   "outputDirectory": ".next"
 }

@@ -23,6 +23,8 @@ workflow; this README is the index.
 | Bulk Issue Processor | `bulk-issue-processor.yml` | manual | Bulk label / summarize / close-stale across many issues |
 | Close stale issues | `stale.yml` | daily (00:00 UTC) | Mark and close stale issues and PRs |
 | Branch Cleanup | `branch-cleanup.yml` | manual; push sentinel on `claude/branch-cleanup-*` | Gated archive-then-delete of branches (dry-run by default); push `[restore-branch:<branch>]` sentinel to restore a deleted branch from its archive tag |
+| PR Governance | `pr-governance.yml` | PR opened/edited/synchronize/ready | Enforce one canonical closing issue, required governance sections, and competing-PR detection |
+| Repository Reconciliation | `repository-reconciliation.yml` | daily; manual | Non-destructive drift report of PR/issue linkage and stale unattached branches |
 | E2E Tests | `e2e-tests.yml` | push / PR to `main` | Run Vitest E2E pipeline tests against production or the PR's Vercel preview deployment and report results on the PR |
 | Autonomous Video Processing | `autonomous-video-processing.yml` | manual | Batch-process YouTube videos by category (matrix) |
 | Real Video Processing (Cloud) | `real-processing.yml` | manual | Process a single video: transcript and/or AI analysis |
@@ -111,6 +113,10 @@ A full audit of this directory was performed (see
 - **Fixed** `auto-assign.yml` — replaced `gh issue edit` with the REST
   assignees endpoint after run logs showed GitHub App installation tokens cannot
   use the CLI's GraphQL assignable mutation for this assignment.
+- **Added** `pr-governance.yml` — validates exactly one canonical closing issue,
+  required delivery evidence sections, and blocks competing open implementation PRs.
+- **Added** `repository-reconciliation.yml` — publishes/updates a single
+  `[automation] Repository drift report` issue without deleting branches.
 
 ## Resources
 

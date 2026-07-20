@@ -27,7 +27,9 @@ concrete reason, verified against the actual repository tree.
 | `mcp-optimization.yml` | **DELETE** | Entire workflow targets `mcp-servers/mcp-profiling/` (requirements.txt, investigator_client.py, profiling_server.py) which does not exist — every run fails. |
 | `phase-goal-tracker.yml` | KEEP | Tracks markdown checklists on phase issues, keeps a single status comment updated, and auto-closes the issue when all checklist goals are complete. |
 | `pr-checks.yml` | KEEP | Validates PR title/description; fork-safe comment handling. |
+| `pr-governance.yml` | **ADD** | Enforces exactly one canonical closing issue, required delivery-evidence sections, and fails when another open PR closes the same issue. Draft PRs are intentionally non-blocking. |
 | `real-processing.yml` | KEEP | Manual single-video processing; well-formed. |
+| `repository-reconciliation.yml` | **ADD** | Scheduled/manual non-destructive reconciliation that updates one `[automation] Repository drift report` issue and proposes stale detached branches without deleting them. |
 | `secret-scan.yml` | KEEP | gitleaks on the working tree; action pinned to SHA, checksum-verified install. |
 | `security.yml` | KEEP | npm audit, safety, bandit, trivy; uploads SARIF. |
 | `verify-litert-mcp.yml` | **DELETE** | Path-filtered smoke test of `mcp-servers/litert-mcp/server.py`; the `mcp-servers/` tree was removed in the dead-code cleanup, so the target no longer exists and every run fails. |
