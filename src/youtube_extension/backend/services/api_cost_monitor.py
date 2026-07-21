@@ -1782,9 +1782,10 @@ class APICostMonitor:
             finally:
                 _WEBHOOK_EVENT_ID.reset(token)
 
-            if await asyncio.to_thread(
+            claim_completed = await asyncio.to_thread(
                 self._complete_outbox_claim, claim, success=success
-            ):
+            )
+            if success and claim_completed:
                 completed += 1
 
         return completed
