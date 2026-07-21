@@ -73,7 +73,7 @@ async def test_markdown_processing():
         logger.error(f"❌ Markdown processing error: {e}")
         return None
 
-async def test_markdown_retrieval(video_id: str):
+async def check_markdown_retrieval(video_id: str):
     """Test retrieving cached markdown analysis"""
     try:
         logger.info(f"📄 Testing markdown retrieval for: {video_id}")
@@ -181,7 +181,7 @@ async def run_comprehensive_tests():
         results["markdown_processing"] = True
         
         # 4. Test markdown retrieval
-        results["markdown_retrieval"] = await test_markdown_retrieval(video_id)
+        results["markdown_retrieval"] = await check_markdown_retrieval(video_id)
     
     # 5. Test cache stats
     results["cache_stats"] = await test_cache_stats()
