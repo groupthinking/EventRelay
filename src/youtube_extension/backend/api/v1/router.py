@@ -110,6 +110,16 @@ performance_monitor = PerformanceMonitor()
 
 logger = logging.getLogger(__name__)
 
+def _safe_log(value: object) -> str:
+    """Strip CR/LF from a value before it enters a log line.
+
+    Guards against log-injection (CWE-117): user-controlled inputs (path
+    params, request fields) can smuggle newlines to forge additional log
+    entries. Sanitize such values wherever they are interpolated into logs.
+    """
+    return str(value).replace("\r", "").replace("\n", "")
+
+
 
 async def _emit_event(event_type: str, data: dict, subject: str | None = None) -> None:
     """Emit a CloudEvent if the publisher is available."""
@@ -572,7 +582,7 @@ async def chat_v1(
     """Chat endpoint with AI processing via AgentOrchestrator"""
     try:
         logger.info(
-            f"Chat request received: {request.message[:50]}... session={request.session_id}"
+            f"Chat request received: {_safe_log(request.message[:50])}... session={_safe_log(request.session_id)}"
         )
 
         params = {
@@ -593,13 +603,13 @@ async def chat_v1(
                 video_id = match.group(1)
 
         if video_id:
-            logger.info(f"Adding video context for video_id: {video_id}")
+            logger.info(f"Adding video context for video_id: {_safe_log(video_id)}")
             detail = data_service.get_video_detail(video_id)
 
             # If video not found, trigger real-time processing
             if not detail and request.video_url:
                 logger.info(
-                    f"Video not found for {video_id}, triggering real-time processing"
+                    f"Video not found for {_safe_log(video_id)}, triggering real-time processing"
                 )
                 try:
                     proc_result = (
@@ -609,7 +619,7 @@ async def chat_v1(
                     )
                     if proc_result and proc_result.get("status") == "success":
                         detail = data_service.get_video_detail(video_id)
-                        logger.info(f"Real-time processing complete for {video_id}")
+                        logger.info(f"Real-time processing complete for {_safe_log(video_id)}")
                 except Exception as e:
                     logger.error(f"Real-time video processing failed: {e}")
 
@@ -674,7 +684,7 @@ async def process_video_v1(
 ):
     """Basic video processing endpoint"""
     try:
-        logger.info(f"Video processing request: {request.video_url}")
+        logger.info(f"Video processing request: {_safe_log(request.video_url)}")
         await _emit_event(
             "com.eventrelay.video.received",
             {"url": request.video_url},
@@ -743,7 +753,7 @@ async def process_video_markdown_v1(
     health_service.increment_metric("process_video_markdown_total")
 
     try:
-        logger.info(f"Markdown processing request: {request.video_url}")
+        logger.info(f"Markdown processing request: {_safe_log(request.video_url)}")
 
         result = await video_processing_service.process_video_for_markdown(
             request.video_url, request.force_regenerate
@@ -779,7 +789,7 @@ async def video_to_software_v1(
 ):
     """Convert YouTube video to deployed software"""
     try:
-        logger.info(f"Video-to-software request: {request.video_url}")
+        logger.info(f"Video-to-software request: {_safe_log(request.video_url)}")
         target_info = resolve_deployment_target(request.deployment_target)
 
         result = await video_processing_service.process_video_to_software(
@@ -1023,7 +1033,7 @@ async def get_actions_by_video_v1(video_id: str):
         actions = repo.get_by_video_id(video_id)
         return actions
     except Exception as e:
-        logger.error(f"Error retrieving actions for {video_id}: {e}", exc_info=True)
+        logger.error(f"Error retrieving actions for {_safe_log(video_id)}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -1071,7 +1081,7 @@ async def update_action_v1(action_id: str, payload: dict[str, Any]):
                     logger.debug("Action feedback recording failed", exc_info=True)
         return {"success": bool(success)}
     except Exception as e:
-        logger.error(f"Error updating action {action_id}: {e}", exc_info=True)
+        logger.error(f"Error updating action {_safe_log(action_id)}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -1327,7 +1337,7 @@ def _persist_video_job(job: VideoJobStatusResponse) -> None:
             data = job.model_dump(mode="json")
             get_job_store().save(job.job_id, data)
         except Exception as exc:
-            logger.warning("Job persist failed for %s: %s", job.job_id, exc)
+            logger.warning("Job persist failed for %s: %s", _safe_log(job.job_id), exc)
 
     # If we are in an async loop, offload serialization and I/O to a thread
     try:
@@ -1424,7 +1434,7 @@ async def _queue_transcript_action_job(
     except Exception as exc:
         logger.info(
             "Cloud Tasks unavailable for %s, using local background task: %s",
-            job_id,
+            _safe_log(job_id),
             exc,
         )
         asyncio.create_task(
@@ -1513,7 +1523,7 @@ async def _run_video_job(
     """Background coroutine that drives the transcript-action workflow."""
     job = _load_video_job(job_id)
     if job is None:
-        logger.error("Video job %s missing at run time", job_id)
+        logger.error("Video job %s missing at run time", _safe_log(job_id))
         return
     try:
         job.status = JobStatus.downloading
@@ -1559,7 +1569,7 @@ async def _run_video_job(
         job.status = JobStatus.failed
         job.error = str(exc)
         _persist_video_job(job)
-        logger.error(f"Video job {job_id} failed: {exc}")
+        logger.error(f"Video job {_safe_log(job_id)} failed: {exc}")
 
 
 @router.post(
@@ -2089,7 +2099,7 @@ async def _run_agent(execution: AgentExecution, events: list[dict[str, Any]]):
     except Exception as exc:
         execution.status = AgentStatus.failed
         execution.error = str(exc)
-        logger.error(f"Agent {execution.agent_id} failed: {exc}")
+        logger.error(f"Agent {_safe_log(execution.agent_id)} failed: {exc}")
 
 
 @router.get(

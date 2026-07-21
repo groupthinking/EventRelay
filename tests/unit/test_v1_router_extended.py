@@ -2357,3 +2357,20 @@ class TestTTLDictEvictionOrder:
         d["d"] = 4   # overflow -> evict b
         assert "b" not in d
         assert {"a", "c", "d"} <= set(d.keys())
+
+
+class TestSafeLog:
+    """Regression guard for log-injection (CWE-117) sanitization."""
+
+    def test_safe_log_strips_crlf(self):
+        from youtube_extension.backend.api.v1 import router as router_module
+
+        malicious = "vid123\r\nERROR forged-admin-login-success"
+        scrubbed = router_module._safe_log(malicious)
+        assert "\n" not in scrubbed and "\r" not in scrubbed
+        assert scrubbed == "vid123ERROR forged-admin-login-success"
+
+    def test_safe_log_coerces_non_str(self):
+        from youtube_extension.backend.api.v1 import router as router_module
+
+        assert router_module._safe_log(42) == "42"
