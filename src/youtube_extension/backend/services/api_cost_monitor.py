@@ -1514,7 +1514,6 @@ class APICostMonitor:
             self._recover_stale_deliveries_sync, stale_timeout_seconds
         )
 
-
     def _recover_stale_deliveries_sync(
         self, stale_timeout_seconds: Optional[int] = None
     ) -> None:
@@ -1703,6 +1702,7 @@ class APICostMonitor:
         except Exception as e:
             logger.error("Error selecting webhook outbox items: %s", e)
             return []
+
     async def process_outbox(
         self, max_items: Optional[int] = None, *, force: bool = False
     ) -> int:
