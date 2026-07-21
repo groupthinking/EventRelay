@@ -21,19 +21,14 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent.parent
 # REMOVED: sys.path.insert for project_root
 
-# Mock FastAPI app if not available
+# Exercise the real versioned backend. A missing production app is a collection
+# failure, not a reason to silently replace it with an empty FastAPI instance.
+from src.youtube_extension.backend.main import app
+from src.youtube_extension.backend.enhanced_video_processor import EnhancedVideoProcessor
+
 try:
-    from src.youtube_extension.backend.main_v2 import app
-    from src.youtube_extension.backend.enhanced_video_processor import EnhancedVideoProcessor
     from src.youtube_extension.mcp.enterprise_mcp_server import EnterpriseMCPServer
 except ImportError:
-    from fastapi import FastAPI
-    app = FastAPI()
-    
-    class EnhancedVideoProcessor:
-        async def process_video(self, url):
-            return {"status": "mock"}
-    
     class EnterpriseMCPServer:
         async def handle_request(self, request):
             return {"jsonrpc": "2.0", "result": {}, "id": request.get("id")}
