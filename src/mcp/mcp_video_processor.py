@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-from __future__ import annotations
-
 """
 MCP-Integrated UVAI Real Video Processor
 Production-grade video processing with MCP ecosystem integration
 ENHANCED WITH HANGING PROTECTION & CIRCUIT BREAKERS
 """
+
+from __future__ import annotations
 
 import asyncio
 import json

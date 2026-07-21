@@ -89,11 +89,11 @@ def resolve_path(*parts: str) -> Path:
         Path: Absolute path resolved from project root
 
     Examples:
-        >>> resolve_path('logs', 'app.log')
-        PosixPath('/Users/garvey/Dev/OpenAI_Hub/projects/EventRelay/logs/app.log')
+        >>> resolve_path('logs', 'app.log')  # doctest: +SKIP
+        PosixPath('.../EventRelay/logs/app.log')
 
-        >>> resolve_path('temp', 'packaged_projects')
-        PosixPath('/Users/garvey/Dev/OpenAI_Hub/projects/EventRelay/temp/packaged_projects')
+        >>> resolve_path('temp', 'packaged_projects')  # doctest: +SKIP
+        PosixPath('.../EventRelay/temp/packaged_projects')
     """
     return get_project_root().joinpath(*parts)
 
