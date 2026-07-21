@@ -1,27 +1,36 @@
 """Regression guard against information disclosure in HTTP 500 responses.
 
-Context: several FastAPI handlers historically raised
-``HTTPException(status_code=500, detail=str(e))`` (or an f-string / dict
-embedding the exception), leaking internal exception text — stack-adjacent
-messages, backend API errors, database errors — to clients (CWE-209). See PR
-#801, which sanitized most but not all handlers.
+Context: several FastAPI handlers historically returned internal exception text
+to clients via 500 responses (CWE-209) — through ``HTTPException`` details and
+through ``JSONResponse`` bodies raised by global/middleware exception handlers.
+Leaked shapes seen in this codebase:
 
-This test encodes the invariant directly on the source of the routers this PR
-hardens: a 500 response must use a *static* string ``detail``, never one derived
-from the caught exception or any runtime value. The scan is AST-based, so it
-catches every call form — positional ``HTTPException(500, str(e))`` and keyword
-``HTTPException(status_code=500, detail=...)`` alike, and flags ``str(...)``,
-f-strings, dicts, and bare variables such as ``detail=error_msg``. It is hermetic
-(no app import / no pydantic) so it runs anywhere.
+* ``raise HTTPException(status_code=500, detail=str(e))``
+* ``raise HTTPException(status_code=500, detail=f"... {e} ...")``
+* ``raise HTTPException(status_code=500, detail=error_msg)``            (variable)
+* ``raise HTTPException(status_code=500, detail={"message": error_msg})``  (dict)
+* ``JSONResponse(status_code=500, content={"detail": str(exc),
+  "path": str(request.url), "error_type": exc.__class__.__name__})``
 
-Scope note: ``_GUARDED_FILES`` is deliberately limited to the routers sanitized
-here. Other backend modules still carry legacy dynamic 500 details (e.g.
-``api/advanced_video_routes.py``); hardening those is tracked separately. Add a
-router to ``_GUARDED_FILES`` once it has been sanitized to bring it under guard —
-that is the intended way to widen coverage.
+This test encodes the invariant directly on the source (a pure AST scan — no app
+import, no pydantic) so it runs anywhere and catches new leaks in *any* backend
+route, global handler, or middleware, not only the ones fixed today. It covers
+both 500 response constructors: ``HTTPException`` and ``JSONResponse``.
+
+Rules:
+
+* ``HTTPException(status_code=500, ...)``: ``detail`` must be an inline static
+  string literal. Anything else — ``str(...)``, an f-string, a bare variable, a
+  dict — is rejected (a 500 detail never legitimately needs to be computed).
+* ``JSONResponse(status_code=500, ...)``: the ``content`` (or ``detail``) must
+  not reference the caught exception or the request. A ``str(exc)`` / ``repr``,
+  an f-string embedding the exception/request, a bare ``exc``/``e``/``error``
+  name, or an attribute such as ``request.url`` / ``exc.__class__`` is rejected.
+  Safe dynamic values — a ``uuid4()`` error id, a ``datetime.now().isoformat()``
+  timestamp — are intentionally allowed.
 
 It deliberately does not constrain 4xx responses: those echo client-supplied
-validation errors, which are not internal-disclosure vectors.
+validation input, which is not an internal-disclosure vector.
 """
 
 from __future__ import annotations
@@ -31,121 +40,165 @@ from pathlib import Path
 
 import pytest
 
-_BACKEND = Path(__file__).resolve().parents[2] / "src" / "youtube_extension" / "backend"
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_BACKEND = _REPO_ROOT / "src" / "youtube_extension" / "backend"
+# The Ray Serve ML surface returns raw ``JSONResponse(...)`` bodies and lives
+# outside ``backend/``; it must be scanned too or 500 leaks there go unguarded.
+_ML_SERVE = _REPO_ROOT / "src" / "uvai" / "ml"
 
-# Routers sanitized by this PR — the invariant is enforced exactly here.
-_GUARDED_FILES = (
-    "cloud_ai_routes.py",
-    "cloud_api_endpoints.py",
-    "real_api_endpoints.py",
-)
-
-
-def _is_httpexception(call: ast.Call) -> bool:
-    func = call.func
-    return (isinstance(func, ast.Name) and func.id == "HTTPException") or (
-        isinstance(func, ast.Attribute) and func.attr == "HTTPException"
-    )
+# Identifiers that, when referenced inside a 500 body, indicate a leak of the
+# caught exception or the inbound request.
+_EXC_NAMES = {"e", "exc", "err", "error", "ex", "exception"}
+_REQUEST_NAMES = {"request", "req"}
+# Attributes that disclose internals when reached from an exception/request.
+_LEAKY_ATTRS = {"url", "__class__", "args", "__cause__", "__context__"}
 
 
-def _is_500_status(node: ast.expr) -> bool:
-    """True if ``node`` denotes HTTP 500 as a literal (``500``) OR a symbolic
-    constant such as ``status.HTTP_500_INTERNAL_SERVER_ERROR`` or
-    ``HTTPStatus.INTERNAL_SERVER_ERROR`` — otherwise the guard could be bypassed
-    by the standard FastAPI symbolic form while still leaking a 500 detail."""
-    if isinstance(node, ast.Constant) and node.value == 500:
-        return True
-    if isinstance(node, ast.Attribute) and node.attr in (
-        "HTTP_500_INTERNAL_SERVER_ERROR",
-        "INTERNAL_SERVER_ERROR",
-    ):
-        return True
+def _is_static_string(node: ast.AST) -> bool:
+    """True iff *node* is an inline string literal (optionally concatenated)."""
+    if isinstance(node, ast.Constant):
+        return isinstance(node.value, str)
+    # "a" "b" implicit concat / "a" + "b"
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+        return _is_static_string(node.left) and _is_static_string(node.right)
     return False
 
 
-def _is_500(call: ast.Call) -> bool:
-    # Positional form: HTTPException(500, ...)
-    if call.args and _is_500_status(call.args[0]):
-        return True
-    # Keyword form: HTTPException(status_code=500, ...)
-    for kw in call.keywords:
-        if kw.arg == "status_code" and _is_500_status(kw.value):
+def _refs_exception_or_request(node: ast.AST) -> bool:
+    """True if *node*'s subtree reads the caught exception or the request."""
+    for leaf in ast.walk(node):
+        if isinstance(leaf, ast.Name) and leaf.id in (_EXC_NAMES | _REQUEST_NAMES):
             return True
+        if isinstance(leaf, ast.Attribute):
+            if leaf.attr in _LEAKY_ATTRS:
+                return True
+            base = leaf.value
+            if isinstance(base, ast.Name) and base.id in (_EXC_NAMES | _REQUEST_NAMES):
+                return True
+        if isinstance(leaf, ast.Call):
+            fn = leaf.func
+            if isinstance(fn, ast.Name) and fn.id in {"str", "repr", "format"}:
+                if any(_refs_exception_or_request(a) for a in leaf.args):
+                    return True
     return False
 
 
-def _detail_node(call: ast.Call) -> ast.expr | None:
-    # Keyword form: detail=...
+def _status_is_500(call: ast.Call, name: str) -> bool:
     for kw in call.keywords:
-        if kw.arg == "detail":
-            return kw.value
-    # Positional form: HTTPException(<status>, <detail>)
-    if len(call.args) >= 2:
-        return call.args[1]
-    return None
+        if kw.arg == "status_code" and isinstance(kw.value, ast.Constant):
+            return kw.value.value == 500
+    # The positional slot of ``status_code`` differs by constructor:
+    #   HTTPException(status_code, detail, ...)  -> args[0]
+    #   JSONResponse(content, status_code, ...)  -> args[1]
+    idx = 1 if name == "JSONResponse" else 0
+    if len(call.args) > idx and isinstance(call.args[idx], ast.Constant):
+        return call.args[idx].value == 500
+    return False
 
 
-def _iter_500_dynamic_detail(text: str):
-    """Yield (line_no, snippet) for each 500 ``HTTPException`` whose ``detail`` is
-    anything other than a static string literal."""
+def _call_name(call: ast.Call) -> str | None:
+    fn = call.func
+    return getattr(fn, "id", None) or getattr(fn, "attr", None)
+
+
+def _iter_500_leaks(text: str):
+    """Yield (line_no, reason) for each 500 response that can leak internals."""
     tree = ast.parse(text)
     for node in ast.walk(tree):
-        if not isinstance(node, ast.Call) or not _is_httpexception(node):
+        if not isinstance(node, ast.Call):
             continue
-        if not _is_500(node):
+        name = _call_name(node)
+        if name not in ("HTTPException", "JSONResponse"):
             continue
-        detail = _detail_node(node)
-        if detail is None:
-            continue  # no detail argument at all — nothing to leak
-        # A static string literal is the only safe form.
-        if isinstance(detail, ast.Constant) and isinstance(detail.value, str):
+        if not _status_is_500(node, name):
             continue
-        yield node.lineno, ast.unparse(node)[:160]
+        # Check keyword arguments
+        for kw in node.keywords:
+            if name == "HTTPException" and kw.arg == "detail":
+                if not _is_static_string(kw.value):
+                    yield node.lineno, "HTTPException 500 detail is not a static string"
+            elif name == "JSONResponse" and kw.arg in ("content", "detail"):
+                if _refs_exception_or_request(kw.value):
+                    yield node.lineno, "JSONResponse 500 body references the exception/request"
+        # Check positional detail argument: HTTPException(status_code, detail)
+        # args[0] is status_code (already checked by _status_is_500); args[1] is detail.
+        if name == "HTTPException" and len(node.args) >= 2:
+            if not _is_static_string(node.args[1]):
+                yield node.lineno, "HTTPException 500 detail is not a static string"
+        # Positional JSONResponse body: JSONResponse(<body>, status_code=500) and
+        # the fully positional JSONResponse(<body>, 500). The content is always
+        # args[0] for JSONResponse, regardless of how status_code is passed.
+        if name == "JSONResponse" and node.args:
+            if _refs_exception_or_request(node.args[0]):
+                yield node.lineno, "JSONResponse 500 body references the exception/request"
 
 
-def test_no_dynamic_detail_in_500_responses() -> None:
+def _guarded_python_files() -> list[Path]:
+    files: list[Path] = []
+    for root in (_BACKEND, _ML_SERVE):
+        if root.exists():
+            files.extend(root.rglob("*.py"))
+    return sorted(files)
+
+
+def test_no_information_disclosure_in_500_responses() -> None:
     offenders: list[str] = []
-    for name in _GUARDED_FILES:
-        path = _BACKEND / name
-        assert path.exists(), f"guarded file no longer exists: {name}"
-        for line_no, snippet in _iter_500_dynamic_detail(path.read_text(encoding="utf-8")):
-            offenders.append(f"{name}:{line_no}: {snippet}")
+    for path in _guarded_python_files():
+        text = path.read_text(encoding="utf-8")
+        try:
+            leaks = list(_iter_500_leaks(text))
+        except SyntaxError as exc:  # pragma: no cover - source is valid Python
+            raise AssertionError(f"could not parse {path}: {exc}") from exc
+        for line_no, reason in leaks:
+            rel = path.relative_to(_REPO_ROOT)
+            offenders.append(f"{rel}:{line_no}: {reason}")
 
     assert not offenders, (
-        "HTTP 500 responses must use a static `detail` string (e.g. "
-        '"Internal server error") and never leak the caught exception or any '
-        "runtime value. Log the full error server-side instead. Offending sites:\n  "
-        + "\n  ".join(offenders)
+        "HTTP 500 responses must not disclose internal details. Use a static "
+        '"Internal server error" body and log the full exception server-side '
+        "instead. Offending sites:\n  " + "\n  ".join(offenders)
     )
 
 
-def test_guard_detects_synthetic_leaks() -> None:
-    """Sanity check: the scanner flags every dynamic 500 detail form and ignores
-    static details and 4xx responses."""
-    leaky = [
-        "raise HTTPException(status_code=500, detail=str(e))",
-        "raise HTTPException(500, str(e))",  # positional status + detail
-        'raise HTTPException(status_code=500, detail=f"failed: {e}")',
-        "raise HTTPException(status_code=500, detail=error_msg)",  # bare variable
-        'raise HTTPException(status_code=500, detail={"message": str(e)})',  # dict
-        # symbolic 500 must not be a blind spot:
-        "raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))",
+def test_guard_detects_every_known_leak_shape() -> None:
+    """Positive controls: the scanner flags each historical leak shape."""
+    leaky_samples = [
+        'raise HTTPException(status_code=500, detail=str(e))',
+        'raise HTTPException(status_code=500, detail=f"boom: {e}")',
+        'raise HTTPException(status_code=500, detail=error_msg)',
+        'raise HTTPException(status_code=500, detail={"message": error_msg})',
+        'return JSONResponse(status_code=500, content={"detail": str(exc)})',
+        'return JSONResponse(status_code=500, content={"path": str(request.url)})',
+        'return JSONResponse(status_code=500, content={"t": exc.__class__.__name__})',
+        # Positional-argument form: HTTPException(status_code, detail)
+        'raise HTTPException(500, str(e))',
+        'raise HTTPException(500, f"internal: {exc}")',
+        'raise HTTPException(500, error_msg)',
+        # JSONResponse with a positional body (the real ml_serve leak shape) —
+        # status via keyword and fully positional (body=args[0], status=args[1]).
+        'return JSONResponse({"error": str(exc)}, status_code=500)',
+        'return JSONResponse({"error": str(exc)}, 500)',
     ]
-    for src in leaky:
-        assert list(_iter_500_dynamic_detail(src)), f"scanner missed a real leak: {src}"
+    for sample in leaky_samples:
+        assert list(_iter_500_leaks(sample)), f"scanner missed a real leak: {sample}"
 
-    safe = [
+
+def test_guard_allows_sanitized_and_safe_dynamic_bodies() -> None:
+    """Negative controls: static bodies and safe dynamic values are allowed."""
+    safe_samples = [
         'raise HTTPException(status_code=500, detail="Internal server error")',
+        # Positional form with a static string is safe.
         'raise HTTPException(500, "Internal server error")',
-        "raise HTTPException(status_code=400, detail=str(exc))",  # 4xx echoes client input
-        "raise HTTPException(status_code=429, detail=f'Rate limit: {e}')",
-        # symbolic 500 with a static detail is still safe:
-        'raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error")',
+        # 4xx echoing client input is out of scope.
+        'raise HTTPException(status_code=400, detail=str(exc))',
+        # A random error id + timestamp is not an internal-disclosure vector.
+        'return JSONResponse(status_code=500, content={'
+        '"id": f"FALLBACK_{uuid.uuid4().hex}", '
+        '"message": "An unexpected error occurred.", '
+        '"timestamp": datetime.now().isoformat()})',
     ]
-    for src in safe:
-        assert not list(
-            _iter_500_dynamic_detail(src)
-        ), f"scanner false-positived: {src}"
+    for sample in safe_samples:
+        assert not list(_iter_500_leaks(sample)), f"scanner false-positived: {sample}"
 
 
 if __name__ == "__main__":  # pragma: no cover
