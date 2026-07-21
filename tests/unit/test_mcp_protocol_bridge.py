@@ -880,17 +880,17 @@ class TestOpenAIAdapter:
         )
         assert result is False
 
-    async def test_initialize_rejects_loopback_https_base_url(self):
+    async def test_initialize_rejects_loopback_https_base_url(self) -> None:
         adapter = OpenAIAdapter()
         result = await adapter.initialize({"api_key": "sk-test", "base_url": "https://127.0.0.1"})
         assert result is False
 
-    async def test_initialize_rejects_private_https_base_url(self):
+    async def test_initialize_rejects_private_https_base_url(self) -> None:
         adapter = OpenAIAdapter()
         result = await adapter.initialize({"api_key": "sk-test", "base_url": "https://10.1.2.3"})
         assert result is False
 
-    async def test_initialize_rejects_hostname_with_mixed_resolution(self):
+    async def test_initialize_rejects_hostname_with_mixed_resolution(self) -> None:
         adapter = OpenAIAdapter()
         with patch.object(
             _pb_mod.socket,
@@ -905,7 +905,7 @@ class TestOpenAIAdapter:
             )
         assert result is False
 
-    async def test_initialize_rejects_unresolvable_hostname(self):
+    async def test_initialize_rejects_unresolvable_hostname(self) -> None:
         adapter = OpenAIAdapter()
         with patch.object(
             _pb_mod.socket,
