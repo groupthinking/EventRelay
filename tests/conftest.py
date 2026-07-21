@@ -45,6 +45,16 @@ try:
 except Exception:
     pass
 
+# Protect the real lightweight youtube_extension processor package too. Some
+# collection-only tests install fallback modules with sys.modules.setdefault().
+# If such a test is collected first, a bare fake processors package leaks into
+# the rest of the suite and real strategies/extractor tests cannot import.
+try:
+    import youtube_extension  # noqa: F401
+    import youtube_extension.processors  # noqa: F401
+except Exception:
+    pass
+
 # Enable dev-mode auth bypass unless the environment already configures auth.
 if not os.getenv("EVENTRELAY_API_KEY"):
     os.environ.setdefault("ALLOW_UNAUTHENTICATED", "1")
