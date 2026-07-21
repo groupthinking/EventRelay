@@ -14,3 +14,6 @@
 ## 2026-07-28 - Memoize text processing in React
 **Learning:** Performing expensive string manipulations like splitting long texts (`transcript.split('\n')`) or generating dynamic Regex expressions inside a component body causes significant CPU overhead on every re-render (like keystroke updates in a search box).
 **Action:** Extract pure transformation logic on static/infrequent data into `useMemo` hooks (e.g., memoizing the paragraph split on `transcript` and precomputing search `RegExp` based on `searchQuery`).
+## 2026-07-31 - Hoist expensive string operations out of hot loops in React useMemo
+**Learning:** Performing operations like `.toLowerCase()` inside a `.filter` array iteration within a React `useMemo` forces string re-allocation and computation per element. When the array is large (like a transcript with thousands of segments), doing invariant operations in the loop causes an unnoticeable main thread spike to become a measurable lag on each keypress.
+**Action:** Always hoist loop-invariant operations like `searchQuery.toLowerCase()` outside of loop bodies. Implement short-circuit boolean checks before accessing or transforming properties of the array items.
