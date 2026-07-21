@@ -384,6 +384,36 @@ class TestFlyAdapterGenerateAppName:
 
 
 class TestFlyAdapterDeploy:
+    async def test_run_deploy_binds_resolved_app_name(self, tmp_path):
+        adapter = FlyAdapter()
+        env_vars = {"FLY_API_TOKEN": "fake-token"}
+
+        with patch.object(
+            adapter,
+            "_run_flyctl_command",
+            new=AsyncMock(
+                return_value={"output": "deployed", "exit_code": 0}
+            ),
+        ) as run_command:
+            result = await adapter._run_flyctl_deploy(
+                str(tmp_path),
+                env_vars,
+                "resolved-app",
+            )
+
+        deploy_args, forwarded_env = run_command.await_args.args
+        assert deploy_args == [
+            "flyctl",
+            "deploy",
+            "--app",
+            "resolved-app",
+            "--remote-only",
+            "--yes",
+            str(tmp_path),
+        ]
+        assert forwarded_env is env_vars
+        assert result == {"output": "deployed", "exit_code": 0}
+
     async def test_reuses_one_generated_app_name(self, monkeypatch, tmp_path):
         monkeypatch.setenv("FLY_API_TOKEN", "fake-token")
         adapter = FlyAdapter()
@@ -420,6 +450,7 @@ class TestFlyAdapterDeploy:
         ensure_config.assert_awaited_once_with(
             str(tmp_path),
             "uvai-my-app-deadbeef",
+            None,
         )
         assert result.metadata["app_name"] == "uvai-my-app-deadbeef"
         assert result.build_log_url == "https://fly.io/apps/uvai-my-app-deadbeef"
@@ -437,6 +468,10 @@ class TestFlyAdapterDeploy:
             "_is_flyctl_installed",
             new=AsyncMock(return_value=True),
         ), patch.object(
+            adapter,
+            "_read_configured_app_name",
+            wraps=adapter._read_configured_app_name,
+        ) as read_configured_name, patch.object(
             adapter,
             "_generate_app_name",
         ) as generate_name, patch.object(
@@ -456,8 +491,31 @@ class TestFlyAdapterDeploy:
             )
 
         generate_name.assert_not_called()
+        read_configured_name.assert_called_once_with(str(tmp_path))
         assert result.metadata["app_name"] == "configured-app"
         assert result.build_log_url == "https://fly.io/apps/configured-app"
+
+    async def test_rejects_non_utf8_existing_config(
+        self,
+        monkeypatch,
+        tmp_path,
+    ):
+        monkeypatch.setenv("FLY_API_TOKEN", "fake-token")
+        (tmp_path / "fly.toml").write_bytes(b"app = \"bad-\xff\"\n")
+        adapter = FlyAdapter()
+
+        with patch.object(
+            adapter,
+            "_is_flyctl_installed",
+            new=AsyncMock(return_value=True),
+        ), pytest.raises(DeploymentError) as exc_info:
+            await adapter._deploy_impl(
+                str(tmp_path),
+                {"title": "Ignored"},
+                {},
+            )
+
+        assert exc_info.value.message == "Unable to read fly.toml"
 
     async def test_rejects_explicit_name_conflicting_with_config(
         self,

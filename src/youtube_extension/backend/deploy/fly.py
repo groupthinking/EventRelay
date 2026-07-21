@@ -57,7 +57,10 @@ class FlyAdapter(BaseDeploymentAdapter):
         if requested_app_name is not None:
             requested_app_name = self._validate_app_name(requested_app_name)
 
-        configured_app_name = self._read_configured_app_name(project_path)
+        configured_app_name = await asyncio.to_thread(
+            self._read_configured_app_name,
+            project_path,
+        )
         if configured_app_name:
             if requested_app_name and requested_app_name != configured_app_name:
                 raise DeploymentError(
@@ -75,7 +78,11 @@ class FlyAdapter(BaseDeploymentAdapter):
             )
 
         # Create fly.toml if it doesn't exist
-        await self._ensure_fly_config(project_path, app_name)
+        await self._ensure_fly_config(
+            project_path,
+            app_name,
+            configured_app_name,
+        )
 
         # Set environment variables for flyctl
         env_vars = os.environ.copy()
@@ -83,7 +90,11 @@ class FlyAdapter(BaseDeploymentAdapter):
 
         # Launch deployment
         self.logger.info("Starting Fly.io deployment...")
-        deploy_result = await self._run_flyctl_deploy(project_path, env_vars)
+        deploy_result = await self._run_flyctl_deploy(
+            project_path,
+            env_vars,
+            app_name,
+        )
 
         # Parse deployment URL from output
         deployment_url = self._extract_deployment_url(deploy_result['output'])
@@ -152,10 +163,16 @@ class FlyAdapter(BaseDeploymentAdapter):
                 recoverable=True
             )
 
-    async def _run_flyctl_deploy(self, project_path: str, env_vars: dict[str, str]) -> dict[str, Any]:
+    async def _run_flyctl_deploy(
+        self,
+        project_path: str,
+        env_vars: dict[str, str],
+        app_name: str,
+    ) -> dict[str, Any]:
         """Run flyctl deploy command"""
         deploy_args = [
             "flyctl", "deploy",
+            "--app", app_name,
             "--remote-only",  # Don't use local docker
             "--yes"  # Auto-confirm prompts
         ]
@@ -170,12 +187,17 @@ class FlyAdapter(BaseDeploymentAdapter):
         self,
         project_path: str,
         app_name: str,
+        configured_app_name: Optional[str] = None,
     ) -> None:
         """Ensure fly.toml configuration exists"""
         fly_config_path = Path(project_path) / "fly.toml"
 
         if fly_config_path.exists():
-            configured_app_name = self._read_configured_app_name(project_path)
+            if configured_app_name is None:
+                configured_app_name = await asyncio.to_thread(
+                    self._read_configured_app_name,
+                    project_path,
+                )
             if configured_app_name != app_name:
                 raise DeploymentError(
                     platform=self.platform,
@@ -239,7 +261,7 @@ primary_region = "iad"
 
         try:
             config_lines = fly_config_path.read_text(encoding="utf-8").splitlines()
-        except OSError:
+        except (OSError, UnicodeDecodeError):
             raise DeploymentError(
                 platform=self.platform,
                 operation="configuration",
