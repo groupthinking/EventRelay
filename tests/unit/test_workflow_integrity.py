@@ -116,6 +116,9 @@ def test_e2e_is_blocking_and_targets_the_triggering_sha_deployment() -> None:
     assert text.count('.creator.type == "Bot"') == 3
     assert text.count('.task == "deploy"') == 2
     assert 'select(.state == "success" and .creator.id == 35613825' in text
+    assert "DEPLOY_IDS=$(gh api" in text
+    assert 'done <<< "$DEPLOY_IDS"' in text
+    assert "| first | .id" not in text
     assert 'No successful ${ENVIRONMENT} deployment found for exact SHA ${SHA}' in text
 
 

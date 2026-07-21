@@ -69,14 +69,14 @@ jobs:
           # Bind the target to Vercel's verified global bot account. The stable
           # numeric ID prevents an environment-name-only deployment spoof.
           if [ "$ENVIRONMENT" = "Preview" ]; then
-            FILTER='[.[] | select(.creator.id == 35613825 and .creator.login == "vercel[bot]" and .creator.type == "Bot" and .task == "deploy" and ((.environment // "") | ascii_downcase | startswith("preview")))] | first | .id // empty'
+            FILTER='.[] | select(.creator.id == 35613825 and .creator.login == "vercel[bot]" and .creator.type == "Bot" and .task == "deploy" and ((.environment // "") | ascii_downcase | startswith("preview"))) | .id'
           else
-            FILTER='[.[] | select(.creator.id == 35613825 and .creator.login == "vercel[bot]" and .creator.type == "Bot" and .task == "deploy" and ((.environment // "") | ascii_downcase == "production"))] | first | .id // empty'
+            FILTER='.[] | select(.creator.id == 35613825 and .creator.login == "vercel[bot]" and .creator.type == "Bot" and .task == "deploy" and ((.environment // "") | ascii_downcase == "production")) | .id'
           fi
 
           for i in $(seq 1 30); do
             DEPLOYMENT_STATUS=0
-            DEPLOY_ID=$(gh api \
+            DEPLOY_IDS=$(gh api \
               "/repos/${{ github.repository }}/deployments?sha=${SHA}&per_page=20" \
               --jq "$FILTER" 2>deployments.err) || DEPLOYMENT_STATUS=$?
             if [ -s deployments.err ]; then
@@ -89,7 +89,11 @@ jobs:
               exit "$DEPLOYMENT_STATUS"
             fi
 
-            if [ -n "$DEPLOY_ID" ]; then
+            while IFS= read -r DEPLOY_ID; do
+              if [ -z "$DEPLOY_ID" ]; then
+                continue
+              fi
+
               STATUS_LOOKUP=0
               DEPLOYMENT_URL=$(gh api \
                 "/repos/${{ github.repository }}/deployments/${DEPLOY_ID}/statuses" \
@@ -103,7 +107,11 @@ jobs:
               if [ "${STATUS_LOOKUP:-0}" != "0" ]; then
                 exit "$STATUS_LOOKUP"
               fi
-            fi
+
+              if [ -n "$DEPLOYMENT_URL" ]; then
+                break
+              fi
+            done <<< "$DEPLOY_IDS"
 
             if [ -n "$DEPLOYMENT_URL" ]; then
               break
