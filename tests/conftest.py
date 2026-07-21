@@ -55,6 +55,20 @@ try:
 except Exception:
     pass
 
+
+# Collection-only fallback stubs must not replace the real extractor module.
+# Remove only a bare synthetic module immediately before its real test module
+# is imported; dependency stubs installed by that test remain intact.
+def pytest_pycollect_makemodule(module_path, parent):
+    if getattr(module_path, "name", "") != "test_enhanced_extractor.py":
+        return None
+
+    module_name = "youtube_extension.processors.enhanced_extractor"
+    module = sys.modules.get(module_name)
+    if module is not None and not getattr(module, "__file__", None):
+        sys.modules.pop(module_name, None)
+    return None
+
 # Enable dev-mode auth bypass unless the environment already configures auth.
 if not os.getenv("EVENTRELAY_API_KEY"):
     os.environ.setdefault("ALLOW_UNAUTHENTICATED", "1")
