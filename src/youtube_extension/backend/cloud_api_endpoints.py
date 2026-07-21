@@ -271,10 +271,11 @@ async def process_video_cloud(
             )
 
     except Exception as e:
-        error_msg = f"Cloud processing failed: {str(e)}"
-        logger.error(error_msg, exc_info=True)
+        logger.error(
+            "Cloud processing failed: %s", _sanitize_log_value(e), exc_info=True
+        )
 
-        # detail is a static string; error_msg (with the exception) is logged above only
+        # The exception is sanitized for logs and never returned to the client.
         raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.post("/api/v3/process-video-task")
@@ -387,7 +388,9 @@ async def process_video_task_handler(
         }
 
     except Exception as e:
-        logger.error(f"Task processing failed: {e}", exc_info=True)
+        logger.error(
+            "Task processing failed: %s", _sanitize_log_value(e), exc_info=True
+        )
 
         # Update state with a static error message; raw exception is logged above only
         try:
@@ -398,7 +401,11 @@ async def process_video_task_handler(
                 error_message="Task processing failed"
             )
         except Exception as state_error:
-            logger.error(f"Failed to update error state: {state_error}")
+            logger.error(
+                "Failed to update error state: %s",
+                _sanitize_log_value(state_error),
+                exc_info=True,
+            )
 
         raise HTTPException(status_code=500, detail="Internal server error")
 
