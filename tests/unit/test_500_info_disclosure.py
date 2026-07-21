@@ -36,6 +36,7 @@ validation input, which is not an internal-disclosure vector.
 from __future__ import annotations
 
 import ast
+from http import HTTPStatus
 from pathlib import Path
 
 import pytest
@@ -83,18 +84,70 @@ def _refs_exception_or_request(node: ast.AST) -> bool:
     return False
 
 
-def _status_is_server_error(call: ast.Call, name: str) -> bool:
+def _named_status_code(name: str) -> int | None:
+    """Resolve standard HTTP status symbols without importing application code."""
+    if name.startswith("HTTP_"):
+        code = name.removeprefix("HTTP_").split("_", 1)[0]
+        if len(code) == 3 and code.isdigit():
+            return int(code)
+    member = HTTPStatus.__members__.get(name)
+    return int(member) if member is not None else None
+
+
+def _status_code_value(node: ast.AST, symbols: dict[str, int]) -> int | None:
+    if isinstance(node, ast.Constant) and isinstance(node.value, int):
+        return node.value
+    if isinstance(node, ast.Name):
+        return symbols.get(node.id, _named_status_code(node.id))
+    if isinstance(node, ast.Attribute):
+        if node.attr == "value":
+            return _status_code_value(node.value, symbols)
+        return _named_status_code(node.attr)
+    return None
+
+
+def _status_symbol_table(tree: ast.Module) -> dict[str, int]:
+    """Resolve module constants that alias literal or standard status values."""
+    symbols: dict[str, int] = {}
+    changed = True
+    while changed:
+        changed = False
+        for node in tree.body:
+            targets: list[ast.AST] = []
+            value: ast.AST | None = None
+            if isinstance(node, ast.Assign):
+                targets, value = node.targets, node.value
+            elif isinstance(node, ast.AnnAssign) and node.value is not None:
+                targets, value = [node.target], node.value
+            if value is None:
+                continue
+            status = _status_code_value(value, symbols)
+            if status is None:
+                continue
+            for target in targets:
+                if (
+                    isinstance(target, ast.Name)
+                    and symbols.get(target.id) != status
+                ):
+                    symbols[target.id] = status
+                    changed = True
+    return symbols
+
+
+def _status_is_server_error(
+    call: ast.Call, name: str, symbols: dict[str, int]
+) -> bool:
     for kw in call.keywords:
-        if kw.arg == "status_code" and isinstance(kw.value, ast.Constant):
-            status = kw.value.value
-            return isinstance(status, int) and 500 <= status <= 599
+        if kw.arg == "status_code":
+            status = _status_code_value(kw.value, symbols)
+            return status is not None and 500 <= status <= 599
     # The positional slot of ``status_code`` differs by constructor:
     #   HTTPException(status_code, detail, ...)  -> args[0]
     #   JSONResponse(content, status_code, ...)  -> args[1]
     idx = 1 if name == "JSONResponse" else 0
-    if len(call.args) > idx and isinstance(call.args[idx], ast.Constant):
-        status = call.args[idx].value
-        return isinstance(status, int) and 500 <= status <= 599
+    if len(call.args) > idx:
+        status = _status_code_value(call.args[idx], symbols)
+        return status is not None and 500 <= status <= 599
     return False
 
 
@@ -106,6 +159,7 @@ def _call_name(call: ast.Call) -> str | None:
 def _iter_500_leaks(text: str):
     """Yield (line_no, reason) for each 500 response that can leak internals."""
     tree = ast.parse(text)
+    status_symbols = _status_symbol_table(tree)
 
     # Bind every response constructor to the exception aliases visible from
     # its enclosing handler.  The fixed conventional-name set remains useful
@@ -132,7 +186,7 @@ def _iter_500_leaks(text: str):
         name = _call_name(node)
         if name not in ("HTTPException", "JSONResponse"):
             continue
-        if not _status_is_server_error(node, name):
+        if not _status_is_server_error(node, name, status_symbols):
             continue
         # Check keyword arguments
         for kw in node.keywords:
@@ -197,6 +251,10 @@ def test_guard_detects_every_known_leak_shape() -> None:
         'raise HTTPException(500, f"internal: {exc}")',
         'raise HTTPException(500, error_msg)',
         'raise HTTPException(status_code=503, detail=str(e))',
+        'raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e))',
+        'raise HTTPException(status_code=HTTPStatus.INTERNAL_SERVER_ERROR, detail=str(e))',
+        'SERVER_FAILURE = status.HTTP_502_BAD_GATEWAY\n'
+        'raise HTTPException(status_code=SERVER_FAILURE, detail=str(e))',
         'raise HTTPException(599, f"internal: {exc}")',
         # JSONResponse with a positional body (the real ml_serve leak shape) —
         # status via keyword and fully positional (body=args[0], status=args[1]).
@@ -221,6 +279,7 @@ def test_guard_allows_sanitized_and_safe_dynamic_bodies() -> None:
         'raise HTTPException(500, "Internal server error")',
         # 4xx echoing client input is out of scope.
         'raise HTTPException(status_code=400, detail=str(exc))',
+        'raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))',
         # A random error id + timestamp is not an internal-disclosure vector.
         'return JSONResponse(status_code=500, content={'
         '"id": f"FALLBACK_{uuid.uuid4().hex}", '
@@ -246,6 +305,7 @@ def test_guard_allows_sanitized_and_safe_dynamic_bodies() -> None:
 # guard is scoped to the request handlers hardened here. Add a file to
 # ``_GUARDED_RESPONSE_FILES`` once its response bodies have been sanitized.
 _GUARDED_RESPONSE_FILES = {"cloud_api_endpoints.py", "real_api_endpoints.py"}
+_RESPONSE_ERROR_FIELDS = {"error", "error_message"}
 
 
 def _refs_any_name(node: ast.AST, names: set[str]) -> bool:
@@ -316,11 +376,14 @@ def _iter_response_error_leaks(text: str):
         for node in ast.walk(scope):
             if isinstance(node, ast.Dict):
                 for key, value in zip(node.keys, node.values):
-                    if isinstance(key, ast.Constant) and key.value == "error":
+                    if (
+                        isinstance(key, ast.Constant)
+                        and key.value in _RESPONSE_ERROR_FIELDS
+                    ):
                         yield node, value
             elif isinstance(node, ast.Call):
                 for keyword in node.keywords:
-                    if keyword.arg == "error":
+                    if keyword.arg in _RESPONSE_ERROR_FIELDS:
                         yield node, keyword.value
 
     def _uses_public_error_sanitizer(node: ast.AST) -> bool:
@@ -358,7 +421,7 @@ def _iter_response_error_leaks(text: str):
         if not isinstance(node, ast.Call):
             continue
         for keyword in node.keywords:
-            if keyword.arg != "error":
+            if keyword.arg not in _RESPONSE_ERROR_FIELDS:
                 continue
             value = keyword.value
             line = getattr(value, "lineno", node.lineno)
@@ -431,6 +494,7 @@ def test_response_body_guard_flags_and_allows() -> None:
         'x = {"error": str(e)}',
         'x = {"status": "error", "error": str(exc)}',
         'x = {"error": f"failed: {e}"}',
+        'x = {"error_message": str(e)}',
         # A nonstandard exception name must not bypass the guard: the identifier
         # is derived from the enclosing `except ... as <name>` handler.
         "try:\n    pass\nexcept Exception as failure:\n"
@@ -445,6 +509,7 @@ def test_response_body_guard_flags_and_allows() -> None:
         '    detail = f"boom: {failure}"\n'
         '    return {"error": detail}\n',
         'response = VideoAnalysisResponse(error=result.get("error"))',
+        'response = VideoAnalysisResponse(error_message=state.error_message)',
         "async def endpoint():\n"
         "    result = await processor.batch_process_videos([])\n"
         "    return result\n",
@@ -459,6 +524,7 @@ def test_response_body_guard_flags_and_allows() -> None:
         'x = {"error": "Internal server error"}',
         'x = {"status": "error", "error": "Service unavailable"}',
         'x = {"error": "failed", "timestamp": datetime.now().isoformat()}',
+        'x = {"error_message": "Internal server error"}',
         # Static body inside a nonstandard-named handler is fine.
         "try:\n    pass\nexcept Exception as failure:\n"
         '    return {"error": "Internal server error"}\n',

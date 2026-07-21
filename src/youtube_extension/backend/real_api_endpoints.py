@@ -55,7 +55,7 @@ def _sanitize_error_list(value: Any) -> Any:
 
 
 def _sanitize_response_errors(value: Any) -> Any:
-    """Copy a response tree while replacing every non-null ``error`` value.
+    """Copy a response tree while replacing every diagnostic error value.
 
     Processor results can contain exception text at the top level and inside
     batch, step, or provider records.  Sanitizing the complete response tree at
@@ -67,7 +67,7 @@ def _sanitize_response_errors(value: Any) -> Any:
     if isinstance(value, dict):
         sanitized: dict[Any, Any] = {}
         for key, item in value.items():
-            if key == "error":
+            if key in {"error", "error_message"}:
                 sanitized[key] = _sanitize_public_error(item)
             elif key == "errors":
                 sanitized[key] = _sanitize_error_list(item)
@@ -149,22 +149,23 @@ def setup_real_api_endpoints(app: FastAPI):
                 video_url=request.video_url,
                 force_refresh=request.force_refresh
             )
+            safe_result = _sanitize_response_errors(result)
 
             # Track metrics
             processing_time = (datetime.now(timezone.utc) - start_time).total_seconds()
 
             # Format response
             response = VideoAnalysisResponse(
-                video_id=result.get('video_id', ''),
+                video_id=safe_result.get('video_id', ''),
                 video_url=request.video_url,
-                success=result.get('success', False),
-                metadata=result.get('metadata'),
-                transcript=result.get('transcript'),
-                ai_analysis=_sanitize_response_errors(result.get('ai_analysis')),
-                cost_breakdown=result.get('cost_breakdown'),
+                success=safe_result.get('success', False),
+                metadata=safe_result.get('metadata'),
+                transcript=safe_result.get('transcript'),
+                ai_analysis=safe_result.get('ai_analysis'),
+                cost_breakdown=safe_result.get('cost_breakdown'),
                 processing_time=processing_time,
-                cached=result.get('cached', False),
-                error=_sanitize_public_error(result.get('error'))
+                cached=safe_result.get('cached', False),
+                error=_sanitize_public_error(safe_result.get('error'))
             )
 
             logger.info(f"✅ Real API processing completed: {result.get('video_id')} - ${result.get('cost_breakdown', {}).get('total_cost', 0):.4f}")

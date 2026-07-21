@@ -434,6 +434,48 @@ class TestProcessVideoEndpoint:
         ]
         assert "leaked-internal-key" not in response.text
 
+    def test_complete_processor_result_is_sanitized(self, client, mock_processor):
+        """Every response-model subtree is a client boundary, not just AI output."""
+        mock_processor.process_video = AsyncMock(
+            return_value={
+                "video_id": "auJzb1D-fag",
+                "success": False,
+                "metadata": {
+                    "error": "metadata-secret",
+                    "nested": {"error_message": "nested-secret"},
+                },
+                "transcript": {"errors": ["transcript-secret"]},
+                "cost_breakdown": {"provider": {"error": "billing-secret"}},
+                "cached": True,
+                "error": None,
+            }
+        )
+
+        response = client.post(
+            "/api/v2/process-video",
+            json={"video_url": "https://youtube.com/watch?v=auJzb1D-fag"},
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["metadata"]["error"] == "Video processing failed"
+        assert body["metadata"]["nested"]["error_message"] == (
+            "Video processing failed"
+        )
+        assert body["transcript"]["errors"] == ["Video processing failed"]
+        assert body["cost_breakdown"]["provider"]["error"] == (
+            "Video processing failed"
+        )
+        assert not any(
+            secret in response.text
+            for secret in (
+                "metadata-secret",
+                "nested-secret",
+                "transcript-secret",
+                "billing-secret",
+            )
+        )
+
     def test_missing_video_url_returns_422(self, client):
         response = client.post("/api/v2/process-video", json={})
         assert response.status_code == 422
