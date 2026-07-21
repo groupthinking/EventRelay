@@ -65,7 +65,7 @@ jobs:
               );
               const match = text.match(pattern);
               if (!match) return null;
-              return match[1].replace(/<!--[\\s\\S]*?-->/g, "").trim();
+              return match[1].replace(/<!--[\s\S]*?-->/g, "").trim();
             }
 
             const placeholderPatterns = [
