@@ -46,15 +46,28 @@ def _sanitize_log_value(value: Any) -> str:
 
 
 def _is_blocked_ip(ip: Union[ipaddress.IPv4Address, ipaddress.IPv6Address]) -> bool:
-    """Return True if the address is in a range unsafe for outbound callbacks."""
+    """Return True unless the address is a globally routable public address.
+
+    Rejecting every non-global destination (rather than enumerating unsafe
+    ranges) also blocks addresses that Python reports as neither private nor
+    global — e.g. shared CGNAT space (``100.64.0.0/10``) and deprecated IPv6
+    site-local (``fec0::/10``) — which the enumerated form let through.
+    Multicast and deprecated IPv6 site-local (``fec0::/10``, which some Python
+    versions still report as global) are rejected explicitly.
+    """
     return (
-        ip.is_private
-        or ip.is_loopback
-        or ip.is_link_local
-        or ip.is_reserved
-        or ip.is_multicast
-        or ip.is_unspecified
+        ip.is_multicast
+        or getattr(ip, "is_site_local", False)
+        or not ip.is_global
     )
+
+
+# Bounds for outbound callback dispatch: a hostname can resolve to many public
+# addresses, so cap how many are attempted and the total wall-clock spent so a
+# black-holing DNS answer cannot tie up a task worker far beyond one timeout.
+_MAX_CALLBACK_ADDRESS_ATTEMPTS = 3
+_CALLBACK_ATTEMPT_TIMEOUT = 10.0
+_CALLBACK_TOTAL_TIMEOUT = 15.0
 
 
 def _is_safe_callback_url(url: str, *, resolve: bool = True) -> bool:
@@ -317,9 +330,18 @@ async def process_video_task_handler(
                     import httpx
 
                     callback_url = httpx.URL(payload.callback_url)
+                    host_header = callback_url.netloc.decode("ascii")
+                    loop = asyncio.get_running_loop()
+                    deadline = loop.time() + _CALLBACK_TOTAL_TIMEOUT
+                    sent = False
+                    last_connect_error: Optional[Exception] = None
                     async with httpx.AsyncClient(follow_redirects=False) as client:
-                        last_connect_error = None
-                        for address in callback_addresses:
+                        for address in callback_addresses[
+                            :_MAX_CALLBACK_ADDRESS_ATTEMPTS
+                        ]:
+                            remaining = deadline - loop.time()
+                            if remaining <= 0:
+                                break
                             pinned_url = callback_url.copy_with(host=address)
                             try:
                                 await client.post(
@@ -329,25 +351,29 @@ async def process_video_task_handler(
                                         "status": "completed",
                                         "processing_time": result.processing_time,
                                     },
-                                    headers={
-                                        "Host": callback_url.netloc.decode("ascii")
-                                    },
+                                    headers={"Host": host_header},
                                     extensions={"sni_hostname": callback_url.host},
-                                    timeout=10.0,
+                                    timeout=min(_CALLBACK_ATTEMPT_TIMEOUT, remaining),
                                 )
+                                sent = True
                                 break
                             except (httpx.ConnectError, httpx.ConnectTimeout) as exc:
                                 # httpx has not sent the request when connection
                                 # establishment fails, so another already-validated
                                 # address is safe to try without duplicating a POST.
                                 last_connect_error = exc
-                        else:
-                            assert last_connect_error is not None
-                            raise last_connect_error
-                    logger.info(
-                        "✅ Callback sent to %s",
-                        _sanitize_log_value(payload.callback_url),
-                    )
+                    if sent:
+                        logger.info(
+                            "✅ Callback sent to %s",
+                            _sanitize_log_value(payload.callback_url),
+                        )
+                    elif last_connect_error is not None:
+                        raise last_connect_error
+                    else:
+                        logger.warning(
+                            "⚠️ Callback abandoned (attempt/deadline bound) for %s",
+                            _sanitize_log_value(payload.callback_url),
+                        )
                 except Exception as e:
                     logger.warning(
                         "⚠️ Callback failed: %s", _sanitize_log_value(str(e))

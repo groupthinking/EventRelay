@@ -1510,6 +1510,8 @@ class TestCallbackUrlSafety:
             "http://10.0.0.5/x",                    # private
             "http://192.168.1.1/x",                 # private
             "http://169.254.169.254/meta",          # link-local / GCP metadata
+            "http://100.64.0.1/x",                  # CGNAT: neither private nor global
+            "http://[fec0::1]/x",                   # deprecated IPv6 site-local
             "https://metadata.google.internal/x",   # blocklisted hostname
             "https://metadata.google.internal./x",  # trailing-dot bypass attempt
             "http://LOCALHOST/x",                   # case-insensitive blocklist
@@ -1711,3 +1713,34 @@ class TestCallbackSsrfEndToEnd:
         assert call_kwargs["headers"]["Host"] == host_header
         assert call_kwargs["extensions"]["sni_hostname"] == "callbacks.example"
         assert call_kwargs["json"]["status"] == "completed"
+
+    def test_task_handler_caps_black_holing_address_attempts(self):
+        # A hostname resolving to many black-holing public addresses must not
+        # exceed the attempt cap, bounding worst-case task-worker time.
+        addresses = tuple(f"203.0.113.{i}" for i in range(1, 6))  # 5 public IPs
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        mock_client.post = AsyncMock(side_effect=_httpx_real.ConnectError("down"))
+        mock_client_cls = MagicMock(return_value=mock_client)
+
+        mock_processor = AsyncMock()
+        mock_processor.process_video_sync = AsyncMock(return_value=self._state())
+        with patch(
+            "youtube_extension.backend.cloud_api_endpoints.get_cloud_video_processor",
+            return_value=mock_processor,
+        ), patch(
+            "youtube_extension.backend.cloud_api_endpoints._validated_callback_addresses",
+            return_value=addresses,
+        ), patch("httpx.AsyncClient", mock_client_cls):
+            response = TestClient(_make_cloud_api_app()).post(
+                "/api/v3/process-video-task",
+                json={
+                    "video_id": "auJzb1D-fag",
+                    "video_url": "https://yt.com/watch?v=auJzb1D-fag",
+                    "callback_url": "https://many.example/cb",
+                },
+                headers={"X-CloudTasks-TaskName": "task-cap"},
+            )
+        assert response.status_code == 200
+        assert mock_client.post.await_count == _cae._MAX_CALLBACK_ADDRESS_ATTEMPTS
