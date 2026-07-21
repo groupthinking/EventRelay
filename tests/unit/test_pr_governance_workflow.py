@@ -73,6 +73,8 @@ def test_governance_workflow_rejects_default_placeholders() -> None:
     assert "Risk level:" in script
     assert "Focused tests" in script
     assert "meaningfulLines.length > 0" in script
+    assert r'replace(/<!--[\s\S]*?-->/g, "").trim()' in script
+    assert r'replace(/<!--[\\s\\S]*?-->/g, "").trim()' not in script
 
 
 def test_governance_workflow_validates_issue_via_api() -> None:
