@@ -15,12 +15,25 @@ describe('auth configuration source safety', () => {
     expect(source).not.toContain("signIn: '/api/auth/signin'");
   });
 
-  it('accepts both project-specific and common Google OAuth env names', () => {
+  it('accepts both project-specific and common Google OAuth env names with standard names prioritized over legacy fallback names', () => {
     const source = readSource('lib/auth.ts');
     expect(source).toContain('GOOGLE_OAUTH_CLIENT_ID');
     expect(source).toContain('GOOGLE_CLIENT_ID');
     expect(source).toContain('GOOGLE_OAUTH_CLIENT_SECRET');
     expect(source).toContain('GOOGLE_CLIENT_SECRET');
+
+    // Verify canonical precedence ordering in process.env lookups
+    const idIdxCanonical = source.indexOf('process.env.GOOGLE_CLIENT_ID');
+    const idIdxFallback = source.indexOf('process.env.GOOGLE_OAUTH_CLIENT_ID');
+    expect(idIdxCanonical).toBeGreaterThan(-1);
+    expect(idIdxFallback).toBeGreaterThan(-1);
+    expect(idIdxCanonical).toBeLessThan(idIdxFallback);
+
+    const secretIdxCanonical = source.indexOf('process.env.GOOGLE_CLIENT_SECRET');
+    const secretIdxFallback = source.indexOf('process.env.GOOGLE_OAUTH_CLIENT_SECRET');
+    expect(secretIdxCanonical).toBeGreaterThan(-1);
+    expect(secretIdxFallback).toBeGreaterThan(-1);
+    expect(secretIdxCanonical).toBeLessThan(secretIdxFallback);
   });
 
   it('keeps the root route as a landing page instead of redirecting to the app', () => {
