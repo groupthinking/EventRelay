@@ -1520,6 +1520,7 @@ for (const [review, expected] of rows) {
         assertions = r"""
 const associations = new Set(['OWNER', 'MEMBER', 'COLLABORATOR']);
 const agents = new Set([
+  'google-labs-jules[bot]',
   'github-copilot[bot]',
   'openai-codex[bot]',
   'chatgpt-codex-connector[bot]',
@@ -1529,6 +1530,7 @@ const rows = [
   ['OWNER', 'person', true],
   ['MEMBER', 'person', true],
   ['COLLABORATOR', 'person', true],
+  ['NONE', 'google-labs-jules[bot]', true],
   ['NONE', 'github-copilot[bot]', true],
   ['NONE', 'openai-codex[bot]', true],
   ['NONE', 'chatgpt-codex-connector[bot]', true],
@@ -1565,19 +1567,19 @@ for (const [association, actor, expected] of rows) {
 const pull = {
   pull_request: {},
   body: '<!-- agent-lock-manifest\n' +
-    '{"agent_login":"github-copilot[bot]"}\n-->'
+    '{"agent_login":"google-labs-jules[bot]"}\n-->'
 };
 const issue = {
-  body: '## Agent login\n\ngithub-copilot[bot]\n\n## Objective\nTest'
+  body: '## Agent login\n\ngoogle-labs-jules[bot]\n\n## Objective\nTest'
 };
 const rows = [
-  ['declared ready', pull, 'github-copilot[bot]',
+  ['declared ready', pull, 'google-labs-jules[bot]',
     'Ready for a review! A PR has been created.', null, true],
-  ['declared structured', issue, 'github-copilot[bot]',
+  ['declared structured', issue, 'google-labs-jules[bot]',
     '<!-- agent-lock-event {bad-json} -->', null, true],
-  ['event edited away', pull, 'github-copilot[bot]',
+  ['event edited away', pull, 'google-labs-jules[bot]',
     'ordinary update', 'Jules encountered an unexpected error', true],
-  ['declared chatter', pull, 'github-copilot[bot]',
+  ['declared chatter', pull, 'google-labs-jules[bot]',
     'ordinary update', null, false],
   ['human discussion', pull, 'maintainer',
     'Ready for a review! A PR has been created.', null, false],
@@ -1587,7 +1589,7 @@ const rows = [
     '<!-- agent-completion-truth-gate:v1 -->', null, false],
   ['intent invalidation', issue, 'github-actions[bot]',
     '<!-- agent-lock-intent-invalidated:v1 -->', null, true],
-  ['missing contract', {body: ''}, 'github-copilot[bot]',
+  ['missing contract', {body: ''}, 'google-labs-jules[bot]',
     'Ready for a review! A PR has been created.', null, false]
 ];
 for (const [name, target, actor, body, previousBody, expected] of rows) {
@@ -1637,6 +1639,7 @@ const rows = [
   ['external-user', {permission: 'read', role_name: 'read'}, false],
   ['custom-reader', {permission: 'read', role_name: 'observe'}, false],
   ['github-actions[bot]', {permission: 'none', role_name: 'none'}, false],
+  ['google-labs-jules[bot]', {permission: 'none', role_name: 'none'}, false],
   ['github-copilot[bot]', {permission: 'read', role_name: 'read'}, false],
   ['openai-codex[bot]', {permission: 'write', role_name: 'write'}, true],
   [null, {permission: 'admin', role_name: 'admin'}, false]
@@ -1673,6 +1676,7 @@ for (const [actor, response, expected] of rows) {
         ]
 
         self.assertNotIn("...knownAgents", reviewer_set)
+        self.assertIn("'google-labs-jules[bot]'", reviewer_set)
         self.assertIn("'chatgpt-codex-connector[bot]'", reviewer_set)
         self.assertIn("'vercel[bot]'", reviewer_set)
         self.assertIn("const aiReviewerLogins = aiReviewerLoginSet()", reviewer_set)
@@ -1685,6 +1689,7 @@ for (const [actor, response, expected] of rows) {
         set_assertions = r"""
 const reviewers = aiReviewerLoginSet();
 const required = [
+  'google-labs-jules',
   'github-copilot',
   'copilot-swe-agent',
   'openai-codex',
@@ -1717,6 +1722,7 @@ if (reviewers.has('human-reviewer')) {
         self.assertEqual(len(functions), 1)
         assertions = r"""
 const reviewers = new Set([
+  'google-labs-jules[bot]',
   'github-copilot[bot]',
   'copilot-swe-agent[bot]',
   'openai-codex[bot]',
@@ -1726,6 +1732,8 @@ const reviewers = new Set([
   'vercel[bot]'
 ].map(normaliseBotLogin));
 const rows = [
+  ['google-labs-jules', true],
+  ['google-labs-jules[bot]', true],
   ['github-copilot', true],
   ['copilot-swe-agent', true],
   ['openai-codex', true],
@@ -2501,15 +2509,15 @@ if (verdictProjection([]) !== null) {
         self.assertEqual(len(functions), 1)
 
         assertions = r"""
-const agents = new Set(['github-copilot[bot]']);
+const agents = new Set(['google-labs-jules[bot]']);
 const rows = [
-  ['structured', 'github-copilot[bot]',
+  ['structured', 'google-labs-jules[bot]',
     '<!-- agent-lock-event {bad-json} -->', true],
-  ['ready', 'github-copilot[bot]',
+  ['ready', 'google-labs-jules[bot]',
     'Ready for a review! A PR has been created.', true],
-  ['error', 'github-copilot[bot]',
+  ['error', 'google-labs-jules[bot]',
     "Jules wasn't able to complete the task", true],
-  ['ordinary agent chatter', 'github-copilot[bot]',
+  ['ordinary agent chatter', 'google-labs-jules[bot]',
     'Here is a progress update.', false],
   ['maintainer discussion', 'maintainer',
     'Ready for a review! A PR has been created.', false],
@@ -2762,7 +2770,7 @@ const rows = [
   ['issue label', base, issue(1, ['mcp/agent']), true],
   ['branch', {...base, head: {ref: 'codex/fix'}}, null, true],
   ['manifest', {...base, body: '<!-- agent-lock-manifest {bad} -->'}, null, true],
-  ['known agent', {...base, user: {login: 'github-copilot[bot]'}}, null, true],
+  ['known agent', {...base, user: {login: 'google-labs-jules[bot]'}}, null, true],
   ['dependabot excluded', {
     ...base,
     user: {login: 'dependabot[bot]'},
@@ -3239,6 +3247,7 @@ async function runValidate(pr) {
         self.assertIn("timeout-minutes: 20", truth_gate_header)
         self.assertIn("trustedCommentAssociations", workflow)
         self.assertIn("comment.author_association", workflow)
+        self.assertIn("google-labs-jules[bot]", workflow)
         self.assertIn("getCollaboratorPermissionLevel", dispatch)
         self.assertIn("context.payload.sender", dispatch)
         self.assertNotIn("issue.author_association", dispatch)
