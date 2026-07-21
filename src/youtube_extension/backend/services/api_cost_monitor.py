@@ -36,6 +36,8 @@ from sqlalchemy import (
     or_,
     text,
 )
+from sqlalchemy.dialects.postgresql import insert as postgresql_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.engine import URL, make_url
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -1303,28 +1305,33 @@ class APICostMonitor:
             self.session_costs[service] += cost
             self.session_requests[service] += 1
 
-        stored = False
+        claimed_alerts: list[tuple[str, float]] = []
         if self.Session is None:
             logger.warning(
                 "API usage was not persisted because persistence is disabled"
             )
         else:
             try:
-                await asyncio.to_thread(self._record_usage_sync, record)
-                stored = True
+                claimed_alerts = await asyncio.to_thread(
+                    self._record_usage_sync, record
+                )
             except Exception as exc:
                 # The provider operation has already completed. Telemetry is
                 # best effort and must never make that paid result retry/fail.
                 logger.error("Failed to record API usage: %s", exc)
 
-        if stored:
-            await self._check_budget_alerts()
+        # This only wakes the explicitly managed worker; network I/O remains
+        # outside the accounting path.
+        for alert_type, current_cost in claimed_alerts:
+            await self._send_budget_alert(current_cost, alert_type)
 
         logger.debug("API usage: %s - $%.4f (%s tokens)", service, cost, tokens_used)
         return record
 
-    def _record_usage_sync(self, record: APIUsageRecord) -> None:
-        """Persist one usage record on a worker thread."""
+    def _record_usage_sync(
+        self, record: APIUsageRecord
+    ) -> list[tuple[str, float]]:
+        """Persist usage and any newly crossed alert in one transaction."""
         with self._session_scope(commit=True) as session:
             session.add(
                 APIUsage(
@@ -1340,6 +1347,83 @@ class APICostMonitor:
                     error_message=record.error_message,
                 )
             )
+            session.flush()
+            return self._stage_budget_alerts(session, record.timestamp)
+
+    def _stage_budget_alerts(
+        self, session: Session, timestamp: datetime
+    ) -> list[tuple[str, float]]:
+        """Aggregate the UTC day and enqueue crossed alerts transactionally."""
+        utc_date = timestamp.astimezone(timezone.utc).date().isoformat()
+        start_at, end_at = self._utc_day_bounds(utc_date)
+        insert_factory = postgresql_insert if self._is_postgres else sqlite_insert
+
+        session.execute(
+            insert_factory(DailyBudget)
+            .values(
+                date=utc_date,
+                total_cost=0.0,
+                alert_sent=False,
+                budget_exceeded=False,
+            )
+            .on_conflict_do_nothing(index_elements=["date"])
+        )
+        budget = (
+            session.query(DailyBudget)
+            .filter_by(date=utc_date)
+            .with_for_update()
+            .one()
+        )
+        total = (
+            session.query(func.sum(APIUsage.cost))
+            .filter(
+                APIUsage.timestamp >= start_at,
+                APIUsage.timestamp < end_at,
+            )
+            .scalar()
+        )
+        current_cost = float(total) if total is not None else 0.0
+        budget.total_cost = current_cost
+
+        claimed: list[tuple[str, float]] = []
+        alert_specs = (
+            ("threshold", self.alert_threshold, "alert_sent"),
+            ("exceeded", self.daily_budget, "budget_exceeded"),
+        )
+        for alert_type, limit, flag_name in alert_specs:
+            if current_cost < limit or getattr(budget, flag_name):
+                continue
+
+            if alert_type == "threshold":
+                payload = (
+                    f"🚨 API Budget Alert: ${current_cost:.2f} "
+                    f"(Alert threshold: ${self.alert_threshold})"
+                )
+            else:
+                payload = (
+                    f"🚨 API Budget Alert: ${current_cost:.2f} "
+                    f"EXCEEDED daily budget of ${self.daily_budget}"
+                )
+
+            inserted = session.execute(
+                insert_factory(WebhookOutbox)
+                .values(
+                    utc_date=utc_date,
+                    alert_type=alert_type,
+                    status="pending",
+                    retry_count=0,
+                    current_cost=current_cost,
+                    payload=payload,
+                )
+                .on_conflict_do_nothing(
+                    index_elements=["utc_date", "alert_type"]
+                )
+            )
+            setattr(budget, flag_name, True)
+            if inserted.rowcount == 1:
+                claimed.append((alert_type, current_cost))
+
+        return claimed
 
     async def _check_budget_alerts(self) -> None:
         """Check and enqueue budget alerts if thresholds are exceeded."""
