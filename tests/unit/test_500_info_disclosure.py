@@ -378,15 +378,23 @@ def _iter_response_error_leaks(text: str):
     # that are allowed to carry diagnostic ``error`` records.
     processor_results: set[str] = set()
     for node in ast.walk(tree):
-        if not isinstance(node, ast.Assign):
+        targets: list[ast.AST]
+        raw_value: ast.AST | None
+        if isinstance(node, ast.Assign):
+            targets, raw_value = node.targets, node.value
+        elif isinstance(node, ast.AnnAssign):
+            targets, raw_value = [node.target], node.value
+        else:
             continue
-        value = node.value.value if isinstance(node.value, ast.Await) else node.value
+        if raw_value is None:
+            continue
+        value = raw_value.value if isinstance(raw_value, ast.Await) else raw_value
         if not isinstance(value, ast.Call) or _call_name(value) not in {
             "process_video",
             "batch_process_videos",
         }:
             continue
-        for target in node.targets:
+        for target in targets:
             processor_results.update(_assigned_names(target))
     for node in ast.walk(tree):
         if (
@@ -440,6 +448,10 @@ def test_response_body_guard_flags_and_allows() -> None:
         "async def endpoint():\n"
         "    result = await processor.batch_process_videos([])\n"
         "    return result\n",
+        "async def endpoint():\n"
+        "    result: dict[str, object] = await "
+        "processor.batch_process_videos([])\n"
+        "    return result\n",
     ):
         assert list(_iter_response_error_leaks(leak)), f"scanner missed a leak: {leak}"
 
@@ -458,6 +470,10 @@ def test_response_body_guard_flags_and_allows() -> None:
         'result.get("error")))',
         "async def endpoint():\n"
         "    result = await processor.batch_process_videos([])\n"
+        "    return _sanitize_response_errors(result)\n",
+        "async def endpoint():\n"
+        "    result: dict[str, object] = await "
+        "processor.batch_process_videos([])\n"
         "    return _sanitize_response_errors(result)\n",
     ):
         assert not list(
