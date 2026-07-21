@@ -6,6 +6,7 @@ Updated to use new base adapter architecture with retry logic and proper error h
 
 import asyncio
 import os
+import time
 from pathlib import Path
 from typing import Any, Optional
 
@@ -183,7 +184,7 @@ primary_region = "iad"
         """Generate a unique app name for Fly.io"""
         title = project_config.get('title', 'uvai-app')
         sanitized = ''.join(c for c in title.lower().replace(' ', '-') if c.isalnum() or c == '-')
-        timestamp = int(asyncio.get_event_loop().time()) % 10000
+        timestamp = int(time.monotonic()) % 10000
         return f"uvai-{sanitized[:20]}-{timestamp}"
 
     def _extract_deployment_url(self, output: str) -> Optional[str]:
