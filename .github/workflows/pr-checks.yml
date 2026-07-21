@@ -622,6 +622,7 @@ jobs:
                 pull && pull.user && pull.user.login || ''
               );
               const knownAgents = new Set([
+                'google-labs-jules[bot]',
                 'github-copilot[bot]',
                 'copilot-swe-agent[bot]',
                 'openai-codex[bot]',
@@ -994,6 +995,7 @@ jobs:
                 unresolved.push('reviewDecision');
               }
               const aiReviewers = new Set([
+                'google-labs-jules[bot]',
                 'github-copilot[bot]',
                 'copilot-swe-agent[bot]',
                 'openai-codex[bot]',
@@ -1435,6 +1437,7 @@ jobs:
               'OWNER', 'MEMBER', 'COLLABORATOR'
             ]);
             const knownAgentCommenters = new Set([
+              'google-labs-jules[bot]',
               'github-copilot[bot]',
               'copilot-swe-agent[bot]',
               'openai-codex[bot]',
@@ -1888,6 +1891,7 @@ jobs:
                 pull && pull.user && pull.user.login || ''
               );
               const knownAgents = new Set([
+                'google-labs-jules[bot]',
                 'github-copilot[bot]',
                 'copilot-swe-agent[bot]',
                 'openai-codex[bot]',
@@ -2275,6 +2279,7 @@ jobs:
             }
             function aiReviewerLoginSet() {
               return new Set([
+                'google-labs-jules[bot]',
                 'github-copilot[bot]',
                 'copilot-swe-agent[bot]',
                 'openai-codex[bot]',
