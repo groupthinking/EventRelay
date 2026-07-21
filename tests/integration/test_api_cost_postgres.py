@@ -66,6 +66,35 @@ def test_runtime_monitor_is_ready_without_alembic_table_access(
     assert member is True
 
 
+def test_old_runtime_remains_ready_with_future_nullable_column(
+    monitor: APICostMonitor,
+) -> None:
+    """An additive migration must remain compatible with the serving revision."""
+    ddl = create_engine(os.environ["DATABASE_URL"], future=True)
+    column_added = False
+    try:
+        with ddl.begin() as connection:
+            connection.execute(
+                text(
+                    "ALTER TABLE public.api_usage "
+                    "ADD COLUMN future_runtime_metadata text"
+                )
+            )
+            column_added = True
+
+        monitor.ensure_database_ready()
+    finally:
+        if column_added:
+            with ddl.begin() as connection:
+                connection.execute(
+                    text(
+                        "ALTER TABLE public.api_usage "
+                        "DROP COLUMN future_runtime_metadata"
+                    )
+                )
+        ddl.dispose()
+
+
 @pytest.mark.asyncio
 async def test_usage_written_by_monitor_is_visible_to_rotated_login(
     monitor: APICostMonitor,

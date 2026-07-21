@@ -1,25 +1,26 @@
 #!/usr/bin/env bash
 #
-# branch-cleanup-delete.sh — archive-tag then delete branches per the assessment.
+# branch-cleanup-delete.sh — preview branches from the cleanup assessment.
 #
 # Generated from docs/branch-cleanup-matrix.csv (2026-07-01 audit).
-# Every branch is first tagged `archive/<branch>` (SHA recoverable indefinitely)
-# and only then deleted from origin. Review the lists before running.
+# Destructive execution is disabled because the current branch lists no longer
+# have a fail-closed live open-PR guard or recovery-SHA ledger. Review the list
+# before restoring those protections in a separately reviewed change.
 #
-# NOTE: CLOSE-SAFE = the branch's PR is already closed/merged (GitHub preserves
-# the ref) OR the tip carries zero unique work. Deleting these loses nothing.
-# REVIEW = no open PR but still carries content or is a merged-PR remnant; glance
-# before deleting.
+# NOTE: the labels below are historical assessment results, not current safety
+# decisions. Re-check every branch and open PR before any future deletion tool.
 #
 # Usage:
-#   scripts/maintenance/branch-cleanup-delete.sh safe             # delete CLOSE-SAFE branches
-#   scripts/maintenance/branch-cleanup-delete.sh review           # delete REVIEW branches (after looking)
-#   DRY_RUN=1 scripts/maintenance/branch-cleanup-delete.sh safe   # print actions only
+#   scripts/maintenance/branch-cleanup-delete.sh safe     # preview CLOSE-SAFE branches
+#   scripts/maintenance/branch-cleanup-delete.sh review   # preview REVIEW branches
 #
-# Recover any branch later with:
-#   git push origin archive/<branch>:refs/heads/<branch>
-#
-set -uo pipefail
+set -euo pipefail
+
+if [ "${DRY_RUN:-1}" != "1" ]; then
+  echo "Destructive branch cleanup is disabled: restore and test the live open-PR guard and recovery ledger first." >&2
+  exit 3
+fi
+readonly DRY_RUN=1
 SAFE_BRANCHES=(
   "chore/docs-audit-reports"
   "claude/capabilities-audit-52xql7"
@@ -75,20 +76,18 @@ REVIEW_BRANCHES=(
   "v0/ultrathinking-8ff3a2ce"
 )
 
-run() { if [ "${DRY_RUN:-0}" = "1" ]; then echo "DRY: $*"; else echo "+ $*"; "$@"; fi; }
-
-archive_and_delete() {
+preview_branch() {
   local b="$1"
   if ! git show-ref --verify --quiet "refs/remotes/origin/$b"; then
     echo "skip (no ref): $b"; return
   fi
-  run git tag -f "archive/$b" "origin/$b"
-  run git push origin "refs/tags/archive/$b"
-  run git push origin --delete "$b"
+  local sha
+  sha=$(git rev-parse "origin/$b")
+  echo "preview: $sha  $b"
 }
 
 case "${1:-}" in
-  safe)   for b in "${SAFE_BRANCHES[@]}";   do archive_and_delete "$b"; done ;;
-  review) for b in "${REVIEW_BRANCHES[@]}"; do archive_and_delete "$b"; done ;;
-  *) echo "usage: $0 {safe|review}   (prefix DRY_RUN=1 to preview)"; exit 2 ;;
+  safe)   for b in "${SAFE_BRANCHES[@]}";   do preview_branch "$b"; done ;;
+  review) for b in "${REVIEW_BRANCHES[@]}"; do preview_branch "$b"; done ;;
+  *) echo "usage: $0 {safe|review}"; exit 2 ;;
 esac

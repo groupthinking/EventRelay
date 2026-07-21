@@ -1,110 +1,36 @@
-name: Branch Cleanup
+name: Branch Cleanup Preview
 
-# Manual, gated branch pruning driven by the branch-cleanup assessment.
-# Runs the archive-then-delete harness server-side, where the GITHUB_TOKEN has
-# the `contents: write` and `workflows: write` rights needed to delete/restore refs.
-#
-# Triggers:
-#   1. workflow_dispatch (from default branch): Actions UI, pick batch + dry_run.
-#   2. push sentinel (from any claude/branch-cleanup-* branch):
-#        [run-cleanup:safe|stale|review]   -> delete that batch (DRY_RUN=0)
-#        [restore-branch:<branch>]         -> recreate <branch> from archive/<branch>
-#      Normal pushes are a no-op.
-#
-# Usage: Actions tab -> Branch Cleanup -> Run workflow -> pick batch + dry_run.
-# Safety:
-#   - dry_run defaults to TRUE; you must set it false to actually delete.
-#   - the delete harness does a LIVE open-PR check per branch (via GITHUB_TOKEN)
-#     and refuses to delete any branch that is the head of an open PR, so a branch
-#     that became active after the assessment snapshot is never deleted.
-#   - every branch SHA is recorded + uploaded as an artifact, and an archive/<branch>
-#     tag is pushed.
-# Restore (via sentinel commit or workflow_dispatch restore mode):
-#   Push a commit with "[restore-branch:<branch>]" to any claude/branch-cleanup-* branch,
-#   or use: git push origin archive/<branch>:refs/heads/<branch>
+# The July branch-list refresh removed the script's live open-PR guard and
+# recovery-SHA ledger. Keep this workflow preview-only until those protections
+# are restored and tested. A preview performs remote reads but cannot tag or
+# delete refs; recovery remains a trusted-human operation.
 
 on:
   workflow_dispatch:
     inputs:
       batch:
-        description: "Which verdict batch to delete"
+        description: "Which branch assessment batch to preview"
         required: true
         default: safe
         type: choice
-        options: [safe, stale, review]
-      dry_run:
-        description: "Preview only (no deletion). Set to false to actually delete."
-        required: true
-        default: true
-        type: boolean
-  push:
-    branches: ["claude/branch-cleanup-*"]
+        options: [safe, review]
 
 permissions:
-  contents: write
-  pull-requests: read
-  workflows: write
+  contents: read
 
 jobs:
-  cleanup:
+  preview:
+    name: Preview branch cleanup (${{ inputs.batch }})
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
         with:
-          fetch-depth: 0          # need all remote refs to tag/delete them
+          fetch-depth: 0
+          persist-credentials: false
 
-      - id: decide
-        name: Decide action from trigger
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "mode=delete" >> "$GITHUB_OUTPUT"
-            echo "batch=${{ inputs.batch }}" >> "$GITHUB_OUTPUT"
-            echo "dry=${{ inputs.dry_run == true && '1' || '0' }}" >> "$GITHUB_OUTPUT"
-            echo "go=yes" >> "$GITHUB_OUTPUT"
-          else
-            msg=$(git log -1 --pretty=%B)
-            if echo "$msg" | grep -qE '\[restore-branch:[^]]+\]'; then
-              rb=$(echo "$msg" | sed -nE 's/.*\[restore-branch:([^]]+)\].*/\1/p' | head -1)
-              echo "mode=restore" >> "$GITHUB_OUTPUT"
-              echo "restore=$rb" >> "$GITHUB_OUTPUT"
-              echo "go=yes" >> "$GITHUB_OUTPUT"
-              echo "::notice::restore sentinel — recreating '$rb' from archive tag"
-            elif echo "$msg" | grep -qE '\[run-cleanup:(safe|stale|review)\]'; then
-              b=$(echo "$msg" | sed -nE 's/.*\[run-cleanup:(safe|stale|review)\].*/\1/p' | head -1)
-              echo "mode=delete" >> "$GITHUB_OUTPUT"
-              echo "batch=$b" >> "$GITHUB_OUTPUT"
-              echo "dry=0" >> "$GITHUB_OUTPUT"
-              echo "go=yes" >> "$GITHUB_OUTPUT"
-              echo "::notice::sentinel detected — executing '$b' batch (real delete)"
-            else
-              echo "go=no" >> "$GITHUB_OUTPUT"
-              echo "::notice::no sentinel in commit message — no-op"
-            fi
-          fi
-
-      - name: Restore branch from archive tag
-        if: steps.decide.outputs.go == 'yes' && steps.decide.outputs.mode == 'restore'
-        run: |
-          b="${{ steps.decide.outputs.restore }}"
-          git push origin "refs/tags/archive/$b:refs/heads/$b"
-          echo "::notice::restored $b -> $(git rev-parse refs/tags/archive/$b)"
-
-      - name: Run branch-cleanup delete (batch=${{ steps.decide.outputs.batch }}, dry_run=${{ steps.decide.outputs.dry }})
-        if: steps.decide.outputs.go == 'yes' && steps.decide.outputs.mode == 'delete'
+      - name: Fetch branch refs and preview assessment
         env:
-          DRY_RUN: ${{ steps.decide.outputs.dry }}
-          GITHUB_TOKEN: ${{ github.token }}     # used for the live open-PR guard
-          GITHUB_REPOSITORY: ${{ github.repository }}
+          DRY_RUN: "1"
         run: |
-          chmod +x scripts/maintenance/branch-cleanup-delete.sh
-          scripts/maintenance/branch-cleanup-delete.sh "${{ steps.decide.outputs.batch }}"
-
-      - name: Upload recovery refs
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: branch-cleanup-recovery-refs
-          path: docs/branch-cleanup-recovery-refs.txt
-          if-no-files-found: warn
+          git fetch --prune origin '+refs/heads/*:refs/remotes/origin/*'
+          scripts/maintenance/branch-cleanup-delete.sh "${{ inputs.batch }}"

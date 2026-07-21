@@ -338,9 +338,7 @@ _POSTGRES_SCHEMA_CONTRACT_SQL = """
             LEFT JOIN column_metadata AS actual
               ON actual.table_name = expected.table_name
              AND actual.column_name = expected.column_name
-        )
-        AND (SELECT count(*) = 29 FROM column_metadata)
-        AS column_contract,
+        ) AS column_contract,
         EXISTS (
             SELECT 1 FROM constraint_columns
             WHERE table_name = 'api_usage'

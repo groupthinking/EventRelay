@@ -314,6 +314,13 @@ def test_postgres_schema_readiness_validates_constraints_and_worker_indexes() ->
     assert "ix_webhook_outbox_stale_claims" in sql
 
 
+def test_postgres_runtime_contract_allows_future_additive_columns() -> None:
+    """Migration-first deploys must not make the old revision unready."""
+    contract = monitor_module._POSTGRES_SCHEMA_CONTRACT_SQL
+
+    assert "count(*) = 29 FROM column_metadata" not in contract
+
+
 def test_postgres_schema_readiness_rejects_malformed_contract() -> None:
     class Result:
         def mappings(self) -> Result:
