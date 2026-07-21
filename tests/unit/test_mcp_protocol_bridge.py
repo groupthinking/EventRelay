@@ -408,7 +408,7 @@ class TestMCPProtocolBridgeSendProtocolRequest:
             user="testuser", task="test_task", intent="testing"
         )
         with patch.object(
-            context,
+            MCPContext,
             "add_history_entry",
             side_effect=RuntimeError("history unavailable"),
         ):
@@ -438,7 +438,7 @@ class TestMCPProtocolBridgeSendProtocolRequest:
             user="testuser", task="test_task", intent="testing"
         )
         with patch.object(
-            context,
+            MCPContext,
             "add_history_entry",
             side_effect=RuntimeError("history unavailable"),
         ):
