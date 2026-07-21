@@ -12,7 +12,15 @@ def check_env_vars():
     critical_vars = ["GEMINI_API_KEY", "OPENAI_API_KEY", "STRIPE_SECRET_KEY"]
     missing = [v for v in critical_vars if not os.getenv(v)]
     if missing:
-        logger.warning(f"Missing critical env vars (non-fatal warning): {missing}")
+        is_production = (
+            os.getenv("APP_ENV") == "production"
+            or os.getenv("ENVIRONMENT") == "production"
+        )
+        if is_production:
+            logger.error(f"❌ Missing critical env vars in production: {missing}")
+            return True
+        else:
+            logger.warning(f"Missing critical env vars (non-fatal warning): {missing}")
     return False
 
 

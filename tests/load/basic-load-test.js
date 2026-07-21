@@ -3,9 +3,10 @@ import { check, sleep, group } from 'k6';
 
 export const options = {
   stages: [
-    { duration: '30s', target: 10 },  // Ramp up to 10 users
-    { duration: '1m', target: 50 },   // Ramp up to 50 users
-    { duration: '2m', target: 50 },   // Stay at 50 users
+    { duration: '30s', target: 10 },  // Baseline: 10 concurrent users
+    { duration: '1m', target: 50 },   // Normal load: 50 concurrent users
+    { duration: '1m', target: 200 },  // Peak load: 200 concurrent users
+    { duration: '1m', target: 500 },  // Stress test: 500+ concurrent users
     { duration: '30s', target: 0 },   // Ramp down
   ],
   thresholds: {

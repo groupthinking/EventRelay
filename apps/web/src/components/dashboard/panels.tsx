@@ -290,7 +290,11 @@ export function SearchPanel({
         }}
         className="flex gap-2"
       >
+        <label htmlFor="search-video" className="sr-only">
+          Search the video
+        </label>
         <input
+          id="search-video"
           type="text"
           placeholder="Search the video…"
           className="flex-1 px-3 py-2.5 text-sm focus:outline-none transition-colors rounded-lg"
