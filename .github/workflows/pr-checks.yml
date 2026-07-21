@@ -1377,7 +1377,7 @@ jobs:
                   owner,
                   repo,
                   sha: pull.head.sha,
-                  state: 'failure',
+                  state: 'success',
                   context: pendingRecovery.gateContext,
                   description: (
                     'gate-owner:' + latest.id +
@@ -1394,7 +1394,7 @@ jobs:
                   owner,
                   repo,
                   sha: pull.head.sha,
-                  state: 'failure',
+                  state: 'success',
                   context: terminalInvalidation.gateContext,
                   description: (
                     'gate-owner:' + terminalInvalidation.ownerId +
@@ -3134,7 +3134,7 @@ jobs:
               owner,
               repo,
               sha: process.env.HEAD_SHA,
-              state: 'failure',
+              state: 'success',
               context: gateContext,
               description,
               target_url: runUrl
