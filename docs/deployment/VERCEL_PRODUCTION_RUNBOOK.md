@@ -91,9 +91,6 @@ Live verification (post-change):
 
 Remaining dashboard items (optional / follow-up):
 
-- **Google OAuth Variables**: Confirm that standard environment variables `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are defined in the Vercel Project Environment Variables dashboard for Vercel production (without legacy fallback variables `GOOGLE_OAUTH_CLIENT_ID` or `GOOGLE_OAUTH_CLIENT_SECRET`).
-- **Google OAuth Authorized Redirect URI**: Verify that the Authorized Redirect URI in the Google Cloud Console matches the canonical production domain exactly:
-  `https://uvai.io/api/auth/callback/google`
 - `SENTRY_AUTH_TOKEN` on Vercel for source-map upload at build time.
 - Configure Vercel Log Drains for persistent logs.
 - Configure Vercel Log Drains for persistent logs.
