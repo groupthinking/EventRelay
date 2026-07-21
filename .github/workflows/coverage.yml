@@ -47,7 +47,6 @@ jobs:
         run: mkdir -p reports
 
       - name: Run tests with coverage
-        continue-on-error: true # Allow workflow to complete for coverage tracking
         run: |
           pytest tests/ \
             --cov=src/youtube_extension \
@@ -55,7 +54,7 @@ jobs:
             --cov-report=term \
             --cov-report=html:reports/htmlcov \
             --cov-fail-under=0 \
-            -v || true
+            -v
 
       - name: Upload coverage to Qlty (same-repo only)
         if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
