@@ -259,7 +259,7 @@ async def analyze_video(request: VideoAnalysisRequest):
         # Must precede CloudAIError: RateLimitError subclasses it, so catching
         # the base first would shadow this handler and return a 503 instead.
         logger.warning(f"Rate limit exceeded: {e}")
-        raise HTTPException(status_code=429, detail=f"Rate limit exceeded: {str(e)}")
+        raise HTTPException(status_code=429, detail="Rate limit exceeded")
     except ConfigurationError as e:
         # Must precede CloudAIError (same subclassing reason) so configuration
         # failures reach this sanitized 500 rather than the dynamic 503 below.

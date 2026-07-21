@@ -83,16 +83,18 @@ def _refs_exception_or_request(node: ast.AST) -> bool:
     return False
 
 
-def _status_is_500(call: ast.Call, name: str) -> bool:
+def _status_is_server_error(call: ast.Call, name: str) -> bool:
     for kw in call.keywords:
         if kw.arg == "status_code" and isinstance(kw.value, ast.Constant):
-            return kw.value.value == 500
+            status = kw.value.value
+            return isinstance(status, int) and 500 <= status <= 599
     # The positional slot of ``status_code`` differs by constructor:
     #   HTTPException(status_code, detail, ...)  -> args[0]
     #   JSONResponse(content, status_code, ...)  -> args[1]
     idx = 1 if name == "JSONResponse" else 0
     if len(call.args) > idx and isinstance(call.args[idx], ast.Constant):
-        return call.args[idx].value == 500
+        status = call.args[idx].value
+        return isinstance(status, int) and 500 <= status <= 599
     return False
 
 
@@ -110,7 +112,7 @@ def _iter_500_leaks(text: str):
         name = _call_name(node)
         if name not in ("HTTPException", "JSONResponse"):
             continue
-        if not _status_is_500(node, name):
+        if not _status_is_server_error(node, name):
             continue
         # Check keyword arguments
         for kw in node.keywords:
@@ -174,10 +176,13 @@ def test_guard_detects_every_known_leak_shape() -> None:
         'raise HTTPException(500, str(e))',
         'raise HTTPException(500, f"internal: {exc}")',
         'raise HTTPException(500, error_msg)',
+        'raise HTTPException(status_code=503, detail=str(e))',
+        'raise HTTPException(599, f"internal: {exc}")',
         # JSONResponse with a positional body (the real ml_serve leak shape) —
         # status via keyword and fully positional (body=args[0], status=args[1]).
         'return JSONResponse({"error": str(exc)}, status_code=500)',
         'return JSONResponse({"error": str(exc)}, 500)',
+        'return JSONResponse({"error": str(exc)}, 503)',
     ]
     for sample in leaky_samples:
         assert list(_iter_500_leaks(sample)), f"scanner missed a real leak: {sample}"

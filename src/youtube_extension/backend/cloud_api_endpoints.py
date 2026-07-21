@@ -35,6 +35,14 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _client_safe_error(error_message: Optional[str]) -> Optional[str]:
+    """Return a stable client-safe value for persisted processor failures.
+
+    Older Firestore records may predate the write-side sanitizer, so every read
+    boundary must treat stored error text as untrusted rather than echoing it.
+    """
+    return "Internal server error" if error_message else None
+
 
 # Pydantic models for API requests/responses
 class CloudVideoProcessingRequest(BaseModel):
@@ -138,7 +146,7 @@ async def process_video_cloud(
                 ai_analysis=result.ai_analysis,
                 processing_time=result.processing_time,
                 from_cache=result.from_cache,
-                error=result.error_message,
+                error=_client_safe_error(result.error_message),
             )
 
     except Exception as e:
@@ -218,8 +226,8 @@ async def process_video_task_handler(
                 status='failed',
                 error_message="Task processing failed"
             )
-        except Exception as state_error:
-            logger.error(f"Failed to update error state: {state_error}")
+        except Exception:
+            logger.error("Failed to update error state", exc_info=True)
 
         raise HTTPException(status_code=500, detail="Internal server error")
 
@@ -280,7 +288,7 @@ async def get_video_status(video_id: str):
             created_at=state.created_at,
             updated_at=state.updated_at,
             processing_time=state.processing_time,
-            error_message=state.error_message,
+            error_message=_client_safe_error(state.error_message),
         )
 
     except HTTPException:
@@ -318,7 +326,7 @@ async def get_video_result(video_id: str):
             "processing_time": state.processing_time,
             "created_at": state.created_at,
             "updated_at": state.updated_at,
-            "error_message": state.error_message,
+            "error_message": _client_safe_error(state.error_message),
         }
 
     except HTTPException:
