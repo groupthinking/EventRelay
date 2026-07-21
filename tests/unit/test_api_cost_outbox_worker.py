@@ -177,6 +177,36 @@ async def test_missing_webhook_url_leaves_item_unattempted(tmp_path):
     assert item.next_attempt_at is None
 
 
+async def test_in_memory_outbox_is_shared_with_worker_threads(monkeypatch):
+    monitor = APICostMonitor(db_path=":memory:")
+    monitor.webhook_url = "https://example.test/hook"
+
+    async def succeed(message):
+        return True
+
+    monkeypatch.setattr(monitor, "_send_webhook_notification", succeed)
+    assert monitor._claim_alert("2026-07-28", "threshold", 8.5)
+
+    assert await monitor.process_outbox(force=True) == 1
+    assert _get_item(monitor, "2026-07-28").status == "sent"
+
+
+async def test_failed_delivery_is_not_counted_as_completed(tmp_path, monkeypatch):
+    monitor = APICostMonitor(db_path=str(tmp_path / "failed-count.db"))
+    monitor.webhook_url = "https://example.test/hook"
+
+    async def fail(message):
+        return False
+
+    monkeypatch.setattr(monitor, "_send_webhook_notification", fail)
+    assert monitor._claim_alert("2026-07-29", "threshold", 8.5)
+
+    assert await monitor.process_outbox(force=True) == 0
+    item = _get_item(monitor, "2026-07-29")
+    assert item.status == "failed"
+    assert item.retry_count == 1
+
+
 async def test_claim_is_compare_and_swap_across_monitor_instances(tmp_path):
     db_path = str(tmp_path / "shared.db")
     first = APICostMonitor(db_path=db_path)
