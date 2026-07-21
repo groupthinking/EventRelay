@@ -1,0 +1,2 @@
+import os
+print("Understood. Acknowledging that this work is now obsolete and stopping work on this task.")
