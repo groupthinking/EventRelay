@@ -358,6 +358,24 @@ class TestProcessVideoEndpoint:
         assert "auJzb1D-fag" not in str(detail)
         assert "crash" not in str(detail)
 
+    def test_processor_failure_record_is_sanitized(self, client, mock_processor):
+        mock_processor.process_video = AsyncMock(
+            return_value={
+                "video_id": "auJzb1D-fag",
+                "success": False,
+                "cost_breakdown": {"total_cost": 0.0},
+                "cached": False,
+                "error": "database password=super-secret",
+            }
+        )
+        response = client.post(
+            "/api/v2/process-video",
+            json={"video_url": "https://youtube.com/watch?v=auJzb1D-fag"},
+        )
+        assert response.status_code == 200
+        assert response.json()["error"] == "Video processing failed"
+        assert "super-secret" not in response.text
+
     def test_missing_video_url_returns_422(self, client):
         response = client.post("/api/v2/process-video", json={})
         assert response.status_code == 422
@@ -468,6 +486,43 @@ class TestBatchProcessEndpoint:
         )
         assert response.status_code == 500
 
+    def test_batch_failure_records_are_sanitized_recursively(
+        self, client, mock_processor
+    ):
+        mock_processor.batch_process_videos = AsyncMock(
+            return_value={
+                "results": [
+                    {
+                        "success": True,
+                        "ai_analysis": {"error": "provider-token-secret"},
+                    }
+                ],
+                "errors": [
+                    {
+                        "success": False,
+                        "error": "socket refused at 10.0.0.4",
+                        "processing_steps": [
+                            {"error": "postgres://user:password@db"}
+                        ],
+                    }
+                ],
+            }
+        )
+        response = client.post(
+            "/api/v2/batch-process",
+            json={"video_urls": ["https://youtube.com/watch?v=auJzb1D-fag"]},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["results"][0]["ai_analysis"]["error"] == "Video processing failed"
+        assert data["errors"][0]["error"] == "Video processing failed"
+        assert (
+            data["errors"][0]["processing_steps"][0]["error"]
+            == "Video processing failed"
+        )
+        assert "password" not in response.text
+        assert "10.0.0.4" not in response.text
+
     def test_batch_max_concurrent_bounds_enforced_by_model(self, client):
         """max_concurrent=0 fails Pydantic validation (ge=1)."""
         response = client.post(
@@ -559,6 +614,26 @@ class TestGetVideoAnalysisEndpoint:
         response = client.get("/api/v2/videos/auJzb1D-fag")
         data = response.json()
         assert data["video_id"] == "auJzb1D-fag"
+
+    def test_legacy_cached_error_fields_are_sanitized(
+        self, client, mock_processor, tmp_cache
+    ):
+        tmp_cache.mkdir(parents=True, exist_ok=True)
+        cache_file = _write_cache_file(
+            tmp_cache,
+            "auJzb1D-fag",
+            {
+                "error": "legacy stack /srv/app.py:42",
+                "ai_analysis": {"success": False, "error": "api-key-secret"},
+            },
+        )
+        mock_processor._get_cache_path.return_value = cache_file
+        response = client.get("/api/v2/videos/auJzb1D-fag")
+        assert response.status_code == 200
+        assert response.json()["error"] == "Video processing failed"
+        assert response.json()["ai_analysis"]["error"] == "Video processing failed"
+        assert "app.py" not in response.text
+        assert "api-key-secret" not in response.text
 
     def test_missing_video_returns_404(self, client, mock_processor, tmp_cache):
         mock_processor._get_cache_path.return_value = tmp_cache / "nonexistent_processed.json"

@@ -26,6 +26,37 @@ from .services.real_youtube_api import get_youtube_service
 # Configure logging
 logger = logging.getLogger(__name__)
 
+_PUBLIC_PROCESSING_ERROR = "Video processing failed"
+
+
+def _sanitize_public_error(value: Any) -> Optional[str]:
+    """Return a client-safe processing error without exposing provider details."""
+    return None if value is None else _PUBLIC_PROCESSING_ERROR
+
+
+def _sanitize_response_errors(value: Any) -> Any:
+    """Copy a response tree while replacing every non-null ``error`` value.
+
+    Processor results can contain exception text at the top level and inside
+    batch, step, or provider records.  Sanitizing the complete response tree at
+    the HTTP boundary also protects cached legacy records without mutating the
+    processor's internal diagnostic value.
+    """
+    if isinstance(value, dict):
+        return {
+            key: (
+                _sanitize_public_error(item)
+                if key == "error"
+                else _sanitize_response_errors(item)
+            )
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_sanitize_response_errors(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_sanitize_response_errors(item) for item in value)
+    return value
+
 # Pydantic models for API requests/responses
 class VideoProcessingRequest(BaseModel):
     video_url: str = Field(..., description="YouTube video URL or ID")
@@ -110,7 +141,7 @@ def setup_real_api_endpoints(app: FastAPI):
                 cost_breakdown=result.get('cost_breakdown'),
                 processing_time=processing_time,
                 cached=result.get('cached', False),
-                error=result.get('error')
+                error=_sanitize_public_error(result.get('error'))
             )
 
             logger.info(f"✅ Real API processing completed: {result.get('video_id')} - ${result.get('cost_breakdown', {}).get('total_cost', 0):.4f}")
@@ -168,7 +199,7 @@ def setup_real_api_endpoints(app: FastAPI):
                 max_concurrent=request.max_concurrent
             )
 
-            return result
+            return _sanitize_response_errors(result)
 
         except HTTPException:
             # Preserve explicit 4xx responses (e.g. the 400 batch-size guard above).
@@ -208,7 +239,9 @@ def setup_real_api_endpoints(app: FastAPI):
                             "has_transcript": video_data.get('transcript', {}).get('has_transcript', False),
                             "ai_analysis_success": video_data.get('ai_analysis', {}).get('success', False),
                             "total_cost": video_data.get('cost_breakdown', {}).get('total_cost', 0.0),
-                            "analysis": video_data.get('ai_analysis', {}),
+                            "analysis": _sanitize_response_errors(
+                                video_data.get('ai_analysis', {})
+                            ),
                             "createdAt": video_data.get('timestamp'),
                             "updatedAt": video_data.get('timestamp')
                         })
@@ -245,7 +278,7 @@ def setup_real_api_endpoints(app: FastAPI):
             with open(cache_path, encoding='utf-8') as f:
                 video_data = json.load(f)
 
-            return video_data
+            return _sanitize_response_errors(video_data)
 
         except HTTPException:
             raise
@@ -336,7 +369,7 @@ def setup_real_api_endpoints(app: FastAPI):
             return {
                 "overall_status": "operational" if processor_status.get('service_status') == 'operational' else "degraded",
                 "timestamp": datetime.now(timezone.utc).isoformat(),
-                "processor": processor_status,
+                "processor": _sanitize_response_errors(processor_status),
                 "cost_monitoring": {
                     "status": "operational",
                     "today_cost": cost_dashboard.get('today_summary', {}).get('total_cost', 0.0),

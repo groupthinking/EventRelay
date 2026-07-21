@@ -106,6 +106,26 @@ def _call_name(call: ast.Call) -> str | None:
 def _iter_500_leaks(text: str):
     """Yield (line_no, reason) for each 500 response that can leak internals."""
     tree = ast.parse(text)
+
+    # Bind every response constructor to the exception aliases visible from
+    # its enclosing handler.  The fixed conventional-name set remains useful
+    # outside a handler, but it must not be the tree-wide security boundary:
+    # ``except Exception as failure`` and aliases derived from ``failure`` are
+    # equally sensitive.
+    handler_taint_by_call: dict[int, set[str]] = {}
+    for handler in ast.walk(tree):
+        if not isinstance(handler, ast.ExceptHandler) or not handler.name:
+            continue
+        tainted = _tainted_names(handler)
+        for child in ast.walk(handler):
+            if isinstance(child, ast.Call):
+                handler_taint_by_call.setdefault(id(child), set()).update(tainted)
+
+    def _refs_server_error_state(call: ast.Call, value: ast.AST) -> bool:
+        return _refs_exception_or_request(value) or _refs_any_name(
+            value, handler_taint_by_call.get(id(call), set())
+        )
+
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
             continue
@@ -120,7 +140,7 @@ def _iter_500_leaks(text: str):
                 if not _is_static_string(kw.value):
                     yield node.lineno, "HTTPException 500 detail is not a static string"
             elif name == "JSONResponse" and kw.arg in ("content", "detail"):
-                if _refs_exception_or_request(kw.value):
+                if _refs_server_error_state(node, kw.value):
                     yield node.lineno, "JSONResponse 500 body references the exception/request"
         # Check positional detail argument: HTTPException(status_code, detail)
         # args[0] is status_code (already checked by _status_is_500); args[1] is detail.
@@ -131,7 +151,7 @@ def _iter_500_leaks(text: str):
         # the fully positional JSONResponse(<body>, 500). The content is always
         # args[0] for JSONResponse, regardless of how status_code is passed.
         if name == "JSONResponse" and node.args:
-            if _refs_exception_or_request(node.args[0]):
+            if _refs_server_error_state(node, node.args[0]):
                 yield node.lineno, "JSONResponse 500 body references the exception/request"
 
 
@@ -183,6 +203,11 @@ def test_guard_detects_every_known_leak_shape() -> None:
         'return JSONResponse({"error": str(exc)}, status_code=500)',
         'return JSONResponse({"error": str(exc)}, 500)',
         'return JSONResponse({"error": str(exc)}, 503)',
+        # A nonstandard handler name and intermediate alias must remain tainted
+        # in the tree-wide 5xx scanner.
+        "try:\n    pass\nexcept Exception as failure:\n"
+        "    message = str(failure)\n"
+        '    return JSONResponse({"error": message}, status_code=503)\n',
     ]
     for sample in leaky_samples:
         assert list(_iter_500_leaks(sample)), f"scanner missed a real leak: {sample}"
@@ -273,7 +298,7 @@ def _tainted_names(handler: ast.ExceptHandler) -> set[str]:
 
 
 def _iter_response_error_leaks(text: str):
-    """Yield (line_no, reason) for dict bodies that put the exception under "error".
+    """Yield (line_no, reason) for responses that can expose an ``error`` value.
 
     A value discloses the caught exception two ways, both flagged:
 
@@ -287,16 +312,26 @@ def _iter_response_error_leaks(text: str):
     seen: set[int] = set()
     reason = 'response body "error" field references the caught exception'
 
-    def _error_dict_values(scope: ast.AST):
+    def _error_values(scope: ast.AST):
         for node in ast.walk(scope):
-            if not isinstance(node, ast.Dict):
-                continue
-            for key, value in zip(node.keys, node.values):
-                if isinstance(key, ast.Constant) and key.value == "error":
-                    yield node, value
+            if isinstance(node, ast.Dict):
+                for key, value in zip(node.keys, node.values):
+                    if isinstance(key, ast.Constant) and key.value == "error":
+                        yield node, value
+            elif isinstance(node, ast.Call):
+                for keyword in node.keywords:
+                    if keyword.arg == "error":
+                        yield node, keyword.value
+
+    def _uses_public_error_sanitizer(node: ast.AST) -> bool:
+        return isinstance(node, ast.Call) and _call_name(node) in {
+            "_client_safe_error",
+            "_sanitize_public_error",
+            "_sanitize_response_errors",
+        }
 
     # Pass 1: values that reference the exception/request by convention.
-    for node, value in _error_dict_values(tree):
+    for node, value in _error_values(tree):
         line = getattr(value, "lineno", node.lineno)
         if _refs_exception_or_request(value) and line not in seen:
             seen.add(line)
@@ -309,11 +344,59 @@ def _iter_response_error_leaks(text: str):
         if not isinstance(handler, ast.ExceptHandler) or not handler.name:
             continue
         tainted = _tainted_names(handler)
-        for node, value in _error_dict_values(handler):
+        for node, value in _error_values(handler):
             line = getattr(value, "lineno", node.lineno)
             if _refs_any_name(value, tainted) and line not in seen:
                 seen.add(line)
                 yield line, reason
+
+    # Response-model keyword arguments are client sinks even when their value
+    # is not syntactically tied to the surrounding exception.  A processor can
+    # return exception text through ``result.get("error")``; require an
+    # explicit boundary sanitizer for every dynamic ``error=...`` value.
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        for keyword in node.keywords:
+            if keyword.arg != "error":
+                continue
+            value = keyword.value
+            line = getattr(value, "lineno", node.lineno)
+            if (
+                line not in seen
+                and not _is_static_string(value)
+                and not (
+                    isinstance(value, ast.Constant) and value.value is None
+                )
+                and not _uses_public_error_sanitizer(value)
+            ):
+                seen.add(line)
+                yield line, 'response model "error" value is not sanitized'
+
+    # Flag the direct pass-through shape used by batch endpoints.  This narrow
+    # data-flow rule follows values returned by the two processor entry points
+    # that are allowed to carry diagnostic ``error`` records.
+    processor_results: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Assign):
+            continue
+        value = node.value.value if isinstance(node.value, ast.Await) else node.value
+        if not isinstance(value, ast.Call) or _call_name(value) not in {
+            "process_video",
+            "batch_process_videos",
+        }:
+            continue
+        for target in node.targets:
+            processor_results.update(_assigned_names(target))
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.Return)
+            and isinstance(node.value, ast.Name)
+            and node.value.id in processor_results
+            and node.lineno not in seen
+        ):
+            seen.add(node.lineno)
+            yield node.lineno, "processor result is returned without error sanitization"
 
 
 def test_no_exception_in_response_error_fields() -> None:
@@ -353,6 +436,10 @@ def test_response_body_guard_flags_and_allows() -> None:
         "try:\n    pass\nexcept Exception as failure:\n"
         '    detail = f"boom: {failure}"\n'
         '    return {"error": detail}\n',
+        'response = VideoAnalysisResponse(error=result.get("error"))',
+        "async def endpoint():\n"
+        "    result = await processor.batch_process_videos([])\n"
+        "    return result\n",
     ):
         assert list(_iter_response_error_leaks(leak)), f"scanner missed a leak: {leak}"
 
@@ -367,6 +454,11 @@ def test_response_body_guard_flags_and_allows() -> None:
         "try:\n    pass\nexcept Exception as failure:\n"
         '    message = "Internal server error"\n'
         '    return {"error": message}\n',
+        'response = VideoAnalysisResponse(error=_sanitize_public_error('
+        'result.get("error")))',
+        "async def endpoint():\n"
+        "    result = await processor.batch_process_videos([])\n"
+        "    return _sanitize_response_errors(result)\n",
     ):
         assert not list(
             _iter_response_error_leaks(safe)
