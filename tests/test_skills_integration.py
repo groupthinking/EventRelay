@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 """Integration tests for GTM skill discovery and invocation.
 
 Tests verify:
@@ -78,11 +79,6 @@ class TestSkillDiscovery:
     def test_list_skills_returns_seven(self, registry: SkillRegistry) -> None:
         skills = registry.list_skills()
         assert len(skills) == 7
-
-    def test_list_skills_filters_by_source(self, registry: SkillRegistry) -> None:
-        skills = registry.list_skills(source="uvai-skills")
-        assert len(skills) == 7
-        assert all(skill["source"] == "uvai-skills" for skill in skills)
 
     def test_all_expected_skill_ids_present(self, registry: SkillRegistry) -> None:
         skills = registry.list_skills()
@@ -185,55 +181,6 @@ class TestSkillTriggerMatching:
 
 class TestSkillInvocation:
     """Verify that skills can be invoked with payloads."""
-
-    @pytest.fixture(autouse=True)
-    def stub_skill_loader(self, monkeypatch: pytest.MonkeyPatch, registry: SkillRegistry) -> None:
-        def _load_skill_instance(skill_id: str):
-            class _FakeSkill:
-                async def execute(self, payload: dict[str, Any]):
-                    if skill_id == "content-generation":
-                        transcript = payload.get("transcript")
-                        if not transcript:
-                            return types.SimpleNamespace(
-                                status="error", output={}, error="Missing 'transcript' in payload"
-                            )
-                        return types.SimpleNamespace(
-                            status="success",
-                            output={
-                                "video_id": payload.get("video_id", "unknown"),
-                                "generated": True,
-                            },
-                            error=None,
-                        )
-                    if skill_id == "seo-optimizer":
-                        return types.SimpleNamespace(status="success", output={"optimized": True}, error=None)
-                    if skill_id == "social-scheduler":
-                        return types.SimpleNamespace(status="success", output={"scheduled": True}, error=None)
-                    if skill_id == "lead-scorer":
-                        return types.SimpleNamespace(
-                            status="success",
-                            output={"lead_id": payload.get("lead_id")},
-                            error=None,
-                        )
-                    if skill_id == "email-campaign":
-                        return types.SimpleNamespace(
-                            status="success",
-                            output={"campaign_type": payload.get("campaign_type")},
-                            error=None,
-                        )
-                    if skill_id == "analytics-dashboard":
-                        return types.SimpleNamespace(status="success", output={"generated": True}, error=None)
-                    if skill_id == "ab-testing":
-                        return types.SimpleNamespace(
-                            status="success",
-                            output={"variant_count": len(payload.get("variants", []))},
-                            error=None,
-                        )
-                    raise ValueError(f"Unknown skill: {skill_id}")
-
-            return _FakeSkill()
-
-        monkeypatch.setattr(registry, "_load_skill_instance", _load_skill_instance)
 
     @pytest.mark.asyncio
     async def test_invoke_content_generation_success(
@@ -377,31 +324,6 @@ class TestEnvPassthrough:
 
 
 # ---------------------------------------------------------------------------
-# Dependency injection and import tests
-# ---------------------------------------------------------------------------
-
-
-class TestSkillLoading:
-    """Verify that real skill modules load cleanly with declared dependencies."""
-
-    def test_load_skill_instance_injects_declared_dependencies(self) -> None:
-        gemini_service = object()
-        registry = SkillRegistry(
-            lock_file_path=LOCK_FILE, dependencies={"gemini_service": gemini_service}
-        )
-
-        instance = registry._load_skill_instance("content-generation")
-
-        assert instance.gemini_service is gemini_service
-
-    def test_load_skill_instance_fails_when_required_dependency_missing(
-        self, registry: SkillRegistry
-    ) -> None:
-        with pytest.raises(ValueError, match="Missing required skill dependencies"):
-            registry._load_skill_instance("content-generation")
-
-
-# ---------------------------------------------------------------------------
 # Lock file validation
 # ---------------------------------------------------------------------------
 
@@ -413,25 +335,116 @@ class TestSkillsLockFile:
         with open(LOCK_FILE) as f:
             data = json.load(f)
         assert "skills" in data
-        assert isinstance(data["skills"], list)
+        assert isinstance(data["skills"], dict)
 
     def test_lock_file_contains_gtm_skills(self) -> None:
         with open(LOCK_FILE) as f:
             data = json.load(f)
-        gtm_skills = [
-            skill for skill in data["skills"] if skill.get("source") == "uvai-skills"
-        ]
+        gtm_skills = {
+            k: v
+            for k, v in data["skills"].items()
+            if v.get("source") == "uvai-skills"
+        }
         assert len(gtm_skills) == 7
 
     def test_each_gtm_skill_has_required_fields(self) -> None:
         with open(LOCK_FILE) as f:
             data = json.load(f)
-        for skill in data["skills"]:
-            if skill.get("source") != "uvai-skills":
+        for skill_id, meta in data["skills"].items():
+            if meta.get("source") != "uvai-skills":
                 continue
-            assert "id" in skill, "uvai skill missing id"
-            assert "skillPath" in skill, f"{skill['id']} missing skillPath"
-            assert "className" in skill, f"{skill['id']} missing className"
-            assert "version" in skill, f"{skill['id']} missing version"
-            assert "triggers" in skill, f"{skill['id']} missing triggers"
-            assert "dependencies" in skill, f"{skill['id']} missing dependencies"
+            assert "skillPath" in meta, f"{skill_id} missing skillPath"
+            assert "className" in meta, f"{skill_id} missing className"
+            assert "version" in meta, f"{skill_id} missing version"
+            assert "triggers" in meta, f"{skill_id} missing triggers"
+            assert "dependencies" in meta, f"{skill_id} missing dependencies"
+=======
+import os
+import json
+import pytest
+import asyncio
+from unittest.mock import MagicMock, patch
+import sys
+
+# Ensure src is in path
+sys.path.append(os.path.join(os.getcwd(), "src"))
+
+# Mock dependencies that cause issues during import
+# Using MagicMock for packages needs __path__ to be set if they are used in imports
+mock_google = MagicMock()
+mock_google.__path__ = []
+sys.modules['google'] = mock_google
+
+mock_google_cloud = MagicMock()
+mock_google_cloud.__path__ = []
+sys.modules['google.cloud'] = mock_google_cloud
+
+sys.modules['google.genai'] = MagicMock()
+sys.modules['google.generativeai'] = MagicMock()
+sys.modules['google.cloud.aiplatform'] = MagicMock()
+sys.modules['vertexai'] = MagicMock()
+sys.modules['vertexai.generative_models'] = MagicMock()
+
+sys.modules['aiohttp'] = MagicMock()
+sys.modules['pandas'] = MagicMock()
+sys.modules['youtube_transcript_api'] = MagicMock()
+sys.modules['youtube_extension.processors.enhanced_extractor'] = MagicMock()
+sys.modules['youtube_extension.services.pipeline_audit_store'] = MagicMock()
+
+# Import SkillRegistry after mocking
+from agents.mcp_ecosystem_coordinator import SkillRegistry
+
+@pytest.fixture
+def skill_registry():
+    # Use the real skills-lock.json created during the task
+    return SkillRegistry(lock_file="skills-lock.json")
+
+def test_skill_discovery(skill_registry):
+    """Verify that all 7 GTM skills are discovered from skills-lock.json."""
+    skills = skill_registry.list_skills(source="uvai-skills")
+    assert len(skills) == 7
+
+    expected_ids = [
+        "content-generation",
+        "seo-optimizer",
+        "social-scheduler",
+        "lead-scorer",
+        "email-campaign",
+        "analytics-dashboard",
+        "ab-testing"
+    ]
+
+    discovered_ids = [s["id"] for s in skills]
+    for skill_id in expected_ids:
+        assert skill_id in discovered_ids
+
+@pytest.mark.asyncio
+async def test_skill_invocation(skill_registry):
+    """Verify that a skill can be invoked and returns the expected result."""
+    # We use content-generation for testing invocation
+    skill_id = "content-generation"
+    context = {"video_id": "test_123", "transcript": "Hello world"}
+
+    # We expect this to work because we created the thin wrapper main.py
+    result = await skill_registry.invoke_skill(skill_id, context)
+
+    assert result["status"] == "success"
+    assert result["skill"] == skill_id
+
+@pytest.mark.asyncio
+async def test_skill_invocation_env_vars(skill_registry):
+    """Verify that environment variables are passed (simulated)."""
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value.stdout = json.dumps({"status": "success"})
+        mock_run.return_value.returncode = 0
+
+        os.environ["GEMINI_API_KEY"] = "test_key"
+
+        await skill_registry.invoke_skill("content-generation", {})
+
+        # Check that the env passed to subprocess.run contains GEMINI_API_KEY
+        args, kwargs = mock_run.call_args
+        passed_env = kwargs.get("env", {})
+        assert passed_env.get("GEMINI_API_KEY") == "test_key"
+        assert "SKILL_CONTEXT" in passed_env
+>>>>>>> origin/main

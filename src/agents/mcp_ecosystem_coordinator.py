@@ -13,8 +13,12 @@ import os
 import subprocess
 import sys
 from dataclasses import asdict
+<<<<<<< HEAD
 from pathlib import Path
 from typing import Any, Optional
+=======
+from typing import Any, Dict, List, Optional
+>>>>>>> origin/main
 
 from youtube_extension.processors.enhanced_extractor import (
     EnhancedVideoExtractor,
@@ -165,7 +169,7 @@ class MCPEcosystemCoordinator:
         self.workflow_history: list[dict] = []
         self.skill_registry = SkillRegistry()
 
-    def list_skills(self, source: Optional[str] = None) -> list[dict[str, Any]]:
+    def list_skills(self, source: Optional[str] = None) -> List[Dict[str, Any]]:
         """Returns a list of discovered skills from the registry."""
         return self.skill_registry.list_skills(source=source)
 
@@ -279,17 +283,19 @@ class MCPEcosystemCoordinator:
 
         return status
 
+<<<<<<< HEAD
 
 class SkillRegistry:
-    """Registry for discovering and invoking GTM skills from skills-lock.json."""
+    """Registry for discovering and invoking GTM skills from skills-lock.json.
+
+    Reads skill definitions from the lock file and dynamically loads skill
+    classes for execution. Implements explicit env-var pass-through when
+    spawning skill processes (no reliance on environment inheritance).
+    """
 
     _LOCK_FILE = "skills-lock.json"
 
-    def __init__(
-        self,
-        lock_file_path: Optional[str] = None,
-        dependencies: Optional[dict[str, Any]] = None,
-    ):
+    def __init__(self, lock_file_path: Optional[str] = None):
         self._lock_path = Path(
             lock_file_path
             or os.environ.get("SKILLS_LOCK_PATH", "")
@@ -297,7 +303,6 @@ class SkillRegistry:
         )
         self._skills: dict[str, dict[str, Any]] = {}
         self._instances: dict[str, Any] = {}
-        self._dependencies: dict[str, Any] = dict(dependencies or {})
         self._load_skills()
 
     def _find_lock_file(self) -> str:
@@ -321,21 +326,11 @@ class SkillRegistry:
             logger.warning("Could not load skills-lock.json: %s", e)
             return
 
-        skills_data = data.get("skills", [])
-        if isinstance(skills_data, dict):
-            items = skills_data.items()
-        elif isinstance(skills_data, list):
-            items = ((entry.get("id"), entry) for entry in skills_data if isinstance(entry, dict))
-        else:
-            logger.warning("Unsupported skills-lock.json format: %s", type(skills_data).__name__)
-            return
-
-        for skill_id, meta in items:
-            if not skill_id or meta.get("source") != "uvai-skills" or meta.get("sourceType") != "local":
-                continue
-            normalized = dict(meta)
-            normalized.setdefault("id", skill_id)
-            self._skills[skill_id] = normalized
+        skills_data = data.get("skills", {})
+        for skill_id, meta in skills_data.items():
+            # Only load uvai-skills (local GTM skills)
+            if meta.get("source") == "uvai-skills" and meta.get("sourceType") == "local":
+                self._skills[skill_id] = meta
 
         logger.info("Loaded %d GTM skills from %s", len(self._skills), self._lock_path)
 
@@ -343,8 +338,7 @@ class SkillRegistry:
         """Build a normalized metadata dict for a skill entry."""
         return {
             "id": skill_id,
-            "name": meta.get("name", skill_id.replace("-", " ").title()),
-            "source": meta.get("source", "uvai-skills"),
+            "name": skill_id.replace("-", " ").title(),
             "class_name": meta.get("className", ""),
             "version": meta.get("version", "0.0.0"),
             "triggers": meta.get("triggers", []),
@@ -352,12 +346,11 @@ class SkillRegistry:
             "entry_point": meta.get("skillPath", ""),
         }
 
-    def list_skills(self, source: Optional[str] = None) -> list[dict[str, Any]]:
-        """Return metadata for registered GTM skills, optionally filtered by source."""
+    def list_skills(self) -> list[dict[str, Any]]:
+        """Return metadata for all registered GTM skills."""
         return [
             self._build_skill_metadata(skill_id, meta)
             for skill_id, meta in self._skills.items()
-            if source is None or meta.get("source") == source
         ]
 
     def get_skill(self, skill_id: str) -> Optional[dict[str, Any]]:
@@ -375,10 +368,6 @@ class SkillRegistry:
             if event_type in meta.get("triggers", [])
         ]
 
-    def register_dependency(self, name: str, dependency: Any) -> None:
-        """Register a named dependency for future skill instantiation."""
-        self._dependencies[name] = dependency
-
     def _load_skill_instance(self, skill_id: str) -> Any:
         """Dynamically import and instantiate a skill class."""
         if skill_id in self._instances:
@@ -388,40 +377,32 @@ class SkillRegistry:
         if meta is None:
             raise ValueError(f"Unknown skill: {skill_id}")
 
-        skill_path = meta["skillPath"]
-        class_name = meta["className"]
-        required_dependencies = meta.get("dependencies", [])
-        missing_dependencies = [
-            dependency
-            for dependency in required_dependencies
-            if dependency not in self._dependencies
-        ]
-        if missing_dependencies:
-            missing = ", ".join(missing_dependencies)
-            raise ValueError(
-                f"Missing required skill dependencies for {skill_id}: {missing}"
-            )
+        skill_path = meta["skillPath"]  # e.g. "src/skills/content_generation/main.py"
+        class_name = meta["className"]  # e.g. "ContentGenerationSkill"
 
+        # Convert file path to module path
         module_path = skill_path.replace("/", ".").removesuffix(".py")
+        # Strip leading "src." if present since src is on sys.path
         if module_path.startswith("src."):
             module_path = module_path[4:]
 
         module = importlib.import_module(module_path)
         skill_class = getattr(module, class_name)
-        dependency_kwargs = {
-            dependency: self._dependencies[dependency]
-            for dependency in required_dependencies
-        }
-        instance = skill_class(**dependency_kwargs)
+        instance = skill_class()
         self._instances[skill_id] = instance
         return instance
 
     def get_env_for_skill(self, skill_id: str) -> dict[str, str]:
-        """Get the explicit env vars to pass through to a skill subprocess."""
+        """Get the explicit env vars to pass through to a skill subprocess.
+
+        Implements MCP security requirement: do NOT rely on environment
+        inheritance; explicitly pass only required vars.
+        """
         meta = self._skills.get(skill_id)
         if meta is None:
             return {}
 
+        # Map dependency names to env vars
         dep_env_map: dict[str, list[str]] = {
             "gemini_service": ["GEMINI_API_KEY"],
             "database_service": ["DATABASE_URL"],
@@ -439,7 +420,10 @@ class SkillRegistry:
     async def invoke_skill(
         self, skill_id: str, payload: dict[str, Any]
     ) -> dict[str, Any]:
-        """Invoke a skill by ID with the given payload."""
+        """Invoke a skill by ID with the given payload.
+
+        Returns the skill result as a dictionary.
+        """
         try:
             instance = self._load_skill_instance(skill_id)
         except (ValueError, ImportError, AttributeError) as e:
@@ -456,6 +440,111 @@ class SkillRegistry:
         except Exception as e:
             logger.error("Skill %s execution failed: %s", skill_id, e)
             return {"status": "error", "error": str(e)}
+
+=======
+class SkillRegistry:
+    """Registry for discovering and invoking skills from skills-lock.json."""
+
+    def __init__(self, lock_file: str = "skills-lock.json"):
+        self.lock_file = lock_file
+        self.skills: List[Dict[str, Any]] = []
+        self._load_skills()
+
+    def _load_skills(self):
+        """Loads skills from the lock file."""
+        if not os.path.exists(self.lock_file):
+            logger.warning(f"Lock file {self.lock_file} not found.")
+            return
+
+        try:
+            with open(self.lock_file, 'r') as f:
+                data = json.load(f)
+                # Handle both list and dict formats for backward compatibility during transition
+                skills_data = data.get("skills", [])
+                if isinstance(skills_data, list):
+                    self.skills = skills_data
+                elif isinstance(skills_data, dict):
+                    # Convert dict format to list
+                    self.skills = []
+                    for skill_id, skill_info in skills_data.items():
+                        skill_info["id"] = skill_id
+                        self.skills.append(skill_info)
+        except Exception as e:
+            logger.error(f"Error loading skills from {self.lock_file}: {e}")
+
+    def list_skills(self, source: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Returns a list of discovered skills, optionally filtered by source."""
+        if source:
+            return [s for s in self.skills if s.get("source") == source]
+        return self.skills
+
+    def get_skill(self, skill_id: str) -> Optional[Dict[str, Any]]:
+        """Retrieves a skill by its ID."""
+        for skill in self.skills:
+            if skill.get("id") == skill_id:
+                return skill
+        return None
+
+    async def invoke_skill(self, skill_id: str, context: Dict[str, Any]) -> Dict[str, Any]:
+        """Invokes a skill by its ID with the given context."""
+        skill = self.get_skill(skill_id)
+        if not skill:
+            return {"status": "error", "message": f"Skill '{skill_id}' not found"}
+
+        entry_point = skill.get("entry_point")
+        if not entry_point or not os.path.exists(entry_point):
+            return {"status": "error", "message": f"Entry point '{entry_point}' not found for skill '{skill_id}'"}
+
+        # Explicitly pass required env vars (Gemini CLI security update)
+        allowed_env_vars = [
+            "GEMINI_API_KEY",
+            "OPENAI_API_KEY",
+            "YOUTUBE_API_KEY",
+            "DATABASE_URL",
+            "GITHUB_TOKEN",
+            "PYTHONPATH"
+        ]
+
+        env = {k: os.environ[k] for k in allowed_env_vars if k in os.environ}
+        env["SKILL_CONTEXT"] = json.dumps(context)
+        # Ensure minimal system env if needed
+        if "PATH" in os.environ:
+            env["PATH"] = os.environ["PATH"]
+
+        try:
+            logger.info(f"🚀 Invoking skill '{skill_id}' via {entry_point}")
+            # Run the skill as a subprocess
+            process = await asyncio.to_thread(
+                subprocess.run,
+                [sys.executable, entry_point],
+                env=env,
+                capture_output=True,
+                text=True,
+                check=True
+            )
+
+            try:
+                result = json.loads(process.stdout)
+                return result
+            except json.JSONDecodeError:
+                return {
+                    "status": "success",
+                    "output": process.stdout.strip(),
+                    "warning": "Output was not valid JSON"
+                }
+
+        except subprocess.CalledProcessError as e:
+            logger.error(f"❌ Skill '{skill_id}' failed with exit code {e.returncode}")
+            logger.error(f"Stderr: {e.stderr}")
+            return {
+                "status": "error",
+                "message": f"Skill execution failed: {str(e)}",
+                "stderr": e.stderr
+            }
+        except Exception as e:
+            logger.error(f"❌ Error invoking skill '{skill_id}': {e}")
+            return {"status": "error", "message": str(e)}
+>>>>>>> origin/main
 
 # Example usage and testing
 async def main():
