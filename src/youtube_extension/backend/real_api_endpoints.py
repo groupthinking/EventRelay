@@ -265,10 +265,10 @@ def setup_real_api_endpoints(app: FastAPI):
             dashboard = await cost_monitor.get_cost_dashboard()
             return dashboard
 
-        except Exception as e:
-            logger.error(f"Error getting cost dashboard: {e}")
+        except Exception:
+            logger.error("Error getting cost dashboard", exc_info=True)
             return {
-                "error": str(e),
+                "error": "Internal server error",
                 "timestamp": datetime.now(timezone.utc).isoformat()
             }
 
@@ -289,10 +289,10 @@ def setup_real_api_endpoints(app: FastAPI):
 
         except HTTPException:
             raise
-        except Exception as e:
-            logger.error(f"Error getting usage analytics: {e}")
+        except Exception:
+            logger.error("Error getting usage analytics", exc_info=True)
             return {
-                "error": str(e),
+                "error": "Internal server error",
                 "timestamp": datetime.now(timezone.utc).isoformat()
             }
 
@@ -305,10 +305,10 @@ def setup_real_api_endpoints(app: FastAPI):
             recommendations = await cost_monitor.optimize_api_usage()
             return recommendations
 
-        except Exception as e:
-            logger.error(f"Error getting optimization recommendations: {e}")
+        except Exception:
+            logger.error("Error getting optimization recommendations", exc_info=True)
             return {
-                "error": str(e),
+                "error": "Internal server error",
                 "recommendations": [],
                 "timestamp": datetime.now(timezone.utc).isoformat()
             }
@@ -354,11 +354,11 @@ def setup_real_api_endpoints(app: FastAPI):
                 "version": "2.0.0-real-api-integration"
             }
 
-        except Exception as e:
-            logger.error(f"Error getting service status: {e}")
+        except Exception:
+            logger.error("Error getting service status", exc_info=True)
             return {
                 "overall_status": "error",
-                "error": str(e),
+                "error": "Internal server error",
                 "timestamp": datetime.now(timezone.utc).isoformat()
             }
 

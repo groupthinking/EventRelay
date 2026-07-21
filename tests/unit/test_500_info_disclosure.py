@@ -201,5 +201,117 @@ def test_guard_allows_sanitized_and_safe_dynamic_bodies() -> None:
         assert not list(_iter_500_leaks(sample)), f"scanner false-positived: {sample}"
 
 
+# ---------------------------------------------------------------------------
+# Response-body disclosure — a third 500-class sink the scan above does not model.
+# ---------------------------------------------------------------------------
+# Some handlers do not *raise* but *return* a dict body — often a 200
+# "degraded"/"failed" payload from a broad ``except Exception`` — that places the
+# caught exception under an ``"error"`` key (e.g. ``return {"error": str(e)}``).
+# That body reaches the client and leaks internal state exactly like a 500 detail
+# would. The ``"error"`` key is targeted specifically: 4xx handlers echo
+# client-supplied input under ``"detail"``, which is not a disclosure vector.
+#
+# The same shape exists more widely across the backend (services/, api/v1/
+# router.py, websocket_service.py); sweeping those is tracked separately, so this
+# guard is scoped to the request handlers hardened here. Add a file to
+# ``_GUARDED_RESPONSE_FILES`` once its response bodies have been sanitized.
+_GUARDED_RESPONSE_FILES = {"cloud_api_endpoints.py", "real_api_endpoints.py"}
+
+
+def _name_referenced(node: ast.AST, name: str) -> bool:
+    """True if *node*'s subtree reads the identifier *name*."""
+    return any(
+        isinstance(leaf, ast.Name) and leaf.id == name for leaf in ast.walk(node)
+    )
+
+
+def _iter_response_error_leaks(text: str):
+    """Yield (line_no, reason) for dict bodies that put the exception under "error".
+
+    A value discloses the caught exception two ways, both flagged:
+
+    * it references the request or a conventionally-named exception variable, or
+      calls ``str``/``repr`` on one (via ``_refs_exception_or_request``); or
+    * it references the identifier bound by the *enclosing*
+      ``except ... as <name>`` handler — whatever that name is (``e``, ``exc``,
+      ``failure`` …), so an ordinary rename cannot bypass the guard.
+    """
+    tree = ast.parse(text)
+    seen: set[int] = set()
+    reason = 'response body "error" field references the caught exception'
+
+    def _error_dict_values(scope: ast.AST):
+        for node in ast.walk(scope):
+            if not isinstance(node, ast.Dict):
+                continue
+            for key, value in zip(node.keys, node.values):
+                if isinstance(key, ast.Constant) and key.value == "error":
+                    yield node, value
+
+    # Pass 1: values that reference the exception/request by convention.
+    for node, value in _error_dict_values(tree):
+        line = getattr(value, "lineno", node.lineno)
+        if _refs_exception_or_request(value) and line not in seen:
+            seen.add(line)
+            yield line, reason
+
+    # Pass 2: values that reference the *enclosing* except handler's bound name,
+    # including nonstandard names such as ``except Exception as failure``.
+    for handler in ast.walk(tree):
+        if not isinstance(handler, ast.ExceptHandler) or not handler.name:
+            continue
+        for node, value in _error_dict_values(handler):
+            line = getattr(value, "lineno", node.lineno)
+            if _name_referenced(value, handler.name) and line not in seen:
+                seen.add(line)
+                yield line, reason
+
+
+def test_no_exception_in_response_error_fields() -> None:
+    offenders: list[str] = []
+    for path in _guarded_python_files():
+        if path.name not in _GUARDED_RESPONSE_FILES:
+            continue
+        text = path.read_text(encoding="utf-8")
+        for line_no, reason in _iter_response_error_leaks(text):
+            rel = path.relative_to(_REPO_ROOT)
+            offenders.append(f"{rel}:{line_no}: {reason}")
+
+    assert not offenders, (
+        'A response body must not place the caught exception under an "error" key '
+        "(CWE-209), including on non-500 'degraded'/'failed' payloads. Return a "
+        "static status string and log the exception server-side. Offending "
+        "sites:\n  " + "\n  ".join(offenders)
+    )
+
+
+def test_response_body_guard_flags_and_allows() -> None:
+    """Controls for the response-body scanner."""
+    for leak in (
+        'x = {"error": str(e)}',
+        'x = {"status": "error", "error": str(exc)}',
+        'x = {"error": f"failed: {e}"}',
+        # A nonstandard exception name must not bypass the guard: the identifier
+        # is derived from the enclosing `except ... as <name>` handler.
+        "try:\n    pass\nexcept Exception as failure:\n"
+        '    return {"error": str(failure)}\n',
+        "try:\n    pass\nexcept Exception as boom:\n    return {"
+        '"status": "error", "error": boom}\n',
+    ):
+        assert list(_iter_response_error_leaks(leak)), f"scanner missed a leak: {leak}"
+
+    for safe in (
+        'x = {"error": "Internal server error"}',
+        'x = {"status": "error", "error": "Service unavailable"}',
+        'x = {"error": "failed", "timestamp": datetime.now().isoformat()}',
+        # Static body inside a nonstandard-named handler is fine.
+        "try:\n    pass\nexcept Exception as failure:\n"
+        '    return {"error": "Internal server error"}\n',
+    ):
+        assert not list(
+            _iter_response_error_leaks(safe)
+        ), f"scanner false-positived: {safe}"
+
+
 if __name__ == "__main__":  # pragma: no cover
     raise SystemExit(pytest.main([__file__, "-v"]))

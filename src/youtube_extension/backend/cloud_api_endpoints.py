@@ -345,11 +345,11 @@ async def get_queue_stats():
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
-    except Exception as e:
-        logger.error(f"Error getting queue stats: {e}")
+    except Exception:
+        logger.error("Error getting queue stats", exc_info=True)
         return {
             "success": False,
-            "error": str(e),
+            "error": "Internal server error",
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
@@ -372,10 +372,11 @@ async def get_cloud_status():
                 "status": "operational",
                 "enabled": True,
             }
-        except Exception as e:
+        except Exception:
+            logger.error("firestore status check failed", exc_info=True)
             status["services"]["firestore"] = {
                 "status": "error",
-                "error": str(e),
+                "error": "Service unavailable",
             }
             status["overall_status"] = "degraded"
 
@@ -388,10 +389,11 @@ async def get_cloud_status():
                 "enabled": True,
                 "queue_stats": stats,
             }
-        except Exception as e:
+        except Exception:
+            logger.error("cloud_tasks status check failed", exc_info=True)
             status["services"]["cloud_tasks"] = {
                 "status": "error",
-                "error": str(e),
+                "error": "Service unavailable",
             }
             status["overall_status"] = "degraded"
 
@@ -402,20 +404,21 @@ async def get_cloud_status():
                 "status": "operational",
                 "enabled": True,
             }
-        except Exception as e:
+        except Exception:
+            logger.error("vertex_ai status check failed", exc_info=True)
             status["services"]["vertex_ai"] = {
                 "status": "error",
-                "error": str(e),
+                "error": "Service unavailable",
             }
             status["overall_status"] = "degraded"
 
         return status
 
-    except Exception as e:
-        logger.error(f"Error getting cloud status: {e}")
+    except Exception:
+        logger.error("Error getting cloud status", exc_info=True)
         return {
             "overall_status": "error",
-            "error": str(e),
+            "error": "Internal server error",
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
