@@ -45,6 +45,15 @@ try:
 except Exception:
     pass
 
+# Protect the real yt_dlp package before collection-only tests install a bare
+# sys.modules fallback with setdefault(). Without this, later integration tests
+# see the synthetic module and cannot patch its YoutubeDL entry point.
+try:
+    import yt_dlp  # noqa: F401
+except Exception:
+    pass
+
+
 # Protect the real lightweight youtube_extension processor package too. Some
 # collection-only tests install fallback modules with sys.modules.setdefault().
 # If such a test is collected first, a bare fake processors package leaks into
