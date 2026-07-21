@@ -1514,6 +1514,7 @@ class APICostMonitor:
             self._recover_stale_deliveries_sync, stale_timeout_seconds
         )
 
+
     def _recover_stale_deliveries_sync(
         self, stale_timeout_seconds: Optional[int] = None
     ) -> None:
@@ -1521,67 +1522,59 @@ class APICostMonitor:
         if stale_timeout_seconds is None:
             stale_timeout_seconds = self.webhook_stale_timeout_seconds
 
-        session = self.Session()
         try:
-            now = datetime.now(timezone.utc)
-            cutoff = now - timedelta(seconds=stale_timeout_seconds)
-            stale_items = (
-                session.query(WebhookOutbox)
-                .filter(
-                    WebhookOutbox.status == "processing",
-                    or_(
-                        WebhookOutbox.last_attempt.is_(None),
-                        WebhookOutbox.last_attempt < cutoff,
-                    ),
-                )
-                .all()
-            )
-
-            for item in stale_items:
-                next_attempt_at, recovery_error = self._retry_state(
-                    max(1, item.retry_count),
-                    now,
-                    "Recovery: Stale/Crashed delivery task recovered",
-                )
-                filters = [
-                    WebhookOutbox.id == item.id,
-                    WebhookOutbox.status == "processing",
-                ]
-                if item.last_attempt is None:
-                    filters.append(WebhookOutbox.last_attempt.is_(None))
-                else:
-                    filters.append(WebhookOutbox.last_attempt == item.last_attempt)
-
-                recovered = (
+            with self._session_scope(commit=True) as session:
+                now = datetime.now(timezone.utc)
+                cutoff = now - timedelta(seconds=stale_timeout_seconds)
+                stale_items = (
                     session.query(WebhookOutbox)
-                    .filter(*filters)
-                    .update(
-                        {
-                            WebhookOutbox.status: "failed",
-                            WebhookOutbox.next_attempt_at: next_attempt_at,
-                            WebhookOutbox.error_message: recovery_error,
-                            WebhookOutbox.last_recovered_at: now,
-                        },
-                        synchronize_session=False,
+                    .filter(
+                        WebhookOutbox.status == "processing",
+                        or_(
+                            WebhookOutbox.last_attempt.is_(None),
+                            WebhookOutbox.last_attempt < cutoff,
+                        ),
                     )
+                    .all()
                 )
-                if recovered:
-                    logger.info(
-                        "Recovered stale webhook delivery %s for %s (%s)",
-                        item.id,
-                        item.utc_date,
-                        item.alert_type,
-                    )
 
-            session.commit()
+                for item in stale_items:
+                    next_attempt_at, recovery_error = self._retry_state(
+                        max(1, item.retry_count),
+                        now,
+                        "Recovery: Stale/Crashed delivery task recovered",
+                    )
+                    filters = [
+                        WebhookOutbox.id == item.id,
+                        WebhookOutbox.status == "processing",
+                    ]
+                    if item.last_attempt is None:
+                        filters.append(WebhookOutbox.last_attempt.is_(None))
+                    else:
+                        filters.append(WebhookOutbox.last_attempt == item.last_attempt)
+
+                    recovered = (
+                        session.query(WebhookOutbox)
+                        .filter(*filters)
+                        .update(
+                            {
+                                WebhookOutbox.status: "failed",
+                                WebhookOutbox.next_attempt_at: next_attempt_at,
+                                WebhookOutbox.error_message: recovery_error,
+                                WebhookOutbox.last_recovered_at: now,
+                            },
+                            synchronize_session=False,
+                        )
+                    )
+                    if recovered:
+                        logger.info(
+                            "Recovered stale webhook delivery %s for %s (%s)",
+                            item.id,
+                            item.utc_date,
+                            item.alert_type,
+                        )
         except Exception as e:
             logger.error("Error during stale webhook delivery recovery: %s", e)
-            try:
-                session.rollback()
-            except Exception:
-                pass
-        finally:
-            session.close()
 
     def _try_claim_outbox_item(
         self,
@@ -1590,58 +1583,50 @@ class APICostMonitor:
         respect_schedule: bool = True,
     ) -> Optional[dict[str, Any]]:
         """Claim one due item with a single compare-and-swap UPDATE."""
-        session = self.Session()
         try:
-            filters = [
-                WebhookOutbox.id == item_id,
-                WebhookOutbox.status.in_(["pending", "failed"]),
-                WebhookOutbox.retry_count < self.webhook_max_attempts,
-            ]
-            if respect_schedule:
-                filters.append(
-                    or_(
-                        WebhookOutbox.next_attempt_at.is_(None),
-                        WebhookOutbox.next_attempt_at <= claim_time,
+            with self._session_scope(commit=True) as session:
+                filters = [
+                    WebhookOutbox.id == item_id,
+                    WebhookOutbox.status.in_(["pending", "failed"]),
+                    WebhookOutbox.retry_count < self.webhook_max_attempts,
+                ]
+                if respect_schedule:
+                    filters.append(
+                        or_(
+                            WebhookOutbox.next_attempt_at.is_(None),
+                            WebhookOutbox.next_attempt_at <= claim_time,
+                        )
+                    )
+
+                claimed = (
+                    session.query(WebhookOutbox)
+                    .filter(*filters)
+                    .update(
+                        {
+                            WebhookOutbox.status: "processing",
+                            WebhookOutbox.retry_count: WebhookOutbox.retry_count + 1,
+                            WebhookOutbox.last_attempt: claim_time,
+                            WebhookOutbox.claimed_at: claim_time,
+                            WebhookOutbox.next_attempt_at: None,
+                        },
+                        synchronize_session=False,
                     )
                 )
+                if claimed != 1:
+                    return None
 
-            claimed = (
-                session.query(WebhookOutbox)
-                .filter(*filters)
-                .update(
-                    {
-                        WebhookOutbox.status: "processing",
-                        WebhookOutbox.retry_count: WebhookOutbox.retry_count + 1,
-                        WebhookOutbox.last_attempt: claim_time,
-                        WebhookOutbox.claimed_at: claim_time,
-                        WebhookOutbox.next_attempt_at: None,
-                    },
-                    synchronize_session=False,
-                )
-            )
-            if claimed != 1:
-                session.rollback()
-                return None
-
-            session.commit()
-            item = session.query(WebhookOutbox).filter_by(id=item_id).one()
-            return {
-                "id": item.id,
-                "payload": item.payload,
-                "utc_date": item.utc_date,
-                "alert_type": item.alert_type,
-                "retry_count": item.retry_count,
-                "last_attempt": item.last_attempt,
-            }
+                item = session.query(WebhookOutbox).filter_by(id=item_id).one()
+                return {
+                    "id": item.id,
+                    "payload": item.payload,
+                    "utc_date": item.utc_date,
+                    "alert_type": item.alert_type,
+                    "retry_count": item.retry_count,
+                    "last_attempt": item.last_attempt,
+                }
         except Exception as e:
             logger.debug("Could not claim webhook outbox item %s: %s", item_id, e)
-            try:
-                session.rollback()
-            except Exception:
-                pass
             return None
-        finally:
-            session.close()
 
     def _complete_outbox_claim(
         self,
@@ -1650,85 +1635,74 @@ class APICostMonitor:
         success: bool,
         error_message: Optional[str] = None,
     ) -> bool:
-        """Conditionally complete exactly the attempt represented by ``claim``."""
-        session = self.Session()
+        """Conditionally complete exactly the represented delivery attempt."""
         try:
-            values: dict[Any, Any]
-            if success:
-                values = {
-                    WebhookOutbox.status: "sent",
-                    WebhookOutbox.next_attempt_at: None,
-                    WebhookOutbox.error_message: None,
-                    WebhookOutbox.sent_at: datetime.now(timezone.utc),
-                }
-            else:
-                next_attempt_at, persisted_error = self._retry_state(
-                    claim["retry_count"],
-                    datetime.now(timezone.utc),
-                    error_message or "Delivery failed",
-                )
-                values = {
-                    WebhookOutbox.status: "failed",
-                    WebhookOutbox.next_attempt_at: next_attempt_at,
-                    WebhookOutbox.error_message: persisted_error,
-                }
+            with self._session_scope(commit=True) as session:
+                values: dict[Any, Any]
+                if success:
+                    values = {
+                        WebhookOutbox.status: "sent",
+                        WebhookOutbox.next_attempt_at: None,
+                        WebhookOutbox.error_message: None,
+                        WebhookOutbox.sent_at: datetime.now(timezone.utc),
+                    }
+                else:
+                    next_attempt_at, persisted_error = self._retry_state(
+                        claim["retry_count"],
+                        datetime.now(timezone.utc),
+                        error_message or "Delivery failed",
+                    )
+                    values = {
+                        WebhookOutbox.status: "failed",
+                        WebhookOutbox.next_attempt_at: next_attempt_at,
+                        WebhookOutbox.error_message: persisted_error,
+                    }
 
-            completed = (
-                session.query(WebhookOutbox)
-                .filter(
-                    WebhookOutbox.id == claim["id"],
-                    WebhookOutbox.status == "processing",
-                    WebhookOutbox.retry_count == claim["retry_count"],
-                    WebhookOutbox.last_attempt == claim["last_attempt"],
+                completed = (
+                    session.query(WebhookOutbox)
+                    .filter(
+                        WebhookOutbox.id == claim["id"],
+                        WebhookOutbox.status == "processing",
+                        WebhookOutbox.retry_count == claim["retry_count"],
+                        WebhookOutbox.last_attempt == claim["last_attempt"],
+                    )
+                    .update(values, synchronize_session=False)
                 )
-                .update(values, synchronize_session=False)
-            )
-            if completed != 1:
-                session.rollback()
-                return False
-            session.commit()
-            return True
+                if completed != 1:
+                    return False
+                return True
         except Exception as e:
             logger.error("Error completing outbox item %s: %s", claim["id"], e)
-            try:
-                session.rollback()
-            except Exception:
-                pass
             return False
-        finally:
-            session.close()
 
     def _select_outbox_item_ids(
         self, *, now: datetime, force: bool, max_items: Optional[int]
     ) -> list[int]:
         """Return due outbox IDs using a short worker-thread transaction."""
-        session = self.Session()
         try:
-            filters = [
-                WebhookOutbox.status.in_(["pending", "failed"]),
-                WebhookOutbox.retry_count < self.webhook_max_attempts,
-            ]
-            if not force:
-                filters.append(
-                    or_(
-                        WebhookOutbox.next_attempt_at.is_(None),
-                        WebhookOutbox.next_attempt_at <= now,
+            with self._session_scope() as session:
+                filters = [
+                    WebhookOutbox.status.in_(["pending", "failed"]),
+                    WebhookOutbox.retry_count < self.webhook_max_attempts,
+                ]
+                if not force:
+                    filters.append(
+                        or_(
+                            WebhookOutbox.next_attempt_at.is_(None),
+                            WebhookOutbox.next_attempt_at <= now,
+                        )
                     )
+                query = (
+                    session.query(WebhookOutbox.id)
+                    .filter(*filters)
+                    .order_by(WebhookOutbox.next_attempt_at, WebhookOutbox.id)
                 )
-            query = (
-                session.query(WebhookOutbox.id)
-                .filter(*filters)
-                .order_by(WebhookOutbox.next_attempt_at, WebhookOutbox.id)
-            )
-            if max_items is not None:
-                query = query.limit(max(0, max_items))
-            return [row[0] for row in query.all()]
+                if max_items is not None:
+                    query = query.limit(max(0, max_items))
+                return [row[0] for row in query.all()]
         except Exception as e:
             logger.error("Error selecting webhook outbox items: %s", e)
             return []
-        finally:
-            session.close()
-
     async def process_outbox(
         self, max_items: Optional[int] = None, *, force: bool = False
     ) -> int:
