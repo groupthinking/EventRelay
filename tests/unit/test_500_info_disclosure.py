@@ -218,11 +218,53 @@ def test_guard_allows_sanitized_and_safe_dynamic_bodies() -> None:
 _GUARDED_RESPONSE_FILES = {"cloud_api_endpoints.py", "real_api_endpoints.py"}
 
 
-def _name_referenced(node: ast.AST, name: str) -> bool:
-    """True if *node*'s subtree reads the identifier *name*."""
+def _refs_any_name(node: ast.AST, names: set[str]) -> bool:
+    """True if *node*'s subtree reads any identifier in *names*."""
     return any(
-        isinstance(leaf, ast.Name) and leaf.id == name for leaf in ast.walk(node)
+        isinstance(leaf, ast.Name) and leaf.id in names for leaf in ast.walk(node)
     )
+
+
+def _assigned_names(target: ast.AST) -> list[str]:
+    """Names bound by an assignment target (handles tuple/list unpacking)."""
+    if isinstance(target, ast.Name):
+        return [target.id]
+    if isinstance(target, (ast.Tuple, ast.List)):
+        out: list[str] = []
+        for elt in target.elts:
+            out.extend(_assigned_names(elt))
+        return out
+    return []
+
+
+def _tainted_names(handler: ast.ExceptHandler) -> set[str]:
+    """Names that carry the caught exception's text within *handler*.
+
+    Seeds with the handler-bound name and propagates to any variable assigned
+    from an expression that references an already-tainted name — so an
+    intermediate alias (``message = str(failure); {"error": message}``) does not
+    launder the leak past the guard. Iterates to a fixpoint; taint is monotonic.
+    """
+    tainted = {handler.name} if handler.name else set()
+    if not tainted:
+        return tainted
+    changed = True
+    while changed:
+        changed = False
+        for node in ast.walk(handler):
+            targets: list[ast.AST] = []
+            value: ast.AST | None = None
+            if isinstance(node, ast.Assign):
+                targets, value = node.targets, node.value
+            elif isinstance(node, (ast.AnnAssign, ast.AugAssign)) and node.value:
+                targets, value = [node.target], node.value
+            if value is not None and _refs_any_name(value, tainted):
+                for tgt in targets:
+                    for name in _assigned_names(tgt):
+                        if name not in tainted:
+                            tainted.add(name)
+                            changed = True
+    return tainted
 
 
 def _iter_response_error_leaks(text: str):
@@ -255,14 +297,16 @@ def _iter_response_error_leaks(text: str):
             seen.add(line)
             yield line, reason
 
-    # Pass 2: values that reference the *enclosing* except handler's bound name,
-    # including nonstandard names such as ``except Exception as failure``.
+    # Pass 2: values that reference the *enclosing* except handler's bound name
+    # (including nonstandard names such as ``except Exception as failure``) or any
+    # intermediate alias assigned from it (``message = str(failure)``).
     for handler in ast.walk(tree):
         if not isinstance(handler, ast.ExceptHandler) or not handler.name:
             continue
+        tainted = _tainted_names(handler)
         for node, value in _error_dict_values(handler):
             line = getattr(value, "lineno", node.lineno)
-            if _name_referenced(value, handler.name) and line not in seen:
+            if _refs_any_name(value, tainted) and line not in seen:
                 seen.add(line)
                 yield line, reason
 
@@ -297,6 +341,13 @@ def test_response_body_guard_flags_and_allows() -> None:
         '    return {"error": str(failure)}\n',
         "try:\n    pass\nexcept Exception as boom:\n    return {"
         '"status": "error", "error": boom}\n',
+        # An intermediate alias must not launder the taint past the guard.
+        "try:\n    pass\nexcept Exception as failure:\n"
+        "    message = str(failure)\n"
+        '    return {"error": message}\n',
+        "try:\n    pass\nexcept Exception as failure:\n"
+        '    detail = f"boom: {failure}"\n'
+        '    return {"error": detail}\n',
     ):
         assert list(_iter_response_error_leaks(leak)), f"scanner missed a leak: {leak}"
 
@@ -307,6 +358,10 @@ def test_response_body_guard_flags_and_allows() -> None:
         # Static body inside a nonstandard-named handler is fine.
         "try:\n    pass\nexcept Exception as failure:\n"
         '    return {"error": "Internal server error"}\n',
+        # A static alias (not derived from the exception) is not tainted.
+        "try:\n    pass\nexcept Exception as failure:\n"
+        '    message = "Internal server error"\n'
+        '    return {"error": message}\n',
     ):
         assert not list(
             _iter_response_error_leaks(safe)
