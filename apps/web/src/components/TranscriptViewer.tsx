@@ -34,7 +34,7 @@ export default function TranscriptViewer({ transcript, className }: TranscriptVi
     // Capturing split regex (no global flag) so `.test()` lastIndex state can't desync.
     return {
       regex: new RegExp(`(${escaped})`, 'i'),
-      lower: searchQuery.toLowerCase(),
+      lower: searchQuery ? searchQuery.toLowerCase() : '',
     };
   }, [searchQuery]);
 
@@ -42,7 +42,7 @@ export default function TranscriptViewer({ transcript, className }: TranscriptVi
     if (!searchConfig) return text;
     const parts = text.split(searchConfig.regex);
     return parts.map((part, i) =>
-      part.toLowerCase() === searchConfig.lower ? (
+      (part ? part.toLowerCase() : '') === searchConfig.lower ? (
         <mark key={i} className="bg-primary-500/30 text-primary-300 rounded px-0.5">
           {part}
         </mark>

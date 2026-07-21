@@ -14,3 +14,6 @@
 ## 2026-07-28 - Memoize text processing in React
 **Learning:** Performing expensive string manipulations like splitting long texts (`transcript.split('\n')`) or generating dynamic Regex expressions inside a component body causes significant CPU overhead on every re-render (like keystroke updates in a search box).
 **Action:** Extract pure transformation logic on static/infrequent data into `useMemo` hooks (e.g., memoizing the paragraph split on `transcript` and precomputing search `RegExp` based on `searchQuery`).
+## 2026-07-28 - Optimize `.toLowerCase()` loop execution and safety
+**Learning:** Performing lowercasing on string comparisons inside frequent render loops or validation filters causes repeated allocations and performance issues. Additionally, failing to guard `.toLowerCase()` can lead to unexpected crashes when strings are null or undefined.
+**Action:** Hoist static/query lowercasing outside iterative arrays and loop bodies (e.g. `searchQuery.toLowerCase()`) and implemented ternary safety checks (`val ? val.toLowerCase() : ''`) inside filtering logic (`InteractiveTranscript.tsx`, `transcription-service.ts`) to improve robustness and speed.
