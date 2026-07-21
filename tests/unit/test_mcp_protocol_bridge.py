@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import importlib.util
 import sys
 import types as _types
 from pathlib import Path
+from typing import Any, Optional
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -43,6 +45,7 @@ MCPProtocolBridge = _pb_mod.MCPProtocolBridge
 ProtocolAdapter = _pb_mod.ProtocolAdapter
 ProtocolType = _pb_mod.ProtocolType
 ServerCapability = _reg_mod.ServerCapability
+MCPContext = _ctx_mod.MCPContext
 
 
 # Minimal concrete adapter for tests
@@ -399,6 +402,56 @@ class TestMCPProtocolBridgeSendProtocolRequest:
         assert last["details"]["error"] == {"type": "ValueError"}
         assert "sk-should-not-persist" not in str(last["details"])
 
+    async def test_history_failure_does_not_change_adapter_success(self) -> None:
+        bridge = await self._connected_bridge()
+        context = _ctx_mod.get_context_manager().create_context(
+            user="testuser", task="test_task", intent="testing"
+        )
+        with patch.object(
+            context,
+            "add_history_entry",
+            side_effect=RuntimeError("history unavailable"),
+        ):
+            response = await bridge.send_protocol_request(
+                ProtocolType.MCP, {"prompt": "hello"}, context=context
+            )
+        assert response == {"status": "ok"}
+        assert bridge.protocol_stats[ProtocolType.MCP] == {
+            "in_flight": 0,
+            "success": 1,
+            "failure": 0,
+        }
+
+    async def test_history_failure_preserves_adapter_exception(self) -> None:
+        class _ErrorAdapter(_FakeAdapter):
+            async def send_request(
+                self,
+                request: dict[str, Any],
+                context: MCPContext,
+            ) -> dict[str, Any]:
+                raise ValueError("adapter failed")
+
+        bridge = MCPProtocolBridge()
+        bridge.register_adapter(_ErrorAdapter(ProtocolType.MCP))
+        bridge.bridge_status[ProtocolType.MCP] = BridgeStatus.CONNECTED
+        context = _ctx_mod.get_context_manager().create_context(
+            user="testuser", task="test_task", intent="testing"
+        )
+        with patch.object(
+            context,
+            "add_history_entry",
+            side_effect=RuntimeError("history unavailable"),
+        ):
+            with pytest.raises(ValueError, match="adapter failed"):
+                await bridge.send_protocol_request(
+                    ProtocolType.MCP, {"prompt": "hello"}, context=context
+                )
+        assert bridge.protocol_stats[ProtocolType.MCP] == {
+            "in_flight": 0,
+            "success": 0,
+            "failure": 1,
+        }
+
 
 # ===========================================================================
 # MCPProtocolBridge.route_request
@@ -484,6 +537,35 @@ class TestMCPProtocolBridgeIntelligentRouting:
         )
         assert resp["protocol"] == "openai"
 
+    async def test_required_capabilities_are_not_forwarded(self) -> None:
+        class _RecordingAdapter(_CapableAdapter):
+            def __init__(self) -> None:
+                super().__init__(
+                    ProtocolType.OPENAI,
+                    [ServerCapability.AI_INFERENCE],
+                )
+                self.request: Optional[dict[str, Any]] = None
+
+            async def send_request(
+                self,
+                request: dict[str, Any],
+                context: MCPContext,
+            ) -> dict[str, Any]:
+                self.request = request
+                return {"status": "ok", "protocol": self._ptype.value}
+
+        adapter = _RecordingAdapter()
+        bridge = await self._bridge_with(adapter)
+        response = await bridge.route_request(
+            {
+                "required_capabilities": [ServerCapability.AI_INFERENCE],
+                "jsonrpc": "2.0",
+                "method": "tools/call",
+            }
+        )
+        assert response["status"] == "ok"
+        assert adapter.request == {"jsonrpc": "2.0", "method": "tools/call"}
+
     async def test_accepts_server_capability_enum_values(self):
         bridge = await self._bridge_with(
             _CapableAdapter(ProtocolType.MCP, [ServerCapability.DATA_PROCESSING]),
@@ -516,6 +598,30 @@ class TestMCPProtocolBridgeIntelligentRouting:
             {"required_capabilities": [ServerCapability.AI_INFERENCE]}
         )
         assert resp["protocol"] == "openai"
+
+    async def test_skips_protocol_when_capability_discovery_times_out(self) -> None:
+        class _HangingCapsAdapter(_CapableAdapter):
+            async def get_capabilities(self) -> list[ServerCapability]:
+                await asyncio.sleep(1)
+                return [ServerCapability.AI_INFERENCE]
+
+        bridge = await self._bridge_with(
+            _HangingCapsAdapter(
+                ProtocolType.MCP, [ServerCapability.AI_INFERENCE]
+            ),
+            _CapableAdapter(
+                ProtocolType.OPENAI, [ServerCapability.AI_INFERENCE]
+            ),
+        )
+        with patch.object(
+            _pb_mod,
+            "_CAPABILITY_DISCOVERY_TIMEOUT_SECONDS",
+            0.001,
+        ):
+            response = await bridge.route_request(
+                {"required_capabilities": [ServerCapability.AI_INFERENCE]}
+            )
+        assert response["protocol"] == "openai"
 
     async def test_prefers_less_loaded_protocol(self):
         bridge = await self._bridge_with(
@@ -811,14 +917,28 @@ class TestOpenAIAdapter:
             )
         assert result is False
 
-    async def test_initialize_rejects_invalid_port_without_raising(self):
+    async def test_initialize_rejects_invalid_port_without_raising(self) -> None:
         adapter = OpenAIAdapter()
         result = await adapter.initialize(
             {"api_key": "sk-test", "base_url": "https://example.com:invalid/v1"}
         )
         assert result is False
 
-    async def test_initialize_rejects_malformed_dns_result(self):
+    async def test_initialize_rejects_out_of_range_port(self) -> None:
+        adapter = OpenAIAdapter()
+        result = await adapter.initialize(
+            {"api_key": "sk-test", "base_url": "https://example.com:70000/v1"}
+        )
+        assert result is False
+
+    async def test_initialize_rejects_malformed_ipv6(self) -> None:
+        adapter = OpenAIAdapter()
+        result = await adapter.initialize(
+            {"api_key": "sk-test", "base_url": "https://[::1/v1"}
+        )
+        assert result is False
+
+    async def test_initialize_rejects_malformed_dns_result(self) -> None:
         adapter = OpenAIAdapter()
         with patch.object(
             _pb_mod.socket,

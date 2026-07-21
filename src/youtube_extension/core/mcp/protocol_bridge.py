@@ -69,12 +69,16 @@ _SUMMARY_KEY_ALLOWLIST = frozenset(
         "type",
     }
 )
+_CAPABILITY_DISCOVERY_TIMEOUT_SECONDS = 5.0
 
 
 def _summarize_payload(payload: Any) -> dict[str, Any]:
     """Build a non-sensitive structural summary for history/logging."""
     if isinstance(payload, Mapping):
-        keys = sorted(key for key in _SUMMARY_KEY_ALLOWLIST if key in payload)
+        try:
+            keys = sorted(key for key in _SUMMARY_KEY_ALLOWLIST if key in payload)
+        except Exception:
+            return {"type": type(payload).__name__}
         return {"type": type(payload).__name__, "keys": keys, "key_count": len(keys)}
     return {"type": type(payload).__name__}
 
@@ -82,6 +86,17 @@ def _summarize_payload(payload: Any) -> dict[str, Any]:
 def _sanitize_exception(exc: Exception) -> dict[str, str]:
     """Return non-sensitive exception metadata safe to persist."""
     return {"type": type(exc).__name__}
+
+
+def _record_history_safely(context: MCPContext, details: dict[str, Any]) -> None:
+    """Persist protocol history without changing the adapter outcome."""
+    try:
+        context.add_history_entry("protocol_request", details)
+    except Exception as exc:
+        logger.warning(
+            "Could not persist protocol request history (%s)",
+            type(exc).__name__,
+        )
 
 
 async def _is_public_https_base_url(base_url: str) -> bool:
@@ -295,35 +310,37 @@ class MCPProtocolBridge:
 
             # Send request through adapter
             response = await self.adapters[protocol_type].send_request(request, context)
-
-            # Update context with response. Store only a non-sensitive summary of
-            # the request — the raw dict may contain API keys/tokens/PII.
-            context.add_history_entry("protocol_request", {
-                "protocol": protocol_type.value,
-                "request_summary": _summarize_payload(request),
-                "response_summary": _summarize_payload(response),
-                "success": True
-            })
-
-            stats["success"] += 1
-            return response
-
-        except Exception as e:
-            # Update context with error
-            context.add_history_entry("protocol_request", {
-                "protocol": protocol_type.value,
-                "request_summary": _summarize_payload(request),
-                "error": _sanitize_exception(e),
-                "success": False
-            })
-
+        except Exception as exc:
             stats["failure"] += 1
+            _record_history_safely(
+                context,
+                {
+                    "protocol": protocol_type.value,
+                    "request_summary": _summarize_payload(request),
+                    "error": _sanitize_exception(exc),
+                    "success": False,
+                },
+            )
             logger.error(
                 "Protocol request failed for %s (%s)",
                 protocol_type.value,
-                type(e).__name__,
+                type(exc).__name__,
             )
             raise
+        else:
+            stats["success"] += 1
+            # Store only non-sensitive summaries. History persistence is
+            # observability, not part of the adapter's success contract.
+            _record_history_safely(
+                context,
+                {
+                    "protocol": protocol_type.value,
+                    "request_summary": _summarize_payload(request),
+                    "response_summary": _summarize_payload(response),
+                    "success": True,
+                },
+            )
+            return response
 
         finally:
             stats["in_flight"] -= 1
@@ -372,7 +389,13 @@ class MCPProtocolBridge:
 
         logger.info(f"Routing request to protocol: {selected_protocol.value}")
 
-        return await self.send_protocol_request(selected_protocol, request, context)
+        adapter_request = dict(request)
+        adapter_request.pop("required_capabilities", None)
+        return await self.send_protocol_request(
+            selected_protocol,
+            adapter_request,
+            context,
+        )
 
     async def _select_protocol(
         self,
@@ -428,9 +451,17 @@ class MCPProtocolBridge:
             capable_protocols = []
             for protocol in candidates:
                 try:
-                    capabilities = set(await self.adapters[protocol].get_capabilities())
-                except Exception as e:
-                    logger.warning(f"Could not get capabilities for {protocol.value}: {e}")
+                    discovered = await asyncio.wait_for(
+                        self.adapters[protocol].get_capabilities(),
+                        timeout=_CAPABILITY_DISCOVERY_TIMEOUT_SECONDS,
+                    )
+                    capabilities = set(discovered)
+                except Exception as exc:
+                    logger.warning(
+                        "Could not get capabilities for %s (%s)",
+                        protocol.value,
+                        type(exc).__name__,
+                    )
                     continue
                 if required_capabilities <= capabilities:
                     capable_protocols.append(protocol)
