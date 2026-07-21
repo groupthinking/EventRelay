@@ -166,15 +166,11 @@ export default function InteractiveTranscript({
   );
 
   const filteredSegments = useMemo(() => {
-    // Optimization (Bolt): Hoist searchQuery lowercasing outside the filter loop
-    // to prevent redundant operations and save CPU overhead per render.
-    const searchLower = searchQuery ? searchQuery.toLowerCase() : '';
-
     return segments.filter((seg) => {
       const matchesSpeaker = !filterSpeaker || seg.speaker === filterSpeaker;
       const matchesSearch =
         !searchQuery ||
-        (seg.text ? seg.text.toLowerCase() : '').includes(searchLower);
+        seg.text.toLowerCase().includes(searchQuery.toLowerCase());
       return matchesSpeaker && matchesSearch;
     });
   }, [segments, filterSpeaker, searchQuery]);

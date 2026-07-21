@@ -162,7 +162,7 @@ function currentVideoUrlForLink(videoUrl: string) {
 }
 
 function isUnsafeRequest(text: string) {
-  const normalized = text ? text.toLowerCase() : '';
+  const normalized = text.toLowerCase();
   return UNSAFE_TERMS.some((term) => normalized.includes(term));
 }
 
