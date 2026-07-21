@@ -17,6 +17,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
+from utils.path_utils import select_writable_dir
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -177,14 +179,18 @@ class MCPEcosystemCoordinator:
     """
 
     def __init__(self, config_path: str = None):
-        default_path = "/Users/garvey/UVAI/10_MCP_ECOSYSTEM"
-        if not config_path:
-            if os.path.exists(default_path):
-                self.config_path = default_path
-            else:
-                self.config_path = str(Path.cwd() / "mcp_ecosystem")
-        else:
+        if config_path:
             self.config_path = config_path
+        else:
+            # The coordinator both reads and writes its config dir, so require
+            # the legacy path to be an existing, writable directory; otherwise
+            # use a runtime dir under cwd that we can persist defaults into.
+            self.config_path = str(
+                select_writable_dir(
+                    "/Users/garvey/UVAI/10_MCP_ECOSYSTEM",
+                    Path.cwd() / "mcp_ecosystem",
+                )
+            )
         self.coordination_config = self._load_coordination_config()
 
         # MCP node registry

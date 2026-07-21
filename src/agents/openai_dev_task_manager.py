@@ -18,6 +18,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
+from utils.path_utils import select_writable_dir
+
 
 @dataclass
 class DevTaskResult:
@@ -34,17 +36,16 @@ class OpenAIDevTaskManager:
     """MCP-first dev task manager to operationalize YouTube video capabilities."""
 
     def __init__(self, workspace_root: Optional[str] = None):
-        default_root = "/Users/garvey/UVAI/src/core/youtube_extension"
-        path_str = workspace_root or os.getenv("WORKSPACE_ROOT")
-        if not path_str:
-            try:
-                candidate = Path(default_root)
-                candidate.mkdir(parents=True, exist_ok=True)
-                path_str = default_root
-            except Exception:
-                path_str = str(Path.cwd() / "workflow_workspace")
-
-        self.workspace_root = Path(path_str)
+        explicit = workspace_root or os.getenv("WORKSPACE_ROOT")
+        if explicit:
+            self.workspace_root = Path(explicit)
+        else:
+            # Reuse the legacy dev root only if it already exists and is
+            # writable; otherwise fall back to a runtime workspace under cwd.
+            self.workspace_root = select_writable_dir(
+                "/Users/garvey/UVAI/src/core/youtube_extension",
+                Path.cwd() / "workflow_workspace",
+            )
         self.output_root = self.workspace_root / "workflow_output"
         self.output_root.mkdir(parents=True, exist_ok=True)
 

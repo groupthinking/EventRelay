@@ -19,6 +19,8 @@ from functools import wraps
 from pathlib import Path
 from typing import Any
 
+from utils.path_utils import select_readable_file, select_writable_dir
+
 # MCP integration imports
 try:
     import mcp
@@ -202,14 +204,18 @@ class MCPConfig:
     """Configuration management for MCP video processor"""
 
     def __init__(self, config_path: str = None):
-        default_path = "/Users/garvey/UVAI/10_MCP_ECOSYSTEM/MCP/mcp_detailed_config.json"
-        if not config_path:
-            if os.path.exists(default_path):
-                self.config_path = default_path
-            else:
-                self.config_path = str(Path.cwd() / "mcp_detailed_config.json")
-        else:
+        if config_path:
             self.config_path = config_path
+        else:
+            # Prefer the legacy config file only if it exists and is readable;
+            # otherwise use a runtime file under cwd (loaded by _load_config,
+            # which falls back to built-in defaults if absent).
+            self.config_path = str(
+                select_readable_file(
+                    "/Users/garvey/UVAI/10_MCP_ECOSYSTEM/MCP/mcp_detailed_config.json",
+                    Path.cwd() / "mcp_detailed_config.json",
+                )
+            )
         self.config = self._load_config()
 
     def _load_config(self) -> dict[str, Any]:
@@ -1159,14 +1165,13 @@ class MCPVideoProcessor:
     ) -> dict[str, Any]:
         """Save results with MCP metadata and analytics"""
 
-        # Create enhanced results directory
-        default_dir = "/Users/garvey/UVAI/10_MCP_ECOSYSTEM/mcp_results"
-        try:
-            results_dir = Path(default_dir)
-            results_dir.mkdir(parents=True, exist_ok=True)
-        except Exception:
-            results_dir = Path.cwd() / "mcp_results"
-
+        # Create enhanced results directory. Select a base that is genuinely
+        # writable (the legacy path only if it exists and is writable), so the
+        # category_dir creation below cannot raise PermissionError.
+        results_dir = select_writable_dir(
+            "/Users/garvey/UVAI/10_MCP_ECOSYSTEM/mcp_results",
+            Path.cwd() / "mcp_results",
+        )
         category_dir = results_dir / content["category"]
         category_dir.mkdir(parents=True, exist_ok=True)
 
