@@ -26,6 +26,13 @@ from PIL import Image
 from .gemini_service import GeminiConfig, GeminiResult, GeminiService
 
 
+async def _record_api_usage(*args: Any, **kwargs: Any) -> Any:
+    """Load cost tracking only when provider usage is actually available."""
+    from youtube_extension.backend.services.api_cost_monitor import track_api_call
+
+    return await track_api_call(*args, **kwargs)
+
+
 class ProcessingMode(Enum):
     """Processing mode roadmap retained for compatibility."""
 
@@ -261,6 +268,11 @@ class HybridProcessorService:
                     **kwargs,
                 )
 
+            await self._track_gemini_usage(
+                cloud_result,
+                routing_decision.task_type,
+            )
+
             hybrid_result = HybridResult(
                 success=cloud_result.success,
                 response=cloud_result.response,
@@ -288,6 +300,45 @@ class HybridProcessorService:
                 latency=time.time() - start_time,
                 mode_used=ProcessingMode.CLOUD_ONLY,
                 error=str(exc),
+            )
+
+    async def _track_gemini_usage(
+        self,
+        result: GeminiResult,
+        task_type: TaskType,
+    ) -> None:
+        """Persist provider-reported usage without delaying a paid result."""
+        if not result.success or result.backend not in {"api", "vertex", "gemini"}:
+            return
+
+        usage = result.usage_metadata
+        if usage is None:
+            self.logger.warning(
+                "Gemini response omitted usage metadata; cost record skipped"
+            )
+            return
+
+        input_tokens = int(getattr(usage, "prompt_token_count", 0) or 0)
+        output_tokens = int(getattr(usage, "candidates_token_count", 0) or 0)
+        if input_tokens <= 0 and output_tokens <= 0:
+            self.logger.warning(
+                "Gemini usage metadata contained no billable token counts"
+            )
+            return
+
+        try:
+            await _record_api_usage(
+                "google",
+                "hybrid/process",
+                input_tokens,
+                model=result.model_name,
+                output_tokens=output_tokens,
+                request_type=task_type.value,
+                success=True,
+            )
+        except Exception:
+            self.logger.exception(
+                "Gemini usage tracking failed after provider completion"
             )
 
     async def _call_gemini(
