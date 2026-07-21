@@ -108,7 +108,7 @@ class DeploymentManager:
                 category="deployment",
                 message="Starting build verification",
                 data={
-                    "project_path": project_path,
+                    "project_name": project_dir.name or "project",
                     "has_package_json": package_json.exists(),
                 },
                 level="info",
@@ -373,6 +373,7 @@ class DeploymentManager:
             "deployments": {},
             "verification": {},
             "errors": [],
+            "urls": {},
             # Keep the result contract stable when verification returns before
             # any deployment is attempted.
             "summary": self._generate_deployment_summary({}),

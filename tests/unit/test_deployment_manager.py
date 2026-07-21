@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import os
 import re
 import subprocess
@@ -401,7 +400,7 @@ class TestVerifyProject:
         sentry_sdk.add_breadcrumb.assert_called_once_with(
             category="deployment",
             message="Starting build verification",
-            data={"project_path": str(tmp_path), "has_package_json": False},
+            data={"project_name": tmp_path.name, "has_package_json": False},
             level="info",
         )
 
@@ -668,6 +667,25 @@ class TestDeployProject:
         assert result["summary"]["successful_deployments"] == 0
         assert result["summary"]["failed_deployments"] == 0
         assert result["summary"]["skipped_deployments"] == 0
+        assert result["urls"] == {}
+
+    async def test_verification_exception_preserves_urls_contract(
+        self,
+        tmp_path,
+    ) -> None:
+        mgr = self._patched_manager()
+        mgr.verify_and_fix_project = AsyncMock(
+            side_effect=RuntimeError("verification crashed")
+        )
+
+        result = await mgr.deploy_project(
+            str(tmp_path),
+            {"title": "Test"},
+            {"target": "vercel"},
+        )
+
+        assert result["status"] == "failed"
+        assert result["urls"] == {}
 
     async def test_no_github_token_adds_error(self, tmp_path) -> None:
         mgr = self._patched_manager()
@@ -703,7 +721,7 @@ class TestDeployProject:
 
         with patch("youtube_extension.backend.deployment_manager._adapter_deploy",
                    new=AsyncMock(return_value=mock_adapter_result)):
-            result = await mgr.deploy_project(
+            await mgr.deploy_project(
                 str(tmp_path),
                 {"title": "Test"},
                 {"target": "vercel"},

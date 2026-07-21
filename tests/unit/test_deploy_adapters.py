@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -15,8 +15,8 @@ sys.modules.pop("youtube_extension.backend.deploy.vercel", None)
 sys.modules.pop("youtube_extension.backend.deploy.netlify", None)
 sys.modules.pop("youtube_extension.backend.deploy.fly", None)
 
-from youtube_extension.backend.deploy.vercel import VercelAdapter, VERCEL_API
-from youtube_extension.backend.deploy.netlify import NetlifyAdapter, NETLIFY_API
+from youtube_extension.backend.deploy.vercel import VercelAdapter
+from youtube_extension.backend.deploy.netlify import NetlifyAdapter
 from youtube_extension.backend.deploy.fly import FlyAdapter
 from youtube_extension.backend.deploy.core import DeploymentResult, DeploymentError
 
@@ -333,17 +333,19 @@ class TestFlyAdapterExtractDeploymentUrl:
 class TestFlyAdapterGenerateAppName:
     def test_does_not_require_current_event_loop(self):
         adapter = FlyAdapter()
+        generated_uuid = MagicMock()
+        generated_uuid.hex = "deadbeefcafebabe"
 
         with patch(
             "youtube_extension.backend.deploy.fly.asyncio.get_event_loop",
             side_effect=AssertionError("app-name generation accessed the event loop"),
         ), patch(
-            "youtube_extension.backend.deploy.fly.time.time",
-            return_value=12345.0,
+            "youtube_extension.backend.deploy.fly.uuid.uuid4",
+            return_value=generated_uuid,
         ):
             name = adapter._generate_app_name({"title": "My App"})
 
-        assert name == "uvai-my-app-2345"
+        assert name == "uvai-my-app-deadbeef"
 
     async def test_starts_with_uvai(self):
         adapter = FlyAdapter()
@@ -364,8 +366,16 @@ class TestFlyAdapterGenerateAppName:
         adapter = FlyAdapter()
         long_title = "This Is A Very Long Application Title That Exceeds Twenty Characters"
         name = adapter._generate_app_name({"title": long_title})
-        # The sanitized portion is limited to 20 chars
-        assert len(name) > 0
+        assert len(name) <= 30
+        assert name[-1].isalnum()
+
+    def test_rejects_unsafe_explicit_name(self):
+        adapter = FlyAdapter()
+
+        with pytest.raises(DeploymentError) as exc_info:
+            adapter._validate_app_name('unsafe"\napp = "injected')
+
+        assert "Fly app name must be" in exc_info.value.message
 
 
 # ===========================================================================
@@ -374,6 +384,141 @@ class TestFlyAdapterGenerateAppName:
 
 
 class TestFlyAdapterDeploy:
+    async def test_reuses_one_generated_app_name(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("FLY_API_TOKEN", "fake-token")
+        adapter = FlyAdapter()
+
+        with patch.object(
+            adapter,
+            "_is_flyctl_installed",
+            new=AsyncMock(return_value=True),
+        ), patch.object(
+            adapter,
+            "_generate_app_name",
+            return_value="uvai-my-app-deadbeef",
+        ) as generate_name, patch.object(
+            adapter,
+            "_ensure_fly_config",
+            new=AsyncMock(),
+        ) as ensure_config, patch.object(
+            adapter,
+            "_run_flyctl_deploy",
+            new=AsyncMock(
+                return_value={
+                    "output": "https://uvai-my-app-deadbeef.fly.dev",
+                    "exit_code": 0,
+                }
+            ),
+        ):
+            result = await adapter._deploy_impl(
+                str(tmp_path),
+                {"title": "My App"},
+                {},
+            )
+
+        generate_name.assert_called_once_with({"title": "My App"})
+        ensure_config.assert_awaited_once_with(
+            str(tmp_path),
+            "uvai-my-app-deadbeef",
+        )
+        assert result.metadata["app_name"] == "uvai-my-app-deadbeef"
+        assert result.build_log_url == "https://fly.io/apps/uvai-my-app-deadbeef"
+
+    async def test_uses_existing_config_app_name(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("FLY_API_TOKEN", "fake-token")
+        (tmp_path / "fly.toml").write_text(
+            'app = "configured-app"\n\n[build]\n',
+            encoding="utf-8",
+        )
+        adapter = FlyAdapter()
+
+        with patch.object(
+            adapter,
+            "_is_flyctl_installed",
+            new=AsyncMock(return_value=True),
+        ), patch.object(
+            adapter,
+            "_generate_app_name",
+        ) as generate_name, patch.object(
+            adapter,
+            "_run_flyctl_deploy",
+            new=AsyncMock(
+                return_value={
+                    "output": "https://configured-app.fly.dev",
+                    "exit_code": 0,
+                }
+            ),
+        ):
+            result = await adapter._deploy_impl(
+                str(tmp_path),
+                {"title": "Ignored"},
+                {},
+            )
+
+        generate_name.assert_not_called()
+        assert result.metadata["app_name"] == "configured-app"
+        assert result.build_log_url == "https://fly.io/apps/configured-app"
+
+    async def test_rejects_explicit_name_conflicting_with_config(
+        self,
+        monkeypatch,
+        tmp_path,
+    ):
+        monkeypatch.setenv("FLY_API_TOKEN", "fake-token")
+        (tmp_path / "fly.toml").write_text(
+            'app = "configured-app"\n',
+            encoding="utf-8",
+        )
+        adapter = FlyAdapter()
+
+        with patch.object(
+            adapter,
+            "_is_flyctl_installed",
+            new=AsyncMock(return_value=True),
+        ), pytest.raises(DeploymentError) as exc_info:
+            await adapter._deploy_impl(
+                str(tmp_path),
+                {"title": "Ignored"},
+                {"FLY_APP_NAME": "different-app"},
+            )
+
+        assert "does not match" in exc_info.value.message
+
+    async def test_created_config_reuses_reported_app_name(
+        self,
+        monkeypatch,
+        tmp_path,
+    ):
+        monkeypatch.setenv("FLY_API_TOKEN", "fake-token")
+        adapter = FlyAdapter()
+
+        with patch.object(
+            adapter,
+            "_is_flyctl_installed",
+            new=AsyncMock(return_value=True),
+        ), patch.object(
+            adapter,
+            "_generate_app_name",
+            return_value="uvai-created-deadbeef",
+        ), patch.object(
+            adapter,
+            "_run_flyctl_deploy",
+            new=AsyncMock(
+                return_value={
+                    "output": "https://uvai-created-deadbeef.fly.dev",
+                    "exit_code": 0,
+                }
+            ),
+        ):
+            result = await adapter._deploy_impl(
+                str(tmp_path),
+                {"title": "Created"},
+                {},
+            )
+
+        fly_config = (tmp_path / "fly.toml").read_text(encoding="utf-8")
+        assert f'app = "{result.metadata["app_name"]}"' in fly_config
+
     async def test_skipped_when_fly_token_missing(self, monkeypatch):
         monkeypatch.delenv("FLY_API_TOKEN", raising=False)
         adapter = FlyAdapter()

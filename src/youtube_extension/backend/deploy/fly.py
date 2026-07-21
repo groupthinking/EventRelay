@@ -6,7 +6,8 @@ Updated to use new base adapter architecture with retry logic and proper error h
 
 import asyncio
 import os
-import time
+import re
+import uuid
 from pathlib import Path
 from typing import Any, Optional
 
@@ -20,6 +21,14 @@ from .core import (
 
 class FlyAdapter(BaseDeploymentAdapter):
     """Fly.io deployment adapter with enhanced error handling and monitoring"""
+
+    _APP_NAME_PATTERN = re.compile(
+        r"^[a-z0-9](?:[a-z0-9-]{0,28}[a-z0-9])?$"
+    )
+    _APP_CONFIG_PATTERN = re.compile(
+        r'''^app\s*=\s*(?:"([^"]+)"|'([^']+)'|([a-zA-Z0-9-]+))'''
+        r'''(?:\s*#.*)?$'''
+    )
 
     def __init__(self):
         super().__init__('fly')
@@ -44,8 +53,29 @@ class FlyAdapter(BaseDeploymentAdapter):
                 message="flyctl not installed or not in PATH"
             )
 
+        requested_app_name = env.get("FLY_APP_NAME")
+        if requested_app_name is not None:
+            requested_app_name = self._validate_app_name(requested_app_name)
+
+        configured_app_name = self._read_configured_app_name(project_path)
+        if configured_app_name:
+            if requested_app_name and requested_app_name != configured_app_name:
+                raise DeploymentError(
+                    platform=self.platform,
+                    operation="configuration",
+                    message=(
+                        "FLY_APP_NAME does not match the app declared in "
+                        "fly.toml"
+                    ),
+                )
+            app_name = configured_app_name
+        else:
+            app_name = requested_app_name or self._generate_app_name(
+                project_config
+            )
+
         # Create fly.toml if it doesn't exist
-        await self._ensure_fly_config(project_path, project_config, env)
+        await self._ensure_fly_config(project_path, app_name)
 
         # Set environment variables for flyctl
         env_vars = os.environ.copy()
@@ -57,9 +87,6 @@ class FlyAdapter(BaseDeploymentAdapter):
 
         # Parse deployment URL from output
         deployment_url = self._extract_deployment_url(deploy_result['output'])
-
-        # Extract app name and deployment details
-        app_name = env.get("FLY_APP_NAME") or self._generate_app_name(project_config)
 
         return DeploymentResult(
             status='success',
@@ -139,16 +166,28 @@ class FlyAdapter(BaseDeploymentAdapter):
 
         return await self._run_flyctl_command(deploy_args, env_vars)
 
-    async def _ensure_fly_config(self, project_path: str, project_config: dict[str, Any], env: dict[str, Any]):
+    async def _ensure_fly_config(
+        self,
+        project_path: str,
+        app_name: str,
+    ) -> None:
         """Ensure fly.toml configuration exists"""
         fly_config_path = Path(project_path) / "fly.toml"
 
         if fly_config_path.exists():
-            self.logger.info("fly.toml already exists, using existing configuration")
+            configured_app_name = self._read_configured_app_name(project_path)
+            if configured_app_name != app_name:
+                raise DeploymentError(
+                    platform=self.platform,
+                    operation="configuration",
+                    message=(
+                        "fly.toml app changed while preparing the deployment"
+                    ),
+                )
+            self.logger.info(
+                "fly.toml already exists, using existing configuration"
+            )
             return
-
-        # Generate fly.toml content
-        app_name = env.get("FLY_APP_NAME") or self._generate_app_name(project_config)
 
         fly_config = f"""\
 app = "{app_name}"
@@ -183,9 +222,66 @@ primary_region = "iad"
     def _generate_app_name(self, project_config: dict[str, Any]) -> str:
         """Generate a unique app name for Fly.io"""
         title = project_config.get('title', 'uvai-app')
-        sanitized = ''.join(c for c in title.lower().replace(' ', '-') if c.isalnum() or c == '-')
-        timestamp = int(time.time()) % 10000
-        return f"uvai-{sanitized[:20]}-{timestamp}"
+        sanitized = ''.join(
+            c
+            for c in str(title).lower().replace(' ', '-')
+            if (c.isascii() and c.isalnum()) or c == '-'
+        ).strip('-')
+        sanitized = sanitized[:16].rstrip('-') or "app"
+        suffix = uuid.uuid4().hex[:8]
+        return self._validate_app_name(f"uvai-{sanitized}-{suffix}")
+
+    def _read_configured_app_name(self, project_path: str) -> Optional[str]:
+        """Return the top-level app declared by an existing fly.toml."""
+        fly_config_path = Path(project_path) / "fly.toml"
+        if not fly_config_path.exists():
+            return None
+
+        try:
+            config_lines = fly_config_path.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            raise DeploymentError(
+                platform=self.platform,
+                operation="configuration",
+                message="Unable to read fly.toml",
+            ) from None
+
+        for raw_line in config_lines:
+            line = raw_line.strip()
+            if not line or line.startswith('#'):
+                continue
+            if line.startswith('['):
+                break
+            if not re.match(r"^app\s*=", line):
+                continue
+
+            match = self._APP_CONFIG_PATTERN.fullmatch(line)
+            if not match:
+                break
+            return self._validate_app_name(
+                next(value for value in match.groups() if value is not None)
+            )
+
+        raise DeploymentError(
+            platform=self.platform,
+            operation="configuration",
+            message="Existing fly.toml must declare a valid top-level app",
+        )
+
+    def _validate_app_name(self, app_name: Any) -> str:
+        """Reject app names that are unsafe for TOML, URLs, or flyctl."""
+        if not isinstance(app_name, str) or not self._APP_NAME_PATTERN.fullmatch(
+            app_name
+        ):
+            raise DeploymentError(
+                platform=self.platform,
+                operation="configuration",
+                message=(
+                    "Fly app name must be 1-30 lowercase letters, digits, or "
+                    "hyphens and cannot start or end with a hyphen"
+                ),
+            )
+        return app_name
 
     def _extract_deployment_url(self, output: str) -> Optional[str]:
         """Extract deployment URL from flyctl output"""
