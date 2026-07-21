@@ -34,23 +34,46 @@ def _sanitize_public_error(value: Any) -> Optional[str]:
     return None if value is None else _PUBLIC_PROCESSING_ERROR
 
 
+def _sanitize_error_list(value: Any) -> Any:
+    """Sanitize a plural ``errors`` collection.
+
+    The AI processor records per-step failures as scalar strings that embed
+    exception text (e.g. ``"content_analysis: <exception>"`` in
+    ``real_ai_processor.analyze_video_content``).  Replace those scalar strings
+    with the public message, while preserving — and recursing into — structured
+    error records so batch result shapes stay intact.
+    """
+    if isinstance(value, list):
+        return [_sanitize_error_list(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_sanitize_error_list(item) for item in value)
+    if isinstance(value, dict):
+        return _sanitize_response_errors(value)
+    if isinstance(value, str):
+        return _PUBLIC_PROCESSING_ERROR
+    return value
+
+
 def _sanitize_response_errors(value: Any) -> Any:
     """Copy a response tree while replacing every non-null ``error`` value.
 
     Processor results can contain exception text at the top level and inside
     batch, step, or provider records.  Sanitizing the complete response tree at
     the HTTP boundary also protects cached legacy records without mutating the
-    processor's internal diagnostic value.
+    processor's internal diagnostic value.  The plural ``errors`` collection is
+    handled by :func:`_sanitize_error_list` because it carries scalar exception
+    strings that a plain recursion would pass through unchanged.
     """
     if isinstance(value, dict):
-        return {
-            key: (
-                _sanitize_public_error(item)
-                if key == "error"
-                else _sanitize_response_errors(item)
-            )
-            for key, item in value.items()
-        }
+        sanitized: dict[Any, Any] = {}
+        for key, item in value.items():
+            if key == "error":
+                sanitized[key] = _sanitize_public_error(item)
+            elif key == "errors":
+                sanitized[key] = _sanitize_error_list(item)
+            else:
+                sanitized[key] = _sanitize_response_errors(item)
+        return sanitized
     if isinstance(value, list):
         return [_sanitize_response_errors(item) for item in value]
     if isinstance(value, tuple):
@@ -137,7 +160,7 @@ def setup_real_api_endpoints(app: FastAPI):
                 success=result.get('success', False),
                 metadata=result.get('metadata'),
                 transcript=result.get('transcript'),
-                ai_analysis=result.get('ai_analysis'),
+                ai_analysis=_sanitize_response_errors(result.get('ai_analysis')),
                 cost_breakdown=result.get('cost_breakdown'),
                 processing_time=processing_time,
                 cached=result.get('cached', False),

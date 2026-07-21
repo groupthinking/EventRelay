@@ -376,6 +376,64 @@ class TestProcessVideoEndpoint:
         assert response.json()["error"] == "Video processing failed"
         assert "super-secret" not in response.text
 
+    def test_nested_ai_analysis_error_is_sanitized(self, client, mock_processor):
+        """The ``ai_analysis`` sub-tree is a client sink too: ``real_video_processor``
+        stores ``ai_analysis['error'] = f'AI analysis failed: {e}'`` on failure, and
+        this 200 endpoint copies ``ai_analysis`` straight into the response. Its
+        nested ``error`` must be scrubbed like the top-level one."""
+        mock_processor.process_video = AsyncMock(
+            return_value={
+                "video_id": "auJzb1D-fag",
+                "success": True,
+                "cost_breakdown": {"total_cost": 0.0},
+                "cached": False,
+                "error": None,
+                "ai_analysis": {
+                    "success": False,
+                    "error": "AI analysis failed: RuntimeError('provider-token-secret')",
+                },
+            }
+        )
+        response = client.post(
+            "/api/v2/process-video",
+            json={"video_url": "https://youtube.com/watch?v=auJzb1D-fag"},
+        )
+        assert response.status_code == 200
+        assert response.json()["ai_analysis"]["error"] == "Video processing failed"
+        assert "provider-token-secret" not in response.text
+
+    def test_ai_analysis_errors_list_scalars_are_sanitized(self, client, mock_processor):
+        """The plural ``errors`` collection carries scalar strings that embed
+        exception text (``real_ai_processor`` appends ``f'{step}: {str(result)}'``).
+        A plain recursion leaves those strings intact, so they must be replaced
+        while structured records stay recursible."""
+        mock_processor.process_video = AsyncMock(
+            return_value={
+                "video_id": "auJzb1D-fag",
+                "success": False,
+                "cost_breakdown": {"total_cost": 0.0},
+                "cached": False,
+                "error": None,
+                "ai_analysis": {
+                    "success": False,
+                    "errors": [
+                        "content_analysis: KeyError('leaked-internal-key')",
+                        "summary: Processing failed",
+                    ],
+                },
+            }
+        )
+        response = client.post(
+            "/api/v2/process-video",
+            json={"video_url": "https://youtube.com/watch?v=auJzb1D-fag"},
+        )
+        assert response.status_code == 200
+        assert response.json()["ai_analysis"]["errors"] == [
+            "Video processing failed",
+            "Video processing failed",
+        ]
+        assert "leaked-internal-key" not in response.text
+
     def test_missing_video_url_returns_422(self, client):
         response = client.post("/api/v2/process-video", json={})
         assert response.status_code == 422
