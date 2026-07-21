@@ -66,3 +66,8 @@ valid. Referenced paths were checked against the working tree:
 | `agent-completion-enforcement.yml` | **ADD** | Protected-default-branch verifier that creates the independent **Agent completion enforcement** Check directly against the PR head SHA. It accepts only an exact-head machine-readable report from the configured dedicated GitHub App; missing/stale/mutable evidence, untrusted label provenance, and custom roles all fail closed. The existing `agent-completion/truth-gate` status stays advisory and must not be made required. |
 
 The protected policy at `.github/agent-lock/trusted-publishers.json` starts with empty allowlists and therefore blocks until a repository administrator provisions the dedicated App and trusted actor identities through protected review. The repository ruleset must then require **Agent completion enforcement**, one independent approval, and resolved conversations.
+
+## Repository governance workflows
+
+| `pr-governance.yml` | **ADD** | Validates that every non-draft ready PR links exactly one real open issue (not a PR number) with non-empty delivery evidence sections (Outcome, Risk, Verification, Production evidence). Fails closed on competing implementation PRs. Triggers on `pull_request_target`. |
+| `repository-reconciliation.yml` | **ADD** | Scheduled (13:17 UTC daily) non-destructive reconciliation report: identifies ready PRs missing a canonical issue, issues with competing implementation PRs (references validated via Issues API), and stale unattached branches. Excludes draft PRs and fork-branch name collisions. Upserts a single issue titled "[automation] Repository drift report". |

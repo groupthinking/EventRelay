@@ -29,6 +29,17 @@ jobs:
             }
 
             const body = pr.body || "";
+
+            // Returns the text content of a section (between its heading and the next ## heading),
+            // with HTML comments and whitespace stripped. Returns null when the heading is absent.
+            function getSectionContent(text, heading) {
+              const escapedHeading = heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+              const pattern = new RegExp(escapedHeading + '\\s*\\n([\\s\\S]*?)(?=\\n## |$)', 'i');
+              const match = text.match(pattern);
+              if (!match) return null;
+              return match[1].replace(/<!--[\s\S]*?-->/g, '').trim();
+            }
+
             const requiredSections = [
               "## Canonical issue",
               "## Outcome",
@@ -36,7 +47,12 @@ jobs:
               "## Verification",
               "## Production evidence"
             ];
-            const missing = requiredSections.filter(section => !body.includes(section));
+
+            // Reject sections that are absent or contain only placeholder / empty content.
+            const missing = requiredSections.filter(section => {
+              const content = getSectionContent(body, section);
+              return content === null || content.length === 0;
+            });
 
             const closingPattern = /(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#(\d+)/gi;
             const issueNumbers = [...body.matchAll(closingPattern)].map(match => Number(match[1]));
@@ -48,27 +64,51 @@ jobs:
 
             if (canonicalIssues.length === 1) {
               const canonical = canonicalIssues[0];
-              const pulls = await github.paginate(github.rest.pulls.list, {
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                state: "open",
-                per_page: 100
-              });
 
-              const competing = pulls.filter(candidate => {
-                if (candidate.number === pr.number) return false;
-                const matches = [...(candidate.body || "").matchAll(closingPattern)]
-                  .map(match => Number(match[1]));
-                return matches.includes(canonical);
-              });
+              // Validate that the referenced number is a real, open issue (not a PR).
+              try {
+                const issueResp = await github.rest.issues.get({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: canonical
+                });
+                const issue = issueResp.data;
+                if (issue.pull_request) {
+                  missing.push(`#${canonical} is a pull request, not an issue`);
+                } else if (issue.state !== "open") {
+                  missing.push(`#${canonical} is not open (state: ${issue.state})`);
+                }
+              } catch (err) {
+                if (err.status === 404) {
+                  missing.push(`#${canonical} does not exist in this repository`);
+                } else {
+                  throw err;
+                }
+              }
 
-              if (competing.length) {
-                const links = competing.map(candidate => `#${candidate.number}`).join(", ");
-                core.setFailed(
-                  `Issue #${canonical} already has another open implementation PR: ${links}. ` +
-                  "Supersede, close, or explicitly consolidate it before this PR becomes canonical."
-                );
-                return;
+              if (missing.length === 0) {
+                const pulls = await github.paginate(github.rest.pulls.list, {
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  state: "open",
+                  per_page: 100
+                });
+
+                const competing = pulls.filter(candidate => {
+                  if (candidate.number === pr.number) return false;
+                  const matches = [...(candidate.body || "").matchAll(closingPattern)]
+                    .map(match => Number(match[1]));
+                  return matches.includes(canonical);
+                });
+
+                if (competing.length) {
+                  const links = competing.map(candidate => `#${candidate.number}`).join(", ");
+                  core.setFailed(
+                    `Issue #${canonical} already has another open implementation PR: ${links}. ` +
+                    "Supersede, close, or explicitly consolidate it before this PR becomes canonical."
+                  );
+                  return;
+                }
               }
             }
 
