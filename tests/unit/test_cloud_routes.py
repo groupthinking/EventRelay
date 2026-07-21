@@ -11,10 +11,12 @@ Covers:
 
 from __future__ import annotations
 
+import ipaddress
 import sys
 import types as _types
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
+from urllib.parse import urlparse
 
 import pytest
 
@@ -1622,3 +1624,90 @@ class TestCallbackSsrfEndToEnd:
         mock_client_cls.assert_called_once()
         assert mock_client_cls.call_args.kwargs.get("follow_redirects") is False
         mock_client.post.assert_awaited_once()
+
+    def test_task_handler_falls_back_only_to_prevalidated_public_address(self):
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        mock_client.post = AsyncMock(
+            side_effect=[_httpx_real.ConnectError("first address down"), None]
+        )
+        mock_client_cls = MagicMock(return_value=mock_client)
+
+        with patch.object(
+            _cae.socket,
+            "getaddrinfo",
+            return_value=[
+                (2, _cae.socket.SOCK_STREAM, 6, "", ("93.184.216.34", 443)),
+                (2, _cae.socket.SOCK_STREAM, 6, "", ("8.8.8.8", 443)),
+            ],
+        ):
+            response = self._post_task("https://callbacks.example/cb", mock_client_cls)
+
+        assert response.status_code == 200
+        assert [
+            str(awaited.args[0]) for awaited in mock_client.post.await_args_list
+        ] == ["https://93.184.216.34/cb", "https://8.8.8.8/cb"]
+        assert all(
+            awaited.kwargs["headers"]["Host"] == "callbacks.example"
+            and awaited.kwargs["extensions"]["sni_hostname"] == "callbacks.example"
+            for awaited in mock_client.post.await_args_list
+        )
+
+    @pytest.mark.parametrize(
+        "callback_url,pinned_url,host_header",
+        [
+            (
+                "http://callbacks.example:8080/cb?job=1",
+                "http://93.184.216.34:8080/cb?job=1",
+                "callbacks.example:8080",
+            ),
+            (
+                "https://callbacks.example:8443/cb?job=1",
+                "https://93.184.216.34:8443/cb?job=1",
+                "callbacks.example:8443",
+            ),
+        ],
+    )
+    def test_task_handler_pins_validated_address_against_dns_rebind(
+        self, callback_url, pinned_url, host_header
+    ):
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        connected_addresses = []
+
+        async def observe_connect_target(url, **kwargs):
+            parsed = urlparse(str(url))
+            host = parsed.hostname
+            try:
+                connected_addresses.append(str(ipaddress.ip_address(host)))
+            except ValueError:
+                # Model httpx's independent connect-time resolution. A vulnerable
+                # implementation passes the attacker-controlled name here and sees
+                # the rebound private address from the second DNS response.
+                connected_addresses.append(
+                    _cae.socket.getaddrinfo(
+                        host, parsed.port, type=_cae.socket.SOCK_STREAM
+                    )[0][4][0]
+                )
+
+        mock_client.post = AsyncMock(side_effect=observe_connect_target)
+        mock_client_cls = MagicMock(return_value=mock_client)
+        public_answer = [(2, _cae.socket.SOCK_STREAM, 6, "", ("93.184.216.34", 443))]
+        rebound_answer = [(2, _cae.socket.SOCK_STREAM, 6, "", ("127.0.0.1", 443))]
+
+        with patch.object(
+            _cae.socket,
+            "getaddrinfo",
+            side_effect=[public_answer, rebound_answer],
+        ):
+            response = self._post_task(callback_url, mock_client_cls)
+
+        assert response.status_code == 200
+        assert connected_addresses == ["93.184.216.34"]
+        call_args, call_kwargs = mock_client.post.await_args
+        assert str(call_args[0]) == pinned_url
+        assert call_kwargs["headers"]["Host"] == host_header
+        assert call_kwargs["extensions"]["sni_hostname"] == "callbacks.example"
+        assert call_kwargs["json"]["status"] == "completed"

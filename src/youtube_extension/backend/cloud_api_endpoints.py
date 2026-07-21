@@ -72,22 +72,34 @@ def _is_safe_callback_url(url: str, *, resolve: bool = True) -> bool:
 
     ``resolve=False`` runs only the cheap, network-free checks; it is used for
     early request-time validation, while the full resolving check is run off
-    the event loop immediately before the outbound request. Because httpx
-    re-resolves the host at connect time, this mitigates but does not fully
-    eliminate DNS-rebinding TOCTOU; closing that entirely requires
-    transport-level pinning of the validated address.
+    the event loop immediately before the outbound request.
+    """
+
+    return _validated_callback_addresses(url, resolve=resolve) is not None
+
+
+def _validated_callback_addresses(
+    url: str, *, resolve: bool = True
+) -> Optional[tuple[str, ...]]:
+    """Validate a callback and return the exact public addresses it resolved to.
+
+    A non-``None`` empty tuple means the URL passed the network-free validation.
+    A resolving validation returns at least one numeric address; callers must use
+    one of those addresses as the connection target instead of resolving the
+    attacker-controlled hostname again.
     """
     try:
         parsed = urlparse(url)
+        port = parsed.port
     except ValueError:
-        return False
+        return None
 
     hostname = parsed.hostname
     if parsed.scheme not in ("http", "https") or not hostname:
-        return False
+        return None
 
     if hostname.rstrip(".").lower() in _BLOCKED_CALLBACK_HOSTS:
-        return False
+        return None
 
     try:
         ip = ipaddress.ip_address(hostname)
@@ -95,28 +107,39 @@ def _is_safe_callback_url(url: str, *, resolve: bool = True) -> bool:
         ip = None
 
     if ip is not None:
-        return not _is_blocked_ip(ip)
+        return None if _is_blocked_ip(ip) else (str(ip),)
 
     if not resolve:
         # Non-literal host clears the cheap gate; it is fully resolved and
         # re-validated before any outbound request is actually made.
-        return True
+        return ()
 
     try:
-        addrinfos = socket.getaddrinfo(hostname, None)
+        addrinfos = socket.getaddrinfo(
+            hostname,
+            port or (443 if parsed.scheme == "https" else 80),
+            type=socket.SOCK_STREAM,
+        )
     except (socket.gaierror, UnicodeError, ValueError):
         # Unresolvable hostname — treat as unsafe.
-        return False
+        return None
 
+    addresses = []
     for info in addrinfos:
+        if info[0] not in (socket.AF_INET, socket.AF_INET6):
+            continue
         resolved = str(info[4][0]).split("%", 1)[0]  # drop IPv6 scope/zone id
         try:
             resolved_ip = ipaddress.ip_address(resolved)
         except ValueError:
-            return False
+            return None
         if _is_blocked_ip(resolved_ip):
-            return False
-    return True
+            return None
+        normalized = str(resolved_ip)
+        if normalized not in addresses:
+            addresses.append(normalized)
+
+    return tuple(addresses) if addresses else None
 
 
 # Pydantic models for API requests/responses
@@ -276,13 +299,15 @@ async def process_video_task_handler(
             force_refresh=False,
         )
 
-        # Call callback URL if provided. Re-validate here (with DNS resolution,
-        # off the event loop) immediately before dispatch — the URL was only
-        # cheaply validated at acceptance, and this is the actual SSRF sink.
+        # Call callback URL if provided. Resolve and validate off the event loop,
+        # then connect to that exact numeric address. The logical URL remains in
+        # Host and TLS SNI so routing and certificate verification still target
+        # the callback hostname without allowing connect-time DNS rebinding.
         if payload.callback_url and result.success:
-            if not await asyncio.to_thread(
-                _is_safe_callback_url, payload.callback_url
-            ):
+            callback_addresses = await asyncio.to_thread(
+                _validated_callback_addresses, payload.callback_url
+            )
+            if not callback_addresses:
                 logger.warning(
                     "⚠️ Refusing to call unsafe callback URL: %s",
                     _sanitize_log_value(payload.callback_url),
@@ -290,16 +315,35 @@ async def process_video_task_handler(
             else:
                 try:
                     import httpx
+
+                    callback_url = httpx.URL(payload.callback_url)
                     async with httpx.AsyncClient(follow_redirects=False) as client:
-                        await client.post(
-                            payload.callback_url,
-                            json={
-                                'video_id': result.video_id,
-                                'status': 'completed',
-                                'processing_time': result.processing_time,
-                            },
-                            timeout=10.0,
-                        )
+                        last_connect_error = None
+                        for address in callback_addresses:
+                            pinned_url = callback_url.copy_with(host=address)
+                            try:
+                                await client.post(
+                                    pinned_url,
+                                    json={
+                                        "video_id": result.video_id,
+                                        "status": "completed",
+                                        "processing_time": result.processing_time,
+                                    },
+                                    headers={
+                                        "Host": callback_url.netloc.decode("ascii")
+                                    },
+                                    extensions={"sni_hostname": callback_url.host},
+                                    timeout=10.0,
+                                )
+                                break
+                            except (httpx.ConnectError, httpx.ConnectTimeout) as exc:
+                                # httpx has not sent the request when connection
+                                # establishment fails, so another already-validated
+                                # address is safe to try without duplicating a POST.
+                                last_connect_error = exc
+                        else:
+                            assert last_connect_error is not None
+                            raise last_connect_error
                     logger.info(
                         "✅ Callback sent to %s",
                         _sanitize_log_value(payload.callback_url),
