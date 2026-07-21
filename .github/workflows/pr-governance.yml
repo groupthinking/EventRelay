@@ -5,6 +5,7 @@ on:
     types: [opened, edited, reopened, synchronize, ready_for_review]
 
 permissions:
+  checks: write
   contents: read
   issues: read
   pull-requests: read
@@ -18,26 +19,74 @@ jobs:
     name: Canonical issue and evidence
     runs-on: ubuntu-latest
     steps:
-      - name: Validate delivery contract
+      - name: Validate delivery contract and publish exact-head Check
         uses: actions/github-script@v8
         with:
           script: |
             const pr = context.payload.pull_request;
+            const runUrl =
+              `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+
+            async function publish(conclusion, title, summary) {
+              await github.rest.checks.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                name: "PR Governance",
+                head_sha: pr.head.sha,
+                status: "completed",
+                conclusion,
+                details_url: runUrl,
+                output: {
+                  title,
+                  summary: summary.slice(0, 60000)
+                }
+              });
+              if (conclusion === "failure") {
+                core.setFailed(summary);
+              }
+            }
+
             if (pr.draft) {
-              core.notice("Draft PR: governance enforcement begins when marked ready.");
+              await publish(
+                "neutral",
+                "Governance deferred for draft PR",
+                `Draft PR #${pr.number} is not enforced. The Check is bound to exact head ${pr.head.sha}.`
+              );
               return;
             }
 
             const body = pr.body || "";
 
-            // Returns the text content of a section (between its heading and the next ## heading),
-            // with HTML comments and whitespace stripped. Returns null when the heading is absent.
             function getSectionContent(text, heading) {
-              const escapedHeading = heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-              const pattern = new RegExp(escapedHeading + '\\s*\\n([\\s\\S]*?)(?=\\n## |$)', 'i');
+              const escapedHeading = heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+              const pattern = new RegExp(
+                escapedHeading + "\\s*\\n([\\s\\S]*?)(?=\\n## |$)",
+                "i"
+              );
               const match = text.match(pattern);
               if (!match) return null;
-              return match[1].replace(/<!--[\s\S]*?-->/g, '').trim();
+              return match[1].replace(/<!--[\\s\\S]*?-->/g, "").trim();
+            }
+
+            const placeholderPatterns = [
+              /^Describe the user or operational result this PR produces\.?$/i,
+              /^List exact automated and manual checks, tied to the current head SHA\.?$/i,
+              /^Provide the Vercel preview, production deployment, runtime evidence, or state why production evidence is not applicable\.?$/i,
+              /^-\s*Risk level:\s*low\s*\/\s*medium\s*\/\s*high\s*$/i,
+              /^-\s*Failure mode:\s*$/i,
+              /^-\s*Rollback:\s*$/i,
+              /^-\s*\[\s\]\s*(Focused tests|Required CI|Review threads resolved)\s*$/i,
+              /^(Closes?|Fix(?:es|ed)?|Resolves?)\s+#\s*$/i
+            ];
+
+            function hasMeaningfulContent(content) {
+              if (content === null) return false;
+              const meaningfulLines = content
+                .split(/\r?\n/)
+                .map(line => line.trim())
+                .filter(Boolean)
+                .filter(line => !placeholderPatterns.some(pattern => pattern.test(line)));
+              return meaningfulLines.length > 0;
             }
 
             const requiredSections = [
@@ -47,25 +96,24 @@ jobs:
               "## Verification",
               "## Production evidence"
             ];
+            const findings = requiredSections
+              .filter(section => !hasMeaningfulContent(getSectionContent(body, section)))
+              .map(section => `${section} is missing or still contains only template placeholders`);
 
-            // Reject sections that are absent or contain only placeholder / empty content.
-            const missing = requiredSections.filter(section => {
-              const content = getSectionContent(body, section);
-              return content === null || content.length === 0;
-            });
-
-            const closingPattern = /(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#(\d+)/gi;
-            const issueNumbers = [...body.matchAll(closingPattern)].map(match => Number(match[1]));
-            const canonicalIssues = [...new Set(issueNumbers)];
+            const closingPattern =
+              /(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#(\d+)/gi;
+            const canonicalIssues = [
+              ...new Set(
+                [...body.matchAll(closingPattern)].map(match => Number(match[1]))
+              )
+            ];
 
             if (canonicalIssues.length !== 1) {
-              missing.push("exactly one closing reference: Closes #<issue>");
+              findings.push("exactly one closing reference is required: Closes #<issue>");
             }
 
             if (canonicalIssues.length === 1) {
               const canonical = canonicalIssues[0];
-
-              // Validate that the referenced number is a real, open issue (not a PR).
               try {
                 const issueResp = await github.rest.issues.get({
                   owner: context.repo.owner,
@@ -74,47 +122,52 @@ jobs:
                 });
                 const issue = issueResp.data;
                 if (issue.pull_request) {
-                  missing.push(`#${canonical} is a pull request, not an issue`);
+                  findings.push(`#${canonical} is a pull request, not an issue`);
                 } else if (issue.state !== "open") {
-                  missing.push(`#${canonical} is not open (state: ${issue.state})`);
+                  findings.push(`#${canonical} is not open (state: ${issue.state})`);
                 }
-              } catch (err) {
-                if (err.status === 404) {
-                  missing.push(`#${canonical} does not exist in this repository`);
+              } catch (error) {
+                if (error.status === 404) {
+                  findings.push(`#${canonical} does not exist in this repository`);
                 } else {
-                  throw err;
+                  throw error;
                 }
               }
 
-              if (missing.length === 0) {
+              if (findings.length === 0) {
                 const pulls = await github.paginate(github.rest.pulls.list, {
                   owner: context.repo.owner,
                   repo: context.repo.repo,
                   state: "open",
                   per_page: 100
                 });
-
                 const competing = pulls.filter(candidate => {
                   if (candidate.number === pr.number) return false;
-                  const matches = [...(candidate.body || "").matchAll(closingPattern)]
-                    .map(match => Number(match[1]));
+                  const matches = [
+                    ...(candidate.body || "").matchAll(closingPattern)
+                  ].map(match => Number(match[1]));
                   return matches.includes(canonical);
                 });
-
                 if (competing.length) {
-                  const links = competing.map(candidate => `#${candidate.number}`).join(", ");
-                  core.setFailed(
-                    `Issue #${canonical} already has another open implementation PR: ${links}. ` +
-                    "Supersede, close, or explicitly consolidate it before this PR becomes canonical."
+                  findings.push(
+                    `Issue #${canonical} already has another open implementation PR: ` +
+                    competing.map(candidate => `#${candidate.number}`).join(", ")
                   );
-                  return;
                 }
               }
             }
 
-            if (missing.length) {
-              core.setFailed(`PR delivery contract is incomplete: ${missing.join("; ")}`);
+            if (findings.length) {
+              await publish(
+                "failure",
+                "Canonical delivery contract blocked",
+                findings.join("; ")
+              );
               return;
             }
 
-            core.notice("PR has one canonical issue and the required delivery evidence sections.");
+            await publish(
+              "success",
+              "Canonical delivery contract verified",
+              `PR #${pr.number} has one real open canonical issue and meaningful evidence. Verified exact head ${pr.head.sha}.`
+            );
