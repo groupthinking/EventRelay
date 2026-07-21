@@ -1,4 +1,5 @@
 """Tests for the deny-by-default API key authentication middleware."""
+
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -19,6 +20,14 @@ def _make_client(monkeypatch, *, api_key=None, allow_unauth=None):
     def health():
         return {"ok": True}
 
+    @app.get("/readyz")
+    def readiness():
+        return {"ready": True}
+
+    @app.get("/readyz/details")
+    def readiness_details():
+        return {"private": True}
+
     @app.get("/api/v1/videos/{vid}")
     def get_video(vid: str):
         return {"vid": vid}
@@ -35,11 +44,21 @@ def test_public_route_open_when_key_set(monkeypatch):
     assert c.get("/health").status_code == 200
 
 
+def test_only_exact_readiness_route_is_public(monkeypatch):
+    c = _make_client(monkeypatch, api_key="secret")
+    assert c.get("/readyz").status_code == 200
+    assert c.get("/readyz/details").status_code == 401
+
+
 def test_protected_get_requires_key(monkeypatch):
     c = _make_client(monkeypatch, api_key="secret")
     assert c.get("/api/v1/videos/abc").status_code == 401
-    assert c.get("/api/v1/videos/abc", headers={"X-API-Key": "wrong"}).status_code == 401
-    assert c.get("/api/v1/videos/abc", headers={"X-API-Key": "secret"}).status_code == 200
+    assert (
+        c.get("/api/v1/videos/abc", headers={"X-API-Key": "wrong"}).status_code == 401
+    )
+    assert (
+        c.get("/api/v1/videos/abc", headers={"X-API-Key": "secret"}).status_code == 200
+    )
 
 
 def test_protected_post_requires_key(monkeypatch):

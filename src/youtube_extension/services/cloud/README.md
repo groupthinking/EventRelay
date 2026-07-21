@@ -18,18 +18,17 @@ This installs:
 - `google-cloud-logging` (Logging)
 - `google-cloud-monitoring` (Monitoring)
 
-### 2. Setup Infrastructure
+### 2. Set up infrastructure
 
-```bash
-export GOOGLE_CLOUD_PROJECT="your-project-id"
-./infrastructure/cloudrun/setup.sh
-```
+Follow `docs/deployment/API_COST_POSTGRESQL_RUNBOOK.md`. The former local setup
+script is retired; infrastructure and least-privilege IAM changes require
+review, and backend deployment runs only through the protected workflow.
 
 ### 3. Deploy to Cloud Run
 
-```bash
-./infrastructure/cloudrun/deploy.sh
-```
+Run `.github/workflows/deploy-cloud-run.yml` for an exact tested SHA from a
+protected environment. Follow `docs/deployment/API_COST_POSTGRESQL_RUNBOOK.md`;
+direct command-line deployment is not supported.
 
 ## Services
 

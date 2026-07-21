@@ -351,7 +351,11 @@ class TestMCPProtocolBridgeSendProtocolRequest:
         )
         await bridge.send_protocol_request(
             ProtocolType.MCP,
-            {"api_key": "sk-super-secret", "prompt": "hello"},
+            {
+                "api_key": "sk-super-secret",
+                "prompt": "hello",
+                "sk-user-controlled-key": "value",
+            },
             context=context,
         )
         last = context.history[-1]
@@ -360,10 +364,12 @@ class TestMCPProtocolBridgeSendProtocolRequest:
         assert "request" not in details
         assert "sk-super-secret" not in str(details)
         summary = details["request_summary"]
-        assert set(summary["keys"]) == {"api_key", "prompt"}
-        # Summary must be strictly structural: key count only, never a
-        # value-dependent measure (e.g. len(str(request))) that leaks payload size.
-        assert summary["key_count"] == 2
+        assert summary["keys"] == ["prompt"]
+        assert "api_key" not in summary["keys"]
+        assert "sk-user-controlled-key" not in str(summary)
+        # The count describes only allowlisted fields, never arbitrary keys or
+        # a value-dependent measure (e.g. len(str(request))).
+        assert summary["key_count"] == 1
         assert "size" not in summary
         assert "response" not in details
         assert details["response_summary"] == {
@@ -717,14 +723,23 @@ class TestOpenAIAdapter:
             _pb_mod.socket,
             "getaddrinfo",
             return_value=[
-                (_pb_mod.socket.AF_INET, _pb_mod.socket.SOCK_STREAM, 6, "", ("93.184.216.34", 443)),
+                (
+                    _pb_mod.socket.AF_INET,
+                    _pb_mod.socket.SOCK_STREAM,
+                    6,
+                    "",
+                    ("93.184.216.34", 443),
+                ),
             ],
-        ):
+        ) as getaddrinfo:
             result = await adapter.initialize(
                 {"api_key": "sk-test", "base_url": "https://proxy.example.com/v1"}
             )
         assert result is True
         assert adapter.base_url == "https://proxy.example.com/v1"
+        getaddrinfo.assert_called_once_with(
+            "proxy.example.com", 443, type=_pb_mod.socket.SOCK_STREAM
+        )
 
     async def test_initialize_rejects_metadata_endpoint_base_url(self):
         adapter = OpenAIAdapter()
@@ -793,6 +808,25 @@ class TestOpenAIAdapter:
         ):
             result = await adapter.initialize(
                 {"api_key": "sk-test", "base_url": "https://does-not-resolve.example/v1"}
+            )
+        assert result is False
+
+    async def test_initialize_rejects_invalid_port_without_raising(self):
+        adapter = OpenAIAdapter()
+        result = await adapter.initialize(
+            {"api_key": "sk-test", "base_url": "https://example.com:invalid/v1"}
+        )
+        assert result is False
+
+    async def test_initialize_rejects_malformed_dns_result(self):
+        adapter = OpenAIAdapter()
+        with patch.object(
+            _pb_mod.socket,
+            "getaddrinfo",
+            return_value=[(_pb_mod.socket.AF_INET,)],
+        ):
+            result = await adapter.initialize(
+                {"api_key": "sk-test", "base_url": "https://malformed.example/v1"}
             )
         assert result is False
 

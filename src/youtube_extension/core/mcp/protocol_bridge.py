@@ -54,11 +54,27 @@ except ImportError:
 # Configure logging
 logger = logging.getLogger(__name__)
 
+_SUMMARY_KEY_ALLOWLIST = frozenset(
+    {
+        "error",
+        "id",
+        "max_tokens",
+        "messages",
+        "model",
+        "prompt",
+        "required_capabilities",
+        "result",
+        "status",
+        "temperature",
+        "type",
+    }
+)
+
 
 def _summarize_payload(payload: Any) -> dict[str, Any]:
     """Build a non-sensitive structural summary for history/logging."""
     if isinstance(payload, Mapping):
-        keys = sorted(str(k) for k in payload.keys())
+        keys = sorted(key for key in _SUMMARY_KEY_ALLOWLIST if key in payload)
         return {"type": type(payload).__name__, "keys": keys, "key_count": len(keys)}
     return {"type": type(payload).__name__}
 
@@ -68,13 +84,17 @@ def _sanitize_exception(exc: Exception) -> dict[str, str]:
     return {"type": type(exc).__name__}
 
 
-def _is_public_https_base_url(base_url: str) -> bool:
+async def _is_public_https_base_url(base_url: str) -> bool:
     """Return True when the URL targets a publicly routable HTTPS endpoint."""
-    parsed = urlparse(base_url)
-    if parsed.scheme != "https" or not parsed.netloc:
+    try:
+        parsed = urlparse(base_url)
+        if parsed.scheme != "https" or not parsed.netloc:
+            return False
+        host = parsed.hostname
+        port = parsed.port or 443
+    except (TypeError, ValueError):
         return False
 
-    host = parsed.hostname
     if not host:
         return False
 
@@ -85,18 +105,24 @@ def _is_public_https_base_url(base_url: str) -> bool:
         pass
 
     try:
-        resolved = socket.getaddrinfo(host, parsed.port or 443, type=socket.SOCK_STREAM)
-    except socket.gaierror:
+        resolved = await asyncio.to_thread(
+            socket.getaddrinfo,
+            host,
+            port,
+            type=socket.SOCK_STREAM,
+        )
+    except (OSError, UnicodeError, ValueError):
         return False
 
     if not resolved:
         return False
 
-    for family, _, _, _, sockaddr in resolved:
-        address = sockaddr[0]
+    for result in resolved:
         try:
+            family = result[0]
+            address = result[4][0]
             ip = ipaddress.ip_address(address)
-        except ValueError:
+        except (IndexError, TypeError, ValueError):
             return False
         if family not in (socket.AF_INET, socket.AF_INET6) or not ip.is_global:
             return False
@@ -534,7 +560,7 @@ class OpenAIAdapter(ProtocolAdapter):
             )
             return False
 
-        if not _is_public_https_base_url(base_url):
+        if not await _is_public_https_base_url(base_url):
             logger.error(
                 "Unsafe OpenAI base_url rejected (must be HTTPS and publicly routable)"
             )

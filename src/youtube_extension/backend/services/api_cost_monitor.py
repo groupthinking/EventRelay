@@ -11,32 +11,40 @@ import asyncio
 import json
 import logging
 import os
+import re
 import threading
 import time
 from collections import defaultdict, deque
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
+from datetime import date as calendar_date
 from datetime import datetime, timedelta, timezone
+from datetime import time as clock_time
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, Union
 
 import aiohttp
 from sqlalchemy import (
-    Boolean,
-    Column,
-    DateTime,
-    Float,
-    Integer,
-    String,
-    UniqueConstraint,
     case,
     create_engine,
     delete,
     func,
+    inspect,
     text,
 )
-from sqlalchemy.orm import declarative_base, sessionmaker
+from sqlalchemy.engine import URL, make_url
+from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.pool import StaticPool
 
-# Default database location. Allow override via environment variable.
+from youtube_extension.backend.config.database import Base
+from youtube_extension.backend.models.api_cost import (
+    APIUsage,
+    DailyBudget,
+    WebhookOutbox,
+)
+
+# Compatibility path used only by explicit local callers and the module self-test.
 _DEFAULT_DB_PATH_ENV = os.getenv("API_COST_MONITOR_DB_PATH")
 DEFAULT_DB_PATH = (
     _DEFAULT_DB_PATH_ENV
@@ -49,56 +57,450 @@ DEFAULT_DB_PATH = (
 # Configure logging
 logger = logging.getLogger(__name__)
 
-# SQLAlchemy Base Declarative
-Base = declarative_base()
-
-
-class APIUsage(Base):
-    """SQLAlchemy model for API usage records"""
-
-    __tablename__ = "api_usage"
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    service = Column(String, nullable=False, index=True)
-    endpoint = Column(String, nullable=False)
-    tokens_used = Column(Integer, default=0)
-    cost = Column(Float, nullable=False)
-    timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
-    request_type = Column(String, nullable=True)
-    user_id = Column(String, nullable=True)
-    video_id = Column(String, nullable=True)
-    success = Column(Boolean, default=True)
-    error_message = Column(String, nullable=True)
-
-
-class DailyBudget(Base):
-    """SQLAlchemy model for daily budgets"""
-
-    __tablename__ = "daily_budgets"
-    date = Column(String, primary_key=True)
-    total_cost = Column(Float, default=0.0)
-    alert_sent = Column(Boolean, default=False)
-    budget_exceeded = Column(Boolean, default=False)
-
-
-class WebhookOutbox(Base):
-    """SQLAlchemy model for durable webhook outbox"""
-
-    __tablename__ = "webhook_outbox"
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    utc_date = Column(String, nullable=False)
-    alert_type = Column(String, nullable=False)
-    status = Column(
-        String, nullable=False, default="pending"
-    )  # pending, processing, sent, failed
-    retry_count = Column(Integer, nullable=False, default=0)
-    last_attempt = Column(DateTime, nullable=True)
-    error_message = Column(String, nullable=True)
-    current_cost = Column(Float, nullable=False)
-    payload = Column(String, nullable=True)
-
-    __table_args__ = (
-        UniqueConstraint("utc_date", "alert_type", name="uq_utc_date_alert_type"),
+_PRODUCTION_NAMES = {"staging", "prod", "production"}
+_RUNTIME_ROLE_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,62}$")
+_REQUIRED_API_COST_COLUMNS = {
+    "api_usage": {
+        "id",
+        "service",
+        "endpoint",
+        "tokens_used",
+        "cost",
+        "timestamp",
+        "request_type",
+        "user_id",
+        "video_id",
+        "success",
+        "error_message",
+    },
+    "daily_budgets": {
+        "date",
+        "total_cost",
+        "alert_sent",
+        "budget_exceeded",
+    },
+    "webhook_outbox": {
+        "id",
+        "utc_date",
+        "alert_type",
+        "status",
+        "retry_count",
+        "last_attempt",
+        "next_attempt_at",
+        "claimed_at",
+        "claim_token",
+        "last_recovered_at",
+        "sent_at",
+        "error_message",
+        "current_cost",
+        "payload",
+    },
+}
+_POSTGRES_SCHEMA_CONTRACT_SQL = """
+    WITH column_metadata AS (
+        SELECT
+            schema_record.nspname AS schema_name,
+            table_record.relname AS table_name,
+            attribute.attname AS column_name,
+            format_type(attribute.atttypid, attribute.atttypmod) AS column_type,
+            attribute.attnotnull AS is_not_null,
+            pg_get_expr(
+                default_record.adbin, default_record.adrelid, false
+            ) AS default_expression,
+            pg_get_serial_sequence(
+                format(
+                    '%I.%I', schema_record.nspname, table_record.relname
+                ),
+                attribute.attname
+            ) AS serial_sequence
+        FROM pg_attribute AS attribute
+        JOIN pg_class AS table_record
+          ON table_record.oid = attribute.attrelid
+        JOIN pg_namespace AS schema_record
+          ON schema_record.oid = table_record.relnamespace
+        LEFT JOIN pg_attrdef AS default_record
+          ON default_record.adrelid = attribute.attrelid
+         AND default_record.adnum = attribute.attnum
+        WHERE schema_record.nspname = 'public'
+          AND table_record.relname IN (
+              'api_usage', 'daily_budgets', 'webhook_outbox'
+          )
+          AND table_record.relkind IN ('r', 'p')
+          AND attribute.attnum > 0
+          AND NOT attribute.attisdropped
+    ),
+    expected_columns (
+        table_name, column_name, column_type, is_not_null, default_kind
+    ) AS (
+        VALUES
+            ('api_usage', 'id', 'integer', true, 'serial'),
+            ('api_usage', 'service', 'character varying(100)', true, 'none'),
+            ('api_usage', 'endpoint', 'character varying(255)', true, 'none'),
+            ('api_usage', 'tokens_used', 'integer', true, 'zero'),
+            ('api_usage', 'cost', 'double precision', true, 'none'),
+            (
+                'api_usage', 'timestamp', 'timestamp with time zone', true,
+                'current_timestamp'
+            ),
+            (
+                'api_usage', 'request_type', 'character varying(100)', false,
+                'none'
+            ),
+            (
+                'api_usage', 'user_id', 'character varying(255)', false,
+                'none'
+            ),
+            (
+                'api_usage', 'video_id', 'character varying(255)', false,
+                'none'
+            ),
+            ('api_usage', 'success', 'boolean', true, 'true'),
+            ('api_usage', 'error_message', 'text', false, 'none'),
+            (
+                'daily_budgets', 'date', 'character varying(10)', true,
+                'none'
+            ),
+            ('daily_budgets', 'total_cost', 'double precision', true, 'zero'),
+            ('daily_budgets', 'alert_sent', 'boolean', true, 'false'),
+            ('daily_budgets', 'budget_exceeded', 'boolean', true, 'false'),
+            ('webhook_outbox', 'id', 'integer', true, 'serial'),
+            (
+                'webhook_outbox', 'utc_date', 'character varying(10)', true,
+                'none'
+            ),
+            (
+                'webhook_outbox', 'alert_type', 'character varying(64)', true,
+                'none'
+            ),
+            (
+                'webhook_outbox', 'status', 'character varying(16)', true,
+                'pending'
+            ),
+            ('webhook_outbox', 'retry_count', 'integer', true, 'zero'),
+            (
+                'webhook_outbox', 'last_attempt', 'timestamp with time zone',
+                false, 'none'
+            ),
+            (
+                'webhook_outbox', 'next_attempt_at', 'timestamp with time zone',
+                false, 'none'
+            ),
+            (
+                'webhook_outbox', 'claimed_at', 'timestamp with time zone',
+                false, 'none'
+            ),
+            (
+                'webhook_outbox', 'claim_token', 'character varying(64)', false,
+                'none'
+            ),
+            (
+                'webhook_outbox', 'last_recovered_at',
+                'timestamp with time zone', false, 'none'
+            ),
+            (
+                'webhook_outbox', 'sent_at', 'timestamp with time zone', false,
+                'none'
+            ),
+            ('webhook_outbox', 'error_message', 'text', false, 'none'),
+            (
+                'webhook_outbox', 'current_cost', 'double precision', true,
+                'none'
+            ),
+            ('webhook_outbox', 'payload', 'text', false, 'none')
+    ),
+    constraint_columns AS (
+        SELECT
+            schema_record.nspname AS schema_name,
+            table_record.relname AS table_name,
+            constraint_record.conname AS constraint_name,
+            constraint_record.contype AS constraint_type,
+            constraint_record.convalidated AS constraint_validated,
+            regexp_replace(
+                regexp_replace(
+                    lower(pg_get_constraintdef(constraint_record.oid, false)),
+                    '[[:space:]()]', '', 'g'
+                ),
+                '::(charactervarying|text|integer|doubleprecision)(\\[\\])?',
+                '', 'g'
+            ) AS normalized_definition,
+            ARRAY(
+                SELECT attribute.attname::text
+                FROM unnest(constraint_record.conkey) WITH ORDINALITY
+                    AS column_key(attnum, ordinality)
+                JOIN pg_attribute AS attribute
+                  ON attribute.attrelid = constraint_record.conrelid
+                 AND attribute.attnum = column_key.attnum
+                ORDER BY column_key.ordinality
+            ) AS column_names
+        FROM pg_constraint AS constraint_record
+        JOIN pg_class AS table_record
+          ON table_record.oid = constraint_record.conrelid
+        JOIN pg_namespace AS schema_record
+          ON schema_record.oid = table_record.relnamespace
+        WHERE schema_record.nspname = 'public'
+    ),
+    index_columns AS (
+        SELECT
+            schema_record.nspname AS schema_name,
+            table_record.relname AS table_name,
+            index_record.relname AS index_name,
+            index_metadata.indisunique AS is_unique,
+            index_metadata.indisvalid AS is_valid,
+            index_metadata.indisready AS is_ready,
+            index_metadata.indpred IS NULL AS is_not_partial,
+            index_metadata.indexprs IS NULL AS has_no_expressions,
+            index_metadata.indnkeyatts AS key_count,
+            index_metadata.indnatts AS total_column_count,
+            ARRAY(
+                SELECT attribute.attname::text
+                FROM unnest(index_metadata.indkey) WITH ORDINALITY
+                    AS column_key(attnum, ordinality)
+                JOIN pg_attribute AS attribute
+                  ON attribute.attrelid = index_metadata.indrelid
+                 AND attribute.attnum = column_key.attnum
+                ORDER BY column_key.ordinality
+            ) AS column_names
+        FROM pg_index AS index_metadata
+        JOIN pg_class AS table_record
+          ON table_record.oid = index_metadata.indrelid
+        JOIN pg_class AS index_record
+          ON index_record.oid = index_metadata.indexrelid
+        JOIN pg_namespace AS schema_record
+          ON schema_record.oid = table_record.relnamespace
+        WHERE schema_record.nspname = 'public'
     )
+    SELECT
+        (
+            SELECT
+                count(*) = 29
+                AND COALESCE(
+                    bool_and(
+                        COALESCE(
+                            actual.column_type = expected.column_type
+                            AND actual.is_not_null = expected.is_not_null
+                            AND CASE expected.default_kind
+                                WHEN 'none' THEN
+                                    actual.default_expression IS NULL
+                                WHEN 'serial' THEN
+                                    actual.serial_sequence = format(
+                                        'public.%s_%s_seq',
+                                        expected.table_name,
+                                        expected.column_name
+                                    )
+                                    AND regexp_replace(
+                                        lower(actual.default_expression),
+                                        '[[:space:]]', '', 'g'
+                                    ) IN (
+                                        format(
+                                            'nextval(''%s_%s_seq''::regclass)',
+                                            expected.table_name,
+                                            expected.column_name
+                                        ),
+                                        format(
+                                            'nextval(''public.%s_%s_seq''::regclass)',
+                                            expected.table_name,
+                                            expected.column_name
+                                        )
+                                    )
+                                WHEN 'zero' THEN
+                                    regexp_replace(
+                                        lower(actual.default_expression),
+                                        '[[:space:]]', '', 'g'
+                                    ) ~ '^[()]?0([.]0*)?[()]?(::(integer|doubleprecision))?$'
+                                WHEN 'current_timestamp' THEN
+                                    regexp_replace(
+                                        lower(actual.default_expression),
+                                        '[[:space:]]', '', 'g'
+                                    ) ~ '^current_timestamp(\\([0-9]+\\))?$'
+                                WHEN 'true' THEN
+                                    regexp_replace(
+                                        lower(actual.default_expression),
+                                        '[[:space:]]', '', 'g'
+                                    ) ~ '^[()]?true[()]?(::boolean)?$'
+                                WHEN 'false' THEN
+                                    regexp_replace(
+                                        lower(actual.default_expression),
+                                        '[[:space:]]', '', 'g'
+                                    ) ~ '^[()]?false[()]?(::boolean)?$'
+                                WHEN 'pending' THEN
+                                    regexp_replace(
+                                        lower(actual.default_expression),
+                                        '[[:space:]]', '', 'g'
+                                    ) ~ '^[()]?''pending''[()]?(::charactervarying)?$'
+                                ELSE false
+                            END,
+                            false
+                        )
+                    ),
+                    false
+                )
+            FROM expected_columns AS expected
+            LEFT JOIN column_metadata AS actual
+              ON actual.table_name = expected.table_name
+             AND actual.column_name = expected.column_name
+        )
+        AND (SELECT count(*) = 29 FROM column_metadata)
+        AS column_contract,
+        EXISTS (
+            SELECT 1 FROM constraint_columns
+            WHERE table_name = 'api_usage'
+              AND constraint_type = 'p'
+              AND constraint_validated
+              AND column_names = ARRAY['id']
+        ) AS api_usage_primary_key,
+        EXISTS (
+            SELECT 1 FROM constraint_columns
+            WHERE table_name = 'daily_budgets'
+              AND constraint_type = 'p'
+              AND constraint_validated
+              AND column_names = ARRAY['date']
+        ) AS daily_budgets_primary_key,
+        EXISTS (
+            SELECT 1 FROM constraint_columns
+            WHERE table_name = 'webhook_outbox'
+              AND constraint_type = 'p'
+              AND constraint_validated
+              AND column_names = ARRAY['id']
+        ) AS webhook_outbox_primary_key,
+        EXISTS (
+            SELECT 1 FROM constraint_columns
+            WHERE table_name = 'webhook_outbox'
+              AND constraint_name = 'uq_utc_date_alert_type'
+              AND constraint_type = 'u'
+              AND constraint_validated
+              AND column_names = ARRAY['utc_date', 'alert_type']
+        ) AS outbox_alert_uniqueness,
+        (
+            SELECT count(*) = 6
+            FROM constraint_columns
+            WHERE constraint_type = 'c'
+              AND constraint_validated
+              AND (
+                  (
+                      table_name = 'api_usage'
+                      AND constraint_name =
+                          'ck_api_usage_tokens_used_nonnegative'
+                      AND normalized_definition = 'checktokens_used>=0'
+                  )
+                  OR (
+                      table_name = 'api_usage'
+                      AND constraint_name = 'ck_api_usage_cost_nonnegative'
+                      AND normalized_definition = 'checkcost>=0'
+                  )
+                  OR (
+                      table_name = 'daily_budgets'
+                      AND constraint_name =
+                          'ck_daily_budgets_total_cost_nonnegative'
+                      AND normalized_definition = 'checktotal_cost>=0'
+                  )
+                  OR (
+                      table_name = 'webhook_outbox'
+                      AND constraint_name = 'ck_webhook_outbox_status'
+                      AND normalized_definition IN (
+                          'checkstatus=anyarray[''pending'',''processing'',''sent'',''failed'']',
+                          'checkstatusin''pending'',''processing'',''sent'',''failed'''
+                      )
+                  )
+                  OR (
+                      table_name = 'webhook_outbox'
+                      AND constraint_name =
+                          'ck_webhook_outbox_retry_count_nonnegative'
+                      AND normalized_definition = 'checkretry_count>=0'
+                  )
+                  OR (
+                      table_name = 'webhook_outbox'
+                      AND constraint_name =
+                          'ck_webhook_outbox_current_cost_nonnegative'
+                      AND normalized_definition = 'checkcurrent_cost>=0'
+                  )
+              )
+        ) AS check_definitions,
+        EXISTS (
+            SELECT 1 FROM index_columns
+            WHERE table_name = 'webhook_outbox'
+              AND index_name = 'ix_webhook_outbox_due'
+              AND NOT is_unique
+              AND is_valid
+              AND is_ready
+              AND is_not_partial
+              AND has_no_expressions
+              AND key_count = 4
+              AND total_column_count = 4
+              AND column_names = ARRAY[
+                  'status', 'next_attempt_at', 'retry_count', 'id'
+              ]
+        ) AS outbox_due_index,
+        EXISTS (
+            SELECT 1 FROM index_columns
+            WHERE table_name = 'webhook_outbox'
+              AND index_name = 'ix_webhook_outbox_stale_claims'
+              AND NOT is_unique
+              AND is_valid
+              AND is_ready
+              AND is_not_partial
+              AND has_no_expressions
+              AND key_count = 3
+              AND total_column_count = 3
+              AND column_names = ARRAY['status', 'claimed_at', 'id']
+        ) AS outbox_stale_claims_index
+"""
+
+
+def is_production_environment() -> bool:
+    """Return whether a deployment marker requires production-grade safety."""
+
+    return (
+        os.getenv("ENVIRONMENT", "").strip().lower() in _PRODUCTION_NAMES
+        or os.getenv("VERCEL_ENV", "").strip().lower() == "production"
+    )
+
+
+def _environment_bool(name: str, default: bool) -> bool:
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return default
+    normalized = raw_value.strip().lower()
+    if normalized not in {"true", "false"}:
+        raise RuntimeError(f"{name} must be exactly true or false")
+    return normalized == "true"
+
+
+def _normalize_database_url(raw_url: str) -> URL:
+    """Normalize PostgreSQL URLs onto the supported synchronous Psycopg driver."""
+
+    try:
+        url = make_url(raw_url)
+    except Exception as exc:
+        raise RuntimeError("API-cost DATABASE_URL is invalid") from exc
+
+    backend = url.get_backend_name()
+    if backend == "postgresql" or url.drivername == "postgres":
+        return url.set(drivername="postgresql+psycopg")
+    if backend == "sqlite":
+        return url
+    raise RuntimeError("API-cost database must use PostgreSQL or explicit local SQLite")
+
+
+def validate_cloud_sql_database_url(
+    database_url: Union[URL, str], instance: str
+) -> None:
+    """Require a production URL to use the Cloud SQL socket mounted by Cloud Run."""
+
+    url = (
+        database_url
+        if isinstance(database_url, URL)
+        else _normalize_database_url(database_url)
+    )
+    expected_host = f"/cloudsql/{instance}"
+    if (
+        url.get_backend_name() != "postgresql"
+        or url.host not in {None, ""}
+        or url.query.get("host") != expected_host
+    ):
+        raise RuntimeError(
+            "Deployed API-cost DATABASE_URL must use the attached Cloud SQL Unix "
+            f"socket (host={expected_host})"
+        )
 
 
 @dataclass
@@ -167,7 +569,7 @@ class APICostMonitor:
             "gemini-3-pro": {"input": 0.000875, "output": 0.0035},
             "gemini-3-flash": {"input": 0.000052, "output": 0.00021},
             "gemini-1.5-pro": {"input": 0.00125, "output": 0.005},
-            "gemini-1.5-flash": {"input": 0.000075, "output": 0.003},
+            "gemini-1.5-flash": {"input": 0.000075, "output": 0.0003},
         },
         "youtube": {
             "search": 100,  # quota units per request
@@ -177,17 +579,27 @@ class APICostMonitor:
         },
     }
 
-    def __init__(self, db_path: Optional[str] = None):
-        """Initialize the API cost monitor"""
-        resolved_path = db_path or DEFAULT_DB_PATH
-        if resolved_path not in {":memory:", ":memory"}:
-            resolved_path = str(Path(resolved_path).expanduser().resolve())
-        self.db_path = resolved_path
+    def __init__(
+        self,
+        db_path: Optional[str] = None,
+        *,
+        database_url: Optional[str] = None,
+        initialize_schema: Optional[bool] = None,
+    ):
+        """Initialize the monitor without performing PostgreSQL DDL.
+
+        ``db_path`` remains as a backwards-compatible, explicit local SQLite
+        opt-in. Production persistence must be configured with PostgreSQL via
+        ``API_COST_DATABASE_URL`` or ``DATABASE_URL`` and migrated separately.
+        """
+        self.is_production = is_production_environment()
         self.daily_budget = float(os.getenv("API_DAILY_BUDGET", "10.00"))
         self.alert_threshold = float(os.getenv("API_ALERT_THRESHOLD", "8.00"))
-        self.cost_tracking_enabled = (
-            os.getenv("API_COST_TRACKING", "true").lower() == "true"
+        self.cost_tracking_enabled = _environment_bool("API_COST_TRACKING", True)
+        self.delivery_enabled = _environment_bool(
+            "API_COST_DELIVERY_ENABLED", not self.is_production
         )
+        self.runtime_db_role = os.getenv("API_COST_RUNTIME_DB_ROLE", "").strip() or None
 
         # Webhook notification settings
         self.webhook_url = os.getenv("API_COST_WEBHOOK_URL")
@@ -217,43 +629,447 @@ class APICostMonitor:
         # Lock for thread safety
         self._lock = threading.Lock()
 
-        # Initialize engine and sessionmaker
-        if self.db_path in {":memory:", ":memory"}:
-            self.engine = create_engine("sqlite://", connect_args={"timeout": 30})
-        else:
-            self.engine = create_engine(
-                f"sqlite:///{self.db_path}", connect_args={"timeout": 30}
-            )
-        self.Session = sessionmaker(bind=self.engine)
+        configured_url = (
+            database_url
+            or os.getenv("API_COST_DATABASE_URL")
+            or os.getenv("DATABASE_URL")
+        )
+        configured_path = db_path or os.getenv("API_COST_MONITOR_DB_PATH")
 
-        # Initialize database
-        self._init_database()
+        if configured_url:
+            self.database_url: Optional[URL] = _normalize_database_url(configured_url)
+        elif configured_path:
+            if configured_path in {":memory:", ":memory"}:
+                self.database_url = make_url("sqlite://")
+            else:
+                resolved_path = str(Path(configured_path).expanduser().resolve())
+                self.database_url = URL.create("sqlite", database=resolved_path)
+        else:
+            self.database_url = None
+
+        persistence_required = self.cost_tracking_enabled or self.delivery_enabled
+        cloud_sql_instance = os.getenv("CLOUD_SQL_INSTANCE_CONNECTION_NAME", "").strip()
+        if self.is_production and self.database_url is not None:
+            if self.database_url.get_backend_name() != "postgresql":
+                raise RuntimeError(
+                    "PostgreSQL DATABASE_URL is required for API-cost tracking "
+                    "or delivery in production"
+                )
+        if self.is_production and persistence_required and self.database_url is None:
+            raise RuntimeError(
+                "PostgreSQL DATABASE_URL is required for API-cost tracking "
+                "or delivery in production"
+            )
+        if self.is_production and persistence_required and not self.runtime_db_role:
+            raise RuntimeError(
+                "API_COST_RUNTIME_DB_ROLE is required for API-cost tracking "
+                "or delivery in production"
+            )
+        if self.is_production and persistence_required and not cloud_sql_instance:
+            raise RuntimeError(
+                "CLOUD_SQL_INSTANCE_CONNECTION_NAME is required for API-cost "
+                "tracking or delivery in production"
+            )
+        if self.is_production and self.database_url is not None and cloud_sql_instance:
+            validate_cloud_sql_database_url(self.database_url, cloud_sql_instance)
+
+        self.engine = None
+        self.Session = None
+        self.db_path: Optional[str] = None
+        self._is_postgres = False
+        if self.database_url is not None:
+            self._is_postgres = self.database_url.get_backend_name() == "postgresql"
+            self.db_path = (
+                self.database_url.database
+                if not self._is_postgres
+                else self.database_url.render_as_string(hide_password=True)
+            )
+            if not self._is_postgres and self.db_path is None:
+                self.db_path = ":memory:"
+            self.engine = self._create_database_engine(self.database_url)
+            self.Session = sessionmaker(
+                bind=self.engine, expire_on_commit=False, future=True
+            )
+
+            should_initialize = (
+                initialize_schema
+                if initialize_schema is not None
+                else not self._is_postgres
+            )
+            if should_initialize and self._is_postgres:
+                raise RuntimeError(
+                    "Runtime PostgreSQL schema creation is forbidden; run Alembic first"
+                )
+            if should_initialize:
+                self._init_database()
 
         logger.info(
-            f"📊 API Cost Monitor initialized - Budget: ${self.daily_budget}, Alert: ${self.alert_threshold}"
+            "API Cost Monitor initialized - budget=%s alert=%s persistence=%s",
+            self.daily_budget,
+            self.alert_threshold,
+            "postgresql" if self._is_postgres else "local" if self.engine else "off",
         )
 
-    def _init_database(self):
-        """Initialize the database schema using SQLAlchemy Base Metadata"""
-        try:
-            if self.db_path not in {":memory:", ":memory"}:
-                db_parent = Path(self.db_path).expanduser().resolve().parent
-                db_parent.mkdir(parents=True, exist_ok=True)
+    @staticmethod
+    def _create_database_engine(database_url: URL):
+        if database_url.get_backend_name() == "sqlite":
+            kwargs: dict[str, Any] = {
+                "connect_args": {"timeout": 30, "check_same_thread": False},
+                "future": True,
+            }
+            if not database_url.database:
+                kwargs["poolclass"] = StaticPool
+            return create_engine(database_url, **kwargs)
 
-            Base.metadata.create_all(self.engine)
+        pool_size = max(1, int(os.getenv("API_COST_DB_POOL_SIZE", "2")))
+        max_overflow = max(0, int(os.getenv("API_COST_DB_MAX_OVERFLOW", "0")))
+        pool_timeout = max(1, int(os.getenv("API_COST_DB_POOL_TIMEOUT", "10")))
+        connect_timeout = max(1, int(os.getenv("API_COST_DB_CONNECT_TIMEOUT", "5")))
+        statement_timeout = max(
+            100, int(os.getenv("API_COST_DB_STATEMENT_TIMEOUT_MS", "5000"))
+        )
+        lock_timeout = max(100, int(os.getenv("API_COST_DB_LOCK_TIMEOUT_MS", "2000")))
+        return create_engine(
+            database_url,
+            pool_size=pool_size,
+            max_overflow=max_overflow,
+            pool_timeout=pool_timeout,
+            pool_pre_ping=True,
+            pool_recycle=max(60, int(os.getenv("API_COST_DB_POOL_RECYCLE", "1800"))),
+            connect_args={
+                "connect_timeout": connect_timeout,
+                "application_name": "eventrelay-api-cost",
+                "options": (
+                    f"-c statement_timeout={statement_timeout} "
+                    f"-c lock_timeout={lock_timeout} -c timezone=UTC "
+                    "-c search_path=public"
+                ),
+            },
+            future=True,
+        )
 
-            # Trigger stale webhook recoveries asynchronously
+    def _init_database(self) -> None:
+        """Create and validate an explicitly selected local SQLite schema."""
+        if self.engine is None or self._is_postgres:
+            return
+        if self.db_path:
+            db_parent = Path(self.db_path).expanduser().resolve().parent
+            db_parent.mkdir(parents=True, exist_ok=True)
+        Base.metadata.create_all(
+            self.engine,
+            tables=[APIUsage.__table__, DailyBudget.__table__, WebhookOutbox.__table__],
+        )
+        self._validate_database_schema()
+
+    def _validate_database_schema(self) -> None:
+        if self.engine is None:
+            raise RuntimeError("API-cost persistence is not configured")
+        if self._is_postgres:
+            required_selects = (
+                "SELECT id, service, endpoint, tokens_used, cost, timestamp, "
+                "request_type, user_id, video_id, success, error_message "
+                "FROM public.api_usage LIMIT 0",
+                "SELECT date, total_cost, alert_sent, budget_exceeded "
+                "FROM public.daily_budgets LIMIT 0",
+                "SELECT id, utc_date, alert_type, status, retry_count, last_attempt, "
+                "next_attempt_at, claimed_at, claim_token, last_recovered_at, sent_at, "
+                "error_message, current_cost, payload "
+                "FROM public.webhook_outbox LIMIT 0",
+            )
+            with self.engine.connect() as connection:
+                for statement in required_selects:
+                    connection.execute(text(statement))
+                schema_checks = (
+                    connection.execute(text(_POSTGRES_SCHEMA_CONTRACT_SQL))
+                    .mappings()
+                    .one()
+                )
+            failed_checks = sorted(
+                name for name, passed in schema_checks.items() if not passed
+            )
+            if failed_checks:
+                raise RuntimeError(
+                    "API-cost PostgreSQL schema contract failed: "
+                    + ", ".join(failed_checks)
+                )
+            return
+        inspector = inspect(self.engine)
+        for table_name, required_columns in _REQUIRED_API_COST_COLUMNS.items():
+            if not inspector.has_table(table_name):
+                raise RuntimeError(f"API-cost database is missing table {table_name}")
+            actual_columns = {
+                column["name"] for column in inspector.get_columns(table_name)
+            }
+            missing = required_columns - actual_columns
+            if missing:
+                if not self._is_postgres:
+                    raise RuntimeError(
+                        "Legacy API-cost SQLite schema is incompatible; "
+                        "back up and recreate the local database"
+                    )
+                raise RuntimeError(
+                    f"API-cost database table {table_name} is missing columns: "
+                    f"{', '.join(sorted(missing))}"
+                )
+
+    @contextmanager
+    def _session_scope(self, *, commit: bool = False) -> Iterator[Session]:
+        if self.Session is None:
+            raise RuntimeError("API-cost persistence is not configured")
+        with self.Session() as session:
             try:
-                loop = asyncio.get_running_loop()
-                loop.create_task(self.recover_stale_deliveries())
-            except RuntimeError:
-                threading.Thread(
-                    target=lambda: asyncio.run(self.recover_stale_deliveries()),
-                    daemon=True,
-                ).start()
+                yield session
+                if commit:
+                    session.commit()
+            except Exception:
+                session.rollback()
+                raise
 
-        except Exception as e:
-            logger.error(f"Failed to initialize cost monitoring database: {e}")
+    def ensure_database_ready(self) -> None:
+        """Validate the runtime schema and effective DML privileges.
+
+        Migration-head ownership belongs to the deployment job. Runtime
+        credentials intentionally do not need access to Alembic's version table.
+        """
+        if self._is_postgres:
+            if not self.runtime_db_role:
+                raise RuntimeError(
+                    "API_COST_RUNTIME_DB_ROLE is required for PostgreSQL readiness"
+                )
+            if not _RUNTIME_ROLE_PATTERN.fullmatch(self.runtime_db_role):
+                raise RuntimeError(
+                    "API_COST_RUNTIME_DB_ROLE must be a plain PostgreSQL role "
+                    "identifier"
+                )
+        self._validate_database_schema()
+        if not self._is_postgres:
+            return
+        assert self.engine is not None
+        privilege_sql = text("""
+            SELECT
+              pg_has_role(
+                current_user, :runtime_role, 'MEMBER'
+              ) AS expected_role_member,
+              runtime_login.rolcanlogin AS login_role,
+              runtime_login.rolinherit AS inherits_privileges,
+              NOT (
+                runtime_login.rolsuper
+                OR runtime_login.rolcreatedb
+                OR runtime_login.rolcreaterole
+                OR runtime_login.rolreplication
+                OR runtime_login.rolbypassrls
+              ) AS non_elevated,
+              NOT EXISTS (
+                SELECT 1
+                FROM pg_auth_members AS membership
+                JOIN pg_roles AS parent_role
+                  ON parent_role.oid = membership.roleid
+                WHERE membership.member = runtime_login.oid
+                  AND parent_role.rolname <> :runtime_role
+              ) AS only_expected_parent_role,
+              NOT runtime_group.rolcanlogin AS group_nologin,
+              NOT (
+                runtime_group.rolsuper
+                OR runtime_group.rolcreatedb
+                OR runtime_group.rolcreaterole
+                OR runtime_group.rolreplication
+                OR runtime_group.rolbypassrls
+              ) AS group_non_elevated,
+              NOT EXISTS (
+                SELECT 1
+                FROM pg_auth_members AS group_membership
+                WHERE group_membership.member = runtime_group.oid
+              ) AS group_no_parent_roles,
+              has_schema_privilege(
+                current_user, 'public', 'USAGE'
+              ) AS schema_usage,
+              NOT has_schema_privilege(
+                current_user, 'public', 'CREATE'
+              ) AS no_schema_create,
+              NOT has_database_privilege(
+                current_user, current_database(), 'CREATE'
+              ) AS no_database_create,
+              NOT EXISTS (
+                SELECT 1
+                FROM pg_database AS database
+                WHERE database.datname = current_database()
+                  AND pg_has_role(
+                    current_user, database.datdba, 'MEMBER'
+                  )
+              ) AS no_database_ownership,
+              NOT EXISTS (
+                SELECT 1
+                FROM pg_class AS relation
+                JOIN pg_namespace AS namespace
+                  ON namespace.oid = relation.relnamespace
+                WHERE namespace.nspname = 'public'
+                  AND relation.relname IN (
+                    'api_usage', 'daily_budgets', 'webhook_outbox',
+                    'api_usage_id_seq', 'webhook_outbox_id_seq'
+                  )
+                  AND pg_has_role(
+                    current_user, relation.relowner, 'MEMBER'
+                  )
+              ) AS no_target_ownership,
+              NOT EXISTS (
+                SELECT 1
+                FROM pg_namespace AS namespace
+                WHERE namespace.nspname <> 'public'
+                  AND namespace.nspname <> 'information_schema'
+                  AND namespace.nspname !~ '^pg_'
+                  AND (
+                    has_schema_privilege(
+                      current_user, namespace.oid, 'USAGE'
+                    )
+                    OR has_schema_privilege(
+                      current_user, namespace.oid, 'CREATE'
+                    )
+                  )
+              ) AS no_unexpected_schema_access,
+              NOT EXISTS (
+                SELECT 1
+                FROM pg_class AS relation
+                JOIN pg_namespace AS namespace
+                  ON namespace.oid = relation.relnamespace
+                CROSS JOIN (
+                  VALUES
+                    ('SELECT'), ('INSERT'), ('UPDATE'), ('DELETE'),
+                    ('TRUNCATE'), ('REFERENCES'), ('TRIGGER')
+                ) AS candidate(privilege_name)
+                WHERE relation.relkind IN ('r', 'p', 'v', 'm', 'f')
+                  AND namespace.nspname <> 'information_schema'
+                  AND namespace.nspname !~ '^pg_'
+                  AND NOT (
+                    namespace.nspname = 'public'
+                    AND relation.relname IN (
+                      'api_usage', 'daily_budgets', 'webhook_outbox'
+                    )
+                    AND candidate.privilege_name IN (
+                      'SELECT', 'INSERT', 'UPDATE', 'DELETE'
+                    )
+                  )
+                  AND has_table_privilege(
+                    current_user, relation.oid, candidate.privilege_name
+                  )
+              ) AS no_unexpected_table_access,
+              NOT EXISTS (
+                SELECT 1
+                FROM pg_class AS relation
+                JOIN pg_namespace AS namespace
+                  ON namespace.oid = relation.relnamespace
+                CROSS JOIN (
+                  VALUES ('USAGE'), ('SELECT'), ('UPDATE')
+                ) AS candidate(privilege_name)
+                WHERE relation.relkind = 'S'
+                  AND namespace.nspname <> 'information_schema'
+                  AND namespace.nspname !~ '^pg_'
+                  AND NOT (
+                    namespace.nspname = 'public'
+                    AND relation.relname IN (
+                      'api_usage_id_seq', 'webhook_outbox_id_seq'
+                    )
+                    AND candidate.privilege_name IN ('USAGE', 'SELECT')
+                  )
+                  AND has_sequence_privilege(
+                    current_user, relation.oid, candidate.privilege_name
+                  )
+              ) AS no_unexpected_sequence_access,
+              (
+                SELECT bool_and(
+                  has_table_privilege(
+                    current_user, required.relation_name,
+                    required.privilege_name
+                  )
+                )
+                FROM (VALUES
+                  ('public.api_usage', 'SELECT'),
+                  ('public.api_usage', 'INSERT'),
+                  ('public.api_usage', 'UPDATE'),
+                  ('public.api_usage', 'DELETE'),
+                  ('public.daily_budgets', 'SELECT'),
+                  ('public.daily_budgets', 'INSERT'),
+                  ('public.daily_budgets', 'UPDATE'),
+                  ('public.daily_budgets', 'DELETE'),
+                  ('public.webhook_outbox', 'SELECT'),
+                  ('public.webhook_outbox', 'INSERT'),
+                  ('public.webhook_outbox', 'UPDATE'),
+                  ('public.webhook_outbox', 'DELETE')
+                ) AS required(relation_name, privilege_name)
+              ) AS required_table_dml,
+              NOT EXISTS (
+                SELECT 1
+                FROM (VALUES
+                  ('public.api_usage', 'TRUNCATE'),
+                  ('public.api_usage', 'REFERENCES'),
+                  ('public.api_usage', 'TRIGGER'),
+                  ('public.daily_budgets', 'TRUNCATE'),
+                  ('public.daily_budgets', 'REFERENCES'),
+                  ('public.daily_budgets', 'TRIGGER'),
+                  ('public.webhook_outbox', 'TRUNCATE'),
+                  ('public.webhook_outbox', 'REFERENCES'),
+                  ('public.webhook_outbox', 'TRIGGER')
+                ) AS unsafe(relation_name, privilege_name)
+                WHERE has_table_privilege(
+                  current_user, unsafe.relation_name,
+                  unsafe.privilege_name
+                )
+              ) AS no_unsafe_table_privileges,
+              (
+                SELECT bool_and(
+                  has_sequence_privilege(
+                    current_user, required.sequence_name,
+                    required.privilege_name
+                  )
+                )
+                FROM (VALUES
+                  ('public.api_usage_id_seq', 'USAGE'),
+                  ('public.api_usage_id_seq', 'SELECT'),
+                  ('public.webhook_outbox_id_seq', 'USAGE'),
+                  ('public.webhook_outbox_id_seq', 'SELECT')
+                ) AS required(sequence_name, privilege_name)
+              ) AS required_sequence_access,
+              NOT EXISTS (
+                SELECT 1
+                FROM (VALUES
+                  ('public.api_usage_id_seq', 'UPDATE'),
+                  ('public.webhook_outbox_id_seq', 'UPDATE')
+                ) AS unsafe(sequence_name, privilege_name)
+                WHERE has_sequence_privilege(
+                  current_user, unsafe.sequence_name,
+                  unsafe.privilege_name
+                )
+              ) AS no_unsafe_sequence_privileges,
+              NOT EXISTS (
+                SELECT 1
+                FROM (VALUES
+                  ('SELECT'), ('INSERT'), ('UPDATE'), ('DELETE'),
+                  ('TRUNCATE'), ('REFERENCES'), ('TRIGGER')
+                ) AS forbidden(privilege_name)
+                WHERE has_table_privilege(
+                  current_user, 'public.alembic_version',
+                  forbidden.privilege_name
+                )
+              ) AS no_alembic_access
+            FROM pg_roles AS runtime_login
+            JOIN pg_roles AS runtime_group
+              ON runtime_group.rolname = :runtime_role
+            WHERE runtime_login.rolname = current_user
+            """)
+        with self.engine.connect() as connection:
+            checks = dict(
+                connection.execute(
+                    privilege_sql,
+                    {"runtime_role": self.runtime_db_role},
+                )
+                .mappings()
+                .one()
+            )
+        failed_checks = [name for name, passed in checks.items() if passed is not True]
+        if failed_checks:
+            raise RuntimeError(
+                "API-cost runtime database privileges are unsafe or incomplete: "
+                + ", ".join(failed_checks)
+            )
 
     def check_rate_limit(self, service: str) -> tuple[bool, int]:
         """
@@ -381,63 +1197,70 @@ class APICostMonitor:
             self.session_costs[service] += cost
             self.session_requests[service] += 1
 
-        # Store in database
-        session = self.Session()
-        try:
-            db_record = APIUsage(
-                service=record.service,
-                endpoint=record.endpoint,
-                tokens_used=record.tokens_used,
-                cost=record.cost,
-                timestamp=record.timestamp,
-                request_type=record.request_type,
-                user_id=record.user_id,
-                video_id=record.video_id,
-                success=record.success,
-                error_message=record.error_message,
+        stored = False
+        if self.Session is None:
+            logger.warning(
+                "API usage was not persisted because persistence is disabled"
             )
-            session.add(db_record)
-            session.commit()
-        except Exception as e:
-            logger.error(f"Failed to record API usage: {e}")
+        else:
             try:
-                session.rollback()
-            except Exception:
-                pass
-        finally:
-            session.close()
+                await asyncio.to_thread(self._record_usage_sync, record)
+                stored = True
+            except Exception as exc:
+                # The provider operation has already completed. Telemetry is
+                # best effort and must never make that paid result retry/fail.
+                logger.error("Failed to record API usage: %s", exc)
 
-        # Check budget alerts
-        await self._check_budget_alerts()
+        if stored:
+            await self._check_budget_alerts()
 
-        logger.debug(f"💰 API Usage: {service} - ${cost:.4f} ({tokens_used} tokens)")
-
+        logger.debug("API usage: %s - $%.4f (%s tokens)", service, cost, tokens_used)
         return record
 
-    async def _check_budget_alerts(self) -> None:
-        """Check and send budget alerts if thresholds are exceeded.
+    def _record_usage_sync(self, record: APIUsageRecord) -> None:
+        """Persist one usage record on a worker thread."""
+        with self._session_scope(commit=True) as session:
+            session.add(
+                APIUsage(
+                    service=record.service,
+                    endpoint=record.endpoint,
+                    tokens_used=record.tokens_used,
+                    cost=record.cost,
+                    timestamp=record.timestamp,
+                    request_type=record.request_type,
+                    user_id=record.user_id,
+                    video_id=record.video_id,
+                    success=record.success,
+                    error_message=record.error_message,
+                )
+            )
 
-        ``record_usage`` calls this after every usage record, so alerts must be
-        gated: each alert type is dispatched at most once per UTC day, the first
-        time that day's spend crosses the corresponding threshold. Without this,
-        every subsequent API call would re-send the webhook and flood recipients.
-        """
+    async def _check_budget_alerts(self) -> None:
+        """Check and enqueue budget alerts if thresholds are exceeded."""
         try:
             today = datetime.now(timezone.utc).date().isoformat()
             daily_cost = await self.get_daily_cost(today)
 
-            if daily_cost >= self.alert_threshold and self._claim_alert(
-                today, "threshold", daily_cost
-            ):
+            threshold_claimed = (
+                daily_cost >= self.alert_threshold
+                and await asyncio.to_thread(
+                    self._claim_alert, today, "threshold", daily_cost
+                )
+            )
+            if threshold_claimed:
                 await self._send_budget_alert(daily_cost, "threshold")
 
-            if daily_cost >= self.daily_budget and self._claim_alert(
-                today, "exceeded", daily_cost
-            ):
+            exceeded_claimed = (
+                daily_cost >= self.daily_budget
+                and await asyncio.to_thread(
+                    self._claim_alert, today, "exceeded", daily_cost
+                )
+            )
+            if exceeded_claimed:
                 await self._send_budget_alert(daily_cost, "exceeded")
 
-        except Exception as e:
-            logger.error(f"Error checking budget alerts: {e}")
+        except Exception as exc:
+            logger.error("Error checking budget alerts: %s", exc)
 
     def _claim_alert(
         self, date: str, alert_type: str, current_cost: float = 0.0
@@ -449,179 +1272,166 @@ class APICostMonitor:
         Because the transaction commits atomically, concurrent processes racing
         cannot both win, ensuring each alert is dispatched at most once per UTC day.
         """
-        session = self.Session()
         try:
-            # Check if outbox item already exists to avoid unnecessary locks
-            existing = (
-                session.query(WebhookOutbox)
-                .filter_by(utc_date=date, alert_type=alert_type)
-                .first()
-            )
-            if existing:
-                return False
-
-            # Update or create DailyBudget record
-            budget = session.query(DailyBudget).filter_by(date=date).first()
-            if not budget:
-                budget = DailyBudget(
-                    date=date,
-                    total_cost=current_cost,
-                    alert_sent=False,
-                    budget_exceeded=False,
+            with self._session_scope(commit=True) as session:
+                existing = (
+                    session.query(WebhookOutbox)
+                    .filter_by(utc_date=date, alert_type=alert_type)
+                    .first()
                 )
-                session.add(budget)
-
-            if alert_type == "threshold":
-                if budget.alert_sent:
+                if existing:
                     return False
-                budget.alert_sent = True
-            elif alert_type == "exceeded":
-                if budget.budget_exceeded:
-                    return False
-                budget.budget_exceeded = True
 
-            # Prepare payload message
-            alert_msg = f"🚨 API Budget Alert: ${current_cost:.2f} "
-            if alert_type == "threshold":
-                alert_msg += f"(Alert threshold: ${self.alert_threshold})"
-            else:
-                alert_msg += f"EXCEEDED daily budget of ${self.daily_budget}"
+                budget = session.query(DailyBudget).filter_by(date=date).first()
+                if not budget:
+                    budget = DailyBudget(
+                        date=date,
+                        total_cost=current_cost,
+                        alert_sent=False,
+                        budget_exceeded=False,
+                    )
+                    session.add(budget)
 
-            # Create outbox item
-            outbox_item = WebhookOutbox(
-                utc_date=date,
-                alert_type=alert_type,
-                status="pending",
-                retry_count=0,
-                current_cost=current_cost,
-                payload=alert_msg,
-            )
-            session.add(outbox_item)
-            session.commit()
+                if alert_type == "threshold":
+                    if budget.alert_sent:
+                        return False
+                    budget.alert_sent = True
+                elif alert_type == "exceeded":
+                    if budget.budget_exceeded:
+                        return False
+                    budget.budget_exceeded = True
+
+                alert_msg = f"🚨 API Budget Alert: ${current_cost:.2f} "
+                if alert_type == "threshold":
+                    alert_msg += f"(Alert threshold: ${self.alert_threshold})"
+                else:
+                    alert_msg += f"EXCEEDED daily budget of ${self.daily_budget}"
+
+                session.add(
+                    WebhookOutbox(
+                        utc_date=date,
+                        alert_type=alert_type,
+                        status="pending",
+                        retry_count=0,
+                        current_cost=current_cost,
+                        payload=alert_msg,
+                    )
+                )
             return True
-        except Exception as e:
+        except Exception as exc:
             logger.debug(
-                f"Failed to claim alert due to concurrency or database exception: {e}"
+                "Failed to claim alert due to concurrency or database exception: %s",
+                exc,
             )
-            try:
-                session.rollback()
-            except Exception:
-                pass
             return False
-        finally:
-            session.close()
 
     def _trigger_delivery(self):
-        """Trigger non-blocking, asynchronous delivery of pending/failed alerts."""
-        try:
-            loop = asyncio.get_running_loop()
-            loop.create_task(self.process_outbox())
-        except RuntimeError:
-            threading.Thread(
-                target=lambda: asyncio.run(self.process_outbox()), daemon=True
-            ).start()
+        """Leave delivery to the dedicated worker's polling loop."""
+        logger.debug("API-cost alert queued for the dedicated worker")
 
     async def recover_stale_deliveries(self, stale_timeout_seconds: int = 30):
-        """Recover items stuck in 'processing' status (due to crashes, task cancellation, etc.)"""
-        session = self.Session()
+        """Recover items left processing after a crash or cancellation."""
+        await asyncio.to_thread(
+            self._recover_stale_deliveries_sync, stale_timeout_seconds
+        )
+
+    def _recover_stale_deliveries_sync(self, stale_timeout_seconds: int) -> None:
         try:
             cutoff = datetime.now(timezone.utc) - timedelta(
                 seconds=stale_timeout_seconds
             )
-            stale_items = (
-                session.query(WebhookOutbox)
-                .filter(
-                    WebhookOutbox.status == "processing",
-                    WebhookOutbox.last_attempt < cutoff,
+            with self._session_scope(commit=True) as session:
+                stale_items = (
+                    session.query(WebhookOutbox)
+                    .filter(
+                        WebhookOutbox.status == "processing",
+                        WebhookOutbox.last_attempt < cutoff,
+                    )
+                    .all()
                 )
-                .all()
+                for item in stale_items:
+                    item.status = "failed"
+                    item.last_recovered_at = datetime.now(timezone.utc)
+                    item.error_message = (
+                        "Recovery: Stale/Crashed delivery task recovered"
+                    )
+                    logger.info(
+                        "Recovered stale webhook delivery %s for %s (%s)",
+                        item.id,
+                        item.utc_date,
+                        item.alert_type,
+                    )
+        except Exception as exc:
+            logger.error("Error during stale webhook delivery recovery: %s", exc)
+
+    async def process_outbox(self, max_items: Optional[int] = None):
+        """Process a bounded set of pending or failed outbox deliveries."""
+        if not self.delivery_enabled:
+            logger.debug("API-cost outbox delivery is disabled")
+            return
+        if not self.webhook_url:
+            logger.warning(
+                "API-cost outbox delivery skipped because no webhook is configured"
             )
-
-            for item in stale_items:
-                item.status = "failed"
-                item.error_message = "Recovery: Stale/Crashed delivery task recovered"
-                logger.info(
-                    f"Recovered stale webhook delivery {item.id} for {item.utc_date} ({item.alert_type})"
-                )
-
-            session.commit()
-        except Exception as e:
-            logger.error(f"Error during stale webhook delivery recovery: {e}")
-            try:
-                session.rollback()
-            except Exception:
-                pass
-        finally:
-            session.close()
-
-    async def process_outbox(self):
-        """Process pending/failed outbox deliveries with bounded retry and crash recovery."""
+            return
         await self.recover_stale_deliveries()
 
-        session = self.Session()
-        try:
-            items = (
-                session.query(WebhookOutbox)
+        item_ids = await asyncio.to_thread(self._list_outbox_candidates, max_items)
+        for item_id in item_ids:
+            payload = await asyncio.to_thread(self._claim_outbox_item, item_id)
+            if payload is None:
+                continue
+            success = await self._send_webhook_notification(payload)
+            await asyncio.to_thread(self._complete_outbox_item, item_id, success)
+
+    def _list_outbox_candidates(self, max_items: Optional[int]) -> list[int]:
+        with self._session_scope() as session:
+            query = (
+                session.query(WebhookOutbox.id)
                 .filter(
                     WebhookOutbox.status.in_(["pending", "failed"]),
-                    WebhookOutbox.retry_count < 5,  # Bounded retry limit of 5
+                    WebhookOutbox.retry_count < 5,
                 )
-                .all()
+                .order_by(WebhookOutbox.id)
             )
+            if max_items is not None:
+                query = query.limit(max(0, max_items))
+            return [row[0] for row in query.all()]
 
-            if not items:
-                return
+    def _claim_outbox_item(self, item_id: int) -> Optional[str]:
+        try:
+            with self._session_scope(commit=True) as session:
+                item = session.query(WebhookOutbox).filter_by(id=item_id).first()
+                if (
+                    item is None
+                    or item.status not in {"pending", "failed"}
+                    or item.retry_count >= 5
+                ):
+                    return None
+                item.status = "processing"
+                item.retry_count += 1
+                item.last_attempt = datetime.now(timezone.utc)
+                item.claimed_at = item.last_attempt
+                return item.payload
+        except Exception as exc:
+            logger.error("Error claiming outbox item %s: %s", item_id, exc)
+            return None
 
-            for item in items:
-                item_id = item.id
-                payload = item.payload
-
-                # Atomically claim this specific item
-                try:
-                    db_item = session.query(WebhookOutbox).filter_by(id=item_id).first()
-                    if (
-                        db_item
-                        and db_item.status in ["pending", "failed"]
-                        and db_item.retry_count < 5
-                    ):
-                        db_item.status = "processing"
-                        db_item.retry_count += 1
-                        db_item.last_attempt = datetime.now(timezone.utc)
-                        session.commit()
-                    else:
-                        continue
-                except Exception as e:
-                    logger.error(f"Error claiming outbox item {item_id}: {e}")
-                    try:
-                        session.rollback()
-                    except Exception:
-                        pass
-                    continue
-
-                # Run delivery without blocking the session or holding database locks
-                success = await self._send_webhook_notification(payload)
-
-                # Update item status based on delivery outcome
-                try:
-                    db_item = session.query(WebhookOutbox).filter_by(id=item_id).first()
-                    if db_item:
-                        if success:
-                            db_item.status = "sent"
-                            db_item.error_message = None
-                        else:
-                            db_item.status = "failed"
-                            db_item.error_message = "Delivery failed"
-                        session.commit()
-                except Exception as e:
-                    logger.error(
-                        f"Error updating status for outbox item {item_id}: {e}"
-                    )
-                    try:
-                        session.rollback()
-                    except Exception:
-                        pass
-        finally:
-            session.close()
+    def _complete_outbox_item(self, item_id: int, success: bool) -> None:
+        try:
+            with self._session_scope(commit=True) as session:
+                item = session.query(WebhookOutbox).filter_by(id=item_id).first()
+                if item is None:
+                    return
+                if success:
+                    item.status = "sent"
+                    item.sent_at = datetime.now(timezone.utc)
+                    item.error_message = None
+                else:
+                    item.status = "failed"
+                    item.error_message = "Delivery failed"
+        except Exception as exc:
+            logger.error("Error updating outbox item %s: %s", item_id, exc)
 
     async def _send_webhook_notification(self, message: str) -> bool:
         """Send an async webhook notification if URL is configured.
@@ -672,29 +1482,53 @@ class APICostMonitor:
         if not date:
             date = datetime.now(timezone.utc).date().isoformat()
 
-        session = self.Session()
+        if self.Session is None:
+            return 0.0
         try:
+            return await asyncio.to_thread(self._get_daily_cost_sync, date)
+        except Exception as exc:
+            logger.error("Error getting daily cost: %s", exc)
+            return 0.0
+
+    def _get_daily_cost_sync(self, date: str) -> float:
+        start_at, end_at = self._utc_day_bounds(date)
+        with self._session_scope() as session:
             result = (
                 session.query(func.sum(APIUsage.cost))
-                .filter(func.date(APIUsage.timestamp) == date)
+                .filter(
+                    APIUsage.timestamp >= start_at,
+                    APIUsage.timestamp < end_at,
+                )
                 .scalar()
             )
             return float(result) if result is not None else 0.0
-        except Exception as e:
-            logger.error(f"Error getting daily cost: {e}")
-            return 0.0
-        finally:
-            session.close()
+
+    @staticmethod
+    def _utc_day_bounds(
+        value: Union[str, calendar_date],
+    ) -> tuple[datetime, datetime]:
+        """Return an indexable half-open UTC interval for one calendar day."""
+        day = calendar_date.fromisoformat(value) if isinstance(value, str) else value
+        start_at = datetime.combine(day, clock_time.min, tzinfo=timezone.utc)
+        return start_at, start_at + timedelta(days=1)
 
     async def get_usage_analytics(self, days: int = 7) -> dict[str, Any]:
         """Get detailed usage analytics for the past N days"""
-        session = self.Session()
+        if self.Session is None:
+            return self._empty_usage_analytics(days)
         try:
-            # Date range
-            end_date = datetime.now(timezone.utc).date()
-            start_date = end_date - timedelta(days=days)
+            return await asyncio.to_thread(self._get_usage_analytics_sync, days)
+        except Exception as exc:
+            logger.error("Error generating usage analytics: %s", exc)
+            return {}
 
-            # Total costs by service
+    def _get_usage_analytics_sync(self, days: int) -> dict[str, Any]:
+        end_date = datetime.now(timezone.utc).date()
+        start_date = end_date - timedelta(days=days)
+        start_at, _ = self._utc_day_bounds(start_date)
+        _, end_at = self._utc_day_bounds(end_date)
+        today_start, today_end = self._utc_day_bounds(end_date)
+        with self._session_scope() as session:
             service_stats_query = (
                 session.query(
                     APIUsage.service,
@@ -703,14 +1537,12 @@ class APICostMonitor:
                     func.avg(APIUsage.cost),
                 )
                 .filter(
-                    func.date(APIUsage.timestamp).between(
-                        start_date.isoformat(), end_date.isoformat()
-                    )
+                    APIUsage.timestamp >= start_at,
+                    APIUsage.timestamp < end_at,
                 )
                 .group_by(APIUsage.service)
                 .all()
             )
-
             service_stats = {}
             for row in service_stats_query:
                 service, total_cost, request_count, avg_cost = row
@@ -720,7 +1552,6 @@ class APICostMonitor:
                     "average_cost": avg_cost,
                 }
 
-            # Daily breakdown
             daily_stats_query = (
                 session.query(
                     func.date(APIUsage.timestamp).label("date"),
@@ -728,9 +1559,8 @@ class APICostMonitor:
                     func.count(APIUsage.id),
                 )
                 .filter(
-                    func.date(APIUsage.timestamp).between(
-                        start_date.isoformat(), end_date.isoformat()
-                    )
+                    APIUsage.timestamp >= start_at,
+                    APIUsage.timestamp < end_at,
                 )
                 .group_by(func.date(APIUsage.timestamp))
                 .order_by(func.date(APIUsage.timestamp))
@@ -739,16 +1569,19 @@ class APICostMonitor:
 
             daily_stats = []
             for row in daily_stats_query:
-                date, total_cost, request_count = row
+                day_value, total_cost, request_count = row
                 daily_stats.append(
                     {
-                        "date": date,
+                        "date": (
+                            day_value.isoformat()
+                            if hasattr(day_value, "isoformat")
+                            else str(day_value)
+                        ),
                         "total_cost": total_cost,
                         "request_count": request_count,
                     }
                 )
 
-            # Error rates
             error_rates_query = (
                 session.query(
                     APIUsage.service,
@@ -756,9 +1589,8 @@ class APICostMonitor:
                     func.count(APIUsage.id),
                 )
                 .filter(
-                    func.date(APIUsage.timestamp).between(
-                        start_date.isoformat(), end_date.isoformat()
-                    )
+                    APIUsage.timestamp >= start_at,
+                    APIUsage.timestamp < end_at,
                 )
                 .group_by(APIUsage.service)
                 .all()
@@ -777,11 +1609,21 @@ class APICostMonitor:
                     ),
                 }
 
-            # Current session stats
             session_stats = {
                 "costs": dict(self.session_costs),
                 "requests": dict(self.session_requests),
             }
+            today_cost_result = (
+                session.query(func.sum(APIUsage.cost))
+                .filter(
+                    APIUsage.timestamp >= today_start,
+                    APIUsage.timestamp < today_end,
+                )
+                .scalar()
+            )
+            today_cost = (
+                float(today_cost_result) if today_cost_result is not None else 0.0
+            )
 
             return {
                 "period": {
@@ -796,18 +1638,34 @@ class APICostMonitor:
                 "budget_status": {
                     "daily_budget": self.daily_budget,
                     "alert_threshold": self.alert_threshold,
-                    "today_cost": await self.get_daily_cost(),
-                    "budget_remaining": max(
-                        0.0, self.daily_budget - await self.get_daily_cost()
-                    ),
+                    "today_cost": today_cost,
+                    "budget_remaining": max(0.0, self.daily_budget - today_cost),
                 },
             }
 
-        except Exception as e:
-            logger.error(f"Error generating usage analytics: {e}")
-            return {}
-        finally:
-            session.close()
+    def _empty_usage_analytics(self, days: int) -> dict[str, Any]:
+        end_date = datetime.now(timezone.utc).date()
+        start_date = end_date - timedelta(days=days)
+        return {
+            "period": {
+                "start_date": start_date.isoformat(),
+                "end_date": end_date.isoformat(),
+                "days": days,
+            },
+            "service_breakdown": {},
+            "daily_breakdown": [],
+            "error_rates": {},
+            "current_session": {
+                "costs": dict(self.session_costs),
+                "requests": dict(self.session_requests),
+            },
+            "budget_status": {
+                "daily_budget": self.daily_budget,
+                "alert_threshold": self.alert_threshold,
+                "today_cost": 0.0,
+                "budget_remaining": self.daily_budget,
+            },
+        }
 
     async def optimize_api_usage(self) -> dict[str, Any]:
         """Provide API usage optimization recommendations"""
@@ -898,14 +1756,16 @@ class APICostMonitor:
 
     async def _basic_cost_cleanup(self):
         """Basic cleanup fallback for API cost data using SQLAlchemy"""
+        await asyncio.to_thread(self._basic_cost_cleanup_sync)
+
+    def _basic_cost_cleanup_sync(self) -> None:
         try:
             usage_cutoff = datetime.now(timezone.utc) - timedelta(days=90)
             budget_cutoff = (
                 (datetime.now(timezone.utc) - timedelta(days=365)).date().isoformat()
             )
 
-            session = self.Session()
-            try:
+            with self._session_scope(commit=True) as session:
                 session.execute(
                     delete(APIUsage).where(APIUsage.timestamp < usage_cutoff)
                 )
@@ -915,110 +1775,119 @@ class APICostMonitor:
                 session.execute(
                     delete(WebhookOutbox).where(WebhookOutbox.utc_date < budget_cutoff)
                 )
-                session.commit()
-                logger.info("Basic API cost cleanup completed successfully")
-            except Exception as e:
-                session.rollback()
-                logger.error(f"Error in basic API cost cleanup: {e}")
-            finally:
-                session.close()
-
-        except Exception as e:
-            logger.error(f"Error in basic API cost cleanup: {e}")
+            logger.info("Basic API cost cleanup completed successfully")
+        except Exception as exc:
+            logger.error("Error in basic API cost cleanup: %s", exc)
 
     async def trigger_manual_cleanup(self) -> dict[str, Any]:
-        """Manually trigger API cost database cleanup and return results using SQLAlchemy"""
+        """Manually clean API-cost data and return a summary."""
         try:
-            start_time = time.time()
-            session = self.Session()
-            try:
-                usage_cutoff = datetime.now(timezone.utc) - timedelta(days=90)
-                budget_cutoff = (
-                    (datetime.now(timezone.utc) - timedelta(days=365))
-                    .date()
-                    .isoformat()
-                )
+            return await asyncio.to_thread(self._trigger_manual_cleanup_sync)
+        except Exception as exc:
+            logger.error("Error in manual API cost cleanup: %s", exc)
+            return {"error": str(exc)}
 
-                # Get counts before deletion
-                before_usage = session.query(APIUsage).count()
-                before_budgets = session.query(DailyBudget).count()
-                before_outbox = session.query(WebhookOutbox).count()
+    def _trigger_manual_cleanup_sync(self) -> dict[str, Any]:
+        start_time = time.time()
+        with self._session_scope(commit=True) as session:
+            usage_cutoff = datetime.now(timezone.utc) - timedelta(days=90)
+            budget_cutoff = (
+                (datetime.now(timezone.utc) - timedelta(days=365)).date().isoformat()
+            )
 
-                session.execute(
-                    delete(APIUsage).where(APIUsage.timestamp < usage_cutoff)
-                )
-                session.execute(
-                    delete(DailyBudget).where(DailyBudget.date < budget_cutoff)
-                )
-                session.execute(
-                    delete(WebhookOutbox).where(WebhookOutbox.utc_date < budget_cutoff)
-                )
-                session.commit()
+            before_usage = session.query(APIUsage).count()
+            before_budgets = session.query(DailyBudget).count()
+            before_outbox = session.query(WebhookOutbox).count()
 
-                after_usage = session.query(APIUsage).count()
-                after_budgets = session.query(DailyBudget).count()
-                after_outbox = session.query(WebhookOutbox).count()
+            session.execute(delete(APIUsage).where(APIUsage.timestamp < usage_cutoff))
+            session.execute(delete(DailyBudget).where(DailyBudget.date < budget_cutoff))
+            session.execute(
+                delete(WebhookOutbox).where(WebhookOutbox.utc_date < budget_cutoff)
+            )
+            session.flush()
 
-                records_deleted = (
-                    (before_usage - after_usage)
-                    + (before_budgets - after_budgets)
-                    + (before_outbox - after_outbox)
-                )
+            after_usage = session.query(APIUsage).count()
+            after_budgets = session.query(DailyBudget).count()
+            after_outbox = session.query(WebhookOutbox).count()
 
-                # Reclaim space
-                session.execute(text("VACUUM"))
-            except Exception as e:
-                session.rollback()
-                raise e
-            finally:
-                session.close()
+            records_deleted = (
+                (before_usage - after_usage)
+                + (before_budgets - after_budgets)
+                + (before_outbox - after_outbox)
+            )
 
-            cleanup_summary = {
-                "database": self.db_path,
-                "tables_cleaned": 3,
-                "total_records_deleted": records_deleted,
-                "total_space_freed_mb": 0.0,
-                "execution_time_seconds": time.time() - start_time,
-                "successful_cleanups": 3,
-                "failed_cleanups": 0,
-                "details": [
-                    {
-                        "table": "api_usage",
-                        "records_deleted": before_usage - after_usage,
-                        "space_freed_mb": 0.0,
-                        "execution_time_ms": int((time.time() - start_time) * 1000),
-                        "success": True,
-                        "error": None,
-                    },
-                    {
-                        "table": "daily_budgets",
-                        "records_deleted": before_budgets - after_budgets,
-                        "space_freed_mb": 0.0,
-                        "execution_time_ms": 0,
-                        "success": True,
-                        "error": None,
-                    },
-                    {
-                        "table": "webhook_outbox",
-                        "records_deleted": before_outbox - after_outbox,
-                        "space_freed_mb": 0.0,
-                        "execution_time_ms": 0,
-                        "success": True,
-                        "error": None,
-                    },
-                ],
-            }
-
-            logger.info(f"Manual API cost cleanup completed: {cleanup_summary}")
-            return cleanup_summary
-
-        except Exception as e:
-            logger.error(f"Error in manual API cost cleanup: {e}")
-            return {"error": str(e)}
+        cleanup_summary = {
+            "database": self.db_path,
+            "tables_cleaned": 3,
+            "total_records_deleted": records_deleted,
+            "total_space_freed_mb": 0.0,
+            "execution_time_seconds": time.time() - start_time,
+            "successful_cleanups": 3,
+            "failed_cleanups": 0,
+            "details": [
+                {
+                    "table": "api_usage",
+                    "records_deleted": before_usage - after_usage,
+                    "space_freed_mb": 0.0,
+                    "execution_time_ms": int((time.time() - start_time) * 1000),
+                    "success": True,
+                    "error": None,
+                },
+                {
+                    "table": "daily_budgets",
+                    "records_deleted": before_budgets - after_budgets,
+                    "space_freed_mb": 0.0,
+                    "execution_time_ms": 0,
+                    "success": True,
+                    "error": None,
+                },
+                {
+                    "table": "webhook_outbox",
+                    "records_deleted": before_outbox - after_outbox,
+                    "space_freed_mb": 0.0,
+                    "execution_time_ms": 0,
+                    "success": True,
+                    "error": None,
+                },
+            ],
+        }
+        logger.info("Manual API cost cleanup completed: %s", cleanup_summary)
+        return cleanup_summary
 
 
-# Global instance
-cost_monitor = APICostMonitor()
+_cost_monitor_instance: Optional[APICostMonitor] = None
+_cost_monitor_lock = threading.Lock()
+
+
+def get_cost_monitor() -> APICostMonitor:
+    """Return the process-wide monitor, creating it only on first use."""
+    global _cost_monitor_instance
+    if _cost_monitor_instance is None:
+        with _cost_monitor_lock:
+            if _cost_monitor_instance is None:
+                _cost_monitor_instance = APICostMonitor()
+    return _cost_monitor_instance
+
+
+async def ensure_api_cost_database_ready() -> None:
+    """Asynchronously validate runtime database compatibility and privileges."""
+    monitor = get_cost_monitor()
+    if not monitor.cost_tracking_enabled and not monitor.delivery_enabled:
+        return
+    await asyncio.to_thread(monitor.ensure_database_ready)
+
+
+class _LazyCostMonitor:
+    """Compatibility proxy for callers importing the historical global name."""
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(get_cost_monitor(), name)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        setattr(get_cost_monitor(), name, value)
+
+
+cost_monitor = _LazyCostMonitor()
 
 
 async def track_api_call(
@@ -1060,7 +1929,7 @@ if __name__ == "__main__":
     import asyncio
 
     async def test_cost_monitor():
-        monitor = APICostMonitor()
+        monitor = APICostMonitor(db_path=DEFAULT_DB_PATH)
 
         # Test usage recording
         await monitor.record_usage(
