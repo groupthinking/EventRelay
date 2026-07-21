@@ -16,7 +16,9 @@ def _load_workflow() -> dict:
 def _get_script(workflow: dict) -> str:
     steps = workflow["jobs"]["policy"]["steps"]
     script_step = next(
-        step for step in steps if "Validate delivery contract" in step.get("name", "")
+        step
+        for step in steps
+        if "Validate delivery contract" in step.get("name", "")
     )
     return script_step["with"]["script"]
 
@@ -33,61 +35,64 @@ def test_governance_workflow_triggers_on_pull_request_target() -> None:
     assert "pull_request_target" in triggers
     types = triggers["pull_request_target"]["types"]
     assert "opened" in types
+    assert "synchronize" in types
     assert "ready_for_review" in types
 
 
-def test_governance_workflow_minimum_permissions() -> None:
+def test_governance_workflow_uses_minimum_permissions() -> None:
     workflow = _load_workflow()
     perms = workflow["permissions"]
-    # Must NOT request write permissions to contents or pull-requests.
+    assert perms.get("checks") == "write"
     assert perms.get("contents") == "read"
     assert perms.get("pull-requests") == "read"
     assert perms.get("issues") == "read"
+    assert set(perms) == {"checks", "contents", "issues", "pull-requests"}
 
 
-def test_governance_workflow_draft_bypass_present() -> None:
-    """Draft PRs should be bypassed; enforcement begins on ready_for_review."""
+def test_governance_workflow_publishes_exact_head_check() -> None:
+    script = _get_script(_load_workflow())
+    assert 'name: "PR Governance"' in script
+    assert "github.rest.checks.create" in script
+    assert "head_sha: pr.head.sha" in script
+    assert 'status: "completed"' in script
+
+
+def test_governance_workflow_draft_bypass_is_head_bound() -> None:
     script = _get_script(_load_workflow())
     assert "pr.draft" in script
-    assert "Draft PR" in script or "draft" in script.lower()
+    assert '"neutral"' in script
+    assert "Governance deferred for draft PR" in script
+    assert "pr.head.sha" in script
 
 
-def test_governance_workflow_detects_empty_placeholder_content() -> None:
-    """Sections must be checked for empty/placeholder content, not just heading presence."""
+def test_governance_workflow_rejects_default_placeholders() -> None:
     script = _get_script(_load_workflow())
-    # The script should strip HTML comments and trim before checking emptiness.
-    assert "getSectionContent" in script or "replace" in script
-    assert "<!--" in script or "html" in script.lower() or "trim()" in script
-    # Should NOT rely solely on body.includes() for non-empty validation.
-    assert "content.length" in script or "content ===" in script
+    assert "placeholderPatterns" in script
+    assert "hasMeaningfulContent" in script
+    assert "Describe the user or operational result" in script
+    assert "Risk level:" in script
+    assert "Focused tests" in script
+    assert "meaningfulLines.length > 0" in script
 
 
 def test_governance_workflow_validates_issue_via_api() -> None:
-    """The canonical issue number must be validated through the Issues API."""
     script = _get_script(_load_workflow())
     assert "github.rest.issues.get" in script
-    # Must check it's not a PR (issues have no pull_request field).
     assert "pull_request" in script
-    # Must check the issue is open.
-    assert "state" in script and "open" in script
-    # Must handle 404 (non-existent issue).
+    assert "issue.state" in script
     assert "404" in script
 
 
-def test_governance_workflow_competing_pr_check_present() -> None:
-    """Should detect and fail on competing open PRs for the same canonical issue."""
+def test_governance_workflow_detects_competing_prs() -> None:
     script = _get_script(_load_workflow())
-    assert "competing" in script
     assert "github.paginate" in script
     assert "github.rest.pulls.list" in script
+    assert "competing" in script
+    assert "another open implementation PR" in script
 
 
-def test_governance_workflow_competing_check_only_after_valid_issue() -> None:
-    """Competing PR search should only run after the canonical issue passes validation."""
+def test_governance_workflow_checks_issue_before_competitors() -> None:
     script = _get_script(_load_workflow())
-    # The issue.get call must appear before the pulls.list paginate call.
-    issues_get_pos = script.find("github.rest.issues.get")
-    pulls_list_pos = script.find("github.rest.pulls.list")
-    assert issues_get_pos != -1
-    assert pulls_list_pos != -1
-    assert issues_get_pos < pulls_list_pos
+    assert script.index("github.rest.issues.get") < script.index(
+        "github.rest.pulls.list"
+    )
