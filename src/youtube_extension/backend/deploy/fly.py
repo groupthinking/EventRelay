@@ -184,7 +184,7 @@ primary_region = "iad"
         """Generate a unique app name for Fly.io"""
         title = project_config.get('title', 'uvai-app')
         sanitized = ''.join(c for c in title.lower().replace(' ', '-') if c.isalnum() or c == '-')
-        timestamp = int(time.monotonic()) % 10000
+        timestamp = int(time.time()) % 10000
         return f"uvai-{sanitized[:20]}-{timestamp}"
 
     def _extract_deployment_url(self, output: str) -> Optional[str]:

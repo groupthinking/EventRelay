@@ -387,6 +387,24 @@ class TestVerifyProject:
         assert result["passed"] is True
         assert "skipping" in result["summary"].lower()
 
+    async def test_sentry_breadcrumb_checks_package_after_path_initialization(
+        self, tmp_path, monkeypatch
+    ) -> None:
+        monkeypatch.setenv("SENTRY_DSN", "https://public@example.invalid/1")
+        sentry_sdk = MagicMock()
+        mgr = _make_manager()
+
+        with patch.dict(sys.modules, {"sentry_sdk": sentry_sdk}):
+            result = await mgr.verify_project(str(tmp_path))
+
+        assert result["passed"] is True
+        sentry_sdk.add_breadcrumb.assert_called_once_with(
+            category="deployment",
+            message="Starting build verification",
+            data={"project_path": str(tmp_path), "has_package_json": False},
+            level="info",
+        )
+
     async def test_npm_install_failure(self, tmp_path) -> None:
         (tmp_path / "package.json").write_text('{"name": "test"}')
         mgr = _make_manager()
@@ -646,6 +664,10 @@ class TestDeployProject:
         )
         assert result["status"] == "failed"
         assert "Build verification failed" in result["errors"][0]
+        assert result["summary"]["total_deployments"] == 0
+        assert result["summary"]["successful_deployments"] == 0
+        assert result["summary"]["failed_deployments"] == 0
+        assert result["summary"]["skipped_deployments"] == 0
 
     async def test_no_github_token_adds_error(self, tmp_path) -> None:
         mgr = self._patched_manager()

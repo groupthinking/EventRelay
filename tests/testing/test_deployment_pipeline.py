@@ -180,13 +180,17 @@ class TestDeploymentPipelineIntegration:
             assert len(result) <= 30, f"App name too long: {result}"
 
     @pytest.mark.asyncio
-    async def test_deployment_manager_orchestration(self, sample_project_config, sample_env):
+    async def test_deployment_manager_orchestration(
+        self, sample_project_config, tmp_path, monkeypatch
+    ):
         """Test deployment manager orchestration"""
+        monkeypatch.delenv('GITHUB_TOKEN', raising=False)
+        monkeypatch.delenv('VERCEL_TOKEN', raising=False)
         manager = DeploymentManager()
 
         # Test deployment with missing tokens (should be skipped gracefully)
         result = await manager.deploy_project(
-            '/tmp/nonexistent',
+            str(tmp_path),
             sample_project_config,
             {'target': 'vercel'}
         )
@@ -200,6 +204,7 @@ class TestDeploymentPipelineIntegration:
         # GitHub deployment should be skipped due to missing token
         assert 'github' not in result['deployments']
         assert 'GitHub token not configured' in result['errors']
+        assert result['deployments']['vercel']['status'] == 'skipped'
 
     @pytest.mark.asyncio
     async def test_mixed_deployment_scenario(self, sample_project_config, sample_env):

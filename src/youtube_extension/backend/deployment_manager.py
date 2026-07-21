@@ -98,13 +98,20 @@ class DeploymentManager:
         Runs npm install and npm run build to catch errors early.
         """
         logger.info("🔍 Verifying project build...")
+        project_dir = Path(project_path)
+        package_json = project_dir / "package.json"
+
         if os.getenv("SENTRY_DSN"):
             import sentry_sdk
+
             sentry_sdk.add_breadcrumb(
                 category="deployment",
                 message="Starting build verification",
-                data={"project_path": project_path, "has_package_json": package_json.exists()},
-                level="info"
+                data={
+                    "project_path": project_path,
+                    "has_package_json": package_json.exists(),
+                },
+                level="info",
             )
 
         result = {
@@ -114,8 +121,6 @@ class DeploymentManager:
             "typescript": {"success": False, "errors": []},
             "summary": ""
         }
-
-        project_dir = Path(project_path)
 
         # Security: validate and resolve path to prevent traversal
         try:
@@ -368,9 +373,9 @@ class DeploymentManager:
             "deployments": {},
             "verification": {},
             "errors": [],
-            # Keep the result contract stable even when build verification
-            # returns before any deployment is attempted.
-            "summary": self._generate_deployment_summary({})
+            # Keep the result contract stable when verification returns before
+            # any deployment is attempted.
+            "summary": self._generate_deployment_summary({}),
         }
 
         try:

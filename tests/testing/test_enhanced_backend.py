@@ -4,6 +4,11 @@ Test Enhanced FastAPI Backend
 Test the new markdown processing endpoints and caching functionality
 """
 
+# This is a manually invoked localhost smoke script, not a hermetic pytest
+# module. Its helper functions return status values and require a running
+# backend, so pytest must not collect them as tests.
+__test__ = False
+
 import asyncio
 import aiohttp
 import json

@@ -34,7 +34,10 @@ if _agents_pkg is None:
     _agents_pkg.__package__ = "agents"
     sys.modules["agents"] = _agents_pkg
 
-# Stub youtube_extension.processors to avoid pulling in heavy ML deps
+# Stub the processor leaf only when it is not already loaded. Track every
+# synthetic module installed here so collection cannot leak it into unrelated
+# tests later in the same pytest process.
+_INSTALLED_PROCESSOR_STUBS: dict[str, types.ModuleType] = {}
 for _mod_name in [
     "youtube_extension",
     "youtube_extension.processors",
@@ -49,9 +52,17 @@ for _mod_name in [
             _stub.EnhancedVideoExtractor = type("EnhancedVideoExtractor", (), {})  # type: ignore[attr-defined]
             _stub.VideoContent = type("VideoContent", (), {})  # type: ignore[attr-defined]
         sys.modules[_mod_name] = _stub
+        _INSTALLED_PROCESSOR_STUBS[_mod_name] = _stub
 
-# Now we can safely import just the coordinator module
-from agents.mcp_ecosystem_coordinator import SkillRegistry  # noqa: E402
+# Import just the coordinator module, then remove only the exact synthetic
+# objects installed above. The imported coordinator retains the references it
+# needs, while subsequent test modules resolve the real processor package.
+try:
+    from agents.mcp_ecosystem_coordinator import SkillRegistry  # noqa: E402
+finally:
+    for _mod_name, _stub in _INSTALLED_PROCESSOR_STUBS.items():
+        if sys.modules.get(_mod_name) is _stub:
+            sys.modules.pop(_mod_name, None)
 
 
 # ---------------------------------------------------------------------------

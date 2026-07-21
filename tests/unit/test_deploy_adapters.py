@@ -331,6 +331,20 @@ class TestFlyAdapterExtractDeploymentUrl:
 
 
 class TestFlyAdapterGenerateAppName:
+    def test_does_not_require_current_event_loop(self):
+        adapter = FlyAdapter()
+
+        with patch(
+            "youtube_extension.backend.deploy.fly.asyncio.get_event_loop",
+            side_effect=AssertionError("app-name generation accessed the event loop"),
+        ), patch(
+            "youtube_extension.backend.deploy.fly.time.time",
+            return_value=12345.0,
+        ):
+            name = adapter._generate_app_name({"title": "My App"})
+
+        assert name == "uvai-my-app-2345"
+
     async def test_starts_with_uvai(self):
         adapter = FlyAdapter()
         name = adapter._generate_app_name({"title": "My App"})
