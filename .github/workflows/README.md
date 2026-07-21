@@ -118,7 +118,9 @@ A full audit of this directory was performed (see
   the refreshed branch list removed the advertised live open-PR guard and
   recovery ledger while retaining active PR heads.
 - **Fixed** `e2e-tests.yml` — exact-SHA deployment resolution is mandatory and
-  test failure now fails the workflow while retaining result reporting.
+  test failure now fails the workflow while retaining result reporting. The
+  checkout is verified against the same SHA and deployment creator identity is
+  pinned to Vercel's global bot account.
 
 ## Resources
 
