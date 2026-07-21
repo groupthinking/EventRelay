@@ -109,10 +109,13 @@ def test_e2e_is_blocking_and_targets_the_triggering_sha_deployment() -> None:
     assert 'SHA="${{ github.event.pull_request.head.sha || github.sha }}"' in text
     assert 'ENVIRONMENT="${{ github.event_name == \'pull_request\' && \'Preview\' || \'Production\' }}"' in text
     assert 'deployments?sha=${SHA}' in text
-    assert text.count(".creator.id == 35613825") == 2
-    assert text.count('.creator.login == "vercel[bot]"') == 2
-    assert text.count('.creator.type == "Bot"') == 2
+    # Both environment-specific deployment filters and the status filter must
+    # bind to Vercel's immutable bot identity before a URL is trusted.
+    assert text.count(".creator.id == 35613825") == 3
+    assert text.count('.creator.login == "vercel[bot]"') == 3
+    assert text.count('.creator.type == "Bot"') == 3
     assert text.count('.task == "deploy"') == 2
+    assert 'select(.state == "success" and .creator.id == 35613825' in text
     assert 'No successful ${ENVIRONMENT} deployment found for exact SHA ${SHA}' in text
 
 

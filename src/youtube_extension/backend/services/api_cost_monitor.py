@@ -272,6 +272,10 @@ _POSTGRES_SCHEMA_CONTRACT_SQL = """
     SELECT
         (
             SELECT
+                -- This count protects the expected contract list itself. The
+                -- actual metadata count is intentionally unconstrained so a
+                -- migration-first deploy may add columns without making the
+                -- still-serving revision unready.
                 count(*) = 29
                 AND COALESCE(
                     bool_and(

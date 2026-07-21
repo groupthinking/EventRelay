@@ -319,6 +319,8 @@ def test_postgres_runtime_contract_allows_future_additive_columns() -> None:
     contract = monitor_module._POSTGRES_SCHEMA_CONTRACT_SQL
 
     assert "count(*) = 29 FROM column_metadata" not in contract
+    assert "actual metadata count is intentionally unconstrained" in contract
+    assert "count(*) = 29" in contract
 
 
 def test_postgres_schema_readiness_rejects_malformed_contract() -> None:

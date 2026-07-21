@@ -93,7 +93,7 @@ jobs:
               STATUS_LOOKUP=0
               DEPLOYMENT_URL=$(gh api \
                 "/repos/${{ github.repository }}/deployments/${DEPLOY_ID}/statuses" \
-                --jq 'first | select(.state == "success") | .environment_url // empty' 2>deployment-status.err) || STATUS_LOOKUP=$?
+                --jq '[.[] | select(.state == "success" and .creator.id == 35613825 and .creator.login == "vercel[bot]" and .creator.type == "Bot")] | first | .environment_url // empty' 2>deployment-status.err) || STATUS_LOOKUP=$?
               if [ -s deployment-status.err ]; then
                 echo "gh api deployment statuses stderr:" >&2
                 cat deployment-status.err >&2
