@@ -367,7 +367,10 @@ class DeploymentManager:
             "project_config": project_config,
             "deployments": {},
             "verification": {},
-            "errors": []
+            "errors": [],
+            # Keep the result contract stable even when build verification
+            # returns before any deployment is attempted.
+            "summary": self._generate_deployment_summary({})
         }
 
         try:
