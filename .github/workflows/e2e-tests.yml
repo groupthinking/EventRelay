@@ -77,7 +77,8 @@ jobs:
           for i in $(seq 1 30); do
             DEPLOYMENT_STATUS=0
             DEPLOY_IDS=$(gh api \
-              "/repos/${{ github.repository }}/deployments?sha=${SHA}&per_page=20" \
+              "/repos/${{ github.repository }}/deployments?sha=${SHA}&per_page=100" \
+              --paginate \
               --jq "$FILTER" 2>deployments.err) || DEPLOYMENT_STATUS=$?
             if [ -s deployments.err ]; then
               echo "gh api deployments stderr:" >&2
