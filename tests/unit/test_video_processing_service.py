@@ -257,6 +257,11 @@ class TestGetVideoProcessor:
 # ===========================================================================
 
 class TestNormalizeResult:
+    @pytest.fixture(autouse=True)
+    def _block_real_yt_dlp(self, monkeypatch):
+        """Normalization tests must not turn an installed adapter into live I/O."""
+        monkeypatch.setitem(sys.modules, "yt_dlp", None)
+
     def test_basic_normalization(self):
         svc = _make_service()
         raw = _success_result()
