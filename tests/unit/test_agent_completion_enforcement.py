@@ -46,5 +46,7 @@ class EnforcementTests(unittest.TestCase):
 
     def test_missing_publication_with_malformed_policy_blocks(self):
         for policy in (None, [], {}, dict(POLICY, custom_role_policy="open", trusted_check_app_slugs=[], trusted_label_actors=[], trusted_human_exemption_actors=[]), dict(POLICY, trusted_check_app_slugs=None, trusted_label_actors=[], trusted_human_exemption_actors=[])):
-            self.assertEqual(missing_publication(policy)["conclusion"], "failure")
-            self.assertEqual(missing_publication(policy)["reason"], "missing_trusted_publication")
+            with self.subTest(policy=policy):
+                result = missing_publication(policy)
+                self.assertEqual(result["conclusion"], "failure")
+                self.assertEqual(result["reason"], "missing_trusted_publication")
