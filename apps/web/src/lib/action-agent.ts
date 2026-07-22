@@ -10,7 +10,9 @@ import 'server-only';
  *
  * Provider routing mirrors the rest of the app: OpenAI (Responses API,
  * multi-round function calling) is primary; Gemini is a single-round fallback
- * used only when OpenAI is unavailable or quota-limited.
+ * used only when OpenAI is unavailable or quota-limited. The OpenAI model is
+ * configurable via `OPENAI_ACTION_MODEL`, so Codex/ChatGPT models served by
+ * the same Responses API (e.g. `codex-mini-latest`) can drive the agent.
  */
 
 import OpenAI from 'openai';
@@ -33,10 +35,21 @@ function getOpenAI(): OpenAI {
   return _openai;
 }
 
-const MODEL_OPENAI = 'gpt-4o-mini';
+const DEFAULT_MODEL_OPENAI = 'gpt-4o-mini';
 const MODEL_GEMINI = GEMINI_FAST_MODEL;
 const MAX_TOOL_ROUNDS = 4;
 const MAX_TRANSCRIPT_CHARS = 8000;
+
+/**
+ * Resolve the OpenAI model used for action extraction. Set `OPENAI_ACTION_MODEL`
+ * to route the agent to a Codex/ChatGPT model on the same Responses API
+ * (e.g. `codex-mini-latest` or `gpt-5-codex`); defaults to `gpt-4o-mini`.
+ * Resolved per call so Next.js runtime env changes take effect without a rebuild.
+ */
+export function resolveOpenAIActionModel(): string {
+  const model = process.env.OPENAI_ACTION_MODEL?.trim();
+  return model || DEFAULT_MODEL_OPENAI;
+}
 
 const SYSTEM_PROMPT = `You are an action agent for a video-to-workflow platform.
 Read the transcript and decide which executable tools to call so the viewer can
@@ -85,10 +98,11 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
 /** Run the OpenAI Responses-API tool-calling loop until the model stops calling tools. */
 async function runWithOpenAI(opts: RunActionAgentOptions, ctx: ToolContext): Promise<AgentAction[]> {
   const openai = getOpenAI();
+  const model = resolveOpenAIActionModel();
   const actions: AgentAction[] = [];
 
   let response = await openai.responses.create({
-    model: MODEL_OPENAI,
+    model,
     instructions: SYSTEM_PROMPT,
     input: buildUserPrompt(opts.transcript, opts.videoTitle),
     tools: toOpenAITools(),
@@ -150,7 +164,7 @@ async function runWithOpenAI(opts: RunActionAgentOptions, ctx: ToolContext): Pro
     }
 
     response = await openai.responses.create({
-      model: MODEL_OPENAI,
+      model,
       previous_response_id: response.id,
       input: toolOutputs,
       tools: toOpenAITools(),
