@@ -36,7 +36,6 @@ def test_coverage_workflow_is_authoritative() -> None:
     config = tomllib.loads((ROOT / "pyproject.toml").read_text())
     coverage_report = config["tool"]["coverage"]["report"]
     pytest_addopts = config["tool"]["pytest"]["ini_options"]["addopts"]
-    pytest_timeout = config["tool"]["pytest"]["ini_options"]["timeout"]
 
     assert 0 < int(job["timeout-minutes"]) <= 45
     assert "continue-on-error" not in job
@@ -46,7 +45,7 @@ def test_coverage_workflow_is_authoritative() -> None:
     assert "--cov=src/youtube_extension" in run_script
     assert "--cov-fail-under" not in run_script
     assert "--cov-fail-under" not in pytest_addopts
-    assert 0 < int(pytest_timeout) <= 120
+    assert "--timeout=120" in run_script
     assert ".[dev,youtube]" in next(
         step for step in steps if step.get("name") == "Install dependencies"
     )["run"]
@@ -66,8 +65,12 @@ def test_ci_installs_the_authoritative_python_environment() -> None:
     install_script = next(
         step for step in steps if step.get("name") == "Install dependencies"
     )["run"]
+    test_script = next(
+        step for step in steps if step.get("name") == "Run tests"
+    )["run"]
 
     assert 'python -m pip install -e ".[dev,youtube]"' in install_script
+    assert "--timeout=120" in test_script
     for suppression in ("|| true", "2>/dev/null", "set +e"):
         assert suppression not in install_script
 

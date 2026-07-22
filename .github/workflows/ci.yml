@@ -94,4 +94,4 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -e ".[dev,youtube]"
       - name: Run tests
-        run: PYTHONPATH=src python -m pytest tests/unit/ -v --override-ini="addopts=" --ignore=tests/unit/test_transcript_action_workflow.py -k "not integration"
+        run: PYTHONPATH=src python -m pytest tests/unit/ -v --timeout=120 --override-ini="addopts=" --ignore=tests/unit/test_transcript_action_workflow.py -k "not integration"

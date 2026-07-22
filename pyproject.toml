@@ -271,9 +271,6 @@ python_files = ["test_*.py", "*_test.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 asyncio_mode = "auto"
-# Deterministic CI must fail a stalled test instead of leaving Coverage pending
-# indefinitely. Explicit live-smoke invocations may override this when needed.
-timeout = 120
 addopts = """\
     -p no:ddtrace \
     --strict-markers \

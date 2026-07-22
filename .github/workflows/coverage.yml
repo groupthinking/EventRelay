@@ -52,6 +52,7 @@ jobs:
       - name: Run tests with coverage
         run: |
           pytest tests/ \
+            --timeout=120 \
             --cov=src/youtube_extension \
             --cov-report=lcov:reports/lcov.info \
             --cov-report=json:reports/coverage.json \
