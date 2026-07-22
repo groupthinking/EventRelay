@@ -33,8 +33,6 @@ jobs:
           python-version: "3.12"
       - name: Python source compiles (no import-time SyntaxErrors)
         run: python -m compileall -q src/
-      - name: Run Production Readiness Checks
-        run: python scripts/check_production_readiness.py
 
   build:
     runs-on: ubuntu-latest

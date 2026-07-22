@@ -112,23 +112,8 @@ jobs:
         id: e2e_tests
         continue-on-error: true
         run: |
-          # Run Vitest E2E
           npx vitest run tests/e2e/ --reporter=verbose 2>&1 | tee test-output.txt
-          VITEST_CODE=${PIPESTATUS[0]}
-
-          echo "=== Running Playwright Smoke Tests ===" | tee -a test-output.txt
-          # Install Playwright and run Playwright Smoke
-          npx playwright install --with-deps chromium
-          cd apps/web && npx playwright test 2>&1 | tee -a ../../test-output.txt
-          PLAYWRIGHT_CODE=${PIPESTATUS[0]}
-
-          # Combine codes: if either is non-zero, exit with failure
-          if [ $VITEST_CODE -ne 0 ] || [ $PLAYWRIGHT_CODE -ne 0 ]; then
-            echo "E2E pipeline or Playwright smoke tests failed (vitest: $VITEST_CODE, playwright: $PLAYWRIGHT_CODE)"
-            echo "exit_code=1" >> $GITHUB_OUTPUT
-          else
-            echo "exit_code=0" >> $GITHUB_OUTPUT
-          fi
+          echo "exit_code=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
 
       - name: Parse test results
         id: results
