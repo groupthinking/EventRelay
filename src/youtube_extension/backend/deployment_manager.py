@@ -99,20 +99,7 @@ class DeploymentManager:
         """
         logger.info("🔍 Verifying project build...")
         project_dir = Path(project_path)
-        package_json = project_dir / "package.json"
 
-        if os.getenv("SENTRY_DSN"):
-            import sentry_sdk
-
-            sentry_sdk.add_breadcrumb(
-                category="deployment",
-                message="Starting build verification",
-                data={
-                    "project_name": project_dir.name or "project",
-                    "has_package_json": package_json.exists(),
-                },
-                level="info",
-            )
 
         result = {
             "passed": False,
@@ -133,6 +120,18 @@ class DeploymentManager:
             return result
 
         package_json = resolved_path / "package.json"
+
+        if os.getenv("SENTRY_DSN"):
+            import sentry_sdk
+            sentry_sdk.add_breadcrumb(
+                category="deployment",
+                message="Starting build verification",
+                data={
+                    "project_name": resolved_path.name,
+                    "has_package_json": package_json.exists(),
+                },
+                level="info",
+            )
 
         # Check if package.json exists
         if not package_json.exists():

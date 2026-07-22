@@ -47,7 +47,6 @@ from youtube_extension.backend.deployment_manager import (  # noqa: E402
     validate_deployment_environment,
 )
 
-
 # ===========================================================================
 # Helpers
 # ===========================================================================
@@ -386,23 +385,41 @@ class TestVerifyProject:
         assert result["passed"] is True
         assert "skipping" in result["summary"].lower()
 
-    async def test_sentry_breadcrumb_checks_package_after_path_initialization(
-        self, tmp_path, monkeypatch
-    ) -> None:
-        monkeypatch.setenv("SENTRY_DSN", "https://public@example.invalid/1")
-        sentry_sdk = MagicMock()
+    async def test_sentry_breadcrumb_reports_package_presence(self, tmp_path) -> None:
+        (tmp_path / "package.json").write_text('{"name": "test"}')
         mgr = _make_manager()
+        sentry_sdk = MagicMock()
+        ok = MagicMock(returncode=0, stdout="ok", stderr="")
 
-        with patch.dict(sys.modules, {"sentry_sdk": sentry_sdk}):
+        with patch(
+            "youtube_extension.backend.deployment_manager.os.getenv",
+            return_value="https://public@example.invalid/1",
+        ), patch.dict(sys.modules, {"sentry_sdk": sentry_sdk}), patch(
+            "youtube_extension.backend.deployment_manager.subprocess.run",
+            return_value=ok,
+        ):
             result = await mgr.verify_project(str(tmp_path))
 
         assert result["passed"] is True
-        sentry_sdk.add_breadcrumb.assert_called_once_with(
-            category="deployment",
-            message="Starting build verification",
-            data={"project_name": tmp_path.name, "has_package_json": False},
-            level="info",
-        )
+        sentry_sdk.add_breadcrumb.assert_called_once()
+        assert sentry_sdk.add_breadcrumb.call_args.kwargs["data"] == {
+            "project_name": tmp_path.name,
+            "has_package_json": True,
+        }
+
+    async def test_invalid_path_is_rejected_before_sentry(self, tmp_path) -> None:
+        mgr = _make_manager()
+        sentry_sdk = MagicMock()
+        missing = tmp_path / "missing"
+
+        with patch(
+            "youtube_extension.backend.deployment_manager.os.getenv",
+            return_value="https://public@example.invalid/1",
+        ), patch.dict(sys.modules, {"sentry_sdk": sentry_sdk}):
+            result = await mgr.verify_project(str(missing))
+
+        assert result["passed"] is False
+        sentry_sdk.add_breadcrumb.assert_not_called()
 
     async def test_npm_install_failure(self, tmp_path) -> None:
         (tmp_path / "package.json").write_text('{"name": "test"}')

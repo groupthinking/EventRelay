@@ -25,6 +25,7 @@ jobs:
   coverage:
     name: Generate and Upload Coverage
     runs-on: ubuntu-latest
+    timeout-minutes: 45
 
     steps:
       - name: Checkout code
@@ -41,7 +42,9 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+          # The deterministic suite imports optional YouTube adapters; install
+          # the repository-owned extra instead of relying on leaked test stubs.
+          pip install -e ".[dev,youtube]"
 
       - name: Create reports directory
         run: mkdir -p reports
@@ -49,11 +52,12 @@ jobs:
       - name: Run tests with coverage
         run: |
           pytest tests/ \
+            --timeout=120 \
             --cov=src/youtube_extension \
             --cov-report=lcov:reports/lcov.info \
+            --cov-report=json:reports/coverage.json \
             --cov-report=term \
             --cov-report=html:reports/htmlcov \
-            --cov-fail-under=0 \
             -v
 
       - name: Upload coverage to Qlty (same-repo only)
@@ -71,5 +75,7 @@ jobs:
           name: coverage-report
           path: |
             reports/lcov.info
+            reports/coverage.json
             reports/htmlcov/
+          if-no-files-found: error
           retention-days: 30
