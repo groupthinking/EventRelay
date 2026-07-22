@@ -848,11 +848,11 @@ jobs:
               const expectedRunId = section(
                 issueBody,
                 ['agent run id', 'run id']
-              ).replace(/^\x60|\x60$/g, '').trim() || String(manifest.run_id || extractRunId(body) || '').trim();
+              ).replace(/^\x60|\x60$/g, '').trim() || (selectedIssue ? String(manifest.run_id || extractRunId(body) || '').trim() : '');
               const expectedAgentLogin = section(
                 issueBody,
                 ['agent login']
-              ).replace(/^\x60|\x60$/g, '').trim() || String(manifest.agent_login || (pull && pull.user && pull.user.login) || '').trim();
+              ).replace(/^\x60|\x60$/g, '').trim() || (selectedIssue ? String(manifest.agent_login || (pull && pull.user && pull.user.login) || '').trim() : '');
               if (!expectedRunId) {
                 errors.push('missing_agent_run_id');
               } else if (manifestMatch && String(manifest.run_id || '') !== expectedRunId) {
@@ -868,6 +868,7 @@ jobs:
             function scheduledContractIdentity(
               selectedIssueNumber,
               selectedIssue,
+              pull,
               currentApplicable
             ) {
               if (!currentApplicable) {
@@ -897,17 +898,35 @@ jobs:
                 }
                 return output.join('\n').trim();
               }
+              function legacyRunId(value) {
+                const match = String(value || '').match(
+                  /(?:\b(?:run|task)[ _-]?id\s*[:=\/]\s*|\btasks?\/)([A-Za-z0-9][A-Za-z0-9._:-]{0,127})/i
+                );
+                return match
+                  ? match[1].replace(/[.,;:]+$/, '')
+                  : null;
+              }
               const issueBody = String(
                 selectedIssue && selectedIssue.body || ''
               );
+              const prBody = String(pull && pull.body || '');
+              const manifestMatch = prBody.match(
+                /<!--\s*agent-lock-manifest\s*([\s\S]*?)-->/i
+              );
+              let manifest = {run_id: null, agent_login: null};
+              if (manifestMatch) {
+                try {
+                  manifest = JSON.parse(manifestMatch[1].trim());
+                } catch (error) {}
+              }
               const agentLogin = section(
                 issueBody,
                 ['agent login']
-              ).replace(/^\x60|\x60$/g, '').trim();
+              ).replace(/^\x60|\x60$/g, '').trim() || (selectedIssue ? String(manifest.agent_login || (pull && pull.user && pull.user.login) || '').trim() : '');
               const runId = section(
                 issueBody,
                 ['agent run id', 'run id']
-              ).replace(/^\x60|\x60$/g, '').trim();
+              ).replace(/^\x60|\x60$/g, '').trim() || (selectedIssue ? String(manifest.run_id || legacyRunId(prBody) || '').trim() : '');
               return {
                 issue_number:
                   Number.isSafeInteger(selectedIssueNumber) &&
@@ -1247,6 +1266,7 @@ jobs:
                       scheduledContractIdentity(
                         selectedIssueNumber,
                         selectedIssue,
+                        pull,
                         currentApplicable
                       );
                     const policyProjectionChanged =
@@ -2184,9 +2204,9 @@ jobs:
                 : null;
             }
             const expectedRunId = section(issueBody, ['agent run id', 'run id'])
-              .replace(/^\x60|\x60$/g, '').trim() || String(manifest.run_id || legacyRunId(prBody) || '').trim();
+              .replace(/^\x60|\x60$/g, '').trim() || (issue ? String(manifest.run_id || legacyRunId(prBody) || '').trim() : '');
             const expectedAgentLogin = section(issueBody, ['agent login'])
-              .replace(/^\x60|\x60$/g, '').trim() || String(manifest.agent_login || (pr && pr.user && pr.user.login) || '').trim();
+              .replace(/^\x60|\x60$/g, '').trim() || (issue ? String(manifest.agent_login || (pr && pr.user && pr.user.login) || '').trim() : '');
             if (applicable && !expectedRunId) {
               collectionErrors.push('missing_agent_run_id');
             } else if (applicable && manifestMatch && String(manifest.run_id || '') !== expectedRunId) {
@@ -2199,11 +2219,18 @@ jobs:
               collectionErrors.push('agent_login_mismatch');
             }
 
+            const knownAgents = new Set([
+              'google-labs-jules[bot]',
+              'github-copilot[bot]',
+              'copilot-swe-agent[bot]',
+              'openai-codex[bot]',
+              'chatgpt-codex-connector[bot]'
+            ]);
             const eventAuthors = new Set(
               expectedAgentLogin ? [expectedAgentLogin] : []
             );
             const events = [];
-            if (applicable && pr && pr.user && eventAuthors.has(pr.user.login)) {
+            if (applicable && pr && pr.user && eventAuthors.has(pr.user.login) && knownAgents.has(pr.user.login)) {
                events.push({
                  kind: 'artifact_ready',
                  sequence: Date.parse(pr.created_at) || pr.id,
