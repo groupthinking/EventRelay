@@ -44,7 +44,7 @@ jobs:
           if test -s trusted-report.json; then
             python3 scripts/ci/agent_completion_enforcement.py trusted-report.json .github/agent-lock/trusted-publishers.json "$head" "$PR" > enforcement-verdict.json
           else
-            printf '%s\n' '{"conclusion":"failure","reason":"missing_trusted_publication","details":{}}' > enforcement-verdict.json
+            python3 scripts/ci/agent_completion_enforcement.py --missing-publication .github/agent-lock/trusted-publishers.json > enforcement-verdict.json
           fi
       - name: Publish the required head-bound Check run
         if: always()
@@ -71,8 +71,12 @@ jobs:
             } catch (error) {
               core.warning(error.message);
             }
-            const conclusion = verdict.conclusion === 'success'
-              ? 'success'
+            const allowedConclusions = new Set([
+              'success', 'failure', 'neutral', 'cancelled', 'timed_out',
+              'action_required'
+            ]);
+            const conclusion = allowedConclusions.has(verdict.conclusion)
+              ? verdict.conclusion
               : 'failure';
             const summary = JSON.stringify(verdict);
             await github.rest.checks.create({
@@ -89,6 +93,6 @@ jobs:
                 summary: summary.slice(0, 60000)
               }
             });
-            if (conclusion !== 'success') {
+            if (conclusion === 'failure') {
               core.setFailed(verdict.reason || 'trusted evidence blocked');
             }

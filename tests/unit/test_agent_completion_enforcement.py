@@ -1,6 +1,6 @@
 import unittest
 
-from scripts.ci.agent_completion_enforcement import verify
+from scripts.ci.agent_completion_enforcement import missing_publication, verify
 
 
 HEAD = "a" * 40
@@ -30,3 +30,25 @@ class EnforcementTests(unittest.TestCase):
     def test_untrusted_label_blocks(self):
         body = report(); body["label_authorization"]["applied_by"] = "agent"
         self.assertEqual(verify(body, POLICY, HEAD, 9)["reason"], "untrusted_label_authorization")
+
+    def test_missing_publication_is_neutral_when_policy_unprovisioned(self):
+        policy = dict(
+            POLICY,
+            trusted_check_app_slugs=[],
+            trusted_label_actors=[],
+            trusted_human_exemption_actors=[],
+        )
+        result = missing_publication(policy)
+        self.assertEqual(result["conclusion"], "neutral")
+        self.assertEqual(result["reason"], "missing_publication_policy_unprovisioned")
+
+    def test_missing_publication_fails_when_policy_is_provisioned(self):
+        policy = dict(
+            POLICY,
+            trusted_check_app_slugs=["agent-lock-trusted"],
+            trusted_label_actors=["maintainer"],
+            trusted_human_exemption_actors=["maintainer"],
+        )
+        result = missing_publication(policy)
+        self.assertEqual(result["conclusion"], "failure")
+        self.assertEqual(result["reason"], "missing_trusted_publication")

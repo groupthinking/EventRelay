@@ -21,6 +21,34 @@ def verdict(reason: str, **details: Any) -> dict[str, Any]:
     return {"conclusion": "failure", "reason": reason, "details": details}
 
 
+def _trusted_lists(policy: Any) -> tuple[list[str], list[str], list[str]] | None:
+    if not isinstance(policy, dict):
+        return None
+    apps = policy.get("trusted_check_app_slugs")
+    labels = policy.get("trusted_label_actors")
+    exemptions = policy.get("trusted_human_exemption_actors")
+    if not all(
+        isinstance(value, list) and all(isinstance(item, str) and item for item in value)
+        for value in (apps, labels, exemptions)
+    ):
+        return None
+    return apps, labels, exemptions
+
+
+def missing_publication(policy: Any) -> dict[str, Any]:
+    trusted = _trusted_lists(policy)
+    if trusted is None:
+        return verdict("invalid_trust_policy")
+    apps, labels, exemptions = trusted
+    if not apps or not labels or not exemptions:
+        return {
+            "conclusion": "neutral",
+            "reason": "missing_publication_policy_unprovisioned",
+            "details": {},
+        }
+    return verdict("missing_trusted_publication")
+
+
 def verify(payload: Any, policy: Any, head_sha: str, pull_number: int) -> dict[str, Any]:
     if not isinstance(payload, dict) or not isinstance(policy, dict):
         return verdict("invalid_payload")
@@ -28,12 +56,10 @@ def verify(payload: Any, policy: Any, head_sha: str, pull_number: int) -> dict[s
         return verdict("invalid_invocation")
     if policy.get("custom_role_policy") != "fail_closed":
         return verdict("invalid_custom_role_policy")
-    apps = policy.get("trusted_check_app_slugs")
-    labels = policy.get("trusted_label_actors")
-    exemptions = policy.get("trusted_human_exemption_actors")
-    if not all(isinstance(value, list) and all(isinstance(item, str) and item for item in value)
-                   for value in (apps, labels, exemptions)):
+    trusted = _trusted_lists(policy)
+    if trusted is None:
         return verdict("invalid_trust_policy")
+    apps, labels, exemptions = trusted
     if not apps or not labels or not exemptions:
         return verdict("trust_policy_unprovisioned")
     required = {"schema_version", "pull_number", "head_sha", "publisher", "applicability", "label_authorization", "focused_tests", "agent_events"}
@@ -78,10 +104,23 @@ def verify(payload: Any, policy: Any, head_sha: str, pull_number: int) -> dict[s
 
 
 def main() -> int:
+    if len(sys.argv) == 3 and sys.argv[1] == "--missing-publication":
+        policy = json.loads(Path(sys.argv[2]).read_text())
+        result = missing_publication(policy)
+        print(json.dumps(result, sort_keys=True))
+        return 0 if result["conclusion"] != "failure" else 1
     if len(sys.argv) != 5:
-        raise SystemExit("usage: verifier REPORT POLICY HEAD_SHA PULL_NUMBER")
+        raise SystemExit(
+            "usage: verifier REPORT POLICY HEAD_SHA PULL_NUMBER "
+            "or verifier --missing-publication POLICY"
+        )
     report, policy, head, pull = sys.argv[1:]
-    result = verify(json.loads(Path(report).read_text()), json.loads(Path(policy).read_text()), head, int(pull))
+    result = verify(
+        json.loads(Path(report).read_text()),
+        json.loads(Path(policy).read_text()),
+        head,
+        int(pull),
+    )
     print(json.dumps(result, sort_keys=True))
     return 0 if result["conclusion"] == "success" else 1
 
