@@ -71,6 +71,8 @@ jobs:
             } catch (error) {
               core.warning(error.message);
             }
+            // Verifier currently emits success/failure/neutral; keep the full
+            // GitHub CheckRun conclusion set accepted for forward compatibility.
             const allowedConclusions = new Set([
               'success', 'failure', 'neutral', 'cancelled', 'timed_out',
               'action_required'

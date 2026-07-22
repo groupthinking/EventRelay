@@ -21,14 +21,15 @@ def verdict(reason: str, **details: Any) -> dict[str, Any]:
     return {"conclusion": "failure", "reason": reason, "details": details}
 
 
-def _trusted_lists(policy: Any) -> tuple[list[str], list[str], list[str]] | None:
+def _extract_trusted_lists(policy: Any) -> tuple[list[str], list[str], list[str]] | None:
     if not isinstance(policy, dict):
         return None
     apps = policy.get("trusted_check_app_slugs")
     labels = policy.get("trusted_label_actors")
     exemptions = policy.get("trusted_human_exemption_actors")
     if not all(
-        isinstance(value, list) and all(isinstance(item, str) and item for item in value)
+        isinstance(value, list)
+        and all(isinstance(item, str) and len(item) > 0 for item in value)
         for value in (apps, labels, exemptions)
     ):
         return None
@@ -36,7 +37,7 @@ def _trusted_lists(policy: Any) -> tuple[list[str], list[str], list[str]] | None
 
 
 def missing_publication(policy: Any) -> dict[str, Any]:
-    trusted = _trusted_lists(policy)
+    trusted = _extract_trusted_lists(policy)
     if trusted is None:
         return verdict("invalid_trust_policy")
     apps, labels, exemptions = trusted
@@ -56,7 +57,7 @@ def verify(payload: Any, policy: Any, head_sha: str, pull_number: int) -> dict[s
         return verdict("invalid_invocation")
     if policy.get("custom_role_policy") != "fail_closed":
         return verdict("invalid_custom_role_policy")
-    trusted = _trusted_lists(policy)
+    trusted = _extract_trusted_lists(policy)
     if trusted is None:
         return verdict("invalid_trust_policy")
     apps, labels, exemptions = trusted
