@@ -26,7 +26,11 @@ def neutral_verdict(reason: str, **details: Any) -> dict[str, Any]:
 
 
 def is_provisioned(policy: Any) -> bool:
-    """Return True only when all three allowlists are non-empty."""
+    """Return True only when all three allowlists are non-empty.
+
+    The three required allowlists are trusted_check_app_slugs,
+    trusted_label_actors, and trusted_human_exemption_actors.
+    """
     if not isinstance(policy, dict):
         return False
     return bool(
