@@ -95,15 +95,23 @@ def test_e2e_is_blocking_and_targets_the_triggering_sha_deployment() -> None:
     steps = {step.get("name"): step for step in job["steps"]}
     text = path.read_text(encoding="utf-8")
     target_sha = "${{ github.event.pull_request.head.sha || github.sha }}"
+    harness_sha = "${{ github.event.pull_request.base.sha || github.sha }}"
 
     assert job.get("continue-on-error", False) is False
-    assert steps["Checkout"]["with"]["ref"] == target_sha
+    assert steps["Checkout"]["with"]["ref"] == harness_sha
     assert steps["Checkout"]["with"]["persist-credentials"] is False
-    assert 'test "$(git rev-parse HEAD)" = "$TARGET_SHA"' in steps[
-        "Verify exact checked-out SHA"
+    assert 'test "$(git rev-parse HEAD)" = "$HARNESS_SHA"' in steps[
+        "Verify trusted harness SHA"
     ]["run"]
-    assert steps["Verify exact checked-out SHA"]["env"]["TARGET_SHA"] == target_sha
+    assert steps["Verify trusted harness SHA"]["env"]["HARNESS_SHA"] == harness_sha
     assert "Require preview bypass credential" in steps
+    assert "VERCEL_AUTOMATION_BYPASS_SECRET" not in workflow.get("env", {})
+    assert "VERCEL_AUTOMATION_BYPASS_SECRET" not in steps[
+        "Install dependencies"
+    ].get("env", {})
+    assert steps["Run E2E tests"]["env"][
+        "VERCEL_AUTOMATION_BYPASS_SECRET"
+    ] == "${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}"
     assert steps["Run E2E tests"]["continue-on-error"] is True
     assert "exit 1" in steps["Fail the job if tests failed"]["run"]
     assert 'SHA="${{ github.event.pull_request.head.sha || github.sha }}"' in text
@@ -122,6 +130,7 @@ def test_e2e_is_blocking_and_targets_the_triggering_sha_deployment() -> None:
     assert 'done <<< "$DEPLOY_IDS"' in text
     assert "| first | .id" not in text
     assert 'No successful ${ENVIRONMENT} deployment found for exact SHA ${SHA}' in text
+    assert steps["Log failure to the job summary"]["env"]["COMMIT_SHA"] == target_sha
 
 
 def test_workflow_audit_tracks_every_live_workflow() -> None:
