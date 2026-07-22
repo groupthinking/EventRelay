@@ -1251,21 +1251,77 @@ class APICostMonitor:
             return 0.0
 
         service_costs = self.COST_MODELS[service]
-        if model not in service_costs:
-            # Use average cost for unknown models
-            model = list(service_costs.keys())[0]
 
         if service == "youtube":
             # YouTube uses quota units, not token pricing
             return input_tokens * 0.0001  # Rough estimate per quota unit
 
-        model_cost = service_costs[model]
+        model_cost = service_costs.get(model)
+        if model_cost is None:
+            # Unknown/aliased model: resolve to the closest known tier
+            # (e.g. "gemini-3.5-flash" -> "gemini-3-flash") instead of
+            # blindly picking the first (most expensive) key.
+            model_cost = self._fallback_model_cost(model, service_costs)
+        if model_cost is None:
+            return 0.0
+
         if isinstance(model_cost, dict):
             input_cost = (input_tokens / 1000) * model_cost["input"]
             output_cost = (output_tokens / 1000) * model_cost["output"]
             return input_cost + output_cost
         else:
             return (input_tokens / 1000) * model_cost
+
+    @staticmethod
+    def _fallback_model_cost(
+        model: str, service_costs: dict[str, Any]
+    ) -> dict[str, float] | float | None:
+        """Resolve pricing for an unknown model name.
+
+        Rather than defaulting to the first (typically most expensive) entry,
+        match on a pricing "tier" keyword shared with a known model
+        (e.g. ``flash``/``mini``/``pro``). If no tier matches, fall back to the
+        average cost across all known models so estimates stay unbiased.
+        """
+        dict_costs = {
+            name: cost
+            for name, cost in service_costs.items()
+            if isinstance(cost, dict)
+        }
+        if not dict_costs:
+            # Non-token pricing (e.g. quota units); use the first entry.
+            return next(iter(service_costs.values()), None)
+
+        # Tokenize on common separators so we match whole tier words and avoid
+        # false substring hits (e.g. "gemini" contains "mini").
+        def _tokens(name: str) -> set[str]:
+            return set(re.split(r"[^a-z0-9]+", (name or "").lower()))
+
+        model_tokens = _tokens(model)
+        # Ordered cheapest/most-specific tiers first so, e.g., a "flash-lite"
+        # model prefers the lighter tier over a generic "pro" match.
+        tier_keywords = [
+            "nano",
+            "lite",
+            "mini",
+            "flash",
+            "haiku",
+            "turbo",
+            "sonnet",
+            "opus",
+            "pro",
+        ]
+        for keyword in tier_keywords:
+            if keyword in model_tokens:
+                for name, cost in dict_costs.items():
+                    if keyword in _tokens(name):
+                        return cost
+
+        # No tier match: use the average cost across known models.
+        count = len(dict_costs)
+        avg_input = sum(c.get("input", 0) for c in dict_costs.values()) / count
+        avg_output = sum(c.get("output", 0) for c in dict_costs.values()) / count
+        return {"input": avg_input, "output": avg_output}
 
     async def record_usage(
         self,
