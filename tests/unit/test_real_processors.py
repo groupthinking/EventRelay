@@ -14,8 +14,6 @@ from __future__ import annotations
 
 import json
 import sys
-import types
-import importlib
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch, call
 
@@ -29,39 +27,7 @@ if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
 # ---------------------------------------------------------------------------
-# Pre-stub heavy / unavailable packages before any module import
-# ---------------------------------------------------------------------------
-
-def _stub_module(name: str, **attrs):
-    """Ensure *name* is stubbed in sys.modules with the expected attributes."""
-    mod = sys.modules.get(name)
-    if mod is None:
-        mod = types.ModuleType(name)
-        sys.modules[name] = mod
-    for k, v in attrs.items():
-        setattr(mod, k, v)
-    return mod
-
-
-# google.genai
-_google = _stub_module("google")
-_google_genai = _stub_module("google.genai", Client=MagicMock())
-_google.genai = _google_genai
-
-# openai
-_openai_mod = _stub_module("openai", AsyncOpenAI=MagicMock())
-
-# anthropic
-_anthropic_mod = _stub_module("anthropic", AsyncAnthropic=MagicMock())
-
-# dotenv
-_stub_module("dotenv", load_dotenv=lambda *args, **kwargs: None)
-
-# pytubefix (used by some transitive imports)
-_stub_module("pytubefix")
-
-# ---------------------------------------------------------------------------
-# Import modules under test *after* stubs are in place
+# Import modules under test
 # ---------------------------------------------------------------------------
 from youtube_extension.backend.services.real_ai_processor import (  # noqa: E402
     AIProcessingRequest,
@@ -141,6 +107,32 @@ def _make_ai_analysis(success: bool = True) -> dict:
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
+@pytest.fixture(autouse=True)
+def _isolate_ai_provider_bindings(monkeypatch):
+    """Keep provider doubles local even when another test imported first.
+
+    ``test_real_api_endpoints`` imports this service earlier in full collection
+    order. Optional OpenAI/Anthropic imports can therefore be absent from the
+    already-cached module. Adding bindings on that module per test avoids both
+    an order dependency and the permanent ``sys.modules`` stubs this file used
+    to leak into unrelated tests.
+    """
+    import youtube_extension.backend.services.real_ai_processor as _mod
+
+    openai_binding = MagicMock()
+    openai_binding.AsyncOpenAI = MagicMock()
+    anthropic_binding = MagicMock()
+    anthropic_binding.AsyncAnthropic = MagicMock()
+    gemini_binding = MagicMock()
+    gemini_binding.Client = MagicMock()
+
+    monkeypatch.setattr(_mod, "openai", openai_binding, raising=False)
+    monkeypatch.setattr(_mod, "anthropic", anthropic_binding, raising=False)
+    monkeypatch.setattr(_mod, "genai", gemini_binding, raising=False)
+    for key in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY"):
+        monkeypatch.delenv(key, raising=False)
+
 
 @pytest.fixture(autouse=True)
 def _reset_ai_processor_singleton():
