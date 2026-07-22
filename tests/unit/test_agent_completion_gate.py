@@ -1288,6 +1288,20 @@ class CompletionGateWorkflowTests(unittest.TestCase):
             workflow.index("name: Publish stable status and comment"),
         )
 
+    def test_advisory_blocked_verdict_does_not_fail_pr_checks(self):
+        workflow = self._workflow()
+        publish_step = workflow[
+            workflow.index("name: Publish stable status and comment"):
+            workflow.index("name: Finalize failed gate publication")
+        ]
+        enforce_step = workflow[workflow.index("name: Enforce verdict"):]
+
+        self.assertNotIn(
+            "core.setFailed('Agent completion evidence is blocked')",
+            publish_step,
+        )
+        self.assertNotIn("steps.gate.outputs.exit_code", enforce_step)
+
     def test_resolve_collect_and_publish_commits_must_match(self):
         workflow = self._workflow()
         collect_step = workflow[

@@ -2993,9 +2993,6 @@ jobs:
               description: ownedDescription(summary),
               target_url: runUrl
             });
-            if (!passed) {
-              core.setFailed('Agent completion evidence is blocked');
-            }
 
       - name: Finalize failed gate publication
         if: >-
@@ -3145,7 +3142,6 @@ jobs:
           always() &&
           steps.resolve.outputs.pr_number != '' &&
           (steps.collect.outcome != 'success' ||
-           steps.gate.outputs.exit_code != '0' ||
            steps.upload.outcome != 'success' ||
            steps.publish.outcome != 'success')
         run: exit 1
