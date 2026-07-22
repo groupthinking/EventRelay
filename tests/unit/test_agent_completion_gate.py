@@ -3301,6 +3301,235 @@ for (const [body, expected] of rows) {
         )
         self.assertEqual(completed.returncode, 0, completed.stderr)
 
+    def test_extract_run_id_duplicate_parser_matches_legacy(self):
+        workflow = self._workflow()
+        functions = _javascript_functions(
+            workflow,
+            "function extractRunId(",
+        )
+        self.assertEqual(len(functions), 1)
+
+        assertions = r"""
+const rows = [
+  ['Run failed', null],
+  ['failed to complete task because the worker stopped', null],
+  ['run id: provider-123', 'provider-123'],
+  ['run_id=provider.456', 'provider.456'],
+  ['task-id/abc:789', 'abc:789'],
+  ['https://jules.google.com/task/1892762060881911102',
+    '1892762060881911102'],
+  ['https://example.test/tasks/task-42.', 'task-42'],
+  ['Run: failed', null],
+  ['Task: failed', null],
+  ['runner:wrong', null],
+  ['', null],
+  [null, null],
+  [undefined, null]
+];
+for (const [body, expected] of rows) {
+  const actual = extractRunId(body);
+  if (actual !== expected) {
+    throw new Error(`${body}: ${actual} !== ${expected}`);
+  }
+}
+"""
+        completed = subprocess.run(
+            ["node", "-e", functions[0] + assertions],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+
+    def test_pr_body_fallback_populates_identity_when_issue_fields_absent(self):
+        workflow = self._workflow()
+
+        collect_step = workflow[
+            workflow.index("name: Collect repository evidence"):
+            workflow.index("name: Evaluate completion evidence")
+        ]
+        self.assertIn("legacyRunId(prBody)", collect_step)
+        self.assertIn("manifest.run_id || legacyRunId(prBody)", collect_step)
+        self.assertIn("manifest.agent_login || (pr && pr.user && pr.user.login)", collect_step)
+
+        functions = _javascript_functions(
+            workflow,
+            "function legacyRunId(",
+        )
+        self.assertEqual(len(functions), 1)
+
+        assertions = r"""
+function section(body, headings) {
+  function normaliseHeading(value) {
+    return String(value || '').toLowerCase().replace(/[^a-z0-9 ]/g, '').trim();
+  }
+  const wanted = new Set(headings.map(normaliseHeading));
+  const lines = String(body || '').split(/\r?\n/);
+  const output = [];
+  let collecting = false;
+  for (const line of lines) {
+    const heading = line.match(/^#{2,6}\s+(.+?)\s*$/);
+    if (heading) {
+      if (collecting) { break; }
+      collecting = wanted.has(normaliseHeading(heading[1]));
+      continue;
+    }
+    if (collecting) { output.push(line); }
+  }
+  return output.join('\n').trim();
+}
+const manifest = {};
+const pr = {user: {login: 'example-agent[bot]'}};
+
+const rows = [
+  ['run id in PR body', 'run id: pr-run-42', '', 'pr-run-42', 'example-agent[bot]'],
+  ['run id in manifest', '', '', 'manifest-run-99', 'example-agent[bot]'],
+  ['no run id anywhere', '', '', '', 'example-agent[bot]'],
+  ['agent login in manifest', 'run id: pr-run-1', '', 'pr-run-1', 'manifest-agent[bot]']
+];
+const prBodyRunId = 'run id: pr-run-42';
+const manifestRunId = 'manifest-run-99';
+const manifestLogin = 'manifest-agent[bot]';
+
+function computeIdentity(prBody, manifestRunIdVal, manifestLoginVal, issueBody) {
+  const runId = section(issueBody, ['agent run id', 'run id'])
+    .replace(/^\x60|\x60$/g, '').trim() ||
+    String(manifestRunIdVal || legacyRunId(prBody) || '').trim();
+  const login = section(issueBody, ['agent login'])
+    .replace(/^\x60|\x60$/g, '').trim() ||
+    String(manifestLoginVal || (pr && pr.user && pr.user.login) || '').trim();
+  return {runId, login};
+}
+
+const absent = computeIdentity(prBodyRunId, '', '', '');
+if (absent.runId !== 'pr-run-42') {
+  throw new Error('PR body run id fallback failed: ' + absent.runId);
+}
+if (absent.login !== 'example-agent[bot]') {
+  throw new Error('PR author login fallback failed: ' + absent.login);
+}
+
+const fromManifest = computeIdentity('', manifestRunId, manifestLogin, '');
+if (fromManifest.runId !== manifestRunId) {
+  throw new Error('manifest run_id fallback failed: ' + fromManifest.runId);
+}
+if (fromManifest.login !== manifestLogin) {
+  throw new Error('manifest agent_login fallback failed: ' + fromManifest.login);
+}
+
+const issueBody = '## Agent run id\nfrom-issue-42\n## Agent login\nissue-agent[bot]';
+const fromIssue = computeIdentity(prBodyRunId, manifestRunId, manifestLogin, issueBody);
+if (fromIssue.runId !== 'from-issue-42') {
+  throw new Error('issue run id should win over fallbacks: ' + fromIssue.runId);
+}
+if (fromIssue.login !== 'issue-agent[bot]') {
+  throw new Error('issue login should win over fallbacks: ' + fromIssue.login);
+}
+"""
+        completed = subprocess.run(
+            ["node", "-e", functions[0] + assertions],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+
+    def test_mismatch_errors_require_manifest_match(self):
+        workflow = self._workflow()
+
+        collect_step = workflow[
+            workflow.index("name: Collect repository evidence"):
+            workflow.index("name: Evaluate completion evidence")
+        ]
+        self.assertIn(
+            "applicable && manifestMatch && String(manifest.run_id || '') !== expectedRunId",
+            collect_step,
+        )
+        self.assertIn(
+            "applicable && manifestMatch &&\n                       String(manifest.agent_login || '') !== expectedAgentLogin",
+            collect_step,
+        )
+
+    def test_synthetic_artifact_ready_event_excluded_for_non_agent_author(self):
+        workflow = self._workflow()
+
+        collect_step = workflow[
+            workflow.index("name: Collect repository evidence"):
+            workflow.index("name: Evaluate completion evidence")
+        ]
+        self.assertIn(
+            "eventAuthors.has(pr.user.login)",
+            collect_step,
+        )
+        self.assertIn(
+            "kind: 'artifact_ready'",
+            collect_step,
+        )
+
+        functions = _javascript_functions(
+            workflow,
+            "function legacyRunId(",
+        )
+        self.assertEqual(len(functions), 1)
+
+        assertions = r"""
+function simulateSyntheticEvent(prUserLogin, expectedAgentLogin) {
+  const eventAuthors = new Set(expectedAgentLogin ? [expectedAgentLogin] : []);
+  const pr = {
+    user: {login: prUserLogin},
+    created_at: '2026-01-01T00:00:00Z',
+    id: 1,
+    head: {sha: 'a'.repeat(40)}
+  };
+  const events = [];
+  const applicable = true;
+  if (applicable && pr && pr.user && eventAuthors.has(pr.user.login)) {
+    events.push({
+      kind: 'artifact_ready',
+      sequence: Date.parse(pr.created_at) || pr.id,
+      comment_id: 0,
+      author: pr.user.login,
+      run_id: 'run-1',
+      head_sha: String((pr.head && pr.head.sha) || '').toLowerCase() || null
+    });
+  }
+  return events;
+}
+
+const agentEvents = simulateSyntheticEvent(
+  'google-labs-jules[bot]',
+  'google-labs-jules[bot]'
+);
+if (agentEvents.length !== 1 || agentEvents[0].kind !== 'artifact_ready') {
+  throw new Error('expected synthetic event for matching agent login');
+}
+
+const humanEvents = simulateSyntheticEvent('human-developer', 'google-labs-jules[bot]');
+if (humanEvents.length !== 0) {
+  throw new Error('expected no synthetic event for non-agent PR author');
+}
+
+const emptyAuthorEvents = simulateSyntheticEvent('any-user', '');
+if (emptyAuthorEvents.length !== 0) {
+  throw new Error('expected no synthetic event when expectedAgentLogin is empty');
+}
+
+const event = agentEvents[0];
+if (typeof event.sequence !== 'number' || event.comment_id !== 0 ||
+    event.author !== 'google-labs-jules[bot]' ||
+    event.head_sha !== 'a'.repeat(40)) {
+  throw new Error('synthetic artifact_ready event has invalid payload: ' +
+    JSON.stringify(event));
+}
+"""
+        completed = subprocess.run(
+            ["node", "-e", functions[0] + assertions],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+
     def test_collector_uses_authoritative_closing_issue_references(self):
         workflow = self._workflow()
 
