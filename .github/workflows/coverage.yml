@@ -48,7 +48,7 @@ jobs:
 
       - name: Run tests with coverage
         run: |
-          pytest tests/ \
+          pytest tests/unit/ tests/integration/ \
             --cov=src/youtube_extension \
             --cov-report=lcov:reports/lcov.info \
             --cov-report=term \
