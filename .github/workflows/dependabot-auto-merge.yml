@@ -16,9 +16,13 @@ permissions:
   pull-requests: write
   statuses: read
 
+env:
+  DEPENDABOT_AUTO_MERGE_ENABLED: "false"
+
 jobs:
   approve:
     if: >-
+      env.DEPENDABOT_AUTO_MERGE_ENABLED == 'true' &&
       github.event_name == 'pull_request_target' &&
       github.event.pull_request.user.login == 'dependabot[bot]' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
@@ -79,7 +83,7 @@ jobs:
             }
 
   merge:
-    if: github.event_name == 'check_suite' && github.event.check_suite.conclusion == 'success'
+    if: env.DEPENDABOT_AUTO_MERGE_ENABLED == 'true' && github.event_name == 'check_suite' && github.event.check_suite.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/github-script@v9
