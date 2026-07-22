@@ -327,6 +327,43 @@ def test_readiness_rejects_missing_worker_index(
         ddl.dispose()
 
 
+def test_readiness_rejects_required_additive_column_without_default(
+    monitor: APICostMonitor,
+) -> None:
+    ddl = create_engine(os.environ["DATABASE_URL"], future=True)
+    column_added = False
+    try:
+        with ddl.begin() as connection:
+            connection.execute(
+                text(
+                    "ALTER TABLE public.api_usage "
+                    "ADD COLUMN incompatible_extra TEXT NOT NULL DEFAULT 'seed'"
+                )
+            )
+            connection.execute(
+                text(
+                    "ALTER TABLE public.api_usage "
+                    "ALTER COLUMN incompatible_extra DROP DEFAULT"
+                )
+            )
+            column_added = True
+
+        with pytest.raises(RuntimeError, match="column_contract"):
+            monitor.ensure_database_ready()
+    finally:
+        if column_added:
+            with ddl.begin() as connection:
+                connection.execute(
+                    text(
+                        "ALTER TABLE public.api_usage "
+                        "DROP COLUMN incompatible_extra"
+                    )
+                )
+        ddl.dispose()
+
+    monitor.ensure_database_ready()
+
+
 def test_readiness_rejects_and_recovers_from_malformed_serial_default(
     monitor: APICostMonitor,
 ) -> None:
