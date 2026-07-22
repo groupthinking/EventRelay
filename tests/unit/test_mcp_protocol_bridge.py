@@ -804,7 +804,12 @@ class TestOpenAIAdapter:
 
     async def test_initialize_returns_true_with_api_key(self):
         adapter = OpenAIAdapter()
-        result = await adapter.initialize({"api_key": "sk-test-key"})
+        with patch.object(
+            _pb_mod.socket,
+            "getaddrinfo",
+            return_value=[(_pb_mod.socket.AF_INET, _pb_mod.socket.SOCK_STREAM, 6, "", ("104.18.7.192", 443))],
+        ):
+            result = await adapter.initialize({"api_key": "sk-test-key"})
         assert result is True
 
     async def test_initialize_stores_api_key(self):
@@ -968,7 +973,12 @@ class TestOpenAIAdapter:
 
     async def test_send_request_calls_openai_api(self):
         adapter = OpenAIAdapter()
-        await adapter.initialize({"api_key": "sk-test"})
+        with patch.object(
+            _pb_mod.socket,
+            "getaddrinfo",
+            return_value=[(_pb_mod.socket.AF_INET, _pb_mod.socket.SOCK_STREAM, 6, "", ("104.18.7.192", 443))],
+        ):
+            await adapter.initialize({"api_key": "sk-test"})
 
         # Mock the client at the SDK boundary
         mock_usage = MagicMock()
@@ -1003,7 +1013,12 @@ class TestOpenAIAdapter:
 
     async def test_send_request_uses_messages_field(self):
         adapter = OpenAIAdapter()
-        await adapter.initialize({"api_key": "sk-test"})
+        with patch.object(
+            _pb_mod.socket,
+            "getaddrinfo",
+            return_value=[(_pb_mod.socket.AF_INET, _pb_mod.socket.SOCK_STREAM, 6, "", ("104.18.7.192", 443))],
+        ):
+            await adapter.initialize({"api_key": "sk-test"})
 
         mock_message = MagicMock()
         mock_message.content = "response"
@@ -1028,13 +1043,23 @@ class TestOpenAIAdapter:
 
     async def test_health_check_returns_true_when_api_reachable(self):
         adapter = OpenAIAdapter()
-        await adapter.initialize({"api_key": "sk-test"})
+        with patch.object(
+            _pb_mod.socket,
+            "getaddrinfo",
+            return_value=[(_pb_mod.socket.AF_INET, _pb_mod.socket.SOCK_STREAM, 6, "", ("104.18.7.192", 443))],
+        ):
+            await adapter.initialize({"api_key": "sk-test"})
         adapter._client.models.retrieve = AsyncMock(return_value=MagicMock())
         assert await adapter.health_check() is True
 
     async def test_health_check_returns_false_on_api_error(self):
         adapter = OpenAIAdapter()
-        await adapter.initialize({"api_key": "sk-test"})
+        with patch.object(
+            _pb_mod.socket,
+            "getaddrinfo",
+            return_value=[(_pb_mod.socket.AF_INET, _pb_mod.socket.SOCK_STREAM, 6, "", ("104.18.7.192", 443))],
+        ):
+            await adapter.initialize({"api_key": "sk-test"})
         adapter._client.models.retrieve = AsyncMock(side_effect=Exception("API error"))
         assert await adapter.health_check() is False
 
@@ -1355,7 +1380,12 @@ class TestSendAiRequest:
         bridge = get_protocol_bridge()
         # Initialize OPENAI adapter with a key and mock the client
         adapter = bridge.adapters[ProtocolType.OPENAI]
-        await adapter.initialize({"api_key": "sk-test"})
+        with patch.object(
+            _pb_mod.socket,
+            "getaddrinfo",
+            return_value=[(_pb_mod.socket.AF_INET, _pb_mod.socket.SOCK_STREAM, 6, "", ("104.18.7.192", 443))],
+        ):
+            await adapter.initialize({"api_key": "sk-test"})
         bridge.bridge_status[ProtocolType.OPENAI] = BridgeStatus.CONNECTED
 
         # Mock the SDK client response
