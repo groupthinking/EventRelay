@@ -59,7 +59,8 @@ def check_logging():
     content = main_path.read_text()
 
     # 1. Check if we configure logging at DEBUG level by default
-    if "level=logging.DEBUG" in content or "level=logging.root.setLevel(logging.DEBUG)" in content:
+    debug_markers = ("level=logging.DEBUG", "setLevel(logging.DEBUG)")
+    if any(marker in content for marker in debug_markers):
         logger.error("❌ Production logging cannot default to DEBUG level (leaks sensitive info).")
         return True
 
