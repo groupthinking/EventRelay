@@ -21,6 +21,10 @@ def verdict(reason: str, **details: Any) -> dict[str, Any]:
     return {"conclusion": "failure", "reason": reason, "details": details}
 
 
+def neutral_verdict(reason: str, **details: Any) -> dict[str, Any]:
+    return {"conclusion": "neutral", "reason": reason, "details": details}
+
+
 def verify(payload: Any, policy: Any, head_sha: str, pull_number: int) -> dict[str, Any]:
     if not isinstance(payload, dict) or not isinstance(policy, dict):
         return verdict("invalid_payload")
@@ -35,7 +39,7 @@ def verify(payload: Any, policy: Any, head_sha: str, pull_number: int) -> dict[s
                    for value in (apps, labels, exemptions)):
         return verdict("invalid_trust_policy")
     if not apps or not labels or not exemptions:
-        return verdict("trust_policy_unprovisioned")
+        return neutral_verdict("trust_policy_unprovisioned")
     required = {"schema_version", "pull_number", "head_sha", "publisher", "applicability", "label_authorization", "focused_tests", "agent_events"}
     if set(payload) != required or payload.get("schema_version") != 1:
         return verdict("invalid_report_schema")

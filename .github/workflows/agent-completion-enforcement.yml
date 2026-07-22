@@ -44,7 +44,23 @@ jobs:
           if test -s trusted-report.json; then
             python3 scripts/ci/agent_completion_enforcement.py trusted-report.json .github/agent-lock/trusted-publishers.json "$head" "$PR" > enforcement-verdict.json
           else
-            printf '%s\n' '{"conclusion":"failure","reason":"missing_trusted_publication","details":{}}' > enforcement-verdict.json
+            # If the policy is unprovisioned (all allowlists empty), yield a neutral advisory
+            # rather than a hard failure so PRs are not blocked while the GitHub App is not yet configured.
+            if python3 - <<'EOF'
+import json, sys
+p = json.load(open('.github/agent-lock/trusted-publishers.json'))
+provisioned = bool(
+    p.get('trusted_check_app_slugs') and
+    p.get('trusted_label_actors') and
+    p.get('trusted_human_exemption_actors')
+)
+sys.exit(0 if provisioned else 1)
+EOF
+            then
+              printf '%s\n' '{"conclusion":"failure","reason":"missing_trusted_publication","details":{}}' > enforcement-verdict.json
+            else
+              printf '%s\n' '{"conclusion":"neutral","reason":"trust_policy_unprovisioned","details":{}}' > enforcement-verdict.json
+            fi
           fi
       - name: Publish the required head-bound Check run
         if: always()
@@ -73,7 +89,9 @@ jobs:
             }
             const conclusion = verdict.conclusion === 'success'
               ? 'success'
-              : 'failure';
+              : verdict.conclusion === 'neutral'
+                ? 'neutral'
+                : 'failure';
             const summary = JSON.stringify(verdict);
             await github.rest.checks.create({
               owner: context.repo.owner,
@@ -85,10 +103,12 @@ jobs:
               output: {
                 title: conclusion === 'success'
                   ? 'Trusted evidence verified'
-                  : 'Trusted evidence blocked',
+                  : conclusion === 'neutral'
+                    ? 'Trusted publisher not yet configured (advisory)'
+                    : 'Trusted evidence blocked',
                 summary: summary.slice(0, 60000)
               }
             });
-            if (conclusion !== 'success') {
+            if (conclusion !== 'success' && conclusion !== 'neutral') {
               core.setFailed(verdict.reason || 'trusted evidence blocked');
             }

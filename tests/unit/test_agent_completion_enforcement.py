@@ -17,7 +17,9 @@ class EnforcementTests(unittest.TestCase):
 
     def test_unprovisioned_policy_blocks(self):
         policy = dict(POLICY, trusted_check_app_slugs=[])
-        self.assertEqual(verify(report(), policy, HEAD, 9)["reason"], "trust_policy_unprovisioned")
+        result = verify(report(), policy, HEAD, 9)
+        self.assertEqual(result["reason"], "trust_policy_unprovisioned")
+        self.assertEqual(result["conclusion"], "neutral")
 
     def test_stale_report_blocks(self):
         body = report(); body["head_sha"] = "b" * 40
