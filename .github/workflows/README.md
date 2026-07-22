@@ -11,6 +11,9 @@ workflow; this README is the index.
 | CI | `ci.yml` | push / PR to `main` | Type-check + lint `apps/web`, build the web app, lint Python (informational), run unit tests |
 | Coverage | `coverage.yml` | push / PR to `main`,`develop`; manual | Generate pytest coverage and upload lcov to Qlty |
 | gh-aw Validation | `gh-aw-validation.yml` | push / PR to `main` on gh-aw files; manual | Pin `gh aw` to `v0.82.14`, compile custom EventRelay `.md` workflows, and run validate + actionlint + zizmor + poutine checks |
+| Canonical PR Remediator | `canonical-pr-remediator.lock.yml` | manual | gh-aw agent (compiled lock) that stages corrective remediation commits onto a canonical PR branch without direct branch writes |
+| EventRelay CI Investigator | `eventrelay-ci-investigator.lock.yml` | manual | gh-aw agent (compiled lock) that investigates CI failures and emits a single deduplicated blocker record; report-first, no branch writes |
+| Focused Coverage Controller | `focused-coverage-controller.lock.yml` | manual | gh-aw agent (compiled lock) read-only canary that monitors the focused Python coverage lane and surfaces gaps without modifying coverage configuration |
 | CodeQL Analysis | `codeql-analysis.yml` | push / PR to `main`; weekly (Mon 06:00 UTC) | Static security analysis for JavaScript/TypeScript and Python |
 | Security Scan | `security.yml` | push / PR to `main`; weekly (Sun 00:00 UTC) | npm audit, Python safety, bandit, Trivy image scan |
 | Dependency Review | `dependency-review.yml` | PR to `main`,`develop` | Review new dependencies for vulnerabilities and license policy |
