@@ -789,7 +789,31 @@ AnthropicAdapter = _pb_mod.AnthropicAdapter
 GoogleAIAdapter = _pb_mod.GoogleAIAdapter
 
 
+_PUBLIC_DNS_RESPONSE = [
+    (
+        _pb_mod.socket.AF_INET,
+        _pb_mod.socket.SOCK_STREAM,
+        6,
+        "",
+        ("104.18.6.56", 443),
+    )
+]
+
+
 class TestOpenAIAdapter:
+    @pytest.fixture(autouse=True)
+    def mock_openai_dns(self):
+        """Patch socket.getaddrinfo so tests never make real DNS lookups.
+
+        Tests that exercise custom URLs already supply their own mock; those
+        uses of ``patch.object`` in a ``with`` block override this fixture for
+        the duration of that block, leaving behaviour unchanged.
+        """
+        with patch.object(
+            _pb_mod.socket, "getaddrinfo", return_value=_PUBLIC_DNS_RESPONSE
+        ):
+            yield
+
     def test_protocol_type(self):
         adapter = OpenAIAdapter()
         assert adapter.protocol_type == ProtocolType.OPENAI
@@ -1353,9 +1377,13 @@ class TestSendAiRequest:
 
     async def test_sends_when_protocol_specified_and_connected(self):
         bridge = get_protocol_bridge()
-        # Initialize OPENAI adapter with a key and mock the client
+        # Initialize OPENAI adapter with a key and mock the client.
+        # Patch DNS so the public-URL check doesn't require internet access.
         adapter = bridge.adapters[ProtocolType.OPENAI]
-        await adapter.initialize({"api_key": "sk-test"})
+        with patch.object(
+            _pb_mod.socket, "getaddrinfo", return_value=_PUBLIC_DNS_RESPONSE
+        ):
+            await adapter.initialize({"api_key": "sk-test"})
         bridge.bridge_status[ProtocolType.OPENAI] = BridgeStatus.CONNECTED
 
         # Mock the SDK client response
