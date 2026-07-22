@@ -1629,13 +1629,19 @@ class APICostMonitor:
                 pass
 
     def _retry_at(self, attempt: int, now: datetime) -> datetime:
-        """Return a bounded exponential equal-jitter retry timestamp."""
+        """Return a bounded exponential equal-jitter retry timestamp.
+
+        Equal jitter keeps retry bursts spaced while scattering each individual
+        attempt across the second half of the capped exponential window:
+        delay = cap/2 + random(0, cap/2).
+        """
         exponential_cap = min(
             self.webhook_retry_max_seconds,
             self.webhook_retry_base_seconds * (2 ** max(0, attempt - 1)),
         )
-        half_cap = exponential_cap / 2
-        delay = half_cap + random.uniform(0, half_cap)
+        base_delay = exponential_cap / 2
+        jitter = random.uniform(0, base_delay)
+        delay = base_delay + jitter
         return now + timedelta(seconds=delay)
 
     def _retry_state(
