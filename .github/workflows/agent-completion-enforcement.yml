@@ -77,11 +77,22 @@ jobs:
             } catch (error) {
               core.warning(error.message);
             }
-            const conclusion = verdict.conclusion === 'success'
-              ? 'success'
-              : verdict.conclusion === 'neutral'
-                ? 'neutral'
-                : 'failure';
+            let conclusion;
+            if (verdict.conclusion === 'success') {
+              conclusion = 'success';
+            } else if (verdict.conclusion === 'neutral') {
+              conclusion = 'neutral';
+            } else {
+              conclusion = 'failure';
+            }
+            let title;
+            if (conclusion === 'success') {
+              title = 'Trusted evidence verified';
+            } else if (conclusion === 'neutral') {
+              title = 'Trusted publisher not yet configured (advisory)';
+            } else {
+              title = 'Trusted evidence blocked';
+            }
             const summary = JSON.stringify(verdict);
             await github.rest.checks.create({
               owner: context.repo.owner,
@@ -91,11 +102,7 @@ jobs:
               status: 'completed',
               conclusion,
               output: {
-                title: conclusion === 'success'
-                  ? 'Trusted evidence verified'
-                  : conclusion === 'neutral'
-                    ? 'Trusted publisher not yet configured (advisory)'
-                    : 'Trusted evidence blocked',
+                title,
                 summary: summary.slice(0, 60000)
               }
             });

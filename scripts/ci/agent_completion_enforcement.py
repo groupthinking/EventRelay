@@ -25,6 +25,17 @@ def neutral_verdict(reason: str, **details: Any) -> dict[str, Any]:
     return {"conclusion": "neutral", "reason": reason, "details": details}
 
 
+def is_provisioned(policy: Any) -> bool:
+    """Return True only when all three allowlists are non-empty."""
+    if not isinstance(policy, dict):
+        return False
+    return bool(
+        policy.get("trusted_check_app_slugs") and
+        policy.get("trusted_label_actors") and
+        policy.get("trusted_human_exemption_actors")
+    )
+
+
 def verify(payload: Any, policy: Any, head_sha: str, pull_number: int) -> dict[str, Any]:
     if not isinstance(payload, dict) or not isinstance(policy, dict):
         return verdict("invalid_payload")
@@ -38,7 +49,7 @@ def verify(payload: Any, policy: Any, head_sha: str, pull_number: int) -> dict[s
     if not all(isinstance(value, list) and all(isinstance(item, str) and item for item in value)
                    for value in (apps, labels, exemptions)):
         return verdict("invalid_trust_policy")
-    if not apps or not labels or not exemptions:
+    if not is_provisioned(policy):
         return neutral_verdict("trust_policy_unprovisioned")
     required = {"schema_version", "pull_number", "head_sha", "publisher", "applicability", "label_authorization", "focused_tests", "agent_events"}
     if set(payload) != required or payload.get("schema_version") != 1:
@@ -79,17 +90,6 @@ def verify(payload: Any, policy: Any, head_sha: str, pull_number: int) -> dict[s
     if not any(event.get("kind") in {"artifact_ready", "completed"} for event in events):
         return verdict("missing_agent_success_event")
     return {"conclusion": "success", "reason": "verified", "details": {"head_sha": head_sha.lower(), "pull_number": pull_number}}
-
-
-def is_provisioned(policy: Any) -> bool:
-    """Return True only when all three allowlists are non-empty."""
-    if not isinstance(policy, dict):
-        return False
-    return bool(
-        policy.get("trusted_check_app_slugs") and
-        policy.get("trusted_label_actors") and
-        policy.get("trusted_human_exemption_actors")
-    )
 
 
 def main() -> int:
