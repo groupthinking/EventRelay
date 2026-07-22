@@ -31,12 +31,52 @@ def _load(rel_path: str, canonical: str):
     return mod
 
 
+def _new_sdk_client(*_args, **_kwargs):
+    """Return a fresh SDK-shaped mock for each adapter initialization."""
+    return MagicMock()
+
+
+def _generate_content_config(**kwargs):
+    return _types.SimpleNamespace(**kwargs)
+
+
+def _optional_sdk_stubs() -> dict[str, _types.ModuleType]:
+    """Build import-compatible SDK stubs without leaking them into collection."""
+    openai_stub = _types.ModuleType("openai")
+    openai_stub.AsyncOpenAI = _new_sdk_client
+
+    anthropic_stub = _types.ModuleType("anthropic")
+    anthropic_stub.AsyncAnthropic = _new_sdk_client
+
+    google_stub = _types.ModuleType("google")
+    google_stub.__path__ = []
+    genai_stub = _types.ModuleType("google.genai")
+    genai_stub.__path__ = []
+    genai_types_stub = _types.ModuleType("google.genai.types")
+    genai_stub.Client = _new_sdk_client
+    genai_types_stub.GenerateContentConfig = _generate_content_config
+    genai_stub.types = genai_types_stub
+    google_stub.genai = genai_stub
+
+    return {
+        "openai": openai_stub,
+        "anthropic": anthropic_stub,
+        "google": google_stub,
+        "google.genai": genai_stub,
+        "google.genai.types": genai_types_stub,
+    }
+
+
 _inject_stub("youtube_extension.core", str(_SRC / "youtube_extension/core"))
 _inject_stub("youtube_extension.core.mcp", str(_SRC / "youtube_extension/core/mcp"))
 
 _ctx_mod = _load("youtube_extension/core/mcp/context_manager.py", "youtube_extension.core.mcp.context_manager")
 _reg_mod = _load("youtube_extension/core/mcp/server_registry.py", "youtube_extension.core.mcp.server_registry")
-_pb_mod = _load("youtube_extension/core/mcp/protocol_bridge.py", "youtube_extension.core.mcp.protocol_bridge")
+with patch.dict(sys.modules, _optional_sdk_stubs()):
+    _pb_mod = _load(
+        "youtube_extension/core/mcp/protocol_bridge.py",
+        "youtube_extension.core.mcp._test_protocol_bridge",
+    )
 
 BridgeStatus = _pb_mod.BridgeStatus
 MCPProtocolBridge = _pb_mod.MCPProtocolBridge
@@ -684,6 +724,13 @@ class TestOpenAIAdapter:
         result = await adapter.initialize({})
         assert result is False
 
+    async def test_initialize_returns_false_when_sdk_unavailable(self):
+        adapter = OpenAIAdapter()
+        with patch.object(_pb_mod, "_HAS_OPENAI", False):
+            result = await adapter.initialize({"api_key": "sk-test-key"})
+        assert result is False
+        assert adapter._client is None
+
     async def test_initialize_returns_true_with_api_key(self):
         adapter = OpenAIAdapter()
         result = await adapter.initialize({"api_key": "sk-test-key"})
@@ -848,6 +895,13 @@ class TestAnthropicAdapter:
         result = await adapter.initialize({})
         assert result is False
 
+    async def test_initialize_returns_false_when_sdk_unavailable(self):
+        adapter = AnthropicAdapter()
+        with patch.object(_pb_mod, "_HAS_ANTHROPIC", False):
+            result = await adapter.initialize({"api_key": "sk-ant-test"})
+        assert result is False
+        assert adapter._client is None
+
     async def test_initialize_returns_true_with_api_key(self):
         adapter = AnthropicAdapter()
         result = await adapter.initialize({"api_key": "sk-ant-test"})
@@ -972,6 +1026,13 @@ class TestGoogleAIAdapter:
         adapter = GoogleAIAdapter()
         result = await adapter.initialize({})
         assert result is False
+
+    async def test_initialize_returns_false_when_sdk_unavailable(self):
+        adapter = GoogleAIAdapter()
+        with patch.object(_pb_mod, "_HAS_GENAI", False):
+            result = await adapter.initialize({"api_key": "google-key"})
+        assert result is False
+        assert adapter._client is None
 
     async def test_initialize_returns_true_with_api_key(self):
         adapter = GoogleAIAdapter()
