@@ -56,6 +56,14 @@ def test_check_logging_debug_fails(tmp_path):
         assert module.check_logging() is True
 
 
+def test_check_logging_root_setlevel_debug_fails(tmp_path):
+    main_py = tmp_path / "main.py"
+    main_py.write_text("logging.root.setLevel(logging.DEBUG)")
+
+    with patch("scripts.check_production_readiness.Path", return_value=main_py):
+        assert module.check_logging() is True
+
+
 def test_check_logging_sentry_pii_hardcoded_fails(tmp_path):
     main_py = tmp_path / "main.py"
     main_py.write_text('send_default_pii = True')
