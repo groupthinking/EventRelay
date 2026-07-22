@@ -1,6 +1,8 @@
 # PR #869 Webhook Outbox & API Cost Monitor Verification Proofs
 
-This document serves as the authoritative verification and proof suite for PR #869 at exact commit head `45edc01037d72e7d2d9a56e18b2d5c2f6bb4ba76` on branch `agent/harden-api-cost-outbox`. It details how the durable outbox state machine, canonical usage tracking, and the transactional database schema satisfy all staging, hardening, and production-readiness criteria.
+> **Evidence-only / draft artifact.** This document records observations made on a now-orphan evidence branch and is not an authoritative production-readiness sign-off. PR #869 remains the canonical implementation; protected staging, revision-replacement, real-credential, production-shaped worker, and rollback proofs are still pending on that branch.
+
+This document summarizes the durable outbox state machine, canonical usage tracking, and transactional database schema as exercised by the tests below. Claims are limited to what the current test suite can demonstrate; any statement that a gate is "fully satisfied" should be read as "covered by automated tests" rather than "deployed and validated in a protected environment."
 
 ---
 
@@ -8,13 +10,13 @@ This document serves as the authoritative verification and proof suite for PR #8
 
 - **Branch/Exact Head:** `agent/harden-api-cost-outbox` at `45edc01037d72e7d2d9a56e18b2d5c2f6bb4ba76`
 - **Total Test Cases Passed:** 206 tests passed cleanly, with 100% success rate across in-memory SQLite and live PostgreSQL environments.
-- **Verification Status:** 🟢 **PASSED & APPROVED**
+- **Verification Status:** 🟡 **DRAFT — test evidence only; production gates not independently verified**
 
 ---
 
 ## 2. Staging Proof & Durable Storage (PR #868 / PR #906 Prerequisite)
 
-The production-substrate prerequisite is fully validated. The PostgreSQL schema is defined deterministically up to migration head (Revision `003_api_cost_postgres_substrate`), using distinct DDL migrator, DML runtime login, and stable `api_cost_runtime` groups.
+The PostgreSQL schema is defined deterministically up to migration head (Revision `003_api_cost_postgres_substrate`), using distinct DDL migrator, DML runtime login, and stable `api_cost_runtime` groups.
 
 ### Row Survival across Worker Revision A → B
 Durable transactions ensure that pending outbox rows survive complete writer exit/restarts and are fully visible to a separate reader process utilizing a rotated database login.
@@ -36,27 +38,37 @@ In a multi-instance or serverless container environment (e.g. Cloud Run with min
 
 ### Atomic Claim Verification
 - **Code implementation:**
-  In `api_cost_monitor.py`:
+  In `api_cost_monitor.py`, `_try_claim_outbox_item()` performs a single compare-and-swap UPDATE against the pending/failed row, fences the claim by incrementing `retry_count` and recording `last_attempt`, then re-reads the row to return the current state:
   ```python
-  stmt = (
-      update(WebhookOutbox)
-      .where(
-          WebhookOutbox.id == item_id,
-          WebhookOutbox.status == "pending",
-          WebhookOutbox.claim_token.is_(None)
+  claimed = (
+      session.query(WebhookOutbox)
+      .filter(*filters)
+      .update(
+          {
+              WebhookOutbox.status: "processing",
+              WebhookOutbox.retry_count: WebhookOutbox.retry_count + 1,
+              WebhookOutbox.last_attempt: claim_time,
+              WebhookOutbox.claimed_at: claim_time,
+              WebhookOutbox.next_attempt_at: None,
+          },
+          synchronize_session=False,
       )
-      .values(
-          status="processing",
-          claimed_at=claim_time,
-          claim_token=token,
-          retry_count=WebhookOutbox.retry_count + 1,
-          last_attempt=claim_time
-      )
-      .returning(WebhookOutbox.id, WebhookOutbox.claim_token)
   )
+  if claimed != 1:
+      return None
+
+  item = session.query(WebhookOutbox).filter_by(id=item_id).one()
+  return {
+      "id": item.id,
+      "payload": item.payload,
+      "utc_date": item.utc_date,
+      "alert_type": item.alert_type,
+      "retry_count": item.retry_count,
+      "last_attempt": item.last_attempt,
+  }
   ```
 - **Fenced Completions and Failures:**
-  Every completion or failure updates the row conditional on matching *both* the row ID and the unique `claim_token` generated for that specific transaction. An expired worker thread cannot overwrite or complete a newer claim.
+  `_complete_outbox_claim()` updates the row conditional on matching the row ID, current `status == "processing"`, and the exact `retry_count`/`last_attempt` returned by the claim. An expired worker thread cannot overwrite or complete a claim that has since been reclaimed or recovered.
 - **Test Proof:**
   - `test_claim_is_compare_and_swap_across_monitor_instances`: Verifies that concurrent calls from separate instances trying to claim the same outbox item result in exactly one successful claim, while the other receives `None`.
   - `test_completion_is_conditional_on_the_original_claim`: Verifies that if a claim has been reclaimed/recovered by a newer token, older outbox workers cannot complete or overwrite it.
@@ -107,7 +119,7 @@ Once an alert fails 5 times, its `status` remains `failed` and `next_attempt_at`
 
 ## 7. Stable Idempotency and Webhook Pinning
 
-To guarantee "at-most-once" or "exactly-once" delivery constraints, stable, deterministic headers are sent with every webhook request.
+Stable request headers support downstream deduplication; they do not by themselves guarantee at-most-once or exactly-once delivery unless the receiver durably enforces the idempotency key.
 
 - **Idempotency Headers:**
   Every retry attempt of a given alert sends identical headers:
@@ -129,4 +141,4 @@ The canonical processing routes handle and persist Gemini-specific token usage a
 
 ---
 
-**All PR #869 validation, safety, and operational gates are fully satisfied at HEAD.** 🚀
+**All PR #869 automated test evidence is captured above. Protected staging, revision-replacement, real-credential, production-shaped worker, and rollback gates remain to be verified independently on the canonical branch before this can be treated as a production-readiness sign-off.**

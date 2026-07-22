@@ -576,6 +576,10 @@ class APICostMonitor:
             "claude-3-haiku-20240307": {"input": 0.00025, "output": 0.00125},
         },
         "google": {
+            # Current generation (routable from GeminiService)
+            "gemini-3.5-flash": {"input": 0.0000001, "output": 0.0000004},
+            "gemini-2.0-flash": {"input": 0.0000001, "output": 0.0000004},
+            # Historical / legacy pricing
             "gemini-3-pro": {"input": 0.000875, "output": 0.0035},
             "gemini-3-flash": {"input": 0.000052, "output": 0.00021},
             "gemini-1.5-pro": {"input": 0.00125, "output": 0.005},

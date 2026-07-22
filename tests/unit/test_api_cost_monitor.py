@@ -82,6 +82,22 @@ class TestCalculateCost:
         )
         assert pytest.approx(cost, rel=1e-6) == 0.000075 + 0.0003
 
+    def test_google_gemini_35_flash_regression_cost(self, monitor):
+        """Routable default model must be priced exactly, not fall back to gemini-3-pro."""
+        cost = monitor.calculate_cost(
+            "google", "gemini-3.5-flash", input_tokens=1000, output_tokens=1000
+        )
+        expected = 0.0000001 + 0.0000004
+        assert pytest.approx(cost, rel=1e-6) == expected
+
+    def test_google_gemini_20_flash_regression_cost(self, monitor):
+        """Hybrid processor test path uses this model and must not fall back."""
+        cost = monitor.calculate_cost(
+            "google", "gemini-2.0-flash", input_tokens=1000, output_tokens=1000
+        )
+        expected = 0.0000001 + 0.0000004
+        assert pytest.approx(cost, rel=1e-6) == expected
+
     def test_youtube_quota_cost(self, monitor):
         cost = monitor.calculate_cost("youtube", "search", input_tokens=100)
         assert pytest.approx(cost, rel=1e-6) == 100 * 0.0001
@@ -206,6 +222,12 @@ class TestCostModelsStructure:
             "claude-sonnet-4-6",
             "claude-haiku-4-5",
         ):
+            assert model in models, f"{model} missing from COST_MODELS"
+
+    def test_current_gemini_models_present(self, monitor):
+        """Every routable Gemini default must have an explicit COST_MODELS entry."""
+        models = monitor.COST_MODELS["google"]
+        for model in ("gemini-3.5-flash", "gemini-2.0-flash"):
             assert model in models, f"{model} missing from COST_MODELS"
 
     def test_anthropic_model_has_input_output_keys(self, monitor):

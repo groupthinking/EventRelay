@@ -325,12 +325,6 @@ omit = [
     "*/tests/*",
     "*/migrations/*",
     "src/youtube_extension/__init__.py",
-    "src/youtube_extension/backend/config/database.py",
-    "src/youtube_extension/backend/deploy/*",
-    "src/youtube_extension/services/ai/vercel_gateway_provider.py",
-    "src/youtube_extension/integrations/cloud_ai.py",
-    "src/youtube_extension/orchestrator/main.py",
-    "src/youtube_extension/services/video_processor_facade.py",
 ]
 
 [tool.coverage.report]
