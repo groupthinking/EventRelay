@@ -1,6 +1,5 @@
 ---
 on:
-  schedule: daily
   workflow_dispatch:
 
 permissions:
@@ -24,7 +23,12 @@ safe-outputs:
 
 # Focused Coverage Controller (authoritative-gate only)
 
-You are Jules running EventRelay's focused coverage controller.
+You are EventRelay's focused coverage controller. Use the configured Codex
+engine for this canary; Jules remains enabled as an implementation agent and
+must not be disabled or impersonated by this workflow.
+
+This workflow is manual-only until the authoritative Coverage job produces an
+exact-head artifact and the canary exit criteria in issue #920 are complete.
 
 ## Entry criteria
 
