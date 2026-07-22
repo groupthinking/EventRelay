@@ -81,13 +81,13 @@ async def async_client(
 
 @pytest.fixture
 def sample_video_url() -> str:
-    return "https://www.youtube.com/watch?v=jNQXAC9IVRw"
+    return "https://www.youtube.com/watch?v=auJzb1D-fag"
 
 
 @pytest.fixture
 def expected_video_data() -> dict:
     return {
-        "id": "jNQXAC9IVRw",
+        "id": "auJzb1D-fag",
         "title": "Advanced React Patterns Tutorial",
         "channel": "React Education Hub",
         "duration": "18:45",
@@ -200,7 +200,7 @@ class TestVideoProcessingPipeline:
 
         assert response.status_code == 200
         data = response.json()
-        assert data["video_data"]["id"] == "jNQXAC9IVRw"
+        assert data["video_data"]["id"] == "auJzb1D-fag"
         assert data["video_data"]["title"] == expected_video_data["title"]
         assert data["video_data"]["duration"] == expected_video_data["duration"]
         assert len(data["actions"]) == 2
@@ -284,7 +284,7 @@ class TestVideoProcessingPipeline:
 
         assert response.status_code == 200
         data = response.json()
-        assert data["video_data"]["id"] == "jNQXAC9IVRw"
+        assert data["video_data"]["id"] == "auJzb1D-fag"
         assert data["transcript"] == []
         assert data["actions"] == []
         assert data["errors"] == ["Transcript unavailable"]
@@ -374,7 +374,7 @@ class TestQualityAssessmentIntegration:
     ):
         processor.process_video.return_value = {
             "video_data": {
-                "id": "jNQXAC9IVRw",
+                "id": "auJzb1D-fag",
                 "title": "Comprehensive Programming Tutorial",
                 "channel": "Education Hub",
                 "duration": "25:30",
@@ -419,7 +419,7 @@ class TestQualityAssessmentIntegration:
         sample_video_url,
     ):
         processor.process_video.return_value = {
-            "video_data": {"id": "jNQXAC9IVRw", "title": "Unknown Video"},
+            "video_data": {"id": "auJzb1D-fag", "title": "Unknown Video"},
             "actions": [],
             "transcript": [],
             "processing_time": 0.001,
@@ -451,7 +451,7 @@ class TestErrorRecoveryIntegration:
         sample_video_url,
     ):
         processor.process_video.return_value = {
-            "video_data": {"id": "jNQXAC9IVRw", "title": "Fallback Metadata"},
+            "video_data": {"id": "auJzb1D-fag", "title": "Fallback Metadata"},
             "actions": [],
             "transcript": [{"text": "Recovered transcript"}],
             "processing_time": 0.3,
