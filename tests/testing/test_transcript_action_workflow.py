@@ -2,11 +2,31 @@ from types import SimpleNamespace
 
 import pytest
 
-from youtube_extension.services.workflows.transcript_action_workflow import TranscriptActionWorkflow
 from src.shared.youtube import RobustYouTubeMetadata
-from youtube_extension.services.ai.speech_to_text_service import SpeechToTextResult
 from youtube_extension.services.agents.adapters.agent_orchestrator import OrchestrationResult
 from youtube_extension.services.agents.dto import AgentResult
+from youtube_extension.services.ai.speech_to_text_service import SpeechToTextResult
+from youtube_extension.services.workflows.transcript_action_workflow import (
+    TranscriptActionWorkflow,
+)
+
+
+@pytest.fixture(autouse=True)
+def _isolate_skill_builder(monkeypatch, tmp_path):
+    """Keep workflow construction from reading or writing the operator's home."""
+    skill_builder = SimpleNamespace(
+        get_context=lambda *args, **kwargs: {
+            "has_data": False,
+            "lessons": [],
+            "success_rate": 0,
+        },
+        record_deployment=lambda *args, **kwargs: None,
+        skills_dir=tmp_path / "skills",
+    )
+    monkeypatch.setattr(
+        "youtube_extension.services.workflows.transcript_action_workflow.get_skill_builder",
+        lambda: skill_builder,
+    )
 
 
 class _StubYouTubeService:
