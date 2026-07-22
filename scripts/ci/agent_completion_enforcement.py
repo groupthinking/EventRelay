@@ -21,6 +21,37 @@ def verdict(reason: str, **details: Any) -> dict[str, Any]:
     return {"conclusion": "failure", "reason": reason, "details": details}
 
 
+def _policy_allowlists(policy: Any) -> tuple[Any, Any, Any] | None:
+    """Return the three allowlists when the policy shape is valid, else None."""
+    if not isinstance(policy, dict) or policy.get("custom_role_policy") != "fail_closed":
+        return None
+    apps = policy.get("trusted_check_app_slugs")
+    labels = policy.get("trusted_label_actors")
+    exemptions = policy.get("trusted_human_exemption_actors")
+    if not all(isinstance(value, list) and all(isinstance(item, str) and item for item in value)
+                   for value in (apps, labels, exemptions)):
+        return None
+    return apps, labels, exemptions
+
+
+def missing_publication(policy: Any) -> dict[str, Any]:
+    """Verdict for a head with no trusted publication.
+
+    Only a well-formed, fail-closed policy whose three allowlists are all empty
+    proves the trusted App is intentionally unprovisioned; that state publishes
+    a neutral, advisory verdict instead of failing every pull request. Any
+    provisioned or malformed policy still fails closed.
+    """
+    allowlists = _policy_allowlists(policy)
+    if allowlists is not None and not any(allowlists):
+        return {
+            "conclusion": "neutral",
+            "reason": "trust_policy_unprovisioned_no_publication",
+            "details": {},
+        }
+    return verdict("missing_trusted_publication")
+
+
 def verify(payload: Any, policy: Any, head_sha: str, pull_number: int) -> dict[str, Any]:
     if not isinstance(payload, dict) or not isinstance(policy, dict):
         return verdict("invalid_payload")
@@ -81,9 +112,14 @@ def main() -> int:
     if len(sys.argv) != 5:
         raise SystemExit("usage: verifier REPORT POLICY HEAD_SHA PULL_NUMBER")
     report, policy, head, pull = sys.argv[1:]
-    result = verify(json.loads(Path(report).read_text()), json.loads(Path(policy).read_text()), head, int(pull))
+    policy_data = json.loads(Path(policy).read_text())
+    report_path = Path(report)
+    if not report_path.exists() or not report_path.read_text().strip():
+        result = missing_publication(policy_data)
+    else:
+        result = verify(json.loads(report_path.read_text()), policy_data, head, int(pull))
     print(json.dumps(result, sort_keys=True))
-    return 0 if result["conclusion"] == "success" else 1
+    return 0 if result["conclusion"] in {"success", "neutral"} else 1
 
 
 if __name__ == "__main__":

@@ -41,11 +41,10 @@ jobs:
           # output/artifact. This workflow never executes PR-controlled code or
           # accepts an artifact produced by a pull_request workflow.
           gh api "repos/$REPO/commits/$head/check-runs" --jq '.check_runs[] | select(.name == "Agent Lock trusted publication") | .output.text' > trusted-report.json
-          if test -s trusted-report.json; then
-            python3 scripts/ci/agent_completion_enforcement.py trusted-report.json .github/agent-lock/trusted-publishers.json "$head" "$PR" > enforcement-verdict.json
-          else
-            printf '%s\n' '{"conclusion":"failure","reason":"missing_trusted_publication","details":{}}' > enforcement-verdict.json
-          fi
+          # The verifier fails closed on any provisioned policy; it publishes a
+          # neutral advisory verdict only when no publication exists and every
+          # trusted allowlist is verifiably empty (App not yet provisioned).
+          python3 scripts/ci/agent_completion_enforcement.py trusted-report.json .github/agent-lock/trusted-publishers.json "$head" "$PR" > enforcement-verdict.json
       - name: Publish the required head-bound Check run
         if: always()
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
@@ -73,7 +72,9 @@ jobs:
             }
             const conclusion = verdict.conclusion === 'success'
               ? 'success'
-              : 'failure';
+              : verdict.conclusion === 'neutral'
+                ? 'neutral'
+                : 'failure';
             const summary = JSON.stringify(verdict);
             await github.rest.checks.create({
               owner: context.repo.owner,
@@ -85,10 +86,12 @@ jobs:
               output: {
                 title: conclusion === 'success'
                   ? 'Trusted evidence verified'
-                  : 'Trusted evidence blocked',
+                  : conclusion === 'neutral'
+                    ? 'Trusted publisher not yet provisioned'
+                    : 'Trusted evidence blocked',
                 summary: summary.slice(0, 60000)
               }
             });
-            if (conclusion !== 'success') {
+            if (conclusion === 'failure') {
               core.setFailed(verdict.reason || 'trusted evidence blocked');
             }
