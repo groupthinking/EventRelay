@@ -99,7 +99,7 @@ Outbox delivery failures undergo bounded exponential backoff with equal jitter t
   - Max Retry Interval: 25s
   - Max Attempt Limit: 5 attempts
 - **Removal from Due Index:**
-  Once an alert fails 5 times, its `status` is transitioned to `failed`, and `next_attempt_at` is set to `NULL`. This completely removes the item from the active `ix_webhook_outbox_due` index, ensuring it is never processed again, eliminating infinite hot-loops.
+Once an alert fails 5 times, its `status` remains `failed` and `next_attempt_at` is set to `NULL`. The worker's `retry_count < webhook_max_attempts` predicate excludes the exhausted row from future processing, preventing infinite retry loops.
 - **Test Proof:**
   - `test_failure_persists_equal_jitter_backoff_and_respects_due_time`: Verifies the exact sequence of backoff delays (`10s`, `20s`, `25s`, `25s`) and asserts that retry number 5 moves the row to a terminal state with no future due dates.
 
