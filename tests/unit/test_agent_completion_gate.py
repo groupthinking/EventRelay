@@ -3466,12 +3466,6 @@ if (fromIssue.login !== 'issue-agent[bot]') {
             collect_step,
         )
 
-        functions = _javascript_functions(
-            workflow,
-            "function legacyRunId(",
-        )
-        self.assertEqual(len(functions), 1)
-
         assertions = r"""
 function simulateSyntheticEvent(prUserLogin, expectedAgentLogin) {
   const eventAuthors = new Set(expectedAgentLogin ? [expectedAgentLogin] : []);
@@ -3523,7 +3517,7 @@ if (typeof event.sequence !== 'number' || event.comment_id !== 0 ||
 }
 """
         completed = subprocess.run(
-            ["node", "-e", functions[0] + assertions],
+            ["node", "-e", assertions],
             check=False,
             capture_output=True,
             text=True,
