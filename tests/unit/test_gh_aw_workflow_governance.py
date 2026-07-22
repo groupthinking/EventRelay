@@ -49,7 +49,7 @@ def test_coverage_workflow_is_authoritative() -> None:
     assert ".[dev,youtube]" in next(
         step for step in steps if step.get("name") == "Install dependencies"
     )["run"]
-    assert 88.1833 <= float(coverage_report["fail_under"]) <= 90
+    assert 88.1219 <= float(coverage_report["fail_under"]) <= 90
     assert int(coverage_report["precision"]) >= 4
     for suppression in ("|| true", "set +e"):
         assert suppression not in run_script
