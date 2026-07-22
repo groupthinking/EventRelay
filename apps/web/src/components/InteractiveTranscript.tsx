@@ -166,13 +166,17 @@ export default function InteractiveTranscript({
   );
 
   const filteredSegments = useMemo(() => {
+    if (!filterSpeaker && !searchQuery) return segments;
+
     const searchLower = searchQuery ? searchQuery.toLowerCase() : '';
     return segments.filter((seg) => {
       const matchesSpeaker = !filterSpeaker || seg.speaker === filterSpeaker;
-      const matchesSearch =
+      if (!matchesSpeaker) return false;
+
+      return (
         !searchLower ||
-        seg.text.toLowerCase().includes(searchLower);
-      return matchesSpeaker && matchesSearch;
+        (seg.text ? seg.text.toLowerCase().includes(searchLower) : false)
+      );
     });
   }, [segments, filterSpeaker, searchQuery]);
 
