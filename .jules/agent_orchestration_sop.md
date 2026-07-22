@@ -1,72 +1,102 @@
-# Agent Orchestration Standard Operating Procedure (SOP) & Inventory
+# EventRelay Agent Orchestration SOP
 
-## 1. Introduction & Mission
-The mission of the EventRelay AI Agent Orchestration team is to enable high-integrity, autonomous planning, reasoning, and execution of Model Context Protocol (MCP) servers and Video Intelligence pipelines.
+## Purpose
 
-To maintain safety, reliability, and security, all dispatched agents must follow these strictly defined Standard Operating Procedures (SOP) without deviation.
+EventRelay uses agents to turn one focused issue into one verified pull request. The source of current delivery truth is GitHub issue #898 and the exact state of its linked issues, pull requests, checks, reviews, and deployments. This document defines durable operating rules; it must not contain a copied PR inventory that becomes stale.
 
----
+## Operating contract
 
-## 2. Team Directory & Roles
+1. Decide the smallest useful action.
+2. Perform the action on the existing canonical branch.
+3. Call it complete only when a machine-verifiable artifact exists.
+4. Record the exact head, checks, reviews, deployment applicability, and next action.
+5. Keep incomplete work draft. Never substitute narration, assignment, or an @mention for progress.
 
-Our orchestration relies on a multi-agent cooperative framework with specialized roles:
+Valid progress is a new exact head, a completed exact-head workflow, a resolved and verified review finding, deployment evidence, or a confirmed state mutation.
 
-- **@Copilot (Lead Organizer)**: Responsible for overall PR organization, triage, diagnostic coordination, and high-level strategy. Grants final approval for draft decisions, commits, closing, and merging on the canonical repository.
-- **@Claude (Reasoning & Code Architect)**: Specialized in advanced reasoning, applying Chain-of-Thought (CoT) logic, structural refactoring, and complex backend implementation.
-- **/gemini (@Gemini) (Verification & Pipeline Specialist)**: Specialized in verification, running E2E pipeline checks, validating Next.js frontend, and auditing media processing code.
-- **@Codex (Execution Engine)**: The primary engine executing workflow steps, and handling repository delivery.
+## Canonical execution unit
 
----
+Every executable unit has:
 
-## 3. Communication & Handoff Protocols
+- one focused child issue of #898;
+- one canonical branch and pull request;
+- a declared file and test scope;
+- an execution receipt;
+- a closing reference only for its focused child issue.
 
-To ensure seamless progress and full context sharing, communication among agents must follow these rules:
+A partial implementation progresses #898 and closes only its focused child issue after all acceptance gates pass. Evidence-only branches must say so and must not compete with the canonical implementation.
 
-1. **Single Thread of Execution**: Only one agent runs at a time. The current agent must conclude their execution by handing off and tagging the next agent.
-2. **Standardized Handoff Format**: The handoff comment must conclude with:
-   - **Current State**: Summary of what was accomplished.
-   - **Blockers / Observations**: Any identified issues.
-   - **Next Step**: A clear, concise, actionable directive for the receiving agent.
-   - **Tag**: The explicit tagging of the receiving agent (e.g., `@Claude`).
-3. **Verification Before Handoff**: No work is handed off or declared complete without running local verification gates and tests.
-4. **Handoff Target**: Upon completion of any subtask, the executing agent must tag `@Copilot` to ask for a PR review and to progress the PR to the next step if acceptable.
+## Execution receipt
 
----
+Every active execution records:
 
-## 4. Current Truth & Status Inventory
+- agent login;
+- run ID;
+- focused issue;
+- canonical branch and PR;
+- claimed timestamp;
+- latest heartbeat;
+- exact head SHA;
+- declared scope and focused tests;
+- artifact or workflow URLs.
 
-The following is the current exact-head status of the repository:
+A dispatch is not active execution until the connector accepts it and a run or heartbeat is observable.
 
-### 4.1. Complete
-- ✅ **Authoritative Coverage Workflow**: The `Coverage` workflow (`.github/workflows/coverage.yml`) has been fully repaired. It is authoritative, runs tests under python 3.12 without `continue-on-error` or `|| true` on the runner, and relies on strict `pyproject.toml` configurations.
-- ✅ **Obsolete Workflow Removal**: The obsolete `.github/agentic/verification-loop.aw.yml` was deleted.
-- ✅ **gh-aw Compiler & Version Pinning**: `gh-aw Validation` workflow pins `github/gh-aw` to stable version `v0.82.14` and compiles source `.md` files to their `.lock.yml` equivalents while performing actionlint, zizmor, and poutine security checks.
+## Roles and authority
 
-### 4.2. Staged
-- ⏸ **EventRelay CI Investigator**: Staged in read-only report-first mode triggered on `workflow_run` events (not hourly AI sweep) to avoid high API costs.
-- ⏸ **Canonical PR Remediator**: Staged to run only on existing canonical PR branches connected to a focused-child issue of `#898`.
-- ⏸ **Focused Coverage Controller**: Staged to run in read-only mode to prevent continuous, expensive AI execution.
+Agents are capabilities, not authorities. A working model remains enabled unless a repository owner explicitly changes its access. Authority is granted by action type:
 
-### 4.3. Blocked / Not Done
-- ❌ **Cloud Tasks Authentication Mismatch**: Cloud Tasks are enqueued without OIDC or `X-API-Key`, but callbacks require `X-API-Key`.
-- ❌ **Non-Durable Execution State**: State is held in JSON and in-memory maps/asyncio tasks, risking state loss during Cloud Run instance recycling.
-- ❌ **Incomplete MCP Execution**: Server execution path inside `MCPOrchestrator._execute_on_server` and `src/youtube_extension/orchestrator/main.py` raises `NotImplementedError`.
+- Implementation agents may change only the declared scope on the canonical branch.
+- Review agents may report findings but may not certify their own implementation.
+- The controller may make safe, reversible metadata corrections, apply focused fixes, return incomplete work to draft, resolve findings proven fixed, and rerun transient failures.
+- Final merge, irreversible infrastructure, production activation, credential changes, billing, security exceptions, and ruleset weakening require explicit human authority.
 
----
+No agent may merge, close useful work, delete an unmerged branch, or mark a PR ready merely because it created or reviewed the change.
 
-## 5. Bounded Agent Constraints (Guardrails)
+## Verification gates
 
-All agents are subject to the following strict safety guardrails:
-1. **Fork Scope Gate**: Never commit, merge, or push work into the parents or original pre-fork repo. Only write to the `Groupthinking` account.
-2. **Credential Safety**: Never use or modify Vercel, Google OAuth, database, GCP, Sentry-management, or production application credentials.
-3. **No Automatic Upgrades**: Do not upgrade `gh-aw`, Node packages, or Python packages to `@latest` or unpinned floating versions.
-4. **No Structural Workflows Modification**: Agents must never weaken rulesets, workflow checks, or security configurations.
+Before a PR advances:
 
----
+- the observed PR head equals the tested head;
+- required CI, coverage, security, secret, dependency, and focused workflows complete on that head;
+- all current review findings are fixed and resolved with evidence;
+- a current-head independent review exists when required;
+- deployment evidence is bound to the same head, or deployment is explicitly non-applicable;
+- the truth gate reports the real remaining blockers;
+- the focused issue and #898 are updated with exact evidence.
 
-## 6. Next Steps & Action Plan
+Vercel proves the Next.js application build and runtime only. It does not prove Python, Cloud Run, Cloud SQL, worker, webhook, or credential behavior unless those paths are explicitly exercised.
 
-1. **Dispatch @Claude** to analyze and draft solutions for the **Cloud Tasks Authentication Mismatch** and **Non-Durable Execution State** issues.
-2. Claude will provide the technical design and implement the fixes, accompanied by rigorous unit tests.
-3. **Dispatch @Gemini** to run the complete verification suite, including E2E, Next.js type-checks, and lints, to certify production readiness.
-4. **@Copilot** will perform final review, merge, and close.
+## Handoff format
+
+A handoff contains:
+
+- Current state: exact head and completed artifacts.
+- Blockers: verified failures or missing authority.
+- Next action: one executable step.
+- Owner: the agent or human authority required.
+
+Handoffs without artifacts are planning notes, not progress.
+
+## Safe controller loop
+
+`detect → validate canonical unit → claim with receipt → act → verify exact head → update issue and #898 → stop`
+
+The controller exits without invoking an agent when nothing changed. It does not create duplicate status issues or comments for unchanged healthy state.
+
+## Prohibited shortcuts
+
+- no competing implementation PR;
+- no retroactive or invented provenance;
+- no self-certified green result;
+- no floating `@latest` workflow dependencies;
+- no unrestricted shell, network, or repository permissions;
+- no automatic merge or approval;
+- no production deployment through repository agents;
+- no credential exposure or mutation;
+- no destructive branch cleanup;
+- no static “current inventory” copied into this SOP.
+
+## Current-state lookup
+
+Read #898, then re-read every currently open PR and its focused issue. Bind all claims to the exact live head. If #898 disagrees with GitHub or Vercel, repair #898 from live evidence rather than treating the mirror as authoritative.
