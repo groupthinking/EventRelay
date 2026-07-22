@@ -46,17 +46,7 @@ jobs:
           else
             # If the policy is unprovisioned (all allowlists empty), yield a neutral advisory
             # rather than a hard failure so PRs are not blocked while the GitHub App is not yet configured.
-            if python3 - <<'EOF'
-import json, sys
-p = json.load(open('.github/agent-lock/trusted-publishers.json'))
-provisioned = bool(
-    p.get('trusted_check_app_slugs') and
-    p.get('trusted_label_actors') and
-    p.get('trusted_human_exemption_actors')
-)
-sys.exit(0 if provisioned else 1)
-EOF
-            then
+            if python3 scripts/ci/agent_completion_enforcement.py --check-provisioned .github/agent-lock/trusted-publishers.json; then
               printf '%s\n' '{"conclusion":"failure","reason":"missing_trusted_publication","details":{}}' > enforcement-verdict.json
             else
               printf '%s\n' '{"conclusion":"neutral","reason":"trust_policy_unprovisioned","details":{}}' > enforcement-verdict.json

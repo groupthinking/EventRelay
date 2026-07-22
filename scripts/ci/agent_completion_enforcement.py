@@ -81,9 +81,25 @@ def verify(payload: Any, policy: Any, head_sha: str, pull_number: int) -> dict[s
     return {"conclusion": "success", "reason": "verified", "details": {"head_sha": head_sha.lower(), "pull_number": pull_number}}
 
 
+def is_provisioned(policy: Any) -> bool:
+    """Return True only when all three allowlists are non-empty."""
+    if not isinstance(policy, dict):
+        return False
+    return bool(
+        policy.get("trusted_check_app_slugs") and
+        policy.get("trusted_label_actors") and
+        policy.get("trusted_human_exemption_actors")
+    )
+
+
 def main() -> int:
+    if len(sys.argv) == 3 and sys.argv[1] == "--check-provisioned":
+        policy_path = sys.argv[2]
+        provisioned = is_provisioned(json.loads(Path(policy_path).read_text()))
+        return 0 if provisioned else 1
     if len(sys.argv) != 5:
-        raise SystemExit("usage: verifier REPORT POLICY HEAD_SHA PULL_NUMBER")
+        raise SystemExit("usage: verifier REPORT POLICY HEAD_SHA PULL_NUMBER\n"
+                         "       verifier --check-provisioned POLICY")
     report, policy, head, pull = sys.argv[1:]
     result = verify(json.loads(Path(report).read_text()), json.loads(Path(policy).read_text()), head, int(pull))
     print(json.dumps(result, sort_keys=True))
