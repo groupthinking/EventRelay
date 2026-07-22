@@ -8,7 +8,7 @@ This document summarizes the durable outbox state machine, canonical usage track
 
 ## 1. Executive Summary
 
-- **Branch/Exact Head:** `agent/harden-api-cost-outbox` at `45edc01037d72e7d2d9a56e18b2d5c2f6bb4ba76`
+- **Branch/Exact Head:** `agent/harden-api-cost-outbox` at `45edc01037d72e7d2d9a56e18b2d5c2f6bb4ba76` (historical reference; verify against the current canonical branch before relying on it)
 - **Total Test Cases Passed:** 206 tests passed cleanly, with 100% success rate across in-memory SQLite and live PostgreSQL environments.
 - **Verification Status:** 🟡 **DRAFT — test evidence only; production gates not independently verified**
 
