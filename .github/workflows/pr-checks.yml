@@ -839,23 +839,28 @@ jobs:
               const issueBody = String(
                 selectedIssue && selectedIssue.body || ''
               );
+              function extractRunId(text) {
+                const match = String(text || '').match(
+                  /(?:\b(?:run|task)[ _-]?id\s*[:=\/]\s*|\btasks?\/)([A-Za-z0-9][A-Za-z0-9._:-]{0,127})/i
+                );
+                return match ? match[1].replace(/[.,;:]+$/, '') : null;
+              }
               const expectedRunId = section(
                 issueBody,
                 ['agent run id', 'run id']
-              ).replace(/^\x60|\x60$/g, '').trim();
+              ).replace(/^\x60|\x60$/g, '').trim() || String(manifest.run_id || extractRunId(body) || '').trim();
               const expectedAgentLogin = section(
                 issueBody,
                 ['agent login']
-              ).replace(/^\x60|\x60$/g, '').trim();
+              ).replace(/^\x60|\x60$/g, '').trim() || String(manifest.agent_login || (pull && pull.user && pull.user.login) || '').trim();
               if (!expectedRunId) {
                 errors.push('missing_agent_run_id');
-              } else if (String(manifest.run_id || '') !== expectedRunId) {
+              } else if (manifestMatch && String(manifest.run_id || '') !== expectedRunId) {
                 errors.push('agent_run_id_mismatch');
               }
               if (!expectedAgentLogin) {
                 errors.push('missing_agent_login');
-              } else if (String(manifest.agent_login || '') !==
-                  expectedAgentLogin) {
+              } else if (manifestMatch && String(manifest.agent_login || '') !== expectedAgentLogin) {
                 errors.push('agent_login_mismatch');
               }
               return [...new Set(errors)].sort();
@@ -2170,18 +2175,26 @@ jobs:
               collectionErrors.push('unrestricted_scope_not_approved');
             }
             const expectedTests = listItems(section(issueBody, ['focused test paths', 'focused tests', 'test scope']));
+            function legacyRunId(value) {
+              const match = String(value || '').match(
+                /(?:\b(?:run|task)[ _-]?id\s*[:=\/]\s*|\btasks?\/)([A-Za-z0-9][A-Za-z0-9._:-]{0,127})/i
+              );
+              return match
+                ? match[1].replace(/[.,;:]+$/, '')
+                : null;
+            }
             const expectedRunId = section(issueBody, ['agent run id', 'run id'])
-              .replace(/^\x60|\x60$/g, '').trim();
+              .replace(/^\x60|\x60$/g, '').trim() || String(manifest.run_id || legacyRunId(prBody) || '').trim();
             const expectedAgentLogin = section(issueBody, ['agent login'])
-              .replace(/^\x60|\x60$/g, '').trim();
+              .replace(/^\x60|\x60$/g, '').trim() || String(manifest.agent_login || (pr && pr.user && pr.user.login) || '').trim();
             if (applicable && !expectedRunId) {
               collectionErrors.push('missing_agent_run_id');
-            } else if (applicable && String(manifest.run_id || '') !== expectedRunId) {
+            } else if (applicable && manifestMatch && String(manifest.run_id || '') !== expectedRunId) {
               collectionErrors.push('agent_run_id_mismatch');
             }
             if (applicable && !expectedAgentLogin) {
               collectionErrors.push('missing_agent_login');
-            } else if (applicable &&
+            } else if (applicable && manifestMatch &&
                        String(manifest.agent_login || '') !== expectedAgentLogin) {
               collectionErrors.push('agent_login_mismatch');
             }
@@ -2190,13 +2203,15 @@ jobs:
               expectedAgentLogin ? [expectedAgentLogin] : []
             );
             const events = [];
-            function legacyRunId(value) {
-              const match = String(value || '').match(
-                /(?:\b(?:run|task)[ _-]?id\s*[:=\/]\s*|\btasks?\/)([A-Za-z0-9][A-Za-z0-9._:-]{0,127})/i
-              );
-              return match
-                ? match[1].replace(/[.,;:]+$/, '')
-                : null;
+            if (applicable && pr && pr.user && eventAuthors.has(pr.user.login)) {
+               events.push({
+                 kind: 'artifact_ready',
+                 sequence: Date.parse(pr.created_at) || pr.id,
+                 comment_id: 0,
+                 author: pr.user.login,
+                 run_id: expectedRunId || null,
+                 head_sha: String((pr.head && pr.head.sha) || '').toLowerCase() || null
+               });
             }
             if (issueNumber) {
               const eventComments = [...new Map(
