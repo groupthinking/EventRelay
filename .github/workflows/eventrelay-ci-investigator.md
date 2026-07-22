@@ -24,6 +24,16 @@ engine: codex
 model: gpt-5.4
 network: defaults
 
+pre-agent-steps:
+  - name: Require dedicated Codex credential
+    env:
+      CODEX_API_KEY: ${{ secrets.CODEX_API_KEY }}
+    run: |
+      if [ -z "${CODEX_API_KEY}" ]; then
+        echo "::error::Dedicated CODEX_API_KEY is required"
+        exit 1
+      fi
+
 safe-outputs:
   add-comment:
     max: 1

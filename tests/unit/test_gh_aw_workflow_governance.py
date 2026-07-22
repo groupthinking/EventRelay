@@ -104,6 +104,21 @@ def test_focused_coverage_controller_can_read_authoritative_runs() -> None:
     assert "requires a separate approved GitHub App canary" in source
 
 
+def test_ci_investigator_requires_dedicated_codex_credential() -> None:
+    workflow = _load_frontmatter(
+        ROOT / ".github/workflows/eventrelay-ci-investigator.md"
+    )
+    credential_gate = next(
+        step
+        for step in workflow["pre-agent-steps"]
+        if step.get("name") == "Require dedicated Codex credential"
+    )
+
+    assert credential_gate["env"]["CODEX_API_KEY"] == "${{ secrets.CODEX_API_KEY }}"
+    assert "Dedicated CODEX_API_KEY is required" in credential_gate["run"]
+    assert "OPENAI_API_KEY" not in credential_gate["run"]
+
+
 def test_live_smoke_modules_are_excluded_before_import(monkeypatch) -> None:
     monkeypatch.delenv("RUN_LIVE_E2E", raising=False)
     monkeypatch.delenv("RUN_LIVE_DEPLOY", raising=False)
