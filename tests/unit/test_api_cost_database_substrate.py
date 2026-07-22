@@ -314,13 +314,18 @@ def test_postgres_schema_readiness_validates_constraints_and_worker_indexes() ->
     assert "ix_webhook_outbox_stale_claims" in sql
 
 
-def test_postgres_runtime_contract_allows_future_additive_columns() -> None:
-    """Migration-first deploys must not make the old revision unready."""
+def test_postgres_runtime_contract_allows_compatible_additive_columns() -> None:
+    """Migration-first columns must remain omittable by the old revision."""
     contract = monitor_module._POSTGRES_SCHEMA_CONTRACT_SQL
 
     assert "count(*) = 29 FROM column_metadata" not in contract
-    assert "actual metadata count is intentionally unconstrained" in contract
+    assert "still-serving revision can omit them from INSERTs" in contract
     assert "count(*) = 29" in contract
+    assert "expected_extra.column_name IS NULL" in contract
+    assert "extra.is_not_null" in contract
+    assert "extra.default_expression IS NULL" in contract
+    assert "extra.generated_kind = ''" in contract
+    assert "extra.identity_kind = ''" in contract
 
 
 def test_postgres_schema_readiness_rejects_malformed_contract() -> None:
