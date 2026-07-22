@@ -15,14 +15,10 @@ permissions:
 env:
   # The workflow resolves the successful Vercel deployment for the triggering
   # SHA: Preview for pull requests, Production for pushes to main. Previews also
-  # need `VERCEL_AUTOMATION_BYPASS_SECRET` as a repository secret.
-  # Vercel previews return HTTP 401 to anonymous traffic; the test harness
-  # forwards this value as the `x-vercel-protection-bypass` header on every
-  # request (see tests/e2e/pipeline.test.ts). Generate it under Vercel →
-  # Project → Settings → Deployment Protection → Protection Bypass for
-  # Automation.
+  # need `VERCEL_AUTOMATION_BYPASS_SECRET` as a repository secret. Pull-request
+  # runs execute the E2E harness from the trusted base SHA so head-controlled
+  # lifecycle scripts and test code never receive that reusable credential.
   TEST_YOUTUBE_URL: https://www.youtube.com/watch?v=auJzb1D-fag
-  VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
 
 jobs:
   e2e:
@@ -34,16 +30,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ github.event.pull_request.base.sha || github.sha }}
           persist-credentials: false
 
-      - name: Verify exact checked-out SHA
+      - name: Verify trusted harness SHA
         env:
-          TARGET_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: test "$(git rev-parse HEAD)" = "$TARGET_SHA"
+          HARNESS_SHA: ${{ github.event.pull_request.base.sha || github.sha }}
+        run: test "$(git rev-parse HEAD)" = "$HARNESS_SHA"
 
       - name: Require preview bypass credential
         if: github.event_name == 'pull_request'
+        env:
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
         run: |
           if [ -z "$VERCEL_AUTOMATION_BYPASS_SECRET" ]; then
             echo "::error::VERCEL_AUTOMATION_BYPASS_SECRET is required for PR E2E"
@@ -135,6 +133,8 @@ jobs:
       - name: Run E2E tests
         id: e2e_tests
         continue-on-error: true
+        env:
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
         run: |
           npx vitest run tests/e2e/ --reporter=verbose 2>&1 | tee test-output.txt
           echo "exit_code=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
@@ -219,7 +219,7 @@ jobs:
           # (flagged by actionlint/zizmor). The shell receives these as data only.
           TRIGGER_EVENT: ${{ github.event_name }}
           TRIGGER_REF: ${{ github.head_ref || github.ref_name }}
-          COMMIT_SHA: ${{ github.sha }}
+          COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           DATE=$(date -u '+%Y-%m-%d %H:%M:%S UTC')
           FAILURES=$(grep -A 2 'FAIL\|AssertionError\|Error:' test-output.txt | head -30 || echo "See test-output.txt")
