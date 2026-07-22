@@ -166,12 +166,19 @@ export default function InteractiveTranscript({
   );
 
   const filteredSegments = useMemo(() => {
+    const lowerQuery = searchQuery ? searchQuery.toLowerCase() : '';
+
     return segments.filter((seg) => {
-      const matchesSpeaker = !filterSpeaker || seg.speaker === filterSpeaker;
-      const matchesSearch =
-        !searchQuery ||
-        seg.text.toLowerCase().includes(searchQuery.toLowerCase());
-      return matchesSpeaker && matchesSearch;
+      // Short-circuit: skip expensive string operations if speaker doesn't match
+      if (filterSpeaker && seg.speaker !== filterSpeaker) {
+        return false;
+      }
+
+      if (!lowerQuery) {
+        return true;
+      }
+
+      return seg.text ? seg.text.toLowerCase().includes(lowerQuery) : false;
     });
   }, [segments, filterSpeaker, searchQuery]);
 

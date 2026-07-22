@@ -14,3 +14,6 @@
 ## 2026-07-28 - Memoize text processing in React
 **Learning:** Performing expensive string manipulations like splitting long texts (`transcript.split('\n')`) or generating dynamic Regex expressions inside a component body causes significant CPU overhead on every re-render (like keystroke updates in a search box).
 **Action:** Extract pure transformation logic on static/infrequent data into `useMemo` hooks (e.g., memoizing the paragraph split on `transcript` and precomputing search `RegExp` based on `searchQuery`).
+## 2026-07-28 - Optimized React filtering performance
+**Learning:** In heavily used components like `InteractiveTranscript.tsx` which filter over large arrays, running string manipulations (`.toLowerCase()`) or expensive checks inside the `.filter()` loop on every element causes CPU overhead on every re-render (like keystroke updates in a search box).
+**Action:** Hoist invariant conversions (like `searchQuery.toLowerCase()`) outside the loop, and use short-circuit boolean evaluation (checking simple conditions like speaker matches first) to bypass the expensive string operations altogether.
