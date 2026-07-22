@@ -25,9 +25,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install pinned gh-aw runtime
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           gh extension remove aw || true
           gh extension install github/gh-aw --pin v0.82.14
