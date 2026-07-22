@@ -1,13 +1,14 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, request } from '@playwright/test';
 
 test.describe('UVAI Production-Path Smoke Suite', () => {
   // Fail-closed gate: Verify BASE_URL is reachable and does not return unauthenticated or server errors.
-  test.beforeAll(async ({ request }) => {
+  test.beforeAll(async () => {
     const baseURL = test.info().project.use.baseURL || 'https://uvai.io';
+    const requestContext = await request.newContext({ baseURL });
     console.info(`[Playwright] Initiating smoke tests against target: ${baseURL}`);
 
     try {
-      const response = await request.get('/');
+      const response = await requestContext.get('/');
       const status = response.status();
 
       // If the page is unauthenticated (e.g. 401), missing (404), or broken (5xx),
@@ -32,6 +33,8 @@ test.describe('UVAI Production-Path Smoke Suite', () => {
     } catch (error) {
       console.error(`[FAIL-CLOSED] Connection check failed for ${baseURL}:`, error);
       throw error;
+    } finally {
+      await requestContext.dispose();
     }
   });
 
