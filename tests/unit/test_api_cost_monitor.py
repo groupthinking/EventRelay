@@ -87,7 +87,7 @@ class TestCalculateCost:
         cost = monitor.calculate_cost(
             "google", "gemini-3.5-flash", input_tokens=1000, output_tokens=1000
         )
-        expected = 0.0000001 + 0.0000004
+        expected = 0.0001 + 0.0004
         assert pytest.approx(cost, rel=1e-6) == expected
 
     def test_google_gemini_20_flash_regression_cost(self, monitor):
@@ -95,7 +95,7 @@ class TestCalculateCost:
         cost = monitor.calculate_cost(
             "google", "gemini-2.0-flash", input_tokens=1000, output_tokens=1000
         )
-        expected = 0.0000001 + 0.0000004
+        expected = 0.0001 + 0.0004
         assert pytest.approx(cost, rel=1e-6) == expected
 
     def test_youtube_quota_cost(self, monitor):

@@ -577,8 +577,8 @@ class APICostMonitor:
         },
         "google": {
             # Current generation (routable from GeminiService)
-            "gemini-3.5-flash": {"input": 0.0000001, "output": 0.0000004},
-            "gemini-2.0-flash": {"input": 0.0000001, "output": 0.0000004},
+            "gemini-3.5-flash": {"input": 0.0001, "output": 0.0004},
+            "gemini-2.0-flash": {"input": 0.0001, "output": 0.0004},
             # Historical / legacy pricing
             "gemini-3-pro": {"input": 0.000875, "output": 0.0035},
             "gemini-3-flash": {"input": 0.000052, "output": 0.00021},
