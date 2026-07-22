@@ -186,13 +186,11 @@ class TestDeploymentPipelineIntegration:
             assert result.startswith(f'uvai-{expected_prefix[5:]}'), f"Unexpected result: {result}"
             assert len(result) <= 30, f"App name too long: {result}"
 
-        with patch(
-            'youtube_extension.backend.deploy.fly.time.monotonic',
-            return_value=12345.67,
-        ):
+        with patch('youtube_extension.backend.deploy.fly.uuid.uuid4') as uuid4:
+            uuid4.return_value.hex = '23456789abcdef'
             assert (
                 adapter._generate_app_name({'title': 'My Awesome App'})
-                == 'uvai-my-awesome-app-2345'
+                == 'uvai-my-awesome-app-23456789'
             )
 
     @pytest.mark.asyncio
