@@ -143,14 +143,14 @@ An **image reference** refers to either a **tag reference** or **digest referenc
 
 A **tag reference** refers to an identifier of form `<registry>/<repo>:<tag>` which locates an image manifest in an [OCI Distribution Specification](https://github.com/opencontainers/distribution-spec/blob/master/spec.md) compliant registry.
 
-A **digest reference**  refers to a [content addressable](https://en.wikipedia.org/wiki/Content-addressable_storage) identifier of form `<registry>/<repo>@<digest>` which locates an image manifest in an [OCI Distribution Specification](https://github.com/opencontainers/distribution-spec/blob/master/spec.md) compliant registry.
+A **digest reference**  refers to a [content addressable](http://web.archive.org/web/20260716223051/https://en.wikipedia.org/wiki/Content-addressable_storage) identifier of form `<registry>/<repo>@<digest>` which locates an image manifest in an [OCI Distribution Specification](https://github.com/opencontainers/distribution-spec/blob/master/spec.md) compliant registry.
 
 The following is a non-exhaustive list of terms defined in the [OCI Image Format Specification](https://github.com/opencontainers/image-spec) used throughout this document:
 * **image manifest** provides an **image config** and a set of layers for a single container image for a specific architecture and operating system.
 * **image config** - https://github.com/opencontainers/image-spec/blob/master/config.md#oci-image-configuration
 * **imageID** - https://github.com/opencontainers/image-spec/blob/master/config.md#imageid
 * **diffID** - https://github.com/opencontainers/image-spec/blob/master/config.md#layer-diffid
-* **OCI Image Layout** format is the [directory structure](https://github.com/opencontainers/image-spec/blob/main/image-layout.md) for OCI content-addressable blobs and [location-addressable](https://en.wikipedia.org/wiki/Content-addressable_storage#Content-addressed_vs._location-addressed) references.
+* **OCI Image Layout** format is the [directory structure](https://github.com/opencontainers/image-spec/blob/main/image-layout.md) for OCI content-addressable blobs and [location-addressable](http://web.archive.org/web/20260716223051/https://en.wikipedia.org/wiki/Content-addressable_storage) references.
 
 The following is a non-exhaustive list of terms defined in the [OCI Distribution Specification](https://github.com/opencontainers/distribution-spec/blob/main/spec.md) used throughout this document:
 
@@ -199,7 +199,7 @@ The platform SHOULD ensure that:
 - The image config's `Label` field has the label `io.buildpacks.base.released` set to the release date of the image.
 - The image config's `Label` field has the label `io.buildpacks.base.description` set to the description of the image.
 - The image config's `Label` field has the label `io.buildpacks.base.metadata` set to additional metadata related to the image.
-- The image config's `Label` field has the label `io.buildpacks.rebasable` set to `true` to indicate that new run image versions maintain [ABI-compatibility](https://en.wikipedia.org/wiki/Application_binary_interface) with previous versions (see [Compatibility Guarantees](#compatibility-guarantees)).
+- The image config's `Label` field has the label `io.buildpacks.rebasable` set to `true` to indicate that new run image versions maintain [ABI-compatibility](http://web.archive.org/web/20260720095204/http://web.archive.org/web/20260720095204/http://web.archive.org/web/20260720095204/https://en.wikipedia.org/wiki/Application_binary_interface) with previous versions (see [Compatibility Guarantees](#compatibility-guarantees)).
 
 ### Target Data
 
