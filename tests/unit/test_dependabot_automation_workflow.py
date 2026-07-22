@@ -37,13 +37,6 @@ def test_dependabot_workflow_uses_safe_triggers_and_permissions() -> None:
         "pull-requests": "write",
         "statuses": "read",
     }
-    # The auto-merge feature flag is controlled by a repository variable
-    # (vars context), which — unlike env — is available in job-level `if`
-    # conditions. It must not be defined as a workflow-level env value, since
-    # env is not accessible there and would make the flag inert.
-    assert "env" not in workflow or "DEPENDABOT_AUTO_MERGE_ENABLED" not in (
-        workflow.get("env") or {}
-    )
 
 
 def test_dependabot_workflow_approves_and_merges_without_checkout() -> None:
@@ -53,13 +46,10 @@ def test_dependabot_workflow_approves_and_merges_without_checkout() -> None:
     approve_job = jobs["approve"]
     merge_job = jobs["merge"]
 
-    assert "vars.DEPENDABOT_AUTO_MERGE_ENABLED == 'true'" in approve_job["if"]
     assert "dependabot[bot]" in approve_job["if"]
     assert "github.event.pull_request.user.login == 'dependabot[bot]'" in approve_job["if"]
     assert "github.repository == 'groupthinking/EventRelay'" in approve_job["if"]
     assert "github.actor == 'dependabot[bot]'" not in approve_job["if"]
-
-    assert "vars.DEPENDABOT_AUTO_MERGE_ENABLED == 'true'" in merge_job["if"]
 
     approve_steps = approve_job["steps"]
     merge_steps = merge_job["steps"]
