@@ -56,7 +56,7 @@ def test_check_logging_debug_fails(tmp_path):
         assert module.check_logging() is True
 
 
-def test_check_logging_root_setlevel_debug_fails(tmp_path):
+def test_check_logging_setlevel_debug_fails(tmp_path):
     main_py = tmp_path / "main.py"
     main_py.write_text("logging.root.setLevel(logging.DEBUG)")
 
