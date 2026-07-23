@@ -58,9 +58,9 @@ No agent may merge, close useful work, delete an unmerged branch, or mark a PR r
 Before a PR advances:
 
 - the observed PR head equals the tested head;
-- required CI, coverage, security, secret, dependency, and focused workflows complete on that head;
+- required CI, security, secret, dependency, and focused workflows pass on that head; coverage is explicitly non-applicable for documentation-only diffs;
 - all current review findings are fixed and resolved with evidence;
-- a current-head independent review exists when required;
+- a current-head independent review exists;
 - deployment evidence is bound to the same head, or deployment is explicitly non-applicable;
 - the truth gate reports the real remaining blockers;
 - the focused issue and #898 are updated with exact evidence.
