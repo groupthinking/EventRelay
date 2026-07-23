@@ -3029,21 +3029,21 @@ const issueB = {
   body: '## Agent login\nexample-agent[bot]\n' +
     '## Agent run id\nrun-b'
 };
-const noPull = null;
-const identityA = scheduledContractIdentity(870, issueA, noPull, true);
-const identityB = scheduledContractIdentity(871, issueB, noPull, true);
-const allNull = scheduledContractIdentity(0, null, noPull, true);
+const pullRequestContext = null;
+const identityA = scheduledContractIdentity(870, issueA, pullRequestContext, true);
+const identityB = scheduledContractIdentity(871, issueB, pullRequestContext, true);
+const allNull = scheduledContractIdentity(0, null, pullRequestContext, true);
 const missingLogin = scheduledContractIdentity(870, {
   body: '## Agent run id\nrun-a'
-}, noPull, true);
+}, pullRequestContext, true);
 const missingRun = scheduledContractIdentity(870, {
   body: '## Agent login\nexample-agent[bot]'
-}, noPull, true);
+}, pullRequestContext, true);
 if (JSON.stringify(identityA) !== JSON.stringify({
   issue_number: 870,
   agent_login: 'example-agent[bot]',
   run_id: 'run-a'
-}) || scheduledContractIdentity(870, issueA, noPull, false) !== null) {
+}) || scheduledContractIdentity(870, issueA, pullRequestContext, false) !== null) {
   throw new Error('contract identity extraction failed');
 }
 const previous = {
