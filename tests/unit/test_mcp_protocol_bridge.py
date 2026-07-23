@@ -828,8 +828,11 @@ class TestOpenAIAdapter:
         await adapter.initialize({"api_key": "sk-test"})
         assert adapter.base_url == "https://api.openai.com/v1"
 
-    async def test_initialize_accepts_custom_https_base_url(self):
+    async def test_initialize_accepts_custom_https_base_url(self, monkeypatch):
         adapter = OpenAIAdapter()
+        monkeypatch.setenv(
+            "OPENAI_ALLOWED_BASE_URLS", "https://proxy.example.com/v1"
+        )
         with patch.object(
             _pb_mod.socket,
             "getaddrinfo",
@@ -843,6 +846,19 @@ class TestOpenAIAdapter:
         getaddrinfo.assert_called_once_with(
             "proxy.example.com", 443, type=_pb_mod.socket.SOCK_STREAM
         )
+
+    async def test_initialize_rejects_unallowlisted_custom_base_url(self) -> None:
+        adapter = OpenAIAdapter()
+        with patch.object(
+            _pb_mod.socket,
+            "getaddrinfo",
+            return_value=[_dns_result("93.184.216.34")],
+        ) as getaddrinfo:
+            result = await adapter.initialize(
+                {"api_key": "sk-test", "base_url": "https://attacker.example/v1"}
+            )
+        assert result is False
+        getaddrinfo.assert_not_called()
 
     async def test_initialize_rejects_metadata_endpoint_base_url(self):
         adapter = OpenAIAdapter()
