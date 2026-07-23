@@ -1,60 +1,56 @@
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { formatApiError } from '../error-handling';
+import { formatApiError } from '@/lib/error-handling';
 
-const webSrc = join(dirname(fileURLToPath(import.meta.url)), '../..');
+/**
+ * Security regression coverage for #945 / PR #942.
+ *
+ * `formatApiError` must never surface stack-derived implementation details in
+ * the client-visible error payload. These tests pin that boundary so the
+ * general web suite cannot pass while a regression re-exposes `Error.stack`.
+ */
+describe('formatApiError stack-trace safety', () => {
+  const STACK_MARKER = 'SECRET_STACK_FRAME at /srv/app/internal/secret.ts:42:13';
 
-function readSource(relativePath: string) {
-  return readFileSync(join(webSrc, relativePath), 'utf8');
-}
+  it('returns only the public message for an Error and never leaks the stack', () => {
+    const error = new Error('Something failed publicly');
+    error.stack = `Error: Something failed publicly\n    ${STACK_MARKER}`;
 
-describe('formatApiError stack safety', () => {
-  it('does not expose Error.stack in the formatted response', () => {
-    const err = new Error('public message only');
-    err.stack =
-      'Error: public message only\n    at Object.<anonymous> (/src/secret/internal-path.ts:42:7)';
+    const result = formatApiError(error);
 
-    const result = formatApiError(err);
-
-    expect(result.message).toBe('public message only');
-    // stack-derived details must not appear anywhere in the result
-    expect(JSON.stringify(result)).not.toContain('internal-path.ts');
-    expect(JSON.stringify(result)).not.toContain('secret');
+    expect(result).toEqual({ message: 'Something failed publicly' });
+    // The serialized payload is what reaches the client — assert the whole
+    // shape is free of any stack-derived detail, not just the known keys.
+    expect(JSON.stringify(result)).not.toContain(STACK_MARKER);
+    expect(JSON.stringify(result)).not.toContain('secret.ts');
     expect(result).not.toHaveProperty('stack');
-    expect(result).not.toHaveProperty('details');
+    expect(result.details).toBeUndefined();
   });
 
-  it('uses the defaultMessage when Error.message is empty', () => {
-    const err = new Error('');
-    err.stack = 'Error\n    at Object.<anonymous> (/src/secret/another-path.ts:1:1)';
+  it('falls back to the default message when an Error has an empty message', () => {
+    const error = new Error('');
+    error.stack = `Error\n    ${STACK_MARKER}`;
 
-    const result = formatApiError(err, 'fallback message');
+    const result = formatApiError(error, 'An error occurred');
 
-    expect(result.message).toBe('fallback message');
-    expect(JSON.stringify(result)).not.toContain('another-path.ts');
-    expect(result).not.toHaveProperty('stack');
+    expect(result).toEqual({ message: 'An error occurred' });
+    expect(JSON.stringify(result)).not.toContain(STACK_MARKER);
   });
 
-  it('handles a non-Error object shape with message and code', () => {
-    const result = formatApiError({ message: 'bad request', code: 'ERR_400' });
+  it('formats the non-Error object shape without exposing extra internals', () => {
+    const result = formatApiError({
+      message: 'Upstream rejected',
+      code: 'E_UPSTREAM',
+      stack: STACK_MARKER,
+    });
 
-    expect(result.message).toBe('bad request');
-    expect(result.code).toBe('ERR_400');
+    expect(result).toEqual({ message: 'Upstream rejected', code: 'E_UPSTREAM' });
+    expect(JSON.stringify(result)).not.toContain(STACK_MARKER);
     expect(result).not.toHaveProperty('stack');
+    expect(result.details).toBeUndefined();
   });
 
-  it('handles a primitive input without throwing', () => {
-    const result = formatApiError('something went wrong');
-
-    expect(result.message).toBe('something went wrong');
-    expect(result).not.toHaveProperty('stack');
-  });
-
-  it('source file does not reference error.stack anywhere in error-handling.ts', () => {
-    const source = readSource('lib/error-handling.ts');
-    // Any reference to error.stack would re-expose implementation details to callers
-    expect(source).not.toContain('error.stack');
+  it('handles primitive errors with only the public string or default', () => {
+    expect(formatApiError('plain failure')).toEqual({ message: 'plain failure' });
+    expect(formatApiError('', 'fallback message')).toEqual({ message: 'fallback message' });
   });
 });
