@@ -70,6 +70,8 @@ _SUMMARY_KEY_ALLOWLIST = frozenset(
     }
 )
 _CAPABILITY_DISCOVERY_TIMEOUT_SECONDS = 5.0
+_DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1"
+_OPENAI_BASE_URL_ALLOWLIST_ENV = "OPENAI_ALLOWED_BASE_URLS"
 
 
 def _summarize_payload(payload: Any) -> dict[str, Any]:
@@ -106,6 +108,18 @@ def _is_global_dns_result(result: Any) -> bool:
         return family in (socket.AF_INET, socket.AF_INET6) and ipaddress.ip_address(address).is_global
     except (IndexError, TypeError, ValueError):
         return False
+
+
+def _is_openai_base_url_allowlisted(base_url: str) -> bool:
+    """Return True for the official endpoint or an operator-approved exact URL."""
+    allowed = {_DEFAULT_OPENAI_BASE_URL.rstrip("/")}
+    configured = os.getenv(_OPENAI_BASE_URL_ALLOWLIST_ENV, "")
+    allowed.update(
+        candidate.strip().rstrip("/")
+        for candidate in configured.split(",")
+        if candidate.strip()
+    )
+    return base_url.rstrip("/") in allowed
 
 
 async def _is_public_https_base_url(base_url: str) -> bool:
@@ -584,6 +598,16 @@ class OpenAIAdapter(ProtocolAdapter):
             logger.error(
                 "Unsafe OpenAI base_url rejected (must be a string, got %s)",
                 type(base_url).__name__,
+            )
+            return False
+
+        # DNS validation alone is vulnerable to rebinding between validation
+        # and the SDK connection. Trust only the official endpoint or an exact
+        # operator-managed allowlist entry, then retain the public-IP check as
+        # defense in depth.
+        if not _is_openai_base_url_allowlisted(base_url):
+            logger.error(
+                "Unsafe OpenAI base_url rejected (endpoint is not allowlisted)"
             )
             return False
 
