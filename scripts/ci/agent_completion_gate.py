@@ -5,10 +5,10 @@ import json
 import re
 import sys
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 
-def evaluate(payload: Any) -> Dict[str, Any]:
+def evaluate(payload: Any) -> dict[str, Any]:
     """Evaluate agent execution evidence and return a fail-closed verdict."""
 
     if not isinstance(payload, dict):
@@ -47,9 +47,7 @@ def evaluate(payload: Any) -> Dict[str, Any]:
         if not isinstance(value, str) or not value.strip():
             invalid_fields.append("policy." + field)
     head_sha = policy.get("head_sha")
-    if not isinstance(head_sha, str) or not re.fullmatch(
-        r"[a-fA-F0-9]{40}", head_sha
-    ):
+    if not isinstance(head_sha, str) or not re.fullmatch(r"[a-fA-F0-9]{40}", head_sha):
         invalid_fields.append("policy.head_sha")
 
     for field, value in (
@@ -122,8 +120,7 @@ def evaluate(payload: Any) -> Dict[str, Any]:
                 invalid_fields.append(f"reviews[{index}].source")
 
     if isinstance(collection_errors, list) and not all(
-        isinstance(error, str) and error.strip()
-        for error in collection_errors
+        isinstance(error, str) and error.strip() for error in collection_errors
     ):
         invalid_fields.append("collection_errors")
 
@@ -306,8 +303,7 @@ def evaluate(payload: Any) -> Dict[str, Any]:
             for event in scoped_events
             if str(event.get("kind") or "").lower() == "error"
             or not active_head_sha
-            or str(event.get("head_sha") or "").strip().lower()
-            == active_head_sha
+            or str(event.get("head_sha") or "").strip().lower() == active_head_sha
         ]
         unscoped_errors = [
             event
@@ -316,8 +312,7 @@ def evaluate(payload: Any) -> Dict[str, Any]:
             and str(event.get("kind") or "").lower() == "error"
         ]
         scoped_error_exists = any(
-            str(event.get("kind") or "").lower() == "error"
-            for event in scoped_events
+            str(event.get("kind") or "").lower() == "error" for event in scoped_events
         )
         error_evidence_exists = scoped_error_exists or bool(unscoped_errors)
         legacy_positive_evidence = [
@@ -325,22 +320,17 @@ def evaluate(payload: Any) -> Dict[str, Any]:
             for event in events
             if error_evidence_exists
             and not str(event.get("run_id") or "").strip()
-            and str(event.get("kind") or "").lower()
-            in {"artifact_ready", "completed"}
+            and str(event.get("kind") or "").lower() in {"artifact_ready", "completed"}
         ]
         events = current_events + unscoped_errors + legacy_positive_evidence
 
-    terminal_kinds = {
-        str(event.get("kind") or "").lower()
-        for event in events
-    }
+    terminal_kinds = {str(event.get("kind") or "").lower() for event in events}
     if not terminal_kinds.intersection({"artifact_ready", "completed"}):
         reasons.append("missing_agent_result")
     if "error" in terminal_kinds:
         reasons.append("agent_run_failed")
-    if (
-        "error" in terminal_kinds
-        and terminal_kinds.intersection({"artifact_ready", "completed"})
+    if "error" in terminal_kinds and terminal_kinds.intersection(
+        {"artifact_ready", "completed"}
     ):
         reasons.append("contradictory_terminal_events")
 

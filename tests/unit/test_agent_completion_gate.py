@@ -10,9 +10,7 @@ from pathlib import Path
 
 def _gate_module():
     try:
-        return importlib.import_module(
-            "scripts.ci.agent_completion_gate"
-        )
+        return importlib.import_module("scripts.ci.agent_completion_gate")
     except ModuleNotFoundError:
         raise AssertionError("completion gate is not implemented") from None
 
@@ -122,7 +120,7 @@ def _javascript_functions(source, signature):
             elif source[index] == "}":
                 depth -= 1
                 if depth == 0:
-                    functions.append(source[start:index + 1])
+                    functions.append(source[start : index + 1])
                     cursor = index + 1
                     break
         else:
@@ -139,7 +137,7 @@ def _github_script_bodies(workflow):
             continue
         key_indent = len(line) - len(line.lstrip())
         body_lines = []
-        for candidate in lines[index + 1:]:
+        for candidate in lines[index + 1 :]:
             if candidate.strip():
                 indent = len(candidate) - len(candidate.lstrip())
                 if indent <= key_indent:
@@ -152,10 +150,12 @@ def _github_script_bodies(workflow):
         ]
         if content_indents:
             content_indent = min(content_indents)
-            bodies.append("\n".join(
-                candidate[content_indent:] if candidate.strip() else ""
-                for candidate in body_lines
-            ))
+            bodies.append(
+                "\n".join(
+                    candidate[content_indent:] if candidate.strip() else ""
+                    for candidate in body_lines
+                )
+            )
     return bodies
 
 
@@ -360,9 +360,7 @@ class CompletionGateTests(unittest.TestCase):
         payload["issue"]["declared_files"] = []
         payload["issue"]["scope_unrestricted"] = True
         payload["pull_request"]["changed_files"].append("docs/extra.md")
-        payload["pull_request"]["present_changed_files"].append(
-            "docs/extra.md"
-        )
+        payload["pull_request"]["present_changed_files"].append("docs/extra.md")
 
         result = _evaluate(payload)
 
@@ -504,9 +502,7 @@ class CompletionGateTests(unittest.TestCase):
 
     def test_success_from_an_old_head_cannot_satisfy_current_head(self):
         payload = _valid_payload()
-        payload["policy"].update(
-            {"run_id": "new-run", "head_sha": "b" * 40}
-        )
+        payload["policy"].update({"run_id": "new-run", "head_sha": "b" * 40})
         payload["events"] = [
             {
                 "kind": "completed",
@@ -744,9 +740,7 @@ class CompletionGateTests(unittest.TestCase):
             with self.subTest(count=count):
                 payload = _valid_payload()
                 results = payload["evidence"]["focused_test_results"]
-                results["tests/unit/test_agent_completion_gate.py"][
-                    "passed"
-                ] = count
+                results["tests/unit/test_agent_completion_gate.py"]["passed"] = count
 
                 result = _evaluate(payload)
 
@@ -973,9 +967,7 @@ class CompletionGateTests(unittest.TestCase):
 
     def test_review_source_must_be_nonempty_text(self):
         payload = _valid_payload()
-        payload["reviews"] = [
-            {"blocking": True, "resolved": False, "source": ""}
-        ]
+        payload["reviews"] = [{"blocking": True, "resolved": False, "source": ""}]
 
         result = _evaluate(payload)
 
@@ -1199,9 +1191,9 @@ class CompletionGateTests(unittest.TestCase):
 
 class CompletionGateWorkflowTests(unittest.TestCase):
     def _workflow(self):
-        return (
-            _repo_root() / ".github" / "workflows" / "pr-checks.yml"
-        ).read_text(encoding="utf-8")
+        return (_repo_root() / ".github" / "workflows" / "pr-checks.yml").read_text(
+            encoding="utf-8"
+        )
 
     def test_workflow_runs_from_trusted_default_branch(self):
         workflow = self._workflow()
@@ -1219,12 +1211,14 @@ class CompletionGateWorkflowTests(unittest.TestCase):
     def test_workflow_cannot_leave_a_stale_green_status(self):
         workflow = self._workflow()
         publish_step = workflow[
-            workflow.index("name: Publish stable status and comment"):
-            workflow.index("name: Finalize failed gate publication")
+            workflow.index("name: Publish stable status and comment") : workflow.index(
+                "name: Finalize failed gate publication"
+            )
         ]
         finalizer_step = workflow[
-            workflow.index("name: Finalize failed gate publication"):
-            workflow.index("name: Enforce verdict")
+            workflow.index("name: Finalize failed gate publication") : workflow.index(
+                "name: Enforce verdict"
+            )
         ]
 
         self.assertIn("id: resolve", workflow)
@@ -1275,8 +1269,7 @@ class CompletionGateWorkflowTests(unittest.TestCase):
         )
         self.assertNotRegex(
             finalizer_step,
-            r"already_failed'\s*\|\|\s*"
-            r"disposition === 'already_succeeded",
+            r"already_failed'\s*\|\|\s*" r"disposition === 'already_succeeded",
         )
         self.assertIn("state: 'failure'", finalizer_step)
         self.assertEqual(
@@ -1291,12 +1284,14 @@ class CompletionGateWorkflowTests(unittest.TestCase):
     def test_resolve_collect_and_publish_commits_must_match(self):
         workflow = self._workflow()
         collect_step = workflow[
-            workflow.index("name: Collect repository evidence"):
-            workflow.index("name: Evaluate completion evidence")
+            workflow.index("name: Collect repository evidence") : workflow.index(
+                "name: Evaluate completion evidence"
+            )
         ]
         publish_step = workflow[
-            workflow.index("name: Publish stable status and comment"):
-            workflow.index("name: Finalize failed gate publication")
+            workflow.index("name: Publish stable status and comment") : workflow.index(
+                "name: Finalize failed gate publication"
+            )
         ]
         functions = _javascript_functions(
             workflow,
@@ -1369,8 +1364,9 @@ for (const [resolved, collected, current, expected] of rows) {
     def test_workflow_reserves_status_capacity_for_finalization(self):
         workflow = self._workflow()
         resolve = workflow[
-            workflow.index("      - name: Resolve pull request"):
-            workflow.index("      - name: Check out trusted gate")
+            workflow.index("      - name: Resolve pull request") : workflow.index(
+                "      - name: Check out trusted gate"
+            )
         ]
 
         self.assertIn("listCommitStatusesForRef", resolve)
@@ -1420,8 +1416,9 @@ for (const [disposition, expected] of rows) {
         self.assertEqual(completed.returncode, 0, completed.stderr)
 
         finalizer_step = workflow[
-            workflow.index("name: Finalize failed gate publication"):
-            workflow.index("name: Enforce verdict")
+            workflow.index("name: Finalize failed gate publication") : workflow.index(
+                "name: Enforce verdict"
+            )
         ]
         self.assertIn("if (!mayFinalizeFailure(disposition))", finalizer_step)
         self.assertIn("No proven lease for failure publication", finalizer_step)
@@ -1612,8 +1609,9 @@ for (const [name, target, actor, body, previousBody, expected] of rows) {
         self.assertEqual(completed.returncode, 0, completed.stderr)
 
         dispatch = workflow[
-            workflow.index("  dispatch-evidence-refresh:"):
-            workflow.index("  validate:")
+            workflow.index("  dispatch-evidence-refresh:") : workflow.index(
+                "  validate:"
+            )
         ]
         self.assertIn("issueCommentAffectsEvidence(", dispatch)
         self.assertIn("context.payload.changes", dispatch)
@@ -1662,8 +1660,9 @@ for (const [actor, response, expected] of rows) {
         self.assertEqual(completed.returncode, 0, completed.stderr)
 
         dispatch = workflow[
-            workflow.index("  dispatch-evidence-refresh:"):
-            workflow.index("  validate:")
+            workflow.index("  dispatch-evidence-refresh:") : workflow.index(
+                "  validate:"
+            )
         ]
         self.assertNotIn("!knownAgentCommenters.has(actor)", dispatch)
         self.assertIn("roleName = result.data.role_name", dispatch)
@@ -1671,8 +1670,9 @@ for (const [actor, response, expected] of rows) {
     def test_every_known_agent_is_treated_as_an_ai_reviewer(self):
         workflow = self._workflow()
         reviewer_set = workflow[
-            workflow.index("function aiReviewerLoginSet("):
-            workflow.index("function isCurrentCopilotReview(")
+            workflow.index("function aiReviewerLoginSet(") : workflow.index(
+                "function isCurrentCopilotReview("
+            )
         ]
 
         self.assertNotIn("...knownAgents", reviewer_set)
@@ -1761,8 +1761,9 @@ for (const [login, expected] of rows) {
         self.assertEqual(completed.returncode, 0, completed.stderr)
 
         thread_collector = workflow[
-            workflow.index("const threads ="):
-            workflow.index("function focusedTestResultsFromLog(")
+            workflow.index("const threads =") : workflow.index(
+                "function focusedTestResultsFromLog("
+            )
         ]
         self.assertRegex(
             thread_collector,
@@ -1810,8 +1811,9 @@ for (const [value, expected] of rows) {
     def test_snapshot_label_actor_permission_decision_table(self):
         workflow = self._workflow()
         snapshot = workflow[
-            workflow.index("  snapshot-agent-task-intent:"):
-            workflow.index("  refresh-open-pull-requests:")
+            workflow.index("  snapshot-agent-task-intent:") : workflow.index(
+                "  refresh-open-pull-requests:"
+            )
         ]
         functions = _javascript_functions(
             workflow,
@@ -1979,7 +1981,9 @@ for (const [values, expected] of rows) {
     def test_workflow_freezes_issue_intent_before_agent_execution(self):
         workflow = self._workflow()
 
-        self.assertIn("types: [opened, edited, labeled, unlabeled, closed, reopened]", workflow)
+        self.assertIn(
+            "types: [opened, edited, labeled, unlabeled, closed, reopened]", workflow
+        )
         self.assertIn("snapshot-agent-task-intent:", workflow)
         self.assertIn("agent-lock-intent-snapshot:v1", workflow)
         self.assertGreaterEqual(
@@ -2024,10 +2028,9 @@ for (const [snapshot, pull, expected] of rows) {
     def test_snapshot_requires_privileged_actor_for_relabel(self):
         workflow = self._workflow()
         header = workflow[
-            workflow.index("  snapshot-agent-task-intent:"):
-            workflow.index("    concurrency:", workflow.index(
-                "  snapshot-agent-task-intent:"
-            ))
+            workflow.index("  snapshot-agent-task-intent:") : workflow.index(
+                "    concurrency:", workflow.index("  snapshot-agent-task-intent:")
+            )
         ]
 
         self.assertNotIn("github.event.action == 'opened'", header)
@@ -2052,9 +2055,7 @@ for (const [snapshot, pull, expected] of rows) {
             workflow,
         )
         self.assertGreaterEqual(
-            workflow.count(
-                "'agent-completion/truth-gate/pr-' + prNumber"
-            ),
+            workflow.count("'agent-completion/truth-gate/pr-' + prNumber"),
             1,
         )
         self.assertEqual(workflow.count("context: gateContext"), 3)
@@ -2194,8 +2195,9 @@ if (crOnly['tests/unit/test_cr.py'].passed !== 1) {
     def test_scheduled_sweep_can_list_pull_requests(self):
         workflow = self._workflow()
         sweep = workflow[
-            workflow.index("  refresh-open-pull-requests:"):
-            workflow.index("  dispatch-evidence-refresh:")
+            workflow.index("  refresh-open-pull-requests:") : workflow.index(
+                "  dispatch-evidence-refresh:"
+            )
         ]
 
         self.assertIn("issues: read", sweep)
@@ -2494,8 +2496,9 @@ if (verdictProjection([]) !== null) {
         self.assertEqual(completed.returncode, 0, completed.stderr)
 
         sweep = workflow[
-            workflow.index("  refresh-open-pull-requests:"):
-            workflow.index("  dispatch-evidence-refresh:")
+            workflow.index("  refresh-open-pull-requests:") : workflow.index(
+                "  dispatch-evidence-refresh:"
+            )
         ]
         self.assertIn("latest.state === 'success'", sweep)
         self.assertIn("previousProjection.projectionKnown", sweep)
@@ -2543,8 +2546,9 @@ for (const [name, actor, body, expected] of rows) {
         self.assertEqual(completed.returncode, 0, completed.stderr)
 
         sweep = workflow[
-            workflow.index("  refresh-open-pull-requests:"):
-            workflow.index("  dispatch-evidence-refresh:")
+            workflow.index("  refresh-open-pull-requests:") : workflow.index(
+                "  dispatch-evidence-refresh:"
+            )
         ]
         self.assertIn("const evidenceComments =", sweep)
         self.assertNotIn("externalPullComments", sweep)
@@ -2635,8 +2639,9 @@ for (const [name, candidate, comments, expected] of rows) {
         self.assertEqual(completed.returncode, 0, completed.stderr)
 
         sweep = workflow[
-            workflow.index("  refresh-open-pull-requests:"):
-            workflow.index("  dispatch-evidence-refresh:")
+            workflow.index("  refresh-open-pull-requests:") : workflow.index(
+                "  dispatch-evidence-refresh:"
+            )
         ]
         self.assertIn("intentProjectionChanged", sweep)
         self.assertIn("previousProjection.collectionErrors", sweep)
@@ -2733,8 +2738,9 @@ for (const [name, previous, current, count, applicable, expected] of rows) {
         self.assertEqual(completed.returncode, 0, completed.stderr)
 
         sweep = workflow[
-            workflow.index("  refresh-open-pull-requests:"):
-            workflow.index("  dispatch-evidence-refresh:")
+            workflow.index("  refresh-open-pull-requests:") : workflow.index(
+                "  dispatch-evidence-refresh:"
+            )
         ]
         self.assertIn("const applicableWithoutSelectedIssue =", sweep)
         self.assertIn("linkProjection.errors.length > 0", sweep)
@@ -2872,8 +2878,7 @@ if (scheduledLinkProjection(textual, []).selectedIssueNumber !== 2 ||
             [
                 "node",
                 "-e",
-                selection_functions[0] + applicable_functions[0] +
-                combined_assertions,
+                selection_functions[0] + applicable_functions[0] + combined_assertions,
             ],
             check=False,
             capture_output=True,
@@ -2996,8 +3001,7 @@ for (const [name, previous, current, applicable, expected] of rows) {
             [
                 "node",
                 "-e",
-                policy_projection_functions[0] +
-                policy_projection_assertions,
+                policy_projection_functions[0] + policy_projection_assertions,
             ],
             check=False,
             capture_output=True,
@@ -3077,8 +3081,9 @@ for (const [name, prior, current, applicable, expected] of rows) {
             [
                 "node",
                 "-e",
-                identity_functions[0] + identity_projection_functions[0] +
-                identity_assertions,
+                identity_functions[0]
+                + identity_projection_functions[0]
+                + identity_assertions,
             ],
             check=False,
             capture_output=True,
@@ -3089,8 +3094,7 @@ for (const [name, prior, current, applicable, expected] of rows) {
     def test_validation_replaces_obsolete_failure_comment(self):
         workflow = self._workflow()
         validate = workflow[
-            workflow.index("  validate:"):
-            workflow.index("  truth-gate:")
+            workflow.index("  validate:") : workflow.index("  truth-gate:")
         ]
 
         self.assertIn("✅ Current validation passed.", validate)
@@ -3106,8 +3110,7 @@ for (const [name, prior, current, applicable, expected] of rows) {
 
         workflow = self._workflow()
         validate = workflow[
-            workflow.index("  validate:"):
-            workflow.index("  truth-gate:")
+            workflow.index("  validate:") : workflow.index("  truth-gate:")
         ]
         script = _github_script_bodies(validate)[0]
 
@@ -3231,17 +3234,21 @@ async function runValidate(pr) {
     def test_gate_runs_are_serialized_and_coalesced_by_pr_number(self):
         workflow = self._workflow()
         dispatch = workflow[
-            workflow.index("  dispatch-evidence-refresh:"):
-            workflow.index("  validate:")
+            workflow.index("  dispatch-evidence-refresh:") : workflow.index(
+                "  validate:"
+            )
         ]
         truth_gate_header = workflow[
-            workflow.index("  truth-gate:"):
-            workflow.index("    steps:", workflow.index("  truth-gate:"))
+            workflow.index("  truth-gate:") : workflow.index(
+                "    steps:", workflow.index("  truth-gate:")
+            )
         ]
 
         self.assertIn("dispatch-evidence-refresh:", workflow)
         self.assertIn("group: agent-completion-${{", workflow)
-        self.assertIn("inputs.pull_request || github.event.pull_request.number", workflow)
+        self.assertIn(
+            "inputs.pull_request || github.event.pull_request.number", workflow
+        )
         self.assertIn("cancel-in-progress: false", truth_gate_header)
         self.assertNotIn("cancel-in-progress: true", truth_gate_header)
         self.assertIn("timeout-minutes: 20", truth_gate_header)
@@ -3353,8 +3360,9 @@ class CompletionGateDocumentationTests(unittest.TestCase):
         ):
             self.assertIn(field, template)
         declared_scope = template[
-            template.index("    id: declared_scope"):
-            template.index("    id: allowed_extra")
+            template.index("    id: declared_scope") : template.index(
+                "    id: allowed_extra"
+            )
         ]
         self.assertIn("validations:", declared_scope)
         self.assertIn("required: true", declared_scope)
@@ -3362,9 +3370,9 @@ class CompletionGateDocumentationTests(unittest.TestCase):
         self.assertNotIn("scope-unrestricted-approved", template)
 
     def test_pr_template_uses_an_inert_example_marker(self):
-        template = (
-            _repo_root() / ".github" / "pull_request_template.md"
-        ).read_text(encoding="utf-8")
+        template = (_repo_root() / ".github" / "pull_request_template.md").read_text(
+            encoding="utf-8"
+        )
 
         self.assertIn("agent-lock-example", template)
         self.assertNotIn("<!-- agent-lock-manifest", template)
