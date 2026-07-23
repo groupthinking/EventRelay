@@ -2902,6 +2902,10 @@ const base = {
   labels: [{name: 'copilot-rabbit'}],
   body: manifest + '\nFixes #870'
 };
+const noFallback = {
+  ...base,
+  body: 'Fixes #870'
+};
 const rows = [
   ['valid', base, issue, true, []],
   ['draft', {...base, draft: true}, issue, true, ['draft_pr']],
@@ -2934,6 +2938,10 @@ const rows = [
     }) + ' -->\nFixes #870'
   }, issue, true, ['agent_login_mismatch']],
   ['missing headings', base, {body: ''}, true, []],
+  ['missing headings without fallback', noFallback, {body: ''}, true, [
+    'missing_agent_login',
+    'missing_agent_run_id'
+  ]],
   ['not applicable', {...base, draft: true, labels: []}, issue, false, []]
 ];
 for (const [name, pull, selected, applicable, expected] of rows) {
@@ -3021,20 +3029,21 @@ const issueB = {
   body: '## Agent login\nexample-agent[bot]\n' +
     '## Agent run id\nrun-b'
 };
-const identityA = scheduledContractIdentity(870, issueA, null, true);
-const identityB = scheduledContractIdentity(871, issueB, null, true);
-const allNull = scheduledContractIdentity(0, null, null, true);
+const noPull = null;
+const identityA = scheduledContractIdentity(870, issueA, noPull, true);
+const identityB = scheduledContractIdentity(871, issueB, noPull, true);
+const allNull = scheduledContractIdentity(0, null, noPull, true);
 const missingLogin = scheduledContractIdentity(870, {
   body: '## Agent run id\nrun-a'
-}, null, true);
+}, noPull, true);
 const missingRun = scheduledContractIdentity(870, {
   body: '## Agent login\nexample-agent[bot]'
-}, null, true);
+}, noPull, true);
 if (JSON.stringify(identityA) !== JSON.stringify({
   issue_number: 870,
   agent_login: 'example-agent[bot]',
   run_id: 'run-a'
-}) || scheduledContractIdentity(870, issueA, null, false) !== null) {
+}) || scheduledContractIdentity(870, issueA, noPull, false) !== null) {
   throw new Error('contract identity extraction failed');
 }
 const previous = {
