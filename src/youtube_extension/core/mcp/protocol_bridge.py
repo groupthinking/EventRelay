@@ -18,6 +18,7 @@ import ipaddress
 import logging
 import os
 import socket
+import ssl
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from datetime import datetime, timezone
@@ -30,6 +31,7 @@ from .server_registry import ServerCapability
 
 # Optional SDK imports — each is silently skipped when not installed
 try:
+    import httpx
     import openai
 
     _HAS_OPENAI = True
@@ -72,6 +74,61 @@ _SUMMARY_KEY_ALLOWLIST = frozenset(
 _CAPABILITY_DISCOVERY_TIMEOUT_SECONDS = 5.0
 _DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1"
 _OPENAI_BASE_URL_ALLOWLIST_ENV = "OPENAI_ALLOWED_BASE_URLS"
+
+
+if _HAS_OPENAI:
+    class _PinnedIPTransport(httpx.AsyncHTTPTransport):
+        """HTTPX transport that always connects to a pre-resolved IP address.
+
+        Prevents DNS rebinding TOCTOU attacks: the hostname is resolved once
+        during ``OpenAIAdapter.initialize()`` and all subsequent TCP connections
+        go directly to that IP.  The original hostname is preserved in the
+        ``Host`` header and as the TLS SNI so certificate verification succeeds
+        against the server's certificate.
+        """
+
+        def __init__(
+            self,
+            *,
+            original_host: str,
+            pinned_ip: str,
+            **kwargs: Any,
+        ) -> None:
+            kwargs.setdefault("verify", ssl.create_default_context())
+            super().__init__(**kwargs)
+            self._original_host = original_host
+            self._pinned_ip = pinned_ip
+
+        async def handle_async_request(
+            self, request: httpx.Request
+        ) -> httpx.Response:
+            if request.url.host not in (self._original_host, self._pinned_ip):
+                raise httpx.ConnectError(
+                    "SSRF guard: request to unexpected host blocked by transport pin"
+                )
+            # Rewrite the URL so httpcore opens a TCP connection to the pinned
+            # IP rather than re-resolving the hostname.
+            url = request.url.copy_with(host=self._pinned_ip)
+            # Explicitly preserve the original hostname in the Host header so
+            # virtual-hosting on the remote end works correctly.
+            raw_headers = [
+                (k, v) for k, v in request.headers.raw if k.lower() != b"host"
+            ]
+            raw_headers.insert(0, (b"host", self._original_host.encode("ascii")))
+            # Pass sni_hostname so httpcore/TLS uses the original hostname for
+            # both the SNI extension and server certificate verification.
+            extensions = {
+                **request.extensions,
+                "sni_hostname": self._original_host.encode("ascii"),
+            }
+            pinned_request = httpx.Request(
+                method=request.method,
+                url=url,
+                headers=raw_headers,
+                stream=request.stream,
+                extensions=extensions,
+            )
+            return await super().handle_async_request(pinned_request)
 
 
 def _summarize_payload(payload: Any) -> dict[str, Any]:
@@ -122,23 +179,35 @@ def _is_openai_base_url_allowlisted(base_url: str) -> bool:
     return base_url.rstrip("/") in allowed
 
 
-async def _is_public_https_base_url(base_url: str) -> bool:
-    """Return True when the URL targets a publicly routable HTTPS endpoint."""
+async def _validate_and_resolve_base_url(base_url: str) -> Optional[str]:
+    """Validate that *base_url* targets a public HTTPS endpoint and return the
+    IP address to use as a pinned TCP connection target.
+
+    This eliminates the DNS TOCTOU window: callers pin subsequent connections
+    to the returned address instead of re-resolving the hostname on every
+    request.
+
+    * For literal globally-routable IP addresses the address itself is returned
+      (no DNS lookup needed; no rebinding possible).
+    * For hostnames *every* resolved address must be globally routable; the
+      first resolved address is returned as the connection pin.
+    * Returns ``None`` when the URL is rejected for any reason.
+    """
     try:
         parsed = urlparse(base_url)
         if parsed.scheme != "https" or not parsed.netloc:
-            return False
+            return None
         host = parsed.hostname
         port = parsed.port or 443
     except (TypeError, ValueError):
-        return False
+        return None
 
     if not host:
-        return False
+        return None
 
     try:
         ip = ipaddress.ip_address(host)
-        return ip.is_global
+        return host if ip.is_global else None
     except ValueError:
         pass
 
@@ -150,9 +219,15 @@ async def _is_public_https_base_url(base_url: str) -> bool:
             type=socket.SOCK_STREAM,
         )
     except (OSError, UnicodeError, ValueError):
-        return False
+        return None
 
-    return bool(resolved) and all(_is_global_dns_result(result) for result in resolved)
+    if not resolved or not all(_is_global_dns_result(r) for r in resolved):
+        return None
+
+    try:
+        return resolved[0][4][0]
+    except (IndexError, TypeError):
+        return None
 
 
 class ProtocolType(Enum):
