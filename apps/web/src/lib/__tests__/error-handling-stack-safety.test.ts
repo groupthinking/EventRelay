@@ -52,19 +52,9 @@ describe('formatApiError stack safety', () => {
     expect(result).not.toHaveProperty('stack');
   });
 
-  it('source file does not contain stack in the Error branch', () => {
+  it('source file does not reference error.stack anywhere in error-handling.ts', () => {
     const source = readSource('lib/error-handling.ts');
-    // The Error instanceof branch must not reference .stack
-    const errorBranchMatch = source.match(
-      /if\s*\(\s*error\s+instanceof\s+Error\s*\)([\s\S]*?)(?=if\s*\(typeof|return\s*\{[^}]*message:\s*String)/,
-    )?.[1];
-
-    if (errorBranchMatch) {
-      expect(errorBranchMatch).not.toContain('.stack');
-    } else {
-      // Fallback: verify .stack is absent from the entire formatApiError body
-      const fnMatch = source.match(/function formatApiError[\s\S]*?^}/m)?.[0] ?? '';
-      expect(fnMatch).not.toContain('error.stack');
-    }
+    // Any reference to error.stack would re-expose implementation details to callers
+    expect(source).not.toContain('error.stack');
   });
 });
