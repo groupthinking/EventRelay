@@ -3029,20 +3029,21 @@ const issueB = {
   body: '## Agent login\nexample-agent[bot]\n' +
     '## Agent run id\nrun-b'
 };
-const identityA = scheduledContractIdentity(870, issueA, null, true);
-const identityB = scheduledContractIdentity(871, issueB, null, true);
-const allNull = scheduledContractIdentity(0, null, null, true);
+const NO_PR_CONTEXT = null;
+const identityA = scheduledContractIdentity(870, issueA, NO_PR_CONTEXT, true);
+const identityB = scheduledContractIdentity(871, issueB, NO_PR_CONTEXT, true);
+const allNull = scheduledContractIdentity(0, null, NO_PR_CONTEXT, true);
 const missingLogin = scheduledContractIdentity(870, {
   body: '## Agent run id\nrun-a'
-}, null, true);
+}, NO_PR_CONTEXT, true);
 const missingRun = scheduledContractIdentity(870, {
   body: '## Agent login\nexample-agent[bot]'
-}, null, true);
+}, NO_PR_CONTEXT, true);
 if (JSON.stringify(identityA) !== JSON.stringify({
   issue_number: 870,
   agent_login: 'example-agent[bot]',
   run_id: 'run-a'
-}) || scheduledContractIdentity(870, issueA, null, false) !== null) {
+}) || scheduledContractIdentity(870, issueA, NO_PR_CONTEXT, false) !== null) {
   throw new Error('contract identity extraction failed');
 }
 const previous = {
@@ -3274,6 +3275,7 @@ async function runValidate(pr) {
             workflow,
             "function legacyRunId(",
         )
+        # legacyRunId currently exists in both scheduled and collector script blocks.
         self.assertEqual(len(functions), 2)
 
         assertions = r"""
@@ -3362,6 +3364,7 @@ for (const [body, expected] of rows) {
             workflow,
             "function legacyRunId(",
         )
+        # Keep both workflow declarations in sync with the same behavior checks.
         self.assertEqual(len(functions), 2)
 
         assertions = r"""
