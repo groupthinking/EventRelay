@@ -3276,8 +3276,8 @@ async function runValidate(pr) {
             "function legacyRunId(",
         )
         # legacyRunId is intentionally duplicated in the scheduled sweep script
-        # and the Collect repository evidence script so each github-script block
-        # can execute independently without shared helper scope.
+        # and the Collect repository evidence script because github-script steps
+        # execute in isolated runtimes and cannot share helper scope.
         self.assertEqual(len(functions), 2)
 
         assertions = r"""
