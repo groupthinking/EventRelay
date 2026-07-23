@@ -3277,7 +3277,7 @@ async function runValidate(pr) {
         )
         # legacyRunId is intentionally duplicated in the scheduled sweep script
         # and the Collect repository evidence script so each github-script block
-        # remains self-contained.
+        # can execute independently without shared helper scope.
         self.assertEqual(len(functions), 2)
 
         assertions = r"""
@@ -3366,8 +3366,8 @@ for (const [body, expected] of rows) {
             workflow,
             "function legacyRunId(",
         )
-        # Validate both legacyRunId declarations from the scheduled sweep and
-        # collector script blocks against the same parsing contract.
+        # This enforces identical parsing behavior across the scheduled sweep
+        # and collector copies of legacyRunId.
         self.assertEqual(len(functions), 2)
 
         assertions = r"""
