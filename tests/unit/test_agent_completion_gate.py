@@ -3275,7 +3275,9 @@ async function runValidate(pr) {
             workflow,
             "function legacyRunId(",
         )
-        # legacyRunId currently exists in both scheduled and collector script blocks.
+        # legacyRunId is intentionally duplicated in the scheduled sweep script
+        # and the Collect repository evidence script so each github-script block
+        # remains self-contained.
         self.assertEqual(len(functions), 2)
 
         assertions = r"""
@@ -3364,7 +3366,8 @@ for (const [body, expected] of rows) {
             workflow,
             "function legacyRunId(",
         )
-        # Keep both workflow declarations in sync with the same behavior checks.
+        # Validate both legacyRunId declarations from the scheduled sweep and
+        # collector script blocks against the same parsing contract.
         self.assertEqual(len(functions), 2)
 
         assertions = r"""
