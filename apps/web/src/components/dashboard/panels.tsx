@@ -23,7 +23,7 @@ function PanelLoading({ label }: { label: string }) {
 
 function EmptyState({ icon, children }: { icon: React.ReactNode; children: React.ReactNode }) {
   return (
-    <div className="flex flex-col items-center justify-center text-center py-16 gap-4">
+    <div className="flex flex-col items-center justify-center text-center py-16 gap-4" role="status" aria-live="polite">
       <div style={{ color: 'rgba(248,245,253,0.2)' }}>{icon}</div>
       <p className="max-w-xs text-sm" style={{ color: 'rgba(248,245,253,0.4)' }}>{children}</p>
     </div>
@@ -223,7 +223,7 @@ export function AgentsPanel({
           {hasEvents && agentBackend && (
             <button
               onClick={() => onDispatch(video.id)}
-              className="px-4 py-2 text-xs font-bold uppercase tracking-wider transition-all active:scale-95"
+              className="px-4 py-2 text-xs font-bold uppercase tracking-wider transition-all active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#6af2de]/40"
               style={{ background: 'rgba(129,140,248,0.15)', color: '#818cf8', border: '1px solid rgba(129,140,248,0.3)' }}
             >
               Dispatch {video.events!.length} events
@@ -232,7 +232,7 @@ export function AgentsPanel({
           {anyRunning && (
             <button
               onClick={() => onRefresh(video.id)}
-              className="px-4 py-2 text-xs font-bold uppercase tracking-wider transition-all active:scale-95"
+              className="px-4 py-2 text-xs font-bold uppercase tracking-wider transition-all active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#6af2de]/40"
               style={{ background: 'rgba(255,255,255,0.05)', color: 'rgba(248,245,253,0.7)', border: '1px solid rgba(255,255,255,0.1)' }}
             >
               Refresh
@@ -304,9 +304,10 @@ export function SearchPanel({
         />
         <button
           type="submit"
-          className="px-4 py-2.5 font-heading font-bold text-xs tracking-wider uppercase transition-all disabled:opacity-30 active:scale-95 rounded-lg"
+          className="px-4 py-2.5 font-heading font-bold text-xs tracking-wider uppercase transition-all disabled:opacity-30 active:scale-95 rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-[#6af2de]/40"
           style={{ background: 'rgba(16, 183, 165, 0.9)', color: '#002b26' }}
           disabled={searchLoading || !searchQuery.trim()}
+          aria-busy={searchLoading || undefined}
         >
           {searchLoading ? '…' : 'Go'}
         </button>
@@ -320,7 +321,8 @@ export function SearchPanel({
               key={i}
               type="button"
               onClick={() => onSeek?.(res.start)}
-              className="w-full text-left p-4 rounded-xl border transition-colors"
+              aria-label={`Jump to ${new Date(res.start * 1000).toISOString().substr(11, 8)}`}
+              className="w-full text-left p-4 rounded-xl border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#6af2de]/40"
               style={{ background: 'rgba(37,37,44,0.4)', borderColor: 'rgba(255,255,255,0.05)' }}
             >
               <div className="flex items-center justify-between mb-1.5">
