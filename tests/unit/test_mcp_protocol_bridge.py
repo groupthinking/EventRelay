@@ -16,6 +16,42 @@ _SRC = Path(__file__).resolve().parents[2] / "src"
 sys.path.insert(0, str(_SRC))
 
 
+def _new_sdk_client(*_args: Any, **_kwargs: Any) -> MagicMock:
+    """Return a fresh SDK-shaped mock for each adapter initialization."""
+    return MagicMock()
+
+
+def _generate_content_config(**kwargs: Any) -> _types.SimpleNamespace:
+    return _types.SimpleNamespace(**kwargs)
+
+
+def _optional_sdk_stubs() -> dict[str, _types.ModuleType]:
+    """Build import-compatible optional SDK stubs for this isolated unit test."""
+    openai_stub = _types.ModuleType("openai")
+    openai_stub.AsyncOpenAI = _new_sdk_client
+
+    anthropic_stub = _types.ModuleType("anthropic")
+    anthropic_stub.AsyncAnthropic = _new_sdk_client
+
+    google_stub = _types.ModuleType("google")
+    google_stub.__path__ = []
+    genai_stub = _types.ModuleType("google.genai")
+    genai_stub.__path__ = []
+    genai_types_stub = _types.ModuleType("google.genai.types")
+    genai_stub.Client = _new_sdk_client
+    genai_types_stub.GenerateContentConfig = _generate_content_config
+    genai_stub.types = genai_types_stub
+    google_stub.genai = genai_stub
+
+    return {
+        "openai": openai_stub,
+        "anthropic": anthropic_stub,
+        "google": google_stub,
+        "google.genai": genai_stub,
+        "google.genai.types": genai_types_stub,
+    }
+
+
 def _inject_stub(name: str, path: str) -> None:
     if name not in sys.modules:
         stub = _types.ModuleType(name)
@@ -38,7 +74,11 @@ _inject_stub("youtube_extension.core.mcp", str(_SRC / "youtube_extension/core/mc
 
 _ctx_mod = _load("youtube_extension/core/mcp/context_manager.py", "youtube_extension.core.mcp.context_manager")
 _reg_mod = _load("youtube_extension/core/mcp/server_registry.py", "youtube_extension.core.mcp.server_registry")
-_pb_mod = _load("youtube_extension/core/mcp/protocol_bridge.py", "youtube_extension.core.mcp.protocol_bridge")
+with patch.dict(sys.modules, _optional_sdk_stubs()):
+    _pb_mod = _load(
+        "youtube_extension/core/mcp/protocol_bridge.py",
+        "youtube_extension.core.mcp.protocol_bridge",
+    )
 
 BridgeStatus = _pb_mod.BridgeStatus
 MCPProtocolBridge = _pb_mod.MCPProtocolBridge
