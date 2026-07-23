@@ -834,6 +834,45 @@ def _dns_result(ip: str, port: int = 443) -> tuple:
     return (_pb_mod.socket.AF_INET, _pb_mod.socket.SOCK_STREAM, 6, "", (ip, port))
 
 
+class TestOpenAIBaseUrlValidation:
+    def test_malformed_dns_result_is_not_global(self) -> None:
+        assert _pb_mod._is_global_dns_result((_pb_mod.socket.AF_INET,)) is False
+
+    @pytest.mark.parametrize(
+        "base_url",
+        [
+            "http://api.openai.com/v1",
+            "https:///missing-host",
+            "https://example.com:invalid/v1",
+            "https://127.0.0.1/v1",
+        ],
+    )
+    async def test_rejects_invalid_or_non_public_urls(self, base_url: str) -> None:
+        assert await _pb_mod._is_public_https_base_url(base_url) is False
+
+    async def test_rejects_empty_dns_resolution(self) -> None:
+        with patch.object(_pb_mod.socket, "getaddrinfo", return_value=[]):
+            assert (
+                await _pb_mod._is_public_https_base_url(
+                    "https://empty-resolution.example/v1"
+                )
+                is False
+            )
+
+    async def test_rejects_dns_resolution_error(self) -> None:
+        with patch.object(
+            _pb_mod.socket,
+            "getaddrinfo",
+            side_effect=_pb_mod.socket.gaierror(),
+        ):
+            assert (
+                await _pb_mod._is_public_https_base_url(
+                    "https://unresolvable.example/v1"
+                )
+                is False
+            )
+
+
 class TestOpenAIAdapter:
     def test_protocol_type(self):
         adapter = OpenAIAdapter()
