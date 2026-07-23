@@ -345,6 +345,56 @@ class TestRecordUsage:
         assert record.success is False
         assert record.error_message == "rate limited"
 
+    async def test_usage_and_crossed_alert_commit_atomically(self, monitor):
+        from youtube_extension.backend.models.api_cost import (
+            APIUsage,
+            DailyBudget,
+            WebhookOutbox,
+        )
+
+        monitor.alert_threshold = 0.001
+        monitor.daily_budget = 100.0
+        record = await monitor.record_usage(
+            service="anthropic",
+            endpoint="/messages",
+            tokens_used=1000,
+            model="claude-opus-4-8",
+        )
+
+        with monitor._session_scope() as session:
+            assert session.query(APIUsage).count() == 1
+            budget = session.query(DailyBudget).one()
+            alert = session.query(WebhookOutbox).one()
+
+            assert budget.total_cost == pytest.approx(record.cost)
+            assert budget.alert_sent is True
+            assert alert.alert_type == "threshold"
+            assert alert.current_cost == pytest.approx(record.cost)
+
+    async def test_alert_staging_failure_rolls_back_usage(self, monitor, monkeypatch):
+        from youtube_extension.backend.models.api_cost import (
+            APIUsage,
+            DailyBudget,
+            WebhookOutbox,
+        )
+
+        def fail_staging(session, timestamp):
+            raise RuntimeError("simulated crash boundary")
+
+        monkeypatch.setattr(monitor, "_stage_budget_alerts", fail_staging)
+        record = await monitor.record_usage(
+            service="anthropic",
+            endpoint="/messages",
+            tokens_used=1000,
+            model="claude-opus-4-8",
+        )
+
+        assert record is not None
+        with monitor._session_scope() as session:
+            assert session.query(APIUsage).count() == 0
+            assert session.query(DailyBudget).count() == 0
+            assert session.query(WebhookOutbox).count() == 0
+
 
 # ===========================================================================
 # APICostMonitor — get_daily_cost
@@ -740,7 +790,7 @@ class TestDurableWebhookOutbox:
 
         # Attempt 2, 3, 4, 5
         for expected_retry in [2, 3, 4, 5]:
-            await monitor.process_outbox()
+            await monitor.process_outbox(force=True)
             session = monitor.Session()
             try:
                 item = (
@@ -754,7 +804,7 @@ class TestDurableWebhookOutbox:
                 session.close()
 
         # Attempt 6 (should not be retried because retry count reached 5)
-        await monitor.process_outbox()
+        await monitor.process_outbox(force=True)
         session = monitor.Session()
         try:
             item = (
