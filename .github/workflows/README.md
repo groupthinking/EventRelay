@@ -11,24 +11,30 @@ workflow; this README is the index.
 | CI | `ci.yml` | push / PR to `main` | Type-check + lint `apps/web`, build the web app, lint Python (informational), run unit tests |
 | Coverage | `coverage.yml` | push / PR to `main`,`develop`; manual | Generate pytest coverage and upload lcov to Qlty |
 | gh-aw Validation | `gh-aw-validation.yml` | push / PR to `main` on gh-aw files; manual | Pin `gh aw` to `v0.82.14`, compile custom EventRelay `.md` workflows, and run validate + actionlint + zizmor + poutine checks |
+| Canonical PR Remediator | `canonical-pr-remediator.lock.yml` | manual | gh-aw agent (compiled lock) that stages corrective remediation commits onto a canonical PR branch without direct branch writes |
+| EventRelay CI Investigator | `eventrelay-ci-investigator.lock.yml` | manual | gh-aw agent (compiled lock) that investigates CI failures and emits a single deduplicated blocker record; report-first, no branch writes |
+| Focused Coverage Controller | `focused-coverage-controller.lock.yml` | manual | gh-aw agent (compiled lock) read-only canary that monitors the focused Python coverage lane and surfaces gaps without modifying coverage configuration |
 | CodeQL Analysis | `codeql-analysis.yml` | push / PR to `main`; weekly (Mon 06:00 UTC) | Static security analysis for JavaScript/TypeScript and Python |
 | Security Scan | `security.yml` | push / PR to `main`; weekly (Sun 00:00 UTC) | npm audit, Python safety, bandit, Trivy image scan |
 | Dependency Review | `dependency-review.yml` | PR to `main`,`develop` | Review new dependencies for vulnerabilities and license policy |
 | Secret Scan | `secret-scan.yml` | push to `main`; all PRs | gitleaks scan of the working tree |
 | Dependabot Auto Merge | `dependabot-auto-merge.yml` | `pull_request_target`, `check_suite` | Approve and auto-merge patch/minor Dependabot PRs (majors excluded) |
 | PR Checks | `pr-checks.yml` | PR opened/edited/synchronize | Validate PR title (conventional commits) and description |
+| Agent completion enforcement | `agent-completion-enforcement.yml` | `pull_request_target`; manual | Create an independent head-bound Check from trusted exact-SHA evidence; fail closed when the trusted publisher is not provisioned |
 | Auto Label | `auto-label.yml` | PR opened/reopened/synchronize | Label PRs by changed file type (docs, tests, python, etc.) |
 | Auto-Assign Issues | `auto-assign.yml` | issue opened | Assign new issues to the repository owner |
 | Issue Triage | `issue-triage.yml` | issue opened | Auto-label new issues by keyword and post a triage comment |
 | Phase Goal Tracker | `phase-goal-tracker.yml` | issue opened/edited/reopened; manual | Track phase checklist progress, comment status, auto-close when complete |
 | Bulk Issue Processor | `bulk-issue-processor.yml` | manual | Bulk label / summarize / close-stale across many issues |
 | Close stale issues | `stale.yml` | daily (00:00 UTC) | Mark and close stale issues and PRs |
-| Branch Cleanup | `branch-cleanup.yml` | manual; push sentinel on `claude/branch-cleanup-*` | Gated archive-then-delete of branches (dry-run by default); push `[restore-branch:<branch>]` sentinel to restore a deleted branch from its archive tag |
-| E2E Tests | `e2e-tests.yml` | push / PR to `main` | Run Vitest E2E pipeline tests against production or the PR's Vercel preview deployment and report results on the PR |
+| Branch Cleanup Preview | `branch-cleanup.yml` | manual | Preview the current safe/review lists; destructive cleanup is disabled until a live open-PR guard and recovery ledger are restored and tested |
+| E2E Tests | `e2e-tests.yml` | push / PR to `main` | Check out the triggering SHA and block on Vitest E2E tests against that SHA's verified Vercel Production or Preview deployment |
 | Autonomous Video Processing | `autonomous-video-processing.yml` | manual | Batch-process YouTube videos by category (matrix) |
 | Real Video Processing (Cloud) | `real-processing.yml` | manual | Process a single video: transcript and/or AI analysis |
 | API-cost PostgreSQL | `api-cost-postgres.yml` | push / PR when substrate changes; manual | Exercise fresh, upgrade-from-002, and round-trip migrations plus runtime-role integration tests on PostgreSQL 16 |
 | Deploy to Google Cloud Run | `deploy-cloud-run.yml` | manual | Run migrations, deploy the bounded delivery-disabled worker, then promote a tested API candidate |
+| Anthropic WIF Test | `anthropic-wif-test.yml` | push to `main`; manual | Smoke-test GitHub OIDC federation to Anthropic without a long-lived API secret |
+| Hybrid Refactor Verification | `verification.yml` | PR to `refactor/hybrid-infra-v2`; manual | Run Docker, Python, security, and integration fallback gates for the hybrid-infrastructure refactor |
 | Emergency Stop | `emergency-stop.yml` | manual (typed confirmation) | Operational kill-switch announcement for running automation |
 
 ## Key Workflows
@@ -114,6 +120,13 @@ A full audit of this directory was performed (see
 - **Fixed** `auto-assign.yml` — replaced `gh issue edit` with the REST
   assignees endpoint after run logs showed GitHub App installation tokens cannot
   use the CLI's GraphQL assignable mutation for this assignment.
+- **Fail-closed** `branch-cleanup.yml` and its script in preview-only mode after
+  the refreshed branch list removed the advertised live open-PR guard and
+  recovery ledger while retaining active PR heads.
+- **Fixed** `e2e-tests.yml` — exact-SHA deployment resolution is mandatory and
+  test failure now fails the workflow while retaining result reporting. The
+  checkout is verified against the same SHA and deployment creator identity is
+  pinned to Vercel's global bot account.
 
 ## Resources
 
@@ -122,8 +135,6 @@ A full audit of this directory was performed (see
 - [Qlty Coverage Action](https://github.com/qltysh/qlty-action)
 - [pytest-cov Documentation](https://pytest-cov.readthedocs.io/)
 
-
-| Agent completion enforcement | `agent-completion-enforcement.yml` | `pull_request_target`; manual | Creates the independent, head-bound `Agent completion enforcement` Check from protected default-branch code. |
 
 ## Agent-completion enforcement
 

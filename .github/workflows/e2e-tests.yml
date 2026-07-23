@@ -13,39 +13,40 @@ permissions:
   deployments: read
 
 env:
-  # By default the E2E suite runs against production. To validate a PR's own
-  # Vercel preview instead, two things are needed:
-  #   1. Point BASE_URL at the preview — set the `E2E_BASE_URL` repository
-  #      variable, or compute the per-PR preview URL in a prior step and export
-  #      it to $GITHUB_ENV as E2E_BASE_URL.
-  #   2. Provide `VERCEL_AUTOMATION_BYPASS_SECRET` as a repository secret.
-  #      Vercel previews return HTTP 401 to anonymous traffic; the test harness
-  #      forwards this value as the `x-vercel-protection-bypass` header on every
-  #      request (see tests/e2e/pipeline.test.ts). Generate it under Vercel →
-  #      Project → Settings → Deployment Protection → Protection Bypass for
-  #      Automation.
-  # When the variable/secret are unset (the default), BASE_URL falls back to
-  # production and no bypass header is sent — behaviour is unchanged.
-  BASE_URL: ${{ vars.E2E_BASE_URL || 'https://uvai.io' }}
+  # The workflow resolves the successful Vercel deployment for the triggering
+  # SHA: Preview for pull requests, Production for pushes to main. Previews also
+  # need `VERCEL_AUTOMATION_BYPASS_SECRET` as a repository secret. Pull-request
+  # runs execute the E2E harness from the trusted base SHA so head-controlled
+  # lifecycle scripts and test code never receive that reusable credential.
   TEST_YOUTUBE_URL: https://www.youtube.com/watch?v=auJzb1D-fag
-  VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
 
 jobs:
   e2e:
     name: E2E Pipeline Tests
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    continue-on-error: true
-    # Only run on pull requests when a preview target is configured via the
-    # `E2E_BASE_URL` repository variable. Without it the suite would fall back
-    # to production (https://uvai.io) and exercise the live site rather than
-    # the PR's own changes — producing noise failures unrelated to the diff.
-    # Pushes to `main` always run as a production health check.
-    if: github.event_name == 'push' || vars.E2E_BASE_URL != ''
 
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Verify trusted harness SHA
+        env:
+          HARNESS_SHA: ${{ github.event.pull_request.base.sha || github.sha }}
+        run: test "$(git rev-parse HEAD)" = "$HARNESS_SHA"
+
+      - name: Require preview bypass credential
+        if: github.event_name == 'pull_request'
+        env:
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+        run: |
+          if [ -z "$VERCEL_AUTOMATION_BYPASS_SECRET" ]; then
+            echo "::error::VERCEL_AUTOMATION_BYPASS_SECRET is required for PR E2E"
+            exit 1
+          fi
 
       - name: Setup Node.js
         uses: actions/setup-node@v7
@@ -53,20 +54,30 @@ jobs:
           node-version: '22'
           cache: 'npm'
 
-      - name: Extract Vercel preview URL for this PR
-        id: preview
-        if: github.event_name == 'pull_request'
+      - name: Resolve exact-SHA Vercel deployment
+        id: deployment
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          SHA="${{ github.event.pull_request.head.sha }}"
-          PREVIEW_URL=""
+          set -euo pipefail
+          SHA="${{ github.event.pull_request.head.sha || github.sha }}"
+          ENVIRONMENT="${{ github.event_name == 'pull_request' && 'Preview' || 'Production' }}"
+          DEPLOYMENT_URL=""
+
+          # Bind the target to Vercel's verified global bot account. The stable
+          # numeric ID prevents an environment-name-only deployment spoof.
+          if [ "$ENVIRONMENT" = "Preview" ]; then
+            FILTER='.[] | select(.creator.id == 35613825 and .creator.login == "vercel[bot]" and .creator.type == "Bot" and .task == "deploy" and ((.environment // "") | ascii_downcase | startswith("preview"))) | .id'
+          else
+            FILTER='.[] | select(.creator.id == 35613825 and .creator.login == "vercel[bot]" and .creator.type == "Bot" and .task == "deploy" and ((.environment // "") | ascii_downcase == "production")) | .id'
+          fi
 
           for i in $(seq 1 30); do
             DEPLOYMENT_STATUS=0
-            DEPLOY_ID=$(gh api \
-              "/repos/${{ github.repository }}/deployments?sha=${SHA}&per_page=20" \
-              --jq '[.[] | select(.environment | ascii_downcase | startswith("preview"))] | first | .id // empty' 2>deployments.err) || DEPLOYMENT_STATUS=$?
+            DEPLOY_IDS=$(gh api \
+              "/repos/${{ github.repository }}/deployments?sha=${SHA}&per_page=100" \
+              --paginate \
+              --jq "$FILTER" 2>deployments.err) || DEPLOYMENT_STATUS=$?
             if [ -s deployments.err ]; then
               echo "gh api deployments stderr:" >&2
               cat deployments.err >&2
@@ -77,11 +88,15 @@ jobs:
               exit "$DEPLOYMENT_STATUS"
             fi
 
-            if [ -n "$DEPLOY_ID" ]; then
+            while IFS= read -r DEPLOY_ID; do
+              if [ -z "$DEPLOY_ID" ]; then
+                continue
+              fi
+
               STATUS_LOOKUP=0
-              PREVIEW_URL=$(gh api \
+              DEPLOYMENT_URL=$(gh api \
                 "/repos/${{ github.repository }}/deployments/${DEPLOY_ID}/statuses" \
-                --jq '[.[] | select(.state=="success")] | first | .environment_url // empty' 2>deployment-status.err) || STATUS_LOOKUP=$?
+                --jq '[.[] | select(.state == "success" and .creator.id == 35613825 and .creator.login == "vercel[bot]" and .creator.type == "Bot")] | first | .environment_url // empty' 2>deployment-status.err) || STATUS_LOOKUP=$?
               if [ -s deployment-status.err ]; then
                 echo "gh api deployment statuses stderr:" >&2
                 cat deployment-status.err >&2
@@ -91,19 +106,26 @@ jobs:
               if [ "${STATUS_LOOKUP:-0}" != "0" ]; then
                 exit "$STATUS_LOOKUP"
               fi
-            fi
 
-            if [ -n "$PREVIEW_URL" ]; then
+              if [ -n "$DEPLOYMENT_URL" ]; then
+                break
+              fi
+            done <<< "$DEPLOY_IDS"
+
+            if [ -n "$DEPLOYMENT_URL" ]; then
               break
             fi
 
             sleep 10
           done
 
-          if [ -n "$PREVIEW_URL" ]; then
-            echo "BASE_URL=$PREVIEW_URL" >> "$GITHUB_ENV"
-            echo "preview_url=$PREVIEW_URL" >> "$GITHUB_OUTPUT"
+          if [ -z "$DEPLOYMENT_URL" ]; then
+            echo "::error::No successful ${ENVIRONMENT} deployment found for exact SHA ${SHA}"
+            exit 1
           fi
+
+          echo "BASE_URL=$DEPLOYMENT_URL" >> "$GITHUB_ENV"
+          echo "deployment_url=$DEPLOYMENT_URL" >> "$GITHUB_OUTPUT"
 
       - name: Install dependencies
         run: npm install --legacy-peer-deps
@@ -111,6 +133,8 @@ jobs:
       - name: Run E2E tests
         id: e2e_tests
         continue-on-error: true
+        env:
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
         run: |
           npx vitest run tests/e2e/ --reporter=verbose 2>&1 | tee test-output.txt
           echo "exit_code=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
@@ -195,7 +219,7 @@ jobs:
           # (flagged by actionlint/zizmor). The shell receives these as data only.
           TRIGGER_EVENT: ${{ github.event_name }}
           TRIGGER_REF: ${{ github.head_ref || github.ref_name }}
-          COMMIT_SHA: ${{ github.sha }}
+          COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           DATE=$(date -u '+%Y-%m-%d %H:%M:%S UTC')
           FAILURES=$(grep -A 2 'FAIL\|AssertionError\|Error:' test-output.txt | head -30 || echo "See test-output.txt")

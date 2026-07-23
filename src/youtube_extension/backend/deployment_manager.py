@@ -100,6 +100,7 @@ class DeploymentManager:
         logger.info("🔍 Verifying project build...")
         project_dir = Path(project_path)
 
+
         result = {
             "passed": False,
             "npm_install": {"success": False, "output": "", "errors": []},
@@ -370,10 +371,11 @@ class DeploymentManager:
             "project_config": project_config,
             "deployments": {},
             "verification": {},
-            # Keep the response contract stable even when build verification
-            # fails before any deployment adapter is invoked.
+            "errors": [],
+            "urls": {},
+            # Keep the result contract stable when verification returns before
+            # any deployment is attempted.
             "summary": self._generate_deployment_summary({}),
-            "errors": []
         }
 
         try:

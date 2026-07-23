@@ -386,7 +386,6 @@ class TestVerifyProject:
         assert "skipping" in result["summary"].lower()
 
     async def test_sentry_breadcrumb_reports_package_presence(self, tmp_path) -> None:
-        """Sentry instrumentation must not run before package path setup."""
         (tmp_path / "package.json").write_text('{"name": "test"}')
         mgr = _make_manager()
         sentry_sdk = MagicMock()
@@ -681,6 +680,29 @@ class TestDeployProject:
         )
         assert result["status"] == "failed"
         assert "Build verification failed" in result["errors"][0]
+        assert result["summary"]["total_deployments"] == 0
+        assert result["summary"]["successful_deployments"] == 0
+        assert result["summary"]["failed_deployments"] == 0
+        assert result["summary"]["skipped_deployments"] == 0
+        assert result["urls"] == {}
+
+    async def test_verification_exception_preserves_urls_contract(
+        self,
+        tmp_path,
+    ) -> None:
+        mgr = self._patched_manager()
+        mgr.verify_and_fix_project = AsyncMock(
+            side_effect=RuntimeError("verification crashed")
+        )
+
+        result = await mgr.deploy_project(
+            str(tmp_path),
+            {"title": "Test"},
+            {"target": "vercel"},
+        )
+
+        assert result["status"] == "failed"
+        assert result["urls"] == {}
 
     async def test_no_github_token_adds_error(self, tmp_path) -> None:
         mgr = self._patched_manager()

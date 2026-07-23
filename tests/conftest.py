@@ -122,28 +122,26 @@ _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
-# Pre-import the real (empty, cheap) src / src.integration packages BEFORE any
-# test module is collected. Several test modules stub `src` in sys.modules as a
-# bare, non-package module via setdefault() at import time (to avoid heavy
-# transitive imports). If one of those runs first, `src` becomes a non-package
-# and later modules importing real `src.integration.*` leaves fail to collect
-# ("'src.integration' is not a package"). Importing the real packages here makes
-# those setdefault() calls no-ops, keeping `src` a proper package.
-# NOTE: we deliberately do NOT import src.agents — its __init__ is heavy and
-# some tests intentionally stub the src.agents namespace.
-#
-# We also pre-import src.integration.looker_embedded specifically: test_backend_main
-# stubs that submodule as a MagicMock in sys.modules (guarded by `if not in
-# sys.modules`), and it never restores it. Once real test_looker_security started
-# importing the real class, that leaked mock made it fail. Pre-importing the real
-# (cheap) submodule here turns the guarded stub into a no-op. It imports only
-# stdlib + pydantic, so it is safe to load eagerly.
+# Pre-import the real, lightweight package namespaces before collection.
+# Several test modules use ``sys.modules.setdefault`` for optional dependency
+# stubs. Loading these namespaces first prevents those fallbacks from replacing
+# a package with a bare synthetic module and breaking later imports. These are
+# required test-harness imports, so an import failure must fail collection.
+# Deliberately do not import ``src.agents``; its initializer is heavyweight and
+# tests that exercise its leaves provide their own scoped dependencies.
+import src  # noqa: F401, E402
+import src.integration  # noqa: F401, E402
+import youtube_extension  # noqa: F401, E402
+import youtube_extension.processors  # noqa: F401, E402
+
+# Preserve the real optional yt-dlp package before collection-only tests can
+# install a bare fallback with ``sys.modules.setdefault``. Absence is allowed
+# because yt-dlp is an optional extra; a broken installed package is not.
 try:
-    import src  # noqa: F401
-    import src.integration  # noqa: F401
-    import src.integration.looker_embedded  # noqa: F401
-except Exception:
-    pass
+    import yt_dlp  # noqa: F401, E402
+except ModuleNotFoundError as exc:
+    if exc.name != "yt_dlp":
+        raise
 
 # Enable dev-mode auth bypass unless the environment already configures auth.
 if not os.getenv("EVENTRELAY_API_KEY"):

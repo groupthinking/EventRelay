@@ -104,6 +104,8 @@ _POSTGRES_SCHEMA_CONTRACT_SQL = """
             attribute.attname AS column_name,
             format_type(attribute.atttypid, attribute.atttypmod) AS column_type,
             attribute.attnotnull AS is_not_null,
+            attribute.attgenerated AS generated_kind,
+            attribute.attidentity AS identity_kind,
             pg_get_expr(
                 default_record.adbin, default_record.adrelid, false
             ) AS default_expression,
@@ -272,6 +274,9 @@ _POSTGRES_SCHEMA_CONTRACT_SQL = """
     SELECT
         (
             SELECT
+                -- This count protects the expected contract list itself.
+                -- Migration-first deploys may add columns only when the
+                -- still-serving revision can omit them from INSERTs.
                 count(*) = 29
                 AND COALESCE(
                     bool_and(
@@ -334,13 +339,23 @@ _POSTGRES_SCHEMA_CONTRACT_SQL = """
                     ),
                     false
                 )
+                AND NOT EXISTS (
+                    SELECT 1
+                    FROM column_metadata AS extra
+                    LEFT JOIN expected_columns AS expected_extra
+                      ON expected_extra.table_name = extra.table_name
+                     AND expected_extra.column_name = extra.column_name
+                    WHERE expected_extra.column_name IS NULL
+                      AND extra.is_not_null
+                      AND extra.default_expression IS NULL
+                      AND extra.generated_kind = ''
+                      AND extra.identity_kind = ''
+                )
             FROM expected_columns AS expected
             LEFT JOIN column_metadata AS actual
               ON actual.table_name = expected.table_name
              AND actual.column_name = expected.column_name
-        )
-        AND (SELECT count(*) = 29 FROM column_metadata)
-        AS column_contract,
+        ) AS column_contract,
         EXISTS (
             SELECT 1 FROM constraint_columns
             WHERE table_name = 'api_usage'
