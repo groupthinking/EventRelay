@@ -99,6 +99,15 @@ def _record_history_safely(context: MCPContext, details: dict[str, Any]) -> None
         )
 
 
+def _is_global_dns_result(result: Any) -> bool:
+    """Return True when a getaddrinfo() result tuple resolves to a global IP."""
+    try:
+        family, address = result[0], result[4][0]
+        return family in (socket.AF_INET, socket.AF_INET6) and ipaddress.ip_address(address).is_global
+    except (IndexError, TypeError, ValueError):
+        return False
+
+
 async def _is_public_https_base_url(base_url: str) -> bool:
     """Return True when the URL targets a publicly routable HTTPS endpoint."""
     try:
@@ -129,20 +138,7 @@ async def _is_public_https_base_url(base_url: str) -> bool:
     except (OSError, UnicodeError, ValueError):
         return False
 
-    if not resolved:
-        return False
-
-    for result in resolved:
-        try:
-            family = result[0]
-            address = result[4][0]
-            ip = ipaddress.ip_address(address)
-        except (IndexError, TypeError, ValueError):
-            return False
-        if family not in (socket.AF_INET, socket.AF_INET6) or not ip.is_global:
-            return False
-
-    return True
+    return bool(resolved) and all(_is_global_dns_result(result) for result in resolved)
 
 
 class ProtocolType(Enum):
