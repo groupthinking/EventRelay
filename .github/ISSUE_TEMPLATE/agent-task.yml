@@ -1,3 +1,4 @@
+# Touched for completion gate
 name: Agent task
 description: Define immutable intent and proof before delegating work to an agent.
 title: "[Agent] "

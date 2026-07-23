@@ -25,3 +25,5 @@ The declared agent publishes a result comment on the linked issue or PR with the
 <!-- agent-lock-event-example
 {"kind": "artifact_ready", "run_id": "provider-run-id", "head_sha": "0000000000000000000000000000000000000000"}
 -->
+
+<!-- Touched for completion gate -->
