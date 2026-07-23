@@ -17,7 +17,6 @@ concrete reason, verified against the actual repository tree.
 | `ci.yml` | **FIX** | Added blocking `apps/web` type-check and ESLint steps before the build so CI fails fast on TypeScript or lint regressions. |
 | `codeql-analysis.yml` | **FIX** | Removed the OWASP `dependency-check` job — pinned to unstable `@main` and pointed at dead paths (`frontend/node_modules`, `src/mcp-bridge.py`); produced no usable SARIF. Switched the Node cache from the dead `frontend/node_modules` path to the npm download cache (`~/.npm`), which is correct for this npm-workspaces repo. CodeQL analysis itself retained. Dependency coverage already lives in `dependency-review.yml` + `security.yml`. |
 | `coverage.yml` | **FIX** | Added a top-level `name:` and the `workflow_dispatch` trigger the README already documented as available. |
-| `gh-aw-validation.yml` | **ADD** | Adds pinned gh-aw (`v0.82.14`) validation for EventRelay's custom markdown workflows. Enforces compile/validate plus actionlint, zizmor, and poutine checks, and verifies committed lock files. |
 | `dependabot-auto-merge.yml` | KEEP | Comprehensive guards (same-repo, non-draft, SHA match, major excluded). |
 | `dependency-review.yml` | KEEP | PR dependency review with documented allow-lists. |
 | `deploy-cloud-run.yml` | KEEP | The real deployment path (GCP Cloud Run); manual dispatch. |
@@ -67,3 +66,8 @@ valid. Referenced paths were checked against the working tree:
 | `agent-completion-enforcement.yml` | **ADD** | Protected-default-branch verifier that creates the independent **Agent completion enforcement** Check directly against the PR head SHA. It accepts only an exact-head machine-readable report from the configured dedicated GitHub App; missing/stale/mutable evidence, untrusted label provenance, and custom roles all fail closed. The existing `agent-completion/truth-gate` status stays advisory and must not be made required. |
 
 The protected policy at `.github/agent-lock/trusted-publishers.json` starts with empty allowlists and therefore blocks until a repository administrator provisions the dedicated App and trusted actor identities through protected review. The repository ruleset must then require **Agent completion enforcement**, one independent approval, and resolved conversations.
+
+## Repository governance workflows
+
+| `pr-governance.yml` | **ADD** | Validates that every non-draft ready PR links exactly one real open issue (not a PR number) with non-empty delivery evidence sections (Outcome, Risk, Verification, Production evidence). Fails closed on competing implementation PRs. Triggers on `pull_request_target`. |
+| `repository-reconciliation.yml` | **ADD** | Scheduled (13:17 UTC daily) non-destructive reconciliation report: identifies ready PRs missing a canonical issue, issues with competing implementation PRs (references validated via Issues API), and stale unattached branches. Excludes draft PRs and fork-branch name collisions. Upserts a single issue titled "[automation] Repository drift report". |
