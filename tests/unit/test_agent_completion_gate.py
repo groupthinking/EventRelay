@@ -3275,7 +3275,7 @@ async function runValidate(pr) {
             workflow,
             "function legacyRunId(",
         )
-        self.assertGreaterEqual(len(functions), 1)
+        self.assertEqual(len(functions), 2)
 
         assertions = r"""
 const rows = [
@@ -3299,13 +3299,14 @@ for (const [body, expected] of rows) {
   }
 }
 """
-        completed = subprocess.run(
-            ["node", "-e", functions[0] + assertions],
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-        self.assertEqual(completed.returncode, 0, completed.stderr)
+        for function in functions:
+            completed = subprocess.run(
+                ["node", "-e", function + assertions],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(completed.returncode, 0, completed.stderr)
 
     def test_extract_run_id_duplicate_parser_matches_legacy(self):
         workflow = self._workflow()
@@ -3362,7 +3363,7 @@ for (const [body, expected] of rows) {
             workflow,
             "function legacyRunId(",
         )
-        self.assertGreaterEqual(len(functions), 1)
+        self.assertEqual(len(functions), 2)
 
         assertions = r"""
 function section(body, headings) {
@@ -3432,13 +3433,14 @@ if (fromIssue.login !== 'issue-agent[bot]') {
   throw new Error('issue login should win over fallbacks: ' + fromIssue.login);
 }
 """
-        completed = subprocess.run(
-            ["node", "-e", functions[0] + assertions],
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-        self.assertEqual(completed.returncode, 0, completed.stderr)
+        for function in functions:
+            completed = subprocess.run(
+                ["node", "-e", function + assertions],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(completed.returncode, 0, completed.stderr)
 
     def test_mismatch_errors_require_manifest_match(self):
         workflow = self._workflow()
