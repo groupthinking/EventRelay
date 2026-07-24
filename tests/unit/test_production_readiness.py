@@ -147,3 +147,72 @@ def test_check_env_vars_development_missing_passes(monkeypatch):
     monkeypatch.setenv("ENVIRONMENT", "development")
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     assert module.check_env_vars() is False
+
+
+def _dependency_paths(tmp_path):
+    req_txt = tmp_path / "requirements.txt"
+    req_txt.write_text("fastapi>=0.110.0")
+    pkg_json = tmp_path / "package.json"
+    pkg_json.write_text('{"dependencies": {"react": "^19"}}')
+
+    def mock_path(path):
+        if str(path) == "requirements.txt":
+            return req_txt
+        if str(path) == "package.json":
+            return pkg_json
+        return Path(path)
+
+    return mock_path
+
+
+def test_check_dependencies_safety_failure_is_fatal(tmp_path):
+    mock_path = _dependency_paths(tmp_path)
+    runs = [
+        MagicMock(returncode=0),
+        MagicMock(returncode=1, stdout="vulnerability found", stderr=""),
+        MagicMock(returncode=1),
+    ]
+    with patch("scripts.check_production_readiness.Path", side_effect=mock_path), \
+         patch("subprocess.run", side_effect=runs):
+        assert module.check_dependencies() is True
+
+
+def test_check_dependencies_safety_success_passes(tmp_path):
+    mock_path = _dependency_paths(tmp_path)
+    runs = [
+        MagicMock(returncode=0),
+        MagicMock(returncode=0, stdout="", stderr=""),
+        MagicMock(returncode=1),
+    ]
+    with patch("scripts.check_production_readiness.Path", side_effect=mock_path), \
+         patch("subprocess.run", side_effect=runs):
+        assert module.check_dependencies() is False
+
+
+def test_check_dependencies_npm_high_audit_failure_is_fatal(tmp_path):
+    mock_path = _dependency_paths(tmp_path)
+    runs = [
+        MagicMock(returncode=1),
+        MagicMock(returncode=0),
+        MagicMock(returncode=1, stdout="1 high severity vulnerability", stderr=""),
+    ]
+    with patch("scripts.check_production_readiness.Path", side_effect=mock_path), \
+         patch("subprocess.run", side_effect=runs) as mock_run:
+        assert module.check_dependencies() is True
+        assert mock_run.call_args_list[-1].args[0] == [
+            "npm",
+            "audit",
+            "--audit-level=high",
+        ]
+
+
+def test_check_dependencies_npm_clean_audit_passes(tmp_path):
+    mock_path = _dependency_paths(tmp_path)
+    runs = [
+        MagicMock(returncode=1),
+        MagicMock(returncode=0),
+        MagicMock(returncode=0, stdout="found 0 vulnerabilities", stderr=""),
+    ]
+    with patch("scripts.check_production_readiness.Path", side_effect=mock_path), \
+         patch("subprocess.run", side_effect=runs):
+        assert module.check_dependencies() is False
