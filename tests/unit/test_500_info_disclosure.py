@@ -305,7 +305,11 @@ def test_guard_allows_sanitized_and_safe_dynamic_bodies() -> None:
 # guard is scoped to the request handlers hardened here. Add a file to
 # ``_GUARDED_RESPONSE_FILES`` once its response bodies have been sanitized.
 _GUARDED_RESPONSE_FILES = {"cloud_api_endpoints.py", "real_api_endpoints.py"}
-_RESPONSE_ERROR_FIELDS = {"error", "error_message"}
+# ``errors`` (plural) is scanned too: an AI/batch processor records per-step
+# failures as a list of scalar strings under this key, so ``{"errors":
+# [str(e)]}`` leaks the caught exception exactly like a scalar ``error`` field
+# and a future regression could reintroduce CWE-209 while the guard stayed green.
+_RESPONSE_ERROR_FIELDS = {"error", "error_message", "errors"}
 
 
 def _refs_any_name(node: ast.AST, names: set[str]) -> bool:
@@ -391,6 +395,7 @@ def _iter_response_error_leaks(text: str):
             "_client_safe_error",
             "_sanitize_public_error",
             "_sanitize_response_errors",
+            "_sanitize_error_list",
         }
 
     # Pass 1: values that reference the exception/request by convention.
@@ -470,6 +475,99 @@ def _iter_response_error_leaks(text: str):
             yield node.lineno, "processor result is returned without error sanitization"
 
 
+# ---------------------------------------------------------------------------
+# Returned-exception disclosure — a service/adapter ``return``s exception text.
+# ---------------------------------------------------------------------------
+# The scans above model handlers that *raise* a 500 or *return* an ``error``-keyed
+# body. A third live shape slips past both: a service method catches an exception
+# and ``return``s its text as an ordinary value (string/tuple), which a caller
+# then forwards to the client. The real leak was
+# ``official_api.validate_video_url`` returning ``f"Video validation failed:
+# {e}"`` as its ``message`` element, echoed verbatim by /api/v2/validate-video
+# under ``"message"`` with HTTP 200 — a live CWE-209 path the endpoint's own 500
+# handler never sees because the adapter swallows the exception and hands it back
+# as data. This scan is scoped to files whose returned values reach a client and
+# flags any ``return`` inside an ``except ... as <name>`` handler that carries the
+# caught exception (or an alias assigned from it). ``raise`` and ``logger`` calls
+# are not returns and are unaffected.
+_RETURNED_EXCEPTION_FILES = {
+    "official_api.py",
+    "real_api_endpoints.py",
+    "cloud_api_endpoints.py",
+}
+
+
+def _iter_returned_exception_leaks(text: str):
+    """Yield (line_no, reason) for ``return``s that carry the caught exception."""
+    tree = ast.parse(text)
+    reason = "return value inside except handler carries the caught exception"
+    for handler in ast.walk(tree):
+        if not isinstance(handler, ast.ExceptHandler) or not handler.name:
+            continue
+        tainted = _tainted_names(handler)
+        for node in ast.walk(handler):
+            if (
+                isinstance(node, ast.Return)
+                and node.value is not None
+                and _refs_any_name(node.value, tainted)
+            ):
+                yield node.lineno, reason
+
+
+def test_no_returned_exception_in_guarded_files() -> None:
+    offenders: list[str] = []
+    for path in _guarded_python_files():
+        if path.name not in _RETURNED_EXCEPTION_FILES:
+            continue
+        text = path.read_text(encoding="utf-8")
+        for line_no, reason in _iter_returned_exception_leaks(text):
+            rel = path.relative_to(_REPO_ROOT)
+            offenders.append(f"{rel}:{line_no}: {reason}")
+
+    assert not offenders, (
+        "A service/adapter must not return the caught exception as a value that "
+        "reaches a client (CWE-209). Return a static message and log the "
+        "exception server-side. Offending sites:\n  " + "\n  ".join(offenders)
+    )
+
+
+def test_returned_exception_guard_flags_and_allows() -> None:
+    """Controls for the returned-exception scanner."""
+    for leak in (
+        # The real validate_video_url leak shape.
+        "try:\n    pass\nexcept Exception as e:\n"
+        '    return False, "", f"Video validation failed: {e}"\n',
+        # A nonstandard handler name is still tracked.
+        "try:\n    pass\nexcept ValueError as boom:\n"
+        '    return False, "", f"Invalid URL: {boom}"\n',
+        # An intermediate alias must not launder the taint.
+        "try:\n    pass\nexcept Exception as failure:\n"
+        "    msg = str(failure)\n"
+        '    return False, "", msg\n',
+        "try:\n    pass\nexcept Exception as exc:\n    return str(exc)\n",
+    ):
+        assert list(
+            _iter_returned_exception_leaks(leak)
+        ), f"scanner missed a returned-exception leak: {leak}"
+
+    for safe in (
+        # Static message inside a handler is fine (no binding referenced).
+        "try:\n    pass\nexcept Exception as e:\n"
+        '    return False, "", "Video validation failed"\n',
+        # Logging the exception and raising a static 500 is fine — not a return.
+        "try:\n    pass\nexcept Exception as e:\n"
+        "    logger.error('failed', exc_info=True)\n"
+        '    raise HTTPException(500, "Internal server error")\n',
+        # A static alias is not tainted.
+        "try:\n    pass\nexcept Exception as failure:\n"
+        '    msg = "Video validation failed"\n'
+        '    return False, "", msg\n',
+    ):
+        assert not list(
+            _iter_returned_exception_leaks(safe)
+        ), f"scanner false-positived: {safe}"
+
+
 def test_no_exception_in_response_error_fields() -> None:
     offenders: list[str] = []
     for path in _guarded_python_files():
@@ -510,6 +608,11 @@ def test_response_body_guard_flags_and_allows() -> None:
         '    return {"error": detail}\n',
         'response = VideoAnalysisResponse(error=result.get("error"))',
         'response = VideoAnalysisResponse(error_message=state.error_message)',
+        # Plural ``errors`` sink: a scalar exception string in the list leaks
+        # just like a scalar ``error`` field.
+        'x = {"errors": [str(e)]}',
+        "try:\n    pass\nexcept Exception as failure:\n"
+        '    return {"errors": [str(failure)]}\n',
         "async def endpoint():\n"
         "    result = await processor.batch_process_videos([])\n"
         "    return result\n",
@@ -534,6 +637,9 @@ def test_response_body_guard_flags_and_allows() -> None:
         '    return {"error": message}\n',
         'response = VideoAnalysisResponse(error=_sanitize_public_error('
         'result.get("error")))',
+        # A static or sanitized plural ``errors`` collection is fine.
+        'x = {"errors": ["Internal server error"]}',
+        'x = {"errors": _sanitize_error_list(result.get("errors"))}',
         "async def endpoint():\n"
         "    result = await processor.batch_process_videos([])\n"
         "    return _sanitize_response_errors(result)\n",

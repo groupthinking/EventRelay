@@ -578,10 +578,14 @@ class RealYouTubeAPIService:
 
             return True, video_id, "Video is public and accessible"
 
-        except ValueError as e:
-            return False, "", f"Invalid URL format: {e}"
-        except Exception as e:
-            return False, "", f"Video validation failed: {e}"
+        except ValueError:
+            # This message is returned to clients under ``message`` by
+            # /api/v2/validate-video; never embed the exception text (CWE-209).
+            logger.warning("Video URL validation failed: invalid URL format", exc_info=True)
+            return False, "", "Invalid video URL format"
+        except Exception:
+            logger.error("Video URL validation failed", exc_info=True)
+            return False, "", "Video validation failed"
 
     async def close(self):
         """Close the HTTP client"""
