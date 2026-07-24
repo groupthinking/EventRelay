@@ -171,7 +171,7 @@ export default function InteractiveTranscript({
       const matchesSpeaker = !filterSpeaker || seg.speaker === filterSpeaker;
       const matchesSearch =
         !searchLower ||
-        seg.text.toLowerCase().includes(searchLower);
+        (seg.text?.toLowerCase().includes(searchLower) ?? false);
       return matchesSpeaker && matchesSearch;
     });
   }, [segments, filterSpeaker, searchQuery]);
