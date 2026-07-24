@@ -143,6 +143,32 @@ def test_check_env_vars_production_missing_fails(monkeypatch):
     assert module.check_env_vars() is True
 
 
+def test_check_env_vars_accepts_google_alias_with_youtube(monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.setenv("GOOGLE_API_KEY", "configured")
+    monkeypatch.setenv("YOUTUBE_API_KEY", "configured")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("STRIPE_SECRET_KEY", raising=False)
+    assert module.check_env_vars() is False
+
+
+def test_check_env_vars_requires_youtube_key(monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.setenv("GOOGLE_API_KEY", "configured")
+    monkeypatch.delenv("YOUTUBE_API_KEY", raising=False)
+    assert module.check_env_vars() is True
+
+
+def test_check_env_vars_requires_gemini_or_google(monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    monkeypatch.setenv("YOUTUBE_API_KEY", "configured")
+    assert module.check_env_vars() is True
+
+
 def test_check_env_vars_development_missing_passes(monkeypatch):
     monkeypatch.setenv("ENVIRONMENT", "development")
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
