@@ -13,11 +13,12 @@ def check_env_vars():
     critical_vars = ["GEMINI_API_KEY", "OPENAI_API_KEY", "STRIPE_SECRET_KEY"]
     missing = [v for v in critical_vars if not os.getenv(v)]
     if missing:
-        is_production = (
-            os.getenv("APP_ENV") == "production"
-            or os.getenv("ENVIRONMENT") == "production"
-        )
-        if is_production:
+        environment = (
+            (os.getenv("ENVIRONMENT") or "").strip()
+            or (os.getenv("VERCEL_ENV") or "").strip()
+            or "development"
+        ).lower()
+        if environment == "production":
             logger.error(f"❌ Missing critical env vars in production: {missing}")
             return True
         else:
@@ -122,7 +123,8 @@ def check_dependencies():
             logger.info("Running dynamic dependency safety scan (safety check)...")
             res = subprocess.run(["safety", "check", "-r", "requirements.txt"], capture_output=True, text=True)
             if res.returncode != 0:
-                logger.warning(f"Safety check found potential issues:\n{res.stdout or res.stderr}")
+                logger.error(f"❌ Safety check found dependency vulnerabilities:\n{res.stdout or res.stderr}")
+                has_error = True
         else:
             logger.info("safety is not installed; skipping dynamic Python dependency scan.")
     except Exception as e:
@@ -132,9 +134,17 @@ def check_dependencies():
         # Check npm audit (Node)
         if subprocess.run(["which", "npm"], capture_output=True).returncode == 0 and pkg_path.exists():
             logger.info("Running dynamic dependency security scan (npm audit)...")
-            res = subprocess.run(["npm", "audit"], capture_output=True, text=True)
-            if "high" in res.stdout.lower() or "critical" in res.stdout.lower():
-                logger.warning("npm audit flagged potential high/critical vulnerabilities.")
+            res = subprocess.run(
+                ["npm", "audit", "--audit-level=high"],
+                capture_output=True,
+                text=True,
+            )
+            if res.returncode != 0:
+                logger.error(
+                    "❌ npm audit found high/critical vulnerabilities or could not complete:\n"
+                    f"{res.stdout or res.stderr}"
+                )
+                has_error = True
         else:
             logger.info("npm is not available or package.json missing; skipping dynamic Node dependency scan.")
     except Exception as e:
