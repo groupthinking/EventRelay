@@ -434,6 +434,43 @@ class TestProcessVideoEndpoint:
         ]
         assert "leaked-internal-key" not in response.text
 
+    def test_ai_analysis_errors_list_non_string_leaves_are_sanitized(
+        self, client, mock_processor
+    ):
+        """Non-string scalar leaves under ``errors`` are still diagnostics.
+
+        FastAPI serializes non-string leaves (ints, bools, bytes), so a legacy
+        or provider value that is not a ``str`` must not bypass the scalar
+        sanitization invariant. Only ``None`` (absence of an error) is
+        preserved; every other non-null leaf is replaced."""
+        mock_processor.process_video = AsyncMock(
+            return_value={
+                "video_id": "auJzb1D-fag",
+                "success": False,
+                "cost_breakdown": {"total_cost": 0.0},
+                "cached": False,
+                "error": None,
+                "ai_analysis": {
+                    "success": False,
+                    "errors": [
+                        13,
+                        True,
+                        None,
+                    ],
+                },
+            }
+        )
+        response = client.post(
+            "/api/v2/process-video",
+            json={"video_url": "https://youtube.com/watch?v=auJzb1D-fag"},
+        )
+        assert response.status_code == 200
+        assert response.json()["ai_analysis"]["errors"] == [
+            "Video processing failed",
+            "Video processing failed",
+            None,
+        ]
+
     def test_complete_processor_result_is_sanitized(self, client, mock_processor):
         """Every response-model subtree is a client boundary, not just AI output."""
         mock_processor.process_video = AsyncMock(

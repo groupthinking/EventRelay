@@ -49,9 +49,13 @@ def _sanitize_error_list(value: Any) -> Any:
         return tuple(_sanitize_error_list(item) for item in value)
     if isinstance(value, dict):
         return _sanitize_response_errors(value)
-    if isinstance(value, str):
-        return _PUBLIC_PROCESSING_ERROR
-    return value
+    # Every remaining leaf is a scalar diagnostic. Only ``None`` (absence of an
+    # error) is preserved; any other non-null leaf — including non-string types
+    # such as bytes, ints, or bools that FastAPI can still serialize — is
+    # replaced so it cannot bypass the scalar sanitization invariant.
+    if value is None:
+        return None
+    return _PUBLIC_PROCESSING_ERROR
 
 
 def _sanitize_response_errors(value: Any) -> Any:
