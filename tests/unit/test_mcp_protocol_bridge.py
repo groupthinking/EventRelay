@@ -853,8 +853,8 @@ class TestOpenAIBaseUrlValidation:
             "https:///missing-host",
             "https://example.com:invalid/v1",
             "https://127.0.0.1/v1",
-            "https://[::1/v1",
-            "https://example.com:70000/v1",
+            "https://[::1/v1",        # malformed IPv6: missing closing ]
+            "https://example.com:70000/v1",  # out-of-range port (>65535)
         ],
     )
     async def test_rejects_invalid_or_non_public_urls(self, base_url: str) -> None:

@@ -129,9 +129,9 @@ async def _is_public_https_base_url(base_url: str) -> bool:
         if parsed.scheme != "https" or not parsed.netloc:
             return False
         # hostname raises ValueError for malformed IPv6 (e.g. "[::1/v1").
-        # port raises ValueError for non-integer port strings.
+        # port raises ValueError when the port string is non-integer.
         host = parsed.hostname
-        raw_port = parsed.port  # None when absent; raises ValueError on invalid
+        raw_port = parsed.port  # None when absent; raises ValueError when port string is non-integer
     except (TypeError, ValueError):
         return False
 
