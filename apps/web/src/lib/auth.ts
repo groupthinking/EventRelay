@@ -61,6 +61,9 @@ function emailAllowed(email: string | null | undefined): boolean {
 
 export const authOptions: NextAuthOptions = {
   providers: buildProviders(),
+  pages: {
+    signIn: '/login',
+  },
   session: {
     strategy: 'jwt',
     maxAge: 30 * 24 * 60 * 60, // 30 days
