@@ -20,7 +20,8 @@ class CodeGeneratorAgent:
     def _load_templates(self) -> dict[str, str]:
         """Load code generation templates"""
         return {
-            "fastapi_endpoint": textwrap.dedent("""
+            "fastapi_endpoint": textwrap.dedent(
+                """
                 @app.post("/api/v1/{endpoint_name}")
                 async def {function_name}({parameters}):
                     \"\"\"
@@ -42,26 +43,26 @@ class CodeGeneratorAgent:
                     except ValidationError as e:
                         raise HTTPException(status_code=400, detail=str(e))
                     except Exception as e:
-                        logger.error("Internal server error", exc_info=True)
-                        raise HTTPException(status_code=500, detail="Internal server error")
-            """),
-            "rest_api": textwrap.dedent("""
+                        raise HTTPException(status_code=500, detail=str(e))
+            """
+            ),
+            "rest_api": textwrap.dedent(
+                """
                 # {title}
                 # Generated API endpoint
 
-                import logging
                 from fastapi import FastAPI, HTTPException
                 from pydantic import BaseModel
                 from datetime import datetime
                 from typing import Optional, List
 
-                logger = logging.getLogger(__name__)
-
                 {models}
 
                 {endpoints}
-            """),
-            "crud_operations": textwrap.dedent("""
+            """
+            ),
+            "crud_operations": textwrap.dedent(
+                """
                 # CRUD operations for {entity}
 
                 @app.post("/{entity_plural}")
@@ -87,7 +88,8 @@ class CodeGeneratorAgent:
                     \"\"\"Delete {entity}\"\"\"
                     # Implementation here
                     pass
-            """),
+            """
+            ),
         }
 
     @staticmethod

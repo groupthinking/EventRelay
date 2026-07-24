@@ -8,64 +8,22 @@ Compatible with UVAI configuration.path_utils interface.
 """
 
 import os
-import tempfile
 from pathlib import Path
-from typing import Optional, Union
+from typing import Union
 
 PathLike = Union[str, "os.PathLike[str]"]
-
-
-def _directory_accepts_files(candidate: Path) -> bool:
-    """Return whether the current process can create and remove a file there."""
-    if not candidate.is_dir():
-        return False
-
-    descriptor: Optional[int] = None
-    probe_path: Optional[str] = None
-    try:
-        descriptor, probe_path = tempfile.mkstemp(
-            prefix=".eventrelay-write-probe-",
-            dir=str(candidate),
-        )
-        os.close(descriptor)
-        descriptor = None
-        Path(probe_path).unlink()
-        probe_path = None
-    except OSError:
-        if descriptor is not None:
-            os.close(descriptor)
-        if probe_path is not None:
-            try:
-                Path(probe_path).unlink()
-            except OSError:
-                pass
-        return False
-    return True
-
-
-def _file_is_readable(candidate: Path) -> bool:
-    """Return whether the current process can open an existing regular file."""
-    if not candidate.is_file():
-        return False
-    try:
-        with candidate.open("rb"):
-            pass
-    except OSError:
-        return False
-    return True
 
 
 def select_writable_dir(preferred: PathLike, fallback: PathLike) -> Path:
     """Return a directory that is actually writable, preferring ``preferred``.
 
     ``preferred`` is chosen only when it *already exists* and is a writable
-    directory and a temporary file can actually be created and removed there.
-    It is never created — this avoids materializing developer- or
+    directory. It is never created — this avoids materializing developer- or
     machine-specific trees (e.g. ``/Users/garvey/...``) in foreign environments
     such as CI runners or root containers, where a plain ``mkdir`` would
     otherwise succeed. Existence alone is insufficient because an existing but
-    read-only directory passes ``exists()``/``mkdir(exist_ok=True)`` and
-    ``os.access`` can be misleading for elevated processes.
+    read-only directory passes ``exists()``/``mkdir(exist_ok=True)`` yet still
+    raises ``PermissionError`` on the first real write.
 
     When ``preferred`` is unusable, ``fallback`` is created (parents included)
     and returned, guaranteeing the caller a writable location.
@@ -78,24 +36,22 @@ def select_writable_dir(preferred: PathLike, fallback: PathLike) -> Path:
         Path: A writable directory.
     """
     candidate = Path(preferred)
-    if _directory_accepts_files(candidate):
+    if candidate.is_dir() and os.access(candidate, os.W_OK):
         return candidate
     runtime = Path(fallback)
     runtime.mkdir(parents=True, exist_ok=True)
-    if not _directory_accepts_files(runtime):
-        raise PermissionError(f"Fallback directory is not writable: {runtime}")
     return runtime
 
 
 def select_readable_file(preferred: PathLike, fallback: PathLike) -> Path:
     """Return a readable config file, preferring ``preferred``.
 
-    ``preferred`` is chosen only when it is a regular file that the current
-    process can actually open. A bare ``exists()`` or ``os.access`` check is not
-    enough, since an unusable file (or a directory at that path) would be
-    selected and then fail to open, silently discarding a valid ``fallback``.
-    When ``preferred`` is unusable the ``fallback`` path is returned as-is (its
-    readability is decided by the caller's own load logic).
+    ``preferred`` is chosen only when it exists as a readable file — a bare
+    ``exists()`` check is not enough, since an existing but unreadable file (or
+    a directory at that path) would be selected and then fail to open, silently
+    discarding a perfectly good ``fallback``. When ``preferred`` is unusable the
+    ``fallback`` path is returned as-is (its readability is decided by the
+    caller's own load logic).
 
     Args:
         preferred: The legacy/default file to reuse when readable.
@@ -105,7 +61,7 @@ def select_readable_file(preferred: PathLike, fallback: PathLike) -> Path:
         Path: The selected file path.
     """
     candidate = Path(preferred)
-    if _file_is_readable(candidate):
+    if candidate.is_file() and os.access(candidate, os.R_OK):
         return candidate
     return Path(fallback)
 
