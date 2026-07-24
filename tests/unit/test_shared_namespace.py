@@ -1,32 +1,16 @@
-"""Regression guard: the repo-root ``shared/`` package must not shadow ``src/shared``.
+"""Regression guard: ``src/shared`` must be importable as ``shared`` from the repo root.
 
-Running the backend or pytest from the repository root puts the root
-``shared/`` package ahead of ``src/shared`` on the import path, which
-historically broke ``from shared.youtube import ...`` (dropping the API v1
-router in local dev and failing full-suite pytest collection).
-
-The root ``shared/__init__.py`` now extends its ``__path__`` to include
-``src/shared`` so both package roots resolve. These tests make that failure
-mode impossible to reintroduce silently.
+The project-root ``shared/`` package was renamed to ``project_shared/`` so it no
+longer collides with ``src/shared`` on ``sys.path``. Running pytest from the
+repository root must still resolve ``from shared.youtube import ...`` to
+``src/shared/youtube``. These tests make that failure mode impossible to
+reintroduce silently.
 """
 
 import importlib.machinery
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-
-
-def test_root_shared_path_includes_src_shared():
-    """The root shared package must expose src/shared subpackages."""
-    import shared
-
-    src_shared = str(REPO_ROOT / "src" / "shared")
-    root_shared = REPO_ROOT / "shared"
-    if str(Path(shared.__file__).parent) == str(root_shared):
-        assert src_shared in list(shared.__path__), (
-            "Root shared/ package shadows src/shared without extending __path__; "
-            "'from shared.youtube import ...' would break when running from the repo root."
-        )
 
 
 def test_shared_youtube_is_importable():
@@ -41,3 +25,15 @@ def test_shared_youtube_is_importable():
     assert spec is not None, "shared.youtube could not be resolved"
     assert spec.origin is not None
     assert Path(spec.origin).is_relative_to(REPO_ROOT / "src" / "shared" / "youtube")
+
+
+def test_root_project_shared_does_not_shadow_src_shared():
+    """The project-root project_shared/ package must not collide with src/shared."""
+    root_shared = REPO_ROOT / "shared"
+    project_shared = REPO_ROOT / "project_shared"
+    assert not root_shared.exists(), (
+        "Repo-root shared/ still exists and would shadow src/shared/ on sys.path"
+    )
+    assert project_shared.exists(), (
+        "project_shared/ directory missing after rename"
+    )

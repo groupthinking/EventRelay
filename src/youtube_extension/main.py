@@ -194,6 +194,11 @@ try:
     logger.info("API v1 router loaded successfully")
 except Exception as e:
     logger.error(f"Failed to load API v1 router: {type(e).__name__}: {e}")
+    # In production this router must be present; fail loudly so deploys do not
+    # silently serve a degraded API. Local dev may still warn if optional dev
+    # dependencies are missing.
+    if os.getenv("ENVIRONMENT", "development").lower() in {"production", "staging"}:
+        raise
 
 
 # Health check endpoint
