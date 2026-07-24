@@ -8,7 +8,7 @@ workflow; this README is the index.
 
 | Workflow | File | Trigger | Purpose |
 |----------|------|---------|---------|
-| CI | `ci.yml` | push / PR to `main` | Type-check + lint `apps/web`, build the web app, lint Python (informational), run unit tests |
+| CI | `ci.yml` | push / PR to `main` | Type-check + lint `apps/web`, build the web app, lint Python (informational), run unit tests, and execute the production-readiness check gate |
 | Coverage | `coverage.yml` | push / PR to `main`,`develop`; manual | Generate pytest coverage and upload lcov to Qlty |
 | gh-aw Validation | `gh-aw-validation.yml` | push / PR to `main` on gh-aw files; manual | Pin `gh aw` to `v0.82.14`, compile custom EventRelay `.md` workflows, and run validate + actionlint + zizmor + poutine checks |
 | CodeQL Analysis | `codeql-analysis.yml` | push / PR to `main`; weekly (Mon 06:00 UTC) | Static security analysis for JavaScript/TypeScript and Python |
@@ -24,7 +24,7 @@ workflow; this README is the index.
 | Bulk Issue Processor | `bulk-issue-processor.yml` | manual | Bulk label / summarize / close-stale across many issues |
 | Close stale issues | `stale.yml` | daily (00:00 UTC) | Mark and close stale issues and PRs |
 | Branch Cleanup | `branch-cleanup.yml` | manual; push sentinel on `claude/branch-cleanup-*` | Gated archive-then-delete of branches (dry-run by default); push `[restore-branch:<branch>]` sentinel to restore a deleted branch from its archive tag |
-| E2E Tests | `e2e-tests.yml` | push / PR to `main` | Run Vitest E2E pipeline tests against production or the PR's Vercel preview deployment and report results on the PR |
+| E2E Tests | `e2e-tests.yml` | push / PR to `main` | Run Vitest E2E pipeline tests and Playwright smoke tests against production or the PR's Vercel preview deployment and report results on the PR |
 | Autonomous Video Processing | `autonomous-video-processing.yml` | manual | Batch-process YouTube videos by category (matrix) |
 | Real Video Processing (Cloud) | `real-processing.yml` | manual | Process a single video: transcript and/or AI analysis |
 | API-cost PostgreSQL | `api-cost-postgres.yml` | push / PR when substrate changes; manual | Exercise fresh, upgrade-from-002, and round-trip migrations plus runtime-role integration tests on PostgreSQL 16 |

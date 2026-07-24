@@ -35,7 +35,6 @@ jobs:
     name: E2E Pipeline Tests
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    continue-on-error: true
     # Only run on pull requests when a preview target is configured via the
     # `E2E_BASE_URL` repository variable. Without it the suite would fall back
     # to production (https://uvai.io) and exercise the live site rather than
@@ -103,6 +102,9 @@ jobs:
           if [ -n "$PREVIEW_URL" ]; then
             echo "BASE_URL=$PREVIEW_URL" >> "$GITHUB_ENV"
             echo "preview_url=$PREVIEW_URL" >> "$GITHUB_OUTPUT"
+          else
+            echo "🔴 [FAIL-CLOSED] No successful Vercel preview URL found for head SHA ${SHA}."
+            exit 1
           fi
 
       - name: Install dependencies
@@ -112,8 +114,29 @@ jobs:
         id: e2e_tests
         continue-on-error: true
         run: |
+          # Turn off exit on error temporarily to execute both test suites
+          set +e
+
+          # Run Vitest E2E
           npx vitest run tests/e2e/ --reporter=verbose 2>&1 | tee test-output.txt
-          echo "exit_code=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
+          VITEST_CODE=${PIPESTATUS[0]}
+
+          echo "=== Running Playwright Smoke Tests ===" | tee -a test-output.txt
+          # Install Playwright and run Playwright Smoke
+          npx playwright install --with-deps chromium
+          cd apps/web && npx playwright test 2>&1 | tee -a ../../test-output.txt
+          PLAYWRIGHT_CODE=${PIPESTATUS[0]}
+
+          # Restore exit on error
+          set -e
+
+          # Combine codes: if either is non-zero, exit with failure
+          if [ $VITEST_CODE -ne 0 ] || [ $PLAYWRIGHT_CODE -ne 0 ]; then
+            echo "E2E pipeline or Playwright smoke tests failed (vitest: $VITEST_CODE, playwright: $PLAYWRIGHT_CODE)"
+            echo "exit_code=1" >> $GITHUB_OUTPUT
+          else
+            echo "exit_code=0" >> $GITHUB_OUTPUT
+          fi
 
       - name: Parse test results
         id: results

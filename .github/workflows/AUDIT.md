@@ -14,7 +14,7 @@ concrete reason, verified against the actual repository tree.
 | `autonomous-video-processing.yml` | KEEP | Manual matrix batch processor; well-formed, scoped permissions. |
 | `branch-cleanup.yml` | **FIX** | Added `workflows: write` permission (missing permission caused push of restored branch to fail with "refusing to allow a GitHub App to create or update workflow ... without `workflows` permission"). Also restored push-sentinel trigger for `claude/branch-cleanup-*` branches and the restore-branch step, and removed the incorrect NOTE claiming restoration of workflow-containing branches is impossible with this token. |
 | `bulk-issue-processor.yml` | KEEP | Manual bulk issue ops via `gh` + Python; dry-run default. |
-| `ci.yml` | **FIX** | Added blocking `apps/web` type-check and ESLint steps before the build so CI fails fast on TypeScript or lint regressions. |
+| `ci.yml` | **FIX** | Added blocking `apps/web` type-check and ESLint steps before the build so CI fails fast on TypeScript or lint regressions, and integrated the fail-closed production-readiness check gate. |
 | `codeql-analysis.yml` | **FIX** | Removed the OWASP `dependency-check` job — pinned to unstable `@main` and pointed at dead paths (`frontend/node_modules`, `src/mcp-bridge.py`); produced no usable SARIF. Switched the Node cache from the dead `frontend/node_modules` path to the npm download cache (`~/.npm`), which is correct for this npm-workspaces repo. CodeQL analysis itself retained. Dependency coverage already lives in `dependency-review.yml` + `security.yml`. |
 | `coverage.yml` | **FIX** | Added a top-level `name:` and the `workflow_dispatch` trigger the README already documented as available. |
 | `gh-aw-validation.yml` | **ADD** | Adds pinned gh-aw (`v0.82.14`) validation for EventRelay's custom markdown workflows. Enforces compile/validate plus actionlint, zizmor, and poutine checks, and verifies committed lock files. |
@@ -22,7 +22,7 @@ concrete reason, verified against the actual repository tree.
 | `dependency-review.yml` | KEEP | PR dependency review with documented allow-lists. |
 | `deploy-cloud-run.yml` | KEEP | The real deployment path (GCP Cloud Run); manual dispatch. |
 | `deploy.yml` | **DELETE** | References a non-existent `deployments/` tree (manifests/terraform); actual infra is `infrastructure/`. The validate job hard-`exit 1`s on missing manifests. Generic multi-cloud (AWS+Azure+Slack) scaffold that duplicates `deploy-cloud-run.yml`. |
-| `e2e-tests.yml` | **FIX** | Resolve the PR's Vercel preview deployment via the GitHub Deployments API before E2E runs, and skip the PR-comment step for forked `pull_request` runs where `GITHUB_TOKEN` is read-only (`Resource not accessible by integration`). Same-repo PRs still get comments. |
+| `e2e-tests.yml` | **FIX** | Resolve the PR's Vercel preview deployment via the GitHub Deployments API before E2E runs, run Vitest pipeline + Playwright smoke stage, fail closed on preview lookup failure, and skip the PR-comment step for forked `pull_request` runs where `GITHUB_TOKEN` is read-only (`Resource not accessible by integration`). Same-repo PRs still get comments. |
 | `emergency-stop.yml` | KEEP | Manual operational kill-switch with typed confirmation. |
 | `issue-triage.yml` | KEEP | Keyword auto-labeling + triage comment on new issues. |
 | `mcp-optimization.yml` | **DELETE** | Entire workflow targets `mcp-servers/mcp-profiling/` (requirements.txt, investigator_client.py, profiling_server.py) which does not exist — every run fails. |
