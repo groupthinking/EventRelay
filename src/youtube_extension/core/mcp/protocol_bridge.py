@@ -128,12 +128,19 @@ async def _is_public_https_base_url(base_url: str) -> bool:
         parsed = urlparse(base_url)
         if parsed.scheme != "https" or not parsed.netloc:
             return False
+        # hostname raises ValueError for malformed IPv6 (e.g. "[::1/v1").
+        # port raises ValueError for non-integer port strings.
         host = parsed.hostname
-        port = parsed.port or 443
+        raw_port = parsed.port  # None when absent; raises ValueError on invalid
     except (TypeError, ValueError):
         return False
 
     if not host:
+        return False
+
+    # Coerce absent port to the HTTPS default, then reject out-of-range values.
+    port = raw_port if raw_port is not None else 443
+    if not (1 <= port <= 65535):
         return False
 
     try:
