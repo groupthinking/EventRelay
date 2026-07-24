@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 
 class StepAction(str, Enum):
     """Action types a build step can perform."""
+
     CREATE_FILE = "create_file"
     MODIFY_FILE = "modify_file"
     INSTALL_DEPENDENCY = "install_dependency"
@@ -31,11 +32,21 @@ class BuildStep(BaseModel):
 
     order: int = Field(..., description="1-based step order")
     action: StepAction = Field(..., description="What this step does")
-    description: str = Field(..., description="Human-readable description of what happens")
-    target_file: Optional[str] = Field(None, description="File path this step creates/modifies")
-    code_content: Optional[str] = Field(None, description="Code snippet shown in the video (if visible)")
-    dependencies: list[str] = Field(default_factory=list, description="Packages/tools this step requires")
-    prerequisites: list[int] = Field(default_factory=list, description="Step order numbers that must complete first")
+    description: str = Field(
+        ..., description="Human-readable description of what happens"
+    )
+    target_file: str | None = Field(
+        None, description="File path this step creates/modifies"
+    )
+    code_content: str | None = Field(
+        None, description="Code snippet shown in the video (if visible)"
+    )
+    dependencies: list[str] = Field(
+        default_factory=list, description="Packages/tools this step requires"
+    )
+    prerequisites: list[int] = Field(
+        default_factory=list, description="Step order numbers that must complete first"
+    )
 
 
 class BuildPlan(BaseModel):
@@ -49,15 +60,27 @@ class BuildPlan(BaseModel):
     video_id: str = Field(..., description="YouTube video ID")
     video_title: str = Field(..., description="Video title")
     project_type: str = Field(default="web", description="web | api | mobile | cli")
-    framework: Optional[str] = Field(None, description="Primary framework (react, vue, fastapi, etc.)")
-    technologies: list[str] = Field(default_factory=list, description="All technologies mentioned")
-    steps: list[BuildStep] = Field(default_factory=list, description="Ordered build steps")
-    summary: str = Field(default="", description="One-paragraph summary of what the video teaches")
+    framework: str | None = Field(
+        None, description="Primary framework (react, vue, fastapi, etc.)"
+    )
+    technologies: list[str] = Field(
+        default_factory=list, description="All technologies mentioned"
+    )
+    steps: list[BuildStep] = Field(
+        default_factory=list, description="Ordered build steps"
+    )
+    summary: str = Field(
+        default="", description="One-paragraph summary of what the video teaches"
+    )
 
     @property
     def file_steps(self) -> list[BuildStep]:
         """Steps that create or modify files."""
-        return [s for s in self.steps if s.action in (StepAction.CREATE_FILE, StepAction.MODIFY_FILE)]
+        return [
+            s
+            for s in self.steps
+            if s.action in (StepAction.CREATE_FILE, StepAction.MODIFY_FILE)
+        ]
 
     @property
     def dependency_steps(self) -> list[BuildStep]:

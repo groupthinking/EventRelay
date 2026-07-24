@@ -16,11 +16,21 @@ from dataclasses import asdict
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    Header,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    status,
+)
 from fastapi.responses import JSONResponse
 
 from shared.youtube import RobustYouTubeMetadata
 from uvai.ml.client import get_uvai_ml_client
+
 try:
     from youtube_extension.services.agents import AgentOrchestrator
     from youtube_extension.services.agents.adapters.agent_orchestrator import (
@@ -72,6 +82,7 @@ from .models import (
     AgentStatus,
     AgentStatusResponse,
     ApiResponse,
+    BlueprintRequest,
     CacheStats,
     ChatRequest,
     ChatResponse,
@@ -87,6 +98,7 @@ from .models import (
     GeminiCacheResponse,
     GeminiTokenRequest,
     GeminiTokenResponse,
+    GenerateCodeRequest,
     HealthResponse,
     JobStatus,
     KnowledgeIngestRequest,
@@ -96,14 +108,12 @@ from .models import (
     TranscriptActionRequest,
     TranscriptActionResponse,
     VideoJobStatusResponse,
+    VideoPackRequest,
     VideoProcessingRequest,
     VideoProcessJobRequest,
     VideoProcessJobResponse,
     VideoToSoftwareRequest,
     VideoToSoftwareResponse,
-    VideoPackRequest,
-    BlueprintRequest,
-    GenerateCodeRequest,
 )
 
 performance_monitor = PerformanceMonitor()
@@ -195,7 +205,9 @@ def get_hybrid_processor_service() -> HybridProcessorService:
 def get_agent_orchestrator_service() -> AgentOrchestrator:
     """Dependency injection for agent orchestrator"""
     if AgentOrchestrator is None:
-        raise HTTPException(status_code=503, detail="Agent orchestration service not available")
+        raise HTTPException(
+            status_code=503, detail="Agent orchestration service not available"
+        )
     return get_service("agent_orchestrator")
 
 
@@ -495,7 +507,9 @@ async def run_transcript_action(
                 video_options=request.video_options,
                 prefetched_metadata=metadata,
             )
-    except Exception as exc:  # noqa: BLE001 - never surface a raw 500 for processing failures
+    except (
+        Exception
+    ) as exc:  # noqa: BLE001 - never surface a raw 500 for processing failures
         logger.exception(
             "transcript-action failed; returning graceful error response",
             extra={"video_url": request.video_url},
@@ -983,7 +997,8 @@ async def get_learning_log_v1(data_service: DataService = Depends(get_data_servi
     description="Persist a durable transcript-derived insight into backend knowledge storage",
 )
 async def ingest_knowledge_v1(
-    request: KnowledgeIngestRequest, data_service: DataService = Depends(get_data_service)
+    request: KnowledgeIngestRequest,
+    data_service: DataService = Depends(get_data_service),
 ):
     """Store transcript-derived knowledge with normalized tags."""
     text = request.text.strip()
@@ -1680,6 +1695,7 @@ async def get_or_create_videopack(request: VideoPackRequest):
     video_id = request.video_id
     if not video_id and request.video_url:
         import re
+
         match = re.search(r"(?:v=|\/)([0-9A-Za-z_-]{11}).*", request.video_url)
         video_id = match.group(1) if match else None
 
@@ -1694,7 +1710,11 @@ async def get_or_create_videopack(request: VideoPackRequest):
     # In a real implementation, this would look up in a VideoPackStore.
     # For MVP, we return a synthesized pack from the job or a 404.
     try:
-        from youtube_extension.videopack.schema import Provenance, Transcript, VideoPackV0
+        from youtube_extension.videopack.schema import (
+            Provenance,
+            Transcript,
+            VideoPackV0,
+        )
 
         # Check if we have a job with results
         job = None
@@ -1779,15 +1799,18 @@ async def generate_project_code(request: GenerateCodeRequest):
     """Generate source code for a project based on a blueprint."""
     try:
         from youtube_extension.backend.ai_code_generator import AICodeGenerator
+
         generator = AICodeGenerator()
 
         # In MVP, we use default architecture if blueprint is missing
         result = await generator.generate_fullstack_project(
-            video_analysis={"extracted_info": request.blueprint or {"title": "MVP Project"}},
+            video_analysis={
+                "extracted_info": request.blueprint or {"title": "MVP Project"}
+            },
             project_config={
                 "project_type": request.project_type,
-                "framework": request.framework
-            }
+                "framework": request.framework,
+            },
         )
         return ApiResponse.success(result)
     except Exception as e:
@@ -1805,7 +1828,9 @@ async def get_pipeline_audit_run(run_id: str):
     entries = get_audit_store().get_run(run_id)
     if not entries:
         raise HTTPException(status_code=404, detail=f"Audit run {run_id} not found")
-    return ApiResponse.success({"run_id": run_id, "entries": entries, "count": len(entries)})
+    return ApiResponse.success(
+        {"run_id": run_id, "entries": entries, "count": len(entries)}
+    )
 
 
 # ============================================================
@@ -1855,13 +1880,11 @@ async def extract_events(request: EventExtractRequest):
                 # cut by taking the rightmost (max) position across all three
                 # punctuation marks.  Fall back to the nearest space (word
                 # boundary) if no sentence end is found in the window.
-                boundary_pos = max(
-                    text.rfind(b, start, end) for b in ('.', '!', '?')
-                )
+                boundary_pos = max(text.rfind(b, start, end) for b in (".", "!", "?"))
                 if boundary_pos != -1:
                     end = boundary_pos + 1  # include the punctuation mark
                 else:
-                    space = text.rfind(' ', start, end)
+                    space = text.rfind(" ", start, end)
                     if space != -1:
                         end = space + 1
             chunks.append(text[start:end])
@@ -1892,7 +1915,9 @@ async def extract_events(request: EventExtractRequest):
             backend = cloud_result.backend if cloud_result else None
             raw_text = (ai_result.response or "") if ai_result.success else ""
             if not raw_text.strip() or backend == "mock":
-                raise RuntimeError("AI extraction unavailable (no real Gemini response)")
+                raise RuntimeError(
+                    "AI extraction unavailable (no real Gemini response)"
+                )
             for line in raw_text.strip().split("\n"):
                 line = line.strip("- •*")
                 if len(line) > 5:
@@ -1902,7 +1927,13 @@ async def extract_events(request: EventExtractRequest):
                                 "action"
                                 if any(
                                     w in line.lower()
-                                    for w in ["do", "create", "build", "implement", "add"]
+                                    for w in [
+                                        "do",
+                                        "create",
+                                        "build",
+                                        "implement",
+                                        "add",
+                                    ]
                                 )
                                 else "topic"
                             ),
@@ -2127,8 +2158,10 @@ async def get_agent_status(agent_id: str):
     tags=["Agents"],
 )
 async def send_a2a_message(
-    body: dict[str, Any] = {},
+    body: dict[str, Any] | None = None,
 ):
+    if body is None:
+        body = {}
     """Send a context-share or tool-request message between agents."""
     sender = body.get("sender", "frontend")
     recipient = body.get("recipient")
@@ -2172,12 +2205,8 @@ async def get_agent_session_logs(
     agent findings can be reviewed and re-dispatched as new actions.
     """
     if _shared_orchestrator is None:
-        raise HTTPException(
-            status_code=503, detail="AgentOrchestrator not available"
-        )
-    logs = _shared_orchestrator.get_session_logs(
-        agent_type=agent_type, limit=limit
-    )
+        raise HTTPException(status_code=503, detail="AgentOrchestrator not available")
+    logs = _shared_orchestrator.get_session_logs(agent_type=agent_type, limit=limit)
     return ApiResponse.success({"sessions": logs, "count": len(logs)})
 
 

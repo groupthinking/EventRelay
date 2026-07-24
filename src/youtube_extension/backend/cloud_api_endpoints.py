@@ -14,18 +14,18 @@ import json
 import logging
 import os
 from datetime import datetime, timezone
-from typing import Dict, Any, List, Optional
+from typing import Any, Optional
 
-from fastapi import APIRouter, FastAPI, HTTPException, BackgroundTasks, Request, Header
+from fastapi import APIRouter, BackgroundTasks, FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 # Import cloud services
 from ..services.cloud import (
-    get_firestore_service,
-    get_cloud_tasks_service,
-    get_vertex_ai_service,
     VideoProcessingTask,
+    get_cloud_tasks_service,
+    get_firestore_service,
+    get_vertex_ai_service,
 )
 from ..services.cloud.cloud_video_processor import get_cloud_video_processor
 
@@ -35,13 +35,18 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-
 # Pydantic models for API requests/responses
 class CloudVideoProcessingRequest(BaseModel):
     video_url: str = Field(..., description="YouTube video URL or ID")
-    priority: int = Field(0, description="Processing priority (higher = more urgent)", ge=0, le=10)
-    async_processing: bool = Field(True, description="Use async processing via Cloud Tasks")
-    callback_url: Optional[str] = Field(None, description="Callback URL for completion notification")
+    priority: int = Field(
+        0, description="Processing priority (higher = more urgent)", ge=0, le=10
+    )
+    async_processing: bool = Field(
+        True, description="Use async processing via Cloud Tasks"
+    )
+    callback_url: Optional[str] = Field(
+        None, description="Callback URL for completion notification"
+    )
 
 
 class CloudVideoAnalysisResponse(BaseModel):
@@ -50,9 +55,9 @@ class CloudVideoAnalysisResponse(BaseModel):
     success: bool
     task_id: Optional[str] = None  # For async processing
     status: Optional[str] = None  # For sync processing
-    metadata: Optional[Dict[str, Any]] = None
-    transcript: Optional[Dict[str, Any]] = None
-    ai_analysis: Optional[Dict[str, Any]] = None
+    metadata: Optional[dict[str, Any]] = None
+    transcript: Optional[dict[str, Any]] = None
+    ai_analysis: Optional[dict[str, Any]] = None
     processing_time: Optional[float] = None
     from_cache: bool = False
     error: Optional[str] = None
@@ -60,15 +65,16 @@ class CloudVideoAnalysisResponse(BaseModel):
 
 class CloudTaskPayload(BaseModel):
     """Payload for Cloud Tasks handler"""
+
     video_id: str
     video_url: str
     priority: int = 0
     callback_url: Optional[str] = None
-    metadata: Optional[Dict[str, Any]] = None
+    metadata: Optional[dict[str, Any]] = None
 
 
 class BatchCloudProcessingRequest(BaseModel):
-    video_urls: List[str] = Field(..., description="List of YouTube video URLs")
+    video_urls: list[str] = Field(..., description="List of YouTube video URLs")
     priority: int = Field(0, description="Processing priority", ge=0, le=10)
 
 
@@ -82,11 +88,9 @@ class VideoStatusResponse(BaseModel):
     error_message: Optional[str] = None
 
 
-
 @router.post("/api/v3/process-video", response_model=CloudVideoAnalysisResponse)
 async def process_video_cloud(
-    request: CloudVideoProcessingRequest,
-    background_tasks: BackgroundTasks
+    request: CloudVideoProcessingRequest, background_tasks: BackgroundTasks
 ):
     """
     Process video using cloud-native architecture.
@@ -118,7 +122,7 @@ async def process_video_cloud(
                 video_url=request.video_url,
                 success=True,
                 task_id=task_id,
-                status='queued',
+                status="queued",
             )
 
         else:
@@ -132,7 +136,7 @@ async def process_video_cloud(
                 video_id=result.video_id,
                 video_url=result.video_url,
                 success=result.success,
-                status='completed' if result.success else 'failed',
+                status="completed" if result.success else "failed",
                 metadata=result.metadata,
                 transcript=result.transcript,
                 ai_analysis=result.ai_analysis,
@@ -147,6 +151,7 @@ async def process_video_cloud(
 
         # detail is a static string; error_msg (with the exception) is logged above only
         raise HTTPException(status_code=500, detail="Internal server error")
+
 
 @router.post("/api/v3/process-video-task")
 async def process_video_task_handler(
@@ -164,8 +169,7 @@ async def process_video_task_handler(
     if not x_cloudtasks_taskname:
         logger.warning("Unauthorized task handler access attempt")
         raise HTTPException(
-            status_code=403,
-            detail="Only Cloud Tasks can call this endpoint"
+            status_code=403, detail="Only Cloud Tasks can call this endpoint"
         )
 
     logger.info(
@@ -186,15 +190,16 @@ async def process_video_task_handler(
         if payload.callback_url and result.success:
             try:
                 import httpx
+
                 async with httpx.AsyncClient() as client:
                     await client.post(
                         payload.callback_url,
                         json={
-                            'video_id': result.video_id,
-                            'status': 'completed',
-                            'processing_time': result.processing_time,
+                            "video_id": result.video_id,
+                            "status": "completed",
+                            "processing_time": result.processing_time,
                         },
-                        timeout=10.0
+                        timeout=10.0,
                     )
                 logger.info(f"✅ Callback sent to {payload.callback_url}")
             except Exception as e:
@@ -215,13 +220,14 @@ async def process_video_task_handler(
             firestore_service = await get_firestore_service()
             await firestore_service.update_state(
                 payload.video_id,
-                status='failed',
-                error_message="Task processing failed"
+                status="failed",
+                error_message="Task processing failed",
             )
         except Exception as state_error:
             logger.error(f"Failed to update error state: {state_error}")
 
         raise HTTPException(status_code=500, detail="Internal server error")
+
 
 @router.post("/api/v3/batch-process")
 async def batch_process_videos_cloud(request: BatchCloudProcessingRequest):
@@ -231,8 +237,7 @@ async def batch_process_videos_cloud(request: BatchCloudProcessingRequest):
     try:
         if len(request.video_urls) > 50:
             raise HTTPException(
-                status_code=400,
-                detail="Maximum 50 videos allowed per batch request"
+                status_code=400, detail="Maximum 50 videos allowed per batch request"
             )
 
         processor = get_cloud_video_processor()
@@ -252,11 +257,11 @@ async def batch_process_videos_cloud(request: BatchCloudProcessingRequest):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Unhandled error in batch_process_videos_cloud: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail="Internal server error"
+        logger.error(
+            f"Unhandled error in batch_process_videos_cloud: {e}", exc_info=True
         )
+        raise HTTPException(status_code=500, detail="Internal server error")
+
 
 @router.get("/api/v3/videos/{video_id}/status", response_model=VideoStatusResponse)
 async def get_video_status(video_id: str):
@@ -269,8 +274,7 @@ async def get_video_status(video_id: str):
 
         if not state:
             raise HTTPException(
-                status_code=404,
-                detail=f"No status found for video: {video_id}"
+                status_code=404, detail=f"No status found for video: {video_id}"
             )
 
         return VideoStatusResponse(
@@ -287,10 +291,8 @@ async def get_video_status(video_id: str):
         raise
     except Exception as e:
         logger.error(f"Unhandled error in get_video_status: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail="Internal server error"
-        )
+        raise HTTPException(status_code=500, detail="Internal server error")
+
 
 @router.get("/api/v3/videos/{video_id}/result")
 async def get_video_result(video_id: str):
@@ -303,8 +305,7 @@ async def get_video_result(video_id: str):
 
         if not state:
             raise HTTPException(
-                status_code=404,
-                detail=f"No result found for video: {video_id}"
+                status_code=404, detail=f"No result found for video: {video_id}"
             )
 
         return {
@@ -325,10 +326,8 @@ async def get_video_result(video_id: str):
         raise
     except Exception as e:
         logger.error(f"Unhandled error in get_video_result: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail="Internal server error"
-        )
+        raise HTTPException(status_code=500, detail="Internal server error")
+
 
 @router.get("/api/v3/queue/stats")
 async def get_queue_stats():
@@ -353,6 +352,7 @@ async def get_queue_stats():
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
+
 @router.get("/api/v3/cloud-status")
 async def get_cloud_status():
     """
@@ -367,7 +367,7 @@ async def get_cloud_status():
 
         # Check Firestore
         try:
-            firestore_service = await get_firestore_service()
+            await get_firestore_service()
             status["services"]["firestore"] = {
                 "status": "operational",
                 "enabled": True,
@@ -397,7 +397,7 @@ async def get_cloud_status():
 
         # Check Vertex AI
         try:
-            vertex_service = get_vertex_ai_service()
+            get_vertex_ai_service()
             status["services"]["vertex_ai"] = {
                 "status": "operational",
                 "enabled": True,
@@ -418,7 +418,6 @@ async def get_cloud_status():
             "error": str(e),
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
-
 
 
 def setup_cloud_api_endpoints(app: FastAPI):
