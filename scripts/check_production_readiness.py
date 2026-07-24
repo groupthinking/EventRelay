@@ -13,11 +13,12 @@ def check_env_vars():
     critical_vars = ["GEMINI_API_KEY", "OPENAI_API_KEY", "STRIPE_SECRET_KEY"]
     missing = [v for v in critical_vars if not os.getenv(v)]
     if missing:
-        is_production = (
-            os.getenv("APP_ENV") == "production"
-            or os.getenv("ENVIRONMENT") == "production"
-        )
-        if is_production:
+        environment = (
+            (os.getenv("ENVIRONMENT") or "").strip()
+            or (os.getenv("VERCEL_ENV") or "").strip()
+            or "development"
+        ).lower()
+        if environment == "production":
             logger.error(f"❌ Missing critical env vars in production: {missing}")
             return True
         else:
