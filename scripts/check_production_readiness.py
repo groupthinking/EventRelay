@@ -10,8 +10,15 @@ logger = logging.getLogger("production-readiness")
 
 def check_env_vars():
     logger.info("Checking environment variables...")
-    critical_vars = ["GEMINI_API_KEY", "OPENAI_API_KEY", "STRIPE_SECRET_KEY"]
-    missing = [v for v in critical_vars if not os.getenv(v)]
+    required_groups = [
+        (("GEMINI_API_KEY", "GOOGLE_API_KEY"), "GEMINI_API_KEY or GOOGLE_API_KEY"),
+        (("YOUTUBE_API_KEY",), "YOUTUBE_API_KEY"),
+    ]
+    missing = [
+        label
+        for names, label in required_groups
+        if not any(os.getenv(name) for name in names)
+    ]
     if missing:
         environment = (
             (os.getenv("ENVIRONMENT") or "").strip()
