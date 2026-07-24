@@ -306,6 +306,7 @@ class GeminiResult:
     model_name: str
     backend: str  # "api" or "vertex"
     error: Optional[str] = None
+    usage_metadata: Optional[Any] = None
 
 
 class GeminiService:
@@ -589,7 +590,8 @@ class GeminiService:
                 response=response.text,
                 latency=latency,
                 model_name=self.config.model_name,
-                backend="vertex" if self._use_vertex else "api"
+                backend="vertex" if self._use_vertex else "api",
+                usage_metadata=getattr(response, "usage_metadata", None),
             )
 
         except Exception as e:
@@ -677,6 +679,7 @@ class GeminiService:
                 latency=time.time() - start_time,
                 model_name=self.config.model_name,
                 backend=self._backend_kind,
+                usage_metadata=getattr(response, "usage_metadata", None),
             )
 
         except Exception as exc:
@@ -826,7 +829,8 @@ class GeminiService:
                 response=response.text,
                 latency=latency,
                 model_name=self.config.model_name,
-                backend="vertex" if self._use_vertex else "api"
+                backend="vertex" if self._use_vertex else "api",
+                usage_metadata=getattr(response, "usage_metadata", None),
             )
 
         except Exception as e:
@@ -893,6 +897,7 @@ class GeminiService:
                 latency=latency,
                 model_name=self.config.model_name,
                 backend="vertex" if self._use_vertex else "api",
+                usage_metadata=getattr(response, "usage_metadata", None),
             )
 
         except Exception as e:
@@ -1174,7 +1179,8 @@ class GeminiService:
                 response=response.text,
                 latency=latency,
                 model_name=self.config.model_name,
-                backend="api"
+                backend="api",
+                usage_metadata=getattr(response, "usage_metadata", None),
             )
 
         except Exception as e:

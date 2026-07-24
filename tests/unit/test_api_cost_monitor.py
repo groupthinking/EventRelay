@@ -82,6 +82,22 @@ class TestCalculateCost:
         )
         assert pytest.approx(cost, rel=1e-6) == 0.000075 + 0.0003
 
+    def test_google_gemini_35_flash_regression_cost(self, monitor):
+        """Routable default model must be priced exactly, not fall back to gemini-3-pro."""
+        cost = monitor.calculate_cost(
+            "google", "gemini-3.5-flash", input_tokens=1000, output_tokens=1000
+        )
+        expected = 0.0001 + 0.0004
+        assert pytest.approx(cost, rel=1e-6) == expected
+
+    def test_google_gemini_20_flash_regression_cost(self, monitor):
+        """Hybrid processor test path uses this model and must not fall back."""
+        cost = monitor.calculate_cost(
+            "google", "gemini-2.0-flash", input_tokens=1000, output_tokens=1000
+        )
+        expected = 0.0001 + 0.0004
+        assert pytest.approx(cost, rel=1e-6) == expected
+
     def test_youtube_quota_cost(self, monitor):
         cost = monitor.calculate_cost("youtube", "search", input_tokens=100)
         assert pytest.approx(cost, rel=1e-6) == 100 * 0.0001
@@ -206,6 +222,12 @@ class TestCostModelsStructure:
             "claude-sonnet-4-6",
             "claude-haiku-4-5",
         ):
+            assert model in models, f"{model} missing from COST_MODELS"
+
+    def test_current_gemini_models_present(self, monitor):
+        """Every routable Gemini default must have an explicit COST_MODELS entry."""
+        models = monitor.COST_MODELS["google"]
+        for model in ("gemini-3.5-flash", "gemini-2.0-flash"):
             assert model in models, f"{model} missing from COST_MODELS"
 
     def test_anthropic_model_has_input_output_keys(self, monitor):
@@ -344,6 +366,56 @@ class TestRecordUsage:
         )
         assert record.success is False
         assert record.error_message == "rate limited"
+
+    async def test_usage_and_crossed_alert_commit_atomically(self, monitor):
+        from youtube_extension.backend.models.api_cost import (
+            APIUsage,
+            DailyBudget,
+            WebhookOutbox,
+        )
+
+        monitor.alert_threshold = 0.001
+        monitor.daily_budget = 100.0
+        record = await monitor.record_usage(
+            service="anthropic",
+            endpoint="/messages",
+            tokens_used=1000,
+            model="claude-opus-4-8",
+        )
+
+        with monitor._session_scope() as session:
+            assert session.query(APIUsage).count() == 1
+            budget = session.query(DailyBudget).one()
+            alert = session.query(WebhookOutbox).one()
+
+            assert budget.total_cost == pytest.approx(record.cost)
+            assert budget.alert_sent is True
+            assert alert.alert_type == "threshold"
+            assert alert.current_cost == pytest.approx(record.cost)
+
+    async def test_alert_staging_failure_rolls_back_usage(self, monitor, monkeypatch):
+        from youtube_extension.backend.models.api_cost import (
+            APIUsage,
+            DailyBudget,
+            WebhookOutbox,
+        )
+
+        def fail_staging(session, timestamp):
+            raise RuntimeError("simulated crash boundary")
+
+        monkeypatch.setattr(monitor, "_stage_budget_alerts", fail_staging)
+        record = await monitor.record_usage(
+            service="anthropic",
+            endpoint="/messages",
+            tokens_used=1000,
+            model="claude-opus-4-8",
+        )
+
+        assert record is not None
+        with monitor._session_scope() as session:
+            assert session.query(APIUsage).count() == 0
+            assert session.query(DailyBudget).count() == 0
+            assert session.query(WebhookOutbox).count() == 0
 
 
 # ===========================================================================
@@ -740,7 +812,7 @@ class TestDurableWebhookOutbox:
 
         # Attempt 2, 3, 4, 5
         for expected_retry in [2, 3, 4, 5]:
-            await monitor.process_outbox()
+            await monitor.process_outbox(force=True)
             session = monitor.Session()
             try:
                 item = (
@@ -754,7 +826,7 @@ class TestDurableWebhookOutbox:
                 session.close()
 
         # Attempt 6 (should not be retried because retry count reached 5)
-        await monitor.process_outbox()
+        await monitor.process_outbox(force=True)
         session = monitor.Session()
         try:
             item = (

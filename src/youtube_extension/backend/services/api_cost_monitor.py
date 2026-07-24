@@ -8,9 +8,11 @@ Monitors OpenAI, Anthropic, Gemini, YouTube Data API, and other service usage.
 """
 
 import asyncio
+import contextvars
 import json
 import logging
 import os
+import random
 import re
 import threading
 import time
@@ -31,8 +33,11 @@ from sqlalchemy import (
     delete,
     func,
     inspect,
+    or_,
     text,
 )
+from sqlalchemy.dialects.postgresql import insert as postgresql_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.engine import URL, make_url
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -57,6 +62,11 @@ DEFAULT_DB_PATH = (
 # Configure logging
 logger = logging.getLogger(__name__)
 
+# Keep the public webhook helper's one-argument signature for existing callers and
+# tests while attaching an outbox event identifier to each delivery attempt.
+_WEBHOOK_EVENT_ID: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
+    "api_cost_webhook_event_id", default=None
+)
 _PRODUCTION_NAMES = {"staging", "prod", "production"}
 _RUNTIME_ROLE_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,62}$")
 _REQUIRED_API_COST_COLUMNS = {
@@ -566,6 +576,10 @@ class APICostMonitor:
             "claude-3-haiku-20240307": {"input": 0.00025, "output": 0.00125},
         },
         "google": {
+            # Current generation (routable from GeminiService)
+            "gemini-3.5-flash": {"input": 0.0001, "output": 0.0004},
+            "gemini-2.0-flash": {"input": 0.0001, "output": 0.0004},
+            # Historical / legacy pricing
             "gemini-3-pro": {"input": 0.000875, "output": 0.0035},
             "gemini-3-flash": {"input": 0.000052, "output": 0.00021},
             "gemini-1.5-pro": {"input": 0.00125, "output": 0.005},
@@ -603,6 +617,22 @@ class APICostMonitor:
 
         # Webhook notification settings
         self.webhook_url = os.getenv("API_COST_WEBHOOK_URL")
+        self.webhook_max_attempts = 5
+        self.webhook_retry_base_seconds = max(
+            0.0, float(os.getenv("API_COST_WEBHOOK_RETRY_BASE_SECONDS", "5"))
+        )
+        self.webhook_retry_max_seconds = max(
+            self.webhook_retry_base_seconds,
+            float(os.getenv("API_COST_WEBHOOK_RETRY_MAX_SECONDS", "300")),
+        )
+        self.webhook_poll_interval_seconds = max(
+            0.01, float(os.getenv("API_COST_WEBHOOK_POLL_SECONDS", "1"))
+        )
+        self.webhook_stale_timeout_seconds = max(
+            1, int(os.getenv("API_COST_WEBHOOK_STALE_SECONDS", "30"))
+        )
+        self._worker_task: Optional[asyncio.Task[None]] = None
+        self._worker_wake_event: Optional[asyncio.Event] = None
 
         # Rate limiters for different services
         self.rate_limiters = {
@@ -720,7 +750,6 @@ class APICostMonitor:
             if not database_url.database:
                 kwargs["poolclass"] = StaticPool
             return create_engine(database_url, **kwargs)
-
         pool_size = max(1, int(os.getenv("API_COST_DB_POOL_SIZE", "2")))
         max_overflow = max(0, int(os.getenv("API_COST_DB_MAX_OVERFLOW", "0")))
         pool_timeout = max(1, int(os.getenv("API_COST_DB_POOL_TIMEOUT", "10")))
@@ -759,7 +788,90 @@ class APICostMonitor:
             self.engine,
             tables=[APIUsage.__table__, DailyBudget.__table__, WebhookOutbox.__table__],
         )
+        self._upgrade_sqlite_outbox_schema()
         self._validate_database_schema()
+
+    def _upgrade_sqlite_outbox_schema(self) -> None:
+        """Add compatible SQLite outbox columns and indexes without data loss."""
+        if self.engine is None or self.engine.dialect.name != "sqlite":
+            return
+
+        with self.engine.connect() as connection:
+            connection.exec_driver_sql("BEGIN EXCLUSIVE")
+            try:
+                columns = {
+                    row[1]
+                    for row in connection.exec_driver_sql(
+                        "PRAGMA table_info(webhook_outbox)"
+                    )
+                }
+                if not columns:
+                    connection.commit()
+                    return
+
+                unique_indexes = [
+                    row[1]
+                    for row in connection.exec_driver_sql(
+                        "PRAGMA index_list(webhook_outbox)"
+                    )
+                    if row[2]
+                ]
+                unique_index_columns = []
+                for index_name in unique_indexes:
+                    unique_index_columns.append(
+                        [
+                            row[2]
+                            for row in connection.exec_driver_sql(
+                                f"PRAGMA index_info({index_name!r})"
+                            )
+                        ]
+                    )
+                if ["utc_date", "alert_type"] not in unique_index_columns:
+                    raise RuntimeError(
+                        "Legacy API-cost SQLite schema is incompatible; "
+                        "back up and recreate the local database"
+                    )
+
+                for column_name, column_type in (
+                    ("next_attempt_at", "DATETIME"),
+                    ("claimed_at", "DATETIME"),
+                    ("claim_token", "VARCHAR(64)"),
+                    ("last_recovered_at", "DATETIME"),
+                    ("sent_at", "DATETIME"),
+                ):
+                    if column_name not in columns:
+                        connection.exec_driver_sql(
+                            "ALTER TABLE webhook_outbox "
+                            f"ADD COLUMN {column_name} {column_type}"
+                        )
+
+                index_columns = [
+                    row[2]
+                    for row in connection.exec_driver_sql(
+                        "PRAGMA index_info(ix_webhook_outbox_due)"
+                    )
+                ]
+                expected_due_index_columns = [
+                    "status",
+                    "next_attempt_at",
+                    "retry_count",
+                ]
+                if index_columns and index_columns != expected_due_index_columns:
+                    connection.exec_driver_sql(
+                        "DROP INDEX IF EXISTS ix_webhook_outbox_due"
+                    )
+                connection.exec_driver_sql(
+                    "CREATE INDEX IF NOT EXISTS ix_webhook_outbox_due "
+                    "ON webhook_outbox (status, next_attempt_at, retry_count)"
+                )
+                connection.exec_driver_sql(
+                    "CREATE INDEX IF NOT EXISTS ix_webhook_outbox_stale_claims "
+                    "ON webhook_outbox (status, claimed_at, id)"
+                )
+                connection.commit()
+            except BaseException:
+                connection.rollback()
+                raise
 
     def _validate_database_schema(self) -> None:
         if self.engine is None:
@@ -1139,21 +1251,77 @@ class APICostMonitor:
             return 0.0
 
         service_costs = self.COST_MODELS[service]
-        if model not in service_costs:
-            # Use average cost for unknown models
-            model = list(service_costs.keys())[0]
 
         if service == "youtube":
             # YouTube uses quota units, not token pricing
             return input_tokens * 0.0001  # Rough estimate per quota unit
 
-        model_cost = service_costs[model]
+        model_cost = service_costs.get(model)
+        if model_cost is None:
+            # Unknown/aliased model: resolve to the closest known tier
+            # (e.g. "gemini-3.5-flash" -> "gemini-3-flash") instead of
+            # blindly picking the first (most expensive) key.
+            model_cost = self._fallback_model_cost(model, service_costs)
+        if model_cost is None:
+            return 0.0
+
         if isinstance(model_cost, dict):
             input_cost = (input_tokens / 1000) * model_cost["input"]
             output_cost = (output_tokens / 1000) * model_cost["output"]
             return input_cost + output_cost
         else:
             return (input_tokens / 1000) * model_cost
+
+    @staticmethod
+    def _fallback_model_cost(
+        model: str, service_costs: dict[str, Any]
+    ) -> dict[str, float] | float | None:
+        """Resolve pricing for an unknown model name.
+
+        Rather than defaulting to the first (typically most expensive) entry,
+        match on a pricing "tier" keyword shared with a known model
+        (e.g. ``flash``/``mini``/``pro``). If no tier matches, fall back to the
+        average cost across all known models so estimates stay unbiased.
+        """
+        dict_costs = {
+            name: cost
+            for name, cost in service_costs.items()
+            if isinstance(cost, dict)
+        }
+        if not dict_costs:
+            # Non-token pricing (e.g. quota units); use the first entry.
+            return next(iter(service_costs.values()), None)
+
+        # Tokenize on common separators so we match whole tier words and avoid
+        # false substring hits (e.g. "gemini" contains "mini").
+        def _tokens(name: str) -> set[str]:
+            return set(re.split(r"[^a-z0-9]+", (name or "").lower()))
+
+        model_tokens = _tokens(model)
+        # Ordered cheapest/most-specific tiers first so, e.g., a "flash-lite"
+        # model prefers the lighter tier over a generic "pro" match.
+        tier_keywords = [
+            "nano",
+            "lite",
+            "mini",
+            "flash",
+            "haiku",
+            "turbo",
+            "sonnet",
+            "opus",
+            "pro",
+        ]
+        for keyword in tier_keywords:
+            if keyword in model_tokens:
+                for name, cost in dict_costs.items():
+                    if keyword in _tokens(name):
+                        return cost
+
+        # No tier match: use the average cost across known models.
+        count = len(dict_costs)
+        avg_input = sum(c.get("input", 0) for c in dict_costs.values()) / count
+        avg_output = sum(c.get("output", 0) for c in dict_costs.values()) / count
+        return {"input": avg_input, "output": avg_output}
 
     async def record_usage(
         self,
@@ -1197,28 +1365,33 @@ class APICostMonitor:
             self.session_costs[service] += cost
             self.session_requests[service] += 1
 
-        stored = False
+        claimed_alerts: list[tuple[str, float]] = []
         if self.Session is None:
             logger.warning(
                 "API usage was not persisted because persistence is disabled"
             )
         else:
             try:
-                await asyncio.to_thread(self._record_usage_sync, record)
-                stored = True
+                claimed_alerts = await asyncio.to_thread(
+                    self._record_usage_sync, record
+                )
             except Exception as exc:
                 # The provider operation has already completed. Telemetry is
                 # best effort and must never make that paid result retry/fail.
                 logger.error("Failed to record API usage: %s", exc)
 
-        if stored:
-            await self._check_budget_alerts()
+        # This only wakes the explicitly managed worker; network I/O remains
+        # outside the accounting path.
+        for alert_type, current_cost in claimed_alerts:
+            await self._send_budget_alert(current_cost, alert_type)
 
         logger.debug("API usage: %s - $%.4f (%s tokens)", service, cost, tokens_used)
         return record
 
-    def _record_usage_sync(self, record: APIUsageRecord) -> None:
-        """Persist one usage record on a worker thread."""
+    def _record_usage_sync(
+        self, record: APIUsageRecord
+    ) -> list[tuple[str, float]]:
+        """Persist usage and any newly crossed alert in one transaction."""
         with self._session_scope(commit=True) as session:
             session.add(
                 APIUsage(
@@ -1234,6 +1407,83 @@ class APICostMonitor:
                     error_message=record.error_message,
                 )
             )
+            session.flush()
+            return self._stage_budget_alerts(session, record.timestamp)
+
+    def _stage_budget_alerts(
+        self, session: Session, timestamp: datetime
+    ) -> list[tuple[str, float]]:
+        """Aggregate the UTC day and enqueue crossed alerts transactionally."""
+        utc_date = timestamp.astimezone(timezone.utc).date().isoformat()
+        start_at, end_at = self._utc_day_bounds(utc_date)
+        insert_factory = postgresql_insert if self._is_postgres else sqlite_insert
+
+        session.execute(
+            insert_factory(DailyBudget)
+            .values(
+                date=utc_date,
+                total_cost=0.0,
+                alert_sent=False,
+                budget_exceeded=False,
+            )
+            .on_conflict_do_nothing(index_elements=["date"])
+        )
+        budget = (
+            session.query(DailyBudget)
+            .filter_by(date=utc_date)
+            .with_for_update()
+            .one()
+        )
+        total = (
+            session.query(func.sum(APIUsage.cost))
+            .filter(
+                APIUsage.timestamp >= start_at,
+                APIUsage.timestamp < end_at,
+            )
+            .scalar()
+        )
+        current_cost = float(total) if total is not None else 0.0
+        budget.total_cost = current_cost
+
+        claimed: list[tuple[str, float]] = []
+        alert_specs = (
+            ("threshold", self.alert_threshold, "alert_sent"),
+            ("exceeded", self.daily_budget, "budget_exceeded"),
+        )
+        for alert_type, limit, flag_name in alert_specs:
+            if current_cost < limit or getattr(budget, flag_name):
+                continue
+
+            if alert_type == "threshold":
+                payload = (
+                    f"🚨 API Budget Alert: ${current_cost:.2f} "
+                    f"(Alert threshold: ${self.alert_threshold})"
+                )
+            else:
+                payload = (
+                    f"🚨 API Budget Alert: ${current_cost:.2f} "
+                    f"EXCEEDED daily budget of ${self.daily_budget}"
+                )
+
+            inserted = session.execute(
+                insert_factory(WebhookOutbox)
+                .values(
+                    utc_date=utc_date,
+                    alert_type=alert_type,
+                    status="pending",
+                    retry_count=0,
+                    current_cost=current_cost,
+                    payload=payload,
+                )
+                .on_conflict_do_nothing(
+                    index_elements=["utc_date", "alert_type"]
+                )
+            )
+            setattr(budget, flag_name, True)
+            if inserted.rowcount == 1:
+                claimed.append((alert_type, current_cost))
+
+        return claimed
 
     async def _check_budget_alerts(self) -> None:
         """Check and enqueue budget alerts if thresholds are exceeded."""
@@ -1326,112 +1576,343 @@ class APICostMonitor:
             return False
 
     def _trigger_delivery(self):
-        """Leave delivery to the dedicated worker's polling loop."""
-        logger.debug("API-cost alert queued for the dedicated worker")
+        """Wake the explicitly managed worker without spawning per-alert tasks."""
+        if self._worker_wake_event is not None:
+            self._worker_wake_event.set()
 
-    async def recover_stale_deliveries(self, stale_timeout_seconds: int = 30):
-        """Recover items left processing after a crash or cancellation."""
+    async def start(self) -> asyncio.Task[None]:
+        """Start the monitor's single managed outbox worker."""
+        if self._worker_task is not None and not self._worker_task.done():
+            return self._worker_task
+
+        self._worker_wake_event = asyncio.Event()
+        self._worker_task = asyncio.create_task(
+            self._outbox_worker(), name="api-cost-webhook-outbox"
+        )
+        return self._worker_task
+
+    async def close(self) -> None:
+        """Stop the managed worker and wait for any claim cleanup to finish."""
+        task = self._worker_task
+        if task is None:
+            return
+
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+        finally:
+            if self._worker_task is task:
+                self._worker_task = None
+                self._worker_wake_event = None
+
+    async def _outbox_worker(self) -> None:
+        """Continuously deliver due outbox items until explicitly closed."""
+        while True:
+            wake_event = self._worker_wake_event
+            if wake_event is None:
+                return
+            wake_event.clear()
+            try:
+                await self.process_outbox()
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.exception("Unhandled error in API-cost webhook outbox worker")
+
+            try:
+                await asyncio.wait_for(
+                    wake_event.wait(), timeout=self.webhook_poll_interval_seconds
+                )
+            except asyncio.TimeoutError:
+                pass
+
+    def _retry_at(self, attempt: int, now: datetime) -> datetime:
+        """Return a bounded exponential equal-jitter retry timestamp.
+
+        Equal jitter keeps retry bursts spaced while scattering each individual
+        attempt across the second half of the capped exponential window:
+        delay = cap/2 + random(0, cap/2).
+        """
+        exponential_cap = min(
+            self.webhook_retry_max_seconds,
+            self.webhook_retry_base_seconds * (2 ** max(0, attempt - 1)),
+        )
+        base_delay = exponential_cap / 2
+        jitter = random.uniform(0, base_delay)
+        delay = base_delay + jitter
+        return now + timedelta(seconds=delay)
+
+    def _retry_state(
+        self, attempt: int, now: datetime, error_message: str
+    ) -> tuple[Optional[datetime], str]:
+        """Return persisted scheduling and error state for a failed attempt."""
+        if attempt >= self.webhook_max_attempts:
+            return (
+                None,
+                f"Retry exhausted after {self.webhook_max_attempts} attempts: "
+                f"{error_message}",
+            )
+        return self._retry_at(attempt, now), error_message
+
+    async def recover_stale_deliveries(
+        self, stale_timeout_seconds: Optional[int] = None
+    ) -> None:
+        """Recover abandoned claims without blocking the application event loop."""
         await asyncio.to_thread(
             self._recover_stale_deliveries_sync, stale_timeout_seconds
         )
 
-    def _recover_stale_deliveries_sync(self, stale_timeout_seconds: int) -> None:
+    def _recover_stale_deliveries_sync(
+        self, stale_timeout_seconds: Optional[int] = None
+    ) -> None:
+        """Recover processing claims in a worker thread."""
+        if stale_timeout_seconds is None:
+            stale_timeout_seconds = self.webhook_stale_timeout_seconds
+
         try:
-            cutoff = datetime.now(timezone.utc) - timedelta(
-                seconds=stale_timeout_seconds
-            )
             with self._session_scope(commit=True) as session:
+                now = datetime.now(timezone.utc)
+                cutoff = now - timedelta(seconds=stale_timeout_seconds)
                 stale_items = (
                     session.query(WebhookOutbox)
                     .filter(
                         WebhookOutbox.status == "processing",
-                        WebhookOutbox.last_attempt < cutoff,
+                        or_(
+                            WebhookOutbox.last_attempt.is_(None),
+                            WebhookOutbox.last_attempt < cutoff,
+                        ),
                     )
                     .all()
                 )
+
                 for item in stale_items:
-                    item.status = "failed"
-                    item.last_recovered_at = datetime.now(timezone.utc)
-                    item.error_message = (
-                        "Recovery: Stale/Crashed delivery task recovered"
+                    next_attempt_at, recovery_error = self._retry_state(
+                        max(1, item.retry_count),
+                        now,
+                        "Recovery: Stale/Crashed delivery task recovered",
                     )
-                    logger.info(
-                        "Recovered stale webhook delivery %s for %s (%s)",
-                        item.id,
-                        item.utc_date,
-                        item.alert_type,
+                    filters = [
+                        WebhookOutbox.id == item.id,
+                        WebhookOutbox.status == "processing",
+                    ]
+                    if item.last_attempt is None:
+                        filters.append(WebhookOutbox.last_attempt.is_(None))
+                    else:
+                        filters.append(WebhookOutbox.last_attempt == item.last_attempt)
+
+                    recovered = (
+                        session.query(WebhookOutbox)
+                        .filter(*filters)
+                        .update(
+                            {
+                                WebhookOutbox.status: "failed",
+                                WebhookOutbox.next_attempt_at: next_attempt_at,
+                                WebhookOutbox.error_message: recovery_error,
+                                WebhookOutbox.last_recovered_at: now,
+                            },
+                            synchronize_session=False,
+                        )
                     )
-        except Exception as exc:
-            logger.error("Error during stale webhook delivery recovery: %s", exc)
+                    if recovered:
+                        logger.info(
+                            "Recovered stale webhook delivery %s for %s (%s)",
+                            item.id,
+                            item.utc_date,
+                            item.alert_type,
+                        )
+        except Exception as e:
+            logger.error("Error during stale webhook delivery recovery: %s", e)
 
-    async def process_outbox(self, max_items: Optional[int] = None):
-        """Process a bounded set of pending or failed outbox deliveries."""
-        if not self.delivery_enabled:
-            logger.debug("API-cost outbox delivery is disabled")
-            return
-        if not self.webhook_url:
-            logger.warning(
-                "API-cost outbox delivery skipped because no webhook is configured"
-            )
-            return
-        await self.recover_stale_deliveries()
-
-        item_ids = await asyncio.to_thread(self._list_outbox_candidates, max_items)
-        for item_id in item_ids:
-            payload = await asyncio.to_thread(self._claim_outbox_item, item_id)
-            if payload is None:
-                continue
-            success = await self._send_webhook_notification(payload)
-            await asyncio.to_thread(self._complete_outbox_item, item_id, success)
-
-    def _list_outbox_candidates(self, max_items: Optional[int]) -> list[int]:
-        with self._session_scope() as session:
-            query = (
-                session.query(WebhookOutbox.id)
-                .filter(
-                    WebhookOutbox.status.in_(["pending", "failed"]),
-                    WebhookOutbox.retry_count < 5,
-                )
-                .order_by(WebhookOutbox.id)
-            )
-            if max_items is not None:
-                query = query.limit(max(0, max_items))
-            return [row[0] for row in query.all()]
-
-    def _claim_outbox_item(self, item_id: int) -> Optional[str]:
+    def _try_claim_outbox_item(
+        self,
+        item_id: int,
+        claim_time: datetime,
+        respect_schedule: bool = True,
+    ) -> Optional[dict[str, Any]]:
+        """Claim one due item with a single compare-and-swap UPDATE."""
         try:
             with self._session_scope(commit=True) as session:
-                item = session.query(WebhookOutbox).filter_by(id=item_id).first()
-                if (
-                    item is None
-                    or item.status not in {"pending", "failed"}
-                    or item.retry_count >= 5
-                ):
+                filters = [
+                    WebhookOutbox.id == item_id,
+                    WebhookOutbox.status.in_(["pending", "failed"]),
+                    WebhookOutbox.retry_count < self.webhook_max_attempts,
+                ]
+                if respect_schedule:
+                    filters.append(
+                        or_(
+                            WebhookOutbox.next_attempt_at.is_(None),
+                            WebhookOutbox.next_attempt_at <= claim_time,
+                        )
+                    )
+
+                claimed = (
+                    session.query(WebhookOutbox)
+                    .filter(*filters)
+                    .update(
+                        {
+                            WebhookOutbox.status: "processing",
+                            WebhookOutbox.retry_count: WebhookOutbox.retry_count + 1,
+                            WebhookOutbox.last_attempt: claim_time,
+                            WebhookOutbox.claimed_at: claim_time,
+                            WebhookOutbox.next_attempt_at: None,
+                        },
+                        synchronize_session=False,
+                    )
+                )
+                if claimed != 1:
                     return None
-                item.status = "processing"
-                item.retry_count += 1
-                item.last_attempt = datetime.now(timezone.utc)
-                item.claimed_at = item.last_attempt
-                return item.payload
-        except Exception as exc:
-            logger.error("Error claiming outbox item %s: %s", item_id, exc)
+
+                item = session.query(WebhookOutbox).filter_by(id=item_id).one()
+                return {
+                    "id": item.id,
+                    "payload": item.payload,
+                    "utc_date": item.utc_date,
+                    "alert_type": item.alert_type,
+                    "retry_count": item.retry_count,
+                    "last_attempt": item.last_attempt,
+                }
+        except Exception as e:
+            logger.debug("Could not claim webhook outbox item %s: %s", item_id, e)
             return None
 
-    def _complete_outbox_item(self, item_id: int, success: bool) -> None:
+    def _complete_outbox_claim(
+        self,
+        claim: dict[str, Any],
+        *,
+        success: bool,
+        error_message: Optional[str] = None,
+    ) -> bool:
+        """Conditionally complete exactly the represented delivery attempt."""
         try:
             with self._session_scope(commit=True) as session:
-                item = session.query(WebhookOutbox).filter_by(id=item_id).first()
-                if item is None:
-                    return
+                values: dict[Any, Any]
                 if success:
-                    item.status = "sent"
-                    item.sent_at = datetime.now(timezone.utc)
-                    item.error_message = None
+                    values = {
+                        WebhookOutbox.status: "sent",
+                        WebhookOutbox.next_attempt_at: None,
+                        WebhookOutbox.error_message: None,
+                        WebhookOutbox.sent_at: datetime.now(timezone.utc),
+                    }
                 else:
-                    item.status = "failed"
-                    item.error_message = "Delivery failed"
-        except Exception as exc:
-            logger.error("Error updating outbox item %s: %s", item_id, exc)
+                    next_attempt_at, persisted_error = self._retry_state(
+                        claim["retry_count"],
+                        datetime.now(timezone.utc),
+                        error_message or "Delivery failed",
+                    )
+                    values = {
+                        WebhookOutbox.status: "failed",
+                        WebhookOutbox.next_attempt_at: next_attempt_at,
+                        WebhookOutbox.error_message: persisted_error,
+                    }
+
+                completed = (
+                    session.query(WebhookOutbox)
+                    .filter(
+                        WebhookOutbox.id == claim["id"],
+                        WebhookOutbox.status == "processing",
+                        WebhookOutbox.retry_count == claim["retry_count"],
+                        WebhookOutbox.last_attempt == claim["last_attempt"],
+                    )
+                    .update(values, synchronize_session=False)
+                )
+                if completed != 1:
+                    return False
+                return True
+        except Exception as e:
+            logger.error("Error completing outbox item %s: %s", claim["id"], e)
+            return False
+
+    def _select_outbox_item_ids(
+        self, *, now: datetime, force: bool, max_items: Optional[int]
+    ) -> list[int]:
+        """Return due outbox IDs using a short worker-thread transaction."""
+        try:
+            with self._session_scope() as session:
+                filters = [
+                    WebhookOutbox.status.in_(["pending", "failed"]),
+                    WebhookOutbox.retry_count < self.webhook_max_attempts,
+                ]
+                if not force:
+                    filters.append(
+                        or_(
+                            WebhookOutbox.next_attempt_at.is_(None),
+                            WebhookOutbox.next_attempt_at <= now,
+                        )
+                    )
+                query = (
+                    session.query(WebhookOutbox.id)
+                    .filter(*filters)
+                    .order_by(WebhookOutbox.next_attempt_at, WebhookOutbox.id)
+                )
+                if max_items is not None:
+                    query = query.limit(max(0, max_items))
+                return [row[0] for row in query.all()]
+        except Exception as e:
+            logger.error("Error selecting webhook outbox items: %s", e)
+            return []
+
+    async def process_outbox(
+        self, max_items: Optional[int] = None, *, force: bool = False
+    ) -> int:
+        """Deliver eligible items, honoring persisted due times by default.
+
+        ``force=True`` is an explicit operational/test escape hatch that ignores
+        only the due timestamp; compare-and-swap claims and retry bounds remain.
+        """
+        if not self.delivery_enabled:
+            logger.debug("API-cost outbox delivery is disabled")
+            return 0
+
+        await self.recover_stale_deliveries()
+
+        if not self.webhook_url:
+            return 0
+
+        item_ids = await asyncio.to_thread(
+            self._select_outbox_item_ids,
+            now=datetime.now(timezone.utc),
+            force=force,
+            max_items=max_items,
+        )
+
+        completed = 0
+        for item_id in item_ids:
+            claim = await asyncio.to_thread(
+                self._try_claim_outbox_item,
+                item_id,
+                datetime.now(timezone.utc),
+                respect_schedule=not force,
+            )
+            if claim is None:
+                continue
+
+            event_id = f"api-cost:{claim['utc_date']}:{claim['alert_type']}"
+            token = _WEBHOOK_EVENT_ID.set(event_id)
+            try:
+                success = await self._send_webhook_notification(claim["payload"])
+            except asyncio.CancelledError:
+                await asyncio.to_thread(
+                    self._complete_outbox_claim,
+                    claim,
+                    success=False,
+                    error_message="Delivery cancelled during worker shutdown",
+                )
+                raise
+            except Exception as e:
+                logger.error("Webhook outbox delivery %s raised: %s", item_id, e)
+                success = False
+            finally:
+                _WEBHOOK_EVENT_ID.reset(token)
+
+            claim_completed = await asyncio.to_thread(
+                self._complete_outbox_claim, claim, success=success
+            )
+            if success and claim_completed:
+                completed += 1
+
+        return completed
 
     async def _send_webhook_notification(self, message: str) -> bool:
         """Send an async webhook notification if URL is configured.
@@ -1443,15 +1924,26 @@ class APICostMonitor:
             True if the POST completed with a successful 2xx status; False otherwise.
         """
         if not self.webhook_url:
-            return True  # Behave as successful delivery if no webhook is configured
+            return False
 
         try:
             payload = {"text": message, "content": message}
+            event_id = _WEBHOOK_EVENT_ID.get()
+            headers = (
+                {"Idempotency-Key": event_id, "X-Event-ID": event_id}
+                if event_id
+                else None
+            )
+            request_kwargs: dict[str, Any] = {
+                "json": payload,
+                "timeout": aiohttp.ClientTimeout(total=5),
+            }
+            if headers is not None:
+                request_kwargs["headers"] = headers
             async with aiohttp.ClientSession() as session:
                 async with session.post(
                     self.webhook_url,
-                    json=payload,
-                    timeout=aiohttp.ClientTimeout(total=5),
+                    **request_kwargs,
                 ) as response:
                     if response.status >= 200 and response.status < 300:
                         return True
