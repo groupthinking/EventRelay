@@ -149,6 +149,27 @@ def test_check_env_vars_development_missing_passes(monkeypatch):
     assert module.check_env_vars() is False
 
 
+def test_check_env_vars_vercel_production_missing_fails(monkeypatch):
+    monkeypatch.delenv("ENVIRONMENT", raising=False)
+    monkeypatch.setenv("VERCEL_ENV", "production")
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    assert module.check_env_vars() is True
+
+
+def test_check_env_vars_normalizes_environment(monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "  Production  ")
+    monkeypatch.setenv("VERCEL_ENV", "preview")
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    assert module.check_env_vars() is True
+
+
+def test_check_env_vars_empty_environment_falls_back_to_vercel(monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "  ")
+    monkeypatch.setenv("VERCEL_ENV", "PRODUCTION")
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    assert module.check_env_vars() is True
+
+
 def _dependency_paths(tmp_path):
     req_txt = tmp_path / "requirements.txt"
     req_txt.write_text("fastapi>=0.110.0")
