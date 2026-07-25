@@ -95,6 +95,12 @@ class TestCalculateCost:
                 "anthropic", "unknown-model", input_tokens=1000, output_tokens=0
             )
 
+    def test_default_model_preserves_legacy_service_costing(self, monitor):
+        cost = monitor.calculate_cost(
+            "openai", "default", input_tokens=1000, output_tokens=0
+        )
+        assert cost > 0.0
+
     def test_google_gemini_35_flash_cost(self, monitor):
         cost = monitor.calculate_cost(
             "google", "gemini-3.5-flash", input_tokens=1000, output_tokens=1000
