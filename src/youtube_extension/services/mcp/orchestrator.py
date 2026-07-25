@@ -14,6 +14,8 @@ from collections import deque
 from datetime import datetime
 from typing import Any, Optional
 
+import aiohttp
+
 from .registry import MCPServerRegistry, get_registry
 from .types import MCPCapability, MCPTask, MCPTaskStatus
 
@@ -50,6 +52,7 @@ class MCPOrchestrator:
         # Orchestration state
         self.orchestration_active = False
         self.orchestration_task: Optional[asyncio.Task] = None
+        self._session: Optional[aiohttp.ClientSession] = None
 
         # Track spawned execution tasks by task_id for cancellation support
         self.spawned_tasks: dict[str, asyncio.Task] = {}
@@ -338,24 +341,42 @@ class MCPOrchestrator:
     ) -> dict[str, Any]:
         """
         Execute task on a specific server via MCP/JSON-RPC.
-
-        NOTE: Real MCP server communication is not yet implemented.
-        This method raises NotImplementedError to make it clear that the
-        orchestrator must not be used in production until this path is wired up.
         """
         config = self.registry.get_server(server_id)
         if not config:
             raise ValueError(f"Cannot execute task {task.task_id}: MCP server not found: {server_id}")
 
-        logger.error(
-            "MCP server execution is not implemented: server_id=%s, task_type=%s",
-            server_id,
-            task.task_type,
-        )
-        raise NotImplementedError(
-            "MCPOrchestrator._execute_on_server is not implemented. "
-            "Wire up real MCP server communication before using this in production."
-        )
+        headers = {"Content-Type": "application/json"}
+        if config.auth_token:
+            headers["Authorization"] = f"Bearer {config.auth_token}"
+
+        payload = {
+            "jsonrpc": "2.0",
+            "method": task.task_type,
+            "params": task.payload,
+            "id": task.task_id,
+        }
+
+        timeout = aiohttp.ClientTimeout(total=config.timeout)
+
+        async with aiohttp.ClientSession() as session:
+            try:
+                async with session.post(
+                    config.endpoint,
+                    json=payload,
+                    headers=headers,
+                    timeout=timeout,
+                ) as response:
+                    response.raise_for_status()
+                    return await response.json()
+            except Exception as e:
+                logger.error(
+                    "Failed to execute task %s on server %s: %s",
+                    task.task_id,
+                    server_id,
+                    e,
+                )
+                raise
 
     async def _check_dependencies(self, task_id: str) -> bool:
         """
@@ -411,6 +432,8 @@ class MCPOrchestrator:
             return
 
         self.orchestration_active = True
+        if self._session is None:
+            self._session = aiohttp.ClientSession()
         self.orchestration_task = asyncio.create_task(self._orchestration_loop())
         logger.info("MCP Orchestration started")
 
@@ -440,6 +463,10 @@ class MCPOrchestrator:
                 await self.orchestration_task
             except asyncio.CancelledError:
                 pass
+
+        if self._session:
+            await self._session.close()
+            self._session = None
 
         logger.info("MCP Orchestration stopped")
 
