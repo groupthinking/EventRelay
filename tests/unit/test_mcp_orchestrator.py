@@ -794,6 +794,47 @@ class TestExecuteOnServer:
         # Verify result is passed through
         assert result == {"result": "success"}
 
+    async def test_execute_on_server_reuses_pooled_session(self):
+        """When start_orchestration has opened a pooled session, _execute_on_server
+        must reuse it instead of creating (and tearing down) a new session per call."""
+        from youtube_extension.services.mcp.registry import MCPServerRegistry
+        from youtube_extension.services.mcp.types import MCPCapability, MCPTask
+
+        mock_response = MagicMock()
+        mock_response.json = AsyncMock(return_value={"result": "pooled"})
+        mock_response.raise_for_status = MagicMock()
+
+        post_cm = MagicMock()
+        post_cm.__aenter__ = AsyncMock(return_value=mock_response)
+        post_cm.__aexit__ = AsyncMock(return_value=False)
+
+        pooled_session = MagicMock()
+        pooled_session.closed = False
+        pooled_session.post = MagicMock(return_value=post_cm)
+
+        registry = MCPServerRegistry()
+        registry.register_server(
+            "srv", "Srv", "http://localhost:9000", [MCPCapability.AI_INFERENCE]
+        )
+
+        orch = MCPOrchestrator(registry=registry)
+        orch._session = pooled_session
+
+        task = MCPTask(
+            task_id="abc",
+            task_type="test_method",
+            payload={"key": "value"},
+            requirements=[MCPCapability.AI_INFERENCE],
+        )
+
+        with patch("aiohttp.ClientSession") as new_session_cls:
+            result = await orch._execute_on_server("srv", task)
+            # No fresh session should be constructed when a pooled one is open.
+            new_session_cls.assert_not_called()
+
+        pooled_session.post.assert_called_once()
+        assert result == {"result": "pooled"}
+
     @patch("aiohttp.ClientSession.post")
     async def test_execute_on_server_handles_http_errors(self, mock_post):
         from youtube_extension.services.mcp.registry import MCPServerRegistry
