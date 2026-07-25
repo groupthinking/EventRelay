@@ -478,3 +478,27 @@ async def test_worker_database_transactions_run_off_event_loop(tmp_path, monkeyp
     assert _get_item(monitor, "2026-07-27").status == "sent"
     assert {name for name, _ in observed_threads} == set(helper_names)
     assert all(thread_id != event_loop_thread for _, thread_id in observed_threads)
+
+
+def test_claim_token_fences_completion_and_is_cleared(tmp_path):
+    monitor = APICostMonitor(db_path=str(tmp_path / "claim-token.db"))
+    assert monitor._claim_alert("2026-07-28", "threshold", 8.5)
+
+    item = _get_item(monitor, "2026-07-28")
+    claim = monitor._try_claim_outbox_item(
+        item.id, datetime.now(timezone.utc), respect_schedule=False
+    )
+
+    assert claim is not None
+    assert claim["claim_token"]
+    assert _get_item(monitor, "2026-07-28").claim_token == claim["claim_token"]
+
+    stale_claim = dict(claim, claim_token="not-the-owner")
+    assert monitor._complete_outbox_claim(stale_claim, success=True) is False
+    assert _get_item(monitor, "2026-07-28").status == "processing"
+
+    assert monitor._complete_outbox_claim(claim, success=True) is True
+    completed = _get_item(monitor, "2026-07-28")
+    assert completed.status == "sent"
+    assert completed.claim_token is None
+    assert completed.claimed_at is None
