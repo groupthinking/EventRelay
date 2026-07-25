@@ -453,12 +453,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         print("::error::--category (or CATEGORY) is required", file=sys.stderr)
         return 2
 
-    missing = check_required_secrets(args.mode)
+    missing = set(check_required_secrets(args.mode))
     if missing:
-        print(
-            f"::error::missing required secret(s) for mode '{args.mode}': {', '.join(missing)}",
-            file=sys.stderr,
-        )
+        # Report the names from the static REQUIRED_SECRETS table rather than
+        # from the environment-derived list, so no value read out of the
+        # process environment can reach the log.
+        for name in REQUIRED_SECRETS.get(args.mode, ()):
+            if name in missing:
+                print(
+                    f"::error::missing required secret for mode '{args.mode}': {name}",
+                    file=sys.stderr,
+                )
         return 2
 
     try:
