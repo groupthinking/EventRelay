@@ -89,11 +89,17 @@ class TestCalculateCost:
     def test_unknown_service_returns_zero(self, monitor):
         assert monitor.calculate_cost("nonexistent", "model", 1000) == 0.0
 
-    def test_unknown_model_falls_back_to_first_model(self, monitor):
+    def test_unknown_model_fails_closed(self, monitor):
+        with pytest.raises(ValueError, match="Unknown pricing model"):
+            monitor.calculate_cost(
+                "anthropic", "unknown-model", input_tokens=1000, output_tokens=0
+            )
+
+    def test_google_gemini_35_flash_cost(self, monitor):
         cost = monitor.calculate_cost(
-            "anthropic", "unknown-model", input_tokens=1000, output_tokens=0
+            "google", "gemini-3.5-flash", input_tokens=1000, output_tokens=1000
         )
-        assert cost > 0.0
+        assert pytest.approx(cost, rel=1e-6) == 0.0015 + 0.009
 
     def test_zero_tokens_returns_zero_cost(self, monitor):
         cost = monitor.calculate_cost(
