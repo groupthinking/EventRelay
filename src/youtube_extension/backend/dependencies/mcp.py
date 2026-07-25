@@ -8,8 +8,8 @@ from typing import Annotated
 
 from fastapi import Depends
 
-from ...services.mcp import MCPOrchestrator, MCPServerRegistry, get_registry
 from ..containers.service_container import get_service_container
+from ...services.mcp import MCPOrchestrator, MCPServerRegistry, get_registry
 
 
 def get_mcp_orchestrator_service() -> MCPOrchestrator:

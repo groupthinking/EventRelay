@@ -433,7 +433,7 @@ class ComparativeAnalysisService:
             )
             resp.raise_for_status()
             data = resp.json()
-
+        
         # Validate response structure to avoid silent failures
         if "choices" not in data or not data["choices"]:
             raise ValueError(
@@ -449,7 +449,7 @@ class ComparativeAnalysisService:
             raise ValueError(
                 f"Invalid Grok API response: 'content' is not a string: {type(text)}"
             )
-
+        
         latency = int((time.monotonic() - start) * 1000)
         return ProviderResult(
             provider="grok",
@@ -478,7 +478,7 @@ class ComparativeAnalysisService:
             )
             resp.raise_for_status()
             data = resp.json()
-
+        
         # Validate response structure to avoid silent failures
         if "choices" not in data or not data["choices"]:
             raise ValueError(
@@ -494,7 +494,7 @@ class ComparativeAnalysisService:
             raise ValueError(
                 f"Invalid OpenAI API response: 'content' is not a string: {type(text)}"
             )
-
+        
         latency = int((time.monotonic() - start) * 1000)
         return ProviderResult(
             provider="openai",

@@ -337,6 +337,10 @@ class DataService:
             logger.error(f"Error reading video detail: {e}")
             return None
 
+        except Exception as e:
+            logger.error(f"Error reading video detail: {e}")
+            return None
+
     def save_feedback(self, feedback_data: dict[str, Any]) -> bool:
         """
         Save feedback data to persistent storage.

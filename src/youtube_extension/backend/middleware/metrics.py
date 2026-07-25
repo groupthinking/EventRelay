@@ -59,9 +59,7 @@ class PrometheusMetricsMiddleware(BaseHTTPMiddleware):
 
         # Dynamically retrieve health_monitoring_service
         try:
-            from youtube_extension.backend.containers.service_container import (
-                get_service,
-            )
+            from youtube_extension.backend.containers.service_container import get_service
             health_service = get_service("health_monitoring_service")
         except Exception:
             health_service = None

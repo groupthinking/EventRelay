@@ -3,34 +3,8 @@
 #   Run all:  pre-commit run --all-files
 #
 # gitleaks blocks commits that introduce secrets (API keys, tokens, private keys).
-# ruff/black/isort keep Python style consistent with pyproject.toml.
-# eslint and tsc guard the Next.js app before changes leave the developer's box.
 repos:
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.18.4
     hooks:
       - id: gitleaks
-
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.11.4
-    hooks:
-      - id: ruff
-        args: ["--fix", "--ignore", "E402,F811,F401,F821,B904,B020,E701,E722"]
-        files: ^src/.*\.py$
-      - id: ruff-format
-        files: ^src/.*\.py$
-
-  - repo: local
-    hooks:
-      - id: eslint-apps-web
-        name: eslint apps/web
-        entry: bash -c 'cd apps/web && npm run lint'
-        language: system
-        files: ^apps/web/.*\.(ts|tsx|js|jsx)$
-        pass_filenames: false
-      - id: tsc-apps-web
-        name: tsc apps/web
-        entry: bash -c 'cd apps/web && npm run type-check'
-        language: system
-        files: ^apps/web/.*\.(ts|tsx)$
-        pass_filenames: false

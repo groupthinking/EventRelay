@@ -29,17 +29,13 @@ if str(SCRIPTS_DIR) not in sys.path:
 # Import knowledge base for accumulated learning
 try:
     from knowledge_base import get_knowledge_base
-
     KNOWLEDGE_BASE_AVAILABLE = True
 except ImportError:
     KNOWLEDGE_BASE_AVAILABLE = False
-    logger.warning(
-        "Knowledge base not available - video technologies won't be persisted"
-    )
+    logger.warning("Knowledge base not available - video technologies won't be persisted")
 
 try:
     from youtube_extension.backend.llm_router import LLMRouter
-
     _LLM_ROUTER_AVAILABLE = True
 except ImportError:
     LLMRouter = None  # type: ignore[assignment,misc]
@@ -73,16 +69,16 @@ class AICodeGenerator:
                 if self.router.has_provider():
                     logger.info("✅ AI Code Generator initialised with LLM router")
                 else:
-                    logger.warning(
-                        "LLMRouter: no API keys found — AI generation disabled"
-                    )
+                    logger.warning("LLMRouter: no API keys found — AI generation disabled")
                     self.router = None
             except Exception as exc:
                 logger.warning("Failed to initialise LLMRouter: %s", exc)
                 self.router = None
 
     async def generate_fullstack_project(
-        self, video_analysis: dict[str, Any], project_config: dict[str, Any]
+        self,
+        video_analysis: dict[str, Any],
+        project_config: dict[str, Any]
     ) -> dict[str, Any]:
         """
         Generate a complete full-stack project using AI.
@@ -96,9 +92,7 @@ class AICodeGenerator:
         """
         if not self.router:
             logger.error("No AI provider available")
-            raise RuntimeError(
-                "AI code generation requires at least one LLM provider API key"
-            )
+            raise RuntimeError("AI code generation requires at least one LLM provider API key")
 
         logger.info("🤖 Starting AI-powered full-stack generation")
 
@@ -118,15 +112,14 @@ class AICodeGenerator:
                 video_id = video_data.get("video_id", "unknown")
                 video_url = video_data.get("video_url", "")
                 result = kb.capture_from_video(video_id, title, technologies, video_url)
-                logger.info(
-                    f"📚 Knowledge captured: {result['captured']} techs, {result['total_unique']} unique total"
-                )
+                logger.info(f"📚 Knowledge captured: {result['captured']} techs, {result['total_unique']} unique total")
             except Exception as e:
                 logger.warning(f"Knowledge capture failed: {e}")
 
         # Determine project architecture
         architecture = await self._determine_architecture(
-            video_analysis, project_config
+            video_analysis,
+            project_config
         )
 
         # Create project directory in configured output location
@@ -137,7 +130,9 @@ class AICodeGenerator:
 
         # Generate project files using AI
         files_created = await self._generate_project_files(
-            project_path, architecture, video_analysis
+            project_path,
+            architecture,
+            video_analysis
         )
 
         logger.info(f"✅ Generated {len(files_created)} files at {project_path}")
@@ -148,17 +143,17 @@ class AICodeGenerator:
             "framework": architecture["framework"],
             "files_created": files_created,
             "entry_point": architecture.get("entry_point", "package.json"),
-            "build_command": architecture.get(
-                "build_command", "npm install && npm run build"
-            ),
+            "build_command": architecture.get("build_command", "npm install && npm run build"),
             "start_command": architecture.get("start_command", "npm run dev"),
             "architecture": architecture,
             "monetization": architecture.get("monetization", {}),
-            "ai_generated": True,
+            "ai_generated": True
         }
 
     async def _determine_architecture(
-        self, video_analysis: dict[str, Any], project_config: dict[str, Any]
+        self,
+        video_analysis: dict[str, Any],
+        project_config: dict[str, Any]
     ) -> dict[str, Any]:
         """Use AI to determine optimal project architecture"""
 
@@ -230,25 +225,19 @@ CRITICAL: Prioritize functional MVP over polished product. Generated code must:
 Choose "fullstack_app" for most cases, "agent" for MCP/workflow systems, "infrastructure_platform" for Turborepo monorepo with multiple apps."""
 
         try:
-            text = (
-                await self.router.generate(prompt, max_tokens=4096)
-                if self.router
-                else None
-            )
+            text = await self.router.generate(prompt, max_tokens=4096) if self.router else None
 
             if not text:
                 raise ValueError("No response from LLM router")
 
             # Extract JSON from potential markdown fences
-            if "```json" in text:
-                text = text.split("```json")[1].split("```")[0]
-            elif "```" in text:
-                text = text.split("```")[1].split("```")[0]
+            if '```json' in text:
+                text = text.split('```json')[1].split('```')[0]
+            elif '```' in text:
+                text = text.split('```')[1].split('```')[0]
 
             architecture = json.loads(text.strip())
-            logger.info(
-                f"📐 Architecture determined: {architecture['type']} with {architecture['framework']}"
-            )
+            logger.info(f"📐 Architecture determined: {architecture['type']} with {architecture['framework']}")
             return architecture
 
         except Exception as e:
@@ -263,12 +252,12 @@ Choose "fullstack_app" for most cases, "agent" for MCP/workflow systems, "infras
             "frontend": {
                 "framework": "nextjs",
                 "styling": "tailwind",
-                "state": "zustand",
+                "state": "zustand"
             },
             "backend": {
                 "type": "api_routes",
                 "database": "supabase",
-                "auth": "nextauth",
+                "auth": "nextauth"
             },
             "features": [
                 "auth",
@@ -279,14 +268,17 @@ Choose "fullstack_app" for most cases, "agent" for MCP/workflow systems, "infras
                 "workflows",
                 "observability",
                 "mcp-connectors",
-                "error-handling",
+                "error-handling"
             ],
             "monetization": {
                 "model": "freemium",
                 "payment_processor": "stripe",
-                "pricing_tiers": ["free", "pro"],
+                "pricing_tiers": ["free", "pro"]
             },
-            "deployment": {"platform": "vercel", "database_hosting": "supabase"},
+            "deployment": {
+                "platform": "vercel",
+                "database_hosting": "supabase"
+            },
             # Explicit flags to trigger all package generation
             "monorepo": True,
             "has_mcp": True,
@@ -300,23 +292,21 @@ Choose "fullstack_app" for most cases, "agent" for MCP/workflow systems, "infras
             "entry_point": "package.json",
             "build_command": "npm install && npm run build",
             "start_command": "npm run dev",
-            "estimated_dev_time": "2-4 hours",
+            "estimated_dev_time": "2-4 hours"
         }
 
     async def _generate_project_files(
         self,
         project_path: Path,
         architecture: dict[str, Any],
-        video_analysis: dict[str, Any],
+        video_analysis: dict[str, Any]
     ) -> list[str]:
         """Generate all project files using AI"""
 
         files_created = []
 
         # Check if this should be a Turborepo monorepo (infrastructure platform)
-        if architecture.get("type") == "infrastructure_platform" or architecture.get(
-            "monorepo"
-        ):
+        if architecture.get("type") == "infrastructure_platform" or architecture.get("monorepo"):
             files_created = await self._generate_turborepo_monorepo(
                 project_path, architecture, video_analysis
             )
@@ -340,7 +330,7 @@ Choose "fullstack_app" for most cases, "agent" for MCP/workflow systems, "infras
         self,
         project_path: Path,
         architecture: dict[str, Any],
-        video_analysis: dict[str, Any],
+        video_analysis: dict[str, Any]
     ) -> list[str]:
         """Generate a complete Next.js full-stack project"""
 
@@ -358,16 +348,14 @@ Choose "fullstack_app" for most cases, "agent" for MCP/workflow systems, "infras
             "src/lib",
             "src/hooks",
             "public",
-            ".github/workflows",  # GitHub Actions for auto-deployment
+            ".github/workflows"  # GitHub Actions for auto-deployment
         ]
         for d in dirs:
             (project_path / d).mkdir(parents=True, exist_ok=True)
 
         # Generate package.json
         package_json = await self._generate_package_json(title, architecture)
-        self._write_file(
-            project_path / "package.json", json.dumps(package_json, indent=2)
-        )
+        self._write_file(project_path / "package.json", json.dumps(package_json, indent=2))
         files_created.append("package.json")
 
         # Generate main page with AI
@@ -391,7 +379,7 @@ Requirements:
 9. Basic Tailwind styling (clean, not fancy)
 
 VALIDATION: Every button must DO something functional (API call, state update, etc).
-Return ONLY the code, no explanations.""",
+Return ONLY the code, no explanations."""
         )
         self._write_file(project_path / "src/app/page.tsx", main_page)
         files_created.append("src/app/page.tsx")
@@ -409,7 +397,7 @@ Return ONLY the code, no explanations.""",
 - INLINE footer section (do NOT import from @/components/footer)
 - All components must be defined in this file or use standard React/Next.js imports only
 - TypeScript
-Return ONLY the code. Do NOT import any @/components/* files.""",
+Return ONLY the code. Do NOT import any @/components/* files."""
         )
         self._write_file(project_path / "src/app/layout.tsx", layout)
         files_created.append("src/app/layout.tsx")
@@ -440,7 +428,7 @@ CONTEXT-SPECIFIC LOGIC:
 - For agent systems: Implement workflow triggers
 
 VALIDATION: API must return real data, not mock/placeholder responses.
-Return ONLY the code.""",
+Return ONLY the code."""
         )
         self._write_file(project_path / "src/app/api/route.ts", api_route)
         files_created.append("src/app/api/route.ts")
@@ -477,7 +465,7 @@ Requirements:
 - NEVER import @material-ui/*, axios (unless added), etc. Only declared deps.
 - Use dockerode for MCP dashboards.
 
-Return ONLY the code.""",
+Return ONLY the code."""
         )
         self._write_file(project_path / "src/app/api/dashboard/route.ts", dashboard_api)
         files_created.append("src/app/api/dashboard/route.ts")
@@ -497,7 +485,7 @@ CRITICAL CONSTRAINTS (MUST FOLLOW EXACTLY):
 - Import ONLY from 'lucide-react' for icons, 'react' for hooks.
 
 CRITICAL CONSTRAINTS (MUST FOLLOW):
-- Use ONLY Tailwind CSS classes + lucide-react icons (already in package.json).
+- Use ONLY Tailwind CSS classes + lucide-react icons (already in package.json). 
 - DO NOT import or use ANY external UI libraries: no @material-ui, no @mui/material, no Chakra, no AntD, no shadcn components.
 - All UI must be built with <div>, <button>, Tailwind (border, p-4, grid, flex, bg-white, shadow etc).
 - Keep it simple and functional.
@@ -518,7 +506,7 @@ IMPLEMENTATION NOTES (from Gemini video best practices for related analysis UIs)
 - Place text prompts after video parts if multimodal (not applicable here).
 
 VALIDATION: Refresh must fetch fresh data. Build must succeed with declared deps only.
-Return ONLY the code.""",
+Return ONLY the code."""
         )
         self._write_file(project_path / "src/app/dashboard/page.tsx", dashboard)
         files_created.append("src/app/dashboard/page.tsx")
@@ -541,7 +529,7 @@ Requirements:
 8. Tailwind styling with class-variance-authority
 
 CRITICAL: Button must support async operations (loading state during API calls).
-Return ONLY the code.""",
+Return ONLY the code."""
         )
         self._write_file(project_path / "src/components/Button.tsx", button_component)
         files_created.append("src/components/Button.tsx")
@@ -581,9 +569,7 @@ Return ONLY the code.""",
         files_created.append(".gitignore")
 
         # Generate GitHub Actions workflow for auto-deployment to Vercel
-        self._write_file(
-            project_path / ".github/workflows/deploy.yml", self._github_actions_deploy()
-        )
+        self._write_file(project_path / ".github/workflows/deploy.yml", self._github_actions_deploy())
         files_created.append(".github/workflows/deploy.yml")
 
         return files_created
@@ -593,7 +579,7 @@ Return ONLY the code.""",
         description: str,
         architecture: dict[str, Any],
         video_analysis: dict[str, Any],
-        specific_prompt: str,
+        specific_prompt: str
     ) -> str:
         """Use AI to generate a specific file"""
 
@@ -613,39 +599,35 @@ TASK: Generate {description}
 {specific_prompt}"""
 
         try:
-            code = (
-                await self.router.generate(prompt, max_tokens=8192)
-                if self.router
-                else None
-            )
+            code = await self.router.generate(prompt, max_tokens=8192) if self.router else None
 
             if not code:
                 return f"// Error: LLM router returned no code for {description}\n// Please implement manually"
 
             # Clean up code fences
-            if "```typescript" in code:
-                code = code.split("```typescript")[1].split("```")[0]
-            elif "```tsx" in code:
-                code = code.split("```tsx")[1].split("```")[0]
-            elif "```javascript" in code:
-                code = code.split("```javascript")[1].split("```")[0]
-            elif "```" in code:
-                code = code.split("```")[1].split("```")[0]
+            if '```typescript' in code:
+                code = code.split('```typescript')[1].split('```')[0]
+            elif '```tsx' in code:
+                code = code.split('```tsx')[1].split('```')[0]
+            elif '```javascript' in code:
+                code = code.split('```javascript')[1].split('```')[0]
+            elif '```' in code:
+                code = code.split('```')[1].split('```')[0]
 
             return code.strip()
 
         except Exception as e:
             logger.error(f"AI file generation failed for {description}: {e}")
-            return (
-                f"// Error generating {description}: {e}\n// Please implement manually"
-            )
+            return f"// Error generating {description}: {e}\n// Please implement manually"
 
     async def _generate_package_json(
-        self, title: str, architecture: dict[str, Any]
+        self,
+        title: str,
+        architecture: dict[str, Any]
     ) -> dict[str, Any]:
         """Generate package.json with appropriate dependencies"""
 
-        name = title.lower().replace(" ", "-").replace("'", "")[:50]
+        name = title.lower().replace(' ', '-').replace("'", '')[:50]
 
         package = {
             "name": name,
@@ -655,9 +637,13 @@ TASK: Generate {description}
                 "dev": "next dev",
                 "build": "next build",
                 "start": "next start",
-                "lint": "next lint",
+                "lint": "next lint"
             },
-            "dependencies": {"next": "14.2.0", "react": "^18", "react-dom": "^18"},
+            "dependencies": {
+                "next": "14.2.0",
+                "react": "^18",
+                "react-dom": "^18"
+            },
             "devDependencies": {
                 "typescript": "^5",
                 "@types/node": "^20",
@@ -667,8 +653,8 @@ TASK: Generate {description}
                 "tailwindcss": "^3.4.1",
                 "autoprefixer": "^10.0.1",
                 "eslint": "^8",
-                "eslint-config-next": "14.2.0",
-            },
+                "eslint-config-next": "14.2.0"
+            }
         }
 
         # Add based on architecture
@@ -698,12 +684,8 @@ TASK: Generate {description}
         package["dependencies"]["lucide-react"] = "^0.300.0"  # Icons
         package["dependencies"]["clsx"] = "^2.1.0"  # Utility
         package["dependencies"]["tailwind-merge"] = "^2.2.0"  # Tailwind utility
-        package["dependencies"][
-            "class-variance-authority"
-        ] = "^0.7.0"  # Button variants
-        package["dependencies"][
-            "axios"
-        ] = "^1.6.0"  # HTTP client (commonly used by AI generated code)
+        package["dependencies"]["class-variance-authority"] = "^0.7.0"  # Button variants
+        package["dependencies"]["axios"] = "^1.6.0"  # HTTP client (commonly used by AI generated code)
 
         # Add infrastructure packages for production-ready apps
         # State management
@@ -715,11 +697,9 @@ TASK: Generate {description}
         package["dependencies"]["@ai-sdk/anthropic"] = "^0.0.15"  # Anthropic provider
 
         # For agent/MCP apps or dashboards with container features: Add dockerode
-        if (
-            architecture.get("type") in ("agent", "fullstack_app")
-            or "docker" in str(architecture.get("features", [])).lower()
-            or "dashboard" in str(architecture.get("features", [])).lower()
-        ):
+        if (architecture.get("type") in ("agent", "fullstack_app") or 
+            "docker" in str(architecture.get("features", [])).lower() or
+            "dashboard" in str(architecture.get("features", [])).lower()):
             package["dependencies"]["dockerode"] = "^4.0.2"
             package["devDependencies"]["@types/dockerode"] = "^3.3.0"
 
@@ -836,7 +816,7 @@ TASK: Generate {description}
             f.write(content)
 
     def _tailwind_config(self) -> str:
-        return """/** @type {import('tailwindcss').Config} */
+        return '''/** @type {import('tailwindcss').Config} */
 module.exports = {
   content: [
     './src/pages/**/*.{js,ts,jsx,tsx,mdx}',
@@ -856,10 +836,10 @@ module.exports = {
     },
   },
   plugins: [],
-}"""
+}'''
 
     def _tsconfig(self) -> str:
-        return """{
+        return '''{
   "compilerOptions": {
     "lib": ["dom", "dom.iterable", "esnext"],
     "allowJs": true,
@@ -884,10 +864,10 @@ module.exports = {
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
   "exclude": ["node_modules"]
-}"""
+}'''
 
     def _next_config(self) -> str:
-        return """/** @type {import('next').NextConfig} */
+        return '''/** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
   images: {
@@ -895,10 +875,10 @@ const nextConfig = {
   },
 }
 
-module.exports = nextConfig"""
+module.exports = nextConfig'''
 
     def _globals_css(self) -> str:
-        return """@tailwind base;
+        return '''@tailwind base;
 @tailwind components;
 @tailwind utilities;
 
@@ -924,16 +904,19 @@ body {
       rgb(var(--background-end-rgb))
     )
     rgb(var(--background-start-rgb));
-}"""
+}'''
 
     def _generate_readme(
-        self, title: str, architecture: dict[str, Any], video_analysis: dict[str, Any]
+        self,
+        title: str,
+        architecture: dict[str, Any],
+        video_analysis: dict[str, Any]
     ) -> str:
         """Generate comprehensive README"""
 
         video_url = video_analysis.get("video_data", {}).get("video_url", "Unknown")
 
-        return f"""# {title}
+        return f'''# {title}
 
 A full-stack {architecture['type']} built with {architecture['framework']}.
 
@@ -1039,7 +1022,7 @@ MIT
 
 ---
 *Generated with UVAI - Transform videos into products*
-"""
+'''
 
     def _generate_env_example(self, architecture: dict[str, Any]) -> str:
         """Generate .env.example file"""
@@ -1061,25 +1044,21 @@ MIT
         backend = architecture.get("backend", {})
 
         if backend.get("database") == "supabase":
-            env_vars.extend(
-                [
-                    "# Supabase",
-                    "NEXT_PUBLIC_SUPABASE_URL=your-supabase-url",
-                    "NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key",
-                    "SUPABASE_SERVICE_ROLE_KEY=your-service-role-key",
-                    "",
-                ]
-            )
+            env_vars.extend([
+                "# Supabase",
+                "NEXT_PUBLIC_SUPABASE_URL=your-supabase-url",
+                "NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key",
+                "SUPABASE_SERVICE_ROLE_KEY=your-service-role-key",
+                ""
+            ])
 
         if backend.get("auth") == "nextauth":
-            env_vars.extend(
-                [
-                    "# NextAuth",
-                    "NEXTAUTH_URL=http://localhost:3000",
-                    "NEXTAUTH_SECRET=your-secret-here",
-                    "",
-                ]
-            )
+            env_vars.extend([
+                "# NextAuth",
+                "NEXTAUTH_URL=http://localhost:3000",
+                "NEXTAUTH_SECRET=your-secret-here",
+                ""
+            ])
 
         monetization = architecture.get("monetization", {})
         if monetization.get("payment_processor") == "stripe":
@@ -1087,15 +1066,13 @@ MIT
             stripe_secret = os.environ.get("STRIPE_SECRET_KEY", "sk_test_...")
             stripe_publishable = os.environ.get("STRIPE_PUBLISHABLE_KEY", "pk_test_...")
 
-            env_vars.extend(
-                [
-                    "# Stripe (LIVE keys injected from environment)",
-                    f"STRIPE_SECRET_KEY={stripe_secret}",
-                    f"NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY={stripe_publishable}",
-                    "STRIPE_WEBHOOK_SECRET=whsec_...",
-                    "",
-                ]
-            )
+            env_vars.extend([
+                "# Stripe (LIVE keys injected from environment)",
+                f"STRIPE_SECRET_KEY={stripe_secret}",
+                f"NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY={stripe_publishable}",
+                "STRIPE_WEBHOOK_SECRET=whsec_...",
+                ""
+            ])
 
         return "\n".join(env_vars)
 
@@ -1115,27 +1092,23 @@ MIT
         upstash_url = os.environ.get("UPSTASH_REDIS_REST_URL", "")
         upstash_token = os.environ.get("UPSTASH_REDIS_REST_TOKEN", "")
         if upstash_url and upstash_token:
-            env_vars.extend(
-                [
-                    "# Infrastructure - State Management",
-                    f"UPSTASH_REDIS_REST_URL={upstash_url}",
-                    f"UPSTASH_REDIS_REST_TOKEN={upstash_token}",
-                    "",
-                ]
-            )
+            env_vars.extend([
+                "# Infrastructure - State Management",
+                f"UPSTASH_REDIS_REST_URL={upstash_url}",
+                f"UPSTASH_REDIS_REST_TOKEN={upstash_token}",
+                ""
+            ])
 
         # AI Gateway
         openai_key = os.environ.get("OPENAI_API_KEY", "")
         anthropic_key = os.environ.get("ANTHROPIC_API_KEY", "")
         if openai_key or anthropic_key:
-            env_vars.extend(
-                [
-                    "# AI Gateway (Vercel AI SDK)",
-                    f"OPENAI_API_KEY={openai_key}",
-                    f"ANTHROPIC_API_KEY={anthropic_key}",
-                    "",
-                ]
-            )
+            env_vars.extend([
+                "# AI Gateway (Vercel AI SDK)",
+                f"OPENAI_API_KEY={openai_key}",
+                f"ANTHROPIC_API_KEY={anthropic_key}",
+                ""
+            ])
 
         backend = architecture.get("backend", {})
 
@@ -1144,30 +1117,25 @@ MIT
             supabase_anon = os.environ.get("SUPABASE_ANON_KEY", "")
             supabase_service = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
 
-            env_vars.extend(
-                [
-                    "# Supabase",
-                    f"NEXT_PUBLIC_SUPABASE_URL={supabase_url}",
-                    f"NEXT_PUBLIC_SUPABASE_ANON_KEY={supabase_anon}",
-                    f"SUPABASE_SERVICE_ROLE_KEY={supabase_service}",
-                    "",
-                ]
-            )
+            env_vars.extend([
+                "# Supabase",
+                f"NEXT_PUBLIC_SUPABASE_URL={supabase_url}",
+                f"NEXT_PUBLIC_SUPABASE_ANON_KEY={supabase_anon}",
+                f"SUPABASE_SERVICE_ROLE_KEY={supabase_service}",
+                ""
+            ])
 
         if backend.get("auth") == "nextauth":
             # Generate a secure random secret for NextAuth
             import secrets
-
             nextauth_secret = secrets.token_urlsafe(32)
 
-            env_vars.extend(
-                [
-                    "# NextAuth",
-                    "NEXTAUTH_URL=http://localhost:3000",
-                    f"NEXTAUTH_SECRET={nextauth_secret}",
-                    "",
-                ]
-            )
+            env_vars.extend([
+                "# NextAuth",
+                "NEXTAUTH_URL=http://localhost:3000",
+                f"NEXTAUTH_SECRET={nextauth_secret}",
+                ""
+            ])
 
         monetization = architecture.get("monetization", {})
         if monetization.get("payment_processor") == "stripe":
@@ -1176,30 +1144,26 @@ MIT
             stripe_publishable = os.environ.get("STRIPE_PUBLISHABLE_KEY", "")
 
             if stripe_secret and stripe_publishable:
-                env_vars.extend(
-                    [
-                        "# Stripe LIVE Keys",
-                        f"STRIPE_SECRET_KEY={stripe_secret}",
-                        f"NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY={stripe_publishable}",
-                        "STRIPE_WEBHOOK_SECRET=whsec_configure_in_stripe_dashboard",
-                        "",
-                    ]
-                )
+                env_vars.extend([
+                    "# Stripe LIVE Keys",
+                    f"STRIPE_SECRET_KEY={stripe_secret}",
+                    f"NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY={stripe_publishable}",
+                    "STRIPE_WEBHOOK_SECRET=whsec_configure_in_stripe_dashboard",
+                    ""
+                ])
             else:
-                env_vars.extend(
-                    [
-                        "# Stripe (keys not found in environment)",
-                        "STRIPE_SECRET_KEY=",
-                        "NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=",
-                        "STRIPE_WEBHOOK_SECRET=",
-                        "",
-                    ]
-                )
+                env_vars.extend([
+                    "# Stripe (keys not found in environment)",
+                    "STRIPE_SECRET_KEY=",
+                    "NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=",
+                    "STRIPE_WEBHOOK_SECRET=",
+                    ""
+                ])
 
         return "\n".join(env_vars)
 
     def _gitignore(self) -> str:
-        return """# Dependencies
+        return '''# Dependencies
 /node_modules
 /.pnp
 .pnp.js
@@ -1234,11 +1198,11 @@ yarn-error.log*
 # TypeScript
 *.tsbuildinfo
 next-env.d.ts
-"""
+'''
 
     def _github_actions_deploy(self) -> str:
         """Generate GitHub Actions workflow for auto-deployment to Vercel"""
-        return """name: Deploy to Vercel
+        return '''name: Deploy to Vercel
 
 on:
   push:
@@ -1290,10 +1254,13 @@ jobs:
               repo: context.repo.repo,
               body: '✅ Deployed to Vercel! Check your deployment at https://vercel.com'
             })
-"""
+'''
 
     async def fix_build_errors(
-        self, project_path: Path, errors: list[str], suggested_fixes: list[str]
+        self,
+        project_path: Path,
+        errors: list[str],
+        suggested_fixes: list[str]
     ) -> dict[str, Any]:
         """
         Use AI to fix build errors in generated code.
@@ -1357,16 +1324,10 @@ Return ONLY the fixed code, no explanations. Ensure:
 5. Code compiles without errors"""
 
             try:
-                response_text = (
-                    await self.router.generate(fix_prompt, max_tokens=4096)
-                    if self.router
-                    else None
-                )
+                response_text = await self.router.generate(fix_prompt, max_tokens=4096) if self.router else None
 
                 if not response_text:
-                    logger.warning(
-                        f"⚠️ LLM router returned no text for {rel_path}, skipping"
-                    )
+                    logger.warning(f"⚠️ LLM router returned no text for {rel_path}, skipping")
                     continue
 
                 fixed_code = response_text.strip()
@@ -1378,12 +1339,7 @@ Return ONLY the fixed code, no explanations. Ensure:
                         if i % 2 == 1:  # Odd indices are code blocks
                             # Remove language identifier
                             lines = block.split("\n")
-                            if lines[0].strip() in [
-                                "typescript",
-                                "tsx",
-                                "javascript",
-                                "js",
-                            ]:
+                            if lines[0].strip() in ["typescript", "tsx", "javascript", "js"]:
                                 fixed_code = "\n".join(lines[1:])
                             else:
                                 fixed_code = block
@@ -1400,14 +1356,14 @@ Return ONLY the fixed code, no explanations. Ensure:
         return {
             "success": len(fixed_files) > 0,
             "fixed_files": fixed_files,
-            "total_errors": len(errors),
+            "total_errors": len(errors)
         }
 
     async def _generate_turborepo_monorepo(
         self,
         project_path: Path,
         architecture: dict[str, Any],
-        video_analysis: dict[str, Any],
+        video_analysis: dict[str, Any]
     ) -> list[str]:
         """Generate Turborepo monorepo infrastructure platform"""
         logger.info("🏗️  Generating Turborepo monorepo structure...")
@@ -1423,15 +1379,16 @@ Return ONLY the fixed code, no explanations. Ensure:
             "pipeline": {
                 "build": {
                     "dependsOn": ["^build"],
-                    "outputs": [".next/**", "!.next/cache/**"],
+                    "outputs": [".next/**", "!.next/cache/**"]
                 },
                 "lint": {},
-                "dev": {"cache": False, "persistent": True},
-            },
+                "dev": {
+                    "cache": False,
+                    "persistent": True
+                }
+            }
         }
-        self._write_file(
-            project_path / "turbo.json", json.dumps(turbo_config, indent=2)
-        )
+        self._write_file(project_path / "turbo.json", json.dumps(turbo_config, indent=2))
         files_created.append("turbo.json")
 
         # 2. Create root package.json with workspaces
@@ -1444,13 +1401,14 @@ Return ONLY the fixed code, no explanations. Ensure:
                 "build": "turbo run build",
                 "dev": "turbo run dev",
                 "lint": "turbo run lint",
-                "format": 'prettier --write "**/*.{ts,tsx,md}"',
+                "format": "prettier --write \"**/*.{ts,tsx,md}\""
             },
-            "devDependencies": {"prettier": "^3.0.0", "turbo": "latest"},
+            "devDependencies": {
+                "prettier": "^3.0.0",
+                "turbo": "latest"
+            }
         }
-        self._write_file(
-            project_path / "package.json", json.dumps(root_package, indent=2)
-        )
+        self._write_file(project_path / "package.json", json.dumps(root_package, indent=2))
         files_created.append("package.json")
 
         # 3. Create .gitignore
@@ -1459,111 +1417,59 @@ Return ONLY the fixed code, no explanations. Ensure:
 
         # 4. Generate apps/web (main Next.js app with Docker integration)
         web_path = project_path / "apps" / "web"
-        web_files = await self._generate_nextjs_project(
-            web_path, architecture, video_analysis
-        )
+        web_files = await self._generate_nextjs_project(web_path, architecture, video_analysis)
         files_created.extend([f"apps/web/{f}" for f in web_files])
 
         # 5. Generate packages/ui (shared UI components)
-        ui_files = await self._generate_ui_package(
-            project_path / "packages" / "ui", architecture
-        )
+        ui_files = await self._generate_ui_package(project_path / "packages" / "ui", architecture)
         files_created.extend([f"packages/ui/{f}" for f in ui_files])
 
         # 6. Generate packages/eslint-config (shared configs)
-        config_files = self._generate_eslint_config_package(
-            project_path / "packages" / "eslint-config"
-        )
+        config_files = self._generate_eslint_config_package(project_path / "packages" / "eslint-config")
         files_created.extend([f"packages/eslint-config/{f}" for f in config_files])
 
         # 7. Generate packages/tsconfig (shared TypeScript configs)
-        tsconfig_files = self._generate_tsconfig_package(
-            project_path / "packages" / "tsconfig"
-        )
+        tsconfig_files = self._generate_tsconfig_package(project_path / "packages" / "tsconfig")
         files_created.extend([f"packages/tsconfig/{f}" for f in tsconfig_files])
 
         # 8. Generate packages/mcp-connectors (if agent or infrastructure type)
-        if architecture.get("type") in [
-            "agent",
-            "infrastructure_platform",
-        ] or architecture.get("has_mcp", False):
-            mcp_files = await self._generate_mcp_connectors_package(
-                project_path / "packages" / "mcp-connectors", architecture
-            )
+        if architecture.get("type") in ["agent", "infrastructure_platform"] or architecture.get("has_mcp", False):
+            mcp_files = await self._generate_mcp_connectors_package(project_path / "packages" / "mcp-connectors", architecture)
             files_created.extend([f"packages/mcp-connectors/{f}" for f in mcp_files])
 
         # 9. Generate packages/workflows (Workflow.dev integration for durable execution)
-        if architecture.get("type") in [
-            "agent",
-            "infrastructure_platform",
-        ] or architecture.get("has_workflows", False):
-            workflow_files = await self._generate_workflows_package(
-                project_path / "packages" / "workflows", architecture
-            )
+        if architecture.get("type") in ["agent", "infrastructure_platform"] or architecture.get("has_workflows", False):
+            workflow_files = await self._generate_workflows_package(project_path / "packages" / "workflows", architecture)
             files_created.extend([f"packages/workflows/{f}" for f in workflow_files])
 
         # 10. Generate packages/observability (OpenTelemetry integration)
-        if architecture.get("type") in [
-            "agent",
-            "infrastructure_platform",
-        ] or architecture.get("has_observability", False):
-            observability_files = await self._generate_observability_package(
-                project_path / "packages" / "observability", architecture
-            )
-            files_created.extend(
-                [f"packages/observability/{f}" for f in observability_files]
-            )
+        if architecture.get("type") in ["agent", "infrastructure_platform"] or architecture.get("has_observability", False):
+            observability_files = await self._generate_observability_package(project_path / "packages" / "observability", architecture)
+            files_created.extend([f"packages/observability/{f}" for f in observability_files])
 
         # 11. Generate packages/ai-gateway (Vercel AI SDK multi-model integration)
-        if architecture.get("type") in [
-            "agent",
-            "infrastructure_platform",
-        ] or architecture.get("has_ai_gateway", False):
-            ai_gateway_files = await self._generate_ai_gateway_package(
-                project_path / "packages" / "ai-gateway", architecture
-            )
+        if architecture.get("type") in ["agent", "infrastructure_platform"] or architecture.get("has_ai_gateway", False):
+            ai_gateway_files = await self._generate_ai_gateway_package(project_path / "packages" / "ai-gateway", architecture)
             files_created.extend([f"packages/ai-gateway/{f}" for f in ai_gateway_files])
 
         # 12. Generate packages/logger (Comprehensive structured logging)
-        if architecture.get("type") in [
-            "agent",
-            "infrastructure_platform",
-        ] or architecture.get("has_logging", False):
-            logger_files = await self._generate_logger_package(
-                project_path / "packages" / "logger", architecture
-            )
+        if architecture.get("type") in ["agent", "infrastructure_platform"] or architecture.get("has_logging", False):
+            logger_files = await self._generate_logger_package(project_path / "packages" / "logger", architecture)
             files_created.extend([f"packages/logger/{f}" for f in logger_files])
 
         # 13. Generate packages/error-handling (Phase 3.1: Error boundaries + retry logic)
-        if architecture.get("type") in [
-            "agent",
-            "infrastructure_platform",
-        ] or architecture.get("has_error_handling", False):
-            error_handling_files = await self._generate_error_handling_package(
-                project_path / "packages" / "error-handling", architecture
-            )
-            files_created.extend(
-                [f"packages/error-handling/{f}" for f in error_handling_files]
-            )
+        if architecture.get("type") in ["agent", "infrastructure_platform"] or architecture.get("has_error_handling", False):
+            error_handling_files = await self._generate_error_handling_package(project_path / "packages" / "error-handling", architecture)
+            files_created.extend([f"packages/error-handling/{f}" for f in error_handling_files])
 
         # 14. Generate packages/database (Phase 3.2: Prisma + migrations)
-        if architecture.get("type") in [
-            "agent",
-            "infrastructure_platform",
-        ] or architecture.get("has_database", False):
-            database_files = await self._generate_database_package(
-                project_path / "packages" / "database", architecture
-            )
+        if architecture.get("type") in ["agent", "infrastructure_platform"] or architecture.get("has_database", False):
+            database_files = await self._generate_database_package(project_path / "packages" / "database", architecture)
             files_created.extend([f"packages/database/{f}" for f in database_files])
 
         # 15. Generate packages/config (Phase 3.3: Environment variable management)
-        if architecture.get("type") in [
-            "agent",
-            "infrastructure_platform",
-        ] or architecture.get("has_config", False):
-            config_files = await self._generate_config_package(
-                project_path / "packages" / "config", architecture
-            )
+        if architecture.get("type") in ["agent", "infrastructure_platform"] or architecture.get("has_config", False):
+            config_files = await self._generate_config_package(project_path / "packages" / "config", architecture)
             files_created.extend([f"packages/config/{f}" for f in config_files])
 
         # 16. Generate README
@@ -1574,9 +1480,7 @@ Return ONLY the fixed code, no explanations. Ensure:
         logger.info(f"✅ Generated Turborepo monorepo with {len(files_created)} files")
         return files_created
 
-    async def _generate_ui_package(
-        self, package_path: Path, architecture: dict[str, Any]
-    ) -> list[str]:
+    async def _generate_ui_package(self, package_path: Path, architecture: dict[str, Any]) -> list[str]:
         """Generate shared UI components package"""
         files_created = []
 
@@ -1585,25 +1489,28 @@ Return ONLY the fixed code, no explanations. Ensure:
             "name": "@repo/ui",
             "version": "0.0.0",
             "private": True,
-            "exports": {"./button": "./src/button.tsx", "./card": "./src/card.tsx"},
+            "exports": {
+                "./button": "./src/button.tsx",
+                "./card": "./src/card.tsx"
+            },
             "scripts": {
                 "lint": "eslint . --max-warnings 0",
-                "generate:component": "turbo gen react-component",
+                "generate:component": "turbo gen react-component"
             },
-            "peerDependencies": {"react": "^18"},
+            "peerDependencies": {
+                "react": "^18"
+            },
             "devDependencies": {
                 "@types/react": "^18",
                 "typescript": "^5",
-                "eslint": "^8",
-            },
+                "eslint": "^8"
+            }
         }
-        self._write_file(
-            package_path / "package.json", json.dumps(package_json, indent=2)
-        )
+        self._write_file(package_path / "package.json", json.dumps(package_json, indent=2))
         files_created.append("package.json")
 
         # Button component
-        button_tsx = """import * as React from "react";
+        button_tsx = '''import * as React from "react";
 
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: "primary" | "secondary" | "outline";
@@ -1631,12 +1538,12 @@ export const Button: React.FC<ButtonProps> = ({
     </button>
   );
 };
-"""
+'''
         self._write_file(package_path / "src/button.tsx", button_tsx)
         files_created.append("src/button.tsx")
 
         # Card component
-        card_tsx = """import * as React from "react";
+        card_tsx = '''import * as React from "react";
 
 export interface CardProps {
   children: React.ReactNode;
@@ -1650,16 +1557,18 @@ export const Card: React.FC<CardProps> = ({ children, className }) => {
     </div>
   );
 };
-"""
+'''
         self._write_file(package_path / "src/card.tsx", card_tsx)
         files_created.append("src/card.tsx")
 
         # tsconfig.json
         tsconfig = {
             "extends": "@repo/typescript-config/react-library.json",
-            "compilerOptions": {"outDir": "dist"},
+            "compilerOptions": {
+                "outDir": "dist"
+            },
             "include": ["src"],
-            "exclude": ["node_modules", "dist"],
+            "exclude": ["node_modules", "dist"]
         }
         self._write_file(package_path / "tsconfig.json", json.dumps(tsconfig, indent=2))
         files_created.append("tsconfig.json")
@@ -1679,22 +1588,20 @@ export const Card: React.FC<CardProps> = ({ children, className }) => {
             "devDependencies": {
                 "eslint": "^8",
                 "eslint-config-next": "14.2.0",
-                "eslint-config-prettier": "^9.0.0",
-            },
+                "eslint-config-prettier": "^9.0.0"
+            }
         }
-        self._write_file(
-            package_path / "package.json", json.dumps(package_json, indent=2)
-        )
+        self._write_file(package_path / "package.json", json.dumps(package_json, indent=2))
         files_created.append("package.json")
 
         # index.js
-        eslint_config = """module.exports = {
+        eslint_config = '''module.exports = {
   extends: ["next", "prettier"],
   rules: {
     "@next/next/no-html-link-for-pages": "off"
   }
 };
-"""
+'''
         self._write_file(package_path / "index.js", eslint_config)
         files_created.append("index.js")
 
@@ -1709,11 +1616,9 @@ export const Card: React.FC<CardProps> = ({ children, className }) => {
             "name": "@repo/typescript-config",
             "version": "0.0.0",
             "private": True,
-            "files": ["base.json", "nextjs.json", "react-library.json"],
+            "files": ["base.json", "nextjs.json", "react-library.json"]
         }
-        self._write_file(
-            package_path / "package.json", json.dumps(package_json, indent=2)
-        )
+        self._write_file(package_path / "package.json", json.dumps(package_json, indent=2))
         files_created.append("package.json")
 
         # base.json
@@ -1728,8 +1633,8 @@ export const Card: React.FC<CardProps> = ({ children, className }) => {
                 "moduleDetection": "force",
                 "isolatedModules": True,
                 "strict": True,
-                "noUncheckedIndexedAccess": True,
-            },
+                "noUncheckedIndexedAccess": True
+            }
         }
         self._write_file(package_path / "base.json", json.dumps(base_config, indent=2))
         files_created.append("base.json")
@@ -1746,12 +1651,10 @@ export const Card: React.FC<CardProps> = ({ children, className }) => {
                 "jsx": "preserve",
                 "incremental": True,
                 "plugins": [{"name": "next"}],
-                "paths": {"@/*": ["./src/*"]},
-            },
+                "paths": {"@/*": ["./src/*"]}
+            }
         }
-        self._write_file(
-            package_path / "nextjs.json", json.dumps(nextjs_config, indent=2)
-        )
+        self._write_file(package_path / "nextjs.json", json.dumps(nextjs_config, indent=2))
         files_created.append("nextjs.json")
 
         # react-library.json
@@ -1765,23 +1668,19 @@ export const Card: React.FC<CardProps> = ({ children, className }) => {
                 "jsx": "react-jsx",
                 "declaration": True,
                 "declarationMap": True,
-                "outDir": "dist",
-            },
+                "outDir": "dist"
+            }
         }
-        self._write_file(
-            package_path / "react-library.json", json.dumps(react_lib_config, indent=2)
-        )
+        self._write_file(package_path / "react-library.json", json.dumps(react_lib_config, indent=2))
         files_created.append("react-library.json")
 
         return files_created
 
-    def _generate_monorepo_readme(
-        self, title: str, architecture: dict[str, Any], video_analysis: dict[str, Any]
-    ) -> str:
+    def _generate_monorepo_readme(self, title: str, architecture: dict[str, Any], video_analysis: dict[str, Any]) -> str:
         """Generate Turborepo monorepo README"""
         video_url = video_analysis.get("video_data", {}).get("video_url", "Unknown")
 
-        return f"""# {title} - Infrastructure Platform
+        return f'''# {title} - Infrastructure Platform
 
 AI-generated Turborepo monorepo from video analysis.
 
@@ -1845,11 +1744,9 @@ vercel --prod
 
 ---
 *Generated with EventRelay AI Infrastructure Generator*
-"""
+'''
 
-    async def _generate_mcp_connectors_package(
-        self, package_path: Path, architecture: dict[str, Any]
-    ) -> list[str]:
+    async def _generate_mcp_connectors_package(self, package_path: Path, architecture: dict[str, Any]) -> list[str]:
         """Generate MCP connectors package with Postgres, GitHub, and Slack connectors"""
         logger.info("🔌 Generating MCP connectors package...")
         files_created = []
@@ -1864,28 +1761,26 @@ vercel --prod
             "exports": {
                 "./postgres": "./dist/postgres.js",
                 "./github": "./dist/github.js",
-                "./slack": "./dist/slack.js",
+                "./slack": "./dist/slack.js"
             },
             "scripts": {
                 "build": "tsc",
                 "dev": "tsc --watch",
-                "lint": "eslint . --max-warnings 0",
+                "lint": "eslint . --max-warnings 0"
             },
             "dependencies": {
                 "pg": "^8.11.0",
                 "@octokit/rest": "^20.0.0",
-                "@slack/web-api": "^6.9.0",
+                "@slack/web-api": "^6.9.0"
             },
             "devDependencies": {
                 "@types/pg": "^8.10.0",
                 "@types/node": "^20",
                 "typescript": "^5",
-                "eslint": "^8",
-            },
+                "eslint": "^8"
+            }
         }
-        self._write_file(
-            package_path / "package.json", json.dumps(package_json, indent=2)
-        )
+        self._write_file(package_path / "package.json", json.dumps(package_json, indent=2))
         files_created.append("package.json")
 
         # tsconfig.json
@@ -1895,10 +1790,10 @@ vercel --prod
                 "outDir": "dist",
                 "rootDir": "src",
                 "declaration": True,
-                "declarationMap": True,
+                "declarationMap": True
             },
             "include": ["src"],
-            "exclude": ["node_modules", "dist"],
+            "exclude": ["node_modules", "dist"]
         }
         self._write_file(package_path / "tsconfig.json", json.dumps(tsconfig, indent=2))
         files_created.append("tsconfig.json")
@@ -1919,7 +1814,7 @@ vercel --prod
         files_created.append("src/slack.ts")
 
         # Generate index barrel export
-        index_ts = """/**
+        index_ts = '''/**
  * MCP Connectors - Production-ready connectors for Postgres, GitHub, and Slack
  * @packageDocumentation
  */
@@ -1927,12 +1822,12 @@ vercel --prod
 export { PostgresConnector, type PostgresConfig, type PostgresToolName } from './postgres';
 export { GitHubConnector, type GitHubConfig, type GitHubToolName } from './github';
 export { SlackConnector, type SlackConfig, type SlackToolName } from './slack';
-"""
+'''
         self._write_file(package_path / "src/index.ts", index_ts)
         files_created.append("src/index.ts")
 
         # README
-        readme = """# MCP Connectors
+        readme = '''# MCP Connectors
 
 Production-ready Model Context Protocol (MCP) connectors for external services.
 
@@ -2003,7 +1898,7 @@ DATABASE_URL=postgresql://user:pass@localhost:5432/db
 GITHUB_TOKEN=ghp_...
 SLACK_BOT_TOKEN=xoxb-...
 ```
-"""
+'''
         self._write_file(package_path / "README.md", readme)
         files_created.append("README.md")
 
@@ -2012,7 +1907,7 @@ SLACK_BOT_TOKEN=xoxb-...
 
     def _generate_postgres_connector(self) -> str:
         """Generate Postgres MCP connector with type safety and connection pooling"""
-        return """import { Pool, PoolClient, QueryResult } from 'pg';
+        return '''import { Pool, PoolClient, QueryResult } from 'pg';
 
 /**
  * Postgres connector configuration
@@ -2227,11 +2122,11 @@ export class PostgresConnector {
     await this.pool.end();
   }
 }
-"""
+'''
 
     def _generate_github_connector(self) -> str:
         """Generate GitHub MCP connector with Octokit integration"""
-        return """import { Octokit } from '@octokit/rest';
+        return '''import { Octokit } from '@octokit/rest';
 
 /**
  * GitHub connector configuration
@@ -2472,11 +2367,11 @@ export class GitHubConnector {
     return response.data;
   }
 }
-"""
+'''
 
     def _generate_slack_connector(self) -> str:
         """Generate Slack MCP connector with Web API integration"""
-        return """import { WebClient } from '@slack/web-api';
+        return '''import { WebClient } from '@slack/web-api';
 
 /**
  * Slack connector configuration
@@ -2680,11 +2575,9 @@ export class SlackConnector {
     return result.messages;
   }
 }
-"""
+'''
 
-    async def _generate_workflows_package(
-        self, package_path: Path, architecture: dict[str, Any]
-    ) -> list[str]:
+    async def _generate_workflows_package(self, package_path: Path, architecture: dict[str, Any]) -> list[str]:
         """Generate Workflow.dev durable workflows package"""
         logger.info("⚡ Generating Workflow.dev durable workflows package...")
         files_created = []
@@ -2698,23 +2591,23 @@ export class SlackConnector {
             "types": "dist/index.d.ts",
             "exports": {
                 "./data-processing": "./dist/data-processing.js",
-                "./mcp-orchestration": "./dist/mcp-orchestration.js",
+                "./mcp-orchestration": "./dist/mcp-orchestration.js"
             },
             "scripts": {
                 "build": "tsc",
                 "dev": "tsc --watch",
-                "lint": "eslint . --max-warnings 0",
+                "lint": "eslint . --max-warnings 0"
             },
-            "dependencies": {"@vercel/workflow": "^0.3.0"},
+            "dependencies": {
+                "@vercel/workflow": "^0.3.0"
+            },
             "devDependencies": {
                 "@types/node": "^20",
                 "typescript": "^5",
-                "eslint": "^8",
-            },
+                "eslint": "^8"
+            }
         }
-        self._write_file(
-            package_path / "package.json", json.dumps(package_json, indent=2)
-        )
+        self._write_file(package_path / "package.json", json.dumps(package_json, indent=2))
         files_created.append("package.json")
 
         # tsconfig.json
@@ -2724,16 +2617,16 @@ export class SlackConnector {
                 "outDir": "dist",
                 "rootDir": "src",
                 "declaration": True,
-                "declarationMap": True,
+                "declarationMap": True
             },
             "include": ["src"],
-            "exclude": ["node_modules", "dist"],
+            "exclude": ["node_modules", "dist"]
         }
         self._write_file(package_path / "tsconfig.json", json.dumps(tsconfig, indent=2))
         files_created.append("tsconfig.json")
 
         # Data processing workflow example
-        data_processing_ts = """import { Workflow } from '@vercel/workflow';
+        data_processing_ts = '''import { Workflow } from '@vercel/workflow';
 
 /**
  * Durable data processing workflow
@@ -2788,12 +2681,12 @@ export async function runDataProcessing(dataUrl: string, storageUrl: string) {
     storageUrl
   });
 }
-"""
+'''
         self._write_file(package_path / "src/data-processing.ts", data_processing_ts)
         files_created.append("src/data-processing.ts")
 
         # MCP orchestration workflow (integrates with MCP connectors)
-        mcp_orchestration_ts = """import { Workflow } from '@vercel/workflow';
+        mcp_orchestration_ts = '''import { Workflow } from '@vercel/workflow';
 import type { PostgresConnector } from '@repo/mcp-connectors/postgres';
 import type { GitHubConnector } from '@repo/mcp-connectors/github';
 import type { SlackConnector } from '@repo/mcp-connectors/slack';
@@ -2912,14 +2805,12 @@ export async function runAgentMonitoring(config: {
 }) {
   return await agentMonitoringWorkflow.run(config);
 }
-"""
-        self._write_file(
-            package_path / "src/mcp-orchestration.ts", mcp_orchestration_ts
-        )
+'''
+        self._write_file(package_path / "src/mcp-orchestration.ts", mcp_orchestration_ts)
         files_created.append("src/mcp-orchestration.ts")
 
         # Index barrel export
-        index_ts = """/**
+        index_ts = '''/**
  * Workflow.dev Durable Workflows
  * @packageDocumentation
  */
@@ -2931,12 +2822,12 @@ export {
   runMCPOrchestration,
   runAgentMonitoring
 } from './mcp-orchestration';
-"""
+'''
         self._write_file(package_path / "src/index.ts", index_ts)
         files_created.append("src/index.ts")
 
         # README
-        readme = """# Durable Workflows with Workflow.dev
+        readme = '''# Durable Workflows with Workflow.dev
 
 Production-ready durable workflows using [Vercel Workflow DevKit](https://useworkflow.dev/).
 
@@ -3022,18 +2913,14 @@ Mark units of work that auto-retry:
 - [Workflow.dev Documentation](https://useworkflow.dev/)
 - [GitHub Repository](https://github.com/vercel/workflow)
 - [Vercel Announcement](https://vercel.com/blog/introducing-workflow)
-"""
+'''
         self._write_file(package_path / "README.md", readme)
         files_created.append("README.md")
 
-        logger.info(
-            f"✅ Generated Workflow.dev package with {len(files_created)} files"
-        )
+        logger.info(f"✅ Generated Workflow.dev package with {len(files_created)} files")
         return files_created
 
-    async def _generate_observability_package(
-        self, package_path: Path, architecture: dict[str, Any]
-    ) -> list[str]:
+    async def _generate_observability_package(self, package_path: Path, architecture: dict[str, Any]) -> list[str]:
         """Generate OpenTelemetry observability package (based on existing EventRelay implementation)"""
         logger.info("📊 Generating OpenTelemetry observability package...")
         files_created = []
@@ -3048,7 +2935,7 @@ Mark units of work that auto-retry:
             "scripts": {
                 "build": "tsc",
                 "dev": "tsc --watch",
-                "lint": "eslint . --max-warnings 0",
+                "lint": "eslint . --max-warnings 0"
             },
             "dependencies": {
                 "@opentelemetry/api": "^1.7.0",
@@ -3057,17 +2944,15 @@ Mark units of work that auto-retry:
                 "@opentelemetry/exporter-metrics-otlp-grpc": "^0.45.0",
                 "@opentelemetry/instrumentation": "^0.45.0",
                 "@opentelemetry/resources": "^1.18.0",
-                "@opentelemetry/semantic-conventions": "^1.18.0",
+                "@opentelemetry/semantic-conventions": "^1.18.0"
             },
             "devDependencies": {
                 "@types/node": "^20",
                 "typescript": "^5",
-                "eslint": "^8",
-            },
+                "eslint": "^8"
+            }
         }
-        self._write_file(
-            package_path / "package.json", json.dumps(package_json, indent=2)
-        )
+        self._write_file(package_path / "package.json", json.dumps(package_json, indent=2))
         files_created.append("package.json")
 
         # tsconfig.json
@@ -3077,16 +2962,16 @@ Mark units of work that auto-retry:
                 "outDir": "dist",
                 "rootDir": "src",
                 "declaration": True,
-                "declarationMap": True,
+                "declarationMap": True
             },
             "include": ["src"],
-            "exclude": ["node_modules", "dist"],
+            "exclude": ["node_modules", "dist"]
         }
         self._write_file(package_path / "tsconfig.json", json.dumps(tsconfig, indent=2))
         files_created.append("tsconfig.json")
 
         # Main observability class
-        observability_ts = """import { Tracer, Meter, trace, metrics, context, SpanStatusCode } from '@opentelemetry/api';
+        observability_ts = '''import { Tracer, Meter, trace, metrics, context, SpanStatusCode } from '@opentelemetry/api';
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-grpc';
 import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-grpc';
@@ -3256,12 +3141,12 @@ export function getObservability(): Observability {
   }
   return observabilityInstance;
 }
-"""
+'''
         self._write_file(package_path / "src/observability.ts", observability_ts)
         files_created.append("src/observability.ts")
 
         # Workflow instrumentation helper
-        workflow_instrumentation_ts = """import { getObservability } from './observability';
+        workflow_instrumentation_ts = '''import { getObservability } from './observability';
 
 /**
  * Helper for instrumenting Workflow.dev workflows with OpenTelemetry
@@ -3352,15 +3237,12 @@ export function getWorkflowInstrumentation(): WorkflowInstrumentation {
   }
   return instrumentationInstance;
 }
-"""
-        self._write_file(
-            package_path / "src/workflow-instrumentation.ts",
-            workflow_instrumentation_ts,
-        )
+'''
+        self._write_file(package_path / "src/workflow-instrumentation.ts", workflow_instrumentation_ts)
         files_created.append("src/workflow-instrumentation.ts")
 
         # Index barrel export
-        index_ts = """/**
+        index_ts = '''/**
  * OpenTelemetry Observability Package
  * @packageDocumentation
  */
@@ -3376,12 +3258,12 @@ export {
   WorkflowInstrumentation,
   getWorkflowInstrumentation
 } from './workflow-instrumentation';
-"""
+'''
         self._write_file(package_path / "src/index.ts", index_ts)
         files_created.append("src/index.ts")
 
         # README
-        readme = """# OpenTelemetry Observability
+        readme = '''# OpenTelemetry Observability
 
 Production-ready observability with OpenTelemetry tracing and metrics.
 
@@ -3520,22 +3402,16 @@ Based on EventRelay's `agents/observability_setup.py`:
 - [OpenTelemetry Docs](https://opentelemetry.io/docs/)
 - [Node.js SDK Guide](https://opentelemetry.io/docs/instrumentation/js/getting-started/nodejs/)
 - [EventRelay Implementation](../../../agents/observability_setup.py)
-"""
+'''
         self._write_file(package_path / "README.md", readme)
         files_created.append("README.md")
 
-        logger.info(
-            f"✅ Generated OpenTelemetry observability package with {len(files_created)} files"
-        )
+        logger.info(f"✅ Generated OpenTelemetry observability package with {len(files_created)} files")
         return files_created
 
-    async def _generate_ai_gateway_package(
-        self, package_path: Path, architecture: dict[str, Any]
-    ) -> list[str]:
+    async def _generate_ai_gateway_package(self, package_path: Path, architecture: dict[str, Any]) -> list[str]:
         """Generate Vercel AI SDK multi-model gateway package (Phase 1.4)"""
-        logger.info(
-            "🤖 Generating Vercel AI Gateway package with multi-model failover..."
-        )
+        logger.info("🤖 Generating Vercel AI Gateway package with multi-model failover...")
 
         package_path.mkdir(parents=True, exist_ok=True)
         files_created = []
@@ -3549,30 +3425,31 @@ Based on EventRelay's `agents/observability_setup.py`:
             "exports": {
                 ".": "./src/index.ts",
                 "./models": "./src/models.ts",
-                "./types": "./src/types.ts",
+                "./types": "./src/types.ts"
             },
-            "scripts": {"lint": "eslint . --max-warnings 0", "test": "jest"},
+            "scripts": {
+                "lint": "eslint . --max-warnings 0",
+                "test": "jest"
+            },
             "dependencies": {
                 "ai": "^3.0.0",
                 "@ai-sdk/openai": "^0.0.24",
                 "@ai-sdk/anthropic": "^0.0.24",
                 "@ai-sdk/google": "^0.0.24",
-                "zod": "^3.22.4",
+                "zod": "^3.22.4"
             },
             "devDependencies": {
                 "@types/node": "^20",
                 "typescript": "^5",
                 "eslint": "^8",
-                "jest": "^29",
-            },
+                "jest": "^29"
+            }
         }
-        self._write_file(
-            package_path / "package.json", json.dumps(package_json, indent=2)
-        )
+        self._write_file(package_path / "package.json", json.dumps(package_json, indent=2))
         files_created.append("package.json")
 
         # src/types.ts - Type definitions
-        types_ts = """export type AIProvider = 'grok' | 'claude' | 'gemini' | 'openai';
+        types_ts = '''export type AIProvider = 'grok' | 'claude' | 'gemini' | 'openai';
 
 export interface AIGatewayConfig {
   providers: AIProvider[];
@@ -3613,13 +3490,13 @@ export interface StreamResult {
   provider: AIProvider;
   model: string;
 }
-"""
+'''
         (package_path / "src").mkdir(exist_ok=True)
         self._write_file(package_path / "src" / "types.ts", types_ts)
         files_created.append("src/types.ts")
 
         # src/models.ts - Model configurations
-        models_ts = """import { openai } from '@ai-sdk/openai';
+        models_ts = '''import { openai } from '@ai-sdk/openai';
 import { anthropic } from '@ai-sdk/anthropic';
 import { google } from '@ai-sdk/google';
 import type { LanguageModel } from 'ai';
@@ -3694,12 +3571,12 @@ export const DEFAULT_MODELS: Record<AIProvider, string> = {
 
 // Default fallback order (Grok -> Claude -> Gemini)
 export const DEFAULT_FALLBACK_ORDER: AIProvider[] = ['grok', 'claude', 'gemini'];
-"""
+'''
         self._write_file(package_path / "src" / "models.ts", models_ts)
         files_created.append("src/models.ts")
 
         # src/index.ts - Main AI Gateway implementation
-        index_ts = """import { generateText, streamText } from 'ai';
+        index_ts = '''import { generateText, streamText } from 'ai';
 import { ModelRegistry, DEFAULT_FALLBACK_ORDER } from './models';
 import type {
   AIProvider,
@@ -3860,22 +3737,25 @@ export type {
 
 // Export model utilities
 export { ModelRegistry, DEFAULT_MODELS, DEFAULT_FALLBACK_ORDER } from './models';
-"""
+'''
         self._write_file(package_path / "src" / "index.ts", index_ts)
         files_created.append("src/index.ts")
 
         # tsconfig.json
         tsconfig = {
             "extends": "@repo/typescript-config/base.json",
-            "compilerOptions": {"outDir": "dist", "rootDir": "src"},
+            "compilerOptions": {
+                "outDir": "dist",
+                "rootDir": "src"
+            },
             "include": ["src"],
-            "exclude": ["node_modules", "dist"],
+            "exclude": ["node_modules", "dist"]
         }
         self._write_file(package_path / "tsconfig.json", json.dumps(tsconfig, indent=2))
         files_created.append("tsconfig.json")
 
         # README.md with comprehensive documentation
-        readme = """# @repo/ai-gateway
+        readme = '''# @repo/ai-gateway
 
 Multi-model AI gateway with automatic failover using Vercel AI SDK.
 
@@ -4115,20 +3995,16 @@ OPENAI_API_KEY=your_openai_api_key
 - [Grok API Docs](https://docs.x.ai/api)
 - [Anthropic API Docs](https://docs.anthropic.com/)
 - [Google Generative AI Docs](https://ai.google.dev/)
-"""
+'''
         self._write_file(package_path / "README.md", readme)
         files_created.append("README.md")
 
         logger.info(f"✅ Generated AI Gateway package with {len(files_created)} files")
         return files_created
 
-    async def _generate_logger_package(
-        self, package_path: Path, architecture: dict[str, Any]
-    ) -> list[str]:
+    async def _generate_logger_package(self, package_path: Path, architecture: dict[str, Any]) -> list[str]:
         """Generate comprehensive structured logging package (Phase 1.5)"""
-        logger.info(
-            "📝 Generating structured logging package with OpenTelemetry integration..."
-        )
+        logger.info("📝 Generating structured logging package with OpenTelemetry integration...")
 
         package_path.mkdir(parents=True, exist_ok=True)
         files_created = []
@@ -4139,27 +4015,31 @@ OPENAI_API_KEY=your_openai_api_key
             "version": "0.0.0",
             "private": True,
             "type": "module",
-            "exports": {".": "./src/index.ts", "./types": "./src/types.ts"},
-            "scripts": {"lint": "eslint . --max-warnings 0", "test": "jest"},
+            "exports": {
+                ".": "./src/index.ts",
+                "./types": "./src/types.ts"
+            },
+            "scripts": {
+                "lint": "eslint . --max-warnings 0",
+                "test": "jest"
+            },
             "dependencies": {
                 "pino": "^8.17.0",
                 "pino-pretty": "^10.3.0",
-                "@opentelemetry/api": "^1.7.0",
+                "@opentelemetry/api": "^1.7.0"
             },
             "devDependencies": {
                 "@types/node": "^20",
                 "typescript": "^5",
                 "eslint": "^8",
-                "jest": "^29",
-            },
+                "jest": "^29"
+            }
         }
-        self._write_file(
-            package_path / "package.json", json.dumps(package_json, indent=2)
-        )
+        self._write_file(package_path / "package.json", json.dumps(package_json, indent=2))
         files_created.append("package.json")
 
         # src/types.ts - Type definitions
-        types_ts = """export type LogLevel = 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal';
+        types_ts = '''export type LogLevel = 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal';
 
 export interface LoggerConfig {
   level?: LogLevel;
@@ -4186,13 +4066,13 @@ export interface StructuredLogger {
   fatal(message: string | Error, context?: LogContext): void;
   child(context: LogContext): StructuredLogger;
 }
-"""
+'''
         (package_path / "src").mkdir(exist_ok=True)
         self._write_file(package_path / "src" / "types.ts", types_ts)
         files_created.append("src/types.ts")
 
         # src/index.ts - Main logger implementation
-        index_ts = """import pino from 'pino';
+        index_ts = '''import pino from 'pino';
 import { trace, context as otelContext } from '@opentelemetry/api';
 import type { LoggerConfig, LogContext, StructuredLogger, LogLevel } from './types';
 
@@ -4342,22 +4222,25 @@ export function createLogger(config?: LoggerConfig): StructuredLogger {
 
 // Export types
 export type { LoggerConfig, LogContext, StructuredLogger, LogLevel } from './types';
-"""
+'''
         self._write_file(package_path / "src" / "index.ts", index_ts)
         files_created.append("src/index.ts")
 
         # tsconfig.json
         tsconfig = {
             "extends": "@repo/typescript-config/base.json",
-            "compilerOptions": {"outDir": "dist", "rootDir": "src"},
+            "compilerOptions": {
+                "outDir": "dist",
+                "rootDir": "src"
+            },
             "include": ["src"],
-            "exclude": ["node_modules", "dist"],
+            "exclude": ["node_modules", "dist"]
         }
         self._write_file(package_path / "tsconfig.json", json.dumps(tsconfig, indent=2))
         files_created.append("tsconfig.json")
 
         # README.md with comprehensive documentation
-        readme = """# @repo/logger
+        readme = '''# @repo/logger
 
 High-performance structured logging with OpenTelemetry integration.
 
@@ -4650,22 +4533,16 @@ LOG_LEVEL=debug      # Override default log level
 - [Pino Docs](https://getpino.io/)
 - [OpenTelemetry Logs](https://opentelemetry.io/docs/specs/otel/logs/)
 - [Structured Logging Best Practices](https://www.thoughtworks.com/insights/blog/structured-logging)
-"""
+'''
         self._write_file(package_path / "README.md", readme)
         files_created.append("README.md")
 
-        logger.info(
-            f"✅ Generated structured logging package with {len(files_created)} files"
-        )
+        logger.info(f"✅ Generated structured logging package with {len(files_created)} files")
         return files_created
 
-    async def _generate_error_handling_package(
-        self, package_path: Path, architecture: dict[str, Any]
-    ) -> list[str]:
+    async def _generate_error_handling_package(self, package_path: Path, architecture: dict[str, Any]) -> list[str]:
         """Generate error handling package with boundaries + retry logic (Phase 3.1)"""
-        logger.info(
-            "🛡️ Generating error handling package with retry logic and circuit breakers..."
-        )
+        logger.info("🛡️ Generating error handling package with retry logic and circuit breakers...")
 
         package_path.mkdir(parents=True, exist_ok=True)
         files_created = []
@@ -4680,23 +4557,27 @@ LOG_LEVEL=debug      # Override default log level
                 ".": "./src/index.ts",
                 "./boundary": "./src/ErrorBoundary.tsx",
                 "./retry": "./src/retry.ts",
-                "./circuit-breaker": "./src/circuit-breaker.ts",
+                "./circuit-breaker": "./src/circuit-breaker.ts"
             },
-            "scripts": {"lint": "eslint . --max-warnings 0", "test": "jest"},
-            "dependencies": {"react": "^18", "@repo/logger": "workspace:*"},
+            "scripts": {
+                "lint": "eslint . --max-warnings 0",
+                "test": "jest"
+            },
+            "dependencies": {
+                "react": "^18",
+                "@repo/logger": "workspace:*"
+            },
             "devDependencies": {
                 "@types/react": "^18",
                 "typescript": "^5",
-                "eslint": "^8",
-            },
+                "eslint": "^8"
+            }
         }
-        self._write_file(
-            package_path / "package.json", json.dumps(package_json, indent=2)
-        )
+        self._write_file(package_path / "package.json", json.dumps(package_json, indent=2))
         files_created.append("package.json")
 
         # src/types.ts
-        types_ts = """export interface RetryConfig {
+        types_ts = '''export interface RetryConfig {
   maxRetries: number;
   baseDelay: number;
   maxDelay: number;
@@ -4715,13 +4596,13 @@ export interface ErrorContext {
   userId?: string;
   [key: string]: any;
 }
-"""
+'''
         (package_path / "src").mkdir(exist_ok=True)
         self._write_file(package_path / "src" / "types.ts", types_ts)
         files_created.append("src/types.ts")
 
         # src/circuit-breaker.ts (from EventRelay api.ts)
-        circuit_breaker_ts = """import type { CircuitBreakerConfig } from './types';
+        circuit_breaker_ts = '''import type { CircuitBreakerConfig } from './types';
 
 export class CircuitBreaker {
   private failures = new Map<string, number>();
@@ -4766,14 +4647,12 @@ export class CircuitBreaker {
 
 // Global circuit breaker instance
 export const globalCircuitBreaker = new CircuitBreaker();
-"""
-        self._write_file(
-            package_path / "src" / "circuit-breaker.ts", circuit_breaker_ts
-        )
+'''
+        self._write_file(package_path / "src" / "circuit-breaker.ts", circuit_breaker_ts)
         files_created.append("src/circuit-breaker.ts")
 
         # src/retry.ts (exponential backoff from EventRelay)
-        retry_ts = """import type { RetryConfig } from './types';
+        retry_ts = '''import type { RetryConfig } from './types';
 import { getLogger } from '@repo/logger';
 
 const logger = getLogger({ name: 'retry' });
@@ -4853,12 +4732,12 @@ export async function retryWithCircuitBreaker<T>(
     throw error;
   }
 }
-"""
+'''
         self._write_file(package_path / "src" / "retry.ts", retry_ts)
         files_created.append("src/retry.ts")
 
         # src/ErrorBoundary.tsx (simplified from EventRelay GlobalErrorBoundary)
-        error_boundary_tsx = """import React, { Component, ErrorInfo, ReactNode } from 'react';
+        error_boundary_tsx = '''import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { getLogger } from '@repo/logger';
 
 const logger = getLogger({ name: 'error-boundary' });
@@ -5000,31 +4879,34 @@ export class ErrorBoundary extends Component<Props, State> {
     return this.props.children;
   }
 }
-"""
+'''
         self._write_file(package_path / "src" / "ErrorBoundary.tsx", error_boundary_tsx)
         files_created.append("src/ErrorBoundary.tsx")
 
         # src/index.ts - barrel export
-        index_ts = """export { ErrorBoundary } from './ErrorBoundary';
+        index_ts = '''export { ErrorBoundary } from './ErrorBoundary';
 export { CircuitBreaker, globalCircuitBreaker } from './circuit-breaker';
 export { retryWithBackoff, retryWithCircuitBreaker } from './retry';
 export type { RetryConfig, CircuitBreakerConfig, ErrorContext } from './types';
-"""
+'''
         self._write_file(package_path / "src" / "index.ts", index_ts)
         files_created.append("src/index.ts")
 
         # tsconfig.json
         tsconfig = {
             "extends": "@repo/typescript-config/react-library.json",
-            "compilerOptions": {"outDir": "dist", "rootDir": "src"},
+            "compilerOptions": {
+                "outDir": "dist",
+                "rootDir": "src"
+            },
             "include": ["src"],
-            "exclude": ["node_modules", "dist"],
+            "exclude": ["node_modules", "dist"]
         }
         self._write_file(package_path / "tsconfig.json", json.dumps(tsconfig, indent=2))
         files_created.append("tsconfig.json")
 
         # README.md
-        readme = """# @repo/error-handling
+        readme = '''# @repo/error-handling
 
 Production-grade error handling with boundaries, retry logic, and circuit breakers.
 
@@ -5092,18 +4974,14 @@ try {
 EventRelay production implementations:
 - frontend/src/components/ErrorBoundary/GlobalErrorBoundary.tsx
 - frontend/src/services/api.ts
-"""
+'''
         self._write_file(package_path / "README.md", readme)
         files_created.append("README.md")
 
-        logger.info(
-            f"✅ Generated error handling package with {len(files_created)} files"
-        )
+        logger.info(f"✅ Generated error handling package with {len(files_created)} files")
         return files_created
 
-    async def _generate_database_package(
-        self, package_path: Path, architecture: dict[str, Any]
-    ) -> list[str]:
+    async def _generate_database_package(self, package_path: Path, architecture: dict[str, Any]) -> list[str]:
         """Generate Prisma + Supabase database package (Phase 3.2)"""
         logger.info("🗄️ Generating Prisma + Supabase database package...")
 
@@ -5119,7 +4997,7 @@ EventRelay production implementations:
             "exports": {
                 ".": "./src/index.ts",
                 "./client": "./src/client.ts",
-                "./seed": "./src/seed.ts",
+                "./seed": "./src/seed.ts"
             },
             "scripts": {
                 "db:generate": "prisma generate",
@@ -5128,26 +5006,24 @@ EventRelay production implementations:
                 "db:migrate:prod": "prisma migrate deploy",
                 "db:seed": "tsx src/seed.ts",
                 "db:studio": "prisma studio",
-                "db:reset": "prisma migrate reset --force",
+                "db:reset": "prisma migrate reset --force"
             },
             "dependencies": {
                 "@prisma/client": "^5.7.0",
-                "@supabase/supabase-js": "^2.39.0",
+                "@supabase/supabase-js": "^2.39.0"
             },
             "devDependencies": {
                 "prisma": "^5.7.0",
                 "tsx": "^4.7.0",
                 "typescript": "^5",
-                "@types/node": "^20",
-            },
+                "@types/node": "^20"
+            }
         }
-        self._write_file(
-            package_path / "package.json", json.dumps(package_json, indent=2)
-        )
+        self._write_file(package_path / "package.json", json.dumps(package_json, indent=2))
         files_created.append("package.json")
 
         # prisma/schema.prisma
-        prisma_schema = """generator client {
+        prisma_schema = '''generator client {
   provider = "prisma-client-js"
   previewFeatures = ["driverAdapters"]
 }
@@ -5209,13 +5085,13 @@ model AuditLog {
   @@index([createdAt])
   @@map("audit_logs")
 }
-"""
+'''
         (package_path / "prisma").mkdir(exist_ok=True)
         self._write_file(package_path / "prisma" / "schema.prisma", prisma_schema)
         files_created.append("prisma/schema.prisma")
 
         # src/client.ts
-        client_ts = """import { PrismaClient } from '@prisma/client';
+        client_ts = '''import { PrismaClient } from '@prisma/client';
 import { getLogger } from '@repo/logger';
 
 const logger = getLogger({ name: 'database' });
@@ -5241,13 +5117,13 @@ process.on('beforeExit', async () => {
 });
 
 export default prisma;
-"""
+'''
         (package_path / "src").mkdir(exist_ok=True)
         self._write_file(package_path / "src" / "client.ts", client_ts)
         files_created.append("src/client.ts")
 
         # src/supabase.ts
-        supabase_ts = """import { createClient } from '@supabase/supabase-js';
+        supabase_ts = '''import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -5278,12 +5154,12 @@ export function getServerSupabase() {
     },
   });
 }
-"""
+'''
         self._write_file(package_path / "src" / "supabase.ts", supabase_ts)
         files_created.append("src/supabase.ts")
 
         # src/seed.ts
-        seed_ts = """import { prisma } from './client';
+        seed_ts = '''import { prisma } from './client';
 import { getLogger } from '@repo/logger';
 
 const logger = getLogger({ name: 'seed' });
@@ -5329,12 +5205,12 @@ main()
   .finally(async () => {
     await prisma.$disconnect();
   });
-"""
+'''
         self._write_file(package_path / "src" / "seed.ts", seed_ts)
         files_created.append("src/seed.ts")
 
         # src/migrations.ts
-        migrations_ts = """import { prisma } from './client';
+        migrations_ts = '''import { prisma } from './client';
 import { getLogger } from '@repo/logger';
 
 const logger = getLogger({ name: 'migrations' });
@@ -5364,21 +5240,21 @@ export async function checkDatabaseConnection() {
     return false;
   }
 }
-"""
+'''
         self._write_file(package_path / "src" / "migrations.ts", migrations_ts)
         files_created.append("src/migrations.ts")
 
         # src/index.ts
-        index_ts = """export { prisma } from './client';
+        index_ts = '''export { prisma } from './client';
 export { supabase, getServerSupabase } from './supabase';
 export { runMigrations, checkDatabaseConnection } from './migrations';
 export * from '@prisma/client';
-"""
+'''
         self._write_file(package_path / "src" / "index.ts", index_ts)
         files_created.append("src/index.ts")
 
         # .env.example
-        env_example = """# Supabase Configuration
+        env_example = '''# Supabase Configuration
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
@@ -5386,22 +5262,25 @@ SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 # Database URLs (from Supabase)
 DATABASE_URL=postgresql://postgres:[PASSWORD]@db.[PROJECT-REF].supabase.co:5432/postgres?pgbouncer=true
 DIRECT_URL=postgresql://postgres:[PASSWORD]@db.[PROJECT-REF].supabase.co:5432/postgres
-"""
+'''
         self._write_file(package_path / ".env.example", env_example)
         files_created.append(".env.example")
 
         # tsconfig.json
         tsconfig = {
             "extends": "@repo/typescript-config/base.json",
-            "compilerOptions": {"outDir": "dist", "rootDir": "src"},
+            "compilerOptions": {
+                "outDir": "dist",
+                "rootDir": "src"
+            },
             "include": ["src"],
-            "exclude": ["node_modules", "dist"],
+            "exclude": ["node_modules", "dist"]
         }
         self._write_file(package_path / "tsconfig.json", json.dumps(tsconfig, indent=2))
         files_created.append("tsconfig.json")
 
         # README.md
-        readme = """# @repo/database
+        readme = '''# @repo/database
 
 Prisma ORM + Supabase PostgreSQL database package.
 
@@ -5622,18 +5501,14 @@ const { data } = supabase.storage
 - [Prisma Docs](https://www.prisma.io/docs)
 - [Supabase Docs](https://supabase.com/docs)
 - [Prisma + Supabase Guide](https://supabase.com/docs/guides/integrations/prisma)
-"""
+'''
         self._write_file(package_path / "README.md", readme)
         files_created.append("README.md")
 
-        logger.info(
-            f"✅ Generated Prisma + Supabase database package with {len(files_created)} files"
-        )
+        logger.info(f"✅ Generated Prisma + Supabase database package with {len(files_created)} files")
         return files_created
 
-    async def _generate_config_package(
-        self, package_path: Path, architecture: dict[str, Any]
-    ) -> list[str]:
+    async def _generate_config_package(self, package_path: Path, architecture: dict[str, Any]) -> list[str]:
         """Generate environment configuration package (Phase 3.3)"""
         logger.info("⚙️ Generating environment configuration package...")
 
@@ -5649,22 +5524,25 @@ const { data } = supabase.storage
             "exports": {
                 ".": "./src/index.ts",
                 "./env": "./src/env.ts",
-                "./constants": "./src/constants.ts",
+                "./constants": "./src/constants.ts"
             },
             "scripts": {
                 "lint": "eslint . --max-warnings 0",
-                "type-check": "tsc --noEmit",
+                "type-check": "tsc --noEmit"
             },
-            "dependencies": {"zod": "^3.22.4"},
-            "devDependencies": {"typescript": "^5", "@types/node": "^20"},
+            "dependencies": {
+                "zod": "^3.22.4"
+            },
+            "devDependencies": {
+                "typescript": "^5",
+                "@types/node": "^20"
+            }
         }
-        self._write_file(
-            package_path / "package.json", json.dumps(package_json, indent=2)
-        )
+        self._write_file(package_path / "package.json", json.dumps(package_json, indent=2))
         files_created.append("package.json")
 
         # src/env.ts - Type-safe environment variables with Zod
-        env_ts = """import { z } from 'zod';
+        env_ts = '''import { z } from 'zod';
 
 const envSchema = z.object({
   // Node Environment
@@ -5714,13 +5592,13 @@ export const env = validateEnv();
 export const isDevelopment = env.NODE_ENV === 'development';
 export const isProduction = env.NODE_ENV === 'production';
 export const isTest = env.NODE_ENV === 'test';
-"""
+'''
         (package_path / "src").mkdir(exist_ok=True)
         self._write_file(package_path / "src" / "env.ts", env_ts)
         files_created.append("src/env.ts")
 
         # src/constants.ts
-        constants_ts = """export const APP_NAME = 'AI Infrastructure Platform';
+        constants_ts = '''export const APP_NAME = 'AI Infrastructure Platform';
 export const APP_DESCRIPTION = 'Production-ready AI infrastructure';
 
 export const API_VERSION = 'v1';
@@ -5756,20 +5634,20 @@ export const RETRY_CONFIG = {
   baseDelay: 1000,
   maxDelay: 10000,
 } as const;
-"""
+'''
         self._write_file(package_path / "src" / "constants.ts", constants_ts)
         files_created.append("src/constants.ts")
 
         # src/index.ts
-        index_ts = """export { env, isDevelopment, isProduction, isTest } from './env';
+        index_ts = '''export { env, isDevelopment, isProduction, isTest } from './env';
 export type { Env } from './env';
 export * from './constants';
-"""
+'''
         self._write_file(package_path / "src" / "index.ts", index_ts)
         files_created.append("src/index.ts")
 
         # .env.example
-        env_example = """# Node Environment
+        env_example = '''# Node Environment
 NODE_ENV=development
 
 # Supabase
@@ -5794,22 +5672,25 @@ OTEL_EXPORTER_OTLP_ENDPOINT=https://your-otel-collector:4318
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 NEXTAUTH_SECRET=your-nextauth-secret
 NEXTAUTH_URL=http://localhost:3000
-"""
+'''
         self._write_file(package_path / ".env.example", env_example)
         files_created.append(".env.example")
 
         # tsconfig.json
         tsconfig = {
             "extends": "@repo/typescript-config/base.json",
-            "compilerOptions": {"outDir": "dist", "rootDir": "src"},
+            "compilerOptions": {
+                "outDir": "dist",
+                "rootDir": "src"
+            },
             "include": ["src"],
-            "exclude": ["node_modules", "dist"],
+            "exclude": ["node_modules", "dist"]
         }
         self._write_file(package_path / "tsconfig.json", json.dumps(tsconfig, indent=2))
         files_created.append("tsconfig.json")
 
         # README.md
-        readme = """# @repo/config
+        readme = '''# @repo/config
 
 Type-safe environment configuration with Zod validation.
 
@@ -5938,20 +5819,18 @@ vercel env add ANTHROPIC_API_KEY
 - [Zod Documentation](https://zod.dev/)
 - [Vercel Environment Variables](https://vercel.com/docs/concepts/projects/environment-variables)
 - [Next.js Environment Variables](https://nextjs.org/docs/basic-features/environment-variables)
-"""
+'''
         self._write_file(package_path / "README.md", readme)
         files_created.append("README.md")
 
-        logger.info(
-            f"✅ Generated environment configuration package with {len(files_created)} files"
-        )
+        logger.info(f"✅ Generated environment configuration package with {len(files_created)} files")
         return files_created
 
     async def _generate_fastapi_project(
         self,
         project_path: Path,
         architecture: dict[str, Any],
-        video_analysis: dict[str, Any],
+        video_analysis: dict[str, Any]
     ) -> list[str]:
         """Generate Python FastAPI project - placeholder for future"""
         # For now, delegate to Next.js
@@ -5962,7 +5841,6 @@ vercel env add ANTHROPIC_API_KEY
 
 # Global instance
 _ai_code_generator = None
-
 
 def get_ai_code_generator() -> AICodeGenerator:
     """Get or create global AI code generator instance"""

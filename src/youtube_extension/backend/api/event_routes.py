@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
@@ -49,7 +49,7 @@ class EventPayload(BaseModel):
             "Legacy types (user_login, mention, insight) accepted for backward compat."
         ),
     )
-    data: Optional[dict[str, Any]] = Field(
+    data: Optional[Dict[str, Any]] = Field(
         default_factory=dict, description="Event data payload"
     )
     timestamp: Optional[datetime] = Field(
@@ -76,7 +76,7 @@ class ClassifiedEventResponse(BaseModel):
     status: str
     type: str
     classified_type: str
-    metadata: dict[str, Any]
+    metadata: Dict[str, Any]
 
 
 @router.post("/", status_code=200, response_model=ClassifiedEventResponse)
@@ -145,7 +145,12 @@ async def ingest_event(event: EventPayload):
 @router.get("/types", status_code=200)
 async def list_event_types():
     """Return the event type taxonomy with metadata."""
-    return {"types": {t.value: EVENT_TYPE_METADATA[t] for t in EventType}}
+    return {
+        "types": {
+            t.value: EVENT_TYPE_METADATA[t]
+            for t in EventType
+        }
+    }
 
 
 def process_event(event: EventPayload, classified_type: EventType):
@@ -165,6 +170,6 @@ def process_event(event: EventPayload, classified_type: EventType):
         severity = event.severity or "medium"
         print(f"  → ALERT [{severity}]: {(event.data or {}).get('title', '')}")
     elif classified_type == EventType.CODE:
-        print("  → CODE snippet captured")
+        print(f"  → CODE snippet captured")
     elif classified_type == EventType.TOPIC:
-        print("  → TOPIC logged")
+        print(f"  → TOPIC logged")

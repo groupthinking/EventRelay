@@ -1,6 +1,6 @@
 import importlib
 from collections.abc import Awaitable
-from typing import Any, Callable
+from typing import Any, Callable, Dict
 
 AdapterFunc = Callable[[str, dict[str, Any], dict[str, Any]], Awaitable[dict[str, Any]]]
 
@@ -22,7 +22,6 @@ _adapter_classes: dict[str, str] = {
 
 _loaded_classes: dict[str, Any] = {}
 
-
 def get_adapter(target: str) -> AdapterFunc:
     """Get legacy adapter function"""
     target = target.lower()
@@ -33,7 +32,6 @@ def get_adapter(target: str) -> AdapterFunc:
         _loaded[target] = module.deploy  # type: ignore
     return _loaded[target]
 
-
 def get_adapter_class(target: str) -> Any:
     """Get new architecture adapter class"""
     target = target.lower()
@@ -41,16 +39,13 @@ def get_adapter_class(target: str) -> Any:
         raise ValueError(f"Unsupported deployment target: {target}")
 
     if target not in _loaded_classes:
-        module_path, class_name = _adapter_classes[target].split(":")
+        module_path, class_name = _adapter_classes[target].split(':')
         module = importlib.import_module(module_path)
         _loaded_classes[target] = getattr(module, class_name)
 
     return _loaded_classes[target]
 
-
-async def deploy_project(
-    target: str, project_path: str, project_config: dict[str, Any], env: dict[str, Any]
-) -> dict[str, Any]:
+async def deploy_project(target: str, project_path: str, project_config: dict[str, Any], env: dict[str, Any]) -> dict[str, Any]:
     """Unified entrypoint to call specific adapter - supports both old and new architecture"""
     try:
         # Try new architecture first
@@ -66,7 +61,7 @@ async def deploy_project(
             "platform": result.platform,
             "error": result.error_message,
             "build_log_url": result.build_log_url,
-            **result.metadata,
+            **result.metadata
         }
 
     except (ImportError, AttributeError):
@@ -74,15 +69,13 @@ async def deploy_project(
         adapter = get_adapter(target)
         return await adapter(project_path, project_config, env)
 
-
 def list_available_adapters() -> dict[str, str]:
     """List all available deployment adapters"""
     return {
         "vercel": "Vercel deployment platform",
         "netlify": "Netlify deployment platform",
-        "fly": "Fly.io deployment platform",
+        "fly": "Fly.io deployment platform"
     }
-
 
 def is_adapter_available(target: str) -> bool:
     """Check if a deployment adapter is available"""

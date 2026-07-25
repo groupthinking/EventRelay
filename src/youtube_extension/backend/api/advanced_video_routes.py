@@ -5,7 +5,7 @@ Temporal analysis, structured output, and CloudEvents publishing endpoints.
 """
 
 import logging
-from typing import Optional
+from typing import Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
@@ -19,10 +19,8 @@ router = APIRouter(prefix="/api/v1/video", tags=["video-analysis"])
 
 # ============ Request Models ============
 
-
 class TemporalSegmentRequest(BaseModel):
     """Request for analyzing a specific time segment."""
-
     video_url: str
     start_time: str = Field(..., description="Start timestamp (MM:SS or HH:MM:SS)")
     end_time: str = Field(..., description="End timestamp (MM:SS or HH:MM:SS)")
@@ -31,81 +29,86 @@ class TemporalSegmentRequest(BaseModel):
 
 class TemporalEventsRequest(BaseModel):
     """Request for extracting timestamped events."""
-
     video_url: str
-    event_types: Optional[list[str]] = Field(
-        None, description="Event types to focus on (e.g., ['code_change', 'api_call'])"
+    event_types: Optional[List[str]] = Field(
+        None,
+        description="Event types to focus on (e.g., ['code_change', 'api_call'])"
     )
     publish_events: bool = Field(
-        False, description="Publish extracted events to EventMesh as CloudEvents"
+        False,
+        description="Publish extracted events to EventMesh as CloudEvents"
     )
 
 
 class TemporalQuestionRequest(BaseModel):
     """Request for temporal question answering."""
-
     video_url: str
     question: str
     time_context: Optional[str] = Field(
-        None, description="Temporal constraint (e.g., 'between 2:30 and 5:00')"
+        None,
+        description="Temporal constraint (e.g., 'between 2:30 and 5:00')"
     )
 
 
 class TimelineRequest(BaseModel):
     """Request for creating video timeline."""
-
     video_url: str
     granularity: str = Field(
-        "medium", description="Timeline granularity: 'fine', 'medium', or 'coarse'"
+        "medium",
+        description="Timeline granularity: 'fine', 'medium', or 'coarse'"
     )
 
 
 class SegmentComparisonRequest(BaseModel):
     """Request for comparing multiple segments."""
-
     video_url: str
-    segments: list[tuple[str, str]] = Field(
-        ..., description="List of (start_time, end_time) tuples to compare"
+    segments: List[Tuple[str, str]] = Field(
+        ...,
+        description="List of (start_time, end_time) tuples to compare"
     )
     comparison_focus: Optional[str] = Field(
-        None, description="Aspect to compare (e.g., 'code quality', 'speaking style')"
+        None,
+        description="Aspect to compare (e.g., 'code quality', 'speaking style')"
     )
 
 
 class TutorialStepsRequest(BaseModel):
     """Request for extracting tutorial steps."""
-
     video_url: str
 
 
 class StructuredAnalysisRequest(BaseModel):
     """Request for analysis with structured JSON output schema."""
-
     video_url: str
     prompt: str
-    schema: dict = Field(
+    schema: Dict = Field(
         ...,
         description="JSON schema for structured output",
         example={
             "type": "object",
             "properties": {
                 "summary": {"type": "string"},
-                "key_points": {"type": "array", "items": {"type": "string"}},
+                "key_points": {
+                    "type": "array",
+                    "items": {"type": "string"}
+                }
             },
-            "required": ["summary", "key_points"],
-        },
+            "required": ["summary", "key_points"]
+        }
     )
-    publish_result: bool = Field(False, description="Publish result as CloudEvent")
+    publish_result: bool = Field(
+        False,
+        description="Publish result as CloudEvent"
+    )
 
 
 # ============ Temporal Analysis Endpoints ============
-
 
 @router.post("/temporal/segment")
 async def analyze_segment(request: TemporalSegmentRequest):
     """
     Analyze a specific time segment of a video.
-
+    
     Example:
     ```json
     {
@@ -119,7 +122,10 @@ async def analyze_segment(request: TemporalSegmentRequest):
     try:
         analyzer = TemporalVideoAnalyzer()
         result = await analyzer.analyze_segment(
-            request.video_url, request.start_time, request.end_time, request.focus
+            request.video_url,
+            request.start_time,
+            request.end_time,
+            request.focus
         )
         await analyzer.close()
 
@@ -127,13 +133,13 @@ async def analyze_segment(request: TemporalSegmentRequest):
             "segment": {
                 "start_time": request.start_time,
                 "end_time": request.end_time,
-                "focus": request.focus,
+                "focus": request.focus
             },
             "analysis": {
                 "summary": result.summary,
                 "key_events": result.key_events,
-                "timestamps": result.timestamps,
-            },
+                "timestamps": result.timestamps
+            }
         }
     except Exception as e:
         logger.error(f"Segment analysis failed: {e}", exc_info=True)
@@ -144,9 +150,9 @@ async def analyze_segment(request: TemporalSegmentRequest):
 async def extract_temporal_events(request: TemporalEventsRequest):
     """
     Extract all timestamped events from a video.
-
+    
     Optionally publishes events to EventMesh as CloudEvents.
-
+    
     Example:
     ```json
     {
@@ -159,7 +165,8 @@ async def extract_temporal_events(request: TemporalEventsRequest):
     try:
         analyzer = TemporalVideoAnalyzer()
         events = await analyzer.extract_temporal_events(
-            request.video_url, request.event_types
+            request.video_url,
+            request.event_types
         )
         await analyzer.close()
 
@@ -170,7 +177,7 @@ async def extract_temporal_events(request: TemporalEventsRequest):
                 "type": evt.event_type,
                 "description": evt.description,
                 "confidence": evt.confidence,
-                "metadata": evt.metadata,
+                "metadata": evt.metadata
             }
             for evt in events
         ]
@@ -187,9 +194,9 @@ async def extract_temporal_events(request: TemporalEventsRequest):
                         "timestamp": evt.timestamp,
                         "description": evt.description,
                         "confidence": evt.confidence,
-                        "metadata": evt.metadata,
+                        "metadata": evt.metadata
                     },
-                    subject=request.video_url,
+                    subject=request.video_url
                 )
                 if event_id:
                     published_ids.append(event_id)
@@ -200,7 +207,7 @@ async def extract_temporal_events(request: TemporalEventsRequest):
             "events_count": len(events),
             "events": events_data,
             "published": request.publish_events,
-            "published_event_ids": published_ids,
+            "published_event_ids": published_ids
         }
     except Exception as e:
         logger.error(f"Event extraction failed: {e}", exc_info=True)
@@ -211,7 +218,7 @@ async def extract_temporal_events(request: TemporalEventsRequest):
 async def answer_temporal_question(request: TemporalQuestionRequest):
     """
     Answer a question about a video with temporal context.
-
+    
     Example:
     ```json
     {
@@ -224,14 +231,16 @@ async def answer_temporal_question(request: TemporalQuestionRequest):
     try:
         analyzer = TemporalVideoAnalyzer()
         answer = await analyzer.temporal_question(
-            request.video_url, request.question, request.time_context
+            request.video_url,
+            request.question,
+            request.time_context
         )
         await analyzer.close()
 
         return {
             "question": request.question,
             "time_context": request.time_context,
-            "answer": answer,
+            "answer": answer
         }
     except Exception as e:
         logger.error(f"Temporal question failed: {e}", exc_info=True)
@@ -242,12 +251,12 @@ async def answer_temporal_question(request: TemporalQuestionRequest):
 async def create_timeline(request: TimelineRequest):
     """
     Create a detailed timeline of video content.
-
+    
     Granularity options:
     - "fine": Every 5-10 seconds
     - "medium": Every 30-60 seconds (default)
     - "coarse": Major section boundaries only
-
+    
     Example:
     ```json
     {
@@ -258,20 +267,19 @@ async def create_timeline(request: TimelineRequest):
     """
     try:
         if request.granularity not in ("fine", "medium", "coarse"):
-            raise HTTPException(
-                400, "Invalid granularity. Must be 'fine', 'medium', or 'coarse'"
-            )
+            raise HTTPException(400, "Invalid granularity. Must be 'fine', 'medium', or 'coarse'")
 
         analyzer = TemporalVideoAnalyzer()
         timeline = await analyzer.create_timeline(
-            request.video_url, request.granularity
+            request.video_url,
+            request.granularity
         )
         await analyzer.close()
 
         return {
             "video_url": request.video_url,
             "granularity": request.granularity,
-            "timeline": timeline,
+            "timeline": timeline
         }
     except HTTPException:
         raise
@@ -284,7 +292,7 @@ async def create_timeline(request: TimelineRequest):
 async def compare_segments(request: SegmentComparisonRequest):
     """
     Compare multiple time segments within a video.
-
+    
     Example:
     ```json
     {
@@ -297,7 +305,9 @@ async def compare_segments(request: SegmentComparisonRequest):
     try:
         analyzer = TemporalVideoAnalyzer()
         comparison = await analyzer.compare_segments(
-            request.video_url, request.segments, request.comparison_focus
+            request.video_url,
+            request.segments,
+            request.comparison_focus
         )
         await analyzer.close()
 
@@ -305,7 +315,7 @@ async def compare_segments(request: SegmentComparisonRequest):
             "video_url": request.video_url,
             "segments_compared": len(request.segments),
             "comparison_focus": request.comparison_focus,
-            "comparison": comparison,
+            "comparison": comparison
         }
     except Exception as e:
         logger.error(f"Segment comparison failed: {e}", exc_info=True)
@@ -317,7 +327,7 @@ async def extract_tutorial_steps(request: TutorialStepsRequest):
     """
     Extract step-by-step tutorial instructions with timestamps.
     Optimized for instructional/tutorial videos.
-
+    
     Example:
     ```json
     {
@@ -333,7 +343,7 @@ async def extract_tutorial_steps(request: TutorialStepsRequest):
         return {
             "video_url": request.video_url,
             "steps_count": len(steps),
-            "steps": steps,
+            "steps": steps
         }
     except Exception as e:
         logger.error(f"Tutorial extraction failed: {e}", exc_info=True)
@@ -342,15 +352,14 @@ async def extract_tutorial_steps(request: TutorialStepsRequest):
 
 # ============ Structured Output Endpoint ============
 
-
 @router.post("/analyze/structured")
 async def analyze_with_schema(request: StructuredAnalysisRequest):
     """
     Analyze video with structured JSON output conforming to provided schema.
-
+    
     Uses Gemini's response_schema to enforce output structure.
     Optionally publishes result as a CloudEvent.
-
+    
     Example:
     ```json
     {
@@ -383,26 +392,26 @@ async def analyze_with_schema(request: StructuredAnalysisRequest):
         )
 
         config = GeminiConfig(
-            response_schema=request.schema, response_mime_type="application/json"
+            response_schema=request.schema,
+            response_mime_type="application/json"
         )
 
         service = GeminiService(config)
 
         # Construct prompt with video
-        contents = [{"text": request.video_url}, {"text": request.prompt}]
+        contents = [
+            {"text": request.video_url},
+            {"text": request.prompt}
+        ]
 
         result = await service.generate_content_async(
-            contents, response_schema=request.schema
+            contents,
+            response_schema=request.schema
         )
 
         # Parse structured result
         import json
-
-        structured_result = (
-            json.loads(result.response)
-            if isinstance(result.response, str)
-            else result.response
-        )
+        structured_result = json.loads(result.response) if isinstance(result.response, str) else result.response
 
         # Publish as CloudEvent if requested
         event_id = None
@@ -413,7 +422,7 @@ async def analyze_with_schema(request: StructuredAnalysisRequest):
                 type="com.eventrelay.video.analyzed.structured",
                 data=structured_result,
                 subject=request.video_url,
-                schema=json.dumps(request.schema),
+                schema=json.dumps(request.schema)
             )
             await publisher.close()
 
@@ -422,7 +431,7 @@ async def analyze_with_schema(request: StructuredAnalysisRequest):
             "structured_result": structured_result,
             "schema": request.schema,
             "published": request.publish_result,
-            "event_id": event_id,
+            "event_id": event_id
         }
     except Exception as e:
         logger.error(f"Structured analysis failed: {e}", exc_info=True)
@@ -431,24 +440,23 @@ async def analyze_with_schema(request: StructuredAnalysisRequest):
 
 # ============ CloudEvents Publishing Endpoint ============
 
-
 @router.post("/publish-event")
 async def publish_video_event(
     source: str,
     event_type: str,
-    data: dict,
+    data: Dict,
     subject: Optional[str] = None,
-    backend: Optional[str] = None,
+    backend: Optional[str] = None
 ):
     """
     Manually publish a video analysis event as a CloudEvent.
-
+    
     Supports multiple backends:
     - pubsub: Google Cloud Pub/Sub
     - http: HTTP webhook
     - openwhisk: Apache OpenWhisk trigger
     - file: Local file (for testing)
-
+    
     Example:
     ```json
     {
@@ -466,14 +474,17 @@ async def publish_video_event(
     try:
         publisher = create_publisher(backend=backend)
         event_id = await publisher.publish(
-            source=source, type=event_type, data=data, subject=subject
+            source=source,
+            type=event_type,
+            data=data,
+            subject=subject
         )
         await publisher.close()
 
         return {
             "status": "published",
             "event_id": event_id,
-            "backend": backend or "default",
+            "backend": backend or "default"
         }
     except Exception as e:
         logger.error(f"Event publishing failed: {e}", exc_info=True)
