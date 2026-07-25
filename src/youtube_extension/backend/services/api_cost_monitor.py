@@ -1251,10 +1251,13 @@ class APICostMonitor:
 
         service_costs = self.COST_MODELS[service]
         if model not in service_costs:
-            raise ValueError(
-                f"Unknown pricing model for {service}: {model!r}; "
-                "refusing to apply an unrelated fallback price"
-            )
+            if model == "default":
+                model = next(iter(service_costs))
+            else:
+                raise ValueError(
+                    f"Unknown pricing model for {service}: {model!r}; "
+                    "refusing to apply an unrelated fallback price"
+                )
 
         if service == "youtube":
             # YouTube uses quota units, not token pricing
