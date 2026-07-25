@@ -791,8 +791,8 @@ class TestExecuteOnServer:
         }
         assert call_kwargs["headers"] == expected_headers
 
-        # Verify result is passed through
-        assert result == {"result": "success"}
+        # The JSON-RPC `result` member is unwrapped and returned to the caller.
+        assert result == "success"
 
     async def test_execute_on_server_reuses_pooled_session(self):
         """When start_orchestration has opened a pooled session, _execute_on_server
@@ -819,6 +819,7 @@ class TestExecuteOnServer:
 
         orch = MCPOrchestrator(registry=registry)
         orch._session = pooled_session
+        orch.orchestration_active = True
 
         task = MCPTask(
             task_id="abc",
@@ -833,7 +834,110 @@ class TestExecuteOnServer:
             new_session_cls.assert_not_called()
 
         pooled_session.post.assert_called_once()
-        assert result == {"result": "pooled"}
+        # The in-flight request is deregistered once it settles.
+        assert orch._pooled_requests == set()
+        assert result == "pooled"
+
+    @patch("aiohttp.ClientSession.post")
+    async def test_execute_on_server_raises_on_jsonrpc_error(self, mock_post):
+        """A JSON-RPC 2.0 error envelope (HTTP 200 + `error` member) must raise so
+        the caller records the task as FAILED, not as a successful result."""
+        from youtube_extension.services.mcp.registry import MCPServerRegistry
+        from youtube_extension.services.mcp.types import MCPCapability, MCPTask
+
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+        mock_response.json = AsyncMock(
+            return_value={
+                "jsonrpc": "2.0",
+                "error": {"code": -32601, "message": "Method not found"},
+                "id": "abc",
+            }
+        )
+        aenter_mock = AsyncMock()
+        aenter_mock.return_value = mock_response
+        mock_post.return_value.__aenter__ = aenter_mock
+
+        registry = MCPServerRegistry()
+        registry.register_server(
+            "srv", "Srv", "http://localhost:9000", [MCPCapability.AI_INFERENCE]
+        )
+        orch = MCPOrchestrator(registry=registry)
+        task = MCPTask(
+            task_id="abc",
+            task_type="missing_method",
+            requirements=[MCPCapability.AI_INFERENCE],
+        )
+
+        with pytest.raises(RuntimeError, match="Method not found"):
+            await orch._execute_on_server("srv", task)
+
+    async def test_stop_orchestration_drains_pooled_request_before_close(self):
+        """stop_orchestration() must not close the pooled session while a direct
+        execute_task() request (untracked in spawned_tasks) is still in flight."""
+        from youtube_extension.services.mcp.registry import MCPServerRegistry
+        from youtube_extension.services.mcp.types import MCPCapability, MCPTask
+
+        release = asyncio.Event()
+
+        async def slow_json():
+            await release.wait()
+            return {"result": "done"}
+
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+        mock_response.json = slow_json
+
+        post_cm = MagicMock()
+        post_cm.__aenter__ = AsyncMock(return_value=mock_response)
+        post_cm.__aexit__ = AsyncMock(return_value=False)
+
+        close_order = []
+
+        async def _close():
+            close_order.append("closed")
+            session.closed = True
+
+        session = MagicMock()
+        session.closed = False
+        session.post = MagicMock(return_value=post_cm)
+        session.close = _close
+
+        registry = MCPServerRegistry()
+        registry.register_server(
+            "srv", "Srv", "http://localhost:9000", [MCPCapability.AI_INFERENCE]
+        )
+        orch = MCPOrchestrator(registry=registry)
+        orch._session = session
+        orch.orchestration_active = True
+
+        task = MCPTask(
+            task_id="abc",
+            task_type="test_method",
+            requirements=[MCPCapability.AI_INFERENCE],
+        )
+
+        # Start a direct execution that blocks inside response.json().
+        exec_task = asyncio.ensure_future(orch._execute_on_server("srv", task))
+        for _ in range(5):
+            await asyncio.sleep(0)
+        assert len(orch._pooled_requests) == 1
+        assert close_order == []
+
+        # stop_orchestration must block on the in-flight request, not close early.
+        stop_task = asyncio.ensure_future(orch.stop_orchestration())
+        for _ in range(5):
+            await asyncio.sleep(0)
+        assert close_order == [], "session closed while a pooled request was in flight"
+        assert session.closed is False
+
+        # Release the request; stop_orchestration then drains and closes.
+        release.set()
+        await stop_task
+        assert await exec_task == "done"
+        assert close_order == ["closed"]
+        assert orch._session is None
+        assert orch._pooled_requests == set()
 
     @patch("aiohttp.ClientSession.post")
     async def test_execute_on_server_handles_http_errors(self, mock_post):
