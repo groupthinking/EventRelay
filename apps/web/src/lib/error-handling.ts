@@ -138,7 +138,6 @@ export function formatApiError(
   if (error instanceof Error) {
     return {
       message: error.message || defaultMessage,
-      // Removed stack trace exposure for security
     };
   }
 
