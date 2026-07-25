@@ -359,24 +359,36 @@ class MCPOrchestrator:
 
         timeout = aiohttp.ClientTimeout(total=config.timeout)
 
-        async with aiohttp.ClientSession() as session:
-            try:
-                async with session.post(
-                    config.endpoint,
-                    json=payload,
-                    headers=headers,
-                    timeout=timeout,
-                ) as response:
-                    response.raise_for_status()
-                    return await response.json()
-            except Exception as e:
-                logger.error(
-                    "Failed to execute task %s on server %s: %s",
-                    task.task_id,
-                    server_id,
-                    e,
-                )
-                raise
+        # Reuse the pooled session created by ``start_orchestration`` so tasks
+        # share TCP/TLS connections. Fall back to a temporary per-call session
+        # when orchestration isn't running (e.g. one-off / direct execution).
+        if self._session is not None and not self._session.closed:
+            session = self._session
+            close_session = False
+        else:
+            session = aiohttp.ClientSession()
+            close_session = True
+
+        try:
+            async with session.post(
+                config.endpoint,
+                json=payload,
+                headers=headers,
+                timeout=timeout,
+            ) as response:
+                response.raise_for_status()
+                return await response.json()
+        except Exception as e:
+            logger.error(
+                "Failed to execute task %s on server %s: %s",
+                task.task_id,
+                server_id,
+                e,
+            )
+            raise
+        finally:
+            if close_session:
+                await session.close()
 
     async def _check_dependencies(self, task_id: str) -> bool:
         """
