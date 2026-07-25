@@ -16,6 +16,7 @@ import random
 import re
 import threading
 import time
+import uuid
 from collections import defaultdict, deque
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -576,6 +577,8 @@ class APICostMonitor:
             "claude-3-haiku-20240307": {"input": 0.00025, "output": 0.00125},
         },
         "google": {
+            # Standard paid-tier prices, normalized from per-million to per-1K USD.
+            "gemini-3.5-flash": {"input": 0.0015, "output": 0.009},
             "gemini-3-pro": {"input": 0.000875, "output": 0.0035},
             "gemini-3-flash": {"input": 0.000052, "output": 0.00021},
             "gemini-1.5-pro": {"input": 0.00125, "output": 0.005},
@@ -1248,8 +1251,10 @@ class APICostMonitor:
 
         service_costs = self.COST_MODELS[service]
         if model not in service_costs:
-            # Use average cost for unknown models
-            model = list(service_costs.keys())[0]
+            raise ValueError(
+                f"Unknown pricing model for {service}: {model!r}; "
+                "refusing to apply an unrelated fallback price"
+            )
 
         if service == "youtube":
             # YouTube uses quota units, not token pricing
@@ -1635,6 +1640,10 @@ class APICostMonitor:
                         filters.append(WebhookOutbox.last_attempt.is_(None))
                     else:
                         filters.append(WebhookOutbox.last_attempt == item.last_attempt)
+                    if item.claim_token is None:
+                        filters.append(WebhookOutbox.claim_token.is_(None))
+                    else:
+                        filters.append(WebhookOutbox.claim_token == item.claim_token)
 
                     recovered = (
                         session.query(WebhookOutbox)
@@ -1645,6 +1654,8 @@ class APICostMonitor:
                                 WebhookOutbox.next_attempt_at: next_attempt_at,
                                 WebhookOutbox.error_message: recovery_error,
                                 WebhookOutbox.last_recovered_at: now,
+                                WebhookOutbox.claimed_at: None,
+                                WebhookOutbox.claim_token: None,
                             },
                             synchronize_session=False,
                         )
@@ -1681,6 +1692,7 @@ class APICostMonitor:
                         )
                     )
 
+                claim_token = uuid.uuid4().hex
                 claimed = (
                     session.query(WebhookOutbox)
                     .filter(*filters)
@@ -1690,6 +1702,7 @@ class APICostMonitor:
                             WebhookOutbox.retry_count: WebhookOutbox.retry_count + 1,
                             WebhookOutbox.last_attempt: claim_time,
                             WebhookOutbox.claimed_at: claim_time,
+                            WebhookOutbox.claim_token: claim_token,
                             WebhookOutbox.next_attempt_at: None,
                         },
                         synchronize_session=False,
@@ -1706,6 +1719,7 @@ class APICostMonitor:
                     "alert_type": item.alert_type,
                     "retry_count": item.retry_count,
                     "last_attempt": item.last_attempt,
+                    "claim_token": item.claim_token,
                 }
         except Exception as e:
             logger.debug("Could not claim webhook outbox item %s: %s", item_id, e)
@@ -1728,6 +1742,8 @@ class APICostMonitor:
                         WebhookOutbox.next_attempt_at: None,
                         WebhookOutbox.error_message: None,
                         WebhookOutbox.sent_at: datetime.now(timezone.utc),
+                        WebhookOutbox.claimed_at: None,
+                        WebhookOutbox.claim_token: None,
                     }
                 else:
                     next_attempt_at, persisted_error = self._retry_state(
@@ -1739,6 +1755,8 @@ class APICostMonitor:
                         WebhookOutbox.status: "failed",
                         WebhookOutbox.next_attempt_at: next_attempt_at,
                         WebhookOutbox.error_message: persisted_error,
+                        WebhookOutbox.claimed_at: None,
+                        WebhookOutbox.claim_token: None,
                     }
 
                 completed = (
@@ -1748,6 +1766,7 @@ class APICostMonitor:
                         WebhookOutbox.status == "processing",
                         WebhookOutbox.retry_count == claim["retry_count"],
                         WebhookOutbox.last_attempt == claim["last_attempt"],
+                        WebhookOutbox.claim_token == claim["claim_token"],
                     )
                     .update(values, synchronize_session=False)
                 )
