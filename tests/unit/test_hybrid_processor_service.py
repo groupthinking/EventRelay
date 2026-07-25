@@ -627,7 +627,8 @@ class TestProcessLiveGeminiPath:
         usage = SimpleNamespace(
             prompt_token_count=125,
             candidates_token_count=40,
-            total_token_count=165,
+            thoughts_token_count=5,
+            total_token_count=170,
         )
         svc = self._svc(
             _make_gemini_result(usage_metadata=usage)
@@ -649,7 +650,7 @@ class TestProcessLiveGeminiPath:
             "hybrid/process",
             125,
             model="gemini-2.0-flash",
-            output_tokens=40,
+            output_tokens=45,
             request_type="video_understanding",
             success=True,
         )
