@@ -320,6 +320,7 @@ class HybridProcessorService:
 
         input_tokens = int(getattr(usage, "prompt_token_count", 0) or 0)
         output_tokens = int(getattr(usage, "candidates_token_count", 0) or 0)
+        output_tokens += int(getattr(usage, "thoughts_token_count", 0) or 0)
         if input_tokens <= 0 and output_tokens <= 0:
             self.logger.warning(
                 "Gemini usage metadata contained no billable token counts"
