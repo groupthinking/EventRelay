@@ -209,3 +209,5 @@ data/audit/*.jsonl
 /rewrite.py
 /commit_script.sh
 /test_*.py
+# Stale local verification marker (never a build input; see docs/MASTER_ROADMAP.md)
+/.verification-gate-pass
