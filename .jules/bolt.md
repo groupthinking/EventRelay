@@ -14,3 +14,6 @@
 ## 2026-07-28 - Memoize text processing in React
 **Learning:** Performing expensive string manipulations like splitting long texts (`transcript.split('\n')`) or generating dynamic Regex expressions inside a component body causes significant CPU overhead on every re-render (like keystroke updates in a search box).
 **Action:** Extract pure transformation logic on static/infrequent data into `useMemo` hooks (e.g., memoizing the paragraph split on `transcript` and precomputing search `RegExp` based on `searchQuery`).
+## 2026-07-25 - Replaced spread array operations with loops
+**Learning:** Calling `Math.max(...array.map())` on potentially large data sources risks throwing a 'Maximum call stack size exceeded' error and hurts performance because of unnecessary array allocations.
+**Action:** Replace map chaining and spread operator with a single O(N) loop to track bounds safely and efficiently when dealing with scalable elements like visual flow nodes.
