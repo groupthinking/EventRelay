@@ -31,9 +31,7 @@ def test_root_project_shared_does_not_shadow_src_shared():
     """The project-root project_shared/ package must not collide with src/shared."""
     root_shared = REPO_ROOT / "shared"
     project_shared = REPO_ROOT / "project_shared"
-    assert not root_shared.exists(), (
-        "Repo-root shared/ still exists and would shadow src/shared/ on sys.path"
-    )
-    assert project_shared.exists(), (
-        "project_shared/ directory missing after rename"
-    )
+    assert (
+        not root_shared.exists()
+    ), "Repo-root shared/ still exists and would shadow src/shared/ on sys.path"
+    assert project_shared.exists(), "project_shared/ directory missing after rename"
