@@ -1,3 +1,5 @@
+import ast
+import json
 import logging
 import os
 import subprocess
@@ -33,27 +35,105 @@ def check_env_vars():
     return False
 
 
-def check_cors():
+def _parse_main():
     main_path = Path("src/youtube_extension/main.py")
     if not main_path.exists():
+        logger.error("❌ main.py not found.")
+        return None
+    try:
+        return ast.parse(main_path.read_text())
+    except (OSError, SyntaxError) as exc:
+        logger.error("❌ Unable to parse main.py: %s", exc)
+        return None
+
+
+def _middleware_call(tree, middleware_name):
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "add_middleware"
+            and node.args
+            and isinstance(node.args[0], ast.Name)
+            and node.args[0].id == middleware_name
+        ):
+            return node
+    return None
+
+
+def check_cors():
+    tree = _parse_main()
+    if tree is None:
         return True
-    content = main_path.read_text()
-    if "_IS_PRODUCTION = _ENVIRONMENT == \"production\"" in content:
-        logger.info("✅ CORS safety checks found.")
+
+    call = _middleware_call(tree, "CORSMiddleware")
+    keywords = {item.arg: item.value for item in call.keywords} if call else {}
+    origins = keywords.get("allow_origins")
+    credentials = keywords.get("allow_credentials")
+    middleware_is_guarded = (
+        isinstance(origins, ast.Name)
+        and origins.id == "_allowed_origins"
+        and isinstance(credentials, ast.Constant)
+        and credentials.value is True
+    )
+
+    origin_assignment = None
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Assign, ast.AnnAssign)):
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            if any(isinstance(target, ast.Name) and target.id == "_allowed_origins" for target in targets):
+                origin_assignment = node.value
+                break
+
+    policy_names = (
+        {node.id for node in ast.walk(origin_assignment) if isinstance(node, ast.Name)}
+        if origin_assignment is not None
+        else set()
+    )
+    policy_is_guarded = {
+        "_PRODUCTION_ORIGINS",
+        "_EXTRA_ORIGINS",
+        "_IS_PRODUCTION",
+        "_DEV_ORIGINS",
+    }.issubset(policy_names)
+
+    if middleware_is_guarded and policy_is_guarded:
+        logger.info("✅ CORS middleware uses the production-gated origin policy.")
         return False
-    logger.error("❌ CORS safety checks missing.")
+    logger.error("❌ CORS middleware is not bound to the production-gated origin policy.")
     return True
 
 
 def check_headers():
-    main_path = Path("src/youtube_extension/main.py")
-    if not main_path.exists():
+    tree = _parse_main()
+    if tree is None:
         return True
-    content = main_path.read_text()
-    if "X-Frame-Options" in content and "X-Content-Type-Options" in content:
-        logger.info("✅ Security headers found.")
+
+    required = {
+        "X-Frame-Options": "DENY",
+        "X-Content-Type-Options": "nosniff",
+    }
+    assignments = {}
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Assign) or not isinstance(node.value, ast.Constant):
+            continue
+        for target in node.targets:
+            if (
+                isinstance(target, ast.Subscript)
+                and isinstance(target.value, ast.Attribute)
+                and target.value.attr == "headers"
+                and isinstance(target.value.value, ast.Name)
+                and target.value.value.id == "response"
+                and isinstance(target.slice, ast.Constant)
+                and isinstance(target.slice.value, str)
+            ):
+                assignments[target.slice.value] = node.value.value
+
+    registered = _middleware_call(tree, "SecurityHeadersMiddleware") is not None
+    if registered and all(assignments.get(name) == value for name, value in required.items()):
+        logger.info("✅ Security-header middleware assignments and registration verified.")
         return False
-    logger.error("❌ Security headers missing.")
+    logger.error("❌ Security-header middleware assignments or registration are missing.")
     return True
 
 
@@ -65,11 +145,32 @@ def check_logging():
         return True
 
     content = main_path.read_text()
-
-    # 1. Check if we configure logging at DEBUG level by default
-    if "level=logging.DEBUG" in content or "setLevel(logging.DEBUG)" in content:
-        logger.error("❌ Production logging cannot default to DEBUG level (leaks sensitive info).")
+    try:
+        tree = ast.parse(content)
+    except SyntaxError as exc:
+        logger.error("❌ Unable to parse main.py logging configuration: %s", exc)
         return True
+
+    # 1. Detect DEBUG defaults structurally so whitespace and line breaks cannot bypass the gate.
+    def is_debug(node):
+        return (
+            isinstance(node, ast.Attribute)
+            and isinstance(node.value, ast.Name)
+            and node.value.id == "logging"
+            and node.attr == "DEBUG"
+        ) or (isinstance(node, ast.Name) and node.id == "DEBUG")
+
+    for call in (node for node in ast.walk(tree) if isinstance(node, ast.Call)):
+        name = call.func.attr if isinstance(call.func, ast.Attribute) else None
+        if name == "basicConfig" and any(
+            keyword.arg == "level" and is_debug(keyword.value)
+            for keyword in call.keywords
+        ):
+            logger.error("❌ Production logging cannot default to DEBUG level (leaks sensitive info).")
+            return True
+        if name == "setLevel" and call.args and is_debug(call.args[0]):
+            logger.error("❌ Production logging cannot default to DEBUG level (leaks sensitive info).")
+            return True
 
     # 2. Check Sentry PII settings to prevent information leakage, excluding comment lines
     has_pii_check = False
@@ -114,14 +215,39 @@ def check_dependencies():
     else:
         logger.warning("requirements.txt not found.")
 
-    pkg_path = Path("package.json")
-    if pkg_path.exists():
-        pkg = pkg_path.read_text()
-        if '"*"' in pkg or "'*'" in pkg:
-            logger.error("❌ Unsafe wildcard version '*' found in package.json.")
+    package_paths = [Path("package.json"), Path("apps/web/package.json")]
+    pkg_path = package_paths[0]
+    dependency_sections = (
+        "dependencies",
+        "devDependencies",
+        "optionalDependencies",
+        "peerDependencies",
+    )
+    for package_path in package_paths:
+        if not package_path.exists():
+            logger.warning("%s not found.", package_path)
+            continue
+        try:
+            manifest = json.loads(package_path.read_text())
+        except (OSError, json.JSONDecodeError) as exc:
+            logger.error("❌ Unable to parse %s: %s", package_path, exc)
             has_error = True
-    else:
-        logger.warning("package.json not found.")
+            continue
+        for section in dependency_sections:
+            dependencies = manifest.get(section, {})
+            if not isinstance(dependencies, dict):
+                logger.error("❌ %s.%s must be an object.", package_path, section)
+                has_error = True
+                continue
+            for dependency, version in dependencies.items():
+                if isinstance(version, str) and version.strip() == "*":
+                    logger.error(
+                        "❌ Unsafe wildcard version for %s in %s: %s",
+                        dependency,
+                        package_path,
+                        version,
+                    )
+                    has_error = True
 
     # 2. Dynamic check via safety/npm-audit if available
     try:
