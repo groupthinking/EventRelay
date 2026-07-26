@@ -233,10 +233,12 @@ ${metadataContext ? `\nKNOWN METADATA:\n${metadataContext}` : ''}`,
           });
           const text = response.output_text || '';
           // Reject results that are just instructions rather than actual content
+          // Hoisting toLowerCase() to eliminate redundant string allocations in multiple includes() checks.
+          const lowerText = text ? text.toLowerCase() : '';
           const isGarbage =
-            text.toLowerCase().includes('click show transcript') ||
-            text.toLowerCase().includes('click on the three dots') ||
-            text.toLowerCase().includes('steps to find') ||
+            lowerText.includes('click show transcript') ||
+            lowerText.includes('click on the three dots') ||
+            lowerText.includes('steps to find') ||
             (text.length < 300 && text.includes('transcript'));
           if (text.length > 100 && !isGarbage) {
             return {
