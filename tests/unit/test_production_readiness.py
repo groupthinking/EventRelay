@@ -15,13 +15,25 @@ import scripts.check_production_readiness as module
 
 
 def test_check_cors_present(tmp_path):
-    # Mock src/youtube_extension/main.py path
+    main_py = tmp_path / "main.py"
+    main_py.write_text(
+        "_allowed_origins = list(dict.fromkeys("
+        "_PRODUCTION_ORIGINS + _EXTRA_ORIGINS + "
+        "([] if _IS_PRODUCTION else _DEV_ORIGINS)))\n"
+        "app.add_middleware(CORSMiddleware, "
+        "allow_origins=_allowed_origins, allow_credentials=True)"
+    )
+
+    with patch("scripts.check_production_readiness.Path", return_value=main_py):
+        assert module.check_cors() is False
+
+
+def test_check_cors_marker_without_middleware_fails(tmp_path):
     main_py = tmp_path / "main.py"
     main_py.write_text('_IS_PRODUCTION = _ENVIRONMENT == "production"')
 
-    # Patch Path within check_cors
     with patch("scripts.check_production_readiness.Path", return_value=main_py):
-        assert module.check_cors() is False  # False means NO error
+        assert module.check_cors() is True
 
 
 def test_check_cors_missing(tmp_path):
@@ -34,7 +46,15 @@ def test_check_cors_missing(tmp_path):
 
 def test_check_headers_present(tmp_path):
     main_py = tmp_path / "main.py"
-    main_py.write_text('response.headers["X-Frame-Options"] = "DENY"\nresponse.headers["X-Content-Type-Options"] = "nosniff"')
+    main_py.write_text(
+        "class SecurityHeadersMiddleware:\n"
+        "    async def dispatch(self, request, call_next):\n"
+        "        response = await call_next(request)\n"
+        "        response.headers[\"X-Frame-Options\"] = \"DENY\"\n"
+        "        response.headers[\"X-Content-Type-Options\"] = \"nosniff\"\n"
+        "        return response\n"
+        "app.add_middleware(SecurityHeadersMiddleware)\n"
+    )
 
     with patch("scripts.check_production_readiness.Path", return_value=main_py):
         assert module.check_headers() is False
@@ -59,6 +79,21 @@ def test_check_logging_debug_fails(tmp_path):
 def test_check_logging_setlevel_debug_fails(tmp_path):
     main_py = tmp_path / "main.py"
     main_py.write_text("logging.root.setLevel(logging.DEBUG)")
+
+    with patch("scripts.check_production_readiness.Path", return_value=main_py):
+        assert module.check_logging() is True
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "logging.root.setLevel(\n    logging.DEBUG\n)",
+        "logging.basicConfig(level = logging.DEBUG)",
+    ],
+)
+def test_check_logging_debug_detection_ignores_formatting(tmp_path, source):
+    main_py = tmp_path / "main.py"
+    main_py.write_text(source)
 
     with patch("scripts.check_production_readiness.Path", return_value=main_py):
         assert module.check_logging() is True
@@ -115,6 +150,28 @@ def test_check_dependencies_wildcard_package_fails(tmp_path):
     with patch("scripts.check_production_readiness.Path", side_effect=mock_path), \
          patch("subprocess.run") as mock_run:
         mock_run.return_value = MagicMock(returncode=1) # mock 'which' failing
+        assert module.check_dependencies() is True
+
+
+def test_check_dependencies_workspace_wildcard_fails(tmp_path):
+    req_txt = tmp_path / "requirements.txt"
+    req_txt.write_text("fastapi>=0.110.0")
+    root_pkg = tmp_path / "package.json"
+    root_pkg.write_text('{"workspaces": ["apps/*"], "dependencies": {"react": "^19"}}')
+    web_pkg = tmp_path / "apps-web-package.json"
+    web_pkg.write_text('{"dependencies": {"next": "*"}}')
+
+    def mock_path(path):
+        paths = {
+            "requirements.txt": req_txt,
+            "package.json": root_pkg,
+            "apps/web/package.json": web_pkg,
+        }
+        return paths.get(str(path), Path(path))
+
+    with patch("scripts.check_production_readiness.Path", side_effect=mock_path), \
+         patch("subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=1)
         assert module.check_dependencies() is True
 
 
