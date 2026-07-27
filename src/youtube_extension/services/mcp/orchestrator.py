@@ -10,10 +10,11 @@ Consolidates orchestration logic from:
 import asyncio
 import logging
 import uuid
-import aiohttp
 from collections import deque
 from datetime import datetime
 from typing import Any, Optional
+
+import aiohttp
 
 from .registry import MCPServerRegistry, get_registry
 from .types import MCPCapability, MCPTask, MCPTaskStatus
@@ -42,7 +43,7 @@ class MCPOrchestrator:
         """
         self.registry = registry or get_registry()
 
-        self.session = None
+        self.session: Optional[aiohttp.ClientSession] = None
 
         # Task management
         self.tasks: dict[str, MCPTask] = {}
@@ -65,9 +66,6 @@ class MCPOrchestrator:
 
         # Performance metrics
         self.metrics = {
-
-            "total_tasks": 0,
-
             "total_tasks": 0,
             "completed_tasks": 0,
             "failed_tasks": 0,
@@ -390,7 +388,7 @@ class MCPOrchestrator:
                 task.task_type,
                 str(e)
             )
-            raise RuntimeError(f"MCP server execution failed: {e}")
+            raise RuntimeError(f"MCP server execution failed: {e}") from e
         except Exception as e:
             logger.error(
                 "Unexpected error during MCP server execution: server_id=%s, task_type=%s, error=%s",
