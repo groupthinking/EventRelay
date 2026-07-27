@@ -22,7 +22,10 @@ permissions:
 
 engine: codex
 model: gpt-5.4
-network: defaults
+network:
+  allowed:
+    - defaults
+    - "AWMGMCPG"
 
 safe-outputs:
   add-comment:
