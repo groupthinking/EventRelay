@@ -735,30 +735,11 @@ class TestExecuteTaskWithServer:
 
 
 # ===========================================================================
-# MCPOrchestrator._execute_on_server (lines 346-350)
+# MCPOrchestrator._execute_on_server
 # ===========================================================================
 
 
 class TestExecuteOnServer:
-    async def test_raises_not_implemented_error(self):
-        from youtube_extension.services.mcp.registry import MCPServerRegistry
-        from youtube_extension.services.mcp.types import MCPCapability, MCPTask
-
-        registry = MCPServerRegistry()
-        registry.register_server(
-            "srv", "Srv", "http://localhost:9000", [MCPCapability.AI_INFERENCE]
-        )
-
-        orch = MCPOrchestrator(registry=registry)
-        task = MCPTask(
-            task_id="abc",
-            task_type="test",
-            requirements=[MCPCapability.AI_INFERENCE],
-        )
-
-        with pytest.raises(NotImplementedError):
-            await orch._execute_on_server("srv", task)
-
     async def test_raises_value_error_for_unknown_server(self):
         from youtube_extension.services.mcp.types import MCPCapability, MCPTask
 
@@ -772,6 +753,69 @@ class TestExecuteOnServer:
         with pytest.raises(ValueError, match="MCP server not found"):
             await orch._execute_on_server("unknown_server", task)
 
+    async def test_successful_execution(self):
+        from youtube_extension.services.mcp.registry import MCPServerRegistry
+        from youtube_extension.services.mcp.types import MCPCapability, MCPTask
+        from aioresponses import aioresponses
+
+        registry = MCPServerRegistry()
+        registry.register_server(
+            "srv", "Srv", "http://localhost:9000", [MCPCapability.AI_INFERENCE], auth_token="secret"
+        )
+        orch = MCPOrchestrator(registry=registry)
+        task = MCPTask(
+            task_id="abc",
+            task_type="test",
+            requirements=[MCPCapability.AI_INFERENCE],
+        )
+
+        with aioresponses() as m:
+            m.post("http://localhost:9000", payload={"result": {"status": "success"}})
+            result = await orch._execute_on_server("srv", task)
+
+        assert result == {"status": "success"}
+
+    async def test_execution_failure_http_error(self):
+        from youtube_extension.services.mcp.registry import MCPServerRegistry
+        from youtube_extension.services.mcp.types import MCPCapability, MCPTask
+        from aioresponses import aioresponses
+
+        registry = MCPServerRegistry()
+        registry.register_server(
+            "srv", "Srv", "http://localhost:9000", [MCPCapability.AI_INFERENCE]
+        )
+        orch = MCPOrchestrator(registry=registry)
+        task = MCPTask(
+            task_id="abc",
+            task_type="test",
+            requirements=[MCPCapability.AI_INFERENCE],
+        )
+
+        with aioresponses() as m:
+            m.post("http://localhost:9000", status=500, payload={"error": "Server error"})
+            with pytest.raises(RuntimeError, match="MCP server execution failed"):
+                await orch._execute_on_server("srv", task)
+
+    async def test_execution_failure_jsonrpc_error(self):
+        from youtube_extension.services.mcp.registry import MCPServerRegistry
+        from youtube_extension.services.mcp.types import MCPCapability, MCPTask
+        from aioresponses import aioresponses
+
+        registry = MCPServerRegistry()
+        registry.register_server(
+            "srv", "Srv", "http://localhost:9000", [MCPCapability.AI_INFERENCE]
+        )
+        orch = MCPOrchestrator(registry=registry)
+        task = MCPTask(
+            task_id="abc",
+            task_type="test",
+            requirements=[MCPCapability.AI_INFERENCE],
+        )
+
+        with aioresponses() as m:
+            m.post("http://localhost:9000", payload={"error": {"code": 123, "message": "Bad request"}})
+            with pytest.raises(RuntimeError, match="MCP server error"):
+                await orch._execute_on_server("srv", task)
 
 # ===========================================================================
 # MCPOrchestrator._check_dependent_tasks (lines 388-395)
