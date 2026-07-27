@@ -14,7 +14,7 @@ model: gpt-5.4
 network:
   allowed:
     - defaults
-    - "AWMGMCPG"
+    - "awmg-mcpg"
 
 safe-outputs:
   add-comment:
