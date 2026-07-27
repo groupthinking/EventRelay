@@ -223,7 +223,7 @@ export function AgentsPanel({
           {hasEvents && agentBackend && (
             <button
               onClick={() => onDispatch(video.id)}
-              className="px-4 py-2 text-xs font-bold uppercase tracking-wider transition-all active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/50 rounded"
+              className="px-4 py-2 text-xs font-bold uppercase tracking-wider transition-all active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70 rounded"
               style={{ background: 'rgba(129,140,248,0.15)', color: '#818cf8', border: '1px solid rgba(129,140,248,0.3)' }}
             >
               Dispatch {video.events!.length} events
@@ -232,7 +232,7 @@ export function AgentsPanel({
           {anyRunning && (
             <button
               onClick={() => onRefresh(video.id)}
-              className="px-4 py-2 text-xs font-bold uppercase tracking-wider transition-all active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/30 rounded"
+              className="px-4 py-2 text-xs font-bold uppercase tracking-wider transition-all active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/40 rounded"
               style={{ background: 'rgba(255,255,255,0.05)', color: 'rgba(248,245,253,0.7)', border: '1px solid rgba(255,255,255,0.1)' }}
             >
               Refresh

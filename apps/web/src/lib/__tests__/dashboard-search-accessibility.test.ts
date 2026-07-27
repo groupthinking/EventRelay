@@ -22,4 +22,27 @@ describe('dashboard search accessibility', () => {
     expect(searchForm).not.toContain('aria-label="Submit search"');
     expect(searchForm).not.toContain('aria-label="Search"');
   });
+
+  it('communicates the search loading state on the Go button via aria-busy', () => {
+    const source = readSource('components/dashboard/panels.tsx');
+    const goButton = source.match(
+      /<button\s+type="submit"[\s\S]*?{searchLoading \? '…' : 'Go'}/,
+    )?.[0];
+
+    expect(goButton).toBeDefined();
+    expect(goButton).toContain('aria-busy={searchLoading || undefined}');
+  });
+
+  it('gives dashboard panel controls a visible keyboard focus state that meets the WCAG 2.2 SC 2.4.11 3:1 contrast floor', () => {
+    const source = readSource('components/dashboard/panels.tsx');
+
+    // Dispatch (indigo-400) and Refresh (white) rings composite against the
+    // ~#0e0e13 dashboard background; the opacities below are the minimum that
+    // clear the 3:1 focus-indicator contrast ratio. Guard against regressing
+    // them back to the sub-threshold /50 and /30 values.
+    expect(source).toContain('focus-visible:ring-indigo-400/70');
+    expect(source).toContain('focus-visible:ring-white/40');
+    expect(source).not.toContain('focus-visible:ring-indigo-400/50');
+    expect(source).not.toContain('focus-visible:ring-white/30');
+  });
 });
