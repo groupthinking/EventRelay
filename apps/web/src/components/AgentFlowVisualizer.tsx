@@ -75,10 +75,27 @@ export default function AgentFlowVisualizer({
   const viewBox = useMemo(() => {
     const allPos = Object.values(positions);
     if (allPos.length === 0) return '0 0 900 700';
-    const minX = Math.min(...allPos.map((p) => p.x)) - 40;
-    const minY = Math.min(...allPos.map((p) => p.y)) - 40;
-    const maxX = Math.max(...allPos.map((p) => p.x + p.width)) + 40;
-    const maxY = Math.max(...allPos.map((p) => p.y + p.height)) + 40;
+
+    // ⚡ Bolt: Replace spread operator mapped arrays with a single for loop to compute boundaries.
+    // Expected impact: Prevents "Maximum call stack size exceeded" errors on large lists and improves performance by reducing O(N) passes from 4 to 1 and eliminating intermediate array allocations.
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+
+    for (let i = 0; i < allPos.length; i++) {
+      const p = allPos[i];
+      if (p.x < minX) minX = p.x;
+      if (p.y < minY) minY = p.y;
+      if (p.x + p.width > maxX) maxX = p.x + p.width;
+      if (p.y + p.height > maxY) maxY = p.y + p.height;
+    }
+
+    minX -= 40;
+    minY -= 40;
+    maxX += 40;
+    maxY += 40;
+
     return `${minX} ${minY} ${maxX - minX} ${maxY - minY}`;
   }, [positions]);
 
