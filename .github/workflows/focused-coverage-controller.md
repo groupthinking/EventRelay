@@ -32,6 +32,7 @@ safe-outputs:
     max: 1
   report-incomplete: false
   threat-detection: true
+  noop: { report-as-issue: false }
 
 ---
 

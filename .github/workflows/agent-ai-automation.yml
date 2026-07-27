@@ -1,0 +1,59 @@
+name: Agent AI Automation & Compilation Check
+
+on:
+  schedule:
+    - cron: "0 0 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  diagnostics-and-compilation:
+    name: Run Diagnostics & Compile Verification
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@f2113028b1d37eff4509472199697f3a402e478a # v5.3.0
+        with:
+          go-version: ">=1.22"
+
+      - name: Set up Python
+        uses: actions/setup-python@42375524e23c412d93fb67b49958b490673d461a # v5.3.0
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install Python Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pytest-cov pyyaml pytest-asyncio
+
+      - name: Clone gh-aw and build compiler
+        run: |
+          git clone https://github.com/github/gh-aw.git /tmp/gh-aw-repo
+          cd /tmp/gh-aw-repo
+          git checkout v0.82.14
+          go build -ldflags "-X main.version=v0.82.14 -X main.isRelease=true" ./cmd/gh-aw
+
+      - name: Run verification of existing lock files
+        run: |
+          /tmp/gh-aw-repo/gh-aw compile
+          # Ensure there is no drift between markdown workflows and generated .lock.yml files
+          if ! git diff --exit-code; then
+            echo "::error::Workflow drift detected! One or more Markdown workflows have uncompiled changes. Please run 'gh aw compile' locally and commit the modified lock files."
+            exit 1
+          fi
+          echo "All agentic workflows are perfectly compiled and in sync with their lock files."
+
+      - name: Run Truth Gate Unit Tests
+        run: |
+          PYTHONPATH=src pytest tests/unit/test_agent_completion_gate.py -v -o addopts=""
