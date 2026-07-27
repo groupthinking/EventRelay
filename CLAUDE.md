@@ -33,10 +33,8 @@ infrastructure/               # Kubernetes manifests, Terraform, database setup
 # Install (editable with dev extras)
 pip install -e .[dev,youtube,ml]
 
-# Run backend server (PYTHONPATH=src is required: the package uses absolute
-# imports rooted at src/, so the `src.youtube_extension.main` form silently
-# fails to load the API v1 router and event routes)
-PYTHONPATH=src uvicorn youtube_extension.main:app --reload --port 8000
+# Run backend server
+uvicorn src.youtube_extension.main:app --reload --port 8000
 
 # Run tests
 pytest tests/ -v

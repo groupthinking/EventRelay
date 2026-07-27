@@ -234,7 +234,7 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
       if (pathname.startsWith('/api/')) {
         return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
       }
-      const signin = new URL('/login', request.url);
+      const signin = new URL('/api/auth/signin', request.url);
       // Relative same-origin path only — blocks open-redirect callback abuse.
       signin.searchParams.set(
         'callbackUrl',

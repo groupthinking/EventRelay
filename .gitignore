@@ -201,13 +201,3 @@ docs/gemini_reference/
 data/audit/*.jsonl
 # TypeScript incremental build cache
 *.tsbuildinfo
-
-# Stray developer scratch artifacts that must never be committed at the repo root.
-# (PR diff dumps, one-off rewrite/commit helper scripts, ad-hoc import probes.)
-/*.diff
-/*.patch
-/rewrite.py
-/commit_script.sh
-/test_*.py
-# Stale local verification marker (never a build input; see docs/MASTER_ROADMAP.md)
-/.verification-gate-pass

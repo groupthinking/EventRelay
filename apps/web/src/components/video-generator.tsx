@@ -181,7 +181,6 @@ export default function VideoGenerator({ className = '' }: VideoGeneratorProps) 
         <button
           onClick={handleGenerate}
           disabled={state === 'generating' || !prompt.trim()}
-          aria-describedby={!prompt.trim() ? 'video-generate-requirement' : undefined}
           className="w-full py-3 rounded-xl bg-gradient-to-r from-purple-600 to-purple-700 font-medium text-sm hover:opacity-90 transition disabled:opacity-40 disabled:cursor-not-allowed"
         >
           {state === 'generating' ? (
@@ -193,11 +192,6 @@ export default function VideoGenerator({ className = '' }: VideoGeneratorProps) 
             'Generate Video'
           )}
         </button>
-        {!prompt.trim() && (
-          <p id="video-generate-requirement" className="text-xs text-white/50 text-center">
-            Enter a prompt to enable video generation.
-          </p>
-        )}
 
         {/* Warning */}
         <p className="text-xs text-yellow-500/70 text-center">

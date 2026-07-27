@@ -31,28 +31,25 @@ export default function TranscriptViewer({ transcript, className }: TranscriptVi
   const searchConfig = useMemo(() => {
     if (!searchQuery) return null;
     const escaped = searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    // ⚡ Bolt: Adding safety check before lowercasing search query to prevent null reference errors on edge cases.
     // Capturing split regex (no global flag) so `.test()` lastIndex state can't desync.
     return {
       regex: new RegExp(`(${escaped})`, 'i'),
-      lower: searchQuery ? searchQuery.toLowerCase() : '',
+      lower: searchQuery.toLowerCase(),
     };
   }, [searchQuery]);
 
   const highlight = (text: string) => {
     if (!searchConfig) return text;
     const parts = text.split(searchConfig.regex);
-    // ⚡ Bolt: Implementing safety check during map iteration when comparing split regex parts.
-    return parts.map((part, i) => {
-      const lowerPart = part ? part.toLowerCase() : '';
-      return lowerPart === searchConfig.lower ? (
+    return parts.map((part, i) =>
+      part.toLowerCase() === searchConfig.lower ? (
         <mark key={i} className="bg-primary-500/30 text-primary-300 rounded px-0.5">
           {part}
         </mark>
       ) : (
         part
-      );
-    });
+      ),
+    );
   };
 
   return (
