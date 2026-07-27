@@ -3101,6 +3101,94 @@ for (const [name, prior, current, applicable, expected] of rows) {
         )
         self.assertIn("issues.updateComment", validate)
 
+    def test_validation_comment_failure_is_non_fatal(self):
+        """A rejected comment API must warn, not fail; ❌ findings still fail."""
+
+        workflow = self._workflow()
+        validate = workflow[
+            workflow.index("  validate:"):
+            workflow.index("  truth-gate:")
+        ]
+        script = _github_script_bodies(validate)[0]
+
+        harness = (
+            """
+const calls = { warnings: [], failures: [] };
+const core = {
+  warning(message) { calls.warnings.push(String(message)); },
+  setFailed(message) { calls.failures.push(String(message)); },
+};
+function rejectingComment() {
+  const error = new Error('Resource not accessible by integration');
+  error.status = 403;
+  return Promise.reject(error);
+}
+async function runValidate(pr) {
+  calls.warnings.length = 0;
+  calls.failures.length = 0;
+  const context = {
+    repo: { owner: 'o', repo: 'r' },
+    payload: { pull_request: pr },
+  };
+  const github = {
+    paginate: async () => [],
+    rest: { issues: {
+      listComments: () => {},
+      createComment: rejectingComment,
+      updateComment: rejectingComment,
+    } },
+  };
+  await (async () => {
+"""
+            + script
+            + """
+  })();
+  return { warnings: calls.warnings.slice(), failures: calls.failures.slice() };
+}
+(async () => {
+  // Warning-only findings + a rejecting comment API must NOT fail the job,
+  // and the rejection must surface as a warning.
+  const warnOnly = await runValidate({
+    title: 'update the widget rendering path',
+    body: 'This description is comfortably longer than twenty characters.',
+    additions: 12,
+    deletions: 4,
+  });
+  if (warnOnly.failures.length !== 0) {
+    throw new Error(
+      'warning-only validation must not fail when the comment API rejects: '
+      + JSON.stringify(warnOnly));
+  }
+  if (warnOnly.warnings.length === 0) {
+    throw new Error('a rejected comment API must emit a warning');
+  }
+  // An error (❌) finding must still call setFailed, comment rejection notwithstanding.
+  const errorFinding = await runValidate({
+    title: 'short',
+    body: 'This description is comfortably longer than twenty characters.',
+    additions: 12,
+    deletions: 4,
+  });
+  if (errorFinding.failures.length === 0) {
+    throw new Error(
+      'an error finding must still call setFailed even when the comment API rejects: '
+      + JSON.stringify(errorFinding));
+  }
+})().catch((error) => {
+  console.error(error && error.stack ? error.stack : error);
+  process.exit(1);
+});
+"""
+        )
+
+        completed = subprocess.run(
+            ["node", "-e", harness],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+
     def test_commented_review_does_not_clear_changes_requested(self):
         workflow = self._workflow()
 
