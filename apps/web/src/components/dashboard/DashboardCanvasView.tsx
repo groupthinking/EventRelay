@@ -159,7 +159,7 @@ export default function DashboardCanvasView({ video, onClose, onExtractEvents }:
       >
         <button
           onClick={onClose}
-          className="flex items-center gap-2 text-sm transition-colors hover:text-white min-h-[44px]"
+          className="flex items-center gap-2 text-sm transition-colors hover:text-white min-h-[44px] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#6af2de]/40 rounded-lg px-2"
           style={{ color: 'rgba(248,245,253,0.5)', fontFamily: 'var(--font-heading)', letterSpacing: '0.05em', fontSize: '12px', textTransform: 'uppercase' }}
         >
           <span className="text-lg" aria-hidden="true">←</span> Back to Library
@@ -185,7 +185,7 @@ export default function DashboardCanvasView({ video, onClose, onExtractEvents }:
                 a.click();
                 URL.revokeObjectURL(a.href);
               }}
-              className="px-4 py-2 font-heading font-bold text-[11px] tracking-wider uppercase transition-all min-h-[44px]"
+              className="px-4 py-2 font-heading font-bold text-[11px] tracking-wider uppercase transition-all min-h-[44px] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#6af2de]/40 rounded-lg"
               style={{ background: 'rgba(16, 183, 165, 0.9)', color: '#002b26' }}
             >
               Export
@@ -284,7 +284,7 @@ function DockTabButton({
   return (
     <button
       onClick={onClick}
-      className="relative px-4 py-4 font-heading text-[11px] tracking-[0.15em] uppercase transition-colors whitespace-nowrap min-h-[44px]"
+      className="relative px-4 py-4 font-heading text-[11px] tracking-[0.15em] uppercase transition-colors whitespace-nowrap min-h-[44px] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#6af2de]/40 focus-visible:z-10"
       style={{
         color: active ? accent : 'rgba(248,245,253,0.4)',
         borderBottom: active ? `2px solid ${accent}` : '2px solid transparent',
@@ -306,7 +306,7 @@ function RailHeader({ title, onCollapse, side }: { title: string; onCollapse: ()
   return (
     <div className="flex-none flex items-center justify-between px-4 py-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', background: 'rgba(25,25,31,0.9)' }}>
       <span className="font-heading text-[11px] tracking-[0.2em] uppercase font-bold" style={{ color: '#f8f5fd' }}>{title}</span>
-      <button onClick={onCollapse} aria-label={`Collapse ${title}`} className="text-lg transition-colors hover:text-white" style={{ color: 'rgba(248,245,253,0.4)' }}>
+      <button onClick={onCollapse} aria-label={`Collapse ${title}`} className="text-lg transition-colors hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-[#6af2de]/40 rounded px-1" style={{ color: 'rgba(248,245,253,0.4)' }}>
         {side === 'left' ? '‹' : '›'}
       </button>
     </div>
@@ -318,7 +318,7 @@ function RailReopen({ label, onClick, side }: { label: string; onClick: () => vo
     <button
       onClick={onClick}
       aria-label={`Expand ${label}`}
-      className="flex-none w-10 flex items-center justify-center transition-colors hover:text-white"
+      className="flex-none w-10 flex items-center justify-center transition-colors hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-[#6af2de]/40 focus-visible:z-10"
       style={{
         color: 'rgba(248,245,253,0.5)',
         background: '#0b0b0f',

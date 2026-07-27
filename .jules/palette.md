@@ -4,3 +4,7 @@
 ## 2026-07-14 - Scrubber Keyboard Accessibility
 **Learning:** Adding keyboard event listeners (like `onKeyDown`) to custom interactive elements (like a `div` acting as a scrubber/slider) doesn't automatically expose those shortcuts to screen readers.
 **Action:** Always add `aria-keyshortcuts` to custom ARIA widgets (like `role="slider"`) to announce available keyboard commands (e.g., "ArrowLeft ArrowRight Home End") when the element receives focus.
+
+## 2026-07-27 - Focus States for Interactive Elements
+**Learning:** Custom buttons and interactive UI elements missing explicit focus indicators (e.g., `focus-visible:ring`) can severely degrade keyboard navigation experiences for a11y users, as focus changes become invisible.
+**Action:** Always add `focus:outline-none focus-visible:ring-2 focus-visible:ring-[#6af2de]/40` (or similar brand color) classes to all interactive elements (`<button>`, `<input>`) to ensure clear visual feedback when navigating via keyboard.

@@ -59,7 +59,7 @@ export default function EventList({ events, loading, onExtract, className }: Eve
         {events.length === 0 && onExtract && (
           <button
             onClick={onExtract}
-            className="text-xs px-3 py-1.5 rounded-lg bg-primary-500/10 text-primary-400 border border-primary-500/20 hover:bg-primary-500/20 transition-colors"
+            className="text-xs px-3 py-1.5 rounded-lg bg-primary-500/10 text-primary-400 border border-primary-500/20 hover:bg-primary-500/20 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40"
           >
             Extract Events
           </button>
