@@ -223,7 +223,11 @@ export function AgentsPanel({
           {hasEvents && agentBackend && (
             <button
               onClick={() => onDispatch(video.id)}
+<<<<<<< HEAD
               className="px-4 py-2 text-xs font-bold uppercase tracking-wider transition-all active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/50 rounded"
+=======
+              className="px-4 py-2 text-xs font-bold uppercase tracking-wider transition-all active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#818cf8]/40 rounded"
+>>>>>>> 29c01229 (feat(ui): add focus-visible styles for keyboard accessibility)
               style={{ background: 'rgba(129,140,248,0.15)', color: '#818cf8', border: '1px solid rgba(129,140,248,0.3)' }}
             >
               Dispatch {video.events!.length} events
@@ -232,7 +236,11 @@ export function AgentsPanel({
           {anyRunning && (
             <button
               onClick={() => onRefresh(video.id)}
+<<<<<<< HEAD
               className="px-4 py-2 text-xs font-bold uppercase tracking-wider transition-all active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/30 rounded"
+=======
+              className="px-4 py-2 text-xs font-bold uppercase tracking-wider transition-all active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/40 rounded"
+>>>>>>> 29c01229 (feat(ui): add focus-visible styles for keyboard accessibility)
               style={{ background: 'rgba(255,255,255,0.05)', color: 'rgba(248,245,253,0.7)', border: '1px solid rgba(255,255,255,0.1)' }}
             >
               Refresh
@@ -297,14 +305,18 @@ export function SearchPanel({
           id="search-video"
           type="text"
           placeholder="Search the video…"
-          className="flex-1 px-3 py-2.5 text-sm focus:outline-none transition-colors rounded-lg"
+          className="flex-1 px-3 py-2.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-[#6af2de]/40 transition-colors rounded-lg"
           style={{ background: 'rgba(25, 25, 31, 0.8)', border: '1px solid rgba(106, 242, 222, 0.15)', color: '#f8f5fd' }}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
         />
         <button
           type="submit"
+<<<<<<< HEAD
           className="px-4 py-2.5 font-heading font-bold text-xs tracking-wider uppercase transition-all disabled:opacity-30 active:scale-95 rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-[#10b7a5]/60"
+=======
+          className="px-4 py-2.5 font-heading font-bold text-xs tracking-wider uppercase transition-all disabled:opacity-30 active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#6af2de]/40 rounded-lg"
+>>>>>>> 29c01229 (feat(ui): add focus-visible styles for keyboard accessibility)
           style={{ background: 'rgba(16, 183, 165, 0.9)', color: '#002b26' }}
           disabled={searchLoading || !searchQuery.trim()}
           aria-busy={searchLoading || undefined}
@@ -321,7 +333,11 @@ export function SearchPanel({
               key={i}
               type="button"
               onClick={() => onSeek?.(res.start)}
+<<<<<<< HEAD
               className="w-full text-left p-4 rounded-xl border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#6af2de]/50"
+=======
+              className="w-full text-left p-4 rounded-xl border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#6af2de]/40"
+>>>>>>> 29c01229 (feat(ui): add focus-visible styles for keyboard accessibility)
               style={{ background: 'rgba(37,37,44,0.4)', borderColor: 'rgba(255,255,255,0.05)' }}
             >
               <div className="flex items-center justify-between mb-1.5">
