@@ -854,6 +854,7 @@ class APICostMonitor:
                     "status",
                     "next_attempt_at",
                     "retry_count",
+                    "id",
                 ]
                 if index_columns and index_columns != expected_due_index_columns:
                     connection.exec_driver_sql(
@@ -861,7 +862,7 @@ class APICostMonitor:
                     )
                 connection.exec_driver_sql(
                     "CREATE INDEX IF NOT EXISTS ix_webhook_outbox_due "
-                    "ON webhook_outbox (status, next_attempt_at, retry_count)"
+                    "ON webhook_outbox (status, next_attempt_at, retry_count, id)"
                 )
                 connection.exec_driver_sql(
                     "CREATE INDEX IF NOT EXISTS ix_webhook_outbox_stale_claims "
@@ -1622,8 +1623,8 @@ class APICostMonitor:
                     .filter(
                         WebhookOutbox.status == "processing",
                         or_(
-                            WebhookOutbox.last_attempt.is_(None),
-                            WebhookOutbox.last_attempt < cutoff,
+                            WebhookOutbox.claimed_at.is_(None),
+                            WebhookOutbox.claimed_at < cutoff,
                         ),
                     )
                     .all()
@@ -1639,10 +1640,10 @@ class APICostMonitor:
                         WebhookOutbox.id == item.id,
                         WebhookOutbox.status == "processing",
                     ]
-                    if item.last_attempt is None:
-                        filters.append(WebhookOutbox.last_attempt.is_(None))
+                    if item.claimed_at is None:
+                        filters.append(WebhookOutbox.claimed_at.is_(None))
                     else:
-                        filters.append(WebhookOutbox.last_attempt == item.last_attempt)
+                        filters.append(WebhookOutbox.claimed_at == item.claimed_at)
                     if item.claim_token is None:
                         filters.append(WebhookOutbox.claim_token.is_(None))
                     else:
