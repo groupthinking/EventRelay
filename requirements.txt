@@ -77,5 +77,3 @@ redis>=5.0.0
 # ddtrace>=2.1.0
 # opentelemetry-distro>=0.40b0
 # opentelemetry-exporter-otlp>=1.20.0
-
-aioresponses==0.7.6
