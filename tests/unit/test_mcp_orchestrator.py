@@ -735,30 +735,30 @@ class TestExecuteTaskWithServer:
 
 
 # ===========================================================================
-# MCPOrchestrator._execute_on_server (lines 346-350)
+# MCPOrchestrator._execute_on_server
 # ===========================================================================
 
 
+def _make_response(json_data, raise_for_status_exc=None):
+    """Build a mock aiohttp response usable as an async-context-manager target."""
+    resp = MagicMock(name="ClientResponse")
+    resp.raise_for_status = MagicMock(side_effect=raise_for_status_exc)
+    resp.json = AsyncMock(return_value=json_data)
+    return resp
+
+
+def _make_session(response):
+    """Build a mock aiohttp.ClientSession whose .post() yields ``response``."""
+    ctx = MagicMock(name="post_ctx")
+    ctx.__aenter__ = AsyncMock(return_value=response)
+    ctx.__aexit__ = AsyncMock(return_value=False)
+    session = MagicMock(name="ClientSession")
+    session.post = MagicMock(return_value=ctx)
+    session.close = AsyncMock()
+    return session
+
+
 class TestExecuteOnServer:
-    async def test_raises_not_implemented_error(self):
-        from youtube_extension.services.mcp.registry import MCPServerRegistry
-        from youtube_extension.services.mcp.types import MCPCapability, MCPTask
-
-        registry = MCPServerRegistry()
-        registry.register_server(
-            "srv", "Srv", "http://localhost:9000", [MCPCapability.AI_INFERENCE]
-        )
-
-        orch = MCPOrchestrator(registry=registry)
-        task = MCPTask(
-            task_id="abc",
-            task_type="test",
-            requirements=[MCPCapability.AI_INFERENCE],
-        )
-
-        with pytest.raises(NotImplementedError):
-            await orch._execute_on_server("srv", task)
-
     async def test_raises_value_error_for_unknown_server(self):
         from youtube_extension.services.mcp.types import MCPCapability, MCPTask
 
@@ -772,6 +772,111 @@ class TestExecuteOnServer:
         with pytest.raises(ValueError, match="MCP server not found"):
             await orch._execute_on_server("unknown_server", task)
 
+    async def test_successful_execution_reuses_pooled_session(self):
+        """When a pooled session exists it is reused (not closed) and a
+        JSON-RPC payload with the auth header is sent."""
+        from youtube_extension.services.mcp.registry import MCPServerRegistry
+        from youtube_extension.services.mcp.types import MCPCapability, MCPTask
+
+        registry = MCPServerRegistry()
+        registry.register_server(
+            "srv", "Srv", "http://localhost:9000", [MCPCapability.AI_INFERENCE], auth_token="secret"
+        )
+        orch = MCPOrchestrator(registry=registry)
+        session = _make_session(_make_response({"result": {"status": "success"}}))
+        orch.session = session
+        task = MCPTask(
+            task_id="abc",
+            task_type="test",
+            requirements=[MCPCapability.AI_INFERENCE],
+        )
+
+        result = await orch._execute_on_server("srv", task)
+
+        assert result == {"status": "success"}
+        # A pooled session must be reused, never closed by _execute_on_server.
+        session.close.assert_not_awaited()
+        _, kwargs = session.post.call_args
+        assert kwargs["headers"]["Authorization"] == "Bearer secret"
+        assert kwargs["json"] == {
+            "jsonrpc": "2.0",
+            "method": "test",
+            "params": task.payload,
+            "id": "abc",
+        }
+
+    async def test_successful_execution_creates_and_closes_session(self):
+        """With no pooled session a temporary one is created and closed."""
+        from youtube_extension.services.mcp.registry import MCPServerRegistry
+        from youtube_extension.services.mcp.types import MCPCapability, MCPTask
+
+        registry = MCPServerRegistry()
+        registry.register_server(
+            "srv", "Srv", "http://localhost:9000", [MCPCapability.AI_INFERENCE]
+        )
+        orch = MCPOrchestrator(registry=registry)
+        session = _make_session(_make_response({"result": {"status": "success"}}))
+        task = MCPTask(
+            task_id="abc",
+            task_type="test",
+            requirements=[MCPCapability.AI_INFERENCE],
+        )
+
+        with patch(
+            "youtube_extension.services.mcp.orchestrator.aiohttp.ClientSession",
+            return_value=session,
+        ):
+            result = await orch._execute_on_server("srv", task)
+
+        assert result == {"status": "success"}
+        session.close.assert_awaited_once()
+
+    async def test_execution_failure_http_error(self):
+        import aiohttp
+
+        from youtube_extension.services.mcp.registry import MCPServerRegistry
+        from youtube_extension.services.mcp.types import MCPCapability, MCPTask
+
+        registry = MCPServerRegistry()
+        registry.register_server(
+            "srv", "Srv", "http://localhost:9000", [MCPCapability.AI_INFERENCE]
+        )
+        orch = MCPOrchestrator(registry=registry)
+        http_error = aiohttp.ClientResponseError(
+            MagicMock(), (), status=500, message="Server error"
+        )
+        session = _make_session(_make_response(None, raise_for_status_exc=http_error))
+        orch.session = session
+        task = MCPTask(
+            task_id="abc",
+            task_type="test",
+            requirements=[MCPCapability.AI_INFERENCE],
+        )
+
+        with pytest.raises(RuntimeError, match="MCP server execution failed"):
+            await orch._execute_on_server("srv", task)
+
+    async def test_execution_failure_jsonrpc_error(self):
+        from youtube_extension.services.mcp.registry import MCPServerRegistry
+        from youtube_extension.services.mcp.types import MCPCapability, MCPTask
+
+        registry = MCPServerRegistry()
+        registry.register_server(
+            "srv", "Srv", "http://localhost:9000", [MCPCapability.AI_INFERENCE]
+        )
+        orch = MCPOrchestrator(registry=registry)
+        session = _make_session(
+            _make_response({"error": {"code": 123, "message": "Bad request"}})
+        )
+        orch.session = session
+        task = MCPTask(
+            task_id="abc",
+            task_type="test",
+            requirements=[MCPCapability.AI_INFERENCE],
+        )
+
+        with pytest.raises(RuntimeError, match="MCP server error"):
+            await orch._execute_on_server("srv", task)
 
 # ===========================================================================
 # MCPOrchestrator._check_dependent_tasks (lines 388-395)
