@@ -791,7 +791,6 @@ class TestExecuteOnServer:
         }
         assert call_kwargs["headers"] == expected_headers
 
-<<<<<<< HEAD
         # The JSON-RPC `result` member is unwrapped and returned to the caller.
         assert result == "success"
 
@@ -939,10 +938,6 @@ class TestExecuteOnServer:
         assert close_order == ["closed"]
         assert orch._session is None
         assert orch._pooled_requests == set()
-=======
-        # Verify result is passed through
-        assert result == {"result": "success"}
->>>>>>> origin/main
 
     @patch("aiohttp.ClientSession.post")
     async def test_execute_on_server_handles_http_errors(self, mock_post):
