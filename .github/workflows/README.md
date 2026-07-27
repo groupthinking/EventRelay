@@ -25,7 +25,7 @@ workflow; this README is the index.
 | Close stale issues | `stale.yml` | daily (00:00 UTC) | Mark and close stale issues and PRs |
 | Branch Cleanup | `branch-cleanup.yml` | manual; push sentinel on `claude/branch-cleanup-*` | Gated archive-then-delete of branches (dry-run by default); push `[restore-branch:<branch>]` sentinel to restore a deleted branch from its archive tag |
 | E2E Tests | `e2e-tests.yml` | push / PR to `main` | Run Vitest E2E pipeline tests against production or the PR's Vercel preview deployment and report results on the PR |
-| Autonomous Video Processing | `autonomous-video-processing.yml` | manual | Batch-process YouTube videos by category (matrix) |
+| Autonomous Video Processing | `autonomous-video-processing.yml` | manual; `workflow_call` | Batch-process YouTube videos by category (matrix) through the ATLAS→PRISM→FORGE→SENTINEL stage pipeline, emitting per-video correlation-ID manifests |
 | Real Video Processing (Cloud) | `real-processing.yml` | manual | Process a single video: transcript and/or AI analysis |
 | API-cost PostgreSQL | `api-cost-postgres.yml` | push / PR when substrate changes; manual | Exercise fresh, upgrade-from-002, and round-trip migrations plus runtime-role integration tests on PostgreSQL 16 |
 | Deploy to Google Cloud Run | `deploy-cloud-run.yml` | manual | Run migrations, deploy the bounded delivery-disabled worker, then promote a tested API candidate |
@@ -72,6 +72,53 @@ Generates pytest coverage and uploads lcov to Qlty.
 - Coverage HTML and lcov are stored as artifacts for 30 days.
 - The test step is authoritative (`--cov-fail-under=90`, no `continue-on-error`,
   no `|| true`) so failures cannot report green.
+
+### Autonomous Video Processing — `autonomous-video-processing.yml`
+
+The batch video pipeline. It is the repository's first reusable workflow
+(`workflow_call`), so it also establishes the convention: `workflow_dispatch`
+and `workflow_call` declare the *same* input names and every step reads them
+through the `inputs` context (never `github.event.inputs`), so a single job body
+serves both triggers.
+
+All logic lives in versioned, unit-tested scripts rather than inline heredocs:
+
+| Script | Job | Responsibility |
+|--------|-----|----------------|
+| `scripts/ci/autonomous_video_plan.py` | `prepare` | Build the category matrix; fail closed if the batch exceeds the video or model-call cap |
+| `scripts/ci/autonomous_video_processing.py` | `process` | Discover videos, run the stage pipeline, write the manifest tree |
+| `scripts/ci/autonomous_video_summary.py` | `summary` | Aggregate per-category manifests into the run status and workflow outputs |
+
+**Modes.** `pipeline_mode: discovery` (default) discovers candidates and writes
+manifests without invoking any generation API — this is the dry-run path for the
+whole pipeline. `pipeline_mode: full` executes every stage and fails closed while
+the Phase 2 agents are unimplemented.
+
+**Stage roles.** ATLAS, PRISM, FORGE and SENTINEL are role labels mapped onto the
+existing `PipelineOrchestrator` stages (`video-ingest`, `research-grounding`,
+`code-gen`, `quality-gate`) — see `STAGES` in
+`scripts/ci/autonomous_video_processing.py`. They are deliberately *not* a second
+agent system.
+
+**Evidence.** Each run writes a manifest tree retained for 30 days:
+
+```
+pipeline_output/<category>/run.json
+pipeline_output/<category>/videos/<video_id>/manifest.json
+pipeline_output/<category>/videos/<video_id>/stages/{atlas,prism,forge,sentinel}.json
+```
+
+Every video carries a deterministic correlation ID that is repeated in each stage
+record, so any artifact can be linked back to its originating run.
+
+**Guardrails.**
+
+- `max_videos_per_run` and `max_model_calls` are enforced in `prepare`, before any
+  external call; an over-budget batch never starts.
+- Discovery returning zero videos is a failure, not an empty success.
+- A video is `delivered` only when every stage — including the terminal SENTINEL
+  QA stage — reports success. The deliverables artifact upload is conditioned on
+  that status, so a blocked run publishes evidence but never deliverables.
 
 ### Deploy to Google Cloud Run — `deploy-cloud-run.yml`
 
