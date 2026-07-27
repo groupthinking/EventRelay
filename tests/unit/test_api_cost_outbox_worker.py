@@ -90,7 +90,7 @@ def test_additive_schema_upgrade_preserves_rows_and_adds_due_index(tmp_path):
 
     assert "next_attempt_at" in columns
     assert "ix_webhook_outbox_due" in indexes
-    assert due_index_columns == ["status", "next_attempt_at", "retry_count"]
+    assert due_index_columns == ["status", "next_attempt_at", "retry_count", "id"]
     assert _get_item(monitor, "2026-07-17").payload == "keep me"
 
 
@@ -329,11 +329,11 @@ async def test_worker_automatically_retries_due_delivery(tmp_path, monkeypatch):
     assert _get_item(monitor, "2026-07-21").retry_count == 2
 
 
-@pytest.mark.parametrize("last_attempt", [None, datetime(2020, 1, 1)])
+@pytest.mark.parametrize("claimed_at", [None, datetime(2020, 1, 1)])
 async def test_stale_processing_recovery_handles_null_and_old_timestamps(
-    tmp_path, last_attempt
+    tmp_path, claimed_at
 ):
-    suffix = "null" if last_attempt is None else "old"
+    suffix = "null" if claimed_at is None else "old"
     monitor = APICostMonitor(db_path=str(tmp_path / f"stale-{suffix}.db"))
     assert monitor._claim_alert("2026-07-22", "threshold", 8.5)
     session = monitor.Session()
@@ -341,7 +341,7 @@ async def test_stale_processing_recovery_handles_null_and_old_timestamps(
         item = session.query(WebhookOutbox).one()
         item.status = "processing"
         item.retry_count = 1
-        item.last_attempt = last_attempt
+        item.claimed_at = claimed_at
         session.commit()
     finally:
         session.close()
@@ -362,7 +362,7 @@ async def test_stale_processing_at_max_attempts_is_terminal(tmp_path):
         item = session.query(WebhookOutbox).one()
         item.status = "processing"
         item.retry_count = 5
-        item.last_attempt = datetime(2020, 1, 1)
+        item.claimed_at = datetime(2020, 1, 1)
         session.commit()
     finally:
         session.close()
