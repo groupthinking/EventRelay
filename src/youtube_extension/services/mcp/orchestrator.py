@@ -14,8 +14,6 @@ from collections import deque
 from datetime import datetime
 from typing import Any, Optional
 
-import aiohttp
-
 from .registry import MCPServerRegistry, get_registry
 from .types import MCPCapability, MCPTask, MCPTaskStatus
 
@@ -42,8 +40,6 @@ class MCPOrchestrator:
             registry: Optional MCP server registry (uses global if not provided)
         """
         self.registry = registry or get_registry()
-
-        self.session: Optional[aiohttp.ClientSession] = None
 
         # Task management
         self.tasks: dict[str, MCPTask] = {}
@@ -342,61 +338,24 @@ class MCPOrchestrator:
     ) -> dict[str, Any]:
         """
         Execute task on a specific server via MCP/JSON-RPC.
+
+        NOTE: Real MCP server communication is not yet implemented.
+        This method raises NotImplementedError to make it clear that the
+        orchestrator must not be used in production until this path is wired up.
         """
         config = self.registry.get_server(server_id)
         if not config:
             raise ValueError(f"Cannot execute task {task.task_id}: MCP server not found: {server_id}")
 
-        headers = {"Content-Type": "application/json"}
-        if config.auth_token:
-            headers["Authorization"] = f"Bearer {config.auth_token}"
-
-        payload = {
-            "jsonrpc": "2.0",
-            "method": task.task_type,
-            "params": task.payload,
-            "id": task.task_id,
-        }
-
-        try:
-            session = self.session if self.session else aiohttp.ClientSession()
-            close_session = self.session is None
-
-            try:
-                async with session.post(
-                    config.endpoint,
-                    json=payload,
-                    headers=headers,
-                    timeout=task.timeout
-                ) as response:
-                    response.raise_for_status()
-                    data = await response.json()
-
-                    if "error" in data:
-                        raise RuntimeError(f"MCP server error: {data['error']}")
-
-                    return data.get("result", data)
-            finally:
-                if close_session:
-                    await session.close()
-
-        except aiohttp.ClientError as e:
-
-            logger.error(
-                "MCP server execution failed: server_id=%s, task_type=%s, error=%s",
-                server_id,
-                task.task_type,
-                str(e)
-            )
-            raise RuntimeError(f"MCP server execution failed: {e}") from e
-        except Exception as e:
-            logger.error(
-                "Unexpected error during MCP server execution: server_id=%s, task_type=%s, error=%s",
-                server_id,
-                task.task_type,
-                str(e)
-            )
-            raise
+        logger.error(
+            "MCP server execution is not implemented: server_id=%s, task_type=%s",
+            server_id,
+            task.task_type,
+        )
+        raise NotImplementedError(
+            "MCPOrchestrator._execute_on_server is not implemented. "
+            "Wire up real MCP server communication before using this in production."
+        )
 
     async def _check_dependencies(self, task_id: str) -> bool:
         """
@@ -451,13 +410,9 @@ class MCPOrchestrator:
             logger.warning("Orchestration already active")
             return
 
-        if self.session is None:
-            self.session = aiohttp.ClientSession()
-
         self.orchestration_active = True
         self.orchestration_task = asyncio.create_task(self._orchestration_loop())
         logger.info("MCP Orchestration started")
-
 
     async def stop_orchestration(self) -> None:
         """Stop the orchestration loop and cancel all spawned tasks"""
@@ -485,10 +440,6 @@ class MCPOrchestrator:
                 await self.orchestration_task
             except asyncio.CancelledError:
                 pass
-
-        if self.session:
-            await self.session.close()
-            self.session = None
 
         logger.info("MCP Orchestration stopped")
 
