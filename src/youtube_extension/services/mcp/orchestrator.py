@@ -53,11 +53,14 @@ class MCPOrchestrator:
         self.orchestration_active = False
         self.orchestration_task: Optional[asyncio.Task] = None
         self._session: Optional[aiohttp.ClientSession] = None
+<<<<<<< HEAD
         # In-flight requests currently borrowing the pooled session. Drained by
         # stop_orchestration() before the session is closed so a direct
         # execute_task() call (which is not tracked in spawned_tasks) cannot have
         # its live HTTP request aborted by shutdown.
         self._pooled_requests: set[asyncio.Task] = set()
+=======
+>>>>>>> origin/main
 
         # Track spawned execution tasks by task_id for cancellation support
         self.spawned_tasks: dict[str, asyncio.Task] = {}
@@ -346,10 +349,13 @@ class MCPOrchestrator:
     ) -> Any:
         """
         Execute task on a specific server via MCP/JSON-RPC.
+<<<<<<< HEAD
 
         Returns the JSON-RPC ``result`` member when the server responds with a
         compliant envelope, or the raw response body otherwise. Raises on a
         JSON-RPC ``error`` envelope or an HTTP-level failure.
+=======
+>>>>>>> origin/main
         """
         config = self.registry.get_server(server_id)
         if not config:
@@ -368,7 +374,16 @@ class MCPOrchestrator:
 
         timeout = aiohttp.ClientTimeout(total=config.timeout)
 
+<<<<<<< HEAD
         async def _post(session: aiohttp.ClientSession) -> Any:
+=======
+        session = self._session
+        own_session = session is None
+        if own_session:
+            session = aiohttp.ClientSession()
+
+        try:
+>>>>>>> origin/main
             async with session.post(
                 config.endpoint,
                 json=payload,
@@ -376,6 +391,7 @@ class MCPOrchestrator:
                 timeout=timeout,
             ) as response:
                 response.raise_for_status()
+<<<<<<< HEAD
                 body = await response.json()
 
                 # JSON-RPC 2.0 servers report application-level failures with an
@@ -418,6 +434,9 @@ class MCPOrchestrator:
                     self._pooled_requests.discard(request)
             async with aiohttp.ClientSession() as session:
                 return await _post(session)
+=======
+                return await response.json()
+>>>>>>> origin/main
         except Exception as e:
             logger.error(
                 "Failed to execute task %s on server %s: %s",
@@ -426,6 +445,12 @@ class MCPOrchestrator:
                 e,
             )
             raise
+<<<<<<< HEAD
+=======
+        finally:
+            if own_session:
+                await session.close()
+>>>>>>> origin/main
 
     async def _check_dependencies(self, task_id: str) -> bool:
         """
@@ -513,6 +538,7 @@ class MCPOrchestrator:
             except asyncio.CancelledError:
                 pass
 
+<<<<<<< HEAD
         # Drain any requests still borrowing the pooled session (e.g. a direct
         # execute_task() call in flight) before closing it, so shutdown never
         # aborts a live HTTP request. orchestration_active is already False, so no
@@ -521,6 +547,8 @@ class MCPOrchestrator:
             await asyncio.gather(*self._pooled_requests, return_exceptions=True)
             self._pooled_requests.clear()
 
+=======
+>>>>>>> origin/main
         if self._session:
             await self._session.close()
             self._session = None
