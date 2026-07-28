@@ -1,0 +1,6 @@
+UTC 2026-07-14T20:17:18Z
+git 64968c272
+base https://uvai.io
+webhook_id=we_1TtCYrPPnkyjEyFRKrZcElIB
+price_monthly=price_1TtCZXPPnkyjEyFR8dYmDo52
+price_annual=price_1TtCZYPPnkyjEyFRLMLPjmzE
