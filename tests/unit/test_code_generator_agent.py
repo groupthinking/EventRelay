@@ -112,3 +112,20 @@ class TestExecuteReturnsValidationFields:
         agent = CodeGeneratorAgent()
         result = asyncio.run(agent.execute({"intent": "api endpoint", "context": {}}))
         assert result["success"] is True
+
+    def test_api_endpoint_hides_internal_exception_details(self) -> None:
+        agent = CodeGeneratorAgent()
+        result = asyncio.run(agent.execute({"intent": "api endpoint", "context": {}}))
+        code = result["generated_code"]
+
+        assert 'detail="Internal server error"' in code
+        assert "status_code=500, detail=str(" not in code
+        assert "status_code=500,\n            detail=str(" not in code
+
+    def test_api_endpoint_logs_internal_exception_server_side(self) -> None:
+        agent = CodeGeneratorAgent()
+        result = asyncio.run(agent.execute({"intent": "api endpoint", "context": {}}))
+        code = result["generated_code"]
+
+        assert "logger = logging.getLogger(__name__)" in code
+        assert 'logger.exception("Generated endpoint failed")' in code

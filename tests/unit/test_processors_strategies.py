@@ -34,6 +34,13 @@ _VALID_URL = "https://www.youtube.com/watch?v=auJzb1D-fag"
 _VALID_ID = "auJzb1D-fag"
 
 
+@pytest.fixture(autouse=True)
+def _disable_external_strategy_clients(monkeypatch):
+    """Pure strategy tests must not initialize Google clients or require ADC."""
+    monkeypatch.setattr(_mod, "HAS_VIDEO_DEPS", False)
+    monkeypatch.setattr(_mod, "HAS_AI_DEPS", False)
+
+
 # ===========================================================================
 # cache_get / cache_set
 # ===========================================================================

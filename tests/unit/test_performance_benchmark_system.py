@@ -1011,6 +1011,37 @@ class TestConvenienceFunctions:
 class TestRunComprehensiveBenchmark:
     """Cover the main orchestration method."""
 
+    @pytest.fixture(autouse=True)
+    def _isolate_component_benchmarks(self, monkeypatch):
+        """Keep orchestration tests deterministic and provider-free."""
+
+        summaries = {
+            "_benchmark_video_processing": {"avg_processing_time_ms": 10_000},
+            "_benchmark_database_queries": {
+                "avg_query_time_ms": 50,
+                "sub_100ms_percent": 100,
+            },
+            "_benchmark_frontend_performance": {"avg_load_time_ms": 1_000},
+            "_benchmark_memory_efficiency": {"max_memory_usage_mb": 512},
+            "_benchmark_cache_performance": {"cache_hit_rate_percent": 90},
+        }
+
+        def _safe_component(summary):
+            async def _run(_system, _iterations):
+                return {
+                    "success": True,
+                    "performance_summary": {"target_met": True, **summary},
+                }
+
+            return _run
+
+        for method_name, summary in summaries.items():
+            monkeypatch.setattr(
+                PerformanceBenchmarkSystem,
+                method_name,
+                _safe_component(summary),
+            )
+
     def _make_psutil_fake(self):
         import types
         return types.SimpleNamespace(
@@ -1116,6 +1147,22 @@ class TestRunComprehensiveBenchmark:
 
 class TestBenchmarkVideoProcessing:
 
+    @pytest.fixture(autouse=True)
+    def _provider_free_processor(self, monkeypatch):
+        import youtube_extension.backend.services.performance_benchmark_system as _mod
+
+        class _FailingProcessor:
+            def __init__(self, strategy="enhanced"):
+                self.strategy = strategy
+
+            async def process_video(self, _url, options=None):
+                raise RuntimeError("provider intentionally unavailable in unit tests")
+
+            async def process_batch(self, _urls, options=None):
+                raise RuntimeError("provider intentionally unavailable in unit tests")
+
+        monkeypatch.setattr(_mod, "VideoProcessor", _FailingProcessor)
+
     def _make_psutil_fake(self):
         import types
         return types.SimpleNamespace(
@@ -1128,7 +1175,7 @@ class TestBenchmarkVideoProcessing:
         import types
         import youtube_extension.backend.services.performance_benchmark_system as _mod
         monkeypatch.setattr(_mod, "psutil", self._make_psutil_fake())
-        # VideoProcessor.process_video raises RuntimeError (the fallback stub)
+        # The class fixture supplies a deterministic provider-free failure.
         system = PerformanceBenchmarkSystem()
         result = await system._benchmark_video_processing(iterations=1)
         assert isinstance(result, dict)

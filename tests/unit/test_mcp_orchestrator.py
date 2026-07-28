@@ -740,9 +740,77 @@ class TestExecuteTaskWithServer:
 
 
 class TestExecuteOnServer:
-    async def test_raises_not_implemented_error(self):
+    @patch("aiohttp.ClientSession.post")
+    async def test_execute_on_server_success(self, mock_post):
         from youtube_extension.services.mcp.registry import MCPServerRegistry
         from youtube_extension.services.mcp.types import MCPCapability, MCPTask
+
+        # Setup mock response
+        mock_response = MagicMock()
+        mock_response.json = AsyncMock(return_value={"result": "success"})
+        mock_response.raise_for_status = MagicMock()
+
+        aenter_mock = AsyncMock()
+        aenter_mock.return_value = mock_response
+        mock_post.return_value.__aenter__ = aenter_mock
+
+        registry = MCPServerRegistry()
+        server_config = registry.register_server(
+            "srv", "Srv", "http://localhost:9000", [MCPCapability.AI_INFERENCE]
+        )
+        server_config.auth_token = "test-token"
+
+        orch = MCPOrchestrator(registry=registry)
+        task = MCPTask(
+            task_id="abc",
+            task_type="test_method",
+            payload={"key": "value"},
+            requirements=[MCPCapability.AI_INFERENCE],
+        )
+
+        result = await orch._execute_on_server("srv", task)
+
+        # Assert post was called correctly
+        mock_post.assert_called_once()
+        call_args, call_kwargs = mock_post.call_args
+        assert call_args[0] == "http://localhost:9000"
+
+        # Verify JSON payload
+        expected_payload = {
+            "jsonrpc": "2.0",
+            "method": "test_method",
+            "params": {"key": "value"},
+            "id": "abc",
+        }
+        assert call_kwargs["json"] == expected_payload
+
+        # Verify headers
+        expected_headers = {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer test-token",
+        }
+        assert call_kwargs["headers"] == expected_headers
+
+        # Verify result is passed through
+        assert result == {"result": "success"}
+
+    @patch("aiohttp.ClientSession.post")
+    async def test_execute_on_server_handles_http_errors(self, mock_post):
+        from youtube_extension.services.mcp.registry import MCPServerRegistry
+        from youtube_extension.services.mcp.types import MCPCapability, MCPTask
+        import aiohttp
+
+        # Setup mock response to raise an exception when raise_for_status is called
+        mock_response = MagicMock()
+        mock_response.raise_for_status.side_effect = aiohttp.ClientResponseError(
+            request_info=MagicMock(),
+            history=()
+        )
+        # We need mock_post.return_value.__aenter__ to be an AsyncMock, but
+        # __aenter__ returns `mock_response` which is now a MagicMock so raise_for_status is sync
+        aenter_mock = AsyncMock()
+        aenter_mock.return_value = mock_response
+        mock_post.return_value.__aenter__ = aenter_mock
 
         registry = MCPServerRegistry()
         registry.register_server(
@@ -756,7 +824,7 @@ class TestExecuteOnServer:
             requirements=[MCPCapability.AI_INFERENCE],
         )
 
-        with pytest.raises(NotImplementedError):
+        with pytest.raises(aiohttp.ClientResponseError):
             await orch._execute_on_server("srv", task)
 
     async def test_raises_value_error_for_unknown_server(self):
