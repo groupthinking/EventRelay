@@ -23,5 +23,5 @@
     ],
     "python.testing.pytestEnabled": false,
     "python.testing.unittestEnabled": true,
-    "notebook.defaultFormatter": "google.antigravity"
+    "notebook.defaultFormatter": "ms-python.black-formatter"
 }
