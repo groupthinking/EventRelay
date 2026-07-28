@@ -1,6 +1,6 @@
 # UVAI Vercel Production Runbook
 
-Last reviewed: 2026-06-17 (infrastructure updates: Vercel envs, Cloud Run min-instances, Sentry)
+Last reviewed: 2026-07-28 (Google OAuth production verification: `org_internal` blocker diagnosis and remediation gates)
 <!-- Previous: 2026-06-12 — Vercel Functions remediation verification matrix (16-agent network; rate-limit-middleware, waitUntil, middleware.ts, @vercel/functions package). -->
 
 This runbook tracks the Vercel launch gates for the public UVAI web app at
@@ -102,6 +102,68 @@ Remaining dashboard items (optional / follow-up):
 - Decide whether to migrate authoritative DNS to Vercel DNS. `uvai.io` works on
   Vercel now, but DNS migration should remain a separate zero-downtime plan.
 - Enable Observability Plus if available on the active plan.
+
+## Google OAuth Production Verification (issue GRV-88 / PR #903)
+
+Production sign-in uses NextAuth's Google provider (`apps/web/src/lib/auth.ts`)
+with callback `https://uvai.io/api/auth/callback/google`. The gates below are
+dashboard-only controls in Google Cloud Console and Vercel — they cannot be
+fixed or verified from repository code.
+
+### Active blocker: `Error 403: org_internal`
+
+Observed 2026-07-28: signing in as a consumer account (`@gmail.com`) at
+`https://uvai.io/login` fails on Google's page with `Error 403: org_internal`
+("uvai can only be used within its organization").
+
+**Root cause.** The Google Cloud project that owns the production OAuth client
+(`688578214833-mdp7fcokinp3g3im06178em290gkkcbt.apps.googleusercontent.com`)
+has its OAuth consent screen **Audience / User type set to "Internal"**. Google
+then rejects any account outside the owning Google Workspace organization
+before our app is ever reached. Nothing in this repository (env vars, NextAuth
+config, redirect URIs) can lift this restriction.
+
+**Remediation (protected, human-owned — requires GCP project owner/editor):**
+
+1. Google Cloud Console → APIs & Services → OAuth consent screen (Google Auth
+   Platform → Audience) for the project owning the client above.
+2. Change **User type** from `Internal` to `External`.
+3. Either **Publish** the app to Production (consumer accounts can sign in;
+   Google may show an "unverified app" screen until verification), or keep it
+   in **Testing** and add the intended accounts (e.g. `garveyht@gmail.com`) as
+   test users (100-user cap).
+4. Re-test a real sign-in at `https://uvai.io/login` and attach the result to
+   issue GRV-88. Propagation is usually immediate but can take a few minutes.
+
+**Related app-side gate.** If `AUTH_ALLOWED_EMAIL_DOMAIN` is set in Vercel
+production, sign-in is additionally restricted to that email domain *after*
+Google succeeds (denial surfaces as NextAuth `AccessDenied`, not a Google 403).
+For a consumer/external audience it must be unset — or set to a domain that
+matches the intended users.
+
+### Verified from outside (2026-07-28, no credentials used)
+
+- `https://uvai.io/login` renders and "Continue with Google" redirects to
+  Google's authorize endpoint successfully.
+- The production request sends `redirect_uri=https://uvai.io/api/auth/callback/google`
+  (exact canonical URI) with `scope=openid email profile`, PKCE (S256), and
+  `state` — no `redirect_uri_mismatch` and no `invalid_client` at this step.
+- A full sign-in/callback could not be completed non-interactively (Google
+  blocks automated browsers), so per-account `org_internal` behavior and the
+  end-to-end callback remain human verification steps.
+
+### OAuth error fingerprints to watch
+
+- `Error 403: org_internal` — consent screen audience is Internal (see above).
+- `Error 400: redirect_uri_mismatch` — authorized redirect URI in the Google
+  client does not exactly match `https://uvai.io/api/auth/callback/google`.
+- `OAUTH_CALLBACK_ERROR` / "State cookie was missing" in Vercel logs — callback
+  reached a different host/deployment than the one that started sign-in (e.g.
+  preview alias mismatch) or cookies were dropped; verify `NEXTAUTH_URL` is
+  `https://uvai.io` and the production alias serves the same deployment.
+- `[auth] Google OAuth client id/secret missing` in Vercel logs — the
+  `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` (or legacy `GOOGLE_OAUTH_*`)
+  variables are absent for the deployed environment.
 
 ## Pre-Launch Smoke Test
 
