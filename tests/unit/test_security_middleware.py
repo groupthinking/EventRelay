@@ -73,5 +73,23 @@ def test_custom_csp_directives():
     assert response.headers["Content-Security-Policy"] == custom_csp
 
 
+def test_create_security_headers_middleware():
+    """Test factory for security headers middleware"""
+    from src.youtube_extension.backend.middleware.security_headers import create_security_headers_middleware
+    
+    middleware_cls = create_security_headers_middleware(enable_hsts=True)
+    app = FastAPI()
+    app.add_middleware(middleware_cls)
+    
+    @app.get("/test")
+    async def test_endpoint():
+        return {"message": "test"}
+        
+    client = TestClient(app, base_url="https://testserver")
+    response = client.get("/test")
+    assert "Strict-Transport-Security" in response.headers
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+

@@ -346,3 +346,133 @@ def test_sentry_smoke_endpoint_gated(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("ALLOW_SENTRY_SMOKE", "1")
     response = client.post("/test-sentry")
     assert response.status_code == 500
+
+
+def test_job_store_list_recent_and_corrupt_json(tmp_path):
+    from youtube_extension.services.pipeline_job_store import PipelineJobStore, get_job_store
+
+    store = PipelineJobStore(tmp_path)
+    store.save("job1", {"job_id": "job1", "data": "a"})
+    store.save("job2", {"job_id": "job2", "data": "b"})
+    
+    # Write a corrupt json file
+    corrupt_file = tmp_path / "corrupt_job.json"
+    corrupt_file.write_text("invalid{json}", encoding="utf-8")
+    
+    recent = store.list_recent(limit=10)
+    assert len(recent) == 2
+    assert {r["job_id"] for r in recent} == {"job1", "job2"}
+
+    # Test load of corrupt JSON
+    assert store.load("corrupt_job") is None
+
+    # Test get_job_store singleton
+    js1 = get_job_store()
+    js2 = get_job_store()
+    assert js1 is js2
+
+
+def test_audit_store_list_runs_and_singleton(tmp_path):
+    from youtube_extension.services.pipeline_audit_store import PipelineAuditStore, get_audit_store
+
+    store = PipelineAuditStore(tmp_path)
+    store.append("run1", agent_id="agent1", action="action1", success=True, duration_ms=10.0)
+    store.append("run2", agent_id="agent2", action="action2", success=False, duration_ms=20.0)
+
+    runs = store.list_runs(limit=10)
+    assert len(runs) == 2
+    assert set(runs) == {"run1", "run2"}
+
+    # Test non-existent run
+    assert store.get_run("non_existent_run") == []
+
+    # Test get_audit_store singleton
+    as1 = get_audit_store()
+    as2 = get_audit_store()
+    assert as1 is as2
+
+
+def test_job_store_naive_created_at_and_unlink_oserror(tmp_path, monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    from pathlib import Path
+    from youtube_extension.services.pipeline_job_store import PipelineJobStore
+
+    store = PipelineJobStore(tmp_path)
+    
+    # Save a job with a naive created_at datetime string
+    naive_ts = (datetime.now() - timedelta(hours=5)).replace(tzinfo=None).isoformat()
+    store.save("naive_job", {"job_id": "naive_job", "created_at": naive_ts})
+    
+    # Save another job to test unlink OSError
+    store.save("unlink_job", {"job_id": "unlink_job", "created_at": naive_ts})
+    
+    # Mock Path.unlink to raise OSError for unlink_job
+    original_unlink = Path.unlink
+    def mock_unlink(self, *args, **kwargs):
+        if "unlink_job" in self.name:
+            raise OSError("permission denied")
+        return original_unlink(self, *args, **kwargs)
+    
+    monkeypatch.setattr(Path, "unlink", mock_unlink)
+    
+    cutoff = datetime.now(timezone.utc)
+    removed = store.expire_before(cutoff)
+    
+    # naive_job should be removed, unlink_job unlink should raise OSError and log warning
+    assert removed == 1
+    assert store.load("naive_job") is None
+    assert store.load("unlink_job") is not None
+
+
+def test_mcp_init():
+    import youtube_extension.services.mcp as mcp
+    assert mcp.MCPOrchestrator is not None
+    assert mcp.get_orchestrator is not None
+
+
+def test_namespace_packages_init():
+    import youtube_extension.core.config as core_config
+    import youtube_extension.core.mcp as core_mcp
+    assert core_config is not None
+    assert core_mcp is not None
+
+
+@pytest.mark.asyncio
+async def test_pubsub_service():
+    from unittest.mock import MagicMock, patch
+    from youtube_extension.backend.services.pubsub_service import PubSubService
+    
+    mock_publisher_client = MagicMock()
+    mock_publisher_client.topic_path.return_value = "projects/p/topics/t"
+    
+    # Mock return value of publish
+    mock_future = MagicMock()
+    mock_future.result.return_value = "msg-123"
+    mock_publisher_client.publish.return_value = mock_future
+    
+    with patch("youtube_extension.backend.services.pubsub_service.pubsub_v1.PublisherClient", return_value=mock_publisher_client):
+        # 1. Success path
+        service = PubSubService("proj", "topic")
+        msg_id = await service.publish_message({"k": "v"}, {"attr": "val"})
+        assert msg_id == "msg-123"
+        mock_publisher_client.publish.assert_called_once_with("projects/p/topics/t", b'{"k": "v"}', attr="val")
+        
+        # 2. Publish failure exception path
+        mock_publisher_client.publish.side_effect = RuntimeError("publish fail")
+        msg_id_fail = await service.publish_message({"k": "v"})
+        assert msg_id_fail is None
+        
+        # 3. Not initialized path
+        service_uninit = PubSubService("", "")
+        assert await service_uninit.publish_message({"k": "v"}) is None
+
+    # 4. Constructor exception path
+    with patch("youtube_extension.backend.services.pubsub_service.pubsub_v1.PublisherClient", side_effect=RuntimeError("init fail")):
+        service_init_fail = PubSubService("proj", "topic")
+        assert service_init_fail._publisher is None
+
+
+
+
+
+
