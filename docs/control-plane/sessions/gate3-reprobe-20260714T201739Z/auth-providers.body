@@ -1,1 +1,0 @@
-{"google":{"id":"google","name":"Google","type":"oauth","signinUrl":"https://uvai.io/api/auth/signin/google","callbackUrl":"https://uvai.io/api/auth/callback/google"}}

@@ -145,27 +145,6 @@ try:
 except Exception:
     pass
 
-# Enable dev-mode auth bypass for tests by default.
-# We set EVENTRELAY_API_KEY to empty string to override any .env file setting,
-# unless it was explicitly configured in the shell environment.
-# Since main.py loads .env with override=False, setting EVENTRELAY_API_KEY to ""
-# in os.environ before main.py imports will prevent it from loading the real key.
-# We also wrap dotenv.load_dotenv in case any module calls it with override=True later.
-if "EVENTRELAY_API_KEY" not in os.environ:
-    os.environ["EVENTRELAY_API_KEY"] = ""
-    os.environ["ALLOW_UNAUTHENTICATED"] = "1"
-
-    try:
-        import dotenv
-        _real_load_dotenv = dotenv.load_dotenv
-
-        def _wrapped_load_dotenv(*args, **kwargs):
-            res = _real_load_dotenv(*args, **kwargs)
-            os.environ["EVENTRELAY_API_KEY"] = ""
-            os.environ["ALLOW_UNAUTHENTICATED"] = "1"
-            return res
-
-        dotenv.load_dotenv = _wrapped_load_dotenv
-    except ImportError:
-        pass
-
+# Enable dev-mode auth bypass unless the environment already configures auth.
+if not os.getenv("EVENTRELAY_API_KEY"):
+    os.environ.setdefault("ALLOW_UNAUTHENTICATED", "1")

@@ -16,7 +16,13 @@ import tempfile
 from pathlib import Path
 from datetime import datetime
 
-from youtube_extension.services.agents.agent_gap_analyzer import (
+# Import the modules to test
+import sys
+project_root = Path(__file__).parent.parent.parent  # tests/unit -> tests -> project root
+agent_module_path = project_root / "src" / "youtube_extension" / "services" / "agents"
+sys.path.insert(0, str(agent_module_path))
+
+from agent_gap_analyzer import (
     AgentGapAnalyzer,
     AgentGap,
     AgentRecommendation

@@ -12,19 +12,16 @@ Components:
 - validation: Configuration validation
 """
 
-try:  # pragma: no cover
-    from .logging_config import (
-        LogContext,
-        LogDestination,
-        LogFormat,
-        LogLevel,
-        UVAILogger,
-        configure_from_environment,
-        get_logger,
-        setup_logging,
-    )
-except ImportError:  # pragma: no cover
-    pass
+from .logging_config import (
+    LogContext,
+    LogDestination,
+    LogFormat,
+    LogLevel,
+    UVAILogger,
+    configure_from_environment,
+    get_logger,
+    setup_logging,
+)
 
 __all__ = [
     "setup_logging",

@@ -113,11 +113,7 @@ workflow_results/
 .poc-venv/
 .poc-runtime.db
 .venv_prod_verify/
-# Shared editor config is versioned by exception; everything else in
-# .vscode/ (mcp.json, IDE-fork state) stays local.
-.vscode/*
-!.vscode/settings.json
-!.vscode/extensions.json
+.vscode/
 .webassets-cache
 .yarn/
 Desktop.ini

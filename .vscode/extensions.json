@@ -1,6 +1,5 @@
 {
     "recommendations": [
-        "googlecloudtools.firebase-dataconnect-vscode",
-        "ms-python.black-formatter"
+        "googlecloudtools.firebase-dataconnect-vscode"
     ]
 }
