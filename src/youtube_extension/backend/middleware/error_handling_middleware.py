@@ -439,7 +439,7 @@ class ErrorHandlingMiddleware(BaseHTTPMiddleware):
                 headers=headers
             )
 
-        except Exception as handling_error:  # pragma: no cover
+        except Exception as handling_error:
             # Fallback error handling
             self.logger.critical(f"Error in error handler: {handling_error}", exc_info=True)
 

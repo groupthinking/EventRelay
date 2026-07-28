@@ -1,1 +1,0 @@
-session mode=subscription status=open amount_total=1900 prices=['price_1TtCZXPPnkyjEyFR8dYmDo52']

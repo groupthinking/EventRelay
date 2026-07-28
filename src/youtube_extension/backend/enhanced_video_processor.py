@@ -296,8 +296,7 @@ class EnhancedVideoProcessor:
                 proxy_url = get_proxy_url()
                 if proxy_url:
                     ytdlp_cmd.extend(["--proxy", proxy_url])
-                canonical_video_url = f"https://www.youtube.com/watch?v={video_id}"
-                ytdlp_cmd.extend(["-o", audio_path, "--", canonical_video_url])
+                ytdlp_cmd.extend(["-o", audio_path, video_url])
                 subprocess.run(
                     ytdlp_cmd, check=True, capture_output=True, timeout=60
                 )
