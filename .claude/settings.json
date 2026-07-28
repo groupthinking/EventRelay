@@ -1,0 +1,5 @@
+{
+  "enabledPlugins": {
+    "desktop-commander@claude-plugins-official": true
+  }
+}

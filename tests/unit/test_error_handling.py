@@ -499,3 +499,36 @@ class TestErrorHandlingMiddlewareHandleException:
         context = {"request_id": "test-timeout"}
         response = await middleware.handle_timeout_error(req, context)
         assert response.status_code == 504
+<<<<<<< HEAD
+=======
+
+
+def test_classify_validation_error():
+    from fastapi.exceptions import RequestValidationError
+    from youtube_extension.backend.middleware.error_handling_middleware import ErrorClassifier
+    exc = RequestValidationError([{"loc": ("body", "video_id"), "msg": "field required", "type": "value_error.missing"}])
+    res = ErrorClassifier.classify_exception(exc)
+    assert res.status_code == 422
+    assert "body -> video_id" in res.message
+
+
+def test_validation_exception_handler_endpoint():
+    from fastapi.exceptions import RequestValidationError
+    from youtube_extension.backend.middleware.error_handling_middleware import setup_error_handlers
+    from fastapi.testclient import TestClient
+    from fastapi import FastAPI
+
+    app = FastAPI()
+    setup_error_handlers(app)
+
+    @app.get("/trigger-validation")
+    async def trigger():
+        raise RequestValidationError([{"loc": ("query", "q"), "msg": "invalid query", "type": "value_error"}])
+
+    client = TestClient(app)
+    response = client.get("/trigger-validation")
+    assert response.status_code == 422
+    assert response.json()["error"]["message"] == "Please check your input and try again."
+
+
+>>>>>>> origin/main

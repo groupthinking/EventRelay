@@ -75,10 +75,32 @@ export default function AgentFlowVisualizer({
   const viewBox = useMemo(() => {
     const allPos = Object.values(positions);
     if (allPos.length === 0) return '0 0 900 700';
+<<<<<<< HEAD
     const minX = Math.min(...allPos.map((p) => p.x)) - 40;
     const minY = Math.min(...allPos.map((p) => p.y)) - 40;
     const maxX = Math.max(...allPos.map((p) => p.x + p.width)) + 40;
     const maxY = Math.max(...allPos.map((p) => p.y + p.height)) + 40;
+=======
+
+    // ⚡ Bolt: Replace multiple O(N) map+spread passes with a single O(N) loop.
+    // Expected impact: Removes 4 intermediate array allocations and prevents Maximum Call Stack Size Exceeded errors on large node graphs.
+    let minX = Infinity, minY = Infinity;
+    let maxX = -Infinity, maxY = -Infinity;
+
+    for (let i = 0; i < allPos.length; i++) {
+      const p = allPos[i];
+      if (p.x < minX) minX = p.x;
+      if (p.y < minY) minY = p.y;
+      if (p.x + p.width > maxX) maxX = p.x + p.width;
+      if (p.y + p.height > maxY) maxY = p.y + p.height;
+    }
+
+    minX -= 40;
+    minY -= 40;
+    maxX += 40;
+    maxY += 40;
+
+>>>>>>> origin/main
     return `${minX} ${minY} ${maxX - minX} ${maxY - minY}`;
   }, [positions]);
 

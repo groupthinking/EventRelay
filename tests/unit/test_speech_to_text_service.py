@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+<<<<<<< HEAD
 import sys
 import types
 from pathlib import Path
+=======
+>>>>>>> origin/main
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+<<<<<<< HEAD
 # ---------------------------------------------------------------------------
 # Add src to path first so module resolution works.
 # ---------------------------------------------------------------------------
@@ -87,6 +91,9 @@ _spec = _ilu.spec_from_file_location(
 _stt_mod = _ilu.module_from_spec(_spec)  # type: ignore[arg-type]
 sys.modules["youtube_extension.services.ai.speech_to_text_service"] = _stt_mod
 _spec.loader.exec_module(_stt_mod)  # type: ignore[union-attr]
+=======
+import youtube_extension.services.ai.speech_to_text_service as _stt_mod
+>>>>>>> origin/main
 
 SPEECH_AVAILABLE = _stt_mod.SPEECH_AVAILABLE
 STORAGE_AVAILABLE = _stt_mod.STORAGE_AVAILABLE

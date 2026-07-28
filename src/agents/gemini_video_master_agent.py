@@ -33,6 +33,11 @@ try:
 
     GEMINI_AVAILABLE = True
 except ImportError:
+<<<<<<< HEAD
+=======
+    genai = None
+    types = None
+>>>>>>> origin/main
     GEMINI_AVAILABLE = False
     logging.warning("Google AI not available - install: pip install google-genai")
 
@@ -1092,7 +1097,11 @@ Malformed JSON:
     @staticmethod
     def _build_gemini_generation_config(
         response_mime_type: str | None = None,
+<<<<<<< HEAD
     ) -> types.GenerateContentConfig:
+=======
+    ) -> "types.GenerateContentConfig":
+>>>>>>> origin/main
         config_kwargs = {
             "max_output_tokens": int(os.getenv("GEMINI_MAX_OUTPUT_TOKENS", "16384"))
         }

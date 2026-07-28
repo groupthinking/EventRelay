@@ -1,0 +1,15 @@
+Fetching deployments in garv1
+> Production deployments for garv1/v0-uvai [183ms]
+
+  Age     Project           Deployment                                     Status         Environment     Duration     Username
+  47s     garv1/v0-uvai     https://v0-uvai-n2hhek9ky-garv1.vercel.app     ● Building     Production      --           ultrathinking
+  2d      garv1/v0-uvai     https://v0-uvai-kor41h06r-garv1.vercel.app     ● Ready        Production      1m           ultrathinking
+  2d      garv1/v0-uvai     https://v0-uvai-nt5gyla6c-garv1.vercel.app     ● Ready        Production      1m           ultrathinking
+  2d      garv1/v0-uvai     https://v0-uvai-o157vyvyg-garv1.vercel.app     ● Ready        Production      1m           ultrathinking
+  2d      garv1/v0-uvai     https://v0-uvai-9m7pbeath-garv1.vercel.app     ● Ready        Production      1m           ultrathinking
+  2d      garv1/v0-uvai     https://v0-uvai-b1xn8nncl-garv1.vercel.app     ● Ready        Production      1m           ultrathinking
+  2d      garv1/v0-uvai     https://v0-uvai-cjbtycux7-garv1.vercel.app     ● Ready        Production      1m           ultrathinking
+  2d      garv1/v0-uvai     https://v0-uvai-7m6sgivad-garv1.vercel.app     ● Ready        Production      1m           ultrathinking
+  2d      garv1/v0-uvai     https://v0-uvai-nyuladrfq-garv1.vercel.app     ● Ready        Production      1m           ultrathinking
+  2d      garv1/v0-uvai     https://v0-uvai-12iqhx1ja-garv1.vercel.app     ● Ready        Production      57s          ultrathinking
+  2d      garv1/v0-uvai     https://v0-uvai-eci8v2sp0-garv1.vercel.app     ● Ready        Production      1m           ultrathinking

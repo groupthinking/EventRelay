@@ -1,7 +1,12 @@
 name: "Hybrid Refactor Verification Gates"
 
+<<<<<<< HEAD
 # Fallback for .github/agentic/verification-loop.aw.yml
 # Runs the same 4-layer verification on every PR targeting the refactor branch
+=======
+# Legacy hybrid-refactor verification workflow
+# (kept branch-scoped for historical compatibility)
+>>>>>>> origin/main
 
 on:
   pull_request:

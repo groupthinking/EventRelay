@@ -25,6 +25,10 @@ import sys
 import threading
 import time
 import tracemalloc
+<<<<<<< HEAD
+=======
+import weakref
+>>>>>>> origin/main
 from collections import deque
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass
@@ -161,9 +165,26 @@ class ResourcePool:
         self.in_use = set()
         self.creation_times = {}
         self._lock = threading.RLock()
+<<<<<<< HEAD
 
         # Start cleanup task
         self.cleanup_task = threading.Thread(target=self._cleanup_worker, daemon=True)
+=======
+        self._closed = False
+
+        # The worker must not retain the pool through a bound method. A weak
+        # reference lets short-lived pools terminate their worker as soon as
+        # the final owner releases them, even when close() was not explicit.
+        stop_event = threading.Event()
+        self._stop_event = stop_event
+        pool_ref = weakref.ref(self, lambda _ref: stop_event.set())
+        self.cleanup_task = threading.Thread(
+            target=ResourcePool._cleanup_worker,
+            args=(pool_ref, stop_event),
+            name=f"resource-pool-cleanup:{name}",
+            daemon=True,
+        )
+>>>>>>> origin/main
         self.cleanup_task.start()
 
         logger.info(f"📦 Resource pool '{name}' initialized (max_size: {max_size})")
@@ -181,7 +202,15 @@ class ResourcePool:
 
     def _acquire_resource(self):
         """Acquire resource from pool"""
+<<<<<<< HEAD
         with self._lock:
+=======
+        self.cleanup_idle_resources()
+        with self._lock:
+            if self._closed:
+                raise RuntimeError(f"Resource pool '{self.name}' is closed")
+
+>>>>>>> origin/main
             # Try to get existing resource from pool
             if self.pool:
                 resource = self.pool.pop()
@@ -202,6 +231,7 @@ class ResourcePool:
 
     def _release_resource(self, resource):
         """Release resource back to pool"""
+<<<<<<< HEAD
         with self._lock:
             if resource in self.in_use:
                 self.in_use.remove(resource)
@@ -241,6 +271,87 @@ class ResourcePool:
 
             except Exception as e:
                 logger.error(f"Error in cleanup worker for pool '{self.name}': {e}")
+=======
+        cleanup_released = False
+        with self._lock:
+            if resource in self.in_use:
+                self.in_use.remove(resource)
+                if self._closed:
+                    self.creation_times.pop(id(resource), None)
+                    cleanup_released = True
+                else:
+                    self.pool.append(resource)
+                    logger.debug(f"🔄 Released resource to pool '{self.name}'")
+
+        if cleanup_released:
+            self._cleanup_one(resource)
+
+    @staticmethod
+    def _cleanup_worker(pool_ref, stop_event: threading.Event):
+        """Background worker to cleanup idle resources"""
+        while not stop_event.wait(60):
+            pool = pool_ref()
+            if pool is None:
+                return
+            try:
+                pool.cleanup_idle_resources()
+            except Exception as e:
+                logger.error(f"Error in cleanup worker for pool '{pool.name}': {e}")
+            finally:
+                # Do not keep the pool alive while waiting for the next cycle.
+                del pool
+
+    def _cleanup_one(self, resource) -> bool:
+        try:
+            self.cleanup_resource(resource)
+            return True
+        except Exception as e:
+            logger.error(f"Error cleaning up resource: {e}")
+            return False
+
+    def cleanup_idle_resources(self, *, force: bool = False) -> int:
+        """Clean available resources that exceeded their idle lifetime."""
+        with self._lock:
+            current_time = time.time()
+            resources_to_cleanup = []
+            for resource in list(self.pool):
+                created_at = self.creation_times.get(id(resource))
+                if force or (
+                    created_at is not None
+                    and current_time - created_at > self.idle_timeout
+                ):
+                    self.pool.remove(resource)
+                    self.creation_times.pop(id(resource), None)
+                    resources_to_cleanup.append(resource)
+
+        cleaned = 0
+        for resource in resources_to_cleanup:
+            if self._cleanup_one(resource):
+                cleaned += 1
+                logger.debug(f"🗑️ Cleaned up idle resource from pool '{self.name}'")
+        return cleaned
+
+    def close(self) -> None:
+        """Stop cleanup work and release every currently available resource."""
+        with self._lock:
+            if self._closed:
+                return
+            self._closed = True
+
+        self._stop_event.set()
+        if (
+            self.cleanup_task.is_alive()
+            and self.cleanup_task is not threading.current_thread()
+        ):
+            self.cleanup_task.join(timeout=1.0)
+        self.cleanup_idle_resources(force=True)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.close()
+>>>>>>> origin/main
 
     def get_stats(self) -> dict[str, Any]:
         """Get pool statistics"""
@@ -287,6 +398,10 @@ class MemoryManager:
         # Threading
         self._lock = threading.RLock()
         self.monitoring_task = None
+<<<<<<< HEAD
+=======
+        self._monitoring_stop = threading.Event()
+>>>>>>> origin/main
 
         # Resource limits
         self.resource_limits = ResourceLimit(
@@ -301,6 +416,7 @@ class MemoryManager:
 
     def start_monitoring(self):
         """Start memory monitoring"""
+<<<<<<< HEAD
         if self.monitoring_task is None:
             self.monitoring_task = threading.Thread(target=self._monitoring_worker, daemon=True)
             self.monitoring_task.start()
@@ -311,11 +427,57 @@ class MemoryManager:
         """Stop memory monitoring"""
         self.monitoring_enabled = False
         self.profiler.stop_tracking()
+=======
+        # Starting is a check/create/start transaction.  Without the lock,
+        # concurrent callers can each observe a not-yet-alive task and create
+        # duplicate monitor threads.
+        with self._lock:
+            if self.monitoring_task is None or not self.monitoring_task.is_alive():
+                self.monitoring_enabled = True
+                self._monitoring_stop.clear()
+                self.monitoring_task = threading.Thread(
+                    target=self._monitoring_worker,
+                    name="memory-manager-monitor",
+                    daemon=True,
+                )
+                self.monitoring_task.start()
+                self.profiler.start_tracking()
+                logger.info("✅ Memory monitoring started")
+
+    def stop_monitoring(self):
+        """Stop memory monitoring"""
+        with self._lock:
+            self.monitoring_enabled = False
+            self._monitoring_stop.set()
+            monitoring_task = self.monitoring_task
+        if (
+            monitoring_task is not None
+            and monitoring_task.is_alive()
+            and monitoring_task is not threading.current_thread()
+        ):
+            monitoring_task.join(timeout=1.0)
+        with self._lock:
+            # A concurrent restart may already have replaced the old task.  In
+            # that case this stop operation must not clear the new task or stop
+            # its profiler.
+            if self.monitoring_task is monitoring_task:
+                if monitoring_task is None or not monitoring_task.is_alive():
+                    self.monitoring_task = None
+                else:
+                    # Retain the live task so start_monitoring() cannot create a
+                    # second monitor while a slow callback is unwinding.
+                    logger.warning("Memory monitoring task is still stopping")
+                self.profiler.stop_tracking()
+>>>>>>> origin/main
         logger.info("⏹️ Memory monitoring stopped")
 
     def _monitoring_worker(self):
         """Background monitoring worker"""
+<<<<<<< HEAD
         while self.monitoring_enabled:
+=======
+        while self.monitoring_enabled and not self._monitoring_stop.is_set():
+>>>>>>> origin/main
             try:
                 # Take memory snapshot
                 snapshot = self._take_system_snapshot()
@@ -327,12 +489,24 @@ class MemoryManager:
                 # Optimize garbage collection if needed
                 self._optimize_garbage_collection(snapshot)
 
+<<<<<<< HEAD
                 # Sleep for 1 minute
                 time.sleep(60)
 
             except Exception as e:
                 logger.error(f"Error in memory monitoring worker: {e}")
                 time.sleep(60)
+=======
+                for pool in list(self.resource_pools.values()):
+                    pool.cleanup_idle_resources()
+
+            except Exception as e:
+                logger.error(f"Error in memory monitoring worker: {e}")
+
+            # Interruptible wait makes stop_monitoring deterministic.
+            if self._monitoring_stop.wait(60):
+                return
+>>>>>>> origin/main
 
     def _take_system_snapshot(self) -> MemorySnapshot:
         """Take system memory snapshot"""
@@ -342,7 +516,14 @@ class MemoryManager:
 
         # Get GC stats
         gc_stats = {
+<<<<<<< HEAD
             'collections': sum(gc.get_stats()),
+=======
+            'collections': sum(
+                generation.get('collections', 0)
+                for generation in gc.get_stats()
+            ),
+>>>>>>> origin/main
             'objects': len(gc.get_objects())
         }
 
@@ -528,6 +709,7 @@ class MemoryManager:
         """Cleanup resource pools to free memory"""
         for pool_name, pool in self.resource_pools.items():
             try:
+<<<<<<< HEAD
                 # Force cleanup of idle resources
                 with pool._lock:
                     resources_to_cleanup = list(pool.pool)
@@ -537,6 +719,11 @@ class MemoryManager:
                         pool.cleanup_resource(resource)
 
                 logger.info(f"🧹 Cleaned up resource pool '{pool_name}': {len(resources_to_cleanup)} resources")
+=======
+                cleaned = pool.cleanup_idle_resources(force=True)
+
+                logger.info(f"🧹 Cleaned up resource pool '{pool_name}': {cleaned} resources")
+>>>>>>> origin/main
 
             except Exception as e:
                 logger.error(f"Error cleaning up resource pool '{pool_name}': {e}")
@@ -592,6 +779,16 @@ class MemoryManager:
         logger.info(f"📦 Created resource pool: {name}")
         return pool
 
+<<<<<<< HEAD
+=======
+    def close(self) -> None:
+        """Stop monitoring and close every managed resource pool."""
+        self.stop_monitoring()
+        for pool in list(self.resource_pools.values()):
+            pool.close()
+        self.resource_pools.clear()
+
+>>>>>>> origin/main
     def get_memory_stats(self) -> dict[str, Any]:
         """Get comprehensive memory statistics"""
         if not self.memory_history:

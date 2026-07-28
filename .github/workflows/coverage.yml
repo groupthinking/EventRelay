@@ -25,6 +25,10 @@ jobs:
   coverage:
     name: Generate and Upload Coverage
     runs-on: ubuntu-latest
+<<<<<<< HEAD
+=======
+    timeout-minutes: 45
+>>>>>>> origin/main
 
     steps:
       - name: Checkout code
@@ -41,12 +45,19 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
+<<<<<<< HEAD
           pip install -e ".[dev]"
+=======
+          # The deterministic suite imports optional YouTube adapters; install
+          # the repository-owned extra instead of relying on leaked test stubs.
+          pip install -e ".[dev,youtube]"
+>>>>>>> origin/main
 
       - name: Create reports directory
         run: mkdir -p reports
 
       - name: Run tests with coverage
+<<<<<<< HEAD
         continue-on-error: true # Allow workflow to complete for coverage tracking
         run: |
           pytest tests/ \
@@ -56,6 +67,17 @@ jobs:
             --cov-report=html:reports/htmlcov \
             --cov-fail-under=0 \
             -v || true
+=======
+        run: |
+          pytest tests/ \
+            --timeout=120 \
+            --cov=src/youtube_extension \
+            --cov-report=lcov:reports/lcov.info \
+            --cov-report=json:reports/coverage.json \
+            --cov-report=term \
+            --cov-report=html:reports/htmlcov \
+            -v
+>>>>>>> origin/main
 
       - name: Upload coverage to Qlty (same-repo only)
         if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
@@ -72,5 +94,11 @@ jobs:
           name: coverage-report
           path: |
             reports/lcov.info
+<<<<<<< HEAD
             reports/htmlcov/
+=======
+            reports/coverage.json
+            reports/htmlcov/
+          if-no-files-found: error
+>>>>>>> origin/main
           retention-days: 30

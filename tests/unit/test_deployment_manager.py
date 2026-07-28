@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+<<<<<<< HEAD
 import asyncio
+=======
+>>>>>>> origin/main
 import os
 import re
 import subprocess
@@ -48,7 +51,10 @@ from youtube_extension.backend.deployment_manager import (  # noqa: E402
     validate_deployment_environment,
 )
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> origin/main
 # ===========================================================================
 # Helpers
 # ===========================================================================
@@ -387,6 +393,46 @@ class TestVerifyProject:
         assert result["passed"] is True
         assert "skipping" in result["summary"].lower()
 
+<<<<<<< HEAD
+=======
+    async def test_sentry_breadcrumb_reports_package_presence(self, tmp_path) -> None:
+        """Sentry instrumentation must not run before package path setup."""
+        (tmp_path / "package.json").write_text('{"name": "test"}')
+        mgr = _make_manager()
+        sentry_sdk = MagicMock()
+        ok = MagicMock(returncode=0, stdout="ok", stderr="")
+
+        with patch(
+            "youtube_extension.backend.deployment_manager.os.getenv",
+            return_value="https://public@example.invalid/1",
+        ), patch.dict(sys.modules, {"sentry_sdk": sentry_sdk}), patch(
+            "youtube_extension.backend.deployment_manager.subprocess.run",
+            return_value=ok,
+        ):
+            result = await mgr.verify_project(str(tmp_path))
+
+        assert result["passed"] is True
+        sentry_sdk.add_breadcrumb.assert_called_once()
+        assert sentry_sdk.add_breadcrumb.call_args.kwargs["data"] == {
+            "project_name": tmp_path.name,
+            "has_package_json": True,
+        }
+
+    async def test_invalid_path_is_rejected_before_sentry(self, tmp_path) -> None:
+        mgr = _make_manager()
+        sentry_sdk = MagicMock()
+        missing = tmp_path / "missing"
+
+        with patch(
+            "youtube_extension.backend.deployment_manager.os.getenv",
+            return_value="https://public@example.invalid/1",
+        ), patch.dict(sys.modules, {"sentry_sdk": sentry_sdk}):
+            result = await mgr.verify_project(str(missing))
+
+        assert result["passed"] is False
+        sentry_sdk.add_breadcrumb.assert_not_called()
+
+>>>>>>> origin/main
     async def test_npm_install_failure(self, tmp_path) -> None:
         (tmp_path / "package.json").write_text('{"name": "test"}')
         mgr = _make_manager()
@@ -681,7 +727,11 @@ class TestDeployProject:
 
         with patch("youtube_extension.backend.deployment_manager._adapter_deploy",
                    new=AsyncMock(return_value=mock_adapter_result)):
+<<<<<<< HEAD
             result = await mgr.deploy_project(
+=======
+            await mgr.deploy_project(
+>>>>>>> origin/main
                 str(tmp_path),
                 {"title": "Test"},
                 {"target": "vercel"},

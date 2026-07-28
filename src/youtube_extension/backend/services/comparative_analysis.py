@@ -34,7 +34,11 @@ try:
     from google.genai import types as genai_types
 
     _GEMINI_AVAILABLE = True
+<<<<<<< HEAD
 except ImportError:
+=======
+except ImportError:  # pragma: no cover
+>>>>>>> origin/main
     _GEMINI_AVAILABLE = False
     logger.warning("Gemini SDK not available – provider will be skipped")
 
@@ -42,7 +46,11 @@ try:
     import anthropic
 
     _CLAUDE_AVAILABLE = True
+<<<<<<< HEAD
 except ImportError:
+=======
+except ImportError:  # pragma: no cover
+>>>>>>> origin/main
     _CLAUDE_AVAILABLE = False
     logger.warning("Anthropic SDK not available – provider will be skipped")
 

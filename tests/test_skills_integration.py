@@ -34,6 +34,7 @@ if _agents_pkg is None:
     _agents_pkg.__package__ = "agents"
     sys.modules["agents"] = _agents_pkg
 
+<<<<<<< HEAD
 # Stub youtube_extension.processors to avoid pulling in heavy ML deps
 for _mod_name in [
     "youtube_extension",
@@ -50,6 +51,8 @@ for _mod_name in [
             _stub.VideoContent = type("VideoContent", (), {})  # type: ignore[attr-defined]
         sys.modules[_mod_name] = _stub
 
+=======
+>>>>>>> origin/main
 # Now we can safely import just the coordinator module
 from agents.mcp_ecosystem_coordinator import SkillRegistry  # noqa: E402
 
@@ -122,6 +125,16 @@ class TestSkillDiscovery:
 # ---------------------------------------------------------------------------
 
 
+<<<<<<< HEAD
+=======
+def test_skill_import_does_not_replace_processor_package() -> None:
+    """The integration test must not poison later test-module collection."""
+    from youtube_extension.processors import strategies
+
+    assert strategies.__file__ is not None
+
+
+>>>>>>> origin/main
 class TestSkillTriggerMatching:
     """Verify trigger-based skill discovery."""
 
