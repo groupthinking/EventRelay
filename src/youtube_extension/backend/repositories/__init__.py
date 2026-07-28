@@ -17,7 +17,7 @@ try:
     from .user import UserProfileRepository, UserRepository, UserSessionRepository
 
     __all__.extend(["UserRepository", "UserProfileRepository", "UserSessionRepository"])
-except ImportError:
+except ImportError:  # pragma: no cover
     # Optional user repositories not available; safe to ignore
     pass
 
@@ -32,7 +32,7 @@ try:
     __all__.extend(
         ["TenantRepository", "TenantUserRepository", "TenantSubscriptionRepository"]
     )
-except ImportError:
+except ImportError:  # pragma: no cover
     # Optional tenant repositories not available; safe to ignore.
     pass
 
@@ -53,7 +53,7 @@ try:
             "VideoProcessingJobRepository",
         ]
     )
-except ImportError:
+except ImportError:  # pragma: no cover
     # Optional video repositories not available; safe to ignore.
     pass
 
@@ -72,7 +72,7 @@ try:
             "LearningProgressRepository",
         ]
     )
-except ImportError:
+except ImportError:  # pragma: no cover
     # Optional learning repositories not available; safe to ignore.
     pass
 
@@ -81,7 +81,7 @@ try:
     from .cache import CacheRepository, CacheStatsRepository
 
     __all__.extend(["CacheRepository", "CacheStatsRepository"])
-except ImportError:
+except ImportError:  # pragma: no cover
     # Optional cache repositories not available; safe to ignore.
     pass
 
@@ -90,7 +90,7 @@ try:
     from .audit import AuditLogRepository, SecurityEventRepository
 
     __all__.extend(["AuditLogRepository", "SecurityEventRepository"])
-except ImportError:
+except ImportError:  # pragma: no cover
     # Optional audit repositories not available; safe to ignore.
     pass
 
@@ -109,7 +109,7 @@ try:
             "UsageStatisticRepository",
         ]
     )
-except ImportError:
+except ImportError:  # pragma: no cover
     # Optional analytics repositories not available; safe to ignore.
     pass
 
@@ -118,6 +118,6 @@ try:
     from .unit_of_work import UnitOfWork
 
     __all__.append("UnitOfWork")
-except ImportError:
+except ImportError:  # pragma: no cover
     # Optional unit of work not available; safe to ignore.
     pass

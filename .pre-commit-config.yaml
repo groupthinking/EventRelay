@@ -3,8 +3,18 @@
 #   Run all:  pre-commit run --all-files
 #
 # gitleaks blocks commits that introduce secrets (API keys, tokens, private keys).
+# vscode-ide-self-reference blocks VS Code forks (Antigravity, Cursor, Windsurf)
+# from committing their own extension IDs into shared .vscode/ config, where they
+# resolve to nothing in stock VS Code. Mirrored by the guards job in ci.yml.
 repos:
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.18.4
     hooks:
       - id: gitleaks
+  - repo: local
+    hooks:
+      - id: vscode-ide-self-reference
+        name: No IDE self-identifiers in shared .vscode config
+        language: pygrep
+        entry: 'google\.antigravity|anysphere\.|codeium\.windsurf'
+        files: ^\.vscode/

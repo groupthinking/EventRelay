@@ -356,3 +356,86 @@ class TestTenantGetUsageStats:
     def test_has_active_users(self):
         t = _ns()
         assert "active_users" in Tenant.get_usage_stats(t)
+
+
+# ===========================================================================
+# TenantUser methods
+# ===========================================================================
+
+
+class TestTenantUserMethods:
+    def test_has_permission(self):
+        from youtube_extension.backend.models.tenant import TenantUser
+        tu = _ns(permissions=["read", "write"])
+        assert TenantUser.has_permission(tu, "read") is True
+        assert TenantUser.has_permission(tu, "delete") is False
+        
+        tu_none = _ns(permissions=None)
+        assert TenantUser.has_permission(tu_none, "read") is False
+
+    def test_add_permission(self):
+        from youtube_extension.backend.models.tenant import TenantUser
+        tu = _ns(permissions=["read"])
+        TenantUser.add_permission(tu, "write")
+        assert tu.permissions == ["read", "write"]
+        
+        # Add duplicate
+        TenantUser.add_permission(tu, "read")
+        assert tu.permissions == ["read", "write"]
+        
+        # None permissions
+        tu_none = _ns(permissions=None)
+        TenantUser.add_permission(tu_none, "read")
+        assert tu_none.permissions == ["read"]
+
+    def test_remove_permission(self):
+        from youtube_extension.backend.models.tenant import TenantUser
+        tu = _ns(permissions=["read", "write"])
+        TenantUser.remove_permission(tu, "write")
+        assert tu.permissions == ["read"]
+        
+        # Remove non-existent
+        TenantUser.remove_permission(tu, "delete")
+        assert tu.permissions == ["read"]
+        
+        # None permissions
+        tu_none = _ns(permissions=None)
+        TenantUser.remove_permission(tu_none, "read")
+        assert tu_none.permissions is None
+
+
+# ===========================================================================
+# TenantSubscription methods
+# ===========================================================================
+
+
+class TestTenantSubscriptionMethods:
+    def test_is_active(self):
+        from youtube_extension.backend.models.tenant import TenantSubscription
+        from datetime import timedelta
+        
+        ts_active = _ns(status="active", expires_at=datetime.utcnow() + timedelta(days=1))
+        assert TenantSubscription.is_active(ts_active) is True
+        
+        ts_inactive_status = _ns(status="cancelled", expires_at=datetime.utcnow() + timedelta(days=1))
+        assert TenantSubscription.is_active(ts_inactive_status) is False
+        
+        ts_expired = _ns(status="active", expires_at=datetime.utcnow() - timedelta(days=1))
+        assert TenantSubscription.is_active(ts_expired) is False
+        
+        ts_no_expiry = _ns(status="active", expires_at=None)
+        assert TenantSubscription.is_active(ts_no_expiry) is True
+
+    def test_days_until_expiry(self):
+        from youtube_extension.backend.models.tenant import TenantSubscription
+        from datetime import timedelta
+        
+        ts_no_expiry = _ns(expires_at=None)
+        assert TenantSubscription.days_until_expiry(ts_no_expiry) is None
+        
+        ts_future = _ns(expires_at=datetime.utcnow() + timedelta(days=5, hours=1))
+        assert TenantSubscription.days_until_expiry(ts_future) == 5
+        
+        ts_past = _ns(expires_at=datetime.utcnow() - timedelta(days=5))
+        assert TenantSubscription.days_until_expiry(ts_past) == 0
+
