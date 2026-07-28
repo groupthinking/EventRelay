@@ -63,7 +63,7 @@ shipped code.
 ## Production Gates — Status (2026-06-17)
 **Verification Gate (16-agent network — verification-gate agent) PASSED 2026-06-12**
 Re-executed criticals on resume:
-- fireAndForget grep (apps/web/src/app/api): 0 active (non-comment). Only explanatory comments ("no fireAndForget", "Direct waitUntil (no fireAndForget...)").
+- fireAndForget grep (apps/web/src/app/api): 0 active (non-comment). Only explanatory comments ("no fireAndForget", "Direct waitUntil (no fireAndForget...)" ).
 - middleware.ts + proxy.ts: Fully active (`matcher: ['/api/:path*']`, delegates to proxy). Dev: memory, AI_LIMIT=12. Prod: Redis or explicit fail-open+warn. 429 includes `Retry-After` + `X-RateLimit-*`. Success responses set rate headers.
 All 3 user outcomes + supporting items (grep 0, waitUntil close-before-BG + no block in stream finally + schedule, active middleware+headers, @vercel/functions package with waitUntil, 16-net/agent_network.json refs in comments, lint on core) confirmed PASS via re-exec + source. .verification-gate-pass marker created. Recommend commit + handoff to launch-plan. (Build has unrelated prerender notes; core remediations green.)
 
