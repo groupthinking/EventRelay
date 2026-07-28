@@ -582,7 +582,7 @@ class RealYouTubeAPIService:
             # This message is returned to clients under ``message`` by
             # /api/v2/validate-video; never embed the exception text (CWE-209).
             logger.warning("Video URL validation failed: invalid URL format", exc_info=True)
-            return False, "", "Invalid video URL format"
+            return False, "", "Invalid URL format"
         except Exception:
             logger.error("Video URL validation failed", exc_info=True)
             return False, "", "Video validation failed"
