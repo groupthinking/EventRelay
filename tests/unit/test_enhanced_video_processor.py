@@ -23,17 +23,10 @@ if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
 # ---------------------------------------------------------------------------
-<<<<<<< HEAD
 # Import the module under test (with GEMINI_API_KEY set so __init__ passes)
 # ---------------------------------------------------------------------------
 import os
 os.environ.setdefault("GEMINI_API_KEY", "test-gemini-key")
-=======
-# Import the module under test. Individual constructor tests provide their own
-# scoped credentials so test collection never mutates the process environment.
-# ---------------------------------------------------------------------------
-import os
->>>>>>> origin/main
 
 import youtube_extension.backend.enhanced_video_processor as _mod
 from youtube_extension.backend.enhanced_video_processor import (
@@ -138,15 +131,7 @@ class TestEnhancedVideoProcessorInit:
         assert proc.livekit_url == "ws://localhost:7880"
 
     def test_livekit_url_from_env(self):
-<<<<<<< HEAD
         with patch.dict(os.environ, {"LIVEKIT_URL": "ws://custom:7880"}, clear=False):
-=======
-        with patch.dict(
-            os.environ,
-            {"GEMINI_API_KEY": "test-key", "LIVEKIT_URL": "ws://custom:7880"},
-            clear=False,
-        ):
->>>>>>> origin/main
             with patch.object(_mod, "GEMINI_VISION_AVAILABLE", False):
                 proc = EnhancedVideoProcessor()
         assert proc.livekit_url == "ws://custom:7880"

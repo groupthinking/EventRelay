@@ -12,12 +12,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-<<<<<<< HEAD
-=======
-_SRC = Path(__file__).resolve().parents[2] / "src"
-sys.path.insert(0, str(_SRC))
-
->>>>>>> origin/main
 # Ensure the google.cloud stub is available before importing worker
 _google_cloud_mock = MagicMock()
 _pubsub_mock = MagicMock()

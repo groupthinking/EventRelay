@@ -5,7 +5,6 @@ Tests all adapters with real API calls (when tokens are available).
 """
 
 import asyncio
-<<<<<<< HEAD
 import pytest
 import os
 import tempfile
@@ -18,27 +17,6 @@ from youtube_extension.backend.deploy.vercel import VercelAdapter
 from youtube_extension.backend.deploy.netlify import NetlifyAdapter
 from youtube_extension.backend.deploy.fly import FlyAdapter
 from youtube_extension.backend.deploy import get_adapter_class, list_available_adapters, is_adapter_available
-=======
-import os
-from unittest.mock import AsyncMock, patch
-
-import pytest
-
-from youtube_extension.backend.deploy import (
-    get_adapter_class,
-    is_adapter_available,
-    list_available_adapters,
-)
-from youtube_extension.backend.deploy.core import EnvironmentValidator
-from youtube_extension.backend.deploy.fly import FlyAdapter
-from youtube_extension.backend.deploy.netlify import NetlifyAdapter
-from youtube_extension.backend.deploy.vercel import VercelAdapter
-from youtube_extension.services.deployment_manager import (
-    DeploymentManager,
-    validate_deployment_environment,
-)
-
->>>>>>> origin/main
 
 @pytest.fixture
 def sample_project_config():
@@ -201,7 +179,6 @@ class TestDeploymentPipelineIntegration:
             assert result.startswith(f'uvai-{expected_prefix[5:]}'), f"Unexpected result: {result}"
             assert len(result) <= 30, f"App name too long: {result}"
 
-<<<<<<< HEAD
     @pytest.mark.asyncio
     async def test_deployment_manager_orchestration(self, sample_project_config, sample_env):
         """Test deployment manager orchestration"""
@@ -210,30 +187,6 @@ class TestDeploymentPipelineIntegration:
         # Test deployment with missing tokens (should be skipped gracefully)
         result = await manager.deploy_project(
             '/tmp/nonexistent',
-=======
-        with patch(
-            'youtube_extension.backend.deploy.fly.time.monotonic',
-            return_value=12345.67,
-        ):
-            assert (
-                adapter._generate_app_name({'title': 'My Awesome App'})
-                == 'uvai-my-awesome-app-2345'
-            )
-
-    @pytest.mark.asyncio
-    async def test_deployment_manager_orchestration(
-        self, sample_project_config, tmp_path, monkeypatch
-    ):
-        """Test deployment manager orchestration"""
-        monkeypatch.delenv('GITHUB_TOKEN', raising=False)
-        monkeypatch.delenv('VERCEL_TOKEN', raising=False)
-        manager = DeploymentManager()
-
-        # A valid non-npm directory reaches credential handling without running
-        # a build or making a real deployment.
-        result = await manager.deploy_project(
-            str(tmp_path),
->>>>>>> origin/main
             sample_project_config,
             {'target': 'vercel'}
         )
@@ -249,7 +202,6 @@ class TestDeploymentPipelineIntegration:
         assert 'GitHub token not configured' in result['errors']
 
     @pytest.mark.asyncio
-<<<<<<< HEAD
     async def test_mixed_deployment_scenario(self, sample_project_config, sample_env):
         """Test mixed deployment scenario with some tokens available"""
         # Set fake tokens for testing
@@ -279,133 +231,6 @@ class TestDeploymentPipelineIntegration:
                 del os.environ['VERCEL_TOKEN']
             if 'GITHUB_TOKEN' in os.environ:
                 del os.environ['GITHUB_TOKEN']
-=======
-    async def test_mixed_deployment_scenario(
-        self, sample_project_config, tmp_path
-    ):
-        """Test mixed results without mutating credentials or making requests."""
-        verification = {'passed': True, 'attempts': [], 'fixes_applied': []}
-        github_result = {
-            'status': 'success',
-            'url': 'https://github.com/test/generated-app',
-        }
-        vercel_result = {
-            'status': 'failed',
-            'error': 'simulated provider rejection',
-        }
-        deployment_config = {
-            'target': 'vercel',
-            'environment': {'VERCEL_TOKEN': 'non-secret-test-value'},
-        }
-
-        with patch(
-            'youtube_extension.backend.deployment_manager.GitHubDeploymentAgent',
-            None,
-        ), patch(
-            'youtube_extension.backend.deployment_manager.SKILL_LEARNING_ENABLED',
-            False,
-        ), patch(
-            'youtube_extension.backend.deployment_manager.AI_CODE_GENERATOR_AVAILABLE',
-            False,
-        ):
-            manager = DeploymentManager(github_token='non-secret-test-value')
-
-        with patch.object(
-            manager,
-            'verify_and_fix_project',
-            new=AsyncMock(return_value=verification),
-        ) as verify_project, patch.object(
-            manager,
-            '_deploy_to_github',
-            new=AsyncMock(return_value=github_result),
-        ) as deploy_github, patch(
-            'youtube_extension.backend.deployment_manager._adapter_deploy',
-            new=AsyncMock(return_value=vercel_result),
-        ) as deploy_adapter:
-            result = await manager.deploy_project(
-                str(tmp_path),
-                sample_project_config,
-                deployment_config,
-            )
-
-        verify_project.assert_awaited_once_with(str(tmp_path), max_retries=2)
-        deploy_github.assert_awaited_once_with(str(tmp_path), sample_project_config)
-        deploy_adapter.assert_awaited_once_with(
-            'vercel',
-            str(tmp_path),
-            sample_project_config,
-            {
-                'VERCEL_TOKEN': 'non-secret-test-value',
-                'GITHUB_REPO_URL': 'https://github.com/test/generated-app',
-            },
-        )
-        assert result['status'] == 'partial_success'
-        assert result['deployments'] == {
-            'github': github_result,
-            'vercel': vercel_result,
-        }
-        assert result['summary']['total_deployments'] == 2
-        assert result['summary']['successful_deployments'] == 1
-        assert result['summary']['failed_deployments'] == 1
-
-    @pytest.mark.asyncio
-    async def test_early_build_failure_preserves_summary_contract(
-        self, sample_project_config, tmp_path
-    ):
-        """A pre-deployment build failure still returns a stable summary."""
-        with patch(
-            'youtube_extension.backend.deployment_manager.GitHubDeploymentAgent',
-            None,
-        ), patch(
-            'youtube_extension.backend.deployment_manager.SKILL_LEARNING_ENABLED',
-            False,
-        ), patch(
-            'youtube_extension.backend.deployment_manager.AI_CODE_GENERATOR_AVAILABLE',
-            False,
-        ):
-            manager = DeploymentManager(github_token='non-secret-test-value')
-        verification = {
-            'passed': False,
-            'attempts': [{'attempt': 1, 'passed': False}],
-            'fixes_applied': [],
-            'final_verification': {
-                'npm_build': {'errors': ['TypeScript compilation failed']},
-            },
-        }
-
-        with patch.object(
-            manager,
-            'verify_and_fix_project',
-            new=AsyncMock(return_value=verification),
-        ), patch.object(
-            manager,
-            '_deploy_to_github',
-            new=AsyncMock(),
-        ) as deploy_github, patch(
-            'youtube_extension.backend.deployment_manager._adapter_deploy',
-            new=AsyncMock(),
-        ) as deploy_adapter:
-            result = await manager.deploy_project(
-                str(tmp_path), sample_project_config, {'target': 'vercel'}
-            )
-
-        assert result['status'] == 'failed'
-        assert result['deployments'] == {}
-        assert result['summary'] == {
-            'total_deployments': 0,
-            'successful_deployments': 0,
-            'failed_deployments': 0,
-            'skipped_deployments': 0,
-            'deployment_urls': {},
-            'primary_url': None,
-        }
-        assert result['errors'] == [
-            'Build verification failed after auto-fix attempts',
-            'TypeScript compilation failed',
-        ]
-        deploy_github.assert_not_awaited()
-        deploy_adapter.assert_not_awaited()
->>>>>>> origin/main
 
     @pytest.mark.asyncio
     async def test_error_recovery_and_reporting(self, sample_project_config, sample_env):
@@ -494,11 +319,7 @@ class TestDeploymentPipelineIntegration:
 
     def test_adapter_registry_integrity(self):
         """Test that adapter registry is properly maintained"""
-<<<<<<< HEAD
         from youtube_extension.backend.deploy import _adapters, _adapter_classes
-=======
-        from youtube_extension.backend.deploy import _adapter_classes, _adapters
->>>>>>> origin/main
 
         # Check legacy adapters
         assert 'vercel' in _adapters
@@ -511,11 +332,7 @@ class TestDeploymentPipelineIntegration:
         assert 'fly' in _adapter_classes
 
         # Verify class references are properly formatted
-<<<<<<< HEAD
         for adapter_name, class_ref in _adapter_classes.items():
-=======
-        for _adapter_name, class_ref in _adapter_classes.items():
->>>>>>> origin/main
             assert ':' in class_ref
             module_path, class_name = class_ref.split(':')
             assert module_path.startswith('youtube_extension.backend.deploy.')

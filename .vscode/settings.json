@@ -2,10 +2,7 @@
     "files.autoSave": "afterDelay",
     "files.trimTrailingWhitespace": true,
     "files.trimFinalNewlines": true,
-<<<<<<< HEAD
     "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
-=======
->>>>>>> origin/main
     "github-actions.workflows.pinned.workflows": [
         ".github/workflows/coverage.yml"
     ],
@@ -26,10 +23,5 @@
         "*test.py"
     ],
     "python.testing.pytestEnabled": false,
-<<<<<<< HEAD
     "python.testing.unittestEnabled": true
-=======
-    "python.testing.unittestEnabled": true,
-    "notebook.defaultFormatter": "ms-python.black-formatter"
->>>>>>> origin/main
 }

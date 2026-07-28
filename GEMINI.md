@@ -57,13 +57,8 @@ Run `/mcp` inside Gemini CLI to verify connected servers and available tools.
 # Install (editable with dev extras)
 pip install -e .[dev,youtube,ml]
 
-<<<<<<< HEAD
 # Run backend server
 uvicorn youtube_extension.main:app --reload --port 8000
-=======
-# Run backend server (PYTHONPATH=src is required for absolute imports to resolve)
-PYTHONPATH=src uvicorn youtube_extension.main:app --reload --port 8000
->>>>>>> origin/main
 
 # Tests
 pytest tests/ -v

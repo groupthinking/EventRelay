@@ -12,7 +12,6 @@ Components:
 - validation: Configuration validation
 """
 
-<<<<<<< HEAD
 from .logging_config import (
     LogContext,
     LogDestination,
@@ -23,21 +22,6 @@ from .logging_config import (
     get_logger,
     setup_logging,
 )
-=======
-try:  # pragma: no cover
-    from .logging_config import (
-        LogContext,
-        LogDestination,
-        LogFormat,
-        LogLevel,
-        UVAILogger,
-        configure_from_environment,
-        get_logger,
-        setup_logging,
-    )
-except ImportError:  # pragma: no cover
-    pass
->>>>>>> origin/main
 
 __all__ = [
     "setup_logging",

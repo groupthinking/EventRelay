@@ -24,25 +24,6 @@ from youtube_extension.services.workflows.transcript_action_workflow import (
 )
 
 
-<<<<<<< HEAD
-=======
-@pytest.fixture(autouse=True)
-def _isolate_skill_builder(monkeypatch, tmp_path) -> None:
-    """Workflow unit tests must not use the process user's persistent skills."""
-    skill_builder = MagicMock()
-    skill_builder.get_context.return_value = {
-        "has_data": False,
-        "lessons": [],
-        "success_rate": 0,
-    }
-    skill_builder.skills_dir = tmp_path / "skills"
-    monkeypatch.setattr(
-        "youtube_extension.services.workflows.transcript_action_workflow.get_skill_builder",
-        lambda: skill_builder,
-    )
-
-
->>>>>>> origin/main
 class _UnexpectedYouTubeService:
     async def __aenter__(self):
         raise AssertionError("YouTube service should not be entered for playlist URLs")

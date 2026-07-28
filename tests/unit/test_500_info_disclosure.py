@@ -40,15 +40,11 @@ from pathlib import Path
 
 import pytest
 
-<<<<<<< HEAD
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _BACKEND = _REPO_ROOT / "src" / "youtube_extension" / "backend"
 # The Ray Serve ML surface returns raw ``JSONResponse(...)`` bodies and lives
 # outside ``backend/``; it must be scanned too or 500 leaks there go unguarded.
 _ML_SERVE = _REPO_ROOT / "src" / "uvai" / "ml"
-=======
-_BACKEND = Path(__file__).resolve().parents[2] / "src" / "youtube_extension" / "backend"
->>>>>>> origin/main
 
 # Identifiers that, when referenced inside a 500 body, indicate a leak of the
 # caught exception or the inbound request.
@@ -87,7 +83,6 @@ def _refs_exception_or_request(node: ast.AST) -> bool:
     return False
 
 
-<<<<<<< HEAD
 def _status_is_500(call: ast.Call, name: str) -> bool:
     for kw in call.keywords:
         if kw.arg == "status_code" and isinstance(kw.value, ast.Constant):
@@ -98,15 +93,6 @@ def _status_is_500(call: ast.Call, name: str) -> bool:
     idx = 1 if name == "JSONResponse" else 0
     if len(call.args) > idx and isinstance(call.args[idx], ast.Constant):
         return call.args[idx].value == 500
-=======
-def _status_is_500(call: ast.Call) -> bool:
-    for kw in call.keywords:
-        if kw.arg == "status_code" and isinstance(kw.value, ast.Constant):
-            return kw.value.value == 500
-    # positional status_code (JSONResponse(500, ...) / HTTPException(500, ...))
-    if call.args and isinstance(call.args[0], ast.Constant):
-        return call.args[0].value == 500
->>>>>>> origin/main
     return False
 
 
@@ -124,11 +110,7 @@ def _iter_500_leaks(text: str):
         name = _call_name(node)
         if name not in ("HTTPException", "JSONResponse"):
             continue
-<<<<<<< HEAD
         if not _status_is_500(node, name):
-=======
-        if not _status_is_500(node):
->>>>>>> origin/main
             continue
         # Check keyword arguments
         for kw in node.keywords:
@@ -143,7 +125,6 @@ def _iter_500_leaks(text: str):
         if name == "HTTPException" and len(node.args) >= 2:
             if not _is_static_string(node.args[1]):
                 yield node.lineno, "HTTPException 500 detail is not a static string"
-<<<<<<< HEAD
         # Positional JSONResponse body: JSONResponse(<body>, status_code=500) and
         # the fully positional JSONResponse(<body>, 500). The content is always
         # args[0] for JSONResponse, regardless of how status_code is passed.
@@ -158,32 +139,18 @@ def _guarded_python_files() -> list[Path]:
         if root.exists():
             files.extend(root.rglob("*.py"))
     return sorted(files)
-=======
-
-
-def _backend_python_files() -> list[Path]:
-    return sorted(_BACKEND.rglob("*.py"))
->>>>>>> origin/main
 
 
 def test_no_information_disclosure_in_500_responses() -> None:
     offenders: list[str] = []
-<<<<<<< HEAD
     for path in _guarded_python_files():
-=======
-    for path in _backend_python_files():
->>>>>>> origin/main
         text = path.read_text(encoding="utf-8")
         try:
             leaks = list(_iter_500_leaks(text))
         except SyntaxError as exc:  # pragma: no cover - source is valid Python
             raise AssertionError(f"could not parse {path}: {exc}") from exc
         for line_no, reason in leaks:
-<<<<<<< HEAD
             rel = path.relative_to(_REPO_ROOT)
-=======
-            rel = path.relative_to(_BACKEND.parents[2])
->>>>>>> origin/main
             offenders.append(f"{rel}:{line_no}: {reason}")
 
     assert not offenders, (
@@ -207,13 +174,10 @@ def test_guard_detects_every_known_leak_shape() -> None:
         'raise HTTPException(500, str(e))',
         'raise HTTPException(500, f"internal: {exc}")',
         'raise HTTPException(500, error_msg)',
-<<<<<<< HEAD
         # JSONResponse with a positional body (the real ml_serve leak shape) —
         # status via keyword and fully positional (body=args[0], status=args[1]).
         'return JSONResponse({"error": str(exc)}, status_code=500)',
         'return JSONResponse({"error": str(exc)}, 500)',
-=======
->>>>>>> origin/main
     ]
     for sample in leaky_samples:
         assert list(_iter_500_leaks(sample)), f"scanner missed a real leak: {sample}"

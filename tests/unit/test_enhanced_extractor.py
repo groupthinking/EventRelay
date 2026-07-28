@@ -2,10 +2,6 @@
 
 from __future__ import annotations
 
-<<<<<<< HEAD
-=======
-import importlib.util as importlib_util
->>>>>>> origin/main
 import json
 import sys
 import types
@@ -21,7 +17,6 @@ _SRC = Path(__file__).resolve().parents[2] / "src"
 sys.path.insert(0, str(_SRC))
 
 # ---------------------------------------------------------------------------
-<<<<<<< HEAD
 # Stub all heavy optional / broken transitive deps at collection time
 # ---------------------------------------------------------------------------
 
@@ -112,92 +107,6 @@ from youtube_extension.processors.enhanced_extractor import (  # noqa: E402
     VideoMetadata,
     VideoSource,
 )
-=======
-# Load the legacy extractor with local-only optional-dependency substitutes.
-# The old tests installed bare modules in global ``sys.modules`` at collection
-# time, so unrelated tests observed fake Google/YouTube packages. Loading the
-# target under a private name keeps those substitutes scoped to this import.
-# ---------------------------------------------------------------------------
-
-_gcapi = types.ModuleType("googleapiclient")
-_gcapi.discovery = types.ModuleType("googleapiclient.discovery")
-_gcapi.errors = types.ModuleType("googleapiclient.errors")
-_gcapi.errors.HttpError = Exception
-
-_tr = types.ModuleType("transformers")
-_tr.pipeline = None
-
-_openai_stub = types.ModuleType("openai")
-_openai_stub.AsyncOpenAI = MagicMock()
-
-_pd = types.ModuleType("pandas")
-
-
-class _FakeDataFrame:
-    def __init__(self, data=None):
-        self._data = data or []
-
-    def to_csv(self, path, index=False):
-        with open(path, "w") as output_file:
-            output_file.write("text,start,duration,end\n")
-
-
-_pd.DataFrame = _FakeDataFrame
-
-_gs_mod = types.ModuleType("youtube_extension.services.ai.gemini_service")
-
-
-class _FakeGeminiService:
-    def __init__(self, *args, **kwargs):
-        pass
-
-    def is_available(self):
-        return False
-
-
-_gs_mod.GeminiService = _FakeGeminiService
-
-_se_mod = types.ModuleType("youtube_extension.processors.scoring_engine")
-
-
-class _FakeScoringEngine:
-    def calculate_all_scores(self, video_info, transcript_dicts):
-        return {"engagement_score": 0.5}
-
-    def generate_actions(self, world_class_analysis):
-        return [{"action": "review"}]
-
-
-_se_mod.ScoringEngine = _FakeScoringEngine
-
-_module_name = "_eventrelay_test_enhanced_extractor"
-_spec = importlib_util.spec_from_file_location(
-    _module_name,
-    _SRC / "youtube_extension" / "processors" / "enhanced_extractor.py",
-)
-_extractor_mod = importlib_util.module_from_spec(_spec)  # type: ignore[arg-type]
-_dependency_stubs = {
-    "googleapiclient": _gcapi,
-    "googleapiclient.discovery": _gcapi.discovery,
-    "googleapiclient.errors": _gcapi.errors,
-    "torch": types.ModuleType("torch"),
-    "transformers": _tr,
-    "openai": _openai_stub,
-    "pandas": _pd,
-    "youtube_extension.services.ai.gemini_service": _gs_mod,
-    "youtube_extension.processors.scoring_engine": _se_mod,
-    _module_name: _extractor_mod,
-}
-with patch.dict(sys.modules, _dependency_stubs):
-    _spec.loader.exec_module(_extractor_mod)  # type: ignore[union-attr]
-
-EnhancedVideoExtractor = _extractor_mod.EnhancedVideoExtractor
-ProcessingStage = _extractor_mod.ProcessingStage
-TranscriptSegment = _extractor_mod.TranscriptSegment
-VideoContent = _extractor_mod.VideoContent
-VideoMetadata = _extractor_mod.VideoMetadata
-VideoSource = _extractor_mod.VideoSource
->>>>>>> origin/main
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -1040,22 +949,15 @@ class TestAnalyzeContent:
 class TestExtractTranscript:
     async def test_raises_when_no_video_deps(self, monkeypatch):
         monkeypatch.delenv("YOUTUBE_API_KEY", raising=False)
-<<<<<<< HEAD
         import youtube_extension.processors.enhanced_extractor as mod
 
         orig = mod.HAS_VIDEO_DEPS
         try:
             mod.HAS_VIDEO_DEPS = False
-=======
-        orig = _extractor_mod.HAS_VIDEO_DEPS
-        try:
-            _extractor_mod.HAS_VIDEO_DEPS = False
->>>>>>> origin/main
             extractor = EnhancedVideoExtractor()
             with pytest.raises(ValueError, match="Video dependencies not available"):
                 await extractor.extract_transcript("abc123")
         finally:
-<<<<<<< HEAD
             mod.HAS_VIDEO_DEPS = orig
 
     async def test_successful_transcript_extraction(self, monkeypatch):
@@ -1065,15 +967,6 @@ class TestExtractTranscript:
         orig = mod.HAS_VIDEO_DEPS
         try:
             mod.HAS_VIDEO_DEPS = True
-=======
-            _extractor_mod.HAS_VIDEO_DEPS = orig
-
-    async def test_successful_transcript_extraction(self, monkeypatch):
-        monkeypatch.delenv("YOUTUBE_API_KEY", raising=False)
-        orig = _extractor_mod.HAS_VIDEO_DEPS
-        try:
-            _extractor_mod.HAS_VIDEO_DEPS = True
->>>>>>> origin/main
             extractor = EnhancedVideoExtractor()
 
             fake_response_data = {
@@ -1086,11 +979,8 @@ class TestExtractTranscript:
                 },
             }
 
-<<<<<<< HEAD
             import httpx
 
-=======
->>>>>>> origin/main
             mock_response = MagicMock()
             mock_response.json.return_value = fake_response_data
             mock_response.raise_for_status = MagicMock()
@@ -1100,15 +990,7 @@ class TestExtractTranscript:
             mock_client.__aexit__ = AsyncMock(return_value=False)
             mock_client.post = AsyncMock(return_value=mock_response)
 
-<<<<<<< HEAD
             with patch("httpx.AsyncClient", return_value=mock_client):
-=======
-            with patch.object(
-                _extractor_mod.httpx,
-                "AsyncClient",
-                return_value=mock_client,
-            ):
->>>>>>> origin/main
                 segments = await extractor.extract_transcript("abc123")
 
             assert len(segments) == 2
@@ -1116,7 +998,6 @@ class TestExtractTranscript:
             assert segments[0].start == 0.0
             assert segments[1].text == "World"
         finally:
-<<<<<<< HEAD
             mod.HAS_VIDEO_DEPS = orig
 
     async def test_http_request_error_raises_value_error(self, monkeypatch):
@@ -1130,22 +1011,10 @@ class TestExtractTranscript:
 
             import httpx
 
-=======
-            _extractor_mod.HAS_VIDEO_DEPS = orig
-
-    async def test_http_request_error_raises_value_error(self, monkeypatch):
-        monkeypatch.delenv("YOUTUBE_API_KEY", raising=False)
-        orig = _extractor_mod.HAS_VIDEO_DEPS
-        try:
-            _extractor_mod.HAS_VIDEO_DEPS = True
-            extractor = EnhancedVideoExtractor()
-
->>>>>>> origin/main
             mock_client = AsyncMock()
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
             mock_client.__aexit__ = AsyncMock(return_value=False)
             mock_client.post = AsyncMock(
-<<<<<<< HEAD
                 side_effect=httpx.RequestError("Connection refused")
             )
 
@@ -1162,26 +1031,6 @@ class TestExtractTranscript:
         orig = mod.HAS_VIDEO_DEPS
         try:
             mod.HAS_VIDEO_DEPS = True
-=======
-                side_effect=_extractor_mod.httpx.RequestError("Connection refused")
-            )
-
-            with patch.object(
-                _extractor_mod.httpx,
-                "AsyncClient",
-                return_value=mock_client,
-            ):
-                with pytest.raises(ValueError, match="caption extractor service"):
-                    await extractor.extract_transcript("abc123")
-        finally:
-            _extractor_mod.HAS_VIDEO_DEPS = orig
-
-    async def test_failed_success_flag_raises(self, monkeypatch):
-        monkeypatch.delenv("YOUTUBE_API_KEY", raising=False)
-        orig = _extractor_mod.HAS_VIDEO_DEPS
-        try:
-            _extractor_mod.HAS_VIDEO_DEPS = True
->>>>>>> origin/main
             extractor = EnhancedVideoExtractor()
 
             fake_response_data = {"success": False, "error": "Video unavailable"}
@@ -1195,23 +1044,11 @@ class TestExtractTranscript:
             mock_client.__aexit__ = AsyncMock(return_value=False)
             mock_client.post = AsyncMock(return_value=mock_response)
 
-<<<<<<< HEAD
             with patch("httpx.AsyncClient", return_value=mock_client):
                 with pytest.raises(Exception):
                     await extractor.extract_transcript("abc123")
         finally:
             mod.HAS_VIDEO_DEPS = orig
-=======
-            with patch.object(
-                _extractor_mod.httpx,
-                "AsyncClient",
-                return_value=mock_client,
-            ):
-                with pytest.raises(Exception):
-                    await extractor.extract_transcript("abc123")
-        finally:
-            _extractor_mod.HAS_VIDEO_DEPS = orig
->>>>>>> origin/main
 
 
 # ===========================================================================
@@ -1299,14 +1136,10 @@ class TestProcessVideo:
         extractor = EnhancedVideoExtractor()
 
         # patch extract_video_id to return None so video_id is assigned (None)
-<<<<<<< HEAD
         with patch(
             "youtube_extension.processors.enhanced_extractor.extract_video_id",
             return_value=None,
         ):
-=======
-        with patch.object(_extractor_mod, "extract_video_id", return_value=None):
->>>>>>> origin/main
             content = await extractor.process_video("not-a-youtube-url")
 
         # Should return error content

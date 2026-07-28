@@ -7,11 +7,7 @@ type GoogleSignInButtonProps = {
   callbackUrl: string;
 };
 
-<<<<<<< HEAD
 export default function GoogleSignInButton({ callbackUrl }: GoogleSignInButtonProps) {
-=======
-export function GoogleSignInButton({ callbackUrl }: GoogleSignInButtonProps) {
->>>>>>> origin/main
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function handleSignIn() {

@@ -508,39 +508,3 @@ class TestHybridProcessorType:
             factory = _reload_factory()
             with pytest.raises(ValueError, match="No working video processor"):
                 factory.get_video_processor("hybrid")
-<<<<<<< HEAD
-=======
-
-    @pytest.mark.asyncio
-    async def test_hybrid_success_path(self, monkeypatch):
-        # We need mock modules for fastvlm_gemini_hybrid.video_pipeline and yt_dlp
-        mock_pipeline = MagicMock()
-        mock_pipeline_instance = MagicMock()
-        mock_pipeline_instance.process_video_hybrid.return_value = {
-            "success": True,
-            "response": '{"summary": "test hybrid summary", "actions": [{"name": "action1"}]}'
-        }
-        mock_pipeline.VideoPipeline.return_value = mock_pipeline_instance
-
-        mock_ytdlp = MagicMock()
-        mock_ytdlp_instance = MagicMock()
-        mock_ytdlp_instance.extract_info.return_value = {"id": "test_vid_id"}
-        mock_ytdlp_instance.prepare_filename.return_value = "filepath.mp4"
-        mock_ytdlp.YoutubeDL.return_value.__enter__.return_value = mock_ytdlp_instance
-
-        # Insert them into sys.modules
-        monkeypatch.setitem(sys.modules, "fastvlm_gemini_hybrid", mock_pipeline)
-        monkeypatch.setitem(sys.modules, "fastvlm_gemini_hybrid.video_pipeline", mock_pipeline)
-        monkeypatch.setitem(sys.modules, "yt_dlp", mock_ytdlp)
-
-        factory = _reload_factory()
-        processor = factory.get_video_processor("hybrid")
-
-        # Test process_video
-        result = await processor.process_video("https://www.youtube.com/watch?v=auJzb1D-fag")
-        assert result["video_id"] == "test_vid_id"
-        assert result["success"] is True
-        assert result["ai_analysis"] == {"summary": "test hybrid summary", "actions": [{"name": "action1"}]}
-        assert result["actions"] == [{"name": "action1"}]
-
->>>>>>> origin/main

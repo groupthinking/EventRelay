@@ -17,11 +17,7 @@ try:
     from .user import UserProfileRepository, UserRepository, UserSessionRepository
 
     __all__.extend(["UserRepository", "UserProfileRepository", "UserSessionRepository"])
-<<<<<<< HEAD
 except ImportError:
-=======
-except ImportError:  # pragma: no cover
->>>>>>> origin/main
     # Optional user repositories not available; safe to ignore
     pass
 
@@ -36,11 +32,7 @@ try:
     __all__.extend(
         ["TenantRepository", "TenantUserRepository", "TenantSubscriptionRepository"]
     )
-<<<<<<< HEAD
 except ImportError:
-=======
-except ImportError:  # pragma: no cover
->>>>>>> origin/main
     # Optional tenant repositories not available; safe to ignore.
     pass
 
@@ -61,11 +53,7 @@ try:
             "VideoProcessingJobRepository",
         ]
     )
-<<<<<<< HEAD
 except ImportError:
-=======
-except ImportError:  # pragma: no cover
->>>>>>> origin/main
     # Optional video repositories not available; safe to ignore.
     pass
 
@@ -84,11 +72,7 @@ try:
             "LearningProgressRepository",
         ]
     )
-<<<<<<< HEAD
 except ImportError:
-=======
-except ImportError:  # pragma: no cover
->>>>>>> origin/main
     # Optional learning repositories not available; safe to ignore.
     pass
 
@@ -97,11 +81,7 @@ try:
     from .cache import CacheRepository, CacheStatsRepository
 
     __all__.extend(["CacheRepository", "CacheStatsRepository"])
-<<<<<<< HEAD
 except ImportError:
-=======
-except ImportError:  # pragma: no cover
->>>>>>> origin/main
     # Optional cache repositories not available; safe to ignore.
     pass
 
@@ -110,11 +90,7 @@ try:
     from .audit import AuditLogRepository, SecurityEventRepository
 
     __all__.extend(["AuditLogRepository", "SecurityEventRepository"])
-<<<<<<< HEAD
 except ImportError:
-=======
-except ImportError:  # pragma: no cover
->>>>>>> origin/main
     # Optional audit repositories not available; safe to ignore.
     pass
 
@@ -133,11 +109,7 @@ try:
             "UsageStatisticRepository",
         ]
     )
-<<<<<<< HEAD
 except ImportError:
-=======
-except ImportError:  # pragma: no cover
->>>>>>> origin/main
     # Optional analytics repositories not available; safe to ignore.
     pass
 
@@ -146,10 +118,6 @@ try:
     from .unit_of_work import UnitOfWork
 
     __all__.append("UnitOfWork")
-<<<<<<< HEAD
 except ImportError:
-=======
-except ImportError:  # pragma: no cover
->>>>>>> origin/main
     # Optional unit of work not available; safe to ignore.
     pass

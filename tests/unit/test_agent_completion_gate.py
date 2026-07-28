@@ -3101,7 +3101,6 @@ for (const [name, prior, current, applicable, expected] of rows) {
         )
         self.assertIn("issues.updateComment", validate)
 
-<<<<<<< HEAD
     def test_validation_comment_failure_is_non_fatal(self):
         """A rejected comment API must warn, not fail; ❌ findings still fail."""
 
@@ -3190,8 +3189,6 @@ async function runValidate(pr) {
         )
         self.assertEqual(completed.returncode, 0, completed.stderr)
 
-=======
->>>>>>> origin/main
     def test_commented_review_does_not_clear_changes_requested(self):
         workflow = self._workflow()
 

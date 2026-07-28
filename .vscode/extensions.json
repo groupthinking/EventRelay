@@ -1,10 +1,5 @@
 {
     "recommendations": [
-<<<<<<< HEAD
         "googlecloudtools.firebase-dataconnect-vscode"
-=======
-        "googlecloudtools.firebase-dataconnect-vscode",
-        "ms-python.black-formatter"
->>>>>>> origin/main
     ]
 }

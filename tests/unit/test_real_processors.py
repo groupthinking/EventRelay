@@ -14,11 +14,8 @@ from __future__ import annotations
 
 import json
 import sys
-<<<<<<< HEAD
 import types
 import importlib
-=======
->>>>>>> origin/main
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch, call
 
@@ -32,7 +29,6 @@ if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
 # ---------------------------------------------------------------------------
-<<<<<<< HEAD
 # Pre-stub heavy / unavailable packages before any module import
 # ---------------------------------------------------------------------------
 
@@ -66,9 +62,6 @@ _stub_module("pytubefix")
 
 # ---------------------------------------------------------------------------
 # Import modules under test *after* stubs are in place
-=======
-# Import modules under test
->>>>>>> origin/main
 # ---------------------------------------------------------------------------
 from youtube_extension.backend.services.real_ai_processor import (  # noqa: E402
     AIProcessingRequest,
@@ -150,35 +143,6 @@ def _make_ai_analysis(success: bool = True) -> dict:
 # ---------------------------------------------------------------------------
 
 @pytest.fixture(autouse=True)
-<<<<<<< HEAD
-=======
-def _isolate_ai_provider_bindings(monkeypatch):
-    """Keep provider doubles local even when another test imported first.
-
-    ``test_real_api_endpoints`` imports this service earlier in full collection
-    order. Optional OpenAI/Anthropic imports can therefore be absent from the
-    already-cached module. Adding bindings on that module per test avoids both
-    an order dependency and the permanent ``sys.modules`` stubs this file used
-    to leak into unrelated tests.
-    """
-    import youtube_extension.backend.services.real_ai_processor as _mod
-
-    openai_binding = MagicMock()
-    openai_binding.AsyncOpenAI = MagicMock()
-    anthropic_binding = MagicMock()
-    anthropic_binding.AsyncAnthropic = MagicMock()
-    gemini_binding = MagicMock()
-    gemini_binding.Client = MagicMock()
-
-    monkeypatch.setattr(_mod, "openai", openai_binding, raising=False)
-    monkeypatch.setattr(_mod, "anthropic", anthropic_binding, raising=False)
-    monkeypatch.setattr(_mod, "genai", gemini_binding, raising=False)
-    for key in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY"):
-        monkeypatch.delenv(key, raising=False)
-
-
-@pytest.fixture(autouse=True)
->>>>>>> origin/main
 def _reset_ai_processor_singleton():
     """Ensure the module-level singleton is reset between tests."""
     import youtube_extension.backend.services.real_ai_processor as _mod

@@ -98,7 +98,6 @@ class DeploymentManager:
         Runs npm install and npm run build to catch errors early.
         """
         logger.info("🔍 Verifying project build...")
-<<<<<<< HEAD
         if os.getenv("SENTRY_DSN"):
             import sentry_sdk
             sentry_sdk.add_breadcrumb(
@@ -107,9 +106,6 @@ class DeploymentManager:
                 data={"project_path": project_path, "has_package_json": package_json.exists()},
                 level="info"
             )
-=======
-        project_dir = Path(project_path)
->>>>>>> origin/main
 
         result = {
             "passed": False,
@@ -119,11 +115,8 @@ class DeploymentManager:
             "summary": ""
         }
 
-<<<<<<< HEAD
         project_dir = Path(project_path)
 
-=======
->>>>>>> origin/main
         # Security: validate and resolve path to prevent traversal
         try:
             resolved_path = project_dir.resolve()
@@ -136,21 +129,6 @@ class DeploymentManager:
 
         package_json = resolved_path / "package.json"
 
-<<<<<<< HEAD
-=======
-        if os.getenv("SENTRY_DSN"):
-            import sentry_sdk
-            sentry_sdk.add_breadcrumb(
-                category="deployment",
-                message="Starting build verification",
-                data={
-                    "project_name": resolved_path.name,
-                    "has_package_json": package_json.exists(),
-                },
-                level="info",
-            )
-
->>>>>>> origin/main
         # Check if package.json exists
         if not package_json.exists():
             result["summary"] = "No package.json found - skipping verification"
@@ -389,12 +367,6 @@ class DeploymentManager:
             "project_config": project_config,
             "deployments": {},
             "verification": {},
-<<<<<<< HEAD
-=======
-            # Keep the response contract stable even when build verification
-            # fails before any deployment adapter is invoked.
-            "summary": self._generate_deployment_summary({}),
->>>>>>> origin/main
             "errors": []
         }
 

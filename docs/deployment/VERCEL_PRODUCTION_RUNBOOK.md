@@ -63,11 +63,7 @@ shipped code.
 ## Production Gates — Status (2026-06-17)
 **Verification Gate (16-agent network — verification-gate agent) PASSED 2026-06-12**
 Re-executed criticals on resume:
-<<<<<<< HEAD
 - fireAndForget grep (apps/web/src/app/api): 0 active (non-comment). Only explanatory comments ("no fireAndForget", "Direct waitUntil (no fireAndForget...)" ).
-=======
-- fireAndForget grep (apps/web/src/app/api): 0 active (non-comment). Only explanatory comments ("no fireAndForget", "Direct waitUntil (no fireAndForget...)").
->>>>>>> origin/main
 - middleware.ts + proxy.ts: Fully active (`matcher: ['/api/:path*']`, delegates to proxy). Dev: memory, AI_LIMIT=12. Prod: Redis or explicit fail-open+warn. 429 includes `Retry-After` + `X-RateLimit-*`. Success responses set rate headers.
 All 3 user outcomes + supporting items (grep 0, waitUntil close-before-BG + no block in stream finally + schedule, active middleware+headers, @vercel/functions package with waitUntil, 16-net/agent_network.json refs in comments, lint on core) confirmed PASS via re-exec + source. .verification-gate-pass marker created. Recommend commit + handoff to launch-plan. (Build has unrelated prerender notes; core remediations green.)
 
@@ -95,14 +91,11 @@ Live verification (post-change):
 
 Remaining dashboard items (optional / follow-up):
 
-<<<<<<< HEAD
 - **Google OAuth Variables**: Confirm that standard environment variables `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are defined in the Vercel Project Environment Variables dashboard for Vercel production.
 - **Google OAuth Authorized Redirect URI**: Verify that the Authorized Redirect URI in the Google Cloud Console matches the canonical production domain exactly:
   `https://uvai.io/api/auth/callback/google`
 - **Legacy Fallback Removal Gate**: Currently, the codebase retains fallback lookups for legacy variable names `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET` in `apps/web/src/lib/auth.ts` to prevent build/deploy errors before the production environment variables are fully migrated.
   - *Removal Gate:* The legacy variables `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET` and their fallback code paths should be completely removed *only after* standard variables `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are confirmed live in the Vercel production environment and production migration evidence is attached to issue #900.
-=======
->>>>>>> origin/main
 - `SENTRY_AUTH_TOKEN` on Vercel for source-map upload at build time.
 - Configure Vercel Log Drains for persistent logs.
 - Configure Vercel Log Drains for persistent logs.

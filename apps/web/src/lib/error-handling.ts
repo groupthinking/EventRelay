@@ -138,11 +138,7 @@ export function formatApiError(
   if (error instanceof Error) {
     return {
       message: error.message || defaultMessage,
-<<<<<<< HEAD
       details: error.stack?.split('\n')[1]?.trim(),
-=======
-      // Removed stack trace exposure for security
->>>>>>> origin/main
     };
   }
 

@@ -20,12 +20,7 @@ class CodeGeneratorAgent:
     def _load_templates(self) -> dict[str, str]:
         """Load code generation templates"""
         return {
-<<<<<<< HEAD
             "fastapi_endpoint": textwrap.dedent("""
-=======
-            "fastapi_endpoint": textwrap.dedent(
-                """
->>>>>>> origin/main
                 @app.post("/api/v1/{endpoint_name}")
                 async def {function_name}({parameters}):
                     \"\"\"
@@ -47,7 +42,6 @@ class CodeGeneratorAgent:
                     except ValidationError as e:
                         raise HTTPException(status_code=400, detail=str(e))
                     except Exception as e:
-<<<<<<< HEAD
                         logger.error("Internal server error", exc_info=True)
                         raise HTTPException(status_code=500, detail="Internal server error")
             """),
@@ -56,22 +50,11 @@ class CodeGeneratorAgent:
                 # Generated API endpoint
 
                 import logging
-=======
-                        raise HTTPException(status_code=500, detail=str(e))
-            """
-            ),
-            "rest_api": textwrap.dedent(
-                """
-                # {title}
-                # Generated API endpoint
-
->>>>>>> origin/main
                 from fastapi import FastAPI, HTTPException
                 from pydantic import BaseModel
                 from datetime import datetime
                 from typing import Optional, List
 
-<<<<<<< HEAD
                 logger = logging.getLogger(__name__)
 
                 {models}
@@ -79,15 +62,6 @@ class CodeGeneratorAgent:
                 {endpoints}
             """),
             "crud_operations": textwrap.dedent("""
-=======
-                {models}
-
-                {endpoints}
-            """
-            ),
-            "crud_operations": textwrap.dedent(
-                """
->>>>>>> origin/main
                 # CRUD operations for {entity}
 
                 @app.post("/{entity_plural}")
@@ -113,12 +87,7 @@ class CodeGeneratorAgent:
                     \"\"\"Delete {entity}\"\"\"
                     # Implementation here
                     pass
-<<<<<<< HEAD
             """),
-=======
-            """
-            ),
->>>>>>> origin/main
         }
 
     @staticmethod

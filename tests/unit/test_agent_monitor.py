@@ -25,19 +25,6 @@ from youtube_extension.services.agents.monitor import (
 )
 
 
-<<<<<<< HEAD
-=======
-@pytest.fixture(autouse=True)
-def _isolate_analyzer_storage(monkeypatch, tmp_path):
-    """Monitoring tests must never persist state in ~/.eventrelay."""
-    from youtube_extension.services.agents.agent_gap_analyzer import AgentGapAnalyzer
-
-    analyzer = AgentGapAnalyzer(storage_dir=tmp_path / "agent_gaps")
-    monkeypatch.setitem(get_analyzer.__globals__, "_analyzer", analyzer)
-    return analyzer
-
-
->>>>>>> origin/main
 class TestMonitoring:
     """Test monitoring functions."""
 

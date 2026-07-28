@@ -3,10 +3,6 @@
 from __future__ import annotations
 
 import sys
-<<<<<<< HEAD
-=======
-import types
->>>>>>> origin/main
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -28,28 +24,6 @@ from youtube_extension.backend.services.memory_optimizer import (
 )
 
 
-<<<<<<< HEAD
-=======
-@pytest.fixture(autouse=True)
-def _deterministic_process_metrics(monkeypatch):
-    """Keep unit tests independent of the runner's PID namespace."""
-    import youtube_extension.backend.services.memory_optimizer as module
-
-    process = types.SimpleNamespace(
-        memory_info=lambda: types.SimpleNamespace(rss=256 * 1024 * 1024),
-    )
-    fake_psutil = types.SimpleNamespace(
-        Process=lambda: process,
-        virtual_memory=lambda: types.SimpleNamespace(
-            total=8 * 1024**3,
-            available=4 * 1024**3,
-            percent=50.0,
-        ),
-    )
-    monkeypatch.setattr(module, "psutil", fake_psutil)
-
-
->>>>>>> origin/main
 # ===========================================================================
 # MemorySnapshot dataclass
 # ===========================================================================

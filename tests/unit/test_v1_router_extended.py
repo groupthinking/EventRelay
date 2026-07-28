@@ -13,10 +13,6 @@ from __future__ import annotations
 import asyncio
 import sys
 from pathlib import Path
-<<<<<<< HEAD
-=======
-from types import SimpleNamespace
->>>>>>> origin/main
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -884,7 +880,6 @@ class TestVideoJobEndpoints:
 
 
 class TestEventExtractionEndpoint:
-<<<<<<< HEAD
     def test_extract_events_from_transcript(self, client):
         """Use inline transcript — no job_id."""
         with patch.object(
@@ -892,31 +887,6 @@ class TestEventExtractionEndpoint:
             "process",
             new_callable=AsyncMock,
             return_value="Build a web app\nCreate an API\nDeploy to cloud\n",
-=======
-    def test_extract_events_from_transcript(self, client, monkeypatch):
-        """Use inline transcript — no job_id."""
-        from youtube_extension.services.ai import vercel_gateway_provider
-
-        processor = SimpleNamespace(
-            process=AsyncMock(
-                return_value=SimpleNamespace(
-                    success=True,
-                    response="Build a web app\nCreate an API\nDeploy to cloud\n",
-                    cloud_result=SimpleNamespace(backend="gemini"),
-                )
-            )
-        )
-        monkeypatch.setattr(
-            vercel_gateway_provider,
-            "gateway_available",
-            lambda: False,
-            raising=False,
-        )
-        with patch.object(
-            router_module,
-            "HybridProcessorService",
-            return_value=processor,
->>>>>>> origin/main
         ):
             payload = {
                 "transcript": (

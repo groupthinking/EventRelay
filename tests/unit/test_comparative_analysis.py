@@ -3,10 +3,7 @@
 from __future__ import annotations
 
 import sys
-<<<<<<< HEAD
 import types
-=======
->>>>>>> origin/main
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -14,7 +11,6 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
-<<<<<<< HEAD
 # Stub out optional heavy dependencies before importing the module
 _google_stub = types.ModuleType("google")
 sys.modules.setdefault("google", _google_stub)
@@ -31,42 +27,21 @@ _anthropic_stub = types.ModuleType("anthropic")
 _anthropic_stub.Anthropic = MagicMock()
 sys.modules.setdefault("anthropic", _anthropic_stub)
 
-=======
->>>>>>> origin/main
 # httpx is a real installed dependency — import it so sys.modules contains the real module
 # before any test file with a heavier httpx stub is loaded
 import httpx as _httpx_real  # noqa: F401
 
-<<<<<<< HEAD
 from youtube_extension.backend.services.comparative_analysis import (  # noqa: E402
-=======
-import youtube_extension.backend.services.comparative_analysis as _comparative_analysis  # noqa: E402
-from youtube_extension.backend.services.comparative_analysis import (  # noqa: E402
-    LFM2_MCP_BASE_URL,
->>>>>>> origin/main
     AnalysisTask,
     ComparativeAnalysisService,
     ComparativeReport,
     LFM2MCPClient,
-<<<<<<< HEAD
     LFM2_MCP_BASE_URL,
-=======
->>>>>>> origin/main
     ProviderResult,
     get_comparative_analysis_service,
 )
 
 
-<<<<<<< HEAD
-=======
-@pytest.fixture(autouse=True)
-def _disable_external_sdk_client_construction(monkeypatch):
-    """Keep service construction offline regardless of installed SDKs or keys."""
-    monkeypatch.setattr(_comparative_analysis, "_GEMINI_AVAILABLE", False)
-    monkeypatch.setattr(_comparative_analysis, "_CLAUDE_AVAILABLE", False)
-
-
->>>>>>> origin/main
 # ===========================================================================
 # AnalysisTask enum
 # ===========================================================================
@@ -633,10 +608,7 @@ class TestQueryGrok:
             "choices": [{"message": {"content": "grok says hello"}}]
         }
 
-<<<<<<< HEAD
         import httpx as real_httpx
-=======
->>>>>>> origin/main
         mock_client = AsyncMock()
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)

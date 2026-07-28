@@ -12,7 +12,6 @@ import pytest
 _SRC = Path(__file__).resolve().parents[2] / "src"
 sys.path.insert(0, str(_SRC))
 
-<<<<<<< HEAD
 # The videopack __init__.py references a 'Chapter' symbol that doesn't exist yet,
 # so we stub the package to bypass the broken __init__ and import submodules directly.
 for _key in [k for k in list(sys.modules.keys()) if "youtube_extension.videopack" in k]:
@@ -22,10 +21,6 @@ _vp_stub = type(sys)("youtube_extension.videopack")
 _vp_stub.__path__ = [str(_SRC / "youtube_extension/videopack")]
 _vp_stub.__package__ = "youtube_extension.videopack"
 sys.modules["youtube_extension.videopack"] = _vp_stub
-=======
-# Import package directly to verify __init__.py works and is covered
-import youtube_extension.videopack  # noqa: F401
->>>>>>> origin/main
 
 from youtube_extension.videopack.schema import (
     ArtifactRef,
