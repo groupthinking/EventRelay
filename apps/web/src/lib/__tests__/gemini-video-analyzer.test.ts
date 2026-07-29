@@ -2,7 +2,15 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 
 const { gatewayChatMock, fetchTranscriptMock } = vi.hoisted(() => ({
   gatewayChatMock: vi.fn(),
-  fetchTranscriptMock: vi.fn(async () => ({ success: false, error: 'unavailable in tests' })),
+  fetchTranscriptMock: vi.fn(
+    async (): Promise<{
+      success: boolean;
+      error?: string;
+      transcript?: string;
+      wordCount?: number;
+      source?: string;
+    }> => ({ success: false, error: 'unavailable in tests' }),
+  ),
 }));
 
 vi.mock('@/lib/vercel-ai-gateway', async (importOriginal) => {
