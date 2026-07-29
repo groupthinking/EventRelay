@@ -55,7 +55,7 @@ afterEach(() => {
 
 describe('buildTranscriptOnlyAnalysis', () => {
   it('preserves the exact transcript without inventing structured analysis', () => {
-    const transcript = 'one two three four';
+    const transcript = '  one two three four \n';
     const result = buildTranscriptOnlyAnalysis(transcript);
 
     expect(result.transcript).toEqual([{ start: 0, duration: 0, text: transcript }]);
@@ -145,6 +145,20 @@ describe('analyzeVideoWithGemini retry on parse failure', () => {
     expect(result.actions).toEqual([]);
     expect(result.events).toEqual([]);
     expect(gatewayChatMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not treat an untyped aborted message as a timeout', async () => {
+    fetchTranscriptMock.mockResolvedValueOnce({
+      success: true,
+      transcript: 'A captured transcript long enough to select structured analysis.',
+      wordCount: 10,
+      source: 'youtube',
+    });
+    gatewayChatMock.mockRejectedValueOnce(new Error('Generation aborted by policy'));
+
+    await expect(
+      analyzeVideoWithGemini('https://www.youtube.com/watch?v=abc123'),
+    ).rejects.toThrow('Generation aborted by policy');
   });
 
   it('keeps non-timeout provider failures fail-closed after transcript capture', async () => {
