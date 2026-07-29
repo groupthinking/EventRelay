@@ -48,6 +48,9 @@ export interface VideoAnalysisResult {
     code: string;
     language: string;
   }[];
+  /** Machine-readable marker for transcript-only timeout/abort fallbacks. */
+  degraded?: true;
+  degradationReason?: 'structured-analysis-timeout';
 }
 
 /**
@@ -186,6 +189,8 @@ export function buildTranscriptOnlyAnalysis(actualTranscript: string): VideoAnal
     architectureCode: '',
     ingestScript: '',
     e22Snippets: [],
+    degraded: true,
+    degradationReason: 'structured-analysis-timeout',
   };
 }
 
