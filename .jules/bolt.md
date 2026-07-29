@@ -17,3 +17,6 @@
 ## 2026-07-24 - Avoiding spread operator for large arrays in calculations
 **Learning:** Using `Math.max(...array.map())` on potentially large data structures runs the risk of hitting the "Maximum call stack size exceeded" error, and creates unnecessary intermediate array allocations, reducing performance.
 **Action:** Replace multiple O(N) array mapping and spread operations with a single O(N) `for` loop to compute bounds simultaneously with zero intermediate allocations.
+## $(date +%Y-%m-%d) - Iterative processing for CI checks
+**Learning:** In GitHub Action workflow scripts, using `.map().filter()` or array spread operators `...array` like `Math.max(...array)` can lead to performance hits or "Maximum call stack size exceeded" on highly-loaded or long-lived workflows, especially when processing many timestamps or metadata records.
+**Action:** Replace `Math.max(...times.map(...))` anti-patterns with a single O(N) iterative `for` loop to track the maximum value, eliminating temporary array allocations and spread operator overhead.

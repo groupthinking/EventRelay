@@ -354,12 +354,16 @@ jobs:
               return 'skip';
             }
             function latestIso(values) {
-              const times = values
-                .map(value => Date.parse(value))
-                .filter(Number.isFinite);
-              return times.length > 0
-                ? new Date(Math.max(...times)).toISOString()
-                : null;
+              let maxTime = -Infinity;
+              let hasTime = false;
+              for (let i = 0; i < values.length; i++) {
+                const time = Date.parse(values[i]);
+                if (Number.isFinite(time)) {
+                  if (time > maxTime) maxTime = time;
+                  hasTime = true;
+                }
+              }
+              return hasTime ? new Date(maxTime).toISOString() : null;
             }
             function workflowRunId(targetUrl) {
               const target = String(targetUrl || '');
