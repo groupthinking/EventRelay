@@ -247,28 +247,32 @@ async function pollBackendJob(
  * of which block the response stream.
  */
 function schedulePostProcessing(videoUrl: string, analysis: VideoAnalysisResult, useBackend: boolean) {
-  // Direct waitUntil on saveTrainingExample for training save (ancillary, post-response)
-  // Orchestrated here AFTER pipeline_status:complete events are streamed.
-  waitUntil(
-    saveTrainingExample(
-      videoUrl,
-      analysis as unknown as Record<string, unknown>,
-    ).then(({ saved, metadata, milestone }) => {
-      if (saved && milestone) {
-        console.log(`\n🎯 TRAINING MILESTONE: ${milestone}/${TUNING_THRESHOLD} examples collected!`);
-        if (milestone >= TUNING_THRESHOLD) {
-          console.log('🚀 READY FOR FINE-TUNING! Call POST /api/training/trigger to start.');
+  // Transcript-only timeout fallbacks are useful for retrieval but are not
+  // valid supervised-training labels. Keep embeddings and indexing below.
+  if (analysis.degraded !== true) {
+    waitUntil(
+      saveTrainingExample(
+        videoUrl,
+        analysis as unknown as Record<string, unknown>,
+      ).then(({ saved, metadata, milestone }) => {
+        if (saved && milestone) {
+          console.log(`\n🎯 TRAINING MILESTONE: ${milestone}/${TUNING_THRESHOLD} examples collected!`);
+          if (milestone >= TUNING_THRESHOLD) {
+            console.log('🚀 READY FOR FINE-TUNING! Call POST /api/training/trigger to start.');
+          }
         }
-      }
-      if (saved) {
-        console.log(`[Training] Dataset: ${metadata.totalExamples} examples`);
-      } else {
-        console.log(`[Training] Skipped duplicate: ${videoUrl}`);
-      }
-    }).catch((err) => {
-      console.warn(`[Training] Background task failed (non-fatal):`, err);
-    }),
-  );
+        if (saved) {
+          console.log(`[Training] Dataset: ${metadata.totalExamples} examples`);
+        } else {
+          console.log(`[Training] Skipped duplicate: ${videoUrl}`);
+        }
+      }).catch((err) => {
+        console.warn(`[Training] Background task failed (non-fatal):`, err);
+      }),
+    );
+  } else {
+    console.warn('[Training] Skipped degraded transcript-only analysis.');
+  }
 
   // Embeddings — direct waitUntil on the post-processing promise (includes saveEmbeddings)
   waitUntil(
