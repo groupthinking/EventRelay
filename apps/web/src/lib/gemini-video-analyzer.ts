@@ -164,6 +164,42 @@ ${actualTranscript ? actualTranscript : "(No transcript available, you MUST use 
 === END TRANSCRIPT ===`;
 }
 
+/**
+ * Build an honest degraded result when transcript retrieval succeeded but the
+ * structured provider call exhausted its budget. The transcript is preserved
+ * verbatim; fields that require model analysis remain empty.
+ */
+export function buildTranscriptOnlyAnalysis(actualTranscript: string): VideoAnalysisResult {
+  const transcript = actualTranscript.trim();
+  const wordCount = transcript ? transcript.split(/\s+/).length : 0;
+
+  return {
+    title: 'Transcript captured — structured analysis unavailable',
+    summary:
+      `Captured ${wordCount} words from the video source. Structured AI analysis did not complete.`,
+    transcript: transcript ? [{ start: 0, duration: 0, text: transcript }] : [],
+    events: [],
+    actions: [],
+    topics: [],
+    architectureCode: '',
+    ingestScript: '',
+    e22Snippets: [],
+  };
+}
+
+function isAbortOrTimeout(error: unknown): boolean {
+  const name = error instanceof Error ? error.name : '';
+  const message = error instanceof Error ? error.message : String(error);
+  const normalized = message.toLowerCase();
+
+  return (
+    name === 'AbortError' ||
+    normalized.includes('aborted') ||
+    normalized.includes('timed out') ||
+    normalized.includes('deadline_exceeded')
+  );
+}
+
 // Utility to delay operations
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -298,6 +334,14 @@ export async function analyzeVideoWithGemini(
       return parseAnalysisResult(resultText);
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
+
+      if (actualTranscript && isAbortOrTimeout(error)) {
+        console.warn(
+          '[Video Analyzer] Structured analysis timed out after transcript capture; returning transcript-only result.',
+        );
+        return buildTranscriptOnlyAnalysis(actualTranscript);
+      }
+
       const retryable =
         error instanceof AnalysisParseError ||
         errorMessage.includes('503') ||
