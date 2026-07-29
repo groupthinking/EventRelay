@@ -1,15 +1,14 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
+import type { TranscriptionResult } from '@/lib/transcription-service';
 
 const { gatewayChatMock, fetchTranscriptMock } = vi.hoisted(() => ({
   gatewayChatMock: vi.fn(),
   fetchTranscriptMock: vi.fn(
-    async (): Promise<{
-      success: boolean;
-      error?: string;
-      transcript?: string;
-      wordCount?: number;
-      source?: string;
-    }> => ({ success: false, error: 'unavailable in tests' }),
+    async (): Promise<TranscriptionResult> => ({
+      success: false,
+      transcript: '',
+      error: 'unavailable in tests',
+    }),
   ),
 }));
 
@@ -49,7 +48,11 @@ const VALID_JSON = JSON.stringify(VALID_ANALYSIS);
 afterEach(() => {
   gatewayChatMock.mockReset();
   fetchTranscriptMock.mockReset();
-  fetchTranscriptMock.mockResolvedValue({ success: false, error: 'unavailable in tests' });
+  fetchTranscriptMock.mockResolvedValue({
+    success: false,
+    transcript: '',
+    error: 'unavailable in tests',
+  });
   vi.useRealTimers();
 });
 
@@ -144,8 +147,37 @@ describe('analyzeVideoWithGemini retry on parse failure', () => {
     expect(result.transcript).toEqual([{ start: 0, duration: 0, text: transcript }]);
     expect(result.actions).toEqual([]);
     expect(result.events).toEqual([]);
+    expect(result.degraded).toBe(true);
+    expect(result.degradationReason).toBe('structured-analysis-timeout');
     expect(gatewayChatMock).toHaveBeenCalledTimes(1);
   });
+
+  it.each(['timed out', 'deadline_exceeded'])(
+    'returns a marked transcript-only result for %s failures',
+    async (message) => {
+      const transcript =
+        'A captured transcript long enough to remain useful when structured analysis times out.';
+      fetchTranscriptMock.mockResolvedValueOnce({
+        success: true,
+        transcript,
+        wordCount: 13,
+        source: 'youtube',
+      });
+      gatewayChatMock.mockRejectedValueOnce(new Error(message));
+
+      const result = await analyzeVideoWithGemini(
+        'https://www.youtube.com/watch?v=abc123',
+      );
+
+      expect(result.transcript).toEqual([
+        { start: 0, duration: 0, text: transcript },
+      ]);
+      expect(result.actions).toEqual([]);
+      expect(result.events).toEqual([]);
+      expect(result.degraded).toBe(true);
+      expect(result.degradationReason).toBe('structured-analysis-timeout');
+    },
+  );
 
   it('does not treat an untyped aborted message as a timeout', async () => {
     fetchTranscriptMock.mockResolvedValueOnce({
