@@ -36,13 +36,31 @@ describe('dashboard search accessibility', () => {
   it('gives dashboard panel controls a visible keyboard focus state that meets the WCAG 2.2 SC 2.4.11 3:1 contrast floor', () => {
     const source = readSource('components/dashboard/panels.tsx');
 
+    // Extract the specific <button> opening tag that owns a given onClick
+    // handler, so each assertion is bound to its own control rather than to
+    // the file at large. The closing `>` of a JSX opening tag sits on its own
+    // line here, which lets us stop at it without tripping over the `=>` in
+    // the arrow handler.
+    const buttonTagFor = (handler: string) => {
+      const openingTags = source.match(/<button\b[\s\S]*?\n\s*>/g) ?? [];
+      return openingTags.find((tag) => tag.includes(handler));
+    };
+
     // Dispatch (indigo-400) and Refresh (white) rings composite against the
-    // ~#0e0e13 dashboard background; the opacities below are the minimum that
-    // clear the 3:1 focus-indicator contrast ratio. Guard against regressing
-    // them back to the sub-threshold /50 and /30 values.
-    expect(source).toContain('focus-visible:ring-indigo-400/70');
-    expect(source).toContain('focus-visible:ring-white/40');
-    expect(source).not.toContain('focus-visible:ring-indigo-400/50');
-    expect(source).not.toContain('focus-visible:ring-white/30');
+    // ~#0e0e13 dashboard background; the opacities asserted below are the
+    // minimum that clear the 3:1 focus-indicator contrast ratio. Asserting on
+    // each button's own tag guards against a regression on one button being
+    // masked by the class merely existing elsewhere, and vice versa.
+    const dispatchButton = buttonTagFor('onDispatch(video.id)');
+    expect(dispatchButton).toBeDefined();
+    expect(dispatchButton).toContain('focus-visible:ring-2');
+    expect(dispatchButton).toContain('focus-visible:ring-indigo-400/70');
+    expect(dispatchButton).not.toContain('focus-visible:ring-indigo-400/50');
+
+    const refreshButton = buttonTagFor('onRefresh(video.id)');
+    expect(refreshButton).toBeDefined();
+    expect(refreshButton).toContain('focus-visible:ring-2');
+    expect(refreshButton).toContain('focus-visible:ring-white/40');
+    expect(refreshButton).not.toContain('focus-visible:ring-white/30');
   });
 });
