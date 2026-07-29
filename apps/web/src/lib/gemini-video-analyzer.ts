@@ -170,14 +170,16 @@ ${actualTranscript ? actualTranscript : "(No transcript available, you MUST use 
  * verbatim; fields that require model analysis remain empty.
  */
 export function buildTranscriptOnlyAnalysis(actualTranscript: string): VideoAnalysisResult {
-  const transcript = actualTranscript.trim();
-  const wordCount = transcript ? transcript.split(/\s+/).length : 0;
+  const normalizedTranscript = actualTranscript.trim();
+  const wordCount = normalizedTranscript ? normalizedTranscript.split(/\s+/).length : 0;
 
   return {
     title: 'Transcript captured — structured analysis unavailable',
     summary:
       `Captured ${wordCount} words from the video source. Structured AI analysis did not complete.`,
-    transcript: transcript ? [{ start: 0, duration: 0, text: transcript }] : [],
+    transcript: normalizedTranscript
+      ? [{ start: 0, duration: 0, text: actualTranscript }]
+      : [],
     events: [],
     actions: [],
     topics: [],
@@ -194,9 +196,11 @@ function isAbortOrTimeout(error: unknown): boolean {
 
   return (
     name === 'AbortError' ||
-    normalized.includes('aborted') ||
+    name === 'TimeoutError' ||
     normalized.includes('timed out') ||
-    normalized.includes('deadline_exceeded')
+    normalized.includes('timeout') ||
+    normalized.includes('deadline_exceeded') ||
+    normalized.includes('deadline exceeded')
   );
 }
 
