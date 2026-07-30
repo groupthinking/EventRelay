@@ -20,7 +20,7 @@
     "npm": ">=8.0.0"
   },
   "devDependencies": {
-    "@modelcontextprotocol/sdk": "^1.26.0",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "brace-expansion": "^5.0.8",
     "eslint": "^9.39.5",
     "next": "^16.2.11",
@@ -46,6 +46,7 @@
     "picomatch": "^4.0.5",
     "protobufjs": "^7.6.5",
     "sharp": "^0.35.0",
+    "@hono/node-server": "^2.0.5",
     "minimatch@3.1.5": {
       "brace-expansion": "^1.1.16"
     },
