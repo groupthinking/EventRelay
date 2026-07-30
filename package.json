@@ -34,7 +34,7 @@
     "react-dom": "^19",
     "next": "^16.2.11",
     "nth-check": "^2.0.1",
-    "postcss": "^8.5.15",
+    "postcss": "^8.5.18",
     "undici": "^6.22.0",
     "esbuild": "^0.28.1",
     "uuid": "11.1.1",
@@ -44,12 +44,13 @@
     "vite": "^8.1.4",
     "vitest": "^4.1.10",
     "picomatch": "^4.0.5",
-    "protobufjs": "^7.6.2",
+    "protobufjs": "^7.6.5",
+    "sharp": "^0.35.0",
     "minimatch@3.1.5": {
-      "brace-expansion": "^1.1.12"
+      "brace-expansion": "^1.1.16"
     },
     "minimatch@9.0.9": {
-      "brace-expansion": "^2.0.3"
+      "brace-expansion": "^2.1.2"
     }
   },
   "dependencies": {
