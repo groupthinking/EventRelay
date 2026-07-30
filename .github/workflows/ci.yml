@@ -28,6 +28,18 @@ jobs:
             exit 1
           fi
           echo "No conflict markers found."
+      - name: No IDE self-identifiers in shared .vscode config
+        run: |
+          # VS Code forks (Antigravity, Cursor, Windsurf) write their own
+          # extension IDs into workspace settings; those IDs resolve to
+          # nothing in stock VS Code and fail silently. Mirrors the
+          # vscode-ide-self-reference pre-commit hook, which not every
+          # committer has installed.
+          if git grep -nE 'google\.antigravity|anysphere\.|codeium\.windsurf' -- .vscode/; then
+            echo "::error::IDE self-identifier found in shared .vscode/ config (see matches above)."
+            exit 1
+          fi
+          echo "No IDE self-identifiers found."
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
