@@ -118,6 +118,10 @@ workflow_results/
 .vscode/*
 !.vscode/settings.json
 !.vscode/extensions.json
+# Agent-IDE skill caches materialized into the working tree (Antigravity/dak
+# plugin skills under .agents/). Same drift class as the .vscode rule above:
+# tool state, not project source — never commit.
+.agents/
 .webassets-cache
 .yarn/
 Desktop.ini
