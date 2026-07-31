@@ -54,6 +54,13 @@ _USERINFO_RE = re.compile(
     r"@"
 )
 
+# Returned when the input cannot be stringified, or when redaction itself
+# fails. Both are fail-closed: emitting a fixed placeholder is preferable to
+# raising (which would mask the original error) or to returning text we cannot
+# guarantee is clean.
+_UNPRINTABLE = "<unprintable error>"
+_REDACTION_FAILED = "<redaction failed>"
+
 
 def _get_webshare_proxy_url() -> str | None:
     """Return the validated WEBSHARE_PROXY_URL, or None for direct connection.
@@ -108,27 +115,38 @@ def _redact_proxy_credentials(text: Any) -> str:
     Delegates to the canonical helper when the ``youtube_extension`` package is
     importable; this module is also loaded standalone by path (see
     ``src/agents/mcp_enhanced_video_processor.py``), so an equivalent local
-    implementation is retained as a fallback. Never raises -- it is called from
-    exception handlers, where a failure would mask the original error.
+    implementation is retained as a fallback.
+
+    Never raises -- it is called from exception handlers, where a failure would
+    mask the original error. If ``text`` cannot be stringified or redaction
+    fails, a fixed non-sensitive placeholder is returned instead.
     """
     try:  # pragma: no cover - exercised only when the package is importable
         from youtube_extension.utils.proxy import (
             redact_proxy_credentials as _canonical,
         )
-
-        return _canonical(text)
     except ImportError:
-        pass
+        _canonical = None  # type: ignore[assignment]
 
-    if not isinstance(text, str):
+    if _canonical is not None:  # pragma: no cover - see above
+        return _canonical(text)
+
+    if isinstance(text, str):
+        candidate = text
+    else:
         try:
-            text = str(text)
-        except Exception:
-            # "Never raises" contract: this fallback runs inside exception
-            # handlers, so a failing __str__ must not propagate and mask the
-            # original error. Return a fixed, non-sensitive placeholder.
-            return "<unprintable error>"
+            candidate = str(text)
+        except Exception:  # noqa: BLE001 - a hostile __str__ must not propagate
+            return _UNPRINTABLE
 
+    try:
+        return _redact_local(candidate)
+    except Exception:  # noqa: BLE001 - never return text we cannot vouch for
+        return _REDACTION_FAILED
+
+
+def _redact_local(text: str) -> str:
+    """Run the two redaction passes over an already-stringified ``text``."""
     url = os.getenv("WEBSHARE_PROXY_URL", "").strip()
     if url and url in text:
         try:
@@ -399,20 +417,20 @@ class YouTubeAPIProxy:
 
                 # Check if we should retry
                 if attempt > self.retry_config.max_retries:
-                    logger.error(f"❌ {operation_name} failed after {attempt-1} retries: {_redact_proxy_credentials(str(error))}")
+                    logger.error(f"❌ {operation_name} failed after {attempt-1} retries: {_redact_proxy_credentials(error)}")
                     self.circuit_breaker.record_failure()
                     self.consecutive_errors += 1
                     break
 
                 # Non-retryable errors
                 if error_type in [YouTubeErrorType.VIDEO_NOT_FOUND, YouTubeErrorType.PRIVATE_VIDEO]:
-                    logger.warning(f"⚠️ {operation_name} non-retryable error: {_redact_proxy_credentials(str(error))}")
+                    logger.warning(f"⚠️ {operation_name} non-retryable error: {_redact_proxy_credentials(error)}")
                     break
 
                 # Calculate retry delay
                 retry_delay = self._calculate_retry_delay(attempt, error_type)
 
-                logger.warning(f"⚠️ {operation_name} attempt {attempt} failed ({error_type.value}), retrying in {retry_delay:.2f}s: {_redact_proxy_credentials(str(error))}")
+                logger.warning(f"⚠️ {operation_name} attempt {attempt} failed ({error_type.value}), retrying in {retry_delay:.2f}s: {_redact_proxy_credentials(error)}")
 
                 self.stats["retries_executed"] += 1
                 await asyncio.sleep(retry_delay)

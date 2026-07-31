@@ -26,6 +26,7 @@ _SRC = Path(__file__).resolve().parents[2] / "src"
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
+from youtube_extension.utils import proxy as proxy_module  # noqa: E402
 from youtube_extension.utils.proxy import (  # noqa: E402
     _PROXY_ENV_VAR,
     get_proxy_dict,
@@ -245,3 +246,70 @@ def test_timeout_expired_argv_is_redacted(monkeypatch):
 
     assert PASSWORD in str(error), "precondition: the raw error does leak"
     _assert_no_secrets(redact_proxy_credentials(error))
+
+
+# ---------------------------------------------------------------------------
+# "Never raises" is a hard contract: the helper only ever runs inside an
+# ``except`` block, so if it raises it masks the original failure entirely --
+# no log line, no API response, just a different traceback.
+# ---------------------------------------------------------------------------
+
+
+class _HostileStr(Exception):
+    """An exception whose ``__str__`` raises.
+
+    Not hypothetical: third-party errors that format their message lazily can
+    fail this way (a missing interpolation key, a repr that touches a closed
+    resource), and they surface exactly where this helper is used.
+    """
+
+    def __str__(self):
+        raise RuntimeError("boom in __str__")
+
+
+class _HostileRepr:
+    def __str__(self):
+        raise ValueError("boom in __str__")
+
+    def __repr__(self):
+        raise ValueError("boom in __repr__")
+
+
+def test_unstringifiable_exception_does_not_propagate(monkeypatch):
+    monkeypatch.setenv(_PROXY_ENV_VAR, PROXY_URL)
+    result = redact_proxy_credentials(_HostileStr())
+    assert isinstance(result, str)
+    _assert_no_secrets(result)
+
+
+def test_unstringifiable_plain_object_does_not_propagate(monkeypatch):
+    monkeypatch.setenv(_PROXY_ENV_VAR, PROXY_URL)
+    assert isinstance(redact_proxy_credentials(_HostileRepr()), str)
+
+
+def test_unstringifiable_input_returns_placeholder_not_empty():
+    """A silent empty string would make the log line useless; the caller needs
+    to be able to tell *why* there is no detail."""
+    result = redact_proxy_credentials(_HostileStr())
+    assert result.strip(), "placeholder must be non-empty"
+    assert "boom" not in result, "must not smuggle the secondary failure through"
+
+
+def test_redaction_failure_returns_placeholder_not_raw_text(monkeypatch):
+    """If the redaction machinery itself fails we must fail *closed*: returning
+    the unredacted text would leak the credential this function exists to strip."""
+    monkeypatch.setenv(_PROXY_ENV_VAR, PROXY_URL)
+
+    class _ExplodingPattern:
+        def sub(self, *_args, **_kwargs):
+            raise RuntimeError("regex exploded")
+
+    monkeypatch.setattr(proxy_module, "_USERINFO_RE", _ExplodingPattern())
+    result = redact_proxy_credentials(f"failed via {PROXY_URL}")
+    _assert_no_secrets(result)
+    assert "regex exploded" not in result
+
+
+def test_hostile_input_still_safe_when_no_proxy_configured(monkeypatch):
+    monkeypatch.delenv(_PROXY_ENV_VAR, raising=False)
+    assert isinstance(redact_proxy_credentials(_HostileStr()), str)

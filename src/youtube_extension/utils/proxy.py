@@ -46,6 +46,13 @@ _USERINFO_RE = re.compile(
 
 _REDACTED = "***"
 
+# Returned when the input cannot be stringified, or when redaction itself
+# fails. Both are fail-closed: emitting a fixed placeholder is preferable to
+# raising (which would mask the original error) or to returning text we cannot
+# guarantee is clean (which could leak the credential we are trying to strip).
+_UNPRINTABLE = "<unprintable error>"
+_REDACTION_FAILED = "<redaction failed>"
+
 
 def get_proxy_url() -> str | None:
     """Return the validated Webshare proxy URL, or None for direct connection.
@@ -111,18 +118,26 @@ def redact_proxy_credentials(text: Any) -> str:
        different proxy variable (``HTTPS_PROXY`` and friends) entirely.
 
     Always returns a string and never raises; it is called from exception
-    handlers, where a failure would mask the original error.
+    handlers, where a failure would mask the original error. If ``text`` cannot
+    be stringified (a ``__str__`` that itself raises) or redaction fails, a
+    fixed non-sensitive placeholder is returned instead.
     """
-    if not isinstance(text, str):
+    if isinstance(text, str):
+        candidate = text
+    else:
         try:
-            text = str(text)
-        except Exception:
-            # The contract is "never raises": an object whose __str__ fails
-            # here is called from an exception handler, so propagating would
-            # mask the original error. Fall back to a fixed, non-sensitive
-            # placeholder instead.
-            return "<unprintable error>"
+            candidate = str(text)
+        except Exception:  # noqa: BLE001 - a hostile __str__ must not propagate
+            return _UNPRINTABLE
 
+    try:
+        return _redact(candidate)
+    except Exception:  # noqa: BLE001 - never return text we cannot vouch for
+        return _REDACTION_FAILED
+
+
+def _redact(text: str) -> str:
+    """Run the two redaction passes over an already-stringified ``text``."""
     url = os.getenv(_PROXY_ENV_VAR, "").strip()
     if url and url in text:
         try:
