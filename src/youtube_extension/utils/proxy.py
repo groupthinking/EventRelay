@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import urllib.parse
 from typing import Any
 
@@ -28,14 +29,41 @@ logger = logging.getLogger(__name__)
 
 _PROXY_ENV_VAR = "WEBSHARE_PROXY_URL"
 
+_ALLOWED_SCHEMES = ("http", "https", "socks5", "socks5h")
+
+# Matches the ``user[:password]@`` userinfo segment of any URL. The user and
+# password classes exclude "/" so a path containing "@" (e.g.
+# "https://example.com/a@b") is never mistaken for credentials.
+_USERINFO_RE = re.compile(
+    r"(?P<scheme>[A-Za-z][A-Za-z0-9+.\-]*://)"
+    r"(?P<user>[^\s/:@]+)"
+    r"(?::(?P<password>[^\s/@]*))?"
+    r"@"
+)
+
+_REDACTED = "***"
+
 
 def get_proxy_url() -> str | None:
-    """Return the validated Webshare proxy URL, or None for direct connection."""
+    """Return the validated Webshare proxy URL, or None for direct connection.
+
+    Never raises and never emits the URL (which carries credentials) into logs.
+    ``urllib.parse`` raises ``ValueError`` for several malformed inputs — an
+    unterminated IPv6 literal at parse time, a non-numeric or out-of-range port
+    when ``.port`` is read — so both are contained here rather than escaping to
+    callers that would log the exception alongside the offending URL.
+    """
     url = os.getenv(_PROXY_ENV_VAR, "").strip()
     if not url:
         return None
-    parsed = urllib.parse.urlparse(url)
-    if parsed.scheme not in ("http", "https", "socks5") or not parsed.hostname:
+    try:
+        parsed = urllib.parse.urlparse(url)
+        valid = parsed.scheme in _ALLOWED_SCHEMES and bool(parsed.hostname)
+        if valid:
+            parsed.port  # noqa: B018 - validates the port, raises ValueError if bad
+    except ValueError:
+        valid = False
+    if not valid:
         logger.warning(
             "%s is set but malformed — falling back to direct connection",
             _PROXY_ENV_VAR,
@@ -67,17 +95,39 @@ def get_transcript_proxy_config() -> Any | None:
     return GenericProxyConfig(http_url=url, https_url=url)
 
 
-def redact_proxy_credentials(text: str) -> str:
-    """Strip user:pass credentials of the configured proxy URL from text."""
+def redact_proxy_credentials(text: Any) -> str:
+    """Strip URL userinfo (``user:pass@``) from ``text``.
+
+    Two passes, because either alone is insufficient:
+
+    1. Exact replacement of the configured ``WEBSHARE_PROXY_URL`` — preserves
+       the host so operators can still tell *which* proxy was in play.
+    2. A generic ``scheme://user:pass@`` sweep — catches credentials that never
+       match the env value verbatim: yt-dlp echoing a normalised/percent-encoded
+       form back on stderr, a ``CalledProcessError`` repr of the argv, or a
+       different proxy variable (``HTTPS_PROXY`` and friends) entirely.
+
+    Always returns a string and never raises; it is called from exception
+    handlers, where a failure would mask the original error.
+    """
+    if not isinstance(text, str):
+        text = str(text)
+
     url = os.getenv(_PROXY_ENV_VAR, "").strip()
-    if not url or url not in text:
-        return text
-    try:
-        parsed = urllib.parse.urlparse(url)
-        netloc = parsed.hostname or ""
-        if parsed.port:
-            netloc = f"{netloc}:{parsed.port}"
-        redacted = parsed._replace(netloc=netloc).geturl()
-    except (ValueError, AttributeError):
-        redacted = "<proxy-url>"
-    return text.replace(url, redacted)
+    if url and url in text:
+        try:
+            parsed = urllib.parse.urlparse(url)
+            netloc = parsed.hostname or ""
+            if parsed.port:
+                netloc = f"{netloc}:{parsed.port}"
+            redacted = parsed._replace(netloc=netloc).geturl()
+        except (ValueError, AttributeError):
+            redacted = "<proxy-url>"
+        text = text.replace(url, redacted)
+
+    def _mask(match: re.Match[str]) -> str:
+        if match.group("password") is None:
+            return f"{match.group('scheme')}{_REDACTED}@"
+        return f"{match.group('scheme')}{_REDACTED}:{_REDACTED}@"
+
+    return _USERINFO_RE.sub(_mask, text)

@@ -25,7 +25,11 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-from youtube_extension.utils.proxy import get_proxy_url, get_transcript_proxy_config
+from youtube_extension.utils.proxy import (
+    get_proxy_url,
+    get_transcript_proxy_config,
+    redact_proxy_credentials,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -316,8 +320,12 @@ class EnhancedVideoProcessor:
                 'processing_time': datetime.now().isoformat()
             }
         except Exception as e:
-            logger.warning(f"OpenAI Whisper failed: {e}")
-            return {'text': '', 'source': 'failed', 'error': str(e)}
+            # subprocess.run(check=True) raises CalledProcessError whose str()
+            # embeds the whole argv — including "--proxy <url-with-credentials>".
+            # Redact before it reaches the log or the returned error field.
+            detail = redact_proxy_credentials(e)
+            logger.warning(f"OpenAI Whisper failed: {detail}")
+            return {'text': '', 'source': 'failed', 'error': detail}
     
     async def _get_youtube_transcript_fallback(self, video_id: str) -> Dict[str, Any]:
         """Fallback to YouTube transcript API"""

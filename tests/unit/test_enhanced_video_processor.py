@@ -8,6 +8,7 @@ fully mocked so tests run without any network or heavyweight library.
 from __future__ import annotations
 
 import json
+import logging
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -638,6 +639,42 @@ class TestGetOpenAIWhisperTranscript:
         assert command[-2:] == ["--", _VIDEO_URL]
         assert hostile_url not in command
         assert result["text"] == "safe transcript"
+
+    async def test_subprocess_failure_never_leaks_proxy_credentials(
+        self, tmp_path, monkeypatch, caplog
+    ):
+        """Regression for #1113.
+
+        ``subprocess.run(..., check=True)`` raises ``CalledProcessError`` whose
+        ``str()`` renders the entire argv — which carries
+        ``--proxy http://user:pass@host``. That string reached both the warning
+        log (CWE-532) and the returned ``error`` field (CWE-209).
+        """
+        import subprocess
+
+        password = "sup3r-s3cret-pw"
+        proxy_url = f"http://wsuser:{password}@p.webshare.io:80"
+        monkeypatch.setenv("WEBSHARE_PROXY_URL", proxy_url)
+
+        proc = _make_processor()
+
+        def _raise(cmd, *args, **kwargs):
+            raise subprocess.CalledProcessError(returncode=1, cmd=cmd)
+
+        with patch.dict(sys.modules, {"openai": MagicMock()}):
+            with patch("tempfile.TemporaryDirectory") as temp_dir:
+                temp_dir.return_value.__enter__.return_value = str(tmp_path)
+                with patch("subprocess.run", side_effect=_raise):
+                    with caplog.at_level(logging.WARNING):
+                        result = await proc._get_openai_whisper_transcript(
+                            _VIDEO_ID, _VIDEO_URL
+                        )
+
+        assert result["source"] == "failed"
+        assert password not in result["error"]
+        assert "wsuser" not in result["error"]
+        assert password not in caplog.text
+        assert "wsuser" not in caplog.text
 
 
 # ===========================================================================

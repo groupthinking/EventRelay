@@ -697,6 +697,34 @@ class TestGetMetadataSearchApi:
 
 
 class TestGetMetadataYtdlp:
+    async def test_ytdlp_stderr_never_leaks_proxy_credentials(self, monkeypatch):
+        """Regression for #1113.
+
+        yt-dlp echoes the ``--proxy`` value back on stderr for connection
+        failures, and the raised message was previously logged verbatim.
+        """
+        password = "sup3r-s3cret-pw"
+        proxy_url = f"http://wsuser:{password}@p.webshare.io:80"
+        monkeypatch.setenv("WEBSHARE_PROXY_URL", proxy_url)
+
+        svc = RobustYouTubeService(api_key="KEY")
+        completed = MagicMock(
+            returncode=1,
+            stdout="",
+            stderr=f"Unable to connect to proxy {proxy_url}",
+        )
+
+        # robust.py imports subprocess inside the method, so patch the module itself.
+        with patch("subprocess.run", return_value=completed):
+            with pytest.raises(Exception) as excinfo:
+                await svc._get_metadata_ytdlp(VIDEO_URL, VIDEO_ID)
+
+        message = str(excinfo.value)
+        assert "yt-dlp failed" in message
+        assert password not in message
+        assert "wsuser" not in message
+        assert "p.webshare.io:80" in message, "host retained for triage"
+
     async def test_ytdlp_successful(self):
         svc = RobustYouTubeService(api_key="KEY")
 

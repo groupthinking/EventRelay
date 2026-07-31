@@ -12,6 +12,7 @@ import json
 import logging
 import os
 import random
+import re
 import time
 import urllib.parse
 from dataclasses import dataclass
@@ -39,15 +40,42 @@ except ImportError as e:
 logger = logging.getLogger("youtube_api_proxy")
 
 
+_ALLOWED_SCHEMES = ("http", "https", "socks5", "socks5h")
+
+# Matches the ``user[:password]@`` userinfo segment of any URL. The user and
+# password classes exclude "/" so a path containing "@" is never mistaken for
+# credentials. Kept in sync with youtube_extension.utils.proxy.
+_USERINFO_RE = re.compile(
+    r"(?P<scheme>[A-Za-z][A-Za-z0-9+.\-]*://)"
+    r"(?P<user>[^\s/:@]+)"
+    r"(?::(?P<password>[^\s/@]*))?"
+    r"@"
+)
+
+
 def _get_webshare_proxy_url() -> str | None:
-    """Return the validated WEBSHARE_PROXY_URL, or None for direct connection."""
+    """Return the validated WEBSHARE_PROXY_URL, or None for direct connection.
+
+    Mirrors ``youtube_extension.utils.proxy.get_proxy_url``. ``urllib.parse``
+    raises ``ValueError`` on several malformed inputs (an unterminated IPv6
+    literal at parse time; a non-numeric or out-of-range port when ``.port`` is
+    read). Contain it here so the exception -- which callers would log next to
+    the credential-bearing URL -- never escapes.
+    """
     url = os.getenv("WEBSHARE_PROXY_URL", "").strip()
     if not url:
         return None
-    parsed = urllib.parse.urlparse(url)
-    if parsed.scheme not in ("http", "https", "socks5") or not parsed.hostname:
+    try:
+        parsed = urllib.parse.urlparse(url)
+        valid = parsed.scheme in _ALLOWED_SCHEMES and bool(parsed.hostname)
+        if valid:
+            parsed.port  # noqa: B018 - validates port, raises ValueError if bad
+    except ValueError:
+        valid = False
+    if not valid:
         logger.warning(
-            "WEBSHARE_PROXY_URL is set but malformed — falling back to direct connection"
+            "WEBSHARE_PROXY_URL is set but malformed - falling back to direct "
+            "connection"
         )
         return None
     return url
@@ -65,27 +93,53 @@ def _get_transcript_proxy_config() -> GenericProxyConfig | None:
     if GenericProxyConfig is None:
         logger.warning(
             "WEBSHARE_PROXY_URL is set but youtube-transcript-api proxy support "
-            "is unavailable (requires youtube-transcript-api>=1.0) — falling back "
+            "is unavailable (requires youtube-transcript-api>=1.0) - falling back "
             "to direct connection"
         )
         return None
     return GenericProxyConfig(http_url=url, https_url=url)
 
 
-def _redact_proxy_credentials(text: str) -> str:
-    """Strip user:pass credentials of the configured proxy URL from text."""
+def _redact_proxy_credentials(text: Any) -> str:
+    """Strip URL userinfo (``user:pass@``) from ``text``.
+
+    Delegates to the canonical helper when the ``youtube_extension`` package is
+    importable; this module is also loaded standalone by path (see
+    ``src/agents/mcp_enhanced_video_processor.py``), so an equivalent local
+    implementation is retained as a fallback. Never raises -- it is called from
+    exception handlers, where a failure would mask the original error.
+    """
+    try:  # pragma: no cover - exercised only when the package is importable
+        from youtube_extension.utils.proxy import (
+            redact_proxy_credentials as _canonical,
+        )
+
+        return _canonical(text)
+    except ImportError:
+        pass
+
+    if not isinstance(text, str):
+        text = str(text)
+
     url = os.getenv("WEBSHARE_PROXY_URL", "").strip()
-    if not url or url not in text:
-        return text
-    try:
-        parsed = urllib.parse.urlparse(url)
-        netloc = parsed.hostname or ""
-        if parsed.port:
-            netloc = f"{netloc}:{parsed.port}"
-        redacted = parsed._replace(netloc=netloc).geturl()
-    except (ValueError, AttributeError):
-        redacted = "<proxy-url>"
-    return text.replace(url, redacted)
+    if url and url in text:
+        try:
+            parsed = urllib.parse.urlparse(url)
+            netloc = parsed.hostname or ""
+            if parsed.port:
+                netloc = f"{netloc}:{parsed.port}"
+            redacted = parsed._replace(netloc=netloc).geturl()
+        except (ValueError, AttributeError):
+            redacted = "<proxy-url>"
+        text = text.replace(url, redacted)
+
+    def _mask(match: re.Match[str]) -> str:
+        if match.group("password") is None:
+            return f"{match.group('scheme')}***@"
+        return f"{match.group('scheme')}***:***@"
+
+    return _USERINFO_RE.sub(_mask, text)
+
 
 class YouTubeErrorType(Enum):
     """YouTube API specific error types"""
