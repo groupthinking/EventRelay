@@ -291,23 +291,47 @@ class EnhancedVideoProcessor:
             with tempfile.TemporaryDirectory() as tmpdir:
                 audio_path = os_mod.path.join(tmpdir, f"{video_id}.mp3")
                 # yt-dlp command for audio only
-                import subprocess
                 ytdlp_cmd = ["yt-dlp", "-x", "--audio-format", "mp3"]
                 proxy_url = get_proxy_url()
                 if proxy_url:
                     ytdlp_cmd.extend(["--proxy", proxy_url])
                 canonical_video_url = f"https://www.youtube.com/watch?v={video_id}"
                 ytdlp_cmd.extend(["-o", audio_path, "--", canonical_video_url])
-                subprocess.run(
-                    ytdlp_cmd, check=True, capture_output=True, timeout=60
-                )
 
-                with open(audio_path, "rb") as audio_file:
-                    transcription = client.audio.transcriptions.create(
-                        model="whisper-1",
-                        file=audio_file,
-                        response_format="text"
+                # Spawned via asyncio: a synchronous download here would pin the
+                # event loop for the whole timeout, stalling every other request.
+                download = await asyncio.create_subprocess_exec(
+                    *ytdlp_cmd,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+                try:
+                    _, stderr = await asyncio.wait_for(
+                        download.communicate(), timeout=60
                     )
+                except asyncio.TimeoutError:
+                    download.kill()
+                    await download.wait()
+                    raise RuntimeError(
+                        "yt-dlp audio download timed out after 60s"
+                    ) from None
+
+                if download.returncode != 0:
+                    raise RuntimeError(
+                        f"yt-dlp audio download failed: {stderr.decode()[:200]}"
+                    )
+
+                # The OpenAI client is synchronous and Whisper calls run for tens
+                # of seconds on long audio, so keep it off the event loop thread.
+                def _transcribe() -> Any:
+                    with open(audio_path, "rb") as audio_file:
+                        return client.audio.transcriptions.create(
+                            model="whisper-1",
+                            file=audio_file,
+                            response_format="text"
+                        )
+
+                transcription = await asyncio.to_thread(_transcribe)
 
             return {
                 'text': transcription,

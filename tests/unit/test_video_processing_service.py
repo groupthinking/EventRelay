@@ -92,6 +92,15 @@ def _make_cache_service(cached_result=None, video_id=_VIDEO_ID):
     return cache
 
 
+def _mock_async_proc(returncode=0, stdout=b"", stderr=b""):
+    """Build a fake asyncio subprocess whose communicate() is awaitable."""
+    proc = MagicMock()
+    proc.returncode = returncode
+    proc.communicate = AsyncMock(return_value=(stdout, stderr))
+    proc.wait = AsyncMock(return_value=returncode)
+    return proc
+
+
 # ===========================================================================
 # resolve_deployment_target
 # ===========================================================================
@@ -975,20 +984,18 @@ class TestTryLangextractFallback:
 
         env = {"LANGEXTRACT_MCP_SERVER": "/nonexistent/langextract_mcp_server.py"}
         with patch.dict("os.environ", env), \
-                patch("subprocess.run") as mock_run:
+                patch("asyncio.create_subprocess_exec") as mock_exec:
             result = await svc._try_langextract_fallback(_VIDEO_URL)
 
         assert result is None
-        mock_run.assert_not_called()
+        mock_exec.assert_not_called()
 
     async def test_returns_none_on_non_zero_returncode(self):
         svc = _make_service()
 
-        mock_proc = MagicMock()
-        mock_proc.returncode = 1
-        mock_proc.stderr = b"error message"
+        mock_proc = _mock_async_proc(returncode=1, stderr=b"error message")
 
-        with patch("subprocess.run", return_value=mock_proc):
+        with patch("asyncio.create_subprocess_exec", AsyncMock(return_value=mock_proc)):
             result = await svc._try_langextract_fallback(_VIDEO_URL)
 
         assert result is None
@@ -996,11 +1003,9 @@ class TestTryLangextractFallback:
     async def test_returns_none_when_result_has_error(self):
         svc = _make_service()
         output = json.dumps({"result": {"error": "extraction failed"}}).encode()
-        mock_proc = MagicMock()
-        mock_proc.returncode = 0
-        mock_proc.stdout = output
+        mock_proc = _mock_async_proc(returncode=0, stdout=output)
 
-        with patch("subprocess.run", return_value=mock_proc):
+        with patch("asyncio.create_subprocess_exec", AsyncMock(return_value=mock_proc)):
             result = await svc._try_langextract_fallback(_VIDEO_URL)
 
         assert result is None
@@ -1008,11 +1013,9 @@ class TestTryLangextractFallback:
     async def test_returns_none_when_empty_text(self):
         svc = _make_service()
         output = json.dumps({"result": {"text": ""}}).encode()
-        mock_proc = MagicMock()
-        mock_proc.returncode = 0
-        mock_proc.stdout = output
+        mock_proc = _mock_async_proc(returncode=0, stdout=output)
 
-        with patch("subprocess.run", return_value=mock_proc):
+        with patch("asyncio.create_subprocess_exec", AsyncMock(return_value=mock_proc)):
             result = await svc._try_langextract_fallback(_VIDEO_URL)
 
         assert result is None
@@ -1023,11 +1026,9 @@ class TestTryLangextractFallback:
 
         output_text = "This is extracted text from the video"
         output = json.dumps({"result": {"text": output_text}}).encode()
-        mock_proc = MagicMock()
-        mock_proc.returncode = 0
-        mock_proc.stdout = output + b"\n"
+        mock_proc = _mock_async_proc(returncode=0, stdout=output + b"\n")
 
-        with patch("subprocess.run", return_value=mock_proc):
+        with patch("asyncio.create_subprocess_exec", AsyncMock(return_value=mock_proc)):
             result = await svc._try_langextract_fallback(_VIDEO_URL)
 
         assert result is not None
@@ -1038,10 +1039,26 @@ class TestTryLangextractFallback:
     async def test_returns_none_on_subprocess_exception(self):
         svc = _make_service()
 
-        with patch("subprocess.run", side_effect=Exception("subprocess crash")):
+        with patch(
+            "asyncio.create_subprocess_exec",
+            AsyncMock(side_effect=Exception("subprocess crash")),
+        ):
             result = await svc._try_langextract_fallback(_VIDEO_URL)
 
         assert result is None
+
+    async def test_returns_none_on_timeout(self):
+        """A hung MCP server is killed and reported, not left to stall the loop."""
+        svc = _make_service()
+
+        mock_proc = _mock_async_proc(returncode=0)
+        mock_proc.communicate = AsyncMock(side_effect=asyncio.TimeoutError)
+
+        with patch("asyncio.create_subprocess_exec", AsyncMock(return_value=mock_proc)):
+            result = await svc._try_langextract_fallback(_VIDEO_URL)
+
+        assert result is None
+        mock_proc.kill.assert_called_once()
 
     async def test_text_truncated_to_4000(self):
         cache = _make_cache_service(video_id=_VIDEO_ID)
@@ -1049,11 +1066,9 @@ class TestTryLangextractFallback:
 
         long_text = "x" * 5000
         output = json.dumps({"result": {"text": long_text}}).encode()
-        mock_proc = MagicMock()
-        mock_proc.returncode = 0
-        mock_proc.stdout = output + b"\n"
+        mock_proc = _mock_async_proc(returncode=0, stdout=output + b"\n")
 
-        with patch("subprocess.run", return_value=mock_proc):
+        with patch("asyncio.create_subprocess_exec", AsyncMock(return_value=mock_proc)):
             result = await svc._try_langextract_fallback(_VIDEO_URL)
 
         assert len(result["markdown_content"]) <= 4050  # some overhead for heading

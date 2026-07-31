@@ -625,19 +625,51 @@ class TestGetOpenAIWhisperTranscript:
         mock_client = mock_openai.OpenAI.return_value
         mock_client.audio.transcriptions.create.return_value = "safe transcript"
 
+        download = MagicMock()
+        download.returncode = 0
+        download.communicate = AsyncMock(return_value=(b"", b""))
+
         with patch.dict(sys.modules, {"openai": mock_openai}):
             with patch("tempfile.TemporaryDirectory") as temp_dir:
                 temp_dir.return_value.__enter__.return_value = str(tmp_path)
-                with patch("subprocess.run") as run:
+                with patch(
+                    "asyncio.create_subprocess_exec",
+                    AsyncMock(return_value=download),
+                ) as run:
                     with patch("builtins.open", mock_open(read_data=b"audio")):
                         result = await proc._get_openai_whisper_transcript(
                             _VIDEO_ID, hostile_url
                         )
 
-        command = run.call_args.args[0]
+        command = list(run.call_args.args)
         assert command[-2:] == ["--", _VIDEO_URL]
         assert hostile_url not in command
         assert result["text"] == "safe transcript"
+
+    async def test_download_failure_falls_back_to_error_payload(self, tmp_path):
+        """A non-zero yt-dlp exit is surfaced instead of transcribing junk."""
+        proc = _make_processor()
+
+        mock_openai = MagicMock()
+
+        download = MagicMock()
+        download.returncode = 1
+        download.communicate = AsyncMock(return_value=(b"", b"unavailable"))
+
+        with patch.dict(sys.modules, {"openai": mock_openai}):
+            with patch("tempfile.TemporaryDirectory") as temp_dir:
+                temp_dir.return_value.__enter__.return_value = str(tmp_path)
+                with patch(
+                    "asyncio.create_subprocess_exec",
+                    AsyncMock(return_value=download),
+                ):
+                    result = await proc._get_openai_whisper_transcript(
+                        _VIDEO_ID, _VIDEO_URL
+                    )
+
+        assert result["source"] == "failed"
+        assert "unavailable" in result["error"]
+        mock_openai.OpenAI.return_value.audio.transcriptions.create.assert_not_called()
 
 
 # ===========================================================================
