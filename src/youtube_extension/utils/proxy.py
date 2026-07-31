@@ -31,16 +31,24 @@ _PROXY_ENV_VAR = "WEBSHARE_PROXY_URL"
 
 _ALLOWED_SCHEMES = ("http", "https", "socks5", "socks5h")
 
-# Matches the ``user[:password]@`` userinfo segment of any URL. The user and
-# password classes exclude "/", "?" and "#" so a path, query, or fragment
-# containing "@" (e.g. "https://example.com/a@b" or
-# "https://example.com?e=a@b") is never mistaken for credentials. The user is
-# allowed to be empty so credentials with no username (e.g. "http://:pass@host")
+# Matches the ``user[:password]@`` userinfo segment of any URL.
+#
+# The classes exclude whitespace, "/", "?" and "#" -- the delimiters that end a
+# URL authority -- so a path, query, or fragment containing "@" (e.g.
+# "https://example.com/a@b" or "https://example.com?e=a@b") is never mistaken
+# for credentials, and a match can never span from one URL into the next.
+#
+# They deliberately *permit* a literal "@". Because the classes are greedy, the
+# engine backtracks to the LAST "@" inside the authority, so an unencoded "@"
+# in the password ("http://user:pa@ss@host") is consumed whole instead of the
+# match stopping at the first separator and leaving the password tail behind.
+#
+# The user may be empty so credentials with no username ("http://:pass@host")
 # are still redacted.
 _USERINFO_RE = re.compile(
     r"(?P<scheme>[A-Za-z][A-Za-z0-9+.\-]*://)"
-    r"(?P<user>[^\s/:@?#]*)"
-    r"(?::(?P<password>[^\s/@?#]*))?"
+    r"(?P<user>[^\s/:?#]*)"
+    r"(?::(?P<password>[^\s/?#]*))?"
     r"@"
 )
 

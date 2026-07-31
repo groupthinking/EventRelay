@@ -181,6 +181,67 @@ def test_credentials_with_empty_username_are_redacted(monkeypatch):
     assert "***" in out
 
 
+def test_unencoded_at_sign_in_password_is_fully_redacted(monkeypatch):
+    """RFC 3986 requires ``@`` in userinfo to be percent-encoded, but real
+    ``*_PROXY`` values are frequently set with a raw ``@`` in the password. The
+    userinfo classes must therefore permit ``@`` and rely on greedy backtracking
+    to the *last* separator, otherwise the match ends at the first ``@`` and the
+    password tail survives into the log line."""
+    monkeypatch.setenv(_PROXY_ENV_VAR, PROXY_URL)
+    secret = "pa@ss"
+    out = redact_proxy_credentials(
+        f"HTTPS_PROXY=http://user:{secret}@proxy.internal:8080 connection refused"
+    )
+    # The tail after the first "@" is the part that used to leak.
+    assert "ss@proxy.internal" not in out
+    assert secret not in out
+    assert "proxy.internal:8080" in out, "host:port must survive for triage"
+
+
+def test_multiple_at_signs_in_password_are_fully_redacted(monkeypatch):
+    monkeypatch.setenv(_PROXY_ENV_VAR, PROXY_URL)
+    secret = "se@cr@et"
+    out = redact_proxy_credentials(f"http://u:{secret}@h.example.com:1 failed")
+    assert secret not in out
+    for fragment in ("cr@et", "et@h.example.com"):
+        assert fragment not in out
+    assert "h.example.com:1" in out
+
+
+def test_at_sign_greed_does_not_span_two_urls(monkeypatch):
+    """Greedy userinfo matching must stay inside one authority. Whitespace and
+    ``/`` are excluded from the classes, so a match cannot run from the first
+    URL's userinfo to the second URL's ``@``."""
+    monkeypatch.setenv(_PROXY_ENV_VAR, PROXY_URL)
+    for text in (
+        "http://u1:p1@h1.example.com:80 and http://u2:p2@h2.example.com:80",
+        "http://u1:p1@h1.example.com:80,http://u2:p2@h2.example.com:80",
+    ):
+        out = redact_proxy_credentials(text)
+        for secret in ("p1", "p2", "u1", "u2"):
+            assert secret not in out, f"{secret!r} leaked from {text!r}: {out!r}"
+        assert "h1.example.com:80" in out
+        assert "h2.example.com:80" in out
+
+
+def test_fragment_at_sign_is_not_over_redacted(monkeypatch):
+    monkeypatch.setenv(_PROXY_ENV_VAR, PROXY_URL)
+    text = "opened https://example.com#tag@x done"
+    assert redact_proxy_credentials(text) == text
+
+
+def test_credential_free_url_with_port_is_untouched(monkeypatch):
+    """``host:port`` looks like ``user:password`` until the required ``@`` fails
+    to appear. Permitting ``@`` in the classes must not make these match."""
+    monkeypatch.setenv(_PROXY_ENV_VAR, PROXY_URL)
+    for text in (
+        "http://proxy.internal:8080/path",
+        "http://proxy.internal:8080",
+        "http://api.example.com contacted by user@corp.com",
+    ):
+        assert redact_proxy_credentials(text) == text
+
+
 def test_query_string_at_sign_is_not_over_redacted(monkeypatch):
     """A query value containing ``@`` must not be mistaken for userinfo: ``?``
     (and ``#``) are authority delimiters, so redaction must stop there."""
