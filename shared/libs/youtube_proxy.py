@@ -43,12 +43,14 @@ logger = logging.getLogger("youtube_api_proxy")
 _ALLOWED_SCHEMES = ("http", "https", "socks5", "socks5h")
 
 # Matches the ``user[:password]@`` userinfo segment of any URL. The user and
-# password classes exclude "/" so a path containing "@" is never mistaken for
-# credentials. Kept in sync with youtube_extension.utils.proxy.
+# password classes exclude "/", "?" and "#" so a path, query, or fragment
+# containing "@" is never mistaken for credentials, and the user may be empty so
+# credentials with no username ("http://:pass@host") are still redacted. Kept in
+# sync with youtube_extension.utils.proxy.
 _USERINFO_RE = re.compile(
     r"(?P<scheme>[A-Za-z][A-Za-z0-9+.\-]*://)"
-    r"(?P<user>[^\s/:@]+)"
-    r"(?::(?P<password>[^\s/@]*))?"
+    r"(?P<user>[^\s/:@?#]*)"
+    r"(?::(?P<password>[^\s/@?#]*))?"
     r"@"
 )
 

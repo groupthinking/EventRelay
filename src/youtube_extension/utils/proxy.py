@@ -32,12 +32,15 @@ _PROXY_ENV_VAR = "WEBSHARE_PROXY_URL"
 _ALLOWED_SCHEMES = ("http", "https", "socks5", "socks5h")
 
 # Matches the ``user[:password]@`` userinfo segment of any URL. The user and
-# password classes exclude "/" so a path containing "@" (e.g.
-# "https://example.com/a@b") is never mistaken for credentials.
+# password classes exclude "/", "?" and "#" so a path, query, or fragment
+# containing "@" (e.g. "https://example.com/a@b" or
+# "https://example.com?e=a@b") is never mistaken for credentials. The user is
+# allowed to be empty so credentials with no username (e.g. "http://:pass@host")
+# are still redacted.
 _USERINFO_RE = re.compile(
     r"(?P<scheme>[A-Za-z][A-Za-z0-9+.\-]*://)"
-    r"(?P<user>[^\s/:@]+)"
-    r"(?::(?P<password>[^\s/@]*))?"
+    r"(?P<user>[^\s/:@?#]*)"
+    r"(?::(?P<password>[^\s/@?#]*))?"
     r"@"
 )
 

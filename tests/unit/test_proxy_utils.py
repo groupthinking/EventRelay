@@ -167,6 +167,27 @@ def test_path_containing_at_sign_is_not_over_redacted(monkeypatch):
     assert redact_proxy_credentials(text) == text
 
 
+def test_credentials_with_empty_username_are_redacted(monkeypatch):
+    """Userinfo with no username (``http://:secret@host``) still carries a
+    password. The generic pass must redact it even when the URL is not the
+    configured ``WEBSHARE_PROXY_URL`` (e.g. a different proxy variable)."""
+    monkeypatch.setenv(_PROXY_ENV_VAR, PROXY_URL)
+    secret = "empty-user-s3cret"
+    out = redact_proxy_credentials(
+        f"HTTP_PROXY=http://:{secret}@other.example.com:8080"
+    )
+    assert secret not in out
+    assert "***" in out
+
+
+def test_query_string_at_sign_is_not_over_redacted(monkeypatch):
+    """A query value containing ``@`` must not be mistaken for userinfo: ``?``
+    (and ``#``) are authority delimiters, so redaction must stop there."""
+    monkeypatch.setenv(_PROXY_ENV_VAR, PROXY_URL)
+    text = "fetched https://example.com?email=a@b.com ok"
+    assert redact_proxy_credentials(text) == text
+
+
 @pytest.mark.parametrize(
     "value",
     [None, 42, ValueError("boom"), ["a", "b"], {"k": "v"}],
