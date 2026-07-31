@@ -17,7 +17,6 @@ from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
 
 from fastapi import APIRouter, FastAPI, HTTPException, BackgroundTasks, Request, Header
-from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, ValidationError
 
@@ -188,7 +187,7 @@ async def process_video_task_handler(
         payload = CloudTaskPayload.model_validate_json(await request.body())
     except ValidationError as exc:
         raise HTTPException(
-            status_code=422, detail=jsonable_encoder(exc.errors())
+            status_code=422, detail=exc.errors(include_input=False)
         ) from exc
 
     logger.info(
