@@ -77,15 +77,15 @@ def _client_constructions(tree: ast.AST) -> list[ast.Call]:
 
 
 def _has_required_keyword(call: ast.Call) -> bool:
-    for keyword in call.keywords:
-        # ``proxy_config=...``
-        if keyword.arg == REQUIRED_KEYWORD:
-            return True
-        # ``**kwargs`` — the keyword may be supplied dynamically; treat the
-        # call as opaque rather than reporting a false positive.
-        if keyword.arg is None:
-            return True
-    return False
+    """True only when the call passes an explicit ``proxy_config=`` keyword.
+
+    ``**kwargs`` is deliberately *not* accepted. ``YouTubeTranscriptApi(**opts)``
+    reads as opaque, but it egresses directly whenever ``opts`` happens to omit
+    ``proxy_config`` — exactly the silent bypass this guard exists to catch.
+    Every real call site spells the keyword out, so requiring it here costs no
+    false positives and closes the hole.
+    """
+    return any(keyword.arg == REQUIRED_KEYWORD for keyword in call.keywords)
 
 
 def _collect_unproxied() -> list[str]:
@@ -367,18 +367,31 @@ def test_module_resolves_proxy_config_from_the_canonical_helper(
         )
 
     for call in calls:
-        literal_none = [
-            kw
-            for kw in call.keywords
-            if kw.arg == REQUIRED_KEYWORD
-            and isinstance(kw.value, ast.Constant)
-            and kw.value.value is None
-        ]
-        assert not literal_none, (
-            f"{module_path}:{call.lineno} passes {REQUIRED_KEYWORD}=None "
-            f"literally, which disables the proxy unconditionally. Use "
-            f"{PROXY_HELPER}() instead."
+        proxy_kwargs = [kw for kw in call.keywords if kw.arg == REQUIRED_KEYWORD]
+        assert proxy_kwargs, (
+            f"{module_path}:{call.lineno} constructs {CLIENT_NAME} without an "
+            f"explicit {REQUIRED_KEYWORD}= keyword."
         )
+        # The value itself must be a call to the canonical helper. Asserting only
+        # that the helper is imported/mentioned (above) still lets a construction
+        # pass ``proxy_config=some_other_config`` or ``proxy_config=object()`` —
+        # foreign values that satisfy the substring and import checks while
+        # egressing outside the centralized proxy. Inspect the AST value.
+        for kw in proxy_kwargs:
+            value = kw.value
+            is_helper_call = isinstance(value, ast.Call) and (
+                (isinstance(value.func, ast.Name) and value.func.id == PROXY_HELPER)
+                or (
+                    isinstance(value.func, ast.Attribute)
+                    and value.func.attr == PROXY_HELPER
+                )
+            )
+            assert is_helper_call, (
+                f"{module_path}:{call.lineno} passes {REQUIRED_KEYWORD}="
+                f"{ast.unparse(value)!r} rather than a call to {PROXY_HELPER}(). "
+                "A hardcoded None, a foreign config, or object() would satisfy "
+                "the substring and import checks while bypassing the proxy."
+            )
 
 
 def test_proxy_helper_returns_none_without_configuration(
