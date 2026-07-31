@@ -636,11 +636,11 @@ class TestCloudApiEndpoints:
         )
         assert response.status_code == 422
 
-    def test_process_video_task_with_header_invalid_json_returns_422(self):
+    def test_process_video_task_with_header_invalid_utf8_returns_422(self):
         client = self._build_app()
         response = client.post(
             "/api/v3/process-video-task",
-            content=b"not-json",
+            content=b"\xff",
             headers={"X-CloudTasks-TaskName": "task-abc-123"},
         )
         assert response.status_code == 422
