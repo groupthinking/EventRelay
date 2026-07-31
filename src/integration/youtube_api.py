@@ -7,17 +7,29 @@ Fetch video metadata, captions, and channel info from YouTube Data API v3.
 import asyncio
 import os
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Optional
 
 import httpx
 from youtube_transcript_api import YouTubeTranscriptApi
 
 try:
     from youtube_extension.utils.proxy import get_transcript_proxy_config
-except ImportError:  # pragma: no cover - optional when running outside the package
+except ImportError:  # pragma: no cover - standalone execution outside the package
+    import sys as _sys
+    from pathlib import Path as _Path
 
-    def get_transcript_proxy_config() -> "Any | None":  # type: ignore[misc]
-        return None
+    # Running this module by path (the documented CLI entry point) leaves the
+    # repository's ``src`` directory off sys.path. Bootstrap it so the canonical
+    # helper resolves instead of silently disabling the proxy.
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+    try:
+        from youtube_extension.utils.proxy import get_transcript_proxy_config
+    except ImportError as _exc:  # pragma: no cover - helper genuinely unreachable
+        raise ImportError(
+            "youtube_extension.utils.proxy is required so transcript requests "
+            "honour WEBSHARE_PROXY_URL; refusing to continue with unproxied "
+            "egress."
+        ) from _exc
 
 
 @dataclass

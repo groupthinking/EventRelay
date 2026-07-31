@@ -14,6 +14,7 @@ test time rather than in production.
 from __future__ import annotations
 
 import ast
+import sys
 from pathlib import Path
 
 import pytest
@@ -30,13 +31,26 @@ REQUIRED_KEYWORD = "proxy_config"
 #: Canonical helper that resolves the configured proxy (or ``None``).
 PROXY_HELPER = "get_transcript_proxy_config"
 
+#: Module that must supply the helper.
+PROXY_MODULE = "youtube_extension.utils.proxy"
+
 
 def _python_files() -> list[Path]:
+    # A configured root that has been moved or renamed must be a hard failure.
+    # Skipping it silently would shrink the scanned surface while every
+    # assertion below still passes against the remaining roots.
+    missing = [root for root in SOURCE_ROOTS if not (PROJECT_ROOT / root).is_dir()]
+    if missing:
+        raise AssertionError(
+            "configured source roots are missing: "
+            + ", ".join(sorted(missing))
+            + " -- the proxy guard would stop scanning them while still "
+            "reporting success. Update SOURCE_ROOTS if the layout changed."
+        )
+
     files: list[Path] = []
     for root in SOURCE_ROOTS:
         base = PROJECT_ROOT / root
-        if not base.is_dir():
-            continue
         for path in base.rglob("*.py"):
             if any(
                 part in {"__pycache__", "node_modules", ".venv"} for part in path.parts
@@ -110,6 +124,79 @@ def test_guard_finds_the_client_at_all() -> None:
     )
 
 
+#: Trees that legitimately construct the client without production egress.
+EXEMPT_ROOTS = frozenset({"tests"})
+
+#: Directories never worth scanning.
+SKIP_DIRS = frozenset(
+    {
+        "node_modules",
+        ".venv",
+        "venv",
+        "__pycache__",
+        ".git",
+        "build",
+        "dist",
+        ".mypy_cache",
+        ".pytest_cache",
+        ".ruff_cache",
+    }
+)
+
+
+def test_source_roots_cover_every_tree_that_builds_the_client() -> None:
+    """``SOURCE_ROOTS`` must be derived from reality, not hand-maintained.
+
+    Narrowing the tuple (say, dropping ``shared``) would leave every other
+    assertion in this module passing against a smaller surface. Rather than
+    trusting the constant, rediscover which trees actually construct the
+    client and require the constant to cover them.
+    """
+    found: dict[str, int] = {}
+    unparseable: list[str] = []
+
+    for path in PROJECT_ROOT.rglob("*.py"):
+        if any(part in SKIP_DIRS for part in path.parts):
+            continue
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        except (SyntaxError, UnicodeDecodeError):
+            unparseable.append(str(path.relative_to(PROJECT_ROOT)))
+            continue
+        if _client_constructions(tree):
+            root = path.relative_to(PROJECT_ROOT).parts[0]
+            found[root] = found.get(root, 0) + 1
+
+    assert not unparseable, (
+        "these files could not be parsed, so the scan silently skipped them: "
+        + ", ".join(sorted(unparseable))
+    )
+
+    required = {root for root in found if root not in EXEMPT_ROOTS}
+    uncovered = required - set(SOURCE_ROOTS)
+    assert not uncovered, (
+        f"{sorted(uncovered)} construct {CLIENT_NAME} but are not listed in "
+        f"SOURCE_ROOTS={list(SOURCE_ROOTS)}, so the proxy guard does not scan "
+        "them. Add them or mark them exempt."
+    )
+
+
+def test_missing_source_root_fails_loudly(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A renamed or moved source root must break the guard, not shrink it.
+
+    Without this, dropping ``shared`` from the tree would leave ``src`` alone
+    satisfying every assertion in this module and the guard would silently stop
+    protecting the shared runtime code.
+    """
+    monkeypatch.setattr(
+        sys.modules[__name__],
+        "SOURCE_ROOTS",
+        SOURCE_ROOTS + ("definitely_not_a_real_root",),
+    )
+    with pytest.raises(AssertionError, match="definitely_not_a_real_root"):
+        _python_files()
+
+
 def test_every_transcript_client_passes_proxy_config() -> None:
     """No runtime code may construct the client without ``proxy_config``."""
     offenders = _collect_unproxied()
@@ -120,6 +207,99 @@ def test_every_transcript_client_passes_proxy_config() -> None:
         + "\n  ".join(offenders)
         + f"\n\nPass {REQUIRED_KEYWORD}={PROXY_HELPER}() — it returns None when "
         f"WEBSHARE_PROXY_URL is unset, so direct connections still work."
+    )
+
+
+#: Modules that construct the client outside the ``youtube_extension`` package
+#: and therefore need the sys.path bootstrap to reach the canonical helper.
+BOOTSTRAPPED_MODULES = (
+    "src/integration/youtube_api.py",
+    "src/agents/process_video_with_mcp.py",
+    "src/agents/interactive_metadata_extractor.py",
+    "src/mcp/mcp_video_processor.py",
+)
+
+
+@pytest.mark.parametrize("module_path", BOOTSTRAPPED_MODULES)
+def test_module_never_stubs_the_proxy_helper_to_none(module_path: str) -> None:
+    """A local fallback returning ``None`` silently disables the proxy.
+
+    ``proxy_config=get_transcript_proxy_config()`` looks correct at the call
+    site, so the AST coverage test above still passes -- but if the name
+    resolves to a stub that returns ``None`` the client egresses directly from
+    the host IP. That is the very failure this module exists to prevent, so the
+    stub shape is banned outright.
+    """
+    path = PROJECT_ROOT / module_path
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.FunctionDef) or node.name != PROXY_HELPER:
+            continue
+        body = [n for n in node.body if not isinstance(n, ast.Expr)]
+        returns_only_none = all(
+            isinstance(n, ast.Return)
+            and isinstance(n.value, ast.Constant)
+            and n.value.value is None
+            for n in body
+        )
+        assert not returns_only_none, (
+            f"{module_path} defines a local {PROXY_HELPER}() that returns None. "
+            "Bootstrap sys.path to the canonical helper or fail closed; do not "
+            "silently bypass the proxy."
+        )
+
+
+@pytest.mark.parametrize("module_path", BOOTSTRAPPED_MODULES)
+def test_bootstrap_path_actually_reaches_the_canonical_helper(
+    module_path: str,
+) -> None:
+    """The fallback inserts ``parents[1]``; prove that really is ``src``.
+
+    If a module moves to a different nesting depth the arithmetic silently
+    points somewhere useless and the import would fail closed at runtime.
+    """
+    path = (PROJECT_ROOT / module_path).resolve()
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+
+    # Read the index the source actually uses instead of assuming it, so that
+    # changing ``parents[1]`` in the module is what this test reacts to. Scope
+    # the search to the sys.path.insert bootstrap: these modules legitimately
+    # use ``parents[N]`` elsewhere for unrelated path maths.
+    inserts = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "insert"
+        and isinstance(node.func.value, ast.Attribute)
+        and node.func.value.attr == "path"
+    ]
+    assert len(inserts) == 1, (
+        f"{module_path}: expected exactly one sys.path.insert bootstrap, "
+        f"found {len(inserts)}."
+    )
+
+    indices = [
+        node.slice.value
+        for node in ast.walk(inserts[0])
+        if isinstance(node, ast.Subscript)
+        and isinstance(node.value, ast.Attribute)
+        and node.value.attr == "parents"
+        and isinstance(node.slice, ast.Constant)
+        and isinstance(node.slice.value, int)
+    ]
+    assert len(indices) == 1, (
+        f"{module_path}: expected exactly one ``parents[N]`` index inside the "
+        f"sys.path bootstrap, found {indices}."
+    )
+
+    bootstrapped_root = path.parents[indices[0]]
+    helper = bootstrapped_root / "youtube_extension" / "utils" / "proxy.py"
+    assert helper.is_file(), (
+        f"{module_path}: sys.path bootstrap uses parents[{indices[0]}] -> "
+        f"{bootstrapped_root}, which does not contain the canonical helper "
+        f"at {helper}."
     )
 
 
@@ -157,6 +337,34 @@ def test_module_resolves_proxy_config_from_the_canonical_helper(
         f"{module_path} constructs {CLIENT_NAME} but never references "
         f"{PROXY_HELPER}; proxy_config is likely hardcoded."
     )
+
+    # A mention is not enough: the call site alone satisfies the substring
+    # check even when the import is broken or renamed. Require a real import
+    # of the helper, bound under its canonical name.
+    proxy_imports = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom) and node.module == PROXY_MODULE
+    ]
+    assert proxy_imports, (
+        f"{module_path} references {PROXY_HELPER} but never imports it from "
+        f"{PROXY_MODULE}; the call site would raise NameError or silently "
+        "resolve to something else."
+    )
+
+    # Every import path must bind the helper. The fallback bootstrap repeats
+    # the import, so checking only that *some* statement binds it would let a
+    # broken primary import through while the module still looks correct.
+    for node in proxy_imports:
+        binds_helper = any(
+            alias.name == PROXY_HELPER and alias.asname in (None, PROXY_HELPER)
+            for alias in node.names
+        )
+        assert binds_helper, (
+            f"{module_path} line {node.lineno}: imports from {PROXY_MODULE} "
+            f"without binding {PROXY_HELPER}. Every import path must provide "
+            "the helper or the call site breaks."
+        )
 
     for call in calls:
         literal_none = [
@@ -198,7 +406,6 @@ def test_proxy_helper_returns_config_carrying_the_url_when_set(
     without the optional ``youtube-transcript-api`` extra installed.
     """
     import importlib
-    import sys
     import types
 
     captured: dict[str, str] = {}
