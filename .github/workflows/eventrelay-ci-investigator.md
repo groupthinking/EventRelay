@@ -102,8 +102,11 @@ one-line reason instead of returning silently. `noop` is the explicit,
 deduplicated "nothing to do" record and is always the correct terminal state
 for a no-change run.
 
-Skip `noop` only when you have already emitted another safe output
-(`add_comment`, `create_issue`, `update_issue`, or `create_check_run`).
+Skip `noop` only when the run has already emitted some other safe output. Any
+safe output satisfies the requirement, including `missing_tool` and
+`missing_data` -- those are themselves valid terminal states, so a run that
+reports one is already accounted for and must not also emit `noop`. Never pair
+`noop` with another safe output in the same run.
 
 ## Jules reporting requirement
 
