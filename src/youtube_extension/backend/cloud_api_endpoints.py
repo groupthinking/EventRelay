@@ -18,7 +18,7 @@ from typing import Dict, Any, List, Optional
 
 from fastapi import APIRouter, FastAPI, HTTPException, BackgroundTasks, Request, Header
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 # Import cloud services
 from ..services.cloud import (
@@ -150,7 +150,6 @@ async def process_video_cloud(
 
 @router.post("/api/v3/process-video-task")
 async def process_video_task_handler(
-    payload: CloudTaskPayload,
     request: Request,
     x_cloudtasks_taskname: Optional[str] = Header(None),
 ):
@@ -167,6 +166,11 @@ async def process_video_task_handler(
             status_code=403,
             detail="Only Cloud Tasks can call this endpoint"
         )
+
+    try:
+        payload = CloudTaskPayload.model_validate_json(await request.body())
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=exc.errors()) from exc
 
     logger.info(
         f"📝 Processing Cloud Task: {x_cloudtasks_taskname} "
