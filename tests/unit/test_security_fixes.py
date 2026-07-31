@@ -7,6 +7,8 @@ Tests that require specific modules will skip if unavailable.
 """
 
 import os
+import re
+import shlex
 import sys
 import pytest
 from pathlib import Path
@@ -17,6 +19,119 @@ import logging
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 sys.path.insert(0, str(project_root / "src"))
+
+# Canonical location of the production container definition. Kept as a module
+# constant so the path is asserted in exactly one place; tests fail rather than
+# skip when it does not resolve.
+PRODUCTION_DOCKERFILE = project_root / "infrastructure" / "docker" / "Dockerfile.production"
+
+# Matches a PEP 508-ish requirement with a `>=` floor, with or without extras
+# and surrounding quotes, e.g. `"uvicorn[standard]>=0.24.0"` or `fastapi`.
+_REQUIREMENT_RE = re.compile(
+    r"""^["']?(?P<name>[A-Za-z0-9][A-Za-z0-9._-]*)   # distribution name
+        (?:\[[^\]]*\])?                              # optional extras
+        (?:\s*>=\s*(?P<floor>[0-9][0-9A-Za-z.*+!-]*))?  # optional >= floor
+    """,
+    re.VERBOSE,
+)
+
+
+def _version_key(version: str) -> tuple:
+    """Comparable key for a dotted version. Non-numeric segments sort as -1 so
+    pre-releases order below the corresponding final release."""
+    parts = []
+    for segment in re.split(r"[._-]", version):
+        parts.append((0, int(segment)) if segment.isdigit() else (-1, 0))
+    return tuple(parts)
+
+
+def _fmt(key: tuple) -> str:
+    return ".".join(str(value) for _, value in key)
+
+
+def _pip_install_command(text: str) -> str:
+    """Reconstruct the logical ``pip install`` command from a Dockerfile,
+    joining backslash line continuations into a single string.
+
+    Operating on the joined command rather than on individual physical lines is
+    essential: the pre-hardening Dockerfile spread ``pytest`` and a trailing
+    ``|| echo`` across continuation lines, so any line-filtered check silently
+    passed against the very content it was meant to reject.
+    """
+    logical, buf = [], ""
+    for raw in text.splitlines():
+        line = raw.rstrip()
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            continue
+        if line.endswith("\\"):
+            buf += line[:-1].strip() + " "
+            continue
+        buf += stripped
+        if buf:
+            logical.append(buf)
+        buf = ""
+    if buf:
+        logical.append(buf)
+    for command in logical:
+        if "pip install" in command:
+            return command
+    return ""
+
+
+def _installed_requirements(command: str) -> dict:
+    """Parse ``{normalised_name: floor_key_or_None}`` from a joined ``pip
+    install`` command, tolerating quoted and unquoted tokens alike."""
+    floors = {}
+    if not command:
+        return floors
+    takes_value = {
+        "--trusted-host",
+        "--index-url",
+        "--extra-index-url",
+        "-i",
+        "-c",
+        "-r",
+        "--constraint",
+        "--requirement",
+    }
+    skip_next = False
+    for token in shlex.split(command):
+        if skip_next:
+            skip_next = False
+            continue
+        if token in ("||", "&&", ";"):
+            # Everything past a shell operator is a fallback, not a requirement.
+            break
+        if token in ("RUN", "pip", "install"):
+            continue
+        if token.startswith("-"):
+            if token in takes_value:
+                skip_next = True
+            continue
+        match = _REQUIREMENT_RE.match(token)
+        if not match:
+            continue
+        name = match.group("name").lower().replace("_", "-")
+        floor = match.group("floor")
+        floors[name] = _version_key(floor) if floor else None
+    return floors
+
+
+def _parse_floors(text: str) -> dict:
+    """Extract ``{normalised_name: floor_key}`` from a requirements file."""
+    floors = {}
+    for raw in text.splitlines():
+        line = raw.strip().rstrip("\\").strip().rstrip(",")
+        if not line or line.startswith("#") or line.startswith("-"):
+            continue
+        match = _REQUIREMENT_RE.match(line)
+        if not match:
+            continue
+        name = match.group("name").lower().replace("_", "-")
+        floor = match.group("floor")
+        floors[name] = _version_key(floor) if floor else None
+    return floors
 
 
 class TestAPIKeyExposureFix:
@@ -189,15 +304,100 @@ class TestSecurityBestPractices:
                             pytest.fail(f"Possible hardcoded API key in {file_path}: {line[:80]}...")
 
     def test_dockerfile_uses_nonroot_user(self):
-        """Verify Dockerfile.production uses non-root user"""
-        dockerfile = project_root / "Dockerfile.production"
-        if not dockerfile.exists():
-            pytest.skip("Dockerfile.production not found")
+        """Verify Dockerfile.production drops privileges to a non-root user.
+
+        The path is asserted rather than skipped on: this test previously
+        resolved ``project_root / "Dockerfile.production"``, which has never
+        existed, so it skipped unconditionally and the assertions below never
+        ran. Failing loudly means a future relocation cannot silently re-vacate
+        the check.
+        """
+        dockerfile = PRODUCTION_DOCKERFILE
+        assert dockerfile.exists(), (
+            f"{dockerfile.relative_to(project_root)} not found. If the file moved, "
+            "update PRODUCTION_DOCKERFILE rather than skipping this test."
+        )
 
         content = dockerfile.read_text()
 
-        assert "USER" in content, "Dockerfile should switch to non-root user"
-        assert "appuser" in content or "nonroot" in content.lower()
+        user_directives = [
+            line.strip()
+            for line in content.splitlines()
+            if line.strip().startswith("USER ")
+        ]
+        assert user_directives, "Dockerfile should switch to a non-root user"
+
+        final_user = user_directives[-1].split(maxsplit=1)[1].strip()
+        assert final_user not in {
+            "root",
+            "0",
+        }, f"Dockerfile must not run as root, got USER {final_user}"
+        assert final_user in {"appuser", "nonroot"}, (
+            f"Unexpected runtime user {final_user!r}; expected a known "
+            "unprivileged account"
+        )
+
+    def test_dockerfile_production_pins_dependency_floors(self):
+        """Every dependency installed by Dockerfile.production must carry a
+        floor at least as high as the canonical declaration in
+        ``requirements.txt``.
+
+        This image installs a reduced runtime subset by name instead of using
+        ``-r requirements.txt``, so advisory floors raised in the canonical
+        manifest do not propagate automatically. Without this guard the image
+        silently drifts behind published security fixes -- which is how an
+        unpinned ``python-multipart`` survived the floor bump for advisories
+        468-471 (see #1095).
+        """
+        dockerfile = PRODUCTION_DOCKERFILE
+        assert dockerfile.exists(), f"{dockerfile} not found"
+
+        requirements = project_root / "requirements.txt"
+        assert requirements.exists(), "requirements.txt not found"
+
+        canonical = _parse_floors(requirements.read_text())
+        installed = _installed_requirements(
+            _pip_install_command(dockerfile.read_text())
+        )
+
+        assert installed, "Dockerfile.production declares no pinned dependencies"
+
+        for name, floor in sorted(installed.items()):
+            assert floor is not None, (
+                f"{name} is installed without a version floor in "
+                "Dockerfile.production; an unconstrained resolve can select a "
+                "version with a known advisory"
+            )
+            expected = canonical.get(name)
+            if expected is None:
+                continue
+            assert floor >= expected, (
+                f"{name} floor {_fmt(floor)} in Dockerfile.production is below "
+                f"the canonical requirements.txt floor {_fmt(expected)}"
+            )
+
+    def test_dockerfile_production_does_not_swallow_install_failures(self):
+        """A ``|| echo`` fallback on the install step makes ``docker build``
+        exit 0 with no packages installed, deferring the failure to runtime."""
+        command = _pip_install_command(PRODUCTION_DOCKERFILE.read_text())
+        assert command, "no pip install step found in Dockerfile.production"
+        assert "|| echo" not in command and "|| true" not in command, (
+            "Dockerfile.production must not mask pip install failures; a "
+            "swallowed install produces an image that builds cleanly and then "
+            "fails at runtime with ModuleNotFoundError"
+        )
+
+    def test_dockerfile_production_excludes_test_tooling(self):
+        """Test frameworks must not be installed into the production image."""
+        installed = _installed_requirements(
+            _pip_install_command(PRODUCTION_DOCKERFILE.read_text())
+        )
+        assert installed, "no pip install step found in Dockerfile.production"
+        for tool in ("pytest", "pytest-cov", "pytest-asyncio"):
+            assert tool not in installed, (
+                f"{tool} must not be installed into the production image; it "
+                "enlarges the runtime attack surface"
+            )
 
 
 if __name__ == "__main__":

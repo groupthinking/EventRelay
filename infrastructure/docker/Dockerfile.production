@@ -24,10 +24,25 @@ WORKDIR /app
 # Copy all files (matches existing Dockerfile pattern)
 COPY . /app/
 
-# Install Python packages with SSL trust configuration for constrained environments
+# Install Python packages with SSL trust configuration for constrained environments.
+#
+# Version floors are duplicated from requirements.txt / pyproject.toml rather than
+# installed via `-r requirements.txt`, because this image deliberately ships a
+# reduced runtime subset. They MUST stay >= the canonical declarations; the
+# equivalence is enforced by
+# tests/unit/test_security_fixes.py::test_dockerfile_production_pins_dependency_floors.
+#
+# Failure is fatal by design: a swallowed `pip install` previously let this image
+# build successfully with no packages installed, deferring the error to runtime.
 RUN pip install --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org \
-    fastapi uvicorn pytest python-dotenv pydantic aiofiles httpx requests python-multipart || \
-    echo "Warning: Some packages may not be available in constrained environments"
+    "fastapi>=0.110.0" \
+    "uvicorn[standard]>=0.24.0" \
+    "python-dotenv>=1.2.2" \
+    "pydantic>=2.5.0" \
+    "aiofiles>=23.2.1" \
+    "httpx>=0.25.0" \
+    "requests>=2.31.0" \
+    "python-multipart>=0.0.31"
 
 # Create necessary directories and set permissions
 RUN mkdir -p logs && \
