@@ -414,6 +414,10 @@ class TestSecurityBestPractices:
         )
 
         assert installed, "Dockerfile.production declares no pinned dependencies"
+        assert "slowapi" in installed, (
+            "Dockerfile.production omits slowapi, which youtube_extension.main "
+            "imports unconditionally at startup"
+        )
 
         for name, floor in sorted(installed.items()):
             assert floor is not None, (
