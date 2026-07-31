@@ -111,7 +111,14 @@ def redact_proxy_credentials(text: Any) -> str:
     handlers, where a failure would mask the original error.
     """
     if not isinstance(text, str):
-        text = str(text)
+        try:
+            text = str(text)
+        except Exception:
+            # The contract is "never raises": an object whose __str__ fails
+            # here is called from an exception handler, so propagating would
+            # mask the original error. Fall back to a fixed, non-sensitive
+            # placeholder instead.
+            return "<unprintable error>"
 
     url = os.getenv(_PROXY_ENV_VAR, "").strip()
     if url and url in text:

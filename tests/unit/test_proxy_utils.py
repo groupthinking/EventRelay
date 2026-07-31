@@ -176,6 +176,21 @@ def test_non_string_input_is_coerced_and_never_raises(monkeypatch, value):
     assert isinstance(redact_proxy_credentials(value), str)
 
 
+def test_object_with_raising_str_returns_placeholder(monkeypatch):
+    """The ``never raises`` contract must hold even when ``str(text)`` itself
+    fails: an object whose ``__str__`` raises must not defeat the sanitizer and
+    mask the original error inside an ``except`` block."""
+    monkeypatch.setenv(_PROXY_ENV_VAR, PROXY_URL)
+
+    class Unprintable:
+        def __str__(self) -> str:
+            raise RuntimeError("cannot stringify")
+
+    out = redact_proxy_credentials(Unprintable())
+    assert out == "<unprintable error>"
+    _assert_no_secrets(out)
+
+
 def test_redaction_survives_a_malformed_configured_url(monkeypatch):
     """Redaction runs inside ``except`` blocks; a bad env value must not make it
     raise and mask the original error."""

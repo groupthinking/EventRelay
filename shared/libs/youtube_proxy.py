@@ -119,7 +119,13 @@ def _redact_proxy_credentials(text: Any) -> str:
         pass
 
     if not isinstance(text, str):
-        text = str(text)
+        try:
+            text = str(text)
+        except Exception:
+            # "Never raises" contract: this fallback runs inside exception
+            # handlers, so a failing __str__ must not propagate and mask the
+            # original error. Return a fixed, non-sensitive placeholder.
+            return "<unprintable error>"
 
     url = os.getenv("WEBSHARE_PROXY_URL", "").strip()
     if url and url in text:
