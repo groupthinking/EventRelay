@@ -636,6 +636,16 @@ class TestCloudApiEndpoints:
         )
         assert response.status_code == 422
 
+    def test_process_video_task_with_header_invalid_json_returns_422(self):
+        client = self._build_app()
+        response = client.post(
+            "/api/v3/process-video-task",
+            content=b"not-json",
+            headers={"X-CloudTasks-TaskName": "task-abc-123"},
+        )
+        assert response.status_code == 422
+        assert response.json()["detail"][0]["type"] == "json_invalid"
+
     def test_process_video_task_exception(self):
         mock_processor = AsyncMock()
         mock_processor.process_video_sync = AsyncMock(side_effect=Exception("processing failed"))
