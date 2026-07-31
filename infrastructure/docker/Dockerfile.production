@@ -36,6 +36,7 @@ COPY . /app/
 # build successfully with no packages installed, deferring the error to runtime.
 RUN pip install --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org \
     "fastapi>=0.110.0" \
+    "slowapi>=0.1.8" \
     "uvicorn[standard]>=0.24.0" \
     "python-dotenv>=1.2.2" \
     "pydantic>=2.5.0" \
