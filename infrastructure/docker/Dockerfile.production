@@ -58,5 +58,15 @@ USER appuser
 # Expose port
 EXPOSE 8000
 
-# Start the application (matches existing server pattern)
-CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+# Start the application.
+#
+# The application package lives under /app/src and uses absolute imports rooted
+# there, so PYTHONPATH must include it -- this is the invocation documented in
+# CLAUDE.md (`PYTHONPATH=src uvicorn youtube_extension.main:app`). The former
+# `server:app` target referenced a root-level server.py that does not exist in
+# this repository, so the container exited immediately on start. The module is
+# asserted importable by
+# tests/unit/test_security_fixes.py::test_dockerfile_production_entrypoint_module_exists.
+ENV PYTHONPATH=/app/src
+
+CMD ["uvicorn", "youtube_extension.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

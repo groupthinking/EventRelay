@@ -65,11 +65,11 @@ success "Kubernetes cluster is accessible"
 
 # Check if required files exist
 REQUIRED_FILES=(
-    "infrastructure/docker/Dockerfile.production"
+    "Dockerfile.production"
     "package.json"
-    "infrastructure/k8s/production/deployment.yaml"
-    "infrastructure/k8s/production/service.yaml"
-    "infrastructure/k8s/monitoring/monitoring.yaml"
+    "k8s/production/deployment.yaml"
+    "k8s/production/service.yaml"
+    "k8s/monitoring/monitoring.yaml"
     "mcp_server.py"
     "learning_app_processor.py"
 )
@@ -101,7 +101,7 @@ log "Step 3: Building Docker Image"
 DOCKER_TAG="enhanced-framework:$(date +%Y%m%d-%H%M%S)"
 LATEST_TAG="enhanced-framework:latest"
 
-if docker build -f infrastructure/docker/Dockerfile.production -t "$DOCKER_TAG" -t "$LATEST_TAG" .; then
+if docker build -f Dockerfile.production -t "$DOCKER_TAG" -t "$LATEST_TAG" .; then
     success "Docker image built successfully: $DOCKER_TAG"
 else
     error "Docker image build failed"
@@ -111,21 +111,21 @@ fi
 log "Step 4: Validating Kubernetes Manifests"
 
 # Validate deployment manifest
-if kubectl apply --dry-run=client -f infrastructure/k8s/production/deployment.yaml; then
+if kubectl apply --dry-run=client -f k8s/production/deployment.yaml; then
     success "Deployment manifest is valid"
 else
     error "Deployment manifest validation failed"
 fi
 
 # Validate service manifest
-if kubectl apply --dry-run=client -f infrastructure/k8s/production/service.yaml; then
+if kubectl apply --dry-run=client -f k8s/production/service.yaml; then
     success "Service manifest is valid"
 else
     error "Service manifest validation failed"
 fi
 
 # Validate monitoring manifest
-if kubectl apply --dry-run=client -f infrastructure/k8s/monitoring/monitoring.yaml; then
+if kubectl apply --dry-run=client -f k8s/monitoring/monitoring.yaml; then
     success "Monitoring manifest is valid"
 else
     error "Monitoring manifest validation failed"
@@ -144,14 +144,14 @@ fi
 log "Step 6: Deploying to Kubernetes"
 
 # Deploy application
-if kubectl apply -f infrastructure/k8s/production/ -n "$NAMESPACE"; then
+if kubectl apply -f k8s/production/ -n "$NAMESPACE"; then
     success "Application deployed successfully"
 else
     error "Application deployment failed"
 fi
 
 # Deploy monitoring
-if kubectl apply -f infrastructure/k8s/monitoring/ -n "$NAMESPACE"; then
+if kubectl apply -f k8s/monitoring/ -n "$NAMESPACE"; then
     success "Monitoring stack deployed successfully"
 else
     error "Monitoring deployment failed"
