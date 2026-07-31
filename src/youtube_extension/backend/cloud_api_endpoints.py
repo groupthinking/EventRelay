@@ -149,7 +149,23 @@ async def process_video_cloud(
         # detail is a static string; error_msg (with the exception) is logged above only
         raise HTTPException(status_code=500, detail="Internal server error")
 
-@router.post("/api/v3/process-video-task")
+@router.post(
+    "/api/v3/process-video-task",
+    # The body is parsed manually after the Cloud Tasks header check, so the
+    # schema is declared here to keep it documented in OpenAPI.
+    openapi_extra={
+        "requestBody": {
+            "required": True,
+            "content": {
+                "application/json": {
+                    "schema": CloudTaskPayload.model_json_schema(
+                        ref_template="#/components/schemas/{model}"
+                    )
+                }
+            },
+        }
+    },
+)
 async def process_video_task_handler(
     request: Request,
     x_cloudtasks_taskname: Optional[str] = Header(None),

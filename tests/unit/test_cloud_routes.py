@@ -646,6 +646,14 @@ class TestCloudApiEndpoints:
         assert response.status_code == 422
         assert response.json()["detail"][0]["type"] == "json_invalid"
 
+    def test_process_video_task_documents_request_body_schema(self):
+        client = self._build_app()
+        spec = client.app.openapi()
+        operation = spec["paths"]["/api/v3/process-video-task"]["post"]
+        schema = operation["requestBody"]["content"]["application/json"]["schema"]
+        assert operation["requestBody"]["required"] is True
+        assert set(schema["required"]) == {"video_id", "video_url"}
+
     def test_process_video_task_exception(self):
         mock_processor = AsyncMock()
         mock_processor.process_video_sync = AsyncMock(side_effect=Exception("processing failed"))
