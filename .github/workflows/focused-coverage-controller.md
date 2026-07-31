@@ -85,3 +85,19 @@ Return an in-depth status report with:
 - exact failing or passing gate names
 - smallest next test-only increment
 - explicit stop reason if prerequisites are missing
+
+## Terminal state contract
+
+Every run MUST finish by emitting at least one safe output. A run that emits
+nothing is not read as "healthy": the harness classifies it as `produced no
+safe outputs` and files a tracking issue, so silence produces noise instead of
+signal.
+
+When the correct outcome is to take no action -- healthy CI, unchanged state, a
+canceled or superseded run, or a preflight early exit -- call `noop` with a
+one-line reason instead of returning silently. `noop` is the explicit,
+deduplicated "nothing to do" record and is always the correct terminal state
+for a no-change run.
+
+Skip `noop` only when you have already emitted another safe output
+(`add_comment`, `create_issue`, `update_issue`, or `create_check_run`).
