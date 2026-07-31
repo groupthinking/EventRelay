@@ -7,10 +7,17 @@ Fetch video metadata, captions, and channel info from YouTube Data API v3.
 import asyncio
 import os
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any, Optional
 
 import httpx
 from youtube_transcript_api import YouTubeTranscriptApi
+
+try:
+    from youtube_extension.utils.proxy import get_transcript_proxy_config
+except ImportError:  # pragma: no cover - optional when running outside the package
+
+    def get_transcript_proxy_config() -> "Any | None":  # type: ignore[misc]
+        return None
 
 
 @dataclass
@@ -96,7 +103,9 @@ class YouTubeAPIService:
         loop = asyncio.get_event_loop()
         transcript = await loop.run_in_executor(
             None,
-            lambda: YouTubeTranscriptApi().fetch(video_id, languages=languages).to_raw_data()
+            lambda: YouTubeTranscriptApi(proxy_config=get_transcript_proxy_config())
+            .fetch(video_id, languages=languages)
+            .to_raw_data()
         )
 
         return [

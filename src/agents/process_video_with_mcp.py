@@ -50,6 +50,13 @@ except Exception:
     YouTubeTranscriptApi = None  # type: ignore
 
 try:
+    from youtube_extension.utils.proxy import get_transcript_proxy_config
+except ImportError:  # pragma: no cover - optional when running outside the package
+
+    def get_transcript_proxy_config() -> Any | None:  # type: ignore[misc]
+        return None
+
+try:
     import yt_dlp  # type: ignore
 except Exception:  # Provide a minimal stub so tests can patch attribute
     class _YTStub:  # type: ignore
@@ -219,7 +226,12 @@ class RealVideoProcessor:
             if YouTubeTranscriptApi is not None:
                 # youtube-transcript-api >=1.0 instance API
                 transcript = await loop.run_in_executor(
-                    None, lambda: YouTubeTranscriptApi().fetch(video_id).to_raw_data()
+                    None,
+                    lambda: YouTubeTranscriptApi(
+                        proxy_config=get_transcript_proxy_config()
+                    )
+                    .fetch(video_id)
+                    .to_raw_data(),
                 )
                 if transcript:
                     return transcript
@@ -230,7 +242,10 @@ class RealVideoProcessor:
         try:
             if YouTubeTranscriptApi is not None:
                 transcript_list = await loop.run_in_executor(
-                    None, lambda: YouTubeTranscriptApi().list(video_id)  # type: ignore[union-attr]
+                    None,
+                    lambda: YouTubeTranscriptApi(  # type: ignore[union-attr]
+                        proxy_config=get_transcript_proxy_config()
+                    ).list(video_id),
                 )
                 fetch_tasks = [
                     loop.run_in_executor(None, lambda t=t: t.fetch().to_raw_data())

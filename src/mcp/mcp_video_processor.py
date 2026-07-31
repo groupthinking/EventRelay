@@ -77,6 +77,13 @@ try:
 except Exception:
     HAS_YT_PROXY = False
 
+try:
+    from youtube_extension.utils.proxy import get_transcript_proxy_config
+except ImportError:  # pragma: no cover - optional when running outside the package
+
+    def get_transcript_proxy_config() -> Any | None:  # type: ignore[misc]
+        return None
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -691,7 +698,7 @@ class MCPVideoProcessor:
             # executor — otherwise it stalls the event loop and defeats the
             # @timeout_protection / circuit-breaker hanging protection.
             loop = asyncio.get_event_loop()
-            yt_api = YouTubeTranscriptApi()
+            yt_api = YouTubeTranscriptApi(proxy_config=get_transcript_proxy_config())
             transcript = await loop.run_in_executor(
                 None,
                 lambda: yt_api.fetch(
@@ -715,7 +722,7 @@ class MCPVideoProcessor:
             # These are blocking network calls — run them in an executor to keep
             # the event loop free and let the timeout protection work.
             loop = asyncio.get_event_loop()
-            yt_api = YouTubeTranscriptApi()
+            yt_api = YouTubeTranscriptApi(proxy_config=get_transcript_proxy_config())
             transcript_list = await loop.run_in_executor(
                 None, lambda: yt_api.list(video_id)
             )
