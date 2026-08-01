@@ -7,6 +7,7 @@ Manages shared state across pipeline stages using Google Cloud Firestore.
 Replaces in-memory caching for cloud-native, scalable deployment.
 """
 
+import asyncio
 import logging
 import os
 from dataclasses import asdict, dataclass
@@ -25,6 +26,11 @@ except ImportError:
 
 
 logger = logging.getLogger(__name__)
+
+# Upper bound on concurrent delete RPCs issued by cleanup_old_states(). Cleanup
+# can match an unbounded number of expired documents, so deletes are fanned out
+# under a semaphore rather than dispatched all at once.
+CLEANUP_DELETE_CONCURRENCY = 16
 
 
 @dataclass
@@ -320,11 +326,34 @@ class FirestoreStateService:
         query = collection.where('created_at', '<', cutoff_date)
         docs = await query.get()
 
-        # Delete in batch
-        count = 0
-        for doc in docs:
-            await doc.reference.delete()
-            count += 1
+        if not docs:
+            logger.info(f"Cleaned up 0 old states (>{days} days)")
+            return 0
+
+        # Delete concurrently. Each delete is an independent network round-trip,
+        # so issuing them sequentially made cleanup cost O(n) round-trips. The
+        # semaphore bounds in-flight RPCs so a large backlog cannot flood
+        # Firestore, and return_exceptions keeps one failure from abandoning
+        # deletes that are already in flight.
+        semaphore = asyncio.Semaphore(CLEANUP_DELETE_CONCURRENCY)
+
+        async def _delete_one(doc: Any) -> None:
+            async with semaphore:
+                await doc.reference.delete()
+
+        results = await asyncio.gather(
+            *(_delete_one(doc) for doc in docs),
+            return_exceptions=True,
+        )
+
+        failures = [r for r in results if isinstance(r, BaseException)]
+        count = len(results) - len(failures)
+
+        if failures:
+            logger.warning(
+                f"Failed to delete {len(failures)} of {len(results)} old states; "
+                f"first error: {failures[0]!r}"
+            )
 
         logger.info(f"Cleaned up {count} old states (>{days} days)")
         return count

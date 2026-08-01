@@ -15,6 +15,7 @@ fake `firestore` module object on the target module.
 
 from __future__ import annotations
 
+import asyncio
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -776,6 +777,83 @@ class TestCleanupOldStates:
         # Call with custom days — just ensure it runs without error
         count = await svc.cleanup_old_states(days=30)
         assert count == 0
+
+    @staticmethod
+    def _tracking_docs(n: int) -> tuple[list, dict]:
+        """Build n mock docs whose deletes record peak overlap."""
+        stats = {"in_flight": 0, "peak": 0}
+
+        async def _tracked() -> None:
+            stats["in_flight"] += 1
+            stats["peak"] = max(stats["peak"], stats["in_flight"])
+            # Yield so sibling deletes get a chance to start. Under the previous
+            # sequential loop nothing else could be running here.
+            await asyncio.sleep(0)
+            stats["in_flight"] -= 1
+
+        docs = []
+        for _ in range(n):
+            doc = MagicMock()
+            doc.reference = MagicMock()
+            doc.reference.delete = AsyncMock(side_effect=_tracked)
+            docs.append(doc)
+        return docs, stats
+
+    async def test_cleanup_deletes_overlap_instead_of_running_sequentially(self):
+        """Deletes must overlap. The sequential loop this replaced had peak overlap 1."""
+        svc, _, _, _, _, coll_ref, query = _make_service_with_db()
+        docs, stats = self._tracking_docs(8)
+        query.get = AsyncMock(return_value=docs)
+
+        count = await svc.cleanup_old_states(days=7)
+
+        assert count == 8
+        assert stats["peak"] > 1, (
+            f"deletes never overlapped (peak={stats['peak']}); "
+            "cleanup is still issuing one round-trip at a time"
+        )
+
+    async def test_cleanup_bounds_in_flight_deletes(self):
+        """A large backlog must not fan out unbounded concurrent RPCs."""
+        svc, _, _, _, _, coll_ref, query = _make_service_with_db()
+        limit = _mod.CLEANUP_DELETE_CONCURRENCY
+        docs, stats = self._tracking_docs(limit * 3)
+        query.get = AsyncMock(return_value=docs)
+
+        count = await svc.cleanup_old_states(days=7)
+
+        assert count == limit * 3
+        assert stats["peak"] <= limit, (
+            f"peak in-flight deletes {stats['peak']} exceeded the "
+            f"CLEANUP_DELETE_CONCURRENCY bound of {limit}"
+        )
+
+    async def test_cleanup_failure_does_not_abandon_remaining_deletes(self):
+        """One failing delete must not strand the rest, and must not be counted."""
+        svc, _, _, _, _, coll_ref, query = _make_service_with_db()
+
+        ok_before = MagicMock()
+        ok_before.reference = MagicMock()
+        ok_before.reference.delete = AsyncMock()
+
+        failing = MagicMock()
+        failing.reference = MagicMock()
+        failing.reference.delete = AsyncMock(side_effect=RuntimeError("firestore boom"))
+
+        ok_after = MagicMock()
+        ok_after.reference = MagicMock()
+        ok_after.reference.delete = AsyncMock()
+
+        query.get = AsyncMock(return_value=[ok_before, failing, ok_after])
+
+        count = await svc.cleanup_old_states(days=7)
+
+        # Only the two successful deletes are reported.
+        assert count == 2
+        # The delete queued after the failure still ran; the sequential loop
+        # would have propagated the error and skipped it entirely.
+        ok_before.reference.delete.assert_awaited_once()
+        ok_after.reference.delete.assert_awaited_once()
 
 
 # ===========================================================================
