@@ -19,5 +19,5 @@ paths = [
   # parso's digest at L5129). Verified: the file references only
   # https://pypi.org/simple + files.pythonhosted.org and contains no
   # credentials in URLs, so it cannot carry a real secret.
-  '''uv\.lock''',
+  '''^uv\.lock$''',
 ]
