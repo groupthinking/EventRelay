@@ -9,7 +9,7 @@
 # resolve to nothing in stock VS Code. Mirrored by the guards job in ci.yml.
 repos:
   - repo: https://github.com/gitleaks/gitleaks
-    rev: v8.19.3
+    rev: v8.18.4
     hooks:
       - id: gitleaks
   - repo: local
