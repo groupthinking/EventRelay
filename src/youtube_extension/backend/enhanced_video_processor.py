@@ -12,9 +12,11 @@ Integrates:
 """
 
 import asyncio
+import contextlib
 import json
 import logging
 import os
+import threading
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
@@ -28,6 +30,15 @@ load_dotenv()
 from youtube_extension.utils.proxy import get_proxy_url, get_transcript_proxy_config
 
 logger = logging.getLogger(__name__)
+
+# Serialises the markdown+metadata pair written by
+# ``EnhancedVideoProcessor._write_result_files``. Result filenames carry only
+# one-second precision, so two saves of the same video inside the same second
+# resolve to the same two paths; without this lock their individually-atomic
+# writes can interleave and leave one save's markdown paired with the other's
+# metadata. Held only across two file writes, and only inside a worker thread,
+# so it never blocks the event loop.
+_RESULT_WRITE_LOCK = threading.Lock()
 
 # Optional Gemini Vision integration for frame analysis
 try:
@@ -725,6 +736,55 @@ Provide a structured JSON response with visual_elements array containing:
             'format': 'text_coerced'
         }
 
+    @staticmethod
+    def _atomic_write_text(path: Any, contents: str) -> None:
+        """
+        Write ``contents`` to ``path`` so a reader never sees a partial file.
+
+        ``open(path, 'w')`` truncates before it writes, so a concurrent reader
+        -- or a crash mid-write -- can leave a half-written analysis on disk.
+        Write to a sibling temporary file and rename it into place instead;
+        ``os.replace`` is atomic, so the target is either the complete previous
+        file or the complete new one. The temporary name carries the pid and
+        thread id so two writers cannot collide on it.
+        """
+        tmp_path = f"{path}.{os.getpid()}.{threading.get_ident()}.tmp"
+        try:
+            with open(tmp_path, 'w', encoding='utf-8') as f:
+                f.write(contents)
+            os.replace(tmp_path, path)
+        except BaseException:
+            with contextlib.suppress(OSError):
+                os.unlink(tmp_path)
+            raise
+
+    @staticmethod
+    def _write_result_files(
+        save_dir: Any,
+        filepath: Any,
+        metadata_file: Any,
+        markdown: str,
+        metadata: dict,
+    ) -> None:
+        """
+        All blocking filesystem work for :meth:`_save_enhanced_result`.
+
+        Kept in one function so the whole save costs a single thread hop
+        rather than one per syscall. ``json.dumps`` is done here rather than
+        by the caller so the serialisation cost -- which scales with the size
+        of the metadata dict -- is paid off the event loop too.
+
+        The two writes are individually atomic *and* are held together under
+        ``_RESULT_WRITE_LOCK`` so concurrent saves cannot pair one save's
+        markdown with another's metadata.
+        """
+        save_dir.mkdir(parents=True, exist_ok=True)
+        payload = json.dumps(metadata, indent=2, default=str)
+        # Both files must land as a matched pair -- see _RESULT_WRITE_LOCK.
+        with _RESULT_WRITE_LOCK:
+            EnhancedVideoProcessor._atomic_write_text(filepath, markdown)
+            EnhancedVideoProcessor._atomic_write_text(metadata_file, payload)
+
     async def _save_enhanced_result(self, video_id: str, metadata: dict, markdown: str) -> str:
         """Save enhanced results to organized directory structure"""
         try:
@@ -733,19 +793,24 @@ Provide a structured JSON response with visual_elements array containing:
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
 
             save_dir = Path('youtube_processed_videos') / 'enhanced_analysis' / category
-            save_dir.mkdir(parents=True, exist_ok=True)
 
             # Save markdown with timestamp
             filename = f"{video_id}_{timestamp}_enhanced.md"
             filepath = save_dir / filename
-
-            with open(filepath, 'w', encoding='utf-8') as f:
-                f.write(markdown)
-
-            # Save metadata
             metadata_file = save_dir / f"{video_id}_{timestamp}_metadata.json"
-            with open(metadata_file, 'w', encoding='utf-8') as f:
-                json.dump(metadata, f, indent=2, default=str)
+
+            # mkdir, both writes and the JSON serialisation are synchronous and
+            # scale with the size of the analysis. Run on this event loop they
+            # stall every other request for the duration of the save, so hand
+            # the whole group to a worker thread in one dispatch.
+            await asyncio.to_thread(
+                self._write_result_files,
+                save_dir,
+                filepath,
+                metadata_file,
+                markdown,
+                metadata,
+            )
 
             logger.info(f"✅ Enhanced results saved to: {filepath}")
             return str(filepath)

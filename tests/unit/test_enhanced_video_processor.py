@@ -7,8 +7,11 @@ fully mocked so tests run without any network or heavyweight library.
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import json
 import sys
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, mock_open, patch
@@ -1217,3 +1220,217 @@ class TestGetEnhancedVideoProcessorFactory:
             with patch.dict(os.environ, {"GEMINI_API_KEY": "factory-key"}, clear=False):
                 proc = get_enhanced_video_processor()
         assert isinstance(proc, EnhancedVideoProcessor)
+
+
+# ===========================================================================
+# Persistence must not stall the event loop, and must not publish partial files
+# ===========================================================================
+
+class TestSaveDoesNotBlockEventLoop:
+    """
+    `_save_enhanced_result` performs mkdir + two file writes + a `json.dumps`.
+    Run directly on the event loop those stall every other in-flight request
+    for the whole duration of the save. These tests pin the two properties the
+    change is claimed to provide: the loop keeps running, and a reader never
+    observes a half-written file.
+    """
+
+    @staticmethod
+    async def _count_heartbeats_during(coro):
+        """Return how many times the loop got to run while ``coro`` was awaited."""
+        ticks = 0
+        stop = False
+
+        async def heartbeat():
+            nonlocal ticks
+            while not stop:
+                ticks += 1
+                await asyncio.sleep(0.005)
+
+        beat = asyncio.create_task(heartbeat())
+        await asyncio.sleep(0)  # let the heartbeat reach its first await first
+        try:
+            result = await coro
+        finally:
+            stop = True
+            beat.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await beat
+        return result, ticks
+
+    async def test_save_does_not_stall_the_event_loop(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        proc = _make_processor()
+
+        real_write = _mod.EnhancedVideoProcessor._atomic_write_text
+
+        def slow_write(path, contents):
+            time.sleep(0.10)
+            real_write(path, contents)
+
+        with patch.object(
+            _mod.EnhancedVideoProcessor, "_atomic_write_text", staticmethod(slow_write)
+        ):
+            result, ticks = await self._count_heartbeats_during(
+                proc._save_enhanced_result(_VIDEO_ID, {"category": "General"}, "# md")
+            )
+
+        assert result != ""
+        # Two 0.10s writes on the loop would yield zero heartbeats.
+        assert ticks > 1, f"event loop was stalled during the save (ticks={ticks})"
+
+    async def test_json_serialisation_also_runs_off_the_loop(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        proc = _make_processor()
+
+        real_dumps = json.dumps
+
+        def slow_dumps(*args, **kwargs):
+            time.sleep(0.10)
+            return real_dumps(*args, **kwargs)
+
+        with patch.object(_mod.json, "dumps", slow_dumps):
+            result, ticks = await self._count_heartbeats_during(
+                proc._save_enhanced_result(_VIDEO_ID, {"category": "General"}, "# md")
+            )
+
+        assert result != ""
+        assert ticks > 1, f"json serialisation stalled the loop (ticks={ticks})"
+
+    async def test_save_writes_readable_markdown_and_metadata(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        proc = _make_processor()
+        metadata = {"category": "Programming", "title": "T"}
+
+        path = await proc._save_enhanced_result(_VIDEO_ID, metadata, "# Heading")
+
+        assert path != ""
+        assert Path(path).read_text(encoding="utf-8") == "# Heading"
+        meta_path = Path(path.replace("_enhanced.md", "_metadata.json"))
+        assert json.loads(meta_path.read_text(encoding="utf-8")) == metadata
+
+    async def test_no_temp_files_remain_after_a_successful_save(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        proc = _make_processor()
+
+        path = await proc._save_enhanced_result(_VIDEO_ID, {"category": "General"}, "# md")
+
+        assert path != ""
+        leftovers = list(Path(path).parent.glob("*.tmp"))
+        assert leftovers == [], f"temporary files left behind: {leftovers}"
+
+    async def test_temp_file_is_cleaned_up_when_the_write_fails(self, tmp_path):
+        target = tmp_path / "out.md"
+
+        with patch.object(_mod.os, "replace", side_effect=OSError("boom")):
+            with pytest.raises(OSError):
+                _mod.EnhancedVideoProcessor._atomic_write_text(target, "payload")
+
+        assert list(tmp_path.glob("*.tmp")) == [], "temp file survived a failed write"
+        assert not target.exists()
+
+    async def test_reader_never_observes_a_partially_written_file(self, tmp_path):
+        """
+        Rewrite one path repeatedly while a reader watches it. `open(path,'w')`
+        truncates first, so a reader can catch a short/empty file; an atomic
+        rename means every observation is a complete generation.
+        """
+        target = tmp_path / "analysis.md"
+        gen_a = "A" * 400_000
+        gen_b = "B" * 400_000
+        _mod.EnhancedVideoProcessor._atomic_write_text(target, gen_a)
+
+        observations = []
+        stop = False
+
+        async def reader():
+            while not stop:
+                with contextlib.suppress(FileNotFoundError):
+                    observations.append(target.read_text(encoding="utf-8"))
+                await asyncio.sleep(0)
+
+        async def writer():
+            for i in range(12):
+                await asyncio.to_thread(
+                    _mod.EnhancedVideoProcessor._atomic_write_text,
+                    target,
+                    gen_b if i % 2 else gen_a,
+                )
+
+        watcher = asyncio.create_task(reader())
+        await asyncio.sleep(0)
+        try:
+            await writer()
+        finally:
+            stop = True
+            watcher.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await watcher
+
+        assert observations, "reader never sampled the file"
+        bad = [len(o) for o in observations if o not in (gen_a, gen_b)]
+        assert not bad, f"reader saw {len(bad)} partial file(s), sizes={bad[:5]}"
+
+
+class TestConcurrentSavesWriteMatchedPairs:
+    """
+    Result filenames carry only one-second precision, so two saves of the same
+    video inside the same second resolve to the same two paths. Each write is
+    individually atomic, but without holding the pair together the two saves
+    can interleave and leave one save's markdown next to the other's metadata.
+    """
+
+    async def test_concurrent_saves_never_mix_markdown_with_foreign_metadata(self, tmp_path):
+        save_dir = tmp_path / "enhanced"
+        md_path = save_dir / "vid_20240101_000000_enhanced.md"
+        meta_path = save_dir / "vid_20240101_000000_metadata.json"
+
+        real_write = EnhancedVideoProcessor._atomic_write_text
+
+        def _interleaving_write(path, contents):
+            # Deterministically drive the worst-case interleaving: writer B
+            # waits long enough for A to land its markdown, and A stalls
+            # between its own two writes.
+            is_markdown = str(path).endswith(".md")
+            if is_markdown and contents.startswith("# B"):
+                time.sleep(0.05)
+            real_write(path, contents)
+            if is_markdown and contents.startswith("# A"):
+                time.sleep(0.15)
+
+        with patch.object(
+            EnhancedVideoProcessor, "_atomic_write_text", staticmethod(_interleaving_write)
+        ):
+            await asyncio.gather(
+                asyncio.to_thread(
+                    EnhancedVideoProcessor._write_result_files,
+                    save_dir, md_path, meta_path, "# A analysis", {"who": "A"},
+                ),
+                asyncio.to_thread(
+                    EnhancedVideoProcessor._write_result_files,
+                    save_dir, md_path, meta_path, "# B analysis", {"who": "B"},
+                ),
+            )
+
+        markdown = md_path.read_text(encoding="utf-8")
+        metadata = json.loads(meta_path.read_text(encoding="utf-8"))
+        winner = "A" if markdown.startswith("# A") else "B"
+
+        assert metadata["who"] == winner, (
+            f"markdown belongs to save {winner} but metadata belongs to "
+            f"save {metadata['who']} -- the pair interleaved"
+        )
+
+    async def test_pair_write_still_produces_both_files(self, tmp_path):
+        """Guard: serialising the pair must not change the single-writer result."""
+        save_dir = tmp_path / "enhanced"
+        md_path = save_dir / "v_enhanced.md"
+        meta_path = save_dir / "v_metadata.json"
+
+        await asyncio.to_thread(
+            EnhancedVideoProcessor._write_result_files,
+            save_dir, md_path, meta_path, "# only", {"who": "solo", "n": 1},
+        )
+
+        assert md_path.read_text(encoding="utf-8") == "# only"
+        assert json.loads(meta_path.read_text(encoding="utf-8")) == {"who": "solo", "n": 1}
