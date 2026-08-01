@@ -35,11 +35,14 @@ import redis.asyncio as redis
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Upper bound on Redis tag-set writes issued concurrently from a single
-# cache write. redis-py's async connection pool defaults to
-# max_connections=20 and each in-flight command holds one connection, so an
-# unbounded fan-out over a large tag list could exhaust the pool. This stays
-# well below that default to leave capacity for concurrent callers.
+# Upper bound on Redis tag-set (SADD) writes a single RedisCacheLayer issues
+# concurrently, aggregated across ALL in-flight set() calls — not per call.
+# redis-py's async connection pool defaults to max_connections=20 and each
+# in-flight command holds one connection, so an unbounded fan-out over a large
+# tag list (or several concurrent writers) could exhaust the pool. This stays
+# well below that default to leave capacity for other commands; it is further
+# clamped to half the actual pool size at construction so a small pool cannot
+# be over-subscribed.
 TAG_WRITE_CONCURRENCY = 8
 
 class DateTimeEncoder(json.JSONEncoder):
@@ -268,6 +271,29 @@ class RedisCacheLayer(IntelligentCacheLayer):
         self.redis_pool = None
         self._connected = False
 
+        # Bound the total concurrent tag-set (SADD) writes this layer issues
+        # across every in-flight set() call. The connection pool is shared by
+        # all callers, so a per-call semaphore would not stop N concurrent
+        # set() calls from each fanning out and collectively exhausting the
+        # pool. Clamp to half the pool so GET/SET/HSET/DELETE keep headroom.
+        # The semaphore itself is created lazily (see _tag_write_gate) so it
+        # binds to the running event loop rather than construction time.
+        self._tag_write_concurrency = min(
+            TAG_WRITE_CONCURRENCY, max(1, self.max_connections // 2)
+        )
+        self._tag_write_semaphore: Optional[asyncio.Semaphore] = None
+
+    def _tag_write_gate(self) -> "asyncio.Semaphore":
+        """Return the layer-wide tag-write semaphore, creating it on first use.
+
+        Shared across all set() calls so concurrent writers draw from one
+        budget instead of each getting a fresh allowance. Built lazily inside
+        an async caller so it binds to the active event loop.
+        """
+        if self._tag_write_semaphore is None:
+            self._tag_write_semaphore = asyncio.Semaphore(self._tag_write_concurrency)
+        return self._tag_write_semaphore
+
     async def connect(self):
         """Connect to Redis"""
         try:
@@ -364,14 +390,15 @@ class RedisCacheLayer(IntelligentCacheLayer):
                 # sequential await costs a full Redis round trip, which
                 # dominates latency on this per-write hot path.
                 #
-                # Concurrency is bounded by TAG_WRITE_CONCURRENCY so a large
-                # tag list cannot exhaust the connection pool, and every task
-                # is awaited to completion (return_exceptions=True) so no tag
-                # write is still in flight when this method returns. The first
-                # failure is re-raised to preserve the original contract: the
-                # handler below logs it and returns False.
+                # Concurrency is bounded by a layer-wide semaphore so neither a
+                # large tag list nor several concurrent set() calls can exhaust
+                # the shared connection pool, and every task is awaited to
+                # completion (return_exceptions=True) so no tag write is still
+                # in flight when this method returns. The first failure is
+                # re-raised to preserve the original contract: the handler below
+                # logs it and returns False.
                 if tags:
-                    semaphore = asyncio.Semaphore(TAG_WRITE_CONCURRENCY)
+                    semaphore = self._tag_write_gate()
 
                     async def _add_tag(tag: str) -> None:
                         async with semaphore:

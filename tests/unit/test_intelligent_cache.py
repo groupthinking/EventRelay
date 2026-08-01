@@ -1303,6 +1303,46 @@ class TestRedisCacheLayerSet:
         assert conn.sadd.call_count == 50
         assert peak <= TAG_WRITE_CONCURRENCY
 
+    async def test_concurrent_set_calls_share_tag_write_bound(self):
+        """Concurrent set() calls must share one tag-write budget.
+
+        The semaphore lives on the layer, not inside a single set() call, so
+        N simultaneous tagged writes cannot each fan out independently and
+        collectively blow past the connection-pool budget. With a per-call
+        semaphore this peak would reach roughly N * TAG_WRITE_CONCURRENCY.
+        """
+        layer = self._connected_layer()
+        conn = _make_redis_conn()
+
+        in_flight = 0
+        peak = 0
+
+        async def _tracking_sadd(*_args, **_kwargs):
+            nonlocal in_flight, peak
+            in_flight += 1
+            peak = max(peak, in_flight)
+            # Yield so other pending tag writes can start if unbounded.
+            await asyncio.sleep(0)
+            in_flight -= 1
+            return 1
+
+        conn.sadd = AsyncMock(side_effect=_tracking_sadd)
+
+        # 5 concurrent writers, 20 tags each: 100 SADDs sharing one pool.
+        with _patch_redis(conn):
+            results = await asyncio.gather(
+                *(
+                    layer.set(f"k{i}", "v", tags=[f"t{i}-{j}" for j in range(20)])
+                    for i in range(5)
+                )
+            )
+
+        assert all(results)
+        assert conn.sadd.call_count == 100
+        # Aggregate in-flight SADDs never exceed the layer-wide bound, even
+        # though five set() calls ran at once.
+        assert peak <= layer._tag_write_concurrency
+
     async def test_set_tag_write_failure_returns_false_and_drains(self):
         """A failing tag write returns False with no writes left in flight."""
         layer = self._connected_layer()
