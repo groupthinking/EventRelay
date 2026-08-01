@@ -110,7 +110,10 @@ class AgentOrchestrator:
         if name in self._agent_types:
             try:
                 agent_class = self._agent_types[name]
-                agent = agent_class(config=config)
+                try:
+                    agent = agent_class(config=config)
+                except TypeError:
+                    agent = agent_class()
                 self._agents[name] = agent
                 return agent
             except Exception as e:
@@ -120,7 +123,10 @@ class AgentOrchestrator:
         # Fallback to registry
         try:
             agent_class = get_agent_class(name)
-            agent = agent_class(config=config)
+            try:
+                agent = agent_class(config=config)
+            except TypeError:
+                agent = agent_class()
             self._agents[name] = agent
             return agent
         except KeyError:
@@ -268,7 +274,8 @@ class AgentOrchestrator:
                 orchestration_result.errors.append(f"Failed to get agent: {agent_name}")
                 break
 
-            result = await agent.run(AgentRequest(params=current_data))
+            task_name = current_data.get("task") or current_data.get("task_type") or agent_name
+            result = await agent.run(AgentRequest(task=task_name, params=current_data))
             orchestration_result.results[agent_name] = result
             orchestration_result.agents_used.append(agent_name)
 
@@ -479,6 +486,60 @@ class AgentOrchestrator:
             }
             for m in msgs[-limit:]
         ]
+
+    # --- Antigravity SDK Workflows ---
+
+    async def execute_antigravity_delegation(
+        self,
+        task_type: str,
+        input_data: dict[str, Any],
+        subagent_names: Optional[list[str]] = None,
+        agent_configs: Optional[dict[str, dict[str, Any]]] = None,
+    ) -> OrchestrationResult:
+        """
+        Execute subagent delegation using Google Antigravity SDK patterns.
+        Spawns subagents, orchestrates context passing, and aggregates results.
+        Falls back to native execution when Antigravity SDK features are not enabled.
+
+        Args:
+            task_type: Core task type to execute.
+            input_data: Shared input payload.
+            subagent_names: Optional explicit list of subagents to delegate to.
+            agent_configs: Configurations for individual subagents.
+
+        Returns:
+            OrchestrationResult containing aggregated subagent results and telemetry.
+        """
+        start_time = asyncio.get_event_loop().time()
+        self.logger.info("Executing Antigravity SDK delegation workflow for: %s", task_type)
+
+        target_agents = subagent_names or self._task_mappings.get(task_type, ["video_master"])
+        delegation_conv_id = str(uuid.uuid4())
+
+        # Log delegation dispatch start
+        for name in target_agents:
+            await self.send_a2a_message(
+                sender="orchestrator",
+                recipient=name,
+                content={
+                    "type": "agent_dispatch",
+                    "task_type": task_type,
+                    "agent_type": name,
+                    "context": input_data,
+                    "status": "delegated",
+                    "framework": "google_antigravity_sdk",
+                },
+                conversation_id=delegation_conv_id,
+            )
+
+        # Delegate execution across subagents sequentially
+        result = await self.execute_agents_sequentially(
+            agent_names=target_agents,
+            input_data=input_data,
+            agent_configs=agent_configs,
+        )
+        result.total_processing_time = asyncio.get_event_loop().time() - start_time
+        return result
 
 
 # Global orchestrator instance

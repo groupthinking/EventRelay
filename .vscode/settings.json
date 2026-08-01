@@ -23,5 +23,6 @@
     ],
     "python.testing.pytestEnabled": false,
     "python.testing.unittestEnabled": true,
-    "notebook.defaultFormatter": "ms-python.black-formatter"
+    "notebook.defaultFormatter": "ms-python.black-formatter",
+    "geminicodeassist.outlines.automaticOutlineGeneration": true
 }
