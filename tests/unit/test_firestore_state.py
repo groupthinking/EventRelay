@@ -760,6 +760,19 @@ class TestCleanupOldStates:
         doc1.reference.delete.assert_awaited_once()
         doc2.reference.delete.assert_awaited_once()
 
+    async def test_cleanup_passes_configured_delete_timeout(self):
+        svc, _, _, _, _, coll_ref, query = _make_service_with_db()
+        doc = MagicMock()
+        doc.reference = MagicMock()
+        doc.reference.delete = AsyncMock()
+        query.get = AsyncMock(return_value=[doc])
+
+        with patch.object(_mod, "CLEANUP_DELETE_TIMEOUT_SECONDS", 12.5):
+            count = await svc.cleanup_old_states(days=7)
+
+        assert count == 1
+        doc.reference.delete.assert_awaited_once_with(timeout=12.5)
+
     async def test_cleanup_queries_with_where_clause(self):
         svc, _, _, _, _, coll_ref, query = _make_service_with_db()
         query.get = AsyncMock(return_value=[])
@@ -783,7 +796,8 @@ class TestCleanupOldStates:
         """Build n mock docs whose deletes record peak overlap."""
         stats = {"in_flight": 0, "peak": 0, "peak_tasks": 0}
 
-        async def _tracked() -> None:
+        async def _tracked(*, timeout: float) -> None:
+            assert timeout > 0
             stats["in_flight"] += 1
             stats["peak"] = max(stats["peak"], stats["in_flight"])
             # Task count reflects how many coroutines were *allocated*, which is
