@@ -1052,75 +1052,111 @@ def _slow(return_value, delay: float = 0.12):
 
 
 class TestRekognitionDoesNotBlockEventLoop:
-    async def test_analyze_image_does_not_stall_the_event_loop(self):
+    @pytest.mark.parametrize(
+        ("analysis_type", "client_method", "response"),
+        [
+            (AnalysisType.LABEL_DETECTION, "detect_labels", {"Labels": []}),
+            (AnalysisType.FACE_DETECTION, "detect_faces", {"FaceDetails": []}),
+            (AnalysisType.TEXT_DETECTION, "detect_text", {"TextDetections": []}),
+            (
+                AnalysisType.CONTENT_MODERATION,
+                "detect_moderation_labels",
+                {"ModerationLabels": []},
+            ),
+        ],
+    )
+    async def test_each_image_detection_runs_off_the_loop(
+        self, analysis_type, client_method, response
+    ):
         provider = _make_provider()
         mock_client = _make_rekognition_client()
-        mock_client.detect_labels.side_effect = _slow({"Labels": []})
+        getattr(mock_client, client_method).side_effect = _slow(response)
         provider._rekognition_client = mock_client
 
-        with patch.object(provider, '_prepare_image_input',
-                          new=AsyncMock(return_value={"Bytes": b"img"})):
+        with patch.object(
+            provider,
+            "_prepare_image_input",
+            new=AsyncMock(return_value={"Bytes": b"img"}),
+        ):
             result, ticks = await _count_heartbeats(
-                provider.analyze_image("http://e.com/i.jpg", [AnalysisType.LABEL_DETECTION])
+                provider.analyze_image("http://e.com/i.jpg", [analysis_type])
             )
 
         assert isinstance(result, VideoAnalysisResult)
-        assert ticks > 0, "detect_labels blocked the event loop"
+        getattr(mock_client, client_method).assert_called_once()
+        assert ticks > 0, f"{client_method} blocked the event loop"
 
-    async def test_every_detection_type_runs_off_the_loop(self):
-        provider = _make_provider()
-        mock_client = _make_rekognition_client()
-        # four blocking calls back to back
-        mock_client.detect_labels.side_effect = _slow({"Labels": []}, 0.06)
-        mock_client.detect_faces.side_effect = _slow({"FaceDetails": []}, 0.06)
-        mock_client.detect_text.side_effect = _slow({"TextDetections": []}, 0.06)
-        mock_client.detect_moderation_labels.side_effect = _slow({"ModerationLabels": []}, 0.06)
-        provider._rekognition_client = mock_client
-
-        with patch.object(provider, '_prepare_image_input',
-                          new=AsyncMock(return_value={"Bytes": b"img"})):
-            _result, ticks = await _count_heartbeats(
-                provider.analyze_image(
-                    "http://e.com/i.jpg",
-                    [AnalysisType.LABEL_DETECTION, AnalysisType.FACE_DETECTION,
-                     AnalysisType.TEXT_DETECTION, AnalysisType.CONTENT_MODERATION],
-                )
-            )
-
-        mock_client.detect_labels.assert_called_once()
-        mock_client.detect_moderation_labels.assert_called_once()
-        assert ticks > 0, "the detect_* chain blocked the event loop"
-
-    async def test_job_polling_does_not_stall_the_event_loop(self):
+    @pytest.mark.parametrize(
+        ("analysis_type", "client_method", "result_key"),
+        [
+            (AnalysisType.LABEL_DETECTION, "start_label_detection", "labels"),
+            (AnalysisType.FACE_DETECTION, "start_face_detection", "faces"),
+            (AnalysisType.TEXT_DETECTION, "start_text_detection", "text"),
+            (
+                AnalysisType.CONTENT_MODERATION,
+                "start_content_moderation",
+                "moderation",
+            ),
+        ],
+    )
+    async def test_each_video_start_runs_off_the_loop(
+        self, analysis_type, client_method, result_key
+    ):
         provider = _make_provider()
         mock_client = MagicMock()
-        mock_client.get_label_detection.side_effect = _slow(
-            {'JobStatus': 'SUCCEEDED', 'Labels': []}
-        )
-        provider._rekognition_client = mock_client
-
-        result, ticks = await _count_heartbeats(
-            provider._wait_for_job_completion("job-1", "labels")
-        )
-
-        assert result['JobStatus'] == 'SUCCEEDED'
-        assert ticks > 0, "get_label_detection blocked the event loop"
-
-    async def test_start_video_analysis_does_not_stall_the_event_loop(self):
-        provider = _make_provider()
-        mock_client = MagicMock()
-        mock_client.start_label_detection.side_effect = _slow({'JobId': 'j-1'})
+        getattr(mock_client, client_method).side_effect = _slow({"JobId": "j-1"})
         provider._rekognition_client = mock_client
 
         result, ticks = await _count_heartbeats(
             provider._start_video_analysis(
-                "my-bucket", "video.mp4", [AnalysisType.LABEL_DETECTION]
+                "my-bucket", "video.mp4", [analysis_type]
             )
         )
 
-        assert result == {'labels': 'j-1'}
-        assert ticks > 0, "start_label_detection blocked the event loop"
+        assert result == {result_key: "j-1"}
+        assert ticks > 0, f"{client_method} blocked the event loop"
 
+    @pytest.mark.parametrize(
+        ("analysis_key", "client_method"),
+        [
+            ("labels", "get_label_detection"),
+            ("faces", "get_face_detection"),
+            ("text", "get_text_detection"),
+            ("moderation", "get_content_moderation"),
+        ],
+    )
+    async def test_each_video_poll_runs_off_the_loop(
+        self, analysis_key, client_method
+    ):
+        provider = _make_provider()
+        mock_client = MagicMock()
+        getattr(mock_client, client_method).side_effect = _slow(
+            {"JobStatus": "SUCCEEDED"}
+        )
+        provider._rekognition_client = mock_client
+
+        result, ticks = await _count_heartbeats(
+            provider._wait_for_job_completion("job-1", analysis_key)
+        )
+
+        assert result["JobStatus"] == "SUCCEEDED"
+        assert ticks > 0, f"{client_method} blocked the event loop"
+
+    @pytest.mark.parametrize("provider_method", ["_test_connection", "get_service_status"])
+    async def test_each_describe_collection_runs_off_the_loop(self, provider_method):
+        provider = _make_provider()
+        mock_client = MagicMock()
+        mock_client.describe_collection.side_effect = _slow({})
+        provider._rekognition_client = mock_client
+
+        _result, ticks = await _count_heartbeats(
+            getattr(provider, provider_method)()
+        )
+
+        mock_client.describe_collection.assert_called_once()
+        assert ticks > 0, (
+            f"describe_collection in {provider_method} blocked the event loop"
+        )
     async def test_local_image_read_runs_off_the_event_loop_thread(self, tmp_path):
         """
         Deterministic counterpart to the heartbeat tests.
