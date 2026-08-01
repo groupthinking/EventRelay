@@ -12,8 +12,11 @@ object so we can exercise that code without the real SDK.
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import json
 import sys
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -982,3 +985,172 @@ class TestModuleLevelAvailabilityFlag:
             assert m.CLOUD_TASKS_AVAILABLE is False
         else:
             assert m.CLOUD_TASKS_AVAILABLE is True
+
+
+# ===========================================================================
+# Event-loop blocking tests
+#
+# The generated Cloud Tasks client is synchronous.  Calling it directly from
+# an ``async def`` blocks the whole event loop for a full network round-trip,
+# stalling every other request served by the same worker.  These tests pin
+# that the blocking calls are dispatched to a worker thread instead.
+# ===========================================================================
+
+
+class TestClientCallsDoNotBlockEventLoop:
+    """The synchronous Cloud Tasks RPCs must not run on the event loop."""
+
+    _RPC_SECONDS = 0.15
+    _HEARTBEAT_INTERVAL = 0.005
+
+    def _video_task(self) -> VideoProcessingTask:
+        return VideoProcessingTask(
+            video_id="vid-block",
+            video_url="https://youtube.com/watch?v=vid-block",
+        )
+
+    async def _count_heartbeats_during(self, coro):
+        """Run ``coro`` while a 5 ms heartbeat ticks; return the tick count."""
+        ticks = 0
+        stop = False
+
+        async def heartbeat():
+            nonlocal ticks
+            while not stop:
+                await asyncio.sleep(self._HEARTBEAT_INTERVAL)
+                ticks += 1
+
+        beat = asyncio.create_task(heartbeat())
+        # Let the heartbeat reach its first await before the RPC starts.
+        await asyncio.sleep(0)
+        try:
+            result = await coro
+        finally:
+            stop = True
+            beat.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await beat
+        return result, ticks
+
+    def _blocking_rpc(self, return_value=None):
+        """A synchronous stand-in for a slow gRPC call."""
+
+        def _rpc(*_args, **_kwargs):
+            time.sleep(self._RPC_SECONDS)
+            return return_value
+
+        return _rpc
+
+    async def test_enqueue_video_processing_does_not_block_loop(self):
+        mock_tv2 = _make_mock_tasks_v2()
+        svc = _initialized_service(mock_tv2)
+
+        response = MagicMock()
+        response.name = ".../tasks/blocking"
+        svc.client.create_task = self._blocking_rpc(response)
+
+        with (
+            patch.object(m, "CLOUD_TASKS_AVAILABLE", True),
+            patch.object(m, "tasks_v2", mock_tv2),
+        ):
+            task_id, ticks = await self._count_heartbeats_during(
+                svc.enqueue_video_processing(self._video_task())
+            )
+
+        assert task_id == "blocking"
+        assert ticks > 0, (
+            f"event loop was blocked for the whole {self._RPC_SECONDS}s RPC: "
+            f"the {self._HEARTBEAT_INTERVAL}s heartbeat ticked {ticks} times"
+        )
+
+    async def test_get_queue_stats_does_not_block_loop(self):
+        mock_tv2 = _make_mock_tasks_v2()
+        svc = _initialized_service(mock_tv2)
+
+        queue = MagicMock()
+        queue.name = "projects/p/locations/l/queues/q"
+        queue.state.name = "RUNNING"
+        queue.stats.tasks_count = 7
+        queue.stats.oldest_estimated_arrival_time = None
+        svc.client.get_queue = self._blocking_rpc(queue)
+
+        with (
+            patch.object(m, "CLOUD_TASKS_AVAILABLE", True),
+            patch.object(m, "tasks_v2", mock_tv2),
+        ):
+            stats, ticks = await self._count_heartbeats_during(svc.get_queue_stats())
+
+        assert stats["tasks_count"] == 7
+        assert ticks > 0, (
+            f"get_queue_stats blocked the loop for the whole {self._RPC_SECONDS}s RPC "
+            f"({ticks} heartbeats)"
+        )
+
+    @pytest.mark.parametrize(
+        "method_name,client_attr",
+        [
+            ("pause_queue", "pause_queue"),
+            ("resume_queue", "resume_queue"),
+            ("purge_queue", "purge_queue"),
+        ],
+    )
+    async def test_queue_control_methods_do_not_block_loop(
+        self, method_name, client_attr
+    ):
+        mock_tv2 = _make_mock_tasks_v2()
+        svc = _initialized_service(mock_tv2)
+        setattr(svc.client, client_attr, self._blocking_rpc())
+
+        with (
+            patch.object(m, "CLOUD_TASKS_AVAILABLE", True),
+            patch.object(m, "tasks_v2", mock_tv2),
+        ):
+            _, ticks = await self._count_heartbeats_during(
+                getattr(svc, method_name)()
+            )
+
+        assert ticks > 0, (
+            f"{method_name} blocked the loop for the whole {self._RPC_SECONDS}s RPC "
+            f"({ticks} heartbeats)"
+        )
+
+    async def test_rpc_errors_still_propagate_from_worker_thread(self):
+        """Moving the call off-loop must not swallow client errors."""
+        mock_tv2 = _make_mock_tasks_v2()
+        svc = _initialized_service(mock_tv2)
+
+        def _boom(*_args, **_kwargs):
+            raise RuntimeError("quota exceeded")
+
+        svc.client.create_task = _boom
+
+        with (
+            patch.object(m, "CLOUD_TASKS_AVAILABLE", True),
+            patch.object(m, "tasks_v2", mock_tv2),
+            pytest.raises(RuntimeError, match="quota exceeded"),
+        ):
+            await svc.enqueue_video_processing(self._video_task())
+
+    async def test_enqueue_batch_still_isolates_failures_off_loop(self):
+        """enqueue_batch's per-task error handling survives the thread hop."""
+        mock_tv2 = _make_mock_tasks_v2()
+        svc = _initialized_service(mock_tv2)
+
+        good = MagicMock()
+        good.name = ".../tasks/ok"
+        svc.client.create_task = MagicMock(
+            side_effect=[good, RuntimeError("network error"), good]
+        )
+
+        tasks = [
+            VideoProcessingTask(video_id=f"v{i}", video_url=f"https://y/{i}")
+            for i in range(3)
+        ]
+
+        with (
+            patch.object(m, "CLOUD_TASKS_AVAILABLE", True),
+            patch.object(m, "tasks_v2", mock_tv2),
+        ):
+            ids = await svc.enqueue_batch(tasks)
+
+        assert ids == ["ok", "ok"]
