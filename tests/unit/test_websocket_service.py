@@ -6,6 +6,7 @@ import asyncio
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from fastapi import WebSocketDisconnect
 
 from youtube_extension.backend.services.websocket_service import (
@@ -616,3 +617,37 @@ class TestBroadcastFanOut:
         # Must not raise and must not construct an empty gather.
         await mgr.broadcast("event")
         assert mgr.active_connections == []
+
+    async def test_cancelled_send_is_re_raised_not_swallowed(self):
+        """gather(return_exceptions=True) captures CancelledError; broadcast must not eat it.
+
+        The pre-fan-out implementation used `except Exception`, so a
+        CancelledError raised by send_text escaped broadcast(). Collecting it
+        into `results` and filtering on `Exception` would silently drop it.
+        """
+        mgr = WebSocketConnectionManager()
+        ok = _make_ws()
+        cancelled = _make_ws()
+        cancelled.send_text = AsyncMock(side_effect=asyncio.CancelledError())
+        mgr.active_connections.extend([ok, cancelled])
+
+        with pytest.raises(asyncio.CancelledError):
+            await mgr.broadcast("event")
+
+    async def test_cancellation_does_not_leak_dead_peers(self):
+        """Ordinary failures are still cleaned up before the cancellation propagates."""
+        mgr = WebSocketConnectionManager()
+        ok = _make_ws()
+        dead = _make_ws()
+        dead.send_text = AsyncMock(side_effect=RuntimeError("peer gone"))
+        cancelled = _make_ws()
+        cancelled.send_text = AsyncMock(side_effect=asyncio.CancelledError())
+        mgr.active_connections.extend([ok, dead, cancelled])
+
+        with pytest.raises(asyncio.CancelledError):
+            await mgr.broadcast("event")
+
+        assert mgr.active_connections == [ok, cancelled], (
+            "the failed peer must still be dropped even though the broadcast "
+            f"was cancelled, got {mgr.active_connections}"
+        )

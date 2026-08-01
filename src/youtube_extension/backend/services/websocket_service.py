@@ -70,13 +70,25 @@ class WebSocketConnectionManager:
             return_exceptions=True,
         )
 
-        # isinstance(..., Exception) mirrors the previous `except Exception`
-        # clause: BaseException-only failures (e.g. CancelledError) propagate
-        # as before rather than being treated as a dead connection.
+        # `return_exceptions=True` captures BaseException-only failures (most
+        # notably CancelledError) into `results` instead of propagating them,
+        # so `isinstance(result, Exception)` alone would silently swallow a
+        # cancellation that the previous `except Exception` loop let escape.
+        # Dead peers are cleaned up first so a cancellation does not leak them,
+        # then the cancellation is re-raised to restore the old semantics.
+        cancellations = [
+            result
+            for result in results
+            if isinstance(result, BaseException) and not isinstance(result, Exception)
+        ]
+
         for connection, result in zip(connections, results, strict=True):
             if isinstance(result, Exception):
                 logger.error(f"Error broadcasting message: {result}")
                 self.disconnect(connection)
+
+        if cancellations:
+            raise cancellations[0]
 
 
 class WebSocketService:
