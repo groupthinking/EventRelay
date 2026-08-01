@@ -1046,6 +1046,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from youtube_extension.backend.services.intelligent_cache import (
     TAG_WRITE_CONCURRENCY,
+    CacheLoopOwnershipError,
     IntelligentCacheSystem,  # noqa: E402
     RedisCacheLayer,
 )
@@ -1388,11 +1389,11 @@ class TestRedisCacheLayerSet:
         time, outside any loop, so that is reachable -- e.g. a process calling
         asyncio.run() more than once, or a suite giving each test a fresh loop.
 
-        This does NOT establish that reusing a RedisCacheLayer or its
-        redis.asyncio ConnectionPool across loops is safe. The pool caches
-        connections whose transports are bound to the loop that opened them and
-        has no ownership contract; see issue #1162. Redis is mocked here, so
-        only semaphore replacement is exercised.
+        Pool reuse across loops is a separate concern governed by the
+        event-loop ownership contract (issue #1162): the first write's loop
+        closes, so the second loop must re-establish the pool via connect()
+        before it may write. That reconnect is what this test performs, and it
+        is exactly why the semaphore has to be replaced too.
         """
         layer = self._connected_layer()
         conn = _make_redis_conn()
@@ -1401,13 +1402,19 @@ class TestRedisCacheLayerSet:
             with _patch_redis(conn):
                 return await layer.set(key, "v", tags=[tag])
 
+        async def _reconnect_and_write(key, tag):
+            with _patch_redis(conn):
+                # The owning loop is gone, so the layer released its pool.
+                await layer.connect()
+                return await layer.set(key, "v", tags=[tag])
+
         assert asyncio.run(_write("k", "a")) is True
         first = layer._tag_write_semaphore
         first_loop = layer._tag_write_semaphore_loop
         assert first is not None
         assert first_loop is not None and first_loop.is_closed()
 
-        assert asyncio.run(_write("k2", "b")) is True
+        assert asyncio.run(_reconnect_and_write("k2", "b")) is True
         assert layer._tag_write_semaphore is not first
         assert layer._tag_write_semaphore_loop is not first_loop
 
@@ -1608,3 +1615,272 @@ class TestRedisCacheLayerUpdateAvgAccessTime:
         layer._update_avg_access_time(20.0)
         # EMA: 0.1 * 20 + 0.9 * 10 = 11.0
         assert layer.stats.avg_access_time_ms == pytest.approx(11.0, rel=0.01)
+
+
+# ---------------------------------------------------------------------------
+# RedisCacheLayer event-loop ownership contract — issue #1162
+# ---------------------------------------------------------------------------
+import contextlib
+import logging
+import threading
+
+
+@contextlib.contextmanager
+def _foreign_owner_loop(layer):
+    """Hand ``layer`` to an owner that is a *different, still running* loop.
+
+    The loop runs on a background thread and stays alive for the duration of
+    the ``with`` block, so the ownership check inside the test's own loop hits
+    the "owner is still live" branch rather than the closed-loop branch.
+    """
+
+    async def _claim():
+        layer._require_pool_loop()
+
+    loop = asyncio.new_event_loop()
+    ready = threading.Event()
+
+    def _run():
+        asyncio.set_event_loop(loop)
+        loop.call_soon(ready.set)
+        loop.run_forever()
+
+    thread = threading.Thread(target=_run, daemon=True)
+    thread.start()
+    assert ready.wait(5), "owner loop failed to start"
+    asyncio.run_coroutine_threadsafe(_claim(), loop).result(5)
+    assert layer._pool_loop is loop
+
+    try:
+        yield loop
+    finally:
+        loop.call_soon_threadsafe(loop.stop)
+        thread.join(5)
+        loop.close()
+
+
+class TestRedisCacheLayerLoopOwnership:
+    """RedisCacheLayer + its ConnectionPool are owned by one event loop.
+
+    redis.asyncio.ConnectionPool caches connections whose transports are bound
+    to the loop that opened them, so a pool reached from a second live loop
+    hands out connections that loop cannot drive. This module also builds an
+    IntelligentCacheSystem singleton at import time, outside any loop, so a
+    single layer instance really is reachable from several loops in one
+    process. See issue #1162.
+    """
+
+    def _connected_layer(self):
+        layer = RedisCacheLayer("L2")
+        layer._connected = True
+        layer.redis_pool = _make_pool()
+        return layer
+
+    # -- rejection from a second live loop, at every pool call site ---------
+
+    @pytest.mark.parametrize(
+        "call",
+        [
+            pytest.param(lambda layer: layer.connect(), id="connect"),
+            pytest.param(lambda layer: layer.disconnect(), id="disconnect"),
+            pytest.param(lambda layer: layer.get("k"), id="get"),
+            pytest.param(lambda layer: layer.set("k", "v"), id="set"),
+            pytest.param(lambda layer: layer.delete("k"), id="delete"),
+            pytest.param(lambda layer: layer.clear(), id="clear"),
+            pytest.param(lambda layer: layer.invalidate_by_tags(["t"]), id="invalidate_by_tags"),
+        ],
+    )
+    async def test_live_foreign_loop_is_rejected(self, call):
+        layer = self._connected_layer()
+        conn = _make_redis_conn()
+
+        with _foreign_owner_loop(layer):
+            with _patch_redis(conn):
+                with pytest.raises(CacheLoopOwnershipError):
+                    await call(layer)
+
+    async def test_rejection_is_not_swallowed_into_a_fallback_value(self):
+        """Every pool method wraps its body in ``except Exception``.
+
+        If the guard ran inside that block the ownership error would surface as
+        an ordinary cache miss (None / False / 0) and the bug would stay
+        invisible. Assert the error escapes instead.
+        """
+        layer = self._connected_layer()
+        conn = _make_redis_conn()
+
+        with _foreign_owner_loop(layer):
+            with _patch_redis(conn):
+                for coro_factory in (
+                    lambda: layer.get("k"),
+                    lambda: layer.set("k", "v"),
+                    lambda: layer.delete("k"),
+                    lambda: layer.clear(),
+                    lambda: layer.invalidate_by_tags(["t"]),
+                ):
+                    with pytest.raises(CacheLoopOwnershipError):
+                        await coro_factory()
+
+    async def test_rejection_leaves_the_layer_untouched(self):
+        """A rejected access must not tear down the owner's working pool."""
+        layer = self._connected_layer()
+        pool = layer.redis_pool
+
+        with _foreign_owner_loop(layer) as owner:
+            with pytest.raises(CacheLoopOwnershipError):
+                await layer.get("k")
+
+            assert layer.redis_pool is pool
+            assert layer._connected is True
+            assert layer._pool_loop is owner
+
+    async def test_no_pool_means_no_ownership_to_violate(self):
+        """A layer that never connected is claimed by nobody."""
+        layer = RedisCacheLayer("L2")
+
+        assert layer._pool_loop is None
+        assert await layer.get("k") is None
+        # Reading a pool-less layer must not claim it for this loop, or the
+        # next loop to call connect() would be locked out.
+        assert layer._pool_loop is None
+
+    # -- closed owner loop -------------------------------------------------
+
+    def test_closed_owner_loop_releases_the_pool(self, caplog):
+        """The pool dies with its loop, so drop it instead of reusing it.
+
+        We deliberately do not ``await pool.disconnect()`` here: that would
+        touch the very transports bound to the dead loop.
+        """
+        layer = self._connected_layer()
+        pool = layer.redis_pool
+
+        async def _claim():
+            layer._require_pool_loop()
+
+        asyncio.run(_claim())
+        first_loop = layer._pool_loop
+        assert first_loop is not None and first_loop.is_closed()
+        assert layer.redis_pool is pool
+
+        with caplog.at_level(logging.WARNING):
+            asyncio.run(_claim())
+
+        assert layer.redis_pool is None
+        assert layer._connected is False
+        assert layer._pool_loop is None
+        assert any(
+            "closed without disconnect()" in r.getMessage() for r in caplog.records
+        ), "the discarded pool must be reported, not dropped silently"
+
+    def test_new_loop_can_reconnect_after_the_owner_closed(self):
+        layer = self._connected_layer()
+        conn = _make_redis_conn()
+
+        async def _use():
+            with _patch_redis(conn):
+                return await layer.get("k")
+
+        async def _reconnect_and_use():
+            with _patch_redis(conn):
+                await layer.connect()
+                return await layer.get("k")
+
+        asyncio.run(_use())
+        assert asyncio.run(_reconnect_and_use()) is None  # miss, but no raise
+        assert layer._connected is True
+
+    # -- disconnect() is the supported handoff -----------------------------
+
+    def test_disconnect_releases_ownership_for_the_next_loop(self):
+        layer = self._connected_layer()
+        pool = AsyncMock()
+        layer.redis_pool = pool
+        conn = _make_redis_conn()
+
+        async def _own_then_release():
+            layer._require_pool_loop()
+            await layer.disconnect()
+
+        asyncio.run(_own_then_release())
+
+        pool.disconnect.assert_awaited_once()
+        assert layer.redis_pool is None
+        assert layer._connected is False
+        assert layer._pool_loop is None
+
+        async def _adopt():
+            with _patch_redis(conn):
+                await layer.connect()
+                return layer._connected
+
+        # No warning path, no error: this is the clean handoff.
+        assert asyncio.run(_adopt()) is True
+
+    async def test_disconnect_without_a_pool_is_a_noop(self):
+        layer = RedisCacheLayer("L2")
+        await layer.disconnect()
+        assert layer.redis_pool is None
+        assert layer._pool_loop is None
+
+    # -- the import-time singleton is the real-world trigger ---------------
+
+    async def test_import_time_singleton_honours_the_contract(self):
+        """`intelligent_cache` is built at import time, outside any loop.
+
+        That single instance is reachable from every loop in the process, which
+        is precisely the situation issue #1162 describes.
+        """
+        from youtube_extension.backend.services import intelligent_cache as ic_module
+
+        layer = ic_module.intelligent_cache.layers[1]
+        assert isinstance(layer, RedisCacheLayer)
+
+        original_pool, original_connected, original_loop = (
+            layer.redis_pool,
+            layer._connected,
+            layer._pool_loop,
+        )
+        try:
+            layer.redis_pool = _make_pool()
+            layer._connected = True
+            layer._pool_loop = None
+
+            with _foreign_owner_loop(layer):
+                with pytest.raises(CacheLoopOwnershipError):
+                    await ic_module.intelligent_cache.get("k")
+        finally:
+            layer.redis_pool = original_pool
+            layer._connected = original_connected
+            layer._pool_loop = original_loop
+
+    async def test_facade_does_not_swallow_the_ownership_error(self):
+        """IntelligentCacheSystem must surface the error, not mask it."""
+        system = IntelligentCacheSystem()
+        layer = system.layers[1]
+        layer._connected = True
+        layer.redis_pool = _make_pool()
+
+        with _foreign_owner_loop(layer):
+            with pytest.raises(CacheLoopOwnershipError):
+                await system.set("k", "v")
+
+    async def test_system_shutdown_releases_the_redis_layer(self):
+        """`shutdown()` is how a process performs the clean handoff.
+
+        Without it the documented recovery path would only be reachable by
+        reaching into `system.layers[1]`.
+        """
+        system = IntelligentCacheSystem()
+        layer = system.layers[1]
+        pool = AsyncMock()
+        layer._connected = True
+        layer.redis_pool = pool
+        layer._require_pool_loop()
+
+        await system.shutdown()
+
+        pool.disconnect.assert_awaited_once()
+        assert layer.redis_pool is None
+        assert layer._connected is False
+        assert layer._pool_loop is None
