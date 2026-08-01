@@ -17,6 +17,14 @@ NAMESPACE="production"
 DEPLOYMENT_NAME="enhanced-framework"
 TIMEOUT=300
 
+# Every path below is relative to the repository root, so anchor there rather
+# than depending on the caller's working directory.
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+DOCKERFILE="infrastructure/docker/Dockerfile.production"
+PRODUCTION_MANIFESTS="infrastructure/k8s/production"
+MONITORING_MANIFESTS="infrastructure/k8s/monitoring"
+cd "$REPO_ROOT"
+
 # Logging function
 log() {
     echo -e "${BLUE}[$(date +'%Y-%m-%d %H:%M:%S')]${NC} $1"
@@ -65,13 +73,11 @@ success "Kubernetes cluster is accessible"
 
 # Check if required files exist
 REQUIRED_FILES=(
-    "Dockerfile.production"
+    "$DOCKERFILE"
     "package.json"
-    "k8s/production/deployment.yaml"
-    "k8s/production/service.yaml"
-    "k8s/monitoring/monitoring.yaml"
-    "mcp_server.py"
-    "learning_app_processor.py"
+    "$PRODUCTION_MANIFESTS/deployment.yaml"
+    "$PRODUCTION_MANIFESTS/service.yaml"
+    "$MONITORING_MANIFESTS/monitoring.yaml"
 )
 
 for file in "${REQUIRED_FILES[@]}"; do
@@ -85,14 +91,18 @@ success "All required files are present"
 log "Step 2: Running Integration Tests"
 
 if [[ -d "venv" ]]; then
+    # shellcheck disable=SC1091
     source venv/bin/activate
-    if python3 tests/integration/test_runner.py; then
-        success "Integration tests passed"
-    else
-        error "Integration tests failed. Please fix issues before deployment."
-    fi
+fi
+
+if ! command -v python3 &> /dev/null; then
+    warning "python3 is not available. Skipping integration tests."
+elif ! python3 -c "import pytest" &> /dev/null; then
+    warning "pytest is not installed. Skipping integration tests."
+elif PYTHONPATH="src" python3 -m pytest tests/integration -q; then
+    success "Integration tests passed"
 else
-    warning "Virtual environment not found. Skipping integration tests."
+    error "Integration tests failed. Please fix issues before deployment."
 fi
 
 # Step 3: Build Docker Image
@@ -101,7 +111,7 @@ log "Step 3: Building Docker Image"
 DOCKER_TAG="enhanced-framework:$(date +%Y%m%d-%H%M%S)"
 LATEST_TAG="enhanced-framework:latest"
 
-if docker build -f Dockerfile.production -t "$DOCKER_TAG" -t "$LATEST_TAG" .; then
+if docker build -f "$DOCKERFILE" -t "$DOCKER_TAG" -t "$LATEST_TAG" .; then
     success "Docker image built successfully: $DOCKER_TAG"
 else
     error "Docker image build failed"
@@ -111,21 +121,21 @@ fi
 log "Step 4: Validating Kubernetes Manifests"
 
 # Validate deployment manifest
-if kubectl apply --dry-run=client -f k8s/production/deployment.yaml; then
+if kubectl apply --dry-run=client -f "$PRODUCTION_MANIFESTS/deployment.yaml"; then
     success "Deployment manifest is valid"
 else
     error "Deployment manifest validation failed"
 fi
 
 # Validate service manifest
-if kubectl apply --dry-run=client -f k8s/production/service.yaml; then
+if kubectl apply --dry-run=client -f "$PRODUCTION_MANIFESTS/service.yaml"; then
     success "Service manifest is valid"
 else
     error "Service manifest validation failed"
 fi
 
 # Validate monitoring manifest
-if kubectl apply --dry-run=client -f k8s/monitoring/monitoring.yaml; then
+if kubectl apply --dry-run=client -f "$MONITORING_MANIFESTS/monitoring.yaml"; then
     success "Monitoring manifest is valid"
 else
     error "Monitoring manifest validation failed"
@@ -144,14 +154,14 @@ fi
 log "Step 6: Deploying to Kubernetes"
 
 # Deploy application
-if kubectl apply -f k8s/production/ -n "$NAMESPACE"; then
+if kubectl apply -f "$PRODUCTION_MANIFESTS/" -n "$NAMESPACE"; then
     success "Application deployed successfully"
 else
     error "Application deployment failed"
 fi
 
 # Deploy monitoring
-if kubectl apply -f k8s/monitoring/ -n "$NAMESPACE"; then
+if kubectl apply -f "$MONITORING_MANIFESTS/" -n "$NAMESPACE"; then
     success "Monitoring stack deployed successfully"
 else
     error "Monitoring deployment failed"
