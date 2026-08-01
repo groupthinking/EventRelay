@@ -1378,17 +1378,21 @@ class TestRedisCacheLayerSet:
         default = RedisCacheLayer("L2")
         assert default._tag_write_limit == TAG_WRITE_CONCURRENCY
 
-    def test_tag_write_semaphore_rebinds_across_sequential_event_loops(self):
-        """The lazy semaphore must survive sequential reuse from a second loop.
+    def test_tag_write_semaphore_is_replaced_after_its_loop_closes(self):
+        """The semaphore must not stay bound to a loop that has closed.
 
-        This module builds an IntelligentCacheSystem singleton at import time,
-        outside any loop, so a semaphore permanently bound to one loop would
-        raise for every later loop that touched the singleton -- e.g. any
-        process calling asyncio.run() more than once, or a test suite that
-        gives each test a fresh loop.
+        Scope: this covers the *semaphore* only. An asyncio.Semaphore binds to
+        the first loop that uses it and raises for every other one, so a
+        semaphore retained past its loop's lifetime would raise on the next
+        loop. This module builds an IntelligentCacheSystem singleton at import
+        time, outside any loop, so that is reachable -- e.g. a process calling
+        asyncio.run() more than once, or a suite giving each test a fresh loop.
 
-        Deliberately a sync test: each loop must fully finish before the next
-        one starts, which is what makes this the *supported* reuse pattern.
+        This does NOT establish that reusing a RedisCacheLayer or its
+        redis.asyncio ConnectionPool across loops is safe. The pool caches
+        connections whose transports are bound to the loop that opened them and
+        has no ownership contract; see issue #1162. Redis is mocked here, so
+        only semaphore replacement is exercised.
         """
         layer = self._connected_layer()
         conn = _make_redis_conn()

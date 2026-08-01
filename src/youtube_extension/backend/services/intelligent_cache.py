@@ -301,18 +301,20 @@ class RedisCacheLayer(IntelligentCacheLayer):
         ``__init__`` would break as soon as a second loop touched the
         singleton.
 
-        It is therefore rebound whenever a different loop is seen, which keeps
-        the singleton usable across successive ``asyncio.run()`` calls.
+        It is therefore replaced whenever a different loop is seen, so that the
+        semaphore itself never outlives the loop it bound to.
 
         Scope note: this limiter bounds tag-write fan-out within one loop. It is
-        deliberately *not* a cross-loop safety mechanism. A ``redis.asyncio``
-        pool caches connections whose transports are bound to the loop that
-        opened them, so a ``RedisCacheLayer`` is already event-loop-affine
-        through ``self.redis_pool`` -- and that affinity applies equally to
-        ``get()``, ``delete()``, ``clear()`` and ``invalidate_by_tags()``, none
-        of which this limiter touches. Enforcing a loop-ownership contract is a
-        layer-wide concern tracked separately; guarding only this one path would
-        give a misleading partial guarantee. Use one layer per event loop.
+        deliberately *not* a cross-loop safety mechanism, and replacing the
+        semaphore does **not** make the layer reusable across loops. A
+        ``redis.asyncio`` pool caches connections whose transports are bound to
+        the loop that opened them, so a ``RedisCacheLayer`` is already
+        event-loop-affine through ``self.redis_pool`` -- and that affinity
+        applies equally to ``get()``, ``delete()``, ``clear()`` and
+        ``invalidate_by_tags()``, none of which this limiter touches. Enforcing
+        a loop-ownership contract is a layer-wide concern tracked in #1162;
+        guarding only this one path would give a misleading partial guarantee.
+        Use one layer per event loop.
         """
         loop = asyncio.get_running_loop()
 
