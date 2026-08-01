@@ -1151,7 +1151,7 @@ class TestClientCallsDoNotBlockEventLoop:
 
         assert ticks > 0, "create_queue blocked the event loop"
 
-    async def test_cancellation_waits_for_in_flight_rpc(self):
+    async def test_repeated_cancellation_waits_for_in_flight_rpc(self):
         mock_tv2 = _make_mock_tasks_v2()
         svc = _initialized_service(mock_tv2)
         started = threading.Event()
@@ -1180,8 +1180,15 @@ class TestClientCallsDoNotBlockEventLoop:
             try:
                 await asyncio.sleep(0.02)
                 assert not enqueue.done(), (
-                    "cancellation propagated before the synchronous RPC finished"
+                    "first cancellation propagated before the RPC finished"
                 )
+
+                enqueue.cancel()
+                await asyncio.sleep(0.02)
+                assert not enqueue.done(), (
+                    "repeated cancellation propagated before the RPC finished"
+                )
+                assert not finished.is_set()
             finally:
                 release.set()
 
