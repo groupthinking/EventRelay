@@ -27,9 +27,11 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-# Upper bound on concurrent delete RPCs issued by cleanup_old_states(). Cleanup
-# can match an unbounded number of expired documents, so deletes are fanned out
-# under a semaphore rather than dispatched all at once.
+# Size of the worker pool that drains expired documents in cleanup_old_states().
+# Cleanup can match an unbounded number of documents, so deletes are pulled from
+# a shared iterator by this many workers rather than dispatched all at once.
+# Sizing the pool -- rather than gating a full fan-out -- bounds the in-flight
+# delete RPCs and the number of allocated task objects by the same constant.
 CLEANUP_DELETE_CONCURRENCY = 16
 
 

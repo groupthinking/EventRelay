@@ -855,31 +855,42 @@ class TestCleanupOldStates:
         )
 
     async def test_cleanup_failure_does_not_abandon_remaining_deletes(self):
-        """One failing delete must not strand the rest, and must not be counted."""
+        """One failing delete must not strand the rest, and must not be counted.
+
+        The pool is deliberately narrowed to a single worker while the backlog is
+        larger, so the *same* worker whose delete raises has to keep pulling from
+        the shared iterator. With a pool wider than the backlog every worker
+        handles exactly one document and the continuation path is never taken --
+        the assertions below would then hold even for a worker that returned on
+        its first exception.
+        """
         svc, _, _, _, _, coll_ref, query = _make_service_with_db()
 
-        ok_before = MagicMock()
-        ok_before.reference = MagicMock()
-        ok_before.reference.delete = AsyncMock()
+        pool_size = 1
+        doc_count = 5
 
-        failing = MagicMock()
-        failing.reference = MagicMock()
-        failing.reference.delete = AsyncMock(side_effect=RuntimeError("firestore boom"))
+        docs = []
+        for i in range(doc_count):
+            doc = MagicMock(name=f"doc{i}")
+            doc.reference = MagicMock()
+            # Fail on the very first document the lone worker touches.
+            doc.reference.delete = AsyncMock(
+                side_effect=RuntimeError("firestore boom") if i == 0 else None
+            )
+            docs.append(doc)
 
-        ok_after = MagicMock()
-        ok_after.reference = MagicMock()
-        ok_after.reference.delete = AsyncMock()
+        query.get = AsyncMock(return_value=docs)
 
-        query.get = AsyncMock(return_value=[ok_before, failing, ok_after])
+        with patch.object(_mod, "CLEANUP_DELETE_CONCURRENCY", pool_size):
+            count = await svc.cleanup_old_states(days=7)
 
-        count = await svc.cleanup_old_states(days=7)
-
-        # Only the two successful deletes are reported.
-        assert count == 2
-        # The delete queued after the failure still ran; the sequential loop
-        # would have propagated the error and skipped it entirely.
-        ok_before.reference.delete.assert_awaited_once()
-        ok_after.reference.delete.assert_awaited_once()
+        # Only the successful deletes are reported.
+        assert count == doc_count - 1
+        # Every document was attempted exactly once. The four after the failure
+        # were reachable only because the worker continued draining the queue;
+        # the original sequential loop propagated the error and skipped them.
+        for doc in docs:
+            doc.reference.delete.assert_awaited_once()
 
 
 # ===========================================================================
