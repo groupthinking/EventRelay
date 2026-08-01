@@ -1132,23 +1132,30 @@ class TestRekognitionDoesNotBlockEventLoop:
         """
         import threading
 
-        from youtube_extension.integrations.cloud_ai.providers import (
-            aws_rekognition as _rek_mod,
-        )
-
         image = tmp_path / "frame.jpg"
         image.write_bytes(b"BINARY-IMAGE-PAYLOAD")
         provider = _make_provider()
 
+        # Patch the exact namespace `_prepare_image_input` resolves
+        # `_read_file_bytes` from — the method's own module globals — instead of a
+        # freshly re-imported module object. Sibling test modules (notably
+        # test_cloud_ai_integrator) evict the cloud_ai modules from sys.modules at
+        # collection time, so a late `import ... as _rek_mod` here can bind a
+        # *different* module object than the one whose globals this provider's
+        # method actually uses, leaving the patch on a stale module and the read
+        # unintercepted (correct bytes returned, but the wrapper never runs).
+        # `__globals__` is ground truth and cannot drift.
+        method_globals = type(provider)._prepare_image_input.__globals__
+        real_read = method_globals['_read_file_bytes']
+
         loop_thread_id = threading.get_ident()
         observed: dict[str, int] = {}
-        real_read = _rek_mod._read_file_bytes
 
         def _recording_read(path):
             observed['thread_id'] = threading.get_ident()
             return real_read(path)
 
-        with patch.object(_rek_mod, '_read_file_bytes', _recording_read):
+        with patch.dict(method_globals, {'_read_file_bytes': _recording_read}):
             result = await provider._prepare_image_input(str(image))
 
         assert result == {'Bytes': b"BINARY-IMAGE-PAYLOAD"}
