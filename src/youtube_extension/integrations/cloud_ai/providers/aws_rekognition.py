@@ -11,6 +11,8 @@ Implements video and image analysis using AWS Rekognition:
 
 import asyncio
 import logging
+import math
+import os
 from datetime import datetime
 from typing import Any
 
@@ -29,6 +31,79 @@ from ..exceptions import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+# Default botocore timeouts. Every Rekognition/S3 call in this module runs via
+# ``asyncio.to_thread``, i.e. on the *shared* default executor. Without an
+# explicit read timeout a stalled AWS request pins one of the pool's limited
+# worker threads indefinitely, which would starve every other ``to_thread``
+# user in the process. Bounding the request bounds the worker.
+_DEFAULT_CONNECT_TIMEOUT = 10.0
+_DEFAULT_READ_TIMEOUT = 60.0
+_DEFAULT_MAX_ATTEMPTS = 3
+
+
+def _positive_finite_float_env(name: str, default: float) -> float:
+    """Read a strictly positive, finite float from the environment."""
+    raw = os.environ.get(name)
+    if raw is None or not raw.strip():
+        return default
+    try:
+        value = float(raw)
+    except (TypeError, ValueError) as exc:
+        raise ConfigurationError(
+            f"{name} must be a number, got {raw!r}",
+            provider=CloudAIProvider.AWS_REKOGNITION.value,
+        ) from exc
+    if not math.isfinite(value) or value <= 0:
+        raise ConfigurationError(
+            f"{name} must be a positive finite number, got {raw!r}",
+            provider=CloudAIProvider.AWS_REKOGNITION.value,
+        )
+    return value
+
+
+def _positive_int_env(name: str, default: int) -> int:
+    """Read a strictly positive integer from the environment."""
+    raw = os.environ.get(name)
+    if raw is None or not raw.strip():
+        return default
+    try:
+        value = int(raw)
+    except (TypeError, ValueError) as exc:
+        raise ConfigurationError(
+            f"{name} must be an integer, got {raw!r}",
+            provider=CloudAIProvider.AWS_REKOGNITION.value,
+        ) from exc
+    if value <= 0:
+        raise ConfigurationError(
+            f"{name} must be a positive integer, got {raw!r}",
+            provider=CloudAIProvider.AWS_REKOGNITION.value,
+        )
+    return value
+
+
+def _timeout_config_kwargs() -> dict:
+    """Parse botocore timeout settings from the environment.
+
+    Kept separate from ``initialize`` so a bad value raises ConfigurationError
+    with its precise message instead of being re-wrapped as a generic
+    CloudAIError by that method's catch-all handler.
+    """
+    return {
+        'connect_timeout': _positive_finite_float_env(
+            'AWS_REKOGNITION_CONNECT_TIMEOUT', _DEFAULT_CONNECT_TIMEOUT
+        ),
+        'read_timeout': _positive_finite_float_env(
+            'AWS_REKOGNITION_READ_TIMEOUT', _DEFAULT_READ_TIMEOUT
+        ),
+        'retries': {
+            'max_attempts': _positive_int_env(
+                'AWS_REKOGNITION_MAX_ATTEMPTS', _DEFAULT_MAX_ATTEMPTS
+            ),
+            'mode': 'standard',
+        },
+    }
 
 
 def _read_file_bytes(path: str) -> bytes:
@@ -64,8 +139,12 @@ class AWSRekognition(BaseCloudAI):
 
     async def initialize(self) -> None:
         """Initialize AWS Rekognition client."""
+        # Parsed before the try so a misconfigured value surfaces as a
+        # ConfigurationError rather than the catch-all CloudAIError below.
+        timeout_kwargs = _timeout_config_kwargs()
         try:
             import boto3
+            from botocore.config import Config as BotoConfig
             from botocore.exceptions import ClientError, NoCredentialsError
 
             # Create session with credentials
@@ -75,9 +154,15 @@ class AWSRekognition(BaseCloudAI):
                 region_name=self.config["region"]
             )
 
+            # Bound every request so a stalled call cannot hold a shared
+            # executor thread forever (all SDK calls here run in to_thread).
+            client_config = BotoConfig(**timeout_kwargs)
+
             # Initialize clients
-            self._rekognition_client = session.client('rekognition')
-            self._s3_client = session.client('s3')
+            self._rekognition_client = session.client(
+                'rekognition', config=client_config
+            )
+            self._s3_client = session.client('s3', config=client_config)
 
             # Test connection
             await self._test_connection()

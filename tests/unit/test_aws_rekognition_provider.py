@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+import os
 import sys
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -131,6 +133,7 @@ class TestAWSRekognitionInitialize:
         mock_boto3.Session.return_value = mock_session
 
         with patch.dict("sys.modules", {"boto3": mock_boto3, "botocore": MagicMock(),
+                                         "botocore.config": MagicMock(),
                                          "botocore.exceptions": MagicMock(
                                              ClientError=Exception, NoCredentialsError=Exception
                                          )}):
@@ -147,6 +150,7 @@ class TestAWSRekognitionInitialize:
         mock_boto3.Session.return_value = mock_session
 
         with patch.dict("sys.modules", {"boto3": mock_boto3, "botocore": MagicMock(),
+                                         "botocore.config": MagicMock(),
                                          "botocore.exceptions": MagicMock(
                                              ClientError=Exception, NoCredentialsError=Exception
                                          )}):
@@ -169,6 +173,7 @@ class TestAWSRekognitionInitialize:
         mock_boto3.Session.return_value = mock_session
 
         with patch.dict("sys.modules", {"boto3": mock_boto3, "botocore": MagicMock(),
+                                         "botocore.config": MagicMock(),
                                          "botocore.exceptions": MagicMock(
                                              ClientError=Exception, NoCredentialsError=Exception
                                          )}):
@@ -1206,3 +1211,96 @@ class TestRekognitionDoesNotBlockEventLoop:
         result = await provider._prepare_image_input(str(image))
 
         assert result == {'Bytes': payload}
+
+
+# ---------------------------------------------------------------------------
+# botocore client timeouts
+# ---------------------------------------------------------------------------
+class TestClientTimeoutConfiguration:
+    """Every SDK call here runs on the shared default executor via
+    ``asyncio.to_thread``. Without an explicit read timeout a stalled AWS
+    request would pin one of that pool's limited worker threads forever and
+    starve every other ``to_thread`` user in the process, so the clients must
+    always be built with a bounded botocore config.
+    """
+
+    @staticmethod
+    async def _initialize(env: dict | None = None):
+        provider = _make_provider()
+        mock_session = MagicMock()
+        mock_session.client.return_value = _make_rekognition_client()
+        mock_boto3 = MagicMock()
+        mock_boto3.Session.return_value = mock_session
+        config_mod = MagicMock()
+
+        stubs = {
+            "boto3": mock_boto3,
+            "botocore": MagicMock(),
+            "botocore.config": config_mod,
+            "botocore.exceptions": MagicMock(
+                ClientError=Exception, NoCredentialsError=Exception
+            ),
+        }
+        with patch.dict("sys.modules", stubs), patch.dict(os.environ, env or {}):
+            await provider.initialize()
+        return mock_session, config_mod
+
+    async def test_both_clients_are_built_with_a_bounded_config(self):
+        mock_session, config_mod = await self._initialize()
+
+        built = config_mod.Config.return_value
+        services = {}
+        for call in mock_session.client.call_args_list:
+            services[call.args[0]] = call.kwargs.get("config")
+
+        assert set(services) == {"rekognition", "s3"}
+        assert services["rekognition"] is built
+        assert services["s3"] is built
+
+    async def test_default_timeouts_are_finite_and_positive(self):
+        _session, config_mod = await self._initialize()
+
+        kwargs = config_mod.Config.call_args.kwargs
+        assert 0 < kwargs["connect_timeout"] < math.inf
+        assert 0 < kwargs["read_timeout"] < math.inf
+        assert kwargs["retries"]["max_attempts"] >= 1
+
+    async def test_timeouts_are_overridable_from_the_environment(self):
+        _session, config_mod = await self._initialize(
+            {
+                "AWS_REKOGNITION_CONNECT_TIMEOUT": "2.5",
+                "AWS_REKOGNITION_READ_TIMEOUT": "7",
+                "AWS_REKOGNITION_MAX_ATTEMPTS": "5",
+            }
+        )
+
+        kwargs = config_mod.Config.call_args.kwargs
+        assert kwargs["connect_timeout"] == 2.5
+        assert kwargs["read_timeout"] == 7.0
+        assert kwargs["retries"]["max_attempts"] == 5
+
+    @pytest.mark.parametrize(
+        "var",
+        ["AWS_REKOGNITION_CONNECT_TIMEOUT", "AWS_REKOGNITION_READ_TIMEOUT"],
+    )
+    @pytest.mark.parametrize("bad", ["inf", "-inf", "nan", "0", "-1", "abc"])
+    async def test_non_finite_or_non_positive_timeouts_are_rejected(self, var, bad):
+        with pytest.raises(ConfigurationError):
+            await self._initialize({var: bad})
+
+    @pytest.mark.parametrize("bad", ["0", "-3", "1.5", "abc"])
+    async def test_invalid_max_attempts_is_rejected(self, bad):
+        with pytest.raises(ConfigurationError):
+            await self._initialize({"AWS_REKOGNITION_MAX_ATTEMPTS": bad})
+
+    @pytest.mark.parametrize(
+        "var",
+        [
+            "AWS_REKOGNITION_CONNECT_TIMEOUT",
+            "AWS_REKOGNITION_READ_TIMEOUT",
+            "AWS_REKOGNITION_MAX_ATTEMPTS",
+        ],
+    )
+    async def test_blank_values_fall_back_to_defaults(self, var):
+        _session, config_mod = await self._initialize({var: "   "})
+        assert config_mod.Config.call_args is not None
