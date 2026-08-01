@@ -14,4 +14,9 @@ paths = [
   '''docs/security/.*''',
   # Test fixtures use obvious dummy keys (e.g. "xai-secret-123"), not real secrets.
   '''tests/.*''',
+  # Machine-generated lockfile: every `hash = "sha256:..."` entry is a PyPI
+  # package integrity digest, not a credential. Their base64 entropy trips
+  # high-entropy rules (e.g. square-access-token on the `parso` sdist hash),
+  # failing the secret-scan gate repo-wide on a false positive.
+  '''uv\.lock''',
 ]
