@@ -14,4 +14,6 @@ paths = [
   '''docs/security/.*''',
   # Test fixtures use obvious dummy keys (e.g. "xai-secret-123"), not real secrets.
   '''tests/.*''',
+  # Ignore uv.lock lockfiles entirely, they contain hashed checksums that trip the square-access-token regex
+  '''uv\.lock''',
 ]
