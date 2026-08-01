@@ -255,11 +255,10 @@ Respond with ONLY valid JSON matching the required structure.`;
     return NextResponse.json({ success: true, provider, data: parsed });
   } catch (error) {
     console.error('Event extraction error:', error);
-    const message = error instanceof Error ? error.message : String(error);
 
     return NextResponse.json({
       success: false,
-      error: message,
+      error: 'Event extraction failed',
       data: { events: [], actions: [], summary: '', topics: [] },
     });
   }

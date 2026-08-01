@@ -38,8 +38,9 @@ export async function GET(
       headers: { 'Content-Type': 'application/json' },
     });
   } catch (error) {
+    console.error('Job proxy error:', error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : String(error) },
+      { error: 'Failed to fetch job status' },
       { status: 502 },
     );
   }
