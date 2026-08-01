@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
+import json
 import sys
+import time
 import types
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -596,3 +600,143 @@ class TestStartStopCollection:
             await svc.start_collection()
             await svc.stop_collection()
             assert svc._running is False
+
+
+# ===========================================================================
+# MetricsService — disk I/O must not block the event loop
+# ===========================================================================
+
+
+class TestDiskIoDoesNotBlockEventLoop:
+    """`record_metric` persists every 10th point while serving requests.
+
+    A synchronous ``open()``/``write()`` there stalls every other task on the
+    loop for the whole disk write. These tests measure loop responsiveness
+    directly: a 5 ms heartbeat must get at least one tick while a deliberately
+    slow file operation is in flight.
+    """
+
+    async def _count_heartbeats_during(self, coro):
+        ticks = 0
+        stop = False
+
+        async def heartbeat():
+            nonlocal ticks
+            while not stop:
+                await asyncio.sleep(0.005)
+                ticks += 1
+
+        beat = asyncio.create_task(heartbeat())
+        await asyncio.sleep(0)  # let the heartbeat reach its first await first
+        try:
+            result = await coro
+        finally:
+            stop = True
+            beat.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await beat
+        return result, ticks
+
+    @staticmethod
+    def _slow_write(_path, _contents):
+        time.sleep(0.15)
+
+    @staticmethod
+    def _slow_read(_path):
+        time.sleep(0.15)
+        return {}
+
+    async def test_persist_metrics_does_not_block_the_loop(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        svc = MetricsService()
+        await svc.record_metric("latency", 1.0)
+
+        with patch.object(
+            MetricsService, "_write_text_file", staticmethod(self._slow_write)
+        ):
+            _, ticks = await self._count_heartbeats_during(svc._persist_metrics())
+
+        assert ticks > 0, (
+            "event loop was blocked for the whole 0.15s metrics write: "
+            f"the 0.005s heartbeat ticked {ticks} times"
+        )
+
+    async def test_load_persisted_metrics_does_not_block_the_loop(
+        self, tmp_path, monkeypatch
+    ):
+        monkeypatch.chdir(tmp_path)
+        svc = MetricsService()
+        svc.metrics_file.write_text("{}")
+
+        with patch.object(
+            MetricsService, "_read_json_file", staticmethod(self._slow_read)
+        ):
+            ok, ticks = await self._count_heartbeats_during(
+                svc.load_persisted_metrics()
+            )
+
+        assert ok is True
+        assert ticks > 0, (
+            "event loop was blocked for the whole 0.15s metrics read: "
+            f"the 0.005s heartbeat ticked {ticks} times"
+        )
+
+    async def test_record_metric_hot_path_does_not_block_the_loop(
+        self, tmp_path, monkeypatch
+    ):
+        """The real production trigger: every 10th point persists inline."""
+        monkeypatch.chdir(tmp_path)
+        svc = MetricsService()
+        for _ in range(9):
+            await svc.record_metric("latency", 1.0)
+
+        with patch.object(
+            MetricsService, "_write_text_file", staticmethod(self._slow_write)
+        ):
+            # the 10th point crosses the `% 10 == 0` boundary and persists
+            _, ticks = await self._count_heartbeats_during(
+                svc.record_metric("latency", 1.0)
+            )
+
+        assert ticks > 0, (
+            "record_metric blocked the loop for the whole 0.15s persist "
+            f"({ticks} heartbeats)"
+        )
+
+    # --- preserved-behaviour guards (pass under both old and new code) ---
+
+    async def test_persist_writes_exported_payload_to_disk(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        svc = MetricsService()
+        await svc.record_metric("latency", 42.0)
+
+        await svc._persist_metrics()
+
+        written = json.loads(svc.metrics_file.read_text())
+        assert "latency" in written["metrics"]
+        assert written["metrics"]["latency"]["points"][0]["value"] == 42.0
+
+    async def test_persist_swallows_write_errors(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        svc = MetricsService()
+        await svc.record_metric("latency", 1.0)
+
+        def _boom(_path, _contents):
+            raise OSError("disk full")
+
+        with patch.object(MetricsService, "_write_text_file", staticmethod(_boom)):
+            await svc._persist_metrics()  # must not raise
+
+    async def test_load_returns_false_when_file_missing(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        svc = MetricsService()
+        svc.metrics_file.unlink(missing_ok=True)
+
+        assert await svc.load_persisted_metrics() is False
+
+    async def test_load_returns_false_on_corrupt_json(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        svc = MetricsService()
+        svc.metrics_file.write_text("{not json")
+
+        assert await svc.load_persisted_metrics() is False

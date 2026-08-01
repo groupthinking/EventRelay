@@ -315,13 +315,30 @@ class MetricsService:
                 logger.error(f"Error in background collection: {e}")
                 await asyncio.sleep(self.collection_interval)
 
+    @staticmethod
+    def _write_text_file(path: Path, contents: str) -> None:
+        """Blocking file write, intended to be run off the event loop."""
+        with open(path, 'w') as f:
+            f.write(contents)
+
+    @staticmethod
+    def _read_json_file(path: Path) -> Any:
+        """Blocking file read + parse, intended to be run off the event loop."""
+        with open(path) as f:
+            return json.load(f)
+
     async def _persist_metrics(self) -> None:
         """Persist metrics to disk"""
         try:
             export_data = await self.export_metrics("json")
 
-            with open(self.metrics_file, 'w') as f:
-                f.write(export_data)
+            # `record_metric` calls this every 10th data point, on the same
+            # event loop that is serving requests. Writing the whole metrics
+            # file inline stalls every other task for the duration of the
+            # disk write, so hand it to a worker thread.
+            await asyncio.to_thread(
+                self._write_text_file, self.metrics_file, export_data
+            )
 
         except Exception as e:
             logger.error(f"Failed to persist metrics: {e}")
@@ -341,8 +358,9 @@ class MetricsService:
             if not self.metrics_file.exists():
                 return False
 
-            with open(self.metrics_file) as f:
-                json.load(f)
+            # Both the read and the json parse are blocking and scale with
+            # file size, so keep them off the event loop.
+            await asyncio.to_thread(self._read_json_file, self.metrics_file)
 
             # Restore metrics (simplified - would need more complex logic for full restoration)
             logger.info(f"Loaded persisted metrics from {self.metrics_file}")
