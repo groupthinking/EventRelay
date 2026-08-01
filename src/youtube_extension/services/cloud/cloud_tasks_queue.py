@@ -8,6 +8,7 @@ Enables non-blocking video processing with retry logic and concurrency control.
 """
 
 import asyncio
+import contextlib
 import json
 import logging
 import os
@@ -28,6 +29,21 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+
+async def _run_sync_rpc(call, /, *args, **kwargs):
+    """Run a synchronous RPC without abandoning it on caller cancellation.
+
+    ``asyncio.to_thread`` cannot stop a worker that has already started. Shield
+    the worker task and wait for it to finish before propagating cancellation so
+    callers may safely close the shared client in ``finally`` blocks.
+    """
+    rpc_task = asyncio.create_task(asyncio.to_thread(call, *args, **kwargs))
+    try:
+        return await asyncio.shield(rpc_task)
+    except asyncio.CancelledError:
+        with contextlib.suppress(Exception):
+            await rpc_task
+        raise
 
 @dataclass
 class TaskConfig:
@@ -197,7 +213,7 @@ class CloudTasksQueueService:
         # calling it directly would block the event loop for a full network
         # round-trip on every enqueue.
         queue_path = self._get_queue_path()
-        response = await asyncio.to_thread(
+        response = await _run_sync_rpc(
             self.client.create_task,
             request=tasks_v2.CreateTaskRequest(
                 parent=queue_path,
@@ -252,7 +268,7 @@ class CloudTasksQueueService:
         try:
             # Try to get the queue
             queue_path = self._get_queue_path()
-            await asyncio.to_thread(self.client.get_queue, name=queue_path)
+            await _run_sync_rpc(self.client.get_queue, name=queue_path)
             logger.info(f"Queue already exists: {queue_path}")
 
         except Exception:
@@ -274,7 +290,7 @@ class CloudTasksQueueService:
                 ),
             )
 
-            await asyncio.to_thread(
+            await _run_sync_rpc(
                 self.client.create_queue,
                 request=tasks_v2.CreateQueueRequest(
                     parent=parent,
@@ -289,7 +305,7 @@ class CloudTasksQueueService:
             raise RuntimeError("Cloud Tasks client not initialized. Call initialize() first.")
 
         queue_path = self._get_queue_path()
-        await asyncio.to_thread(self.client.pause_queue, name=queue_path)
+        await _run_sync_rpc(self.client.pause_queue, name=queue_path)
         logger.info(f"Paused queue: {queue_path}")
 
     async def resume_queue(self) -> None:
@@ -298,7 +314,7 @@ class CloudTasksQueueService:
             raise RuntimeError("Cloud Tasks client not initialized. Call initialize() first.")
 
         queue_path = self._get_queue_path()
-        await asyncio.to_thread(self.client.resume_queue, name=queue_path)
+        await _run_sync_rpc(self.client.resume_queue, name=queue_path)
         logger.info(f"Resumed queue: {queue_path}")
 
     async def purge_queue(self) -> None:
@@ -307,7 +323,7 @@ class CloudTasksQueueService:
             raise RuntimeError("Cloud Tasks client not initialized. Call initialize() first.")
 
         queue_path = self._get_queue_path()
-        await asyncio.to_thread(self.client.purge_queue, name=queue_path)
+        await _run_sync_rpc(self.client.purge_queue, name=queue_path)
         logger.info(f"Purged queue: {queue_path}")
 
     async def get_queue_stats(self) -> dict[str, Any]:
@@ -321,7 +337,7 @@ class CloudTasksQueueService:
             raise RuntimeError("Cloud Tasks client not initialized. Call initialize() first.")
 
         queue_path = self._get_queue_path()
-        queue = await asyncio.to_thread(self.client.get_queue, name=queue_path)
+        queue = await _run_sync_rpc(self.client.get_queue, name=queue_path)
 
         return {
             'name': queue.name,
