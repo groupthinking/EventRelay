@@ -16,10 +16,16 @@ paths = [
   '''tests/.*''',
 ]
 
-# Gitleaks v8.19.3 merges same-ID attributes from the default ruleset. Inherit
-# Square's detector and append only the narrow generated-record exception.
+# Gitleaks v8.19.3 does not preserve the inherited detector when a same-ID rule
+# adds only an allowlist. Repeat that release's exact Square detector, then add
+# the narrow generated-record exception below.
 [[rules]]
 id = "square-access-token"
+description = "Detected a Square Access Token, risking unauthorized payment processing and financial transaction exposure."
+regex = '''\b((?:EAAA|sq0atp-)[\w-]{22,60})(?:['|\"|\n|\r|\s|\x60|;]|$)'''
+keywords = [
+  "sq0atp-","eaaa",
+]
 
   [rules.allowlist]
   description = "Generated uv.lock PyPI artifact checksum records"
