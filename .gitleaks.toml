@@ -16,12 +16,17 @@ paths = [
   '''tests/.*''',
 ]
 
-# uv.lock records public Python package artifacts as a URL plus SHA-256 digest,
-# size, and upload timestamp. Some digest substrings match the inherited Square
-# token detector. Keep that detector active, and suppress only a complete PyPI
-# artifact record in the generated lockfile.
+# Gitleaks v8.18.4 does not safely merge an allowlist-only same-ID rule with the
+# inherited default rule. Repeat that pinned release's exact Square detector so
+# the scanner cannot accidentally disable it while adding the narrow exception.
 [[rules]]
 id = "square-access-token"
+description = "Detected a Square Access Token, risking unauthorized payment processing and financial transaction exposure."
+regex = '''(?i)\b((EAAA|sq0atp-)[0-9A-Za-z\-_]{22,60})(?:['|\"|\n|\r|\s|\x60|;]|$)'''
+keywords = [
+  "sq0atp-",
+  "eaaa",
+]
 
   [rules.allowlist]
   description = "Generated uv.lock PyPI artifact checksum records"
