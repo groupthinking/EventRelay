@@ -1301,7 +1301,7 @@ class TestRedisCacheLayerSet:
 
         assert result is True
         assert conn.sadd.call_count == 50
-        assert peak <= TAG_WRITE_CONCURRENCY
+        assert peak <= layer._tag_write_limit
 
     async def test_set_tag_write_failure_returns_false_and_drains(self):
         """A failing tag write returns False with no writes left in flight."""
@@ -1330,6 +1330,82 @@ class TestRedisCacheLayerSet:
         assert result is False
         # Every scheduled write ran to completion before set() returned.
         assert finished == started
+
+    async def test_concurrent_sets_share_one_tag_write_budget(self):
+        """Concurrent set() calls must share the tag-write budget.
+
+        The limiter has to be per-layer, not per-call: every caller draws from
+        the same connection pool, so N concurrent writers each running their
+        own budget would still exhaust it. warm_cache() gathers set() calls,
+        so this is a reachable path.
+        """
+        layer = self._connected_layer()
+        conn = _make_redis_conn()
+
+        in_flight = 0
+        peak = 0
+
+        async def _tracking_sadd(*_args, **_kwargs):
+            nonlocal in_flight, peak
+            in_flight += 1
+            peak = max(peak, in_flight)
+            # Yield so every other pending tag write can start if unbounded.
+            await asyncio.sleep(0)
+            in_flight -= 1
+            return 1
+
+        conn.sadd = AsyncMock(side_effect=_tracking_sadd)
+        tags = [f"tag{i}" for i in range(20)]
+
+        with _patch_redis(conn):
+            results = await asyncio.gather(
+                *(layer.set(f"k{i}", "v", tags=tags) for i in range(5))
+            )
+
+        assert all(results)
+        assert conn.sadd.call_count == 100
+        # Aggregate in-flight writes stay within the single shared budget,
+        # not 5x it, and leave headroom under the pool's max_connections.
+        assert peak <= layer._tag_write_limit
+        assert layer._tag_write_limit < layer.max_connections
+
+    async def test_tag_write_limit_scales_down_for_small_pools(self):
+        """A small pool must not be handed a fan-out wider than itself."""
+        small = RedisCacheLayer("L2", max_connections=4)
+        assert small._tag_write_limit >= 1
+        assert small._tag_write_limit < small.max_connections
+
+        default = RedisCacheLayer("L2")
+        assert default._tag_write_limit == TAG_WRITE_CONCURRENCY
+
+    async def test_tag_write_semaphore_rebinds_across_event_loops(self):
+        """The lazy semaphore must survive being used from a second loop.
+
+        This module builds an IntelligentCacheSystem singleton at import time,
+        outside any loop, so a semaphore bound to one loop would raise for
+        every other loop that touched the singleton.
+        """
+        layer = self._connected_layer()
+        conn = _make_redis_conn()
+
+        with _patch_redis(conn):
+            assert await layer.set("k", "v", tags=["a"]) is True
+        first = layer._tag_write_semaphore
+        assert first is not None
+
+        def _run_on_fresh_loop():
+            async def _inner():
+                with _patch_redis(conn):
+                    return await layer.set("k2", "v", tags=["b"])
+
+            loop = asyncio.new_event_loop()
+            try:
+                return loop.run_until_complete(_inner())
+            finally:
+                loop.close()
+
+        assert await asyncio.to_thread(_run_on_fresh_loop) is True
+        assert layer._tag_write_semaphore is not first
 
     async def test_set_stores_metadata(self):
         layer = self._connected_layer()
