@@ -1370,3 +1370,67 @@ class TestSaveDoesNotBlockEventLoop:
         assert observations, "reader never sampled the file"
         bad = [len(o) for o in observations if o not in (gen_a, gen_b)]
         assert not bad, f"reader saw {len(bad)} partial file(s), sizes={bad[:5]}"
+
+
+class TestConcurrentSavesWriteMatchedPairs:
+    """
+    Result filenames carry only one-second precision, so two saves of the same
+    video inside the same second resolve to the same two paths. Each write is
+    individually atomic, but without holding the pair together the two saves
+    can interleave and leave one save's markdown next to the other's metadata.
+    """
+
+    async def test_concurrent_saves_never_mix_markdown_with_foreign_metadata(self, tmp_path):
+        save_dir = tmp_path / "enhanced"
+        md_path = save_dir / "vid_20240101_000000_enhanced.md"
+        meta_path = save_dir / "vid_20240101_000000_metadata.json"
+
+        real_write = EnhancedVideoProcessor._atomic_write_text
+
+        def _interleaving_write(path, contents):
+            # Deterministically drive the worst-case interleaving: writer B
+            # waits long enough for A to land its markdown, and A stalls
+            # between its own two writes.
+            is_markdown = str(path).endswith(".md")
+            if is_markdown and contents.startswith("# B"):
+                time.sleep(0.05)
+            real_write(path, contents)
+            if is_markdown and contents.startswith("# A"):
+                time.sleep(0.15)
+
+        with patch.object(
+            EnhancedVideoProcessor, "_atomic_write_text", staticmethod(_interleaving_write)
+        ):
+            await asyncio.gather(
+                asyncio.to_thread(
+                    EnhancedVideoProcessor._write_result_files,
+                    save_dir, md_path, meta_path, "# A analysis", {"who": "A"},
+                ),
+                asyncio.to_thread(
+                    EnhancedVideoProcessor._write_result_files,
+                    save_dir, md_path, meta_path, "# B analysis", {"who": "B"},
+                ),
+            )
+
+        markdown = md_path.read_text(encoding="utf-8")
+        metadata = json.loads(meta_path.read_text(encoding="utf-8"))
+        winner = "A" if markdown.startswith("# A") else "B"
+
+        assert metadata["who"] == winner, (
+            f"markdown belongs to save {winner} but metadata belongs to "
+            f"save {metadata['who']} -- the pair interleaved"
+        )
+
+    async def test_pair_write_still_produces_both_files(self, tmp_path):
+        """Guard: serialising the pair must not change the single-writer result."""
+        save_dir = tmp_path / "enhanced"
+        md_path = save_dir / "v_enhanced.md"
+        meta_path = save_dir / "v_metadata.json"
+
+        await asyncio.to_thread(
+            EnhancedVideoProcessor._write_result_files,
+            save_dir, md_path, meta_path, "# only", {"who": "solo", "n": 1},
+        )
+
+        assert md_path.read_text(encoding="utf-8") == "# only"
+        assert json.loads(meta_path.read_text(encoding="utf-8")) == {"who": "solo", "n": 1}

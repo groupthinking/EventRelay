@@ -31,6 +31,15 @@ from youtube_extension.utils.proxy import get_proxy_url, get_transcript_proxy_co
 
 logger = logging.getLogger(__name__)
 
+# Serialises the markdown+metadata pair written by
+# ``EnhancedVideoProcessor._write_result_files``. Result filenames carry only
+# one-second precision, so two saves of the same video inside the same second
+# resolve to the same two paths; without this lock their individually-atomic
+# writes can interleave and leave one save's markdown paired with the other's
+# metadata. Held only across two file writes, and only inside a worker thread,
+# so it never blocks the event loop.
+_RESULT_WRITE_LOCK = threading.Lock()
+
 # Optional Gemini Vision integration for frame analysis
 try:
     # Use package import (works with PYTHONPATH=src and when the real MCP server on 8010 is exercised)
@@ -764,12 +773,17 @@ Provide a structured JSON response with visual_elements array containing:
         rather than one per syscall. ``json.dumps`` is done here rather than
         by the caller so the serialisation cost -- which scales with the size
         of the metadata dict -- is paid off the event loop too.
+
+        The two writes are individually atomic *and* are held together under
+        ``_RESULT_WRITE_LOCK`` so concurrent saves cannot pair one save's
+        markdown with another's metadata.
         """
         save_dir.mkdir(parents=True, exist_ok=True)
-        EnhancedVideoProcessor._atomic_write_text(filepath, markdown)
-        EnhancedVideoProcessor._atomic_write_text(
-            metadata_file, json.dumps(metadata, indent=2, default=str)
-        )
+        payload = json.dumps(metadata, indent=2, default=str)
+        # Both files must land as a matched pair -- see _RESULT_WRITE_LOCK.
+        with _RESULT_WRITE_LOCK:
+            EnhancedVideoProcessor._atomic_write_text(filepath, markdown)
+            EnhancedVideoProcessor._atomic_write_text(metadata_file, payload)
 
     async def _save_enhanced_result(self, video_id: str, metadata: dict, markdown: str) -> str:
         """Save enhanced results to organized directory structure"""
