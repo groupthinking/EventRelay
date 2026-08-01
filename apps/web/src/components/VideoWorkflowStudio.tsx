@@ -652,7 +652,8 @@ export default function VideoWorkflowStudio() {
                       alt={`Source frame ${index + 1}`}
                       width={320}
                       height={180}
-                      loading="lazy"
+                      loading={index === 0 ? 'eager' : 'lazy'}
+                      fetchPriority={index === 0 ? 'high' : 'auto'}
                       className="h-full w-full object-cover"
                     />
                   ) : (
