@@ -38,12 +38,21 @@ async def _run_sync_rpc(call, /, *args, **kwargs):
     callers may safely close the shared client in ``finally`` blocks.
     """
     rpc_task = asyncio.create_task(asyncio.to_thread(call, *args, **kwargs))
-    try:
-        return await asyncio.shield(rpc_task)
-    except asyncio.CancelledError:
+    cancelled = False
+    while not rpc_task.done():
+        try:
+            await asyncio.shield(rpc_task)
+        except asyncio.CancelledError:
+            cancelled = True
+        except Exception:
+            if not cancelled:
+                raise
+
+    if cancelled:
         with contextlib.suppress(Exception):
-            await rpc_task
-        raise
+            rpc_task.result()
+        raise asyncio.CancelledError
+    return rpc_task.result()
 
 
 @dataclass
