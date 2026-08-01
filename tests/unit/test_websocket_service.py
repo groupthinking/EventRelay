@@ -579,7 +579,12 @@ class TestBroadcastFanOut:
 
         await mgr.broadcast("event")
 
-        assert completed == ["fast-1", "fast-2", "slow"], (
+        # Both fast peers must finish before the slow head-of-list peer. Their
+        # order relative to each other is scheduler-dependent (both sleep(0)),
+        # so it is deliberately not asserted -- only that neither was blocked
+        # behind the slow peer. Under a sequential loop the slow peer, being
+        # first, completes first and this fails.
+        assert completed[-1] == "slow" and set(completed[:2]) == {"fast-1", "fast-2"}, (
             f"completion order was {completed}; a slow peer at the head of the "
             "connection list delayed delivery to the fast peers behind it"
         )
