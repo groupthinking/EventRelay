@@ -16,6 +16,7 @@ import asyncio
 import contextlib
 import json
 import sys
+import threading
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -1114,6 +1115,80 @@ class TestClientCallsDoNotBlockEventLoop:
             f"({ticks} heartbeats)"
         )
 
+    async def test_create_queue_existing_path_does_not_block_loop(self):
+        mock_tv2 = _make_mock_tasks_v2()
+        svc = _initialized_service(mock_tv2)
+        svc.client.get_queue = self._blocking_rpc(MagicMock())
+
+        with (
+            patch.object(m, "CLOUD_TASKS_AVAILABLE", True),
+            patch.object(m, "tasks_v2", mock_tv2),
+        ):
+            _, ticks = await self._count_heartbeats_during(
+                svc.create_queue_if_not_exists()
+            )
+
+        svc.client.create_queue.assert_not_called()
+        assert ticks > 0, "get_queue blocked the event loop"
+
+    async def test_create_queue_fallback_does_not_block_loop(self):
+        mock_tv2 = _make_mock_tasks_v2()
+        svc = _initialized_service(mock_tv2)
+
+        def _missing(*_args, **_kwargs):
+            raise RuntimeError("queue not found")
+
+        svc.client.get_queue = _missing
+        svc.client.create_queue = self._blocking_rpc(MagicMock())
+
+        with (
+            patch.object(m, "CLOUD_TASKS_AVAILABLE", True),
+            patch.object(m, "tasks_v2", mock_tv2),
+        ):
+            _, ticks = await self._count_heartbeats_during(
+                svc.create_queue_if_not_exists()
+            )
+
+        assert ticks > 0, "create_queue blocked the event loop"
+
+    async def test_cancellation_waits_for_in_flight_rpc(self):
+        mock_tv2 = _make_mock_tasks_v2()
+        svc = _initialized_service(mock_tv2)
+        started = threading.Event()
+        release = threading.Event()
+        finished = threading.Event()
+        response = MagicMock()
+        response.name = ".../tasks/cancelled"
+
+        def _blocking_create(*_args, **_kwargs):
+            started.set()
+            release.wait(timeout=1)
+            finished.set()
+            return response
+
+        svc.client.create_task = _blocking_create
+
+        with (
+            patch.object(m, "CLOUD_TASKS_AVAILABLE", True),
+            patch.object(m, "tasks_v2", mock_tv2),
+        ):
+            enqueue = asyncio.create_task(
+                svc.enqueue_video_processing(self._video_task())
+            )
+            assert await asyncio.to_thread(started.wait, 1)
+            enqueue.cancel()
+            try:
+                await asyncio.sleep(0.02)
+                assert not enqueue.done(), (
+                    "cancellation propagated before the synchronous RPC finished"
+                )
+            finally:
+                release.set()
+
+            with pytest.raises(asyncio.CancelledError):
+                await enqueue
+
+        assert finished.is_set()
     async def test_rpc_errors_still_propagate_from_worker_thread(self):
         """Moving the call off-loop must not swallow client errors."""
         mock_tv2 = _make_mock_tasks_v2()
