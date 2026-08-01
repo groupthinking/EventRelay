@@ -15,3 +15,17 @@ paths = [
   # Test fixtures use obvious dummy keys (e.g. "xai-secret-123"), not real secrets.
   '''tests/.*''',
 ]
+
+# uv.lock records public Python package artifacts as a URL plus SHA-256 digest,
+# size, and upload timestamp. Some digest substrings match the inherited Square
+# token detector. Keep that detector active, and suppress only a complete PyPI
+# artifact record in the generated lockfile.
+[[rules]]
+id = "square-access-token"
+
+  [rules.allowlist]
+  description = "Generated uv.lock PyPI artifact checksum records"
+  condition = "AND"
+  regexTarget = "line"
+  paths = ['''^uv\.lock$''']
+  regexes = ['''^\s*\{\s*url\s*=\s*"https://files\.pythonhosted\.org/packages/[^"]+\.(?:whl|tar\.gz|zip)",\s*hash\s*=\s*"sha256:[0-9a-f]{64}",\s*size\s*=\s*[0-9]+,\s*upload-time\s*=\s*"[^"]+"\s*\},?\s*$''']
