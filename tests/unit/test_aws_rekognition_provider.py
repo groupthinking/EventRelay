@@ -1157,6 +1157,7 @@ class TestRekognitionDoesNotBlockEventLoop:
         assert ticks > 0, (
             f"describe_collection in {provider_method} blocked the event loop"
         )
+
     async def test_local_image_read_runs_off_the_event_loop_thread(self, tmp_path):
         """
         Deterministic counterpart to the heartbeat tests.
@@ -1168,23 +1169,24 @@ class TestRekognitionDoesNotBlockEventLoop:
         """
         import threading
 
-        from youtube_extension.integrations.cloud_ai.providers import (
-            aws_rekognition as _rek_mod,
-        )
-
         image = tmp_path / "frame.jpg"
         image.write_bytes(b"BINARY-IMAGE-PAYLOAD")
         provider = _make_provider()
 
+        # Patch the exact namespace that _prepare_image_input resolves from.
+        # Other test modules evict cloud_ai modules from sys.modules during
+        # collection, so re-importing the module here can patch a stale object.
+        method_globals = type(provider)._prepare_image_input.__globals__
+        real_read = method_globals["_read_file_bytes"]
+
         loop_thread_id = threading.get_ident()
         observed: dict[str, int] = {}
-        real_read = _rek_mod._read_file_bytes
 
         def _recording_read(path):
             observed['thread_id'] = threading.get_ident()
             return real_read(path)
 
-        with patch.object(_rek_mod, '_read_file_bytes', _recording_read):
+        with patch.dict(method_globals, {"_read_file_bytes": _recording_read}):
             result = await provider._prepare_image_input(str(image))
 
         assert result == {'Bytes': b"BINARY-IMAGE-PAYLOAD"}
