@@ -14,4 +14,10 @@ paths = [
   '''docs/security/.*''',
   # Test fixtures use obvious dummy keys (e.g. "xai-secret-123"), not real secrets.
   '''tests/.*''',
+  # uv.lock stores package integrity digests (`hash = "sha256:<64 hex>"`) and
+  # sizes. High-entropy hex triggers token rules (e.g. square-access-token on
+  # parso's digest at L5129). Verified: the file references only
+  # https://pypi.org/simple + files.pythonhosted.org and contains no
+  # credentials in URLs, so it cannot carry a real secret.
+  '''uv\.lock''',
 ]
