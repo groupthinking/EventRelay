@@ -7,6 +7,7 @@ Extracted WebSocket handling business logic.
 Handles real-time communication, message routing, and connection management.
 """
 
+import asyncio
 import json
 import logging
 from datetime import datetime
@@ -47,18 +48,35 @@ class WebSocketConnectionManager:
             self.disconnect(websocket)
 
     async def broadcast(self, message: str):
-        """Broadcast message to all active connections"""
-        disconnected = []
-        for connection in self.active_connections:
-            try:
-                await connection.send_text(message)
-            except Exception as e:
-                logger.error(f"Error broadcasting message: {e}")
-                disconnected.append(connection)
+        """Broadcast message to all active connections concurrently.
 
-        # Remove disconnected connections
-        for connection in disconnected:
-            self.disconnect(connection)
+        Sends are issued in parallel rather than one at a time. A sequential
+        loop makes every client wait for the ones ahead of it, so a single slow
+        or backpressured peer delays delivery to the whole fleet (head-of-line
+        blocking) and total latency grows with the connection count.
+
+        Each WebSocket owns an independent send buffer, so there is no shared
+        pooled resource to exhaust here and concurrency is naturally bounded by
+        the number of connected clients. Failures are isolated via
+        ``return_exceptions=True`` so one dead peer cannot abort the broadcast.
+        """
+        # Snapshot: disconnect() mutates active_connections as we clean up.
+        connections = list(self.active_connections)
+        if not connections:
+            return
+
+        results = await asyncio.gather(
+            *(connection.send_text(message) for connection in connections),
+            return_exceptions=True,
+        )
+
+        # isinstance(..., Exception) mirrors the previous `except Exception`
+        # clause: BaseException-only failures (e.g. CancelledError) propagate
+        # as before rather than being treated as a dead connection.
+        for connection, result in zip(connections, results, strict=True):
+            if isinstance(result, Exception):
+                logger.error(f"Error broadcasting message: {result}")
+                self.disconnect(connection)
 
 
 class WebSocketService:
