@@ -1229,3 +1229,46 @@ class TestClientCallsDoNotBlockEventLoop:
             ids = await svc.enqueue_batch(tasks)
 
         assert ids == ["ok", "ok"]
+
+    async def test_cancellation_is_still_delivered_to_the_caller(self):
+        """Deferring cancellation must not swallow it."""
+        cancelled = False
+
+        def _slow_rpc(*_args, **_kwargs):
+            time.sleep(self._RPC_SECONDS)
+            return MagicMock()
+
+        async def _call():
+            nonlocal cancelled
+            try:
+                await m._run_sync_rpc(_slow_rpc)
+            except asyncio.CancelledError:
+                cancelled = True
+                raise
+
+        task = asyncio.create_task(_call())
+        await asyncio.sleep(0.02)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+        assert cancelled, "caller never observed the CancelledError"
+
+    async def test_rpc_failure_during_cancellation_does_not_mask_cancel(self):
+        """A failing in-flight RPC must not replace the CancelledError."""
+
+        def _slow_boom(*_args, **_kwargs):
+            time.sleep(self._RPC_SECONDS)
+            raise RuntimeError("transport died")
+
+        task = asyncio.create_task(m._run_sync_rpc(_slow_boom))
+        await asyncio.sleep(0.02)
+        task.cancel()
+
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    async def test_uncancelled_calls_return_normally(self):
+        """The happy path is unchanged by the cancellation handling."""
+        sentinel = MagicMock()
+        assert await m._run_sync_rpc(lambda *_a, **_k: sentinel) is sentinel

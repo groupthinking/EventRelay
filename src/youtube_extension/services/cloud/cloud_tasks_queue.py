@@ -45,6 +45,7 @@ async def _run_sync_rpc(call, /, *args, **kwargs):
             await rpc_task
         raise
 
+
 @dataclass
 class TaskConfig:
     """Configuration for a Cloud Tasks task"""
