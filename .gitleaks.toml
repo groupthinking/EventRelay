@@ -5,7 +5,17 @@
 useDefault = true
 
 [allowlist]
-description = "Paths excluded from secret scanning"
+description = "Paths and false-positive patterns excluded from secret scanning"
+# Package lockfiles (uv.lock, package-lock.json, etc.) record public SHA-256
+# package-integrity hashes. Their high entropy trips the default
+# square-access-token rule (e.g. uv.lock:5129, the `parso` sdist hash), even
+# though a `sha256:<hex>` integrity digest is not a credential. Match on the
+# whole line so only genuine `hash = "sha256:..."` digests are allowlisted;
+# any real token elsewhere in a lockfile is still scanned.
+regexTarget = "line"
+regexes = [
+  '''hash = "sha256:[0-9a-f]{64}"''',
+]
 paths = [
   # Vendored saved web pages from Google (AI Studio / APIs Explorer): contain
   # Google's own public page keys, not EventRelay credentials.
