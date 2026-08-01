@@ -299,16 +299,38 @@ class RedisCacheLayer(IntelligentCacheLayer):
         any event loop. An ``asyncio.Semaphore`` binds to the first loop that
         uses it and raises for every other one, so a semaphore built in
         ``__init__`` would break as soon as a second loop touched the
-        singleton. Re-creating it when the running loop changes keeps one
-        limiter per (instance, loop) pair.
+        singleton.
+
+        Rebinding is therefore allowed, but only *sequentially* -- once the
+        previously bound loop has finished. That covers the real reuse case
+        (``asyncio.run()`` called more than once, e.g. one loop per test) while
+        rejecting genuinely concurrent use from a second live loop, where two
+        loops would each get their own full budget against the one shared
+        ``self.redis_pool`` and the aggregate could exceed ``max_connections``.
+        Concurrent cross-loop use is unsupported at the pool level too: a
+        ``redis.asyncio`` pool caches connections whose transports are bound to
+        the loop that opened them. Use one layer (and one pool) per loop.
+
+        The guard is best-effort: it detects the unsupported usage rather than
+        making it safe.
         """
         loop = asyncio.get_running_loop()
-        if (
-            self._tag_write_semaphore is None
-            or self._tag_write_semaphore_loop is not loop
-        ):
-            self._tag_write_semaphore = asyncio.Semaphore(self._tag_write_limit)
-            self._tag_write_semaphore_loop = loop
+        bound = self._tag_write_semaphore_loop
+
+        if self._tag_write_semaphore is not None and bound is loop:
+            return self._tag_write_semaphore
+
+        if bound is not None and not bound.is_closed() and bound.is_running():
+            raise RuntimeError(
+                f"{self.name} is already bound to a running event loop and cannot "
+                f"be used concurrently from another one. A {type(self).__name__} "
+                "owns a redis.asyncio connection pool with event-loop affinity, "
+                "and a second live loop would get its own tag-write budget "
+                "against the same pool. Create one layer per event loop."
+            )
+
+        self._tag_write_semaphore = asyncio.Semaphore(self._tag_write_limit)
+        self._tag_write_semaphore_loop = loop
         return self._tag_write_semaphore
 
     async def connect(self):

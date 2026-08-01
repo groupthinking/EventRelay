@@ -1378,22 +1378,82 @@ class TestRedisCacheLayerSet:
         default = RedisCacheLayer("L2")
         assert default._tag_write_limit == TAG_WRITE_CONCURRENCY
 
-    async def test_tag_write_semaphore_rebinds_across_event_loops(self):
-        """The lazy semaphore must survive being used from a second loop.
+    def test_tag_write_semaphore_rebinds_across_sequential_event_loops(self):
+        """The lazy semaphore must survive sequential reuse from a second loop.
 
         This module builds an IntelligentCacheSystem singleton at import time,
-        outside any loop, so a semaphore bound to one loop would raise for
-        every other loop that touched the singleton.
+        outside any loop, so a semaphore permanently bound to one loop would
+        raise for every later loop that touched the singleton -- e.g. any
+        process calling asyncio.run() more than once, or a test suite that
+        gives each test a fresh loop.
+
+        Deliberately a sync test: each loop must fully finish before the next
+        one starts, which is what makes this the *supported* reuse pattern.
+        """
+        layer = self._connected_layer()
+        conn = _make_redis_conn()
+
+        async def _write(key, tag):
+            with _patch_redis(conn):
+                return await layer.set(key, "v", tags=[tag])
+
+        assert asyncio.run(_write("k", "a")) is True
+        first = layer._tag_write_semaphore
+        first_loop = layer._tag_write_semaphore_loop
+        assert first is not None
+        assert first_loop is not None and first_loop.is_closed()
+
+        assert asyncio.run(_write("k2", "b")) is True
+        assert layer._tag_write_semaphore is not first
+        assert layer._tag_write_semaphore_loop is not first_loop
+
+    async def test_tag_write_semaphore_rejects_concurrent_event_loops(self):
+        """A second *live* loop must be rejected, not silently rebound.
+
+        Rebinding while the first loop is still running would hand each loop
+        its own full budget against the one shared redis_pool, so the aggregate
+        in-flight command count could exceed max_connections again. The pool
+        itself is not safe to share across live loops either.
         """
         layer = self._connected_layer()
         conn = _make_redis_conn()
 
         with _patch_redis(conn):
             assert await layer.set("k", "v", tags=["a"]) is True
-        first = layer._tag_write_semaphore
-        assert first is not None
+        bound = layer._tag_write_semaphore
+        bound_loop = layer._tag_write_semaphore_loop
+        assert bound is not None
 
-        def _run_on_fresh_loop():
+        def _acquire_from_a_second_live_loop():
+            # The outer loop is still running while this one does, which is
+            # exactly the unsupported case.
+            async def _inner():
+                return layer._get_tag_write_semaphore()
+
+            loop = asyncio.new_event_loop()
+            try:
+                return loop.run_until_complete(_inner())
+            finally:
+                loop.close()
+
+        with pytest.raises(RuntimeError, match="concurrently"):
+            await asyncio.to_thread(_acquire_from_a_second_live_loop)
+
+        # The owning loop's binding is left intact.
+        assert layer._tag_write_semaphore is bound
+        assert layer._tag_write_semaphore_loop is bound_loop
+
+    async def test_set_from_a_second_live_loop_fails_closed(self):
+        """End-to-end: the refusal degrades to set() -> False, never a silent
+        rebind that would double the tag-write budget on the shared pool."""
+        layer = self._connected_layer()
+        conn = _make_redis_conn()
+
+        with _patch_redis(conn):
+            assert await layer.set("k", "v", tags=["a"]) is True
+        bound = layer._tag_write_semaphore
+
+        def _write_from_a_second_live_loop():
             async def _inner():
                 with _patch_redis(conn):
                     return await layer.set("k2", "v", tags=["b"])
@@ -1404,8 +1464,8 @@ class TestRedisCacheLayerSet:
             finally:
                 loop.close()
 
-        assert await asyncio.to_thread(_run_on_fresh_loop) is True
-        assert layer._tag_write_semaphore is not first
+        assert await asyncio.to_thread(_write_from_a_second_live_loop) is False
+        assert layer._tag_write_semaphore is bound
 
     async def test_set_stores_metadata(self):
         layer = self._connected_layer()
