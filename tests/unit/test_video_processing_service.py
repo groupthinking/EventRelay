@@ -8,12 +8,10 @@ are fully mocked.
 from __future__ import annotations
 
 import asyncio
-import sys
-import subprocess
 import json
-from datetime import datetime
+import sys
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch, call
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 

@@ -77,18 +77,17 @@ for _k in list(sys.modules):
     if any(_k == p or _k.startswith(p + ".") for p in _SERVICE_PREFIXES):
         del sys.modules[_k]
 
+from youtube_extension.services.ai.gemini_service import GeminiConfig, GeminiResult
 from youtube_extension.services.ai.hybrid_processor_service import (  # noqa: E402
+    TASK_ROUTING_RULES,
     HybridConfig,
     HybridProcessorService,
     HybridResult,
     ProcessingMode,
     RoutingDecision,
     RoutingEngine,
-    TASK_ROUTING_RULES,
     TaskType,
 )
-from youtube_extension.services.ai.gemini_service import GeminiConfig, GeminiResult
-
 
 # ===========================================================================
 # Helpers

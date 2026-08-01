@@ -35,7 +35,6 @@ sys.modules.setdefault("psutil", _psutil_stub)
 
 from youtube_extension.backend.services.metrics_service import MetricPoint, MetricSeries
 
-
 # ===========================================================================
 # MetricPoint
 # ===========================================================================
@@ -182,7 +181,9 @@ class TestMetricSeriesGetAggregatedStats:
 # ===========================================================================
 
 
-from youtube_extension.backend.services.metrics_service import MetricsService  # noqa: E402
+from youtube_extension.backend.services.metrics_service import (
+    MetricsService,  # noqa: E402
+)
 
 
 class TestMetricsServiceInit:
@@ -401,6 +402,7 @@ class TestGetSystemMetrics:
     async def test_psutil_error_returns_error_dict(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
         import types
+
         import youtube_extension.backend.services.metrics_service as _mod
         fake_psutil = types.SimpleNamespace(
             cpu_percent=MagicMock(side_effect=RuntimeError("psutil failed")),

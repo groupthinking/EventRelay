@@ -12,8 +12,11 @@ import pytest
 _SRC = Path(__file__).resolve().parents[2] / "src"
 sys.path.insert(0, str(_SRC))
 
-from youtube_extension.backend.ai_code_generator import AICodeGenerator, get_ai_code_generator
 import youtube_extension.backend.ai_code_generator as _mod
+from youtube_extension.backend.ai_code_generator import (
+    AICodeGenerator,
+    get_ai_code_generator,
+)
 
 _ARCH = {
     "type": "web_app",

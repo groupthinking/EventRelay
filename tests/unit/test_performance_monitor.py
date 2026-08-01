@@ -10,15 +10,16 @@ from __future__ import annotations
 # performance_monitor (which calls psutil.cpu_percent etc.) gets the real lib.
 # ---------------------------------------------------------------------------
 import sys
+
 sys.modules.pop('psutil', None)
 import psutil as _real_psutil
+
 sys.modules['psutil'] = _real_psutil
 sys.modules.pop('youtube_extension.backend.services.performance_monitor', None)
 
 from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path
-from unittest.mock import patch, AsyncMock
 
 import pytest
 
@@ -29,7 +30,6 @@ from youtube_extension.backend.services.performance_monitor import (
     PerformanceMetric,
     PerformanceMonitor,
 )
-
 
 # ===========================================================================
 # PerformanceMetric dataclass
@@ -535,7 +535,10 @@ class TestStoreMetric:
 
     async def test_store_metric_does_not_raise(self, monitor):
         from datetime import datetime, timezone
-        from youtube_extension.backend.services.performance_monitor import PerformanceMetric
+
+        from youtube_extension.backend.services.performance_monitor import (
+            PerformanceMetric,
+        )
         metric = PerformanceMetric(
             component="test", metric_name="latency", value=42.0,
             timestamp=datetime.now(timezone.utc)
@@ -545,7 +548,10 @@ class TestStoreMetric:
     async def test_store_metric_persists_to_db(self, monitor):
         import sqlite3
         from datetime import datetime, timezone
-        from youtube_extension.backend.services.performance_monitor import PerformanceMetric
+
+        from youtube_extension.backend.services.performance_monitor import (
+            PerformanceMetric,
+        )
         metric = PerformanceMetric(
             component="video", metric_name="process_time", value=1500.0,
             timestamp=datetime.now(timezone.utc)
@@ -571,7 +577,10 @@ class TestCheckAlertThresholds:
 
     async def test_no_threshold_key_does_not_raise(self, monitor):
         from datetime import datetime, timezone
-        from youtube_extension.backend.services.performance_monitor import PerformanceMetric
+
+        from youtube_extension.backend.services.performance_monitor import (
+            PerformanceMetric,
+        )
         metric = PerformanceMetric(
             component="test", metric_name="unknown_metric", value=999.0,
             timestamp=datetime.now(timezone.utc)
@@ -580,7 +589,10 @@ class TestCheckAlertThresholds:
 
     async def test_below_warning_no_alert(self, monitor):
         from datetime import datetime, timezone
-        from youtube_extension.backend.services.performance_monitor import PerformanceMetric
+
+        from youtube_extension.backend.services.performance_monitor import (
+            PerformanceMetric,
+        )
         metric = PerformanceMetric(
             component="db", metric_name="database_query_time", value=50.0,
             timestamp=datetime.now(timezone.utc)
@@ -590,7 +602,10 @@ class TestCheckAlertThresholds:
 
     async def test_above_warning_creates_alert(self, monitor):
         from datetime import datetime, timezone
-        from youtube_extension.backend.services.performance_monitor import PerformanceMetric
+
+        from youtube_extension.backend.services.performance_monitor import (
+            PerformanceMetric,
+        )
         metric = PerformanceMetric(
             component="db", metric_name="database_query_time", value=150.0,
             timestamp=datetime.now(timezone.utc)
@@ -600,7 +615,10 @@ class TestCheckAlertThresholds:
 
     async def test_above_critical_severity_is_critical(self, monitor):
         from datetime import datetime, timezone
-        from youtube_extension.backend.services.performance_monitor import PerformanceMetric
+
+        from youtube_extension.backend.services.performance_monitor import (
+            PerformanceMetric,
+        )
         metric = PerformanceMetric(
             component="db", metric_name="database_query_time", value=2000.0,
             timestamp=datetime.now(timezone.utc)
@@ -622,7 +640,10 @@ class TestStoreAlert:
 
     async def test_store_alert_does_not_raise(self, monitor):
         from datetime import datetime, timezone
-        from youtube_extension.backend.services.performance_monitor import PerformanceAlert
+
+        from youtube_extension.backend.services.performance_monitor import (
+            PerformanceAlert,
+        )
         alert = PerformanceAlert(
             alert_id="test_001",
             component="db",
@@ -638,7 +659,10 @@ class TestStoreAlert:
     async def test_store_alert_persists(self, monitor):
         import sqlite3
         from datetime import datetime, timezone
-        from youtube_extension.backend.services.performance_monitor import PerformanceAlert
+
+        from youtube_extension.backend.services.performance_monitor import (
+            PerformanceAlert,
+        )
         alert = PerformanceAlert(
             alert_id="test_002",
             component="api",
@@ -659,7 +683,10 @@ class TestStoreAlert:
 
     async def test_send_alert_notification_does_not_raise(self, monitor):
         from datetime import datetime, timezone
-        from youtube_extension.backend.services.performance_monitor import PerformanceAlert
+
+        from youtube_extension.backend.services.performance_monitor import (
+            PerformanceAlert,
+        )
         alert = PerformanceAlert(
             alert_id="notif_001",
             component="test",
@@ -685,6 +712,7 @@ class TestMonitorSystemResources:
 
     async def test_monitor_system_resources_does_not_raise(self, monitor, monkeypatch):
         import types
+
         import youtube_extension.backend.services.performance_monitor as _mod
         fake_psutil = types.SimpleNamespace(
             cpu_percent=lambda interval=None: 30.0,
@@ -701,6 +729,7 @@ class TestMonitorSystemResources:
 
     async def test_monitor_system_resources_adds_metrics(self, monitor, monkeypatch):
         import types
+
         import youtube_extension.backend.services.performance_monitor as _mod
         fake_psutil = types.SimpleNamespace(
             cpu_percent=lambda interval=None: 45.0,
@@ -762,7 +791,7 @@ class TestBasicCleanup:
 
     async def test_basic_cleanup_with_old_records(self, monitor):
         import sqlite3
-        from datetime import datetime, timezone, timedelta
+        from datetime import datetime, timedelta, timezone
         old_time = (datetime.now(timezone.utc) - timedelta(days=60)).isoformat()
         conn = sqlite3.connect(monitor.db_path)
         cursor = conn.cursor()
@@ -883,7 +912,6 @@ class TestRunPerformanceBenchmark:
         assert "comp_b1" in monitor.performance_baselines
 
     async def test_calculates_improvement_vs_baseline(self, monitor):
-        import time
         monitor.performance_baselines["comp_b1"] = 10000.0  # slow baseline
 
         async def fast_func():
@@ -914,19 +942,27 @@ class TestConvenienceFunctions:
         _mod._performance_monitor_instance = original
 
     async def test_track_video_processing_time(self):
-        from youtube_extension.backend.services.performance_monitor import track_video_processing_time
+        from youtube_extension.backend.services.performance_monitor import (
+            track_video_processing_time,
+        )
         await track_video_processing_time(1500.0)
 
     async def test_track_database_query_time(self):
-        from youtube_extension.backend.services.performance_monitor import track_database_query_time
+        from youtube_extension.backend.services.performance_monitor import (
+            track_database_query_time,
+        )
         await track_database_query_time(50.0, query_type="SELECT")
 
     async def test_track_api_response_time(self):
-        from youtube_extension.backend.services.performance_monitor import track_api_response_time
+        from youtube_extension.backend.services.performance_monitor import (
+            track_api_response_time,
+        )
         await track_api_response_time(200.0, endpoint="/api/v1/videos")
 
     async def test_track_frontend_load_time(self):
-        from youtube_extension.backend.services.performance_monitor import track_frontend_load_time
+        from youtube_extension.backend.services.performance_monitor import (
+            track_frontend_load_time,
+        )
         await track_frontend_load_time(800.0, page="dashboard")
 
 
@@ -944,7 +980,9 @@ class TestPerformanceTimerDecorator:
         return m
 
     async def test_decorator_on_async_function(self, monitor):
-        from youtube_extension.backend.services.performance_monitor import performance_timer
+        from youtube_extension.backend.services.performance_monitor import (
+            performance_timer,
+        )
 
         @performance_timer("test_comp", "async_op")
         async def my_async_func():
@@ -954,7 +992,9 @@ class TestPerformanceTimerDecorator:
         assert result == 42
 
     def test_decorator_on_sync_function(self, monitor):
-        from youtube_extension.backend.services.performance_monitor import performance_timer
+        from youtube_extension.backend.services.performance_monitor import (
+            performance_timer,
+        )
 
         @performance_timer("test_comp", "sync_op")
         def my_sync_func():

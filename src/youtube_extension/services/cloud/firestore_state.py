@@ -7,13 +7,11 @@ Manages shared state across pipeline stages using Google Cloud Firestore.
 Replaces in-memory caching for cloud-native, scalable deployment.
 """
 
-import asyncio
-import json
 import logging
 import os
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Optional
 
 try:
     from google.cloud import firestore
@@ -36,15 +34,15 @@ class VideoProcessingState:
     video_url: str
     status: str  # 'pending', 'processing', 'completed', 'failed'
     current_stage: str  # 'metadata', 'transcript', 'analysis', 'complete'
-    metadata: Optional[Dict[str, Any]] = None
-    transcript: Optional[Dict[str, Any]] = None
-    ai_analysis: Optional[Dict[str, Any]] = None
+    metadata: Optional[dict[str, Any]] = None
+    transcript: Optional[dict[str, Any]] = None
+    ai_analysis: Optional[dict[str, Any]] = None
     error_message: Optional[str] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
     processing_time: Optional[float] = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for Firestore storage"""
         data = asdict(self)
         # Ensure timestamps are properly formatted
@@ -54,7 +52,7 @@ class VideoProcessingState:
         return data
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'VideoProcessingState':
+    def from_dict(cls, data: dict[str, Any]) -> 'VideoProcessingState':
         """Create from Firestore dictionary"""
         return cls(**data)
 
@@ -98,8 +96,8 @@ class FirestoreStateService:
 
         # Initialize Firestore client
         self.db: Optional[AsyncClient] = None
-        self._local_cache: Dict[str, VideoProcessingState] = {}
-        self._cache_timestamps: Dict[str, datetime] = {}
+        self._local_cache: dict[str, VideoProcessingState] = {}
+        self._cache_timestamps: dict[str, datetime] = {}
 
         logger.info(
             f"FirestoreStateService initialized: "
@@ -202,9 +200,9 @@ class FirestoreStateService:
         video_id: str,
         status: Optional[str] = None,
         current_stage: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-        transcript: Optional[Dict[str, Any]] = None,
-        ai_analysis: Optional[Dict[str, Any]] = None,
+        metadata: Optional[dict[str, Any]] = None,
+        transcript: Optional[dict[str, Any]] = None,
+        ai_analysis: Optional[dict[str, Any]] = None,
         error_message: Optional[str] = None,
         processing_time: Optional[float] = None,
     ) -> VideoProcessingState:
@@ -280,7 +278,7 @@ class FirestoreStateService:
         self,
         status: Optional[str] = None,
         limit: int = 100,
-    ) -> List[VideoProcessingState]:
+    ) -> list[VideoProcessingState]:
         """
         List processing states with optional filtering.
 

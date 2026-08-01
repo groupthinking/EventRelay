@@ -15,6 +15,7 @@ from unittest.mock import MagicMock
 # Remove any mock installed by test_index_analysis.py so we get real psutil
 sys.modules.pop('psutil', None)
 import psutil as _real_psutil
+
 sys.modules['psutil'] = _real_psutil
 # Force reimport of memory_manager so it gets real psutil
 sys.modules.pop('youtube_extension.backend.services.memory_manager', None)
@@ -722,8 +723,9 @@ class TestTakeSystemSnapshot:
     def _get_patched_snapshot(self, rss_bytes=100*1024*1024, vms_bytes=200*1024*1024,
                                percent=50.0, cached=512*1024*1024, buffers=64*1024*1024):
         """Helper that patches both psutil and gc.get_stats to take a snapshot."""
-        from unittest.mock import patch
         import types
+        from unittest.mock import patch
+
         import youtube_extension.backend.services.memory_manager as _mod
         fake = types.SimpleNamespace(
             virtual_memory=lambda: types.SimpleNamespace(
@@ -979,8 +981,9 @@ class TestTakeCorrectiveAction:
             mock_cleanup.assert_called()
 
     def test_high_system_memory_calls_emergency_cleanup(self):
-        from unittest.mock import patch
         import types
+        from unittest.mock import patch
+
         import youtube_extension.backend.services.memory_manager as _mod
         manager = _mod.MemoryManager()
         alert = _mod.MemoryAlert(
@@ -1010,7 +1013,6 @@ class TestGetProcessInfo:
         assert isinstance(info, dict)
 
     def test_returns_empty_dict_on_exception(self):
-        import types
         import youtube_extension.backend.services.memory_manager as _mod
         # Provide a psutil that raises on Process()
         class FakePsutil:
@@ -1115,6 +1117,7 @@ class TestCleanupResourcePools:
 class TestEmergencyCleanup:
     def test_emergency_cleanup_runs_without_error(self):
         import types
+
         import youtube_extension.backend.services.memory_manager as _mod
         manager = _mod.MemoryManager()
         fake = types.SimpleNamespace(
@@ -1130,8 +1133,9 @@ class TestEmergencyCleanup:
             _mod.psutil = orig
 
     def test_emergency_cleanup_calls_force_gc_multiple_times(self):
-        from unittest.mock import patch
         import types
+        from unittest.mock import patch
+
         import youtube_extension.backend.services.memory_manager as _mod
         manager = _mod.MemoryManager()
         fake = types.SimpleNamespace(
@@ -1149,8 +1153,9 @@ class TestEmergencyCleanup:
             _mod.psutil = orig
 
     def test_emergency_cleanup_calls_cleanup_pools(self):
-        from unittest.mock import patch
         import types
+        from unittest.mock import patch
+
         import youtube_extension.backend.services.memory_manager as _mod
         manager = _mod.MemoryManager()
         fake = types.SimpleNamespace(
@@ -1314,6 +1319,7 @@ class TestMemoryLimitContextManager:
 
     def test_memory_limit_restores_old_limit(self):
         import resource as _resource
+
         from youtube_extension.backend.services.memory_manager import memory_limit
         old_limit = _resource.getrlimit(_resource.RLIMIT_AS)
         try:

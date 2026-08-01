@@ -12,14 +12,12 @@ Covers:
 - Edge cases: security violations, expired/old contexts, malformed history, etc.
 """
 
-import uuid
 from datetime import datetime, timedelta
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
 from youtube_extension.core.mcp.context_manager import (
-    ContextPriority,
     ContextStatus,
     MCPContext,
 )
@@ -33,7 +31,6 @@ from youtube_extension.core.mcp.validation import (
     validate_context,
     validate_context_quick,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers

@@ -1,9 +1,9 @@
-import pytest
-from unittest.mock import MagicMock, AsyncMock, patch
 import json
 import sys
-import os
 from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 # Add src to sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
@@ -23,8 +23,9 @@ mock_ray.serve = mock_serve
 sys.modules['ray'] = mock_ray
 sys.modules['ray.serve'] = mock_serve
 
+
 from uvai.ml.serve import UVAIMLRouter
-from starlette.requests import Request
+
 
 class MockRequest:
     def __init__(self, method, path, json_data=None, json_exception=None):

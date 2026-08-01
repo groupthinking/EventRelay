@@ -56,6 +56,7 @@ for _mod in _STUBS:
 # Provide a realistic RobustYouTubeMetadata stub used in type hints / dataclass calls
 from dataclasses import dataclass
 
+
 @dataclass
 class _FakeMetadata:
     video_id: str = "auJzb1D-fag"
@@ -115,7 +116,15 @@ _stub_attr("youtube_extension.services.pipeline_job_store", "get_job_store", Mag
 # Now import the router (it will use the stubs above)
 # ---------------------------------------------------------------------------
 from youtube_extension.backend.api.v1 import router as router_module  # noqa: E402
+from youtube_extension.backend.api.v1.models import (  # noqa: E402
+    AgentExecution,
+    AgentStatus,
+    JobStatus,
+    VideoJobStatusResponse,
+)
 from youtube_extension.backend.api.v1.router import (  # noqa: E402
+    _InMemoryActionRepository,
+    _video_jobs,
     get_agent_orchestrator_service,
     get_cache_service,
     get_data_service,
@@ -125,16 +134,6 @@ from youtube_extension.backend.api.v1.router import (  # noqa: E402
     get_video_processing_service,
     get_websocket_manager,
     router,
-    _InMemoryActionRepository,
-    _video_jobs,
-    _agent_executions,
-)
-from youtube_extension.backend.api.v1.models import (  # noqa: E402
-    AgentDispatchRequest,
-    AgentExecution,
-    AgentStatus,
-    JobStatus,
-    VideoJobStatusResponse,
 )
 
 # ---------------------------------------------------------------------------
@@ -1611,8 +1610,8 @@ class TestRunVideoJobCoroutine:
 
     async def test_run_video_job_success(self):
         """Success path: workflow completes → job.status = complete."""
-        from youtube_extension.backend.api.v1.router import _run_video_job
         from youtube_extension.backend.api.v1.models import VideoProcessJobRequest
+        from youtube_extension.backend.api.v1.router import _run_video_job
 
         job_id = "job_unit_success"
         _video_jobs[job_id] = VideoJobStatusResponse(
@@ -1653,8 +1652,8 @@ class TestRunVideoJobCoroutine:
 
     async def test_run_video_job_failure_result(self):
         """Workflow returns success=False → job.status = failed."""
-        from youtube_extension.backend.api.v1.router import _run_video_job
         from youtube_extension.backend.api.v1.models import VideoProcessJobRequest
+        from youtube_extension.backend.api.v1.router import _run_video_job
 
         job_id = "job_unit_fail"
         _video_jobs[job_id] = VideoJobStatusResponse(
@@ -1695,8 +1694,8 @@ class TestRunVideoJobCoroutine:
 
     async def test_run_video_job_exception(self):
         """Workflow raises → job.status = failed with error message."""
-        from youtube_extension.backend.api.v1.router import _run_video_job
         from youtube_extension.backend.api.v1.models import VideoProcessJobRequest
+        from youtube_extension.backend.api.v1.router import _run_video_job
 
         job_id = "job_unit_exc"
         _video_jobs[job_id] = VideoJobStatusResponse(
@@ -1728,8 +1727,8 @@ class TestRunVideoJobCoroutine:
 
     async def test_run_video_job_no_error_text(self):
         """Workflow returns success=False with empty errors list."""
-        from youtube_extension.backend.api.v1.router import _run_video_job
         from youtube_extension.backend.api.v1.models import VideoProcessJobRequest
+        from youtube_extension.backend.api.v1.router import _run_video_job
 
         job_id = "job_unit_noerr"
         _video_jobs[job_id] = VideoJobStatusResponse(
@@ -1960,8 +1959,8 @@ class TestQueueTranscriptActionJob:
 
     async def test_queue_job_cloud_tasks_unavailable(self):
         """CloudTasksQueueService raises → fallback to local background task."""
-        from youtube_extension.backend.api.v1.router import _queue_transcript_action_job
         from youtube_extension.backend.api.v1.models import TranscriptActionRequest
+        from youtube_extension.backend.api.v1.router import _queue_transcript_action_job
 
         request = TranscriptActionRequest(
             video_url="https://www.youtube.com/watch?v=auJzb1D-fag",
@@ -2008,8 +2007,8 @@ class TestQueueTranscriptActionJob:
 
     async def test_queue_job_cloud_tasks_success(self):
         """CloudTasksQueueService succeeds → queued_transport = cloud_tasks."""
-        from youtube_extension.backend.api.v1.router import _queue_transcript_action_job
         from youtube_extension.backend.api.v1.models import TranscriptActionRequest
+        from youtube_extension.backend.api.v1.router import _queue_transcript_action_job
 
         request = TranscriptActionRequest(
             video_url="https://www.youtube.com/watch?v=auJzb1D-fag",

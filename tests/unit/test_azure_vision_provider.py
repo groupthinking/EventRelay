@@ -15,7 +15,6 @@ sys.path.insert(0, str(_SRC))
 from youtube_extension.integrations.cloud_ai.base import (
     AnalysisType,
     CloudAIProvider,
-    DetectionResult,
     VideoAnalysisResult,
 )
 from youtube_extension.integrations.cloud_ai.exceptions import (
@@ -25,7 +24,6 @@ from youtube_extension.integrations.cloud_ai.exceptions import (
     RateLimitError,
 )
 from youtube_extension.integrations.cloud_ai.providers.azure_vision import AzureVision
-
 
 # ---------------------------------------------------------------------------
 # Helpers

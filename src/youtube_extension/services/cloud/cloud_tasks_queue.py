@@ -7,13 +7,12 @@ Manages async video processing queue using Google Cloud Tasks.
 Enables non-blocking video processing with retry logic and concurrency control.
 """
 
-import asyncio
 import json
 import logging
 import os
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, Optional
+from datetime import datetime, timedelta
+from typing import Any, Optional
 
 try:
     from google.cloud import tasks_v2
@@ -47,7 +46,7 @@ class VideoProcessingTask:
     video_url: str
     priority: int = 0  # Higher = more urgent
     callback_url: Optional[str] = None
-    metadata: Optional[Dict[str, Any]] = None
+    metadata: Optional[dict[str, Any]] = None
 
     def to_json(self) -> str:
         """Convert to JSON payload"""
@@ -306,7 +305,7 @@ class CloudTasksQueueService:
         self.client.purge_queue(name=queue_path)
         logger.info(f"Purged queue: {queue_path}")
 
-    async def get_queue_stats(self) -> Dict[str, Any]:
+    async def get_queue_stats(self) -> dict[str, Any]:
         """
         Get queue statistics.
 

@@ -17,7 +17,6 @@ from youtube_extension.backend.services.health_monitoring_service import (
     SystemHealth,
 )
 
-
 # ===========================================================================
 # HealthStatus enum
 # ===========================================================================

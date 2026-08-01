@@ -33,7 +33,6 @@ from youtube_extension.backend.services.intelligent_cache import (
     datetime_decoder,
 )
 
-
 # ---------------------------------------------------------------------------
 # DateTimeEncoder
 # ---------------------------------------------------------------------------
@@ -565,7 +564,9 @@ class TestIntelligentCacheSystem:
     """Tests for IntelligentCacheSystem that orchestrates multiple layers."""
 
     def setup_method(self):
-        from youtube_extension.backend.services.intelligent_cache import IntelligentCacheSystem
+        from youtube_extension.backend.services.intelligent_cache import (
+            IntelligentCacheSystem,
+        )
         # Build a system with only an in-memory L1 layer (no Redis required).
         self.system = IntelligentCacheSystem.__new__(IntelligentCacheSystem)
         self.system.layers = [
@@ -727,7 +728,9 @@ class TestAdaptiveTtl:
     """Cover the frequency branches inside _calculate_adaptive_ttl."""
 
     def _make_system(self):
-        from youtube_extension.backend.services.intelligent_cache import IntelligentCacheSystem
+        from youtube_extension.backend.services.intelligent_cache import (
+            IntelligentCacheSystem,
+        )
         system = IntelligentCacheSystem.__new__(IntelligentCacheSystem)
         system.layers = [
             InMemoryCacheLayer("L1", max_size=100, max_size_bytes=1024 * 1024)
@@ -785,7 +788,9 @@ class TestAnalyzePerformanceSuggestions:
     """Ensure all three optimization suggestion branches are exercised."""
 
     def _make_system_with_history(self, records):
-        from youtube_extension.backend.services.intelligent_cache import IntelligentCacheSystem
+        from youtube_extension.backend.services.intelligent_cache import (
+            IntelligentCacheSystem,
+        )
         system = IntelligentCacheSystem.__new__(IntelligentCacheSystem)
         system.layers = [
             InMemoryCacheLayer("L1", max_size=100, max_size_bytes=1024 * 1024)
@@ -1033,17 +1038,15 @@ class TestGlobalCacheDeleteAndInvalidateTags:
 
 
 # make IntelligentCacheSystem importable in tests defined above
-from youtube_extension.backend.services.intelligent_cache import IntelligentCacheSystem  # noqa: E402
-
-
 # ---------------------------------------------------------------------------
 # RedisCacheLayer (L2 Cache) — covers lines 254-450
 # ---------------------------------------------------------------------------
-
-import unittest.mock as _mock
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from youtube_extension.backend.services.intelligent_cache import RedisCacheLayer
+from youtube_extension.backend.services.intelligent_cache import (
+    IntelligentCacheSystem,  # noqa: E402
+    RedisCacheLayer,
+)
 
 
 def _make_redis_conn(

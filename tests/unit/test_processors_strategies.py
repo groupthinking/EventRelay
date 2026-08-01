@@ -13,9 +13,9 @@ sys.path.insert(0, str(_SRC))
 
 import youtube_extension.processors.strategies as _mod
 from youtube_extension.processors.strategies import (
+    EnhancedStrategy,
     OptimizedStrategy,
     ParallelStrategy,
-    EnhancedStrategy,
     ProcessingStage,
     ProcessorStrategy,
     TranscriptSegment,

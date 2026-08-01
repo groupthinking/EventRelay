@@ -16,11 +16,20 @@ from dataclasses import asdict
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, status
-from fastapi.responses import JSONResponse
+from fastapi import (
+    APIRouter,
+    Depends,
+    Header,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    status,
+)
 
 from shared.youtube import RobustYouTubeMetadata
 from uvai.ml.client import get_uvai_ml_client
+
 try:
     from youtube_extension.services.agents import AgentOrchestrator
     from youtube_extension.services.agents.adapters.agent_orchestrator import (
@@ -72,6 +81,7 @@ from .models import (
     AgentStatus,
     AgentStatusResponse,
     ApiResponse,
+    BlueprintRequest,
     CacheStats,
     ChatRequest,
     ChatResponse,
@@ -87,6 +97,7 @@ from .models import (
     GeminiCacheResponse,
     GeminiTokenRequest,
     GeminiTokenResponse,
+    GenerateCodeRequest,
     HealthResponse,
     JobStatus,
     KnowledgeIngestRequest,
@@ -96,14 +107,12 @@ from .models import (
     TranscriptActionRequest,
     TranscriptActionResponse,
     VideoJobStatusResponse,
+    VideoPackRequest,
     VideoProcessingRequest,
     VideoProcessJobRequest,
     VideoProcessJobResponse,
     VideoToSoftwareRequest,
     VideoToSoftwareResponse,
-    VideoPackRequest,
-    BlueprintRequest,
-    GenerateCodeRequest,
 )
 
 performance_monitor = PerformanceMonitor()
@@ -1694,7 +1703,11 @@ async def get_or_create_videopack(request: VideoPackRequest):
     # In a real implementation, this would look up in a VideoPackStore.
     # For MVP, we return a synthesized pack from the job or a 404.
     try:
-        from youtube_extension.videopack.schema import Provenance, Transcript, VideoPackV0
+        from youtube_extension.videopack.schema import (
+            Provenance,
+            Transcript,
+            VideoPackV0,
+        )
 
         # Check if we have a job with results
         job = None
@@ -2127,9 +2140,11 @@ async def get_agent_status(agent_id: str):
     tags=["Agents"],
 )
 async def send_a2a_message(
-    body: dict[str, Any] = {},
+    body: dict[str, Any] = None,
 ):
     """Send a context-share or tool-request message between agents."""
+    if body is None:
+        body = {}
     sender = body.get("sender", "frontend")
     recipient = body.get("recipient")
     content = body.get("content", {})

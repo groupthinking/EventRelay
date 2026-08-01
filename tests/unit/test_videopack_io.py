@@ -23,7 +23,11 @@ sys.modules.pop("youtube_extension.videopack.schema", None)
 sys.modules.pop("youtube_extension.videopack.io", None)
 
 from youtube_extension.videopack.io import load_json, read_pack, save_json, write_pack
-from youtube_extension.videopack.schema import Metrics, Provenance, Transcript, VideoPackV0
+from youtube_extension.videopack.schema import (
+    Provenance,
+    Transcript,
+    VideoPackV0,
+)
 
 
 def _pack(video_id="auJzb1D-fag") -> VideoPackV0:

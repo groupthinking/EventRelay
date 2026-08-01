@@ -15,10 +15,7 @@ fake `firestore` module object on the target module.
 
 from __future__ import annotations
 
-import importlib
 import sys
-import types
-import unittest.mock as mock
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch

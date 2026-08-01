@@ -6,13 +6,12 @@ import json
 import sys
 from pathlib import Path
 
-import pytest
-
 _SRC = Path(__file__).resolve().parents[2] / "src"
 sys.path.insert(0, str(_SRC))
 
 # Stub the broken services __init__ before importing submodules
 import types as _types  # noqa: E402
+
 if "youtube_extension.services" not in sys.modules:
     _stub = _types.ModuleType("youtube_extension.services")
     _stub.__path__ = [str(_SRC / "youtube_extension/services")]
@@ -25,11 +24,10 @@ sys.modules.pop("youtube_extension.services.skill_builder", None)
 
 from youtube_extension.services.skill_builder import (  # noqa: E402
     SkillBuilder,
-    _skill_id,
     _now_iso,
+    _skill_id,
     get_skill_builder,
 )
-
 
 # ===========================================================================
 # Module-level helpers
@@ -381,7 +379,10 @@ class TestListSkillsCorruptFile:
     """list_skills silently ignores corrupt skill files (lines 208-209)"""
 
     def test_corrupt_json_is_skipped(self, tmp_path):
-        from youtube_extension.services.skill_builder import SkillBuilder, _SKILL_FILE_SUFFIX
+        from youtube_extension.services.skill_builder import (
+            _SKILL_FILE_SUFFIX,
+            SkillBuilder,
+        )
         sb = SkillBuilder(skills_dir=tmp_path)
         # Write one valid skill
         sb.record_deployment("react", "netlify", success=True)
@@ -399,7 +400,11 @@ class TestLoadSkillCorruptFile:
     """_load_skill silently returns default for corrupt file (lines 229-230)"""
 
     def test_corrupt_json_returns_default(self, tmp_path):
-        from youtube_extension.services.skill_builder import SkillBuilder, _SKILL_FILE_SUFFIX, _skill_id
+        from youtube_extension.services.skill_builder import (
+            _SKILL_FILE_SUFFIX,
+            SkillBuilder,
+            _skill_id,
+        )
         sb = SkillBuilder(skills_dir=tmp_path)
         sid = _skill_id("django", "fly")
         # Write a corrupt skill file directly

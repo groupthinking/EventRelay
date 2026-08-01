@@ -22,6 +22,12 @@ _vp_stub.__path__ = [str(_SRC / "youtube_extension/videopack")]
 _vp_stub.__package__ = "youtube_extension.videopack"
 sys.modules["youtube_extension.videopack"] = _vp_stub
 
+from youtube_extension.videopack.exceptions import (
+    VideoPackError,
+    VideoPackValidationError,
+)
+from youtube_extension.videopack.io import load_json, read_pack, save_json, write_pack
+from youtube_extension.videopack.provenance import stable_hash
 from youtube_extension.videopack.schema import (
     ArtifactRef,
     CodeSnippet,
@@ -32,15 +38,12 @@ from youtube_extension.videopack.schema import (
     Transcript,
     TranscriptSegment,
     VideoPackV0,
-    VPVersion,
     VisualContext,
     VisualElement,
+    VPVersion,
 )
-from youtube_extension.videopack.io import load_json, read_pack, save_json, write_pack
 from youtube_extension.videopack.validate import validate_pack
 from youtube_extension.videopack.versioning import UpgradePolicy, upgrade_to_v0
-from youtube_extension.videopack.provenance import stable_hash
-from youtube_extension.videopack.exceptions import VideoPackError, VideoPackValidationError
 
 _NOW = datetime(2024, 1, 1, 12, 0, 0)
 

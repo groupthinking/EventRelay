@@ -1,5 +1,5 @@
 import json
-import pytest
+
 from scripts.maintenance.automated_orchestration_scheduler import OrchestrationScheduler
 
 

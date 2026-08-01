@@ -30,7 +30,6 @@ sys.path.insert(0, str(_SRC))
 # Import the module under test (tasks_v2 will be None at this point)
 # ---------------------------------------------------------------------------
 import youtube_extension.services.cloud.cloud_tasks_queue as m
-
 from youtube_extension.services.cloud.cloud_tasks_queue import (
     CloudTasksQueueService,
     TaskConfig,

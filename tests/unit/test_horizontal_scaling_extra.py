@@ -12,13 +12,13 @@ _SRC = Path(__file__).resolve().parents[2] / "src"
 sys.path.insert(0, str(_SRC))
 
 from youtube_extension.backend.services.horizontal_scaling_system import (
-    LoadBalanceStrategy,
+    AutoScaler,
+    HorizontalScalingSystem,
     LoadBalancer,
+    LoadBalanceStrategy,
+    ScalingRule,
     ServiceInstance,
     ServiceStatus,
-    AutoScaler,
-    ScalingRule,
-    HorizontalScalingSystem,
 )
 
 
@@ -284,6 +284,7 @@ class TestLoadBalancerStats:
 
     def test_counts_registered_instances(self):
         import statistics as _stat_mod
+
         import youtube_extension.backend.services.horizontal_scaling_system as _hss_mod
         _hss_mod.statistics = _stat_mod
         lb = LoadBalancer()
@@ -513,7 +514,6 @@ class TestCheckInstanceHealth:
     async def test_check_healthy_updates_last_health_check(self):
         """When healthy, last_health_check is refreshed."""
         import unittest.mock as mock
-        from datetime import datetime, timezone
 
         lb = LoadBalancer()
         inst = _make_instance()
@@ -823,7 +823,7 @@ class TestAutoScalerIsInCooldown:
 
     def test_not_in_cooldown_when_old(self):
         """Rule scaled a long time ago → not in cooldown."""
-        from datetime import datetime, timezone, timedelta
+        from datetime import datetime, timedelta, timezone
 
         lb = LoadBalancer()
         scaler = AutoScaler(lb)
@@ -833,7 +833,7 @@ class TestAutoScalerIsInCooldown:
 
     def test_cooldown_boundary_exactly_met(self):
         """When elapsed == cooldown_seconds the rule is NOT in cooldown."""
-        from datetime import datetime, timezone, timedelta
+        from datetime import datetime, timedelta, timezone
 
         lb = LoadBalancer()
         scaler = AutoScaler(lb)
@@ -850,6 +850,7 @@ class TestAutoScalerIsInCooldown:
 class TestAutoScalerCalculateServiceMetrics:
     def _inject_statistics(self):
         import statistics as _stat_mod
+
         import youtube_extension.backend.services.horizontal_scaling_system as _hss_mod
         _hss_mod.statistics = _stat_mod
 
@@ -915,6 +916,7 @@ class TestAutoScalerCalculateServiceMetrics:
 class TestAutoScalerScaleUp:
     def _inject_statistics(self):
         import statistics as _stat_mod
+
         import youtube_extension.backend.services.horizontal_scaling_system as _hss_mod
         _hss_mod.statistics = _stat_mod
 
@@ -947,7 +949,7 @@ class TestAutoScalerScaleUp:
 
     async def test_scale_up_updates_rule_last_scaled(self):
         """_scale_up updates rule.last_scaled to now."""
-        from datetime import datetime, timezone, timedelta
+        from datetime import timedelta
         self._inject_statistics()
         lb = LoadBalancer()
         scaler = AutoScaler(lb)
@@ -993,6 +995,7 @@ class TestAutoScalerScaleUp:
 class TestAutoScalerScaleDown:
     def _inject_statistics(self):
         import statistics as _stat_mod
+
         import youtube_extension.backend.services.horizontal_scaling_system as _hss_mod
         _hss_mod.statistics = _stat_mod
 
@@ -1027,7 +1030,7 @@ class TestAutoScalerScaleDown:
 
     async def test_scale_down_updates_rule_last_scaled(self):
         """_scale_down updates rule.last_scaled."""
-        from datetime import datetime, timezone, timedelta
+        from datetime import timedelta
         self._inject_statistics()
         lb = LoadBalancer()
         scaler = AutoScaler(lb)
@@ -1076,6 +1079,7 @@ class TestAutoScalerScaleDown:
 class TestAutoScalerGetScalingStats:
     def _inject_statistics(self):
         import statistics as _stat_mod
+
         import youtube_extension.backend.services.horizontal_scaling_system as _hss_mod
         _hss_mod.statistics = _stat_mod
 
@@ -1161,6 +1165,7 @@ class TestAutoScalerGetScalingStats:
 class TestAutoScalerEvaluateScalingRules:
     def _inject_statistics(self):
         import statistics as _stat_mod
+
         import youtube_extension.backend.services.horizontal_scaling_system as _hss_mod
         _hss_mod.statistics = _stat_mod
 
@@ -1203,7 +1208,7 @@ class TestAutoScalerEvaluateScalingRules:
             cooldown_seconds=0,
         )
         # Override last_scaled to be old enough
-        from datetime import datetime, timezone, timedelta
+        from datetime import datetime, timedelta, timezone
         rule.last_scaled = datetime.now(timezone.utc) - timedelta(seconds=1000)
         scaler.add_scaling_rule("svc", rule)
 
@@ -1232,7 +1237,7 @@ class TestAutoScalerEvaluateScalingRules:
             min_instances=1,
             cooldown_seconds=0,
         )
-        from datetime import datetime, timezone, timedelta
+        from datetime import datetime, timedelta, timezone
         rule.last_scaled = datetime.now(timezone.utc) - timedelta(seconds=1000)
         scaler.add_scaling_rule("svc", rule)
 
@@ -1345,6 +1350,7 @@ class TestHorizontalScalingSystemStartStop:
 class TestHorizontalScalingSystemGetStatus:
     def _inject_statistics(self):
         import statistics as _stat_mod
+
         import youtube_extension.backend.services.horizontal_scaling_system as _hss_mod
         _hss_mod.statistics = _stat_mod
 
@@ -1632,6 +1638,7 @@ class TestSetupDefaultScalingRules:
 
     def _inject_statistics(self):
         import statistics as _stat_mod
+
         import youtube_extension.backend.services.horizontal_scaling_system as _hss_mod
         _hss_mod.statistics = _stat_mod
 
@@ -1676,14 +1683,14 @@ class TestSetupDefaultScalingRules:
 # Module-level convenience functions — lines 948-988
 # ===========================================================================
 
+import youtube_extension.backend.services.horizontal_scaling_system as _hss_module
 from youtube_extension.backend.services.horizontal_scaling_system import (
+    get_scaling_system_status,
+    process_load_balanced_request,
+    register_service_instance,
     start_horizontal_scaling,
     stop_horizontal_scaling,
-    register_service_instance,
-    process_load_balanced_request,
-    get_scaling_system_status,
 )
-import youtube_extension.backend.services.horizontal_scaling_system as _hss_module
 
 
 class TestConvenienceFunctions:

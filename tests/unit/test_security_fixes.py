@@ -6,12 +6,10 @@ NOTE: These tests verify security patterns are in place.
 Tests that require specific modules will skip if unavailable.
 """
 
-import os
 import sys
-import pytest
 from pathlib import Path
-from unittest.mock import patch, MagicMock
-import logging
+
+import pytest
 
 # Add project root to path for imports
 project_root = Path(__file__).parent.parent.parent
@@ -64,8 +62,8 @@ class TestInputValidationFix:
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore", FutureWarning)
                 from agents.unified.mcp_a2a_mojo_integration import (
+                    sanitize_message_content,
                     validate_agent_identifier,
-                    sanitize_message_content
                 )
 
             # Basic smoke test
@@ -81,7 +79,9 @@ class TestInputValidationFix:
             import warnings
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore", FutureWarning)
-                from agents.unified.mcp_a2a_mojo_integration import sanitize_message_content
+                from agents.unified.mcp_a2a_mojo_integration import (
+                    sanitize_message_content,
+                )
 
             malicious_string = "normal\\x00text\\x01"
             sanitized = sanitize_message_content(malicious_string)

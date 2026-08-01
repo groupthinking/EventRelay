@@ -2,7 +2,6 @@ import unittest
 
 from scripts.ci.agent_completion_enforcement import verify
 
-
 HEAD = "a" * 40
 POLICY = {"custom_role_policy": "fail_closed", "trusted_check_app_slugs": ["agent-lock-trusted"], "trusted_label_actors": ["maintainer"], "trusted_human_exemption_actors": ["maintainer"]}
 

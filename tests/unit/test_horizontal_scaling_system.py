@@ -16,7 +16,6 @@ from youtube_extension.backend.services.horizontal_scaling_system import (
     ServiceStatus,
 )
 
-
 # ===========================================================================
 # ServiceStatus enum
 # ===========================================================================

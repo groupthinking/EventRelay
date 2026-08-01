@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import sys
-import types as _types
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -15,17 +14,16 @@ sys.path.insert(0, str(_SRC))
 from youtube_extension.integrations.cloud_ai.base import (
     AnalysisType,
     CloudAIProvider,
-    DetectionResult,
     VideoAnalysisResult,
 )
 from youtube_extension.integrations.cloud_ai.exceptions import (
-    AuthenticationError,
     CloudAIError,
     ConfigurationError,
     RateLimitError,
 )
-from youtube_extension.integrations.cloud_ai.providers.aws_rekognition import AWSRekognition
-
+from youtube_extension.integrations.cloud_ai.providers.aws_rekognition import (
+    AWSRekognition,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
