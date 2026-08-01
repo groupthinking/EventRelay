@@ -6,6 +6,21 @@ useDefault = true
 
 [allowlist]
 description = "Paths excluded from secret scanning"
+# Match against the whole source line rather than the extracted secret, so the
+# regexes below can require the surrounding package-URL context.
+regexTarget = "line"
+regexes = [
+  # Dependency lockfiles record every artifact as a PyPI download URL whose path
+  # embeds the artifact's own content hash, e.g.
+  #   https://files.pythonhosted.org/packages/30/4b/90c9378...a7/parso-0.8.7.tar.gz
+  # Those hex segments are public integrity digests, but their length and
+  # entropy collide with generic provider-token rules (parso 0.8.7 currently
+  # trips `square-access-token`). Anchoring on the public PyPI CDN host keeps
+  # the rest of the lockfile scanned: a private index URL carrying real
+  # credentials (https://user:token@pypi.internal/...) does not match this and
+  # is still reported.
+  '''https://files\.pythonhosted\.org/packages/''',
+]
 paths = [
   # Vendored saved web pages from Google (AI Studio / APIs Explorer): contain
   # Google's own public page keys, not EventRelay credentials.
