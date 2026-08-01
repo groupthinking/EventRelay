@@ -1132,24 +1132,36 @@ class TestRekognitionDoesNotBlockEventLoop:
         """
         import threading
 
-        from youtube_extension.integrations.cloud_ai.providers import (
-            aws_rekognition as _rek_mod,
-        )
-
         image = tmp_path / "frame.jpg"
         image.write_bytes(b"BINARY-IMAGE-PAYLOAD")
         provider = _make_provider()
 
         loop_thread_id = threading.get_ident()
         observed: dict[str, int] = {}
-        real_read = _rek_mod._read_file_bytes
+
+        # Patch the *exact* globals dict the running coroutine resolves names
+        # in — derived from the provider we actually call — rather than a
+        # separately re-imported module alias. A function's ``__globals__`` is
+        # frozen to its defining module at ``def`` time. Under EventRelay's
+        # dual-import hazard (``src.youtube_extension`` vs ``youtube_extension``
+        # are two distinct module objects with independent dicts), a bare
+        # ``from ... import aws_rekognition`` inside the test can resolve to a
+        # different object than the one backing ``_prepare_image_input``'s
+        # ``_read_file_bytes`` lookup — which silently no-ops the patch and was
+        # the cause of the intermittent full-suite CI failure. Sourcing the
+        # dict from ``type(provider)`` makes the two identical by construction.
+        globs = type(provider)._prepare_image_input.__globals__
+        real_read = globs['_read_file_bytes']
 
         def _recording_read(path):
             observed['thread_id'] = threading.get_ident()
             return real_read(path)
 
-        with patch.object(_rek_mod, '_read_file_bytes', _recording_read):
+        globs['_read_file_bytes'] = _recording_read
+        try:
             result = await provider._prepare_image_input(str(image))
+        finally:
+            globs['_read_file_bytes'] = real_read
 
         assert result == {'Bytes': b"BINARY-IMAGE-PAYLOAD"}
         assert 'thread_id' in observed, "_read_file_bytes was never called"
