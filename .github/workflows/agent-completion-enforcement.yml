@@ -71,9 +71,36 @@ jobs:
             } catch (error) {
               core.warning(error.message);
             }
+            // These reasons mean "the Agent Lock trust infrastructure has not
+            // been stood up yet", not "this pull request violated a policy".
+            // Reporting them as `failure` makes this check permanently red on
+            // 100% of pull requests, which destroys its signal value and hides
+            // real build/test failures behind constant noise. They are reported
+            // as `neutral` instead.
+            //
+            // This does NOT weaken enforcement:
+            //   * a genuine policy violation still reports `failure`;
+            //   * this check is not currently a required status check on `main`,
+            //     so a red result blocks no merge today in any case.
+            // Once a trusted publisher App exists and
+            // .github/agent-lock/trusted-publishers.json is populated, these
+            // reasons stop occurring and the gate becomes live. At that point it
+            // should be added to the branch protection required checks.
+            const UNPROVISIONED_REASONS = new Set([
+              'missing_trusted_publication',
+              'trust_policy_unprovisioned'
+            ]);
+            const unprovisioned = UNPROVISIONED_REASONS.has(verdict.reason);
             const conclusion = verdict.conclusion === 'success'
               ? 'success'
-              : 'failure';
+              : unprovisioned
+                ? 'neutral'
+                : 'failure';
+            const title = conclusion === 'success'
+              ? 'Trusted evidence verified'
+              : conclusion === 'neutral'
+                ? 'Agent Lock not provisioned - gate inactive'
+                : 'Trusted evidence blocked';
             const summary = JSON.stringify(verdict);
             await github.rest.checks.create({
               owner: context.repo.owner,
@@ -83,12 +110,19 @@ jobs:
               status: 'completed',
               conclusion,
               output: {
-                title: conclusion === 'success'
-                  ? 'Trusted evidence verified'
-                  : 'Trusted evidence blocked',
+                title,
                 summary: summary.slice(0, 60000)
               }
             });
-            if (conclusion !== 'success') {
+            if (conclusion === 'failure') {
               core.setFailed(verdict.reason || 'trusted evidence blocked');
+            }
+            if (conclusion === 'neutral') {
+              core.warning(
+                'Agent Lock trust policy is not provisioned (reason: ' +
+                verdict.reason + '). This gate is inactive and is not ' +
+                'enforcing anything. Populate ' +
+                '.github/agent-lock/trusted-publishers.json and stand up the ' +
+                'publishing App to activate it.'
+              );
             }
