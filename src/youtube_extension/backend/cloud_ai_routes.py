@@ -397,6 +397,21 @@ async def process_batch_videos(video_urls: list[str], analysis_types: list[Analy
                     return_exceptions=True,
                 )
 
+                # `return_exceptions=True` also captures BaseException-only
+                # failures (most notably CancelledError) as *values*, so an
+                # `isinstance(..., Exception)` test alone would let a cancelled
+                # child fall through to format_analysis_result. Re-raise those
+                # to preserve the previous `await`/`except Exception` semantics,
+                # where cancellation propagated out of the loop.
+                cancellations = [
+                    result
+                    for result in batch_results
+                    if isinstance(result, BaseException)
+                    and not isinstance(result, Exception)
+                ]
+                if cancellations:
+                    raise cancellations[0]
+
                 # isinstance(..., Exception) mirrors the previous
                 # `except Exception ... continue`: one failing video is logged
                 # and skipped without aborting the rest of the batch.

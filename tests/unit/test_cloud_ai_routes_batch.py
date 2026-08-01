@@ -6,6 +6,8 @@ import asyncio
 import contextlib
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
 from youtube_extension.backend import cloud_ai_routes as routes
 
 
@@ -124,3 +126,68 @@ class TestProcessBatchVideosFanOut:
         with _fake_cloud_ai(_tracking_analyze(state)):
             await routes.process_batch_videos([], [], None, 4, "task-5")
         assert state["peak"] == 0
+
+
+class TestProcessBatchVideosCancellation:
+    """Cancellation must propagate, not be misread as a successful result.
+
+    ``asyncio.gather(..., return_exceptions=True)`` captures a child's
+    ``CancelledError`` as a *value*. Because it derives from ``BaseException``
+    and not ``Exception``, an ``isinstance(result, Exception)`` filter alone
+    would hand it to ``format_analysis_result`` as if it were an analysis.
+    The previous sequential ``await``/``except Exception`` loop let
+    cancellation escape, so it must still escape here.
+    """
+
+    async def test_cancelled_analysis_is_re_raised_not_treated_as_a_result(self):
+        async def analyze(video_url, **_kwargs):
+            if video_url == "u2":
+                raise asyncio.CancelledError()
+            await asyncio.sleep(0)
+            return f"result:{video_url}"
+
+        formatted: list[object] = []
+
+        with _fake_cloud_ai(analyze) as fake_asyncio:
+            with patch.object(
+                routes,
+                "format_analysis_result",
+                side_effect=lambda r: formatted.append(r) or r,
+            ):
+                with pytest.raises(asyncio.CancelledError):
+                    await routes.process_batch_videos(
+                        task_id="t-cancel",
+                        video_urls=["u1", "u2", "u3", "u4"],
+                        analysis_types=[],
+                        preferred_provider=None,
+                        batch_size=2,
+                    )
+
+        assert not any(isinstance(r, BaseException) for r in formatted), (
+            f"a CancelledError leaked into format_analysis_result: {formatted}"
+        )
+        assert fake_asyncio.sleep.await_count == 0, (
+            "cancellation did not abort the run: the inter-batch pause ran and "
+            "the following batch was still dispatched"
+        )
+
+    async def test_cancellation_takes_precedence_over_ordinary_failures(self):
+        """A cancelled peer still propagates when siblings also failed."""
+
+        async def analyze(video_url, **_kwargs):
+            if video_url == "boom":
+                raise RuntimeError("provider exploded")
+            if video_url == "cancelled":
+                raise asyncio.CancelledError()
+            await asyncio.sleep(0)
+            return f"result:{video_url}"
+
+        with _fake_cloud_ai(analyze):
+            with pytest.raises(asyncio.CancelledError):
+                await routes.process_batch_videos(
+                    task_id="t-mixed",
+                    video_urls=["ok", "boom", "cancelled"],
+                    analysis_types=[],
+                    preferred_provider=None,
+                    batch_size=3,
+                )
