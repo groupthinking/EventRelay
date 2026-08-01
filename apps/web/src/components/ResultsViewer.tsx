@@ -2,6 +2,7 @@
 
 import { clsx } from 'clsx';
 import { Check } from 'lucide-react';
+import { useMemo } from 'react';
 import type { AgentExecution, ExtractedEvent } from '@/lib/types';
 
 interface ResultsViewerProps {
@@ -19,7 +20,14 @@ interface ResultsViewerProps {
  * @returns The results section for completed executions with results, or `null` when none are available.
  */
 export default function ResultsViewer({ executions, events, className }: ResultsViewerProps) {
-  const completed = executions.filter((e) => e.status === 'complete' && e.result);
+  const completed = useMemo(
+    () => executions.filter((e) => e.status === 'complete' && e.result),
+    [executions],
+  );
+
+  // Index events by id so each rendered row resolves its event in O(1) rather than
+  // rescanning the whole `events` array, which made rendering O(completed x events).
+  const eventsById = useMemo(() => new Map(events.map((e) => [e.id, e])), [events]);
 
   if (completed.length === 0) return null;
 
@@ -31,7 +39,7 @@ export default function ResultsViewer({ executions, events, className }: Results
 
       <div className="space-y-3">
         {completed.map((exec) => {
-          const event = events.find((e) => e.id === exec.event_id);
+          const event = exec.event_id ? eventsById.get(exec.event_id) : undefined;
           return (
             <div
               key={exec.agent_id}
