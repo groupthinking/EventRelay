@@ -372,19 +372,22 @@ class LoggingService:
     async def _write_to_files(self, logs: list[StructuredLogEntry]) -> None:
         """Write logs to file outputs"""
         try:
-            # Write structured logs
+            # Write structured logs.
+            # aiofiles dispatches every write() to the thread-pool executor, so a
+            # per-entry loop costs one executor round-trip per log line. Serialise
+            # the whole batch first and issue a single write instead.
             structured_path = self.config['log_directory'] / 'structured_logs.jsonl'
+            structured_payload = ''.join(f'{log.json()}\n' for log in logs)
             async with aiofiles.open(structured_path, 'a') as f:
-                for log in logs:
-                    await f.write(log.json() + '\n')
+                await f.write(structured_payload)
 
             # Write error logs separately
             error_logs = [log for log in logs if log.level in ['ERROR', 'CRITICAL']]
             if error_logs:
                 error_path = self.config['log_directory'] / 'error_logs.jsonl'
+                error_payload = ''.join(f'{log.json()}\n' for log in error_logs)
                 async with aiofiles.open(error_path, 'a') as f:
-                    for log in error_logs:
-                        await f.write(log.json() + '\n')
+                    await f.write(error_payload)
 
         except Exception as e:
             self.logger.error(f"Failed to write logs to files: {e}")
