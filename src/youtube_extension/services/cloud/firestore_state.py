@@ -30,9 +30,14 @@ logger = logging.getLogger(__name__)
 # Size of the worker pool that drains expired documents in cleanup_old_states().
 # Cleanup can match an unbounded number of documents, so deletes are pulled from
 # a shared iterator by this many workers rather than dispatched all at once.
-# Sizing the pool -- rather than gating a full fan-out -- bounds the in-flight
-# delete RPCs and the number of allocated task objects by the same constant.
-CLEANUP_DELETE_CONCURRENCY = 16
+# Both controls are configurable so operators can tune cleanup independently of
+# an application deployment; invalid numeric values fail fast during startup.
+CLEANUP_DELETE_CONCURRENCY = max(
+    1, int(os.getenv("CLEANUP_DELETE_CONCURRENCY", "16"))
+)
+CLEANUP_DELETE_TIMEOUT_SECONDS = max(
+    0.001, float(os.getenv("CLEANUP_DELETE_TIMEOUT_SECONDS", "30"))
+)
 
 
 @dataclass
@@ -352,7 +357,7 @@ class FirestoreStateService:
                 except StopIteration:
                     return
                 try:
-                    await doc.reference.delete()
+                    await doc.reference.delete(timeout=CLEANUP_DELETE_TIMEOUT_SECONDS)
                     succeeded += 1
                 except Exception as exc:  # noqa: BLE001 - tallied and logged below
                     failures.append(exc)
