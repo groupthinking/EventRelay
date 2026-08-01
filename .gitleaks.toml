@@ -14,4 +14,8 @@ paths = [
   '''docs/security/.*''',
   # Test fixtures use obvious dummy keys (e.g. "xai-secret-123"), not real secrets.
   '''tests/.*''',
+  # Dependency lockfile: contains third-party PyPI package hashes (sha256 digests),
+  # not EventRelay credentials. Secret scanners mis-flag these high-entropy digests
+  # (e.g. the square-access-token rule fires on a package hash), so exclude the file.
+  '''(^|/)uv\.lock$''',
 ]
