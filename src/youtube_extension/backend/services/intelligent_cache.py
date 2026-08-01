@@ -352,9 +352,13 @@ class RedisCacheLayer(IntelligentCacheLayer):
                     "size_bytes": len(serialized_data)
                 })
 
-                # Add to tag sets for invalidation
-                for tag in (tags or []):
-                    await conn.sadd(f"uvai:tag:{tag}", key)
+                # Add to tag sets for invalidation.
+                # Issued concurrently: sequential awaits cost one Redis round trip per
+                # tag, which dominates latency on this per-write hot path.
+                if tags:
+                    await asyncio.gather(
+                        *(conn.sadd(f"uvai:tag:{tag}", key) for tag in tags)
+                    )
 
                 logger.debug(f"L2 Redis SET: {key} ({len(serialized_data)} bytes)")
                 return True
