@@ -1121,7 +1121,17 @@ class TestRekognitionDoesNotBlockEventLoop:
         assert result == {'labels': 'j-1'}
         assert ticks > 0, "start_label_detection blocked the event loop"
 
-    async def test_local_image_read_does_not_stall_the_event_loop(self, tmp_path):
+    async def test_local_image_read_runs_off_the_event_loop_thread(self, tmp_path):
+        """
+        Deterministic counterpart to the heartbeat tests.
+
+        The local read is far too fast to time reliably on a loaded runner, so
+        instead of measuring elapsed ticks this asserts the property directly:
+        the read must execute on a worker thread, not on the thread running the
+        event loop. This is immune to scheduler load and needs no sleeps.
+        """
+        import threading
+
         from youtube_extension.integrations.cloud_ai.providers import (
             aws_rekognition as _rek_mod,
         )
@@ -1130,20 +1140,23 @@ class TestRekognitionDoesNotBlockEventLoop:
         image.write_bytes(b"BINARY-IMAGE-PAYLOAD")
         provider = _make_provider()
 
+        loop_thread_id = threading.get_ident()
+        observed: dict[str, int] = {}
         real_read = _rek_mod._read_file_bytes
 
-        def _slow_read(path):
-            import time
-            time.sleep(0.12)
+        def _recording_read(path):
+            observed['thread_id'] = threading.get_ident()
             return real_read(path)
 
-        with patch.object(_rek_mod, '_read_file_bytes', _slow_read):
-            result, ticks = await _count_heartbeats(
-                provider._prepare_image_input(str(image))
-            )
+        with patch.object(_rek_mod, '_read_file_bytes', _recording_read):
+            result = await provider._prepare_image_input(str(image))
 
         assert result == {'Bytes': b"BINARY-IMAGE-PAYLOAD"}
-        assert ticks > 0, "the local image read blocked the event loop"
+        assert 'thread_id' in observed, "_read_file_bytes was never called"
+        assert observed['thread_id'] != loop_thread_id, (
+            "the local image read ran on the event loop thread instead of "
+            "being dispatched to a worker thread"
+        )
 
     async def test_local_image_bytes_are_read_correctly(self, tmp_path):
         """Guard: offloading must not change what is returned."""
