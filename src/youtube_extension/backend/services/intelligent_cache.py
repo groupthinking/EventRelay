@@ -35,6 +35,13 @@ import redis.asyncio as redis
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Upper bound on Redis tag-set writes issued concurrently from a single
+# cache write. redis-py's async connection pool defaults to
+# max_connections=20 and each in-flight command holds one connection, so an
+# unbounded fan-out over a large tag list could exhaust the pool. This stays
+# well below that default to leave capacity for concurrent callers.
+TAG_WRITE_CONCURRENCY = 8
+
 class DateTimeEncoder(json.JSONEncoder):
     """JSON encoder that handles datetime objects"""
     def default(self, obj):
@@ -353,12 +360,30 @@ class RedisCacheLayer(IntelligentCacheLayer):
                 })
 
                 # Add to tag sets for invalidation.
-                # Issued concurrently: sequential awaits cost one Redis round trip per
-                # tag, which dominates latency on this per-write hot path.
+                # Issued concurrently rather than one await per tag: each
+                # sequential await costs a full Redis round trip, which
+                # dominates latency on this per-write hot path.
+                #
+                # Concurrency is bounded by TAG_WRITE_CONCURRENCY so a large
+                # tag list cannot exhaust the connection pool, and every task
+                # is awaited to completion (return_exceptions=True) so no tag
+                # write is still in flight when this method returns. The first
+                # failure is re-raised to preserve the original contract: the
+                # handler below logs it and returns False.
                 if tags:
-                    await asyncio.gather(
-                        *(conn.sadd(f"uvai:tag:{tag}", key) for tag in tags)
+                    semaphore = asyncio.Semaphore(TAG_WRITE_CONCURRENCY)
+
+                    async def _add_tag(tag: str) -> None:
+                        async with semaphore:
+                            await conn.sadd(f"uvai:tag:{tag}", key)
+
+                    results = await asyncio.gather(
+                        *(_add_tag(tag) for tag in tags),
+                        return_exceptions=True,
                     )
+                    for result in results:
+                        if isinstance(result, BaseException):
+                            raise result
 
                 logger.debug(f"L2 Redis SET: {key} ({len(serialized_data)} bytes)")
                 return True

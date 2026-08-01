@@ -6,6 +6,7 @@ Redis is not installed; stub it before importing the module under test.
 
 import sys
 import types as _types
+import asyncio
 
 # --- Redis stub (must happen before module import) ---
 _redis_mod = _types.ModuleType("redis")
@@ -1044,6 +1045,7 @@ class TestGlobalCacheDeleteAndInvalidateTags:
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from youtube_extension.backend.services.intelligent_cache import (
+    TAG_WRITE_CONCURRENCY,
     IntelligentCacheSystem,  # noqa: E402
     RedisCacheLayer,
 )
@@ -1268,6 +1270,66 @@ class TestRedisCacheLayerSet:
             await layer.set("k", "v", tags=["tag1", "tag2"])
 
         assert conn.sadd.call_count == 2
+
+    async def test_set_tag_writes_stay_within_concurrency_bound(self):
+        """A large tag list must not fan out past the connection-pool budget.
+
+        redis-py's async pool defaults to max_connections=20 and every
+        in-flight command holds a connection, so unbounded concurrency here
+        would be able to exhaust the pool.
+        """
+        layer = self._connected_layer()
+        conn = _make_redis_conn()
+
+        in_flight = 0
+        peak = 0
+
+        async def _tracking_sadd(*_args, **_kwargs):
+            nonlocal in_flight, peak
+            in_flight += 1
+            peak = max(peak, in_flight)
+            # Yield so other pending tag writes can start if unbounded.
+            await asyncio.sleep(0)
+            in_flight -= 1
+            return 1
+
+        conn.sadd = AsyncMock(side_effect=_tracking_sadd)
+        tags = [f"tag{i}" for i in range(50)]
+
+        with _patch_redis(conn):
+            result = await layer.set("k", "v", tags=tags)
+
+        assert result is True
+        assert conn.sadd.call_count == 50
+        assert peak <= TAG_WRITE_CONCURRENCY
+
+    async def test_set_tag_write_failure_returns_false_and_drains(self):
+        """A failing tag write returns False with no writes left in flight."""
+        layer = self._connected_layer()
+        conn = _make_redis_conn()
+
+        started = 0
+        finished = 0
+
+        async def _flaky_sadd(name, *_args, **_kwargs):
+            nonlocal started, finished
+            started += 1
+            await asyncio.sleep(0)
+            if name.endswith("tag3"):
+                finished += 1
+                raise RuntimeError("redis unavailable")
+            finished += 1
+            return 1
+
+        conn.sadd = AsyncMock(side_effect=_flaky_sadd)
+        tags = [f"tag{i}" for i in range(6)]
+
+        with _patch_redis(conn):
+            result = await layer.set("k", "v", tags=tags)
+
+        assert result is False
+        # Every scheduled write ran to completion before set() returned.
+        assert finished == started
 
     async def test_set_stores_metadata(self):
         layer = self._connected_layer()
