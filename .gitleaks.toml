@@ -14,4 +14,9 @@ paths = [
   '''docs/security/.*''',
   # Test fixtures use obvious dummy keys (e.g. "xai-secret-123"), not real secrets.
   '''tests/.*''',
+  # Generated dependency lockfile: uv.lock records package registry URLs and
+  # sha256 content hashes, not credentials. Some package hashes trip default
+  # high-entropy rules (e.g. a "parso" sdist sha256 matches "square-access-token")
+  # as false positives, which fails `gitleaks detect --no-git` on every PR.
+  '''^uv\.lock$''',
 ]
