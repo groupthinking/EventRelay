@@ -230,6 +230,7 @@ export async function POST(request: Request) {
           });
         }
       } catch (uploadError) {
+        console.error('Training upload/trigger error:', uploadError);
         return NextResponse.json({
           error: 'Upload/trigger failed',
           fallback: {
