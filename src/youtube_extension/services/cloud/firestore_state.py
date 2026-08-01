@@ -330,28 +330,43 @@ class FirestoreStateService:
             logger.info(f"Cleaned up 0 old states (>{days} days)")
             return 0
 
-        # Delete concurrently. Each delete is an independent network round-trip,
-        # so issuing them sequentially made cleanup cost O(n) round-trips. The
-        # semaphore bounds in-flight RPCs so a large backlog cannot flood
-        # Firestore, and return_exceptions keeps one failure from abandoning
-        # deletes that are already in flight.
-        semaphore = asyncio.Semaphore(CLEANUP_DELETE_CONCURRENCY)
+        # Delete with a fixed pool of workers pulling from a shared iterator.
+        # Deleting sequentially made cleanup latency scale with the size of the
+        # expired backlog. The pool overlaps up to CLEANUP_DELETE_CONCURRENCY
+        # deletes at a time while keeping *both* the in-flight RPCs and the
+        # number of pending task objects bounded -- gather() over every document
+        # would allocate one task per document up front, which is unsafe for a
+        # query whose result set has no limit. Failures are tallied rather than
+        # raised so one bad delete cannot abandon the rest of the backlog.
+        pending = iter(docs)
+        succeeded = 0
+        failures: list[Exception] = []
 
-        async def _delete_one(doc: Any) -> None:
-            async with semaphore:
-                await doc.reference.delete()
+        async def _delete_worker() -> None:
+            nonlocal succeeded
+            while True:
+                try:
+                    doc = next(pending)
+                except StopIteration:
+                    return
+                try:
+                    await doc.reference.delete()
+                    succeeded += 1
+                except Exception as exc:  # noqa: BLE001 - tallied and logged below
+                    failures.append(exc)
 
-        results = await asyncio.gather(
-            *(_delete_one(doc) for doc in docs),
-            return_exceptions=True,
+        await asyncio.gather(
+            *(
+                _delete_worker()
+                for _ in range(min(CLEANUP_DELETE_CONCURRENCY, len(docs)))
+            )
         )
 
-        failures = [r for r in results if isinstance(r, BaseException)]
-        count = len(results) - len(failures)
+        count = succeeded
 
         if failures:
             logger.warning(
-                f"Failed to delete {len(failures)} of {len(results)} old states; "
+                f"Failed to delete {len(failures)} of {len(docs)} old states; "
                 f"first error: {failures[0]!r}"
             )
 

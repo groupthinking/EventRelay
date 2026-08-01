@@ -781,11 +781,14 @@ class TestCleanupOldStates:
     @staticmethod
     def _tracking_docs(n: int) -> tuple[list, dict]:
         """Build n mock docs whose deletes record peak overlap."""
-        stats = {"in_flight": 0, "peak": 0}
+        stats = {"in_flight": 0, "peak": 0, "peak_tasks": 0}
 
         async def _tracked() -> None:
             stats["in_flight"] += 1
             stats["peak"] = max(stats["peak"], stats["in_flight"])
+            # Task count reflects how many coroutines were *allocated*, which is
+            # a stricter bound than how many RPCs are in flight.
+            stats["peak_tasks"] = max(stats["peak_tasks"], len(asyncio.all_tasks()))
             # Yield so sibling deletes get a chance to start. Under the previous
             # sequential loop nothing else could be running here.
             await asyncio.sleep(0)
@@ -826,6 +829,29 @@ class TestCleanupOldStates:
         assert stats["peak"] <= limit, (
             f"peak in-flight deletes {stats['peak']} exceeded the "
             f"CLEANUP_DELETE_CONCURRENCY bound of {limit}"
+        )
+
+    async def test_cleanup_bounds_allocated_delete_tasks_not_just_rpcs(self):
+        """A worker pool must not allocate one task per document.
+
+        Gathering over every document would schedule len(docs) tasks up front,
+        so a large backlog would cost unbounded task/event-loop memory even
+        though only CLEANUP_DELETE_CONCURRENCY RPCs are in flight. The query
+        driving this has no limit, so that allocation must stay bounded too.
+        """
+        svc, _, _, _, _, coll_ref, query = _make_service_with_db()
+        limit = _mod.CLEANUP_DELETE_CONCURRENCY
+        docs, stats = self._tracking_docs(limit * 3)
+        query.get = AsyncMock(return_value=docs)
+
+        count = await svc.cleanup_old_states(days=7)
+
+        assert count == limit * 3
+        # Allow a small margin for the enclosing test task and gather bookkeeping.
+        assert stats["peak_tasks"] <= limit + 3, (
+            f"cleanup allocated {stats['peak_tasks']} concurrent tasks for "
+            f"{limit * 3} documents; delete tasks are not bounded by the "
+            f"CLEANUP_DELETE_CONCURRENCY worker pool of {limit}"
         )
 
     async def test_cleanup_failure_does_not_abandon_remaining_deletes(self):
