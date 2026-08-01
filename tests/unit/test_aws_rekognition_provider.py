@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+import os
 import sys
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -131,6 +133,7 @@ class TestAWSRekognitionInitialize:
         mock_boto3.Session.return_value = mock_session
 
         with patch.dict("sys.modules", {"boto3": mock_boto3, "botocore": MagicMock(),
+                                         "botocore.config": MagicMock(),
                                          "botocore.exceptions": MagicMock(
                                              ClientError=Exception, NoCredentialsError=Exception
                                          )}):
@@ -147,6 +150,7 @@ class TestAWSRekognitionInitialize:
         mock_boto3.Session.return_value = mock_session
 
         with patch.dict("sys.modules", {"boto3": mock_boto3, "botocore": MagicMock(),
+                                         "botocore.config": MagicMock(),
                                          "botocore.exceptions": MagicMock(
                                              ClientError=Exception, NoCredentialsError=Exception
                                          )}):
@@ -169,6 +173,7 @@ class TestAWSRekognitionInitialize:
         mock_boto3.Session.return_value = mock_session
 
         with patch.dict("sys.modules", {"boto3": mock_boto3, "botocore": MagicMock(),
+                                         "botocore.config": MagicMock(),
                                          "botocore.exceptions": MagicMock(
                                              ClientError=Exception, NoCredentialsError=Exception
                                          )}):
@@ -1004,3 +1009,298 @@ class TestAWSRekognitionEstimateCost:
         cost1 = provider.estimate_cost(60.0, [AnalysisType.LABEL_DETECTION])
         cost2 = provider.estimate_cost(120.0, [AnalysisType.LABEL_DETECTION])
         assert cost2 == pytest.approx(cost1 * 2)
+
+
+# ===========================================================================
+# Event-loop responsiveness: every boto3 call must run off the loop
+# ===========================================================================
+
+async def _count_heartbeats(coro, tick: float = 0.005) -> tuple[object, int]:
+    """Run ``coro`` while a heartbeat task ticks; return (result, ticks).
+
+    If the awaited work performs blocking I/O directly on the event loop the
+    heartbeat never gets scheduled and ``ticks`` stays at 0.
+    """
+    import asyncio
+    import contextlib
+
+    ticks = 0
+    stop = False
+
+    async def _beat():
+        nonlocal ticks
+        while not stop:
+            await asyncio.sleep(tick)
+            ticks += 1
+
+    beat = asyncio.create_task(_beat())
+    await asyncio.sleep(0)  # let the heartbeat reach its first await first
+    try:
+        result = await coro
+    finally:
+        stop = True
+        beat.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await beat
+    return result, ticks
+
+
+def _slow(return_value, delay: float = 0.12):
+    """A synchronous callable that blocks for ``delay`` seconds."""
+    import time
+
+    def _call(*_args, **_kwargs):
+        time.sleep(delay)
+        return return_value
+
+    return _call
+
+
+class TestRekognitionDoesNotBlockEventLoop:
+    @pytest.mark.parametrize(
+        ("analysis_type", "client_method", "response"),
+        [
+            (AnalysisType.LABEL_DETECTION, "detect_labels", {"Labels": []}),
+            (AnalysisType.FACE_DETECTION, "detect_faces", {"FaceDetails": []}),
+            (AnalysisType.TEXT_DETECTION, "detect_text", {"TextDetections": []}),
+            (
+                AnalysisType.CONTENT_MODERATION,
+                "detect_moderation_labels",
+                {"ModerationLabels": []},
+            ),
+        ],
+    )
+    async def test_each_image_detection_runs_off_the_loop(
+        self, analysis_type, client_method, response
+    ):
+        provider = _make_provider()
+        mock_client = _make_rekognition_client()
+        getattr(mock_client, client_method).side_effect = _slow(response)
+        provider._rekognition_client = mock_client
+
+        with patch.object(
+            provider,
+            "_prepare_image_input",
+            new=AsyncMock(return_value={"Bytes": b"img"}),
+        ):
+            result, ticks = await _count_heartbeats(
+                provider.analyze_image("http://e.com/i.jpg", [analysis_type])
+            )
+
+        assert isinstance(result, VideoAnalysisResult)
+        getattr(mock_client, client_method).assert_called_once()
+        assert ticks > 0, f"{client_method} blocked the event loop"
+
+    @pytest.mark.parametrize(
+        ("analysis_type", "client_method", "result_key"),
+        [
+            (AnalysisType.LABEL_DETECTION, "start_label_detection", "labels"),
+            (AnalysisType.FACE_DETECTION, "start_face_detection", "faces"),
+            (AnalysisType.TEXT_DETECTION, "start_text_detection", "text"),
+            (
+                AnalysisType.CONTENT_MODERATION,
+                "start_content_moderation",
+                "moderation",
+            ),
+        ],
+    )
+    async def test_each_video_start_runs_off_the_loop(
+        self, analysis_type, client_method, result_key
+    ):
+        provider = _make_provider()
+        mock_client = MagicMock()
+        getattr(mock_client, client_method).side_effect = _slow({"JobId": "j-1"})
+        provider._rekognition_client = mock_client
+
+        result, ticks = await _count_heartbeats(
+            provider._start_video_analysis(
+                "my-bucket", "video.mp4", [analysis_type]
+            )
+        )
+
+        assert result == {result_key: "j-1"}
+        assert ticks > 0, f"{client_method} blocked the event loop"
+
+    @pytest.mark.parametrize(
+        ("analysis_key", "client_method"),
+        [
+            ("labels", "get_label_detection"),
+            ("faces", "get_face_detection"),
+            ("text", "get_text_detection"),
+            ("moderation", "get_content_moderation"),
+        ],
+    )
+    async def test_each_video_poll_runs_off_the_loop(
+        self, analysis_key, client_method
+    ):
+        provider = _make_provider()
+        mock_client = MagicMock()
+        getattr(mock_client, client_method).side_effect = _slow(
+            {"JobStatus": "SUCCEEDED"}
+        )
+        provider._rekognition_client = mock_client
+
+        result, ticks = await _count_heartbeats(
+            provider._wait_for_job_completion("job-1", analysis_key)
+        )
+
+        assert result["JobStatus"] == "SUCCEEDED"
+        assert ticks > 0, f"{client_method} blocked the event loop"
+
+    @pytest.mark.parametrize("provider_method", ["_test_connection", "get_service_status"])
+    async def test_each_describe_collection_runs_off_the_loop(self, provider_method):
+        provider = _make_provider()
+        mock_client = MagicMock()
+        mock_client.describe_collection.side_effect = _slow({})
+        provider._rekognition_client = mock_client
+
+        _result, ticks = await _count_heartbeats(
+            getattr(provider, provider_method)()
+        )
+
+        mock_client.describe_collection.assert_called_once()
+        assert ticks > 0, (
+            f"describe_collection in {provider_method} blocked the event loop"
+        )
+
+    async def test_local_image_read_runs_off_the_event_loop_thread(self, tmp_path):
+        """
+        Deterministic counterpart to the heartbeat tests.
+
+        The local read is far too fast to time reliably on a loaded runner, so
+        instead of measuring elapsed ticks this asserts the property directly:
+        the read must execute on a worker thread, not on the thread running the
+        event loop. This is immune to scheduler load and needs no sleeps.
+        """
+        import threading
+
+        image = tmp_path / "frame.jpg"
+        image.write_bytes(b"BINARY-IMAGE-PAYLOAD")
+        provider = _make_provider()
+
+        # Patch the exact namespace that _prepare_image_input resolves from.
+        # Other test modules evict cloud_ai modules from sys.modules during
+        # collection, so re-importing the module here can patch a stale object.
+        method_globals = type(provider)._prepare_image_input.__globals__
+        real_read = method_globals["_read_file_bytes"]
+
+        loop_thread_id = threading.get_ident()
+        observed: dict[str, int] = {}
+
+        def _recording_read(path):
+            observed['thread_id'] = threading.get_ident()
+            return real_read(path)
+
+        with patch.dict(method_globals, {"_read_file_bytes": _recording_read}):
+            result = await provider._prepare_image_input(str(image))
+
+        assert result == {'Bytes': b"BINARY-IMAGE-PAYLOAD"}
+        assert 'thread_id' in observed, "_read_file_bytes was never called"
+        assert observed['thread_id'] != loop_thread_id, (
+            "the local image read ran on the event loop thread instead of "
+            "being dispatched to a worker thread"
+        )
+
+    async def test_local_image_bytes_are_read_correctly(self, tmp_path):
+        """Guard: offloading must not change what is returned."""
+        image = tmp_path / "frame.png"
+        payload = bytes(range(256)) * 8
+        image.write_bytes(payload)
+        provider = _make_provider()
+
+        result = await provider._prepare_image_input(str(image))
+
+        assert result == {'Bytes': payload}
+
+
+# ---------------------------------------------------------------------------
+# botocore client timeouts
+# ---------------------------------------------------------------------------
+class TestClientTimeoutConfiguration:
+    """Every SDK call here runs on the shared default executor via
+    ``asyncio.to_thread``. Without an explicit read timeout a stalled AWS
+    request would pin one of that pool's limited worker threads forever and
+    starve every other ``to_thread`` user in the process, so the clients must
+    always be built with a bounded botocore config.
+    """
+
+    @staticmethod
+    async def _initialize(env: dict | None = None):
+        provider = _make_provider()
+        mock_session = MagicMock()
+        mock_session.client.return_value = _make_rekognition_client()
+        mock_boto3 = MagicMock()
+        mock_boto3.Session.return_value = mock_session
+        config_mod = MagicMock()
+
+        stubs = {
+            "boto3": mock_boto3,
+            "botocore": MagicMock(),
+            "botocore.config": config_mod,
+            "botocore.exceptions": MagicMock(
+                ClientError=Exception, NoCredentialsError=Exception
+            ),
+        }
+        with patch.dict("sys.modules", stubs), patch.dict(os.environ, env or {}):
+            await provider.initialize()
+        return mock_session, config_mod
+
+    async def test_both_clients_are_built_with_a_bounded_config(self):
+        mock_session, config_mod = await self._initialize()
+
+        built = config_mod.Config.return_value
+        services = {}
+        for call in mock_session.client.call_args_list:
+            services[call.args[0]] = call.kwargs.get("config")
+
+        assert set(services) == {"rekognition", "s3"}
+        assert services["rekognition"] is built
+        assert services["s3"] is built
+
+    async def test_default_timeouts_are_finite_and_positive(self):
+        _session, config_mod = await self._initialize()
+
+        kwargs = config_mod.Config.call_args.kwargs
+        assert 0 < kwargs["connect_timeout"] < math.inf
+        assert 0 < kwargs["read_timeout"] < math.inf
+        assert kwargs["retries"]["max_attempts"] >= 1
+
+    async def test_timeouts_are_overridable_from_the_environment(self):
+        _session, config_mod = await self._initialize(
+            {
+                "AWS_REKOGNITION_CONNECT_TIMEOUT": "2.5",
+                "AWS_REKOGNITION_READ_TIMEOUT": "7",
+                "AWS_REKOGNITION_MAX_ATTEMPTS": "5",
+            }
+        )
+
+        kwargs = config_mod.Config.call_args.kwargs
+        assert kwargs["connect_timeout"] == 2.5
+        assert kwargs["read_timeout"] == 7.0
+        assert kwargs["retries"]["max_attempts"] == 5
+
+    @pytest.mark.parametrize(
+        "var",
+        ["AWS_REKOGNITION_CONNECT_TIMEOUT", "AWS_REKOGNITION_READ_TIMEOUT"],
+    )
+    @pytest.mark.parametrize("bad", ["inf", "-inf", "nan", "0", "-1", "abc"])
+    async def test_non_finite_or_non_positive_timeouts_are_rejected(self, var, bad):
+        with pytest.raises(ConfigurationError):
+            await self._initialize({var: bad})
+
+    @pytest.mark.parametrize("bad", ["0", "-3", "1.5", "abc"])
+    async def test_invalid_max_attempts_is_rejected(self, bad):
+        with pytest.raises(ConfigurationError):
+            await self._initialize({"AWS_REKOGNITION_MAX_ATTEMPTS": bad})
+
+    @pytest.mark.parametrize(
+        "var",
+        [
+            "AWS_REKOGNITION_CONNECT_TIMEOUT",
+            "AWS_REKOGNITION_READ_TIMEOUT",
+            "AWS_REKOGNITION_MAX_ATTEMPTS",
+        ],
+    )
+    async def test_blank_values_fall_back_to_defaults(self, var):
+        _session, config_mod = await self._initialize({var: "   "})
+        assert config_mod.Config.call_args is not None
