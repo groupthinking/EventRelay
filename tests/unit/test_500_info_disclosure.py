@@ -106,13 +106,22 @@ def _status_code_value(node: ast.AST, symbols: dict[str, int]) -> int | None:
     return None
 
 
-def _status_symbol_table(tree: ast.Module) -> dict[str, int]:
-    """Resolve module constants that alias literal or standard status values."""
-    symbols: dict[str, int] = {}
+def _status_symbol_table(
+    body: list[ast.stmt], base: dict[str, int] | None = None
+) -> dict[str, int]:
+    """Resolve constants in one lexical scope that alias status values.
+
+    ``body`` is a scope's direct statement list — a module body or a
+    ``FunctionDef``/``AsyncFunctionDef`` body. ``base`` seeds the table with
+    symbols visible from enclosing scopes so a local alias of an outer constant
+    still resolves; only the direct statements of ``body`` are scanned, so a
+    status aliased inside a *nested* function is not leaked into this scope.
+    """
+    symbols: dict[str, int] = dict(base) if base else {}
     changed = True
     while changed:
         changed = False
-        for node in tree.body:
+        for node in body:
             targets: list[ast.AST] = []
             value: ast.AST | None = None
             if isinstance(node, ast.Assign):
@@ -125,18 +134,13 @@ def _status_symbol_table(tree: ast.Module) -> dict[str, int]:
             if status is None:
                 continue
             for target in targets:
-                if (
-                    isinstance(target, ast.Name)
-                    and symbols.get(target.id) != status
-                ):
+                if isinstance(target, ast.Name) and symbols.get(target.id) != status:
                     symbols[target.id] = status
                     changed = True
     return symbols
 
 
-def _status_is_server_error(
-    call: ast.Call, name: str, symbols: dict[str, int]
-) -> bool:
+def _status_is_server_error(call: ast.Call, name: str, symbols: dict[str, int]) -> bool:
     for kw in call.keywords:
         if kw.arg == "status_code":
             status = _status_code_value(kw.value, symbols)
@@ -159,7 +163,35 @@ def _call_name(call: ast.Call) -> str | None:
 def _iter_500_leaks(text: str):
     """Yield (line_no, reason) for each 500 response that can leak internals."""
     tree = ast.parse(text)
-    status_symbols = _status_symbol_table(tree)
+    module_symbols = _status_symbol_table(tree.body)
+
+    # A status code aliased inside a function body is only visible in that
+    # lexical scope, so resolving against module scope alone is a false negative
+    # (``server_failure = status.HTTP_503_...`` then
+    # ``HTTPException(status_code=server_failure, ...)``). Resolve each response
+    # call against its module scope plus every enclosing function scope.
+    parents: dict[int, ast.AST] = {}
+    for parent in ast.walk(tree):
+        for child in ast.iter_child_nodes(parent):
+            parents[id(child)] = parent
+
+    scope_cache: dict[int, dict[str, int]] = {}
+
+    def _symbols_for(call: ast.AST) -> dict[str, int]:
+        enclosing: list[ast.AST] = []
+        cur = parents.get(id(call))
+        while cur is not None:
+            if isinstance(cur, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                enclosing.append(cur)
+            cur = parents.get(id(cur))
+        symbols = module_symbols
+        for func in reversed(enclosing):  # outermost enclosing scope first
+            cached = scope_cache.get(id(func))
+            if cached is None:
+                cached = _status_symbol_table(func.body, base=symbols)
+                scope_cache[id(func)] = cached
+            symbols = cached
+        return symbols
 
     # Bind every response constructor to the exception aliases visible from
     # its enclosing handler.  The fixed conventional-name set remains useful
@@ -186,7 +218,7 @@ def _iter_500_leaks(text: str):
         name = _call_name(node)
         if name not in ("HTTPException", "JSONResponse"):
             continue
-        if not _status_is_server_error(node, name, status_symbols):
+        if not _status_is_server_error(node, name, _symbols_for(node)):
             continue
         # Check keyword arguments
         for kw in node.keywords:
@@ -239,22 +271,22 @@ def test_no_information_disclosure_in_500_responses() -> None:
 def test_guard_detects_every_known_leak_shape() -> None:
     """Positive controls: the scanner flags each historical leak shape."""
     leaky_samples = [
-        'raise HTTPException(status_code=500, detail=str(e))',
+        "raise HTTPException(status_code=500, detail=str(e))",
         'raise HTTPException(status_code=500, detail=f"boom: {e}")',
-        'raise HTTPException(status_code=500, detail=error_msg)',
+        "raise HTTPException(status_code=500, detail=error_msg)",
         'raise HTTPException(status_code=500, detail={"message": error_msg})',
         'return JSONResponse(status_code=500, content={"detail": str(exc)})',
         'return JSONResponse(status_code=500, content={"path": str(request.url)})',
         'return JSONResponse(status_code=500, content={"t": exc.__class__.__name__})',
         # Positional-argument form: HTTPException(status_code, detail)
-        'raise HTTPException(500, str(e))',
+        "raise HTTPException(500, str(e))",
         'raise HTTPException(500, f"internal: {exc}")',
-        'raise HTTPException(500, error_msg)',
-        'raise HTTPException(status_code=503, detail=str(e))',
-        'raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e))',
-        'raise HTTPException(status_code=HTTPStatus.INTERNAL_SERVER_ERROR, detail=str(e))',
-        'SERVER_FAILURE = status.HTTP_502_BAD_GATEWAY\n'
-        'raise HTTPException(status_code=SERVER_FAILURE, detail=str(e))',
+        "raise HTTPException(500, error_msg)",
+        "raise HTTPException(status_code=503, detail=str(e))",
+        "raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e))",
+        "raise HTTPException(status_code=HTTPStatus.INTERNAL_SERVER_ERROR, detail=str(e))",
+        "SERVER_FAILURE = status.HTTP_502_BAD_GATEWAY\n"
+        "raise HTTPException(status_code=SERVER_FAILURE, detail=str(e))",
         'raise HTTPException(599, f"internal: {exc}")',
         # JSONResponse with a positional body (the real ml_serve leak shape) —
         # status via keyword and fully positional (body=args[0], status=args[1]).
@@ -266,6 +298,11 @@ def test_guard_detects_every_known_leak_shape() -> None:
         "try:\n    pass\nexcept Exception as failure:\n"
         "    message = str(failure)\n"
         '    return JSONResponse({"error": message}, status_code=503)\n',
+        # A 5xx status aliased inside a *function* body (not module scope) must
+        # still be resolved, or the guard has a lexical-scope false negative.
+        "def handler(exc):\n"
+        "    server_failure = status.HTTP_503_SERVICE_UNAVAILABLE\n"
+        "    raise HTTPException(status_code=server_failure, detail=str(exc))\n",
     ]
     for sample in leaky_samples:
         assert list(_iter_500_leaks(sample)), f"scanner missed a real leak: {sample}"
@@ -278,13 +315,18 @@ def test_guard_allows_sanitized_and_safe_dynamic_bodies() -> None:
         # Positional form with a static string is safe.
         'raise HTTPException(500, "Internal server error")',
         # 4xx echoing client input is out of scope.
-        'raise HTTPException(status_code=400, detail=str(exc))',
-        'raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))',
+        "raise HTTPException(status_code=400, detail=str(exc))",
+        "raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))",
         # A random error id + timestamp is not an internal-disclosure vector.
-        'return JSONResponse(status_code=500, content={'
+        "return JSONResponse(status_code=500, content={"
         '"id": f"FALLBACK_{uuid.uuid4().hex}", '
         '"message": "An unexpected error occurred.", '
         '"timestamp": datetime.now().isoformat()})',
+        # A 4xx status aliased inside a function body must resolve to 4xx and be
+        # left out of scope — local-scope resolution must not over-flag either.
+        "def handler(exc):\n"
+        "    client_error = status.HTTP_400_BAD_REQUEST\n"
+        "    raise HTTPException(status_code=client_error, detail=str(exc))\n",
     ]
     for sample in safe_samples:
         assert not list(_iter_500_leaks(sample)), f"scanner false-positived: {sample}"
@@ -390,13 +432,24 @@ def _iter_response_error_leaks(text: str):
                     if keyword.arg in _RESPONSE_ERROR_FIELDS:
                         yield node, keyword.value
 
-    def _uses_public_error_sanitizer(node: ast.AST) -> bool:
-        return isinstance(node, ast.Call) and _call_name(node) in {
-            "_client_safe_error",
-            "_sanitize_public_error",
-            "_sanitize_response_errors",
-            "_sanitize_error_list",
-        }
+    # A scalar ``error``/``error_message`` sink must be scrubbed by a
+    # value-replacing helper. The whole-tree walker ``_sanitize_response_errors``
+    # returns non-container inputs unchanged, so wrapping a bare scalar in it
+    # (``error=_sanitize_response_errors(result["error"])``) satisfies a naive
+    # allowlist while still forwarding the raw diagnostic. The plural ``errors``
+    # list is scrubbed element-wise by ``_sanitize_error_list``. The tree walkers
+    # stay valid for whole processor results, which the pass below checks
+    # separately.
+    _scalar_error_sanitizers = {"_client_safe_error", "_sanitize_public_error"}
+    _error_list_sanitizers = {"_sanitize_error_list"}
+
+    def _uses_sufficient_sanitizer(node: ast.AST, field: str) -> bool:
+        if not isinstance(node, ast.Call):
+            return False
+        allowed = (
+            _error_list_sanitizers if field == "errors" else _scalar_error_sanitizers
+        )
+        return _call_name(node) in allowed
 
     # Pass 1: values that reference the exception/request by convention.
     for node, value in _error_values(tree):
@@ -433,10 +486,8 @@ def _iter_response_error_leaks(text: str):
             if (
                 line not in seen
                 and not _is_static_string(value)
-                and not (
-                    isinstance(value, ast.Constant) and value.value is None
-                )
-                and not _uses_public_error_sanitizer(value)
+                and not (isinstance(value, ast.Constant) and value.value is None)
+                and not _uses_sufficient_sanitizer(value, keyword.arg)
             ):
                 seen.add(line)
                 yield line, 'response model "error" value is not sanitized'
@@ -607,7 +658,11 @@ def test_response_body_guard_flags_and_allows() -> None:
         '    detail = f"boom: {failure}"\n'
         '    return {"error": detail}\n',
         'response = VideoAnalysisResponse(error=result.get("error"))',
-        'response = VideoAnalysisResponse(error_message=state.error_message)',
+        "response = VideoAnalysisResponse(error_message=state.error_message)",
+        # A whole-tree walker is not a scalar sanitizer: it returns non-container
+        # inputs unchanged, so a scalar ``error`` wrapped in it still leaks.
+        "response = VideoAnalysisResponse("
+        'error=_sanitize_response_errors(result["error"]))',
         # Plural ``errors`` sink: a scalar exception string in the list leaks
         # just like a scalar ``error`` field.
         'x = {"errors": [str(e)]}',
@@ -635,8 +690,12 @@ def test_response_body_guard_flags_and_allows() -> None:
         "try:\n    pass\nexcept Exception as failure:\n"
         '    message = "Internal server error"\n'
         '    return {"error": message}\n',
-        'response = VideoAnalysisResponse(error=_sanitize_public_error('
+        "response = VideoAnalysisResponse(error=_sanitize_public_error("
         'result.get("error")))',
+        # The element-wise list sanitizer is the correct scrubber for the plural
+        # ``errors`` keyword sink and remains sufficient there.
+        "response = BatchResponse(errors=_sanitize_error_list("
+        'result.get("errors")))',
         # A static or sanitized plural ``errors`` collection is fine.
         'x = {"errors": ["Internal server error"]}',
         'x = {"errors": _sanitize_error_list(result.get("errors"))}',
