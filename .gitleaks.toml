@@ -5,7 +5,18 @@
 useDefault = true
 
 [allowlist]
-description = "Paths excluded from secret scanning"
+description = "Paths and package-digest lines excluded from secret scanning"
+# Match the regexes below against the whole line, not just the captured secret,
+# so digest-only false positives can be scoped to their `sha256:` context.
+regexTarget = "line"
+regexes = [
+  # PyPI / uv lockfile package digests: `sha256:<64 hex>`. Gitleaks' default
+  # `square-access-token` rule (Square tokens begin "EAAA…") false-matches hex
+  # digests whose leading characters spell that prefix — e.g. parso 0.8.7's
+  # `sha256:eaaac4c9…` in uv.lock. These are public package hashes, not secrets.
+  # Scoped to the `sha256:` prefix so a real credential sharing a line is still caught.
+  '''sha256:[a-f0-9]{64}''',
+]
 paths = [
   # Vendored saved web pages from Google (AI Studio / APIs Explorer): contain
   # Google's own public page keys, not EventRelay credentials.
