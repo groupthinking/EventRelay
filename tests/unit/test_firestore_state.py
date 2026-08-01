@@ -15,6 +15,9 @@ fake `firestore` module object on the target module.
 
 from __future__ import annotations
 
+import asyncio
+import math
+import os
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -728,6 +731,69 @@ class TestListStates:
 
 
 # ===========================================================================
+# Module-level cleanup configuration parsing
+# ===========================================================================
+
+
+class TestCleanupConfigEnvParsing:
+    """Tests for the env-override parsers backing the cleanup constants.
+
+    ``float()`` accepts ``inf``/``-inf``/``nan``, so an unvalidated timeout
+    override could silently remove the per-delete deadline. These tests pin that
+    non-finite and non-positive values are rejected rather than clamped.
+    """
+
+    @pytest.mark.parametrize("raw", ["inf", "Infinity", "-inf", "nan", "0", "-1", "0.0"])
+    def test_float_env_rejects_non_finite_and_non_positive(self, raw):
+        with patch.dict(os.environ, {"CLEANUP_TEST_TIMEOUT": raw}, clear=False):
+            with pytest.raises(ValueError, match="positive, finite"):
+                _mod._positive_finite_float_env("CLEANUP_TEST_TIMEOUT", 30.0)
+
+    def test_float_env_rejects_malformed_value(self):
+        with patch.dict(os.environ, {"CLEANUP_TEST_TIMEOUT": "abc"}, clear=False):
+            with pytest.raises(ValueError):
+                _mod._positive_finite_float_env("CLEANUP_TEST_TIMEOUT", 30.0)
+
+    @pytest.mark.parametrize("raw", ["", "   "])
+    def test_float_env_blank_falls_back_to_default(self, raw):
+        with patch.dict(os.environ, {"CLEANUP_TEST_TIMEOUT": raw}, clear=False):
+            assert _mod._positive_finite_float_env("CLEANUP_TEST_TIMEOUT", 30.0) == 30.0
+
+    def test_float_env_unset_falls_back_to_default(self):
+        os.environ.pop("CLEANUP_TEST_TIMEOUT", None)
+        assert _mod._positive_finite_float_env("CLEANUP_TEST_TIMEOUT", 30.0) == 30.0
+
+    def test_float_env_parses_valid_override(self):
+        with patch.dict(os.environ, {"CLEANUP_TEST_TIMEOUT": " 12.5 "}, clear=False):
+            assert _mod._positive_finite_float_env("CLEANUP_TEST_TIMEOUT", 30.0) == 12.5
+
+    @pytest.mark.parametrize("raw", ["0", "-4"])
+    def test_int_env_rejects_non_positive(self, raw):
+        with patch.dict(os.environ, {"CLEANUP_TEST_POOL": raw}, clear=False):
+            with pytest.raises(ValueError, match=">= 1"):
+                _mod._positive_int_env("CLEANUP_TEST_POOL", 16)
+
+    @pytest.mark.parametrize("raw", ["abc", "1.5", "inf"])
+    def test_int_env_rejects_malformed_value(self, raw):
+        with patch.dict(os.environ, {"CLEANUP_TEST_POOL": raw}, clear=False):
+            with pytest.raises(ValueError):
+                _mod._positive_int_env("CLEANUP_TEST_POOL", 16)
+
+    def test_int_env_blank_falls_back_to_default(self):
+        with patch.dict(os.environ, {"CLEANUP_TEST_POOL": ""}, clear=False):
+            assert _mod._positive_int_env("CLEANUP_TEST_POOL", 16) == 16
+
+    def test_int_env_parses_valid_override(self):
+        with patch.dict(os.environ, {"CLEANUP_TEST_POOL": " 4 "}, clear=False):
+            assert _mod._positive_int_env("CLEANUP_TEST_POOL", 16) == 4
+
+    def test_module_defaults_are_positive_and_finite(self):
+        assert _mod.CLEANUP_DELETE_CONCURRENCY >= 1
+        assert math.isfinite(_mod.CLEANUP_DELETE_TIMEOUT_SECONDS)
+        assert _mod.CLEANUP_DELETE_TIMEOUT_SECONDS > 0
+
+
+# ===========================================================================
 # FirestoreStateService — cleanup_old_states
 # ===========================================================================
 
@@ -759,6 +825,19 @@ class TestCleanupOldStates:
         doc1.reference.delete.assert_awaited_once()
         doc2.reference.delete.assert_awaited_once()
 
+    async def test_cleanup_passes_configured_delete_timeout(self):
+        svc, _, _, _, _, coll_ref, query = _make_service_with_db()
+        doc = MagicMock()
+        doc.reference = MagicMock()
+        doc.reference.delete = AsyncMock()
+        query.get = AsyncMock(return_value=[doc])
+
+        with patch.object(_mod, "CLEANUP_DELETE_TIMEOUT_SECONDS", 12.5):
+            count = await svc.cleanup_old_states(days=7)
+
+        assert count == 1
+        doc.reference.delete.assert_awaited_once_with(timeout=12.5)
+
     async def test_cleanup_queries_with_where_clause(self):
         svc, _, _, _, _, coll_ref, query = _make_service_with_db()
         query.get = AsyncMock(return_value=[])
@@ -776,6 +855,121 @@ class TestCleanupOldStates:
         # Call with custom days — just ensure it runs without error
         count = await svc.cleanup_old_states(days=30)
         assert count == 0
+
+    @staticmethod
+    def _tracking_docs(n: int) -> tuple[list, dict]:
+        """Build n mock docs whose deletes record peak overlap."""
+        stats = {"in_flight": 0, "peak": 0, "peak_tasks": 0}
+
+        async def _tracked(*, timeout: float) -> None:
+            assert timeout > 0
+            stats["in_flight"] += 1
+            stats["peak"] = max(stats["peak"], stats["in_flight"])
+            # Task count reflects how many coroutines were *allocated*, which is
+            # a stricter bound than how many RPCs are in flight.
+            stats["peak_tasks"] = max(stats["peak_tasks"], len(asyncio.all_tasks()))
+            # Yield so sibling deletes get a chance to start. Under the previous
+            # sequential loop nothing else could be running here.
+            await asyncio.sleep(0)
+            stats["in_flight"] -= 1
+
+        docs = []
+        for _ in range(n):
+            doc = MagicMock()
+            doc.reference = MagicMock()
+            doc.reference.delete = AsyncMock(side_effect=_tracked)
+            docs.append(doc)
+        return docs, stats
+
+    async def test_cleanup_deletes_overlap_instead_of_running_sequentially(self):
+        """Deletes must overlap. The sequential loop this replaced had peak overlap 1."""
+        svc, _, _, _, _, coll_ref, query = _make_service_with_db()
+        docs, stats = self._tracking_docs(8)
+        query.get = AsyncMock(return_value=docs)
+
+        count = await svc.cleanup_old_states(days=7)
+
+        assert count == 8
+        assert stats["peak"] > 1, (
+            f"deletes never overlapped (peak={stats['peak']}); "
+            "cleanup is still issuing one round-trip at a time"
+        )
+
+    async def test_cleanup_bounds_in_flight_deletes(self):
+        """A large backlog must not fan out unbounded concurrent RPCs."""
+        svc, _, _, _, _, coll_ref, query = _make_service_with_db()
+        limit = _mod.CLEANUP_DELETE_CONCURRENCY
+        docs, stats = self._tracking_docs(limit * 3)
+        query.get = AsyncMock(return_value=docs)
+
+        count = await svc.cleanup_old_states(days=7)
+
+        assert count == limit * 3
+        assert stats["peak"] <= limit, (
+            f"peak in-flight deletes {stats['peak']} exceeded the "
+            f"CLEANUP_DELETE_CONCURRENCY bound of {limit}"
+        )
+
+    async def test_cleanup_bounds_allocated_delete_tasks_not_just_rpcs(self):
+        """A worker pool must not allocate one task per document.
+
+        Gathering over every document would schedule len(docs) tasks up front,
+        so a large backlog would cost unbounded task/event-loop memory even
+        though only CLEANUP_DELETE_CONCURRENCY RPCs are in flight. The query
+        driving this has no limit, so that allocation must stay bounded too.
+        """
+        svc, _, _, _, _, coll_ref, query = _make_service_with_db()
+        limit = _mod.CLEANUP_DELETE_CONCURRENCY
+        docs, stats = self._tracking_docs(limit * 3)
+        query.get = AsyncMock(return_value=docs)
+
+        count = await svc.cleanup_old_states(days=7)
+
+        assert count == limit * 3
+        # Allow a small margin for the enclosing test task and gather bookkeeping.
+        assert stats["peak_tasks"] <= limit + 3, (
+            f"cleanup allocated {stats['peak_tasks']} concurrent tasks for "
+            f"{limit * 3} documents; delete tasks are not bounded by the "
+            f"CLEANUP_DELETE_CONCURRENCY worker pool of {limit}"
+        )
+
+    async def test_cleanup_failure_does_not_abandon_remaining_deletes(self):
+        """One failing delete must not strand the rest, and must not be counted.
+
+        The pool is deliberately narrowed to a single worker while the backlog is
+        larger, so the *same* worker whose delete raises has to keep pulling from
+        the shared iterator. With a pool wider than the backlog every worker
+        handles exactly one document and the continuation path is never taken --
+        the assertions below would then hold even for a worker that returned on
+        its first exception.
+        """
+        svc, _, _, _, _, coll_ref, query = _make_service_with_db()
+
+        pool_size = 1
+        doc_count = 5
+
+        docs = []
+        for i in range(doc_count):
+            doc = MagicMock(name=f"doc{i}")
+            doc.reference = MagicMock()
+            # Fail on the very first document the lone worker touches.
+            doc.reference.delete = AsyncMock(
+                side_effect=RuntimeError("firestore boom") if i == 0 else None
+            )
+            docs.append(doc)
+
+        query.get = AsyncMock(return_value=docs)
+
+        with patch.object(_mod, "CLEANUP_DELETE_CONCURRENCY", pool_size):
+            count = await svc.cleanup_old_states(days=7)
+
+        # Only the successful deletes are reported.
+        assert count == doc_count - 1
+        # Every document was attempted exactly once. The four after the failure
+        # were reachable only because the worker continued draining the queue;
+        # the original sequential loop propagated the error and skipped them.
+        for doc in docs:
+            doc.reference.delete.assert_awaited_once()
 
 
 # ===========================================================================
