@@ -4,6 +4,7 @@ Cloud AI API Routes
 FastAPI routes for cloud AI video analysis services.
 """
 
+import asyncio
 import logging
 from typing import Any, Optional
 
@@ -377,23 +378,36 @@ async def process_batch_videos(video_urls: list[str], analysis_types: list[Analy
             for i in range(0, len(video_urls), batch_size):
                 batch = video_urls[i:i+batch_size]
 
-                for video_url in batch:
-                    try:
-                        result = await ai.analyze_video(
+                # Analyse the batch concurrently. batch_size is the intended
+                # concurrency bound against the shared upstream AI providers,
+                # so the batch is exactly the right unit to run in parallel.
+                # Awaiting each video in turn made batch_size control nothing
+                # but the cadence of the pause below, while the wall-clock cost
+                # stayed the full sum of every per-video analysis.
+                batch_results = await asyncio.gather(
+                    *(
+                        ai.analyze_video(
                             video_url=video_url,
                             analysis_types=analysis_types,
                             preferred_provider=preferred_provider,
-                            use_fallback=True
+                            use_fallback=True,
                         )
-                        results.append(format_analysis_result(result))
+                        for video_url in batch
+                    ),
+                    return_exceptions=True,
+                )
 
-                    except Exception as e:
-                        logger.error(f"Failed to analyze video {video_url}: {e}")
+                # isinstance(..., Exception) mirrors the previous
+                # `except Exception ... continue`: one failing video is logged
+                # and skipped without aborting the rest of the batch.
+                for video_url, result in zip(batch, batch_results, strict=True):
+                    if isinstance(result, Exception):
+                        logger.error(f"Failed to analyze video {video_url}: {result}")
                         continue
+                    results.append(format_analysis_result(result))
 
                 # Brief pause between batches
                 if i + batch_size < len(video_urls):
-                    import asyncio
                     await asyncio.sleep(1)
 
         # Store results (in production, save to database or cache)
