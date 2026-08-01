@@ -614,9 +614,50 @@ jobs:
               };
             }
             function agentTaskApplicable(pull, selectedIssue) {
+              function declaresAgentContract(issue) {
+                function normaliseHeading(value) {
+                  return String(value || '').toLowerCase()
+                    .replace(/[^a-z0-9 ]/g, '').trim();
+                }
+                function section(body, headings) {
+                  const wanted = new Set(headings.map(normaliseHeading));
+                  const lines = String(body || '').split(/\r?\n/);
+                  const output = [];
+                  let collecting = false;
+                  for (const line of lines) {
+                    const heading = line.match(/^#{2,6}\s+(.+?)\s*$/);
+                    if (heading) {
+                      if (collecting) {
+                        break;
+                      }
+                      collecting = wanted.has(normaliseHeading(heading[1]));
+                      continue;
+                    }
+                    if (collecting) {
+                      output.push(line);
+                    }
+                  }
+                  return output.join('\n').trim();
+                }
+                function declared(headings) {
+                  const value = section(
+                    String((issue && issue.body) || ''), headings
+                  ).replace(/^\x60|\x60$/g, '').trim();
+                  return Boolean(value) && value !== '_No response_';
+                }
+                return declared(['agent run id', 'run id']) &&
+                  declared(['agent login']);
+              }
               function normaliseLabel(value) {
                 return String(value || '').toLowerCase()
                   .replace(/[^a-z0-9 ]/g, '').trim();
+              }
+              function carriesAgentLabel(source) {
+                return (source || []).map(label =>
+                  typeof label === 'string' ? label : label.name
+                ).map(normaliseLabel).some(label =>
+                  ['agent', 'agenttask', 'mcpagent'].includes(label)
+                );
               }
               const login = String(
                 pull && pull.user && pull.user.login || ''
@@ -628,21 +669,6 @@ jobs:
                 'openai-codex[bot]',
                 'chatgpt-codex-connector[bot]'
               ]);
-              const labels = [
-                ...((pull && pull.labels) || []).map(label =>
-                  typeof label === 'string' ? label : label.name
-                ),
-                ...(selectedIssue && selectedIssue.labels
-                  ? Array.isArray(selectedIssue.labels)
-                    ? selectedIssue.labels
-                    : selectedIssue.labels.nodes || []
-                  : []).map(label =>
-                    typeof label === 'string' ? label : label.name
-                  )
-              ].map(normaliseLabel);
-              const agentLabel = labels.some(label =>
-                ['agent', 'agenttask', 'mcpagent'].includes(label)
-              );
               const agentBranch =
                 /^(?:agent|claude|codex|copilot|jules)[/-]/i.test(
                   String(pull && pull.head && pull.head.ref || '')
@@ -651,10 +677,28 @@ jobs:
                 /<!--\s*agent-lock-manifest\s*[\s\S]*?-->/i.test(
                   String(pull && pull.body || '')
                 );
-              return login !== 'dependabot[bot]' && (
-                knownAgents.has(login) || agentBranch || agentLabel ||
-                  manifestPresent
-              );
+              // Provenance asserted by the pull request itself. Each of these is
+              // a claim made by the producing side that this is agent work.
+              const pullProvenance = knownAgents.has(login) || agentBranch ||
+                manifestPresent ||
+                carriesAgentLabel((pull && pull.labels) || []);
+              // Issue-side dispatch. `agent-task` is also applied as a topic tag
+              // by label automation to issues that never declared a contract, so
+              // the bare label is not sufficient evidence of a dispatch: it only
+              // counts when the issue actually declares the run id and login the
+              // gate goes on to require. Treating the bare label as sufficient
+              // made the gate permanently unsatisfiable for human pull requests
+              // closing such issues, because the contract they were measured
+              // against had never been written (#1130).
+              const issueLabelSource = selectedIssue && selectedIssue.labels
+                ? Array.isArray(selectedIssue.labels)
+                  ? selectedIssue.labels
+                  : selectedIssue.labels.nodes || []
+                : [];
+              const issueDispatch = carriesAgentLabel(issueLabelSource) &&
+                declaresAgentContract(selectedIssue);
+              return login !== 'dependabot[bot]' &&
+                (pullProvenance || issueDispatch);
             }
             function intentContractErrors(issue, comments, pullCreatedAt) {
               const errors = [];
@@ -1872,9 +1916,50 @@ jobs:
                 Number.isFinite(pullTime) && snapshotTime < pullTime;
             }
             function agentTaskApplicable(pull, selectedIssue) {
+              function declaresAgentContract(issue) {
+                function normaliseHeading(value) {
+                  return String(value || '').toLowerCase()
+                    .replace(/[^a-z0-9 ]/g, '').trim();
+                }
+                function section(body, headings) {
+                  const wanted = new Set(headings.map(normaliseHeading));
+                  const lines = String(body || '').split(/\r?\n/);
+                  const output = [];
+                  let collecting = false;
+                  for (const line of lines) {
+                    const heading = line.match(/^#{2,6}\s+(.+?)\s*$/);
+                    if (heading) {
+                      if (collecting) {
+                        break;
+                      }
+                      collecting = wanted.has(normaliseHeading(heading[1]));
+                      continue;
+                    }
+                    if (collecting) {
+                      output.push(line);
+                    }
+                  }
+                  return output.join('\n').trim();
+                }
+                function declared(headings) {
+                  const value = section(
+                    String((issue && issue.body) || ''), headings
+                  ).replace(/^\x60|\x60$/g, '').trim();
+                  return Boolean(value) && value !== '_No response_';
+                }
+                return declared(['agent run id', 'run id']) &&
+                  declared(['agent login']);
+              }
               function normaliseLabel(value) {
                 return String(value || '').toLowerCase()
                   .replace(/[^a-z0-9 ]/g, '').trim();
+              }
+              function carriesAgentLabel(source) {
+                return (source || []).map(label =>
+                  typeof label === 'string' ? label : label.name
+                ).map(normaliseLabel).some(label =>
+                  ['agent', 'agenttask', 'mcpagent'].includes(label)
+                );
               }
               const login = String(
                 pull && pull.user && pull.user.login || ''
@@ -1886,21 +1971,6 @@ jobs:
                 'openai-codex[bot]',
                 'chatgpt-codex-connector[bot]'
               ]);
-              const labels = [
-                ...((pull && pull.labels) || []).map(label =>
-                  typeof label === 'string' ? label : label.name
-                ),
-                ...(selectedIssue && selectedIssue.labels
-                  ? Array.isArray(selectedIssue.labels)
-                    ? selectedIssue.labels
-                    : selectedIssue.labels.nodes || []
-                  : []).map(label =>
-                    typeof label === 'string' ? label : label.name
-                  )
-              ].map(normaliseLabel);
-              const agentLabel = labels.some(label =>
-                ['agent', 'agenttask', 'mcpagent'].includes(label)
-              );
               const agentBranch =
                 /^(?:agent|claude|codex|copilot|jules)[/-]/i.test(
                   String(pull && pull.head && pull.head.ref || '')
@@ -1909,10 +1979,28 @@ jobs:
                 /<!--\s*agent-lock-manifest\s*[\s\S]*?-->/i.test(
                   String(pull && pull.body || '')
                 );
-              return login !== 'dependabot[bot]' && (
-                knownAgents.has(login) || agentBranch || agentLabel ||
-                  manifestPresent
-              );
+              // Provenance asserted by the pull request itself. Each of these is
+              // a claim made by the producing side that this is agent work.
+              const pullProvenance = knownAgents.has(login) || agentBranch ||
+                manifestPresent ||
+                carriesAgentLabel((pull && pull.labels) || []);
+              // Issue-side dispatch. `agent-task` is also applied as a topic tag
+              // by label automation to issues that never declared a contract, so
+              // the bare label is not sufficient evidence of a dispatch: it only
+              // counts when the issue actually declares the run id and login the
+              // gate goes on to require. Treating the bare label as sufficient
+              // made the gate permanently unsatisfiable for human pull requests
+              // closing such issues, because the contract they were measured
+              // against had never been written (#1130).
+              const issueLabelSource = selectedIssue && selectedIssue.labels
+                ? Array.isArray(selectedIssue.labels)
+                  ? selectedIssue.labels
+                  : selectedIssue.labels.nodes || []
+                : [];
+              const issueDispatch = carriesAgentLabel(issueLabelSource) &&
+                declaresAgentContract(selectedIssue);
+              return login !== 'dependabot[bot]' &&
+                (pullProvenance || issueDispatch);
             }
 
             const prNumber = Number(process.env.INPUT_PR_NUMBER || 0);
@@ -2077,6 +2165,20 @@ jobs:
               normaliseHeading(typeof label === 'string' ? label : label.name)
             ));
             const applicable = agentTaskApplicable(pr, issue);
+            // A linked issue carrying `agent-task` that never declared a run id
+            // and login was not dispatched to an agent -- the label is topic
+            // noise. Report it so the mislabel is visible and correctable,
+            // instead of silently measuring the pull request against a contract
+            // that does not exist (#1130).
+            if (!applicable && issue &&
+                ['agenttask', 'mcpagent'].some(label => issueLabels.has(label))) {
+              core.notice(
+                'mislabelled_agent_task: issue #' + issue.number + ' carries an ' +
+                'agent task label but declares no Agent Run ID / Agent Login, ' +
+                'and this pull request shows no agent provenance. Treating it ' +
+                'as human work. Remove the label if it was applied in error.'
+              );
+            }
             if (applicable && !issue) {
               collectionErrors.push('missing_linked_issue');
             }
