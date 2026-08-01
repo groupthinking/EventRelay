@@ -33,4 +33,7 @@ keywords = [
   condition = "AND"
   regexTarget = "line"
   paths = ['''^uv\.lock$''']
-  regexes = ['''^\s*\{\s*url\s*=\s*"https://files\.pythonhosted\.org/packages/[^"]+\.(?:whl|tar\.gz|zip)",\s*hash\s*=\s*"sha256:[0-9a-f]{64}",\s*size\s*=\s*[0-9]+,\s*upload-time\s*=\s*"[^"]+"\s*\},?\s*$''']
+  # Match only uv's canonical PyPI archive grammar. The hash path and digest
+  # are lowercase hex and upload-time is RFC 3339 UTC, so a detector-matching
+  # Square token cannot be hidden in any free-form field.
+  regexes = ['''^\s*\{\s*url\s*=\s*"https://files\.pythonhosted\.org/packages/[0-9a-f]{2}/[0-9a-f]{2}/[0-9a-f]{2}/[0-9a-f]{64}/[A-Za-z0-9][A-Za-z0-9._+\-]*(?:\.whl|\.tar\.gz|\.zip)",\s*hash\s*=\s*"sha256:[0-9a-f]{64}",\s*size\s*=\s*[0-9]+,\s*upload-time\s*=\s*"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{1,9})?Z"\s*\},?\s*$''']
