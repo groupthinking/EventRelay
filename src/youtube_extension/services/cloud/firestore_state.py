@@ -9,6 +9,7 @@ Replaces in-memory caching for cloud-native, scalable deployment.
 
 import asyncio
 import logging
+import math
 import os
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
@@ -27,16 +28,52 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-# Size of the worker pool that drains expired documents in cleanup_old_states().
+def _positive_int_env(name: str, default: int) -> int:
+    """Read a positive integer override, failing fast on invalid configuration.
+
+    An unset or blank variable falls back to ``default`` (blank is common when a
+    compose/Helm template renders an empty value). Anything else must parse to an
+    integer >= 1; out-of-range values raise rather than being silently clamped,
+    so an operator typo surfaces at startup instead of changing behaviour quietly.
+    """
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return default
+    value = int(raw.strip())
+    if value < 1:
+        raise ValueError(f"{name} must be >= 1, got {raw!r}")
+    return value
+
+
+def _positive_finite_float_env(name: str, default: float) -> float:
+    """Read a positive, finite float override, failing fast on invalid configuration.
+
+    ``float()`` happily accepts ``inf``/``-inf``/``nan``. An infinite timeout would
+    silently remove the per-delete deadline (or be rejected downstream by gRPC
+    timeout validation), and ``nan`` compares false against every bound, so
+    non-finite values are rejected outright rather than clamped into range.
+    """
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return default
+    value = float(raw.strip())
+    if not math.isfinite(value) or value <= 0:
+        raise ValueError(
+            f"{name} must be a positive, finite number of seconds, got {raw!r}"
+        )
+    return value
+
+
+# Worker-pool size and per-delete deadline used by cleanup_old_states().
 # Cleanup can match an unbounded number of documents, so deletes are pulled from
 # a shared iterator by this many workers rather than dispatched all at once.
-# Both controls are configurable so operators can tune cleanup independently of
-# an application deployment; invalid numeric values fail fast during startup.
-CLEANUP_DELETE_CONCURRENCY = max(
-    1, int(os.getenv("CLEANUP_DELETE_CONCURRENCY", "16"))
-)
-CLEANUP_DELETE_TIMEOUT_SECONDS = max(
-    0.001, float(os.getenv("CLEANUP_DELETE_TIMEOUT_SECONDS", "30"))
+# Sizing the pool -- rather than gating a full fan-out -- bounds the in-flight
+# delete RPCs and the number of allocated task objects by the same constant.
+# Both controls are overridable so operators can tune cleanup independently of an
+# application deployment; invalid values fail fast during import.
+CLEANUP_DELETE_CONCURRENCY = _positive_int_env("CLEANUP_DELETE_CONCURRENCY", 16)
+CLEANUP_DELETE_TIMEOUT_SECONDS = _positive_finite_float_env(
+    "CLEANUP_DELETE_TIMEOUT_SECONDS", 30.0
 )
 
 

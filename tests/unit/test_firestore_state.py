@@ -16,6 +16,8 @@ fake `firestore` module object on the target module.
 from __future__ import annotations
 
 import asyncio
+import math
+import os
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -726,6 +728,69 @@ class TestListStates:
             await svc.list_states(limit=50)
         coll_ref.order_by.assert_called_once()
         query.limit.assert_called_once_with(50)
+
+
+# ===========================================================================
+# Module-level cleanup configuration parsing
+# ===========================================================================
+
+
+class TestCleanupConfigEnvParsing:
+    """Tests for the env-override parsers backing the cleanup constants.
+
+    ``float()`` accepts ``inf``/``-inf``/``nan``, so an unvalidated timeout
+    override could silently remove the per-delete deadline. These tests pin that
+    non-finite and non-positive values are rejected rather than clamped.
+    """
+
+    @pytest.mark.parametrize("raw", ["inf", "Infinity", "-inf", "nan", "0", "-1", "0.0"])
+    def test_float_env_rejects_non_finite_and_non_positive(self, raw):
+        with patch.dict(os.environ, {"CLEANUP_TEST_TIMEOUT": raw}, clear=False):
+            with pytest.raises(ValueError, match="positive, finite"):
+                _mod._positive_finite_float_env("CLEANUP_TEST_TIMEOUT", 30.0)
+
+    def test_float_env_rejects_malformed_value(self):
+        with patch.dict(os.environ, {"CLEANUP_TEST_TIMEOUT": "abc"}, clear=False):
+            with pytest.raises(ValueError):
+                _mod._positive_finite_float_env("CLEANUP_TEST_TIMEOUT", 30.0)
+
+    @pytest.mark.parametrize("raw", ["", "   "])
+    def test_float_env_blank_falls_back_to_default(self, raw):
+        with patch.dict(os.environ, {"CLEANUP_TEST_TIMEOUT": raw}, clear=False):
+            assert _mod._positive_finite_float_env("CLEANUP_TEST_TIMEOUT", 30.0) == 30.0
+
+    def test_float_env_unset_falls_back_to_default(self):
+        os.environ.pop("CLEANUP_TEST_TIMEOUT", None)
+        assert _mod._positive_finite_float_env("CLEANUP_TEST_TIMEOUT", 30.0) == 30.0
+
+    def test_float_env_parses_valid_override(self):
+        with patch.dict(os.environ, {"CLEANUP_TEST_TIMEOUT": " 12.5 "}, clear=False):
+            assert _mod._positive_finite_float_env("CLEANUP_TEST_TIMEOUT", 30.0) == 12.5
+
+    @pytest.mark.parametrize("raw", ["0", "-4"])
+    def test_int_env_rejects_non_positive(self, raw):
+        with patch.dict(os.environ, {"CLEANUP_TEST_POOL": raw}, clear=False):
+            with pytest.raises(ValueError, match=">= 1"):
+                _mod._positive_int_env("CLEANUP_TEST_POOL", 16)
+
+    @pytest.mark.parametrize("raw", ["abc", "1.5", "inf"])
+    def test_int_env_rejects_malformed_value(self, raw):
+        with patch.dict(os.environ, {"CLEANUP_TEST_POOL": raw}, clear=False):
+            with pytest.raises(ValueError):
+                _mod._positive_int_env("CLEANUP_TEST_POOL", 16)
+
+    def test_int_env_blank_falls_back_to_default(self):
+        with patch.dict(os.environ, {"CLEANUP_TEST_POOL": ""}, clear=False):
+            assert _mod._positive_int_env("CLEANUP_TEST_POOL", 16) == 16
+
+    def test_int_env_parses_valid_override(self):
+        with patch.dict(os.environ, {"CLEANUP_TEST_POOL": " 4 "}, clear=False):
+            assert _mod._positive_int_env("CLEANUP_TEST_POOL", 16) == 4
+
+    def test_module_defaults_are_positive_and_finite(self):
+        assert _mod.CLEANUP_DELETE_CONCURRENCY >= 1
+        assert math.isfinite(_mod.CLEANUP_DELETE_TIMEOUT_SECONDS)
+        assert _mod.CLEANUP_DELETE_TIMEOUT_SECONDS > 0
 
 
 # ===========================================================================
