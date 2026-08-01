@@ -1004,3 +1004,154 @@ class TestAWSRekognitionEstimateCost:
         cost1 = provider.estimate_cost(60.0, [AnalysisType.LABEL_DETECTION])
         cost2 = provider.estimate_cost(120.0, [AnalysisType.LABEL_DETECTION])
         assert cost2 == pytest.approx(cost1 * 2)
+
+
+# ===========================================================================
+# Event-loop responsiveness: every boto3 call must run off the loop
+# ===========================================================================
+
+async def _count_heartbeats(coro, tick: float = 0.005) -> tuple[object, int]:
+    """Run ``coro`` while a heartbeat task ticks; return (result, ticks).
+
+    If the awaited work performs blocking I/O directly on the event loop the
+    heartbeat never gets scheduled and ``ticks`` stays at 0.
+    """
+    import asyncio
+    import contextlib
+
+    ticks = 0
+    stop = False
+
+    async def _beat():
+        nonlocal ticks
+        while not stop:
+            await asyncio.sleep(tick)
+            ticks += 1
+
+    beat = asyncio.create_task(_beat())
+    await asyncio.sleep(0)  # let the heartbeat reach its first await first
+    try:
+        result = await coro
+    finally:
+        stop = True
+        beat.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await beat
+    return result, ticks
+
+
+def _slow(return_value, delay: float = 0.12):
+    """A synchronous callable that blocks for ``delay`` seconds."""
+    import time
+
+    def _call(*_args, **_kwargs):
+        time.sleep(delay)
+        return return_value
+
+    return _call
+
+
+class TestRekognitionDoesNotBlockEventLoop:
+    async def test_analyze_image_does_not_stall_the_event_loop(self):
+        provider = _make_provider()
+        mock_client = _make_rekognition_client()
+        mock_client.detect_labels.side_effect = _slow({"Labels": []})
+        provider._rekognition_client = mock_client
+
+        with patch.object(provider, '_prepare_image_input',
+                          new=AsyncMock(return_value={"Bytes": b"img"})):
+            result, ticks = await _count_heartbeats(
+                provider.analyze_image("http://e.com/i.jpg", [AnalysisType.LABEL_DETECTION])
+            )
+
+        assert isinstance(result, VideoAnalysisResult)
+        assert ticks > 0, "detect_labels blocked the event loop"
+
+    async def test_every_detection_type_runs_off_the_loop(self):
+        provider = _make_provider()
+        mock_client = _make_rekognition_client()
+        # four blocking calls back to back
+        mock_client.detect_labels.side_effect = _slow({"Labels": []}, 0.06)
+        mock_client.detect_faces.side_effect = _slow({"FaceDetails": []}, 0.06)
+        mock_client.detect_text.side_effect = _slow({"TextDetections": []}, 0.06)
+        mock_client.detect_moderation_labels.side_effect = _slow({"ModerationLabels": []}, 0.06)
+        provider._rekognition_client = mock_client
+
+        with patch.object(provider, '_prepare_image_input',
+                          new=AsyncMock(return_value={"Bytes": b"img"})):
+            _result, ticks = await _count_heartbeats(
+                provider.analyze_image(
+                    "http://e.com/i.jpg",
+                    [AnalysisType.LABEL_DETECTION, AnalysisType.FACE_DETECTION,
+                     AnalysisType.TEXT_DETECTION, AnalysisType.CONTENT_MODERATION],
+                )
+            )
+
+        mock_client.detect_labels.assert_called_once()
+        mock_client.detect_moderation_labels.assert_called_once()
+        assert ticks > 0, "the detect_* chain blocked the event loop"
+
+    async def test_job_polling_does_not_stall_the_event_loop(self):
+        provider = _make_provider()
+        mock_client = MagicMock()
+        mock_client.get_label_detection.side_effect = _slow(
+            {'JobStatus': 'SUCCEEDED', 'Labels': []}
+        )
+        provider._rekognition_client = mock_client
+
+        result, ticks = await _count_heartbeats(
+            provider._wait_for_job_completion("job-1", "labels")
+        )
+
+        assert result['JobStatus'] == 'SUCCEEDED'
+        assert ticks > 0, "get_label_detection blocked the event loop"
+
+    async def test_start_video_analysis_does_not_stall_the_event_loop(self):
+        provider = _make_provider()
+        mock_client = MagicMock()
+        mock_client.start_label_detection.side_effect = _slow({'JobId': 'j-1'})
+        provider._rekognition_client = mock_client
+
+        result, ticks = await _count_heartbeats(
+            provider._start_video_analysis(
+                "my-bucket", "video.mp4", [AnalysisType.LABEL_DETECTION]
+            )
+        )
+
+        assert result == {'labels': 'j-1'}
+        assert ticks > 0, "start_label_detection blocked the event loop"
+
+    async def test_local_image_read_does_not_stall_the_event_loop(self, tmp_path):
+        from youtube_extension.integrations.cloud_ai.providers import (
+            aws_rekognition as _rek_mod,
+        )
+
+        image = tmp_path / "frame.jpg"
+        image.write_bytes(b"BINARY-IMAGE-PAYLOAD")
+        provider = _make_provider()
+
+        real_read = _rek_mod._read_file_bytes
+
+        def _slow_read(path):
+            import time
+            time.sleep(0.12)
+            return real_read(path)
+
+        with patch.object(_rek_mod, '_read_file_bytes', _slow_read):
+            result, ticks = await _count_heartbeats(
+                provider._prepare_image_input(str(image))
+            )
+
+        assert result == {'Bytes': b"BINARY-IMAGE-PAYLOAD"}
+        assert ticks > 0, "the local image read blocked the event loop"
+
+    async def test_local_image_bytes_are_read_correctly(self, tmp_path):
+        """Guard: offloading must not change what is returned."""
+        image = tmp_path / "frame.png"
+        payload = bytes(range(256)) * 8
+        image.write_bytes(payload)
+        provider = _make_provider()
+
+        result = await provider._prepare_image_input(str(image))
+
+        assert result == {'Bytes': payload}

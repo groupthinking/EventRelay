@@ -31,6 +31,13 @@ from ..exceptions import (
 logger = logging.getLogger(__name__)
 
 
+def _read_file_bytes(path: str) -> bytes:
+    """Read a file's bytes. Module-level so it can run in a worker thread."""
+    with open(path, 'rb') as handle:
+        return handle.read()
+
+
+
 class AWSRekognition(BaseCloudAI):
     """Amazon Rekognition video and image analysis integration."""
 
@@ -103,8 +110,9 @@ class AWSRekognition(BaseCloudAI):
         """Test AWS Rekognition connection."""
         try:
             # Simple API call to test connectivity
-            self._rekognition_client.describe_collection(
-                CollectionId='non-existent-collection'
+            await asyncio.to_thread(
+                self._rekognition_client.describe_collection,
+                CollectionId='non-existent-collection',
             )
         except Exception as e:
             if "ResourceNotFoundException" in str(e):
@@ -174,27 +182,31 @@ class AWSRekognition(BaseCloudAI):
             results = {}
 
             if AnalysisType.LABEL_DETECTION in analysis_types:
-                results['labels'] = self._rekognition_client.detect_labels(
+                results['labels'] = await asyncio.to_thread(
+                    self._rekognition_client.detect_labels,
                     Image=image_data,
                     MaxLabels=50,
-                    MinConfidence=0.5
+                    MinConfidence=0.5,
                 )
 
             if AnalysisType.FACE_DETECTION in analysis_types:
-                results['faces'] = self._rekognition_client.detect_faces(
+                results['faces'] = await asyncio.to_thread(
+                    self._rekognition_client.detect_faces,
                     Image=image_data,
-                    Attributes=['ALL']
+                    Attributes=['ALL'],
                 )
 
             if AnalysisType.TEXT_DETECTION in analysis_types:
-                results['text'] = self._rekognition_client.detect_text(
-                    Image=image_data
+                results['text'] = await asyncio.to_thread(
+                    self._rekognition_client.detect_text,
+                    Image=image_data,
                 )
 
             if AnalysisType.CONTENT_MODERATION in analysis_types:
-                results['moderation'] = self._rekognition_client.detect_moderation_labels(
+                results['moderation'] = await asyncio.to_thread(
+                    self._rekognition_client.detect_moderation_labels,
                     Image=image_data,
-                    MinConfidence=0.5
+                    MinConfidence=0.5,
                 )
 
             processing_time = (datetime.utcnow() - start_time).total_seconds()
@@ -219,8 +231,9 @@ class AWSRekognition(BaseCloudAI):
 
             # Test with describe_collection call
             try:
-                self._rekognition_client.describe_collection(
-                    CollectionId='health-check-collection'
+                await asyncio.to_thread(
+                    self._rekognition_client.describe_collection,
+                    CollectionId='health-check-collection',
                 )
             except Exception as e:
                 if "ResourceNotFoundException" in str(e):
@@ -278,28 +291,32 @@ class AWSRekognition(BaseCloudAI):
 
         # Start different analysis operations based on requested types
         if AnalysisType.LABEL_DETECTION in analysis_types:
-            response = self._rekognition_client.start_label_detection(
+            response = await asyncio.to_thread(
+                self._rekognition_client.start_label_detection,
                 Video=video_input,
-                MinConfidence=0.5
+                MinConfidence=0.5,
             )
             job_ids['labels'] = response['JobId']
 
         if AnalysisType.FACE_DETECTION in analysis_types:
-            response = self._rekognition_client.start_face_detection(
-                Video=video_input
+            response = await asyncio.to_thread(
+                self._rekognition_client.start_face_detection,
+                Video=video_input,
             )
             job_ids['faces'] = response['JobId']
 
         if AnalysisType.TEXT_DETECTION in analysis_types:
-            response = self._rekognition_client.start_text_detection(
-                Video=video_input
+            response = await asyncio.to_thread(
+                self._rekognition_client.start_text_detection,
+                Video=video_input,
             )
             job_ids['text'] = response['JobId']
 
         if AnalysisType.CONTENT_MODERATION in analysis_types:
-            response = self._rekognition_client.start_content_moderation(
+            response = await asyncio.to_thread(
+                self._rekognition_client.start_content_moderation,
                 Video=video_input,
-                MinConfidence=0.5
+                MinConfidence=0.5,
             )
             job_ids['moderation'] = response['JobId']
 
@@ -326,13 +343,25 @@ class AWSRekognition(BaseCloudAI):
         while elapsed_time < max_wait_time:
             try:
                 if analysis_type == 'labels':
-                    response = self._rekognition_client.get_label_detection(JobId=job_id)
+                    response = await asyncio.to_thread(
+                        self._rekognition_client.get_label_detection,
+                        JobId=job_id,
+                    )
                 elif analysis_type == 'faces':
-                    response = self._rekognition_client.get_face_detection(JobId=job_id)
+                    response = await asyncio.to_thread(
+                        self._rekognition_client.get_face_detection,
+                        JobId=job_id,
+                    )
                 elif analysis_type == 'text':
-                    response = self._rekognition_client.get_text_detection(JobId=job_id)
+                    response = await asyncio.to_thread(
+                        self._rekognition_client.get_text_detection,
+                        JobId=job_id,
+                    )
                 elif analysis_type == 'moderation':
-                    response = self._rekognition_client.get_content_moderation(JobId=job_id)
+                    response = await asyncio.to_thread(
+                        self._rekognition_client.get_content_moderation,
+                        JobId=job_id,
+                    )
                 else:
                     raise ValueError(f"Unknown analysis type: {analysis_type}")
 
@@ -369,9 +398,8 @@ class AWSRekognition(BaseCloudAI):
                 response = await client.get(image_url)
                 return {'Bytes': response.content}
         else:
-            # Local file
-            with open(image_url, 'rb') as image_file:
-                return {'Bytes': image_file.read()}
+            # Local file - read off the event loop
+            return {'Bytes': await asyncio.to_thread(_read_file_bytes, image_url)}
 
     def _process_video_results(self, results: dict[str, Any], video_id: str,
                              analysis_types: list[AnalysisType],
