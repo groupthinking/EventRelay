@@ -8,9 +8,12 @@ Provides comprehensive monitoring and analytics capabilities.
 """
 
 import asyncio
+import contextlib
 import json
 import logging
+import os
 import statistics
+import tempfile
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
@@ -97,6 +100,12 @@ class MetricsService:
 
         # Create logs directory
         self.metrics_file.parent.mkdir(parents=True, exist_ok=True)
+
+        # Serialises persistence. Created lazily and keyed to the running loop:
+        # this service is a process-wide singleton, so a lock built in
+        # __init__ would bind to whichever loop happened to construct it.
+        self._persist_lock: Optional[asyncio.Lock] = None
+        self._persist_lock_loop: Optional[asyncio.AbstractEventLoop] = None
 
         # Start background collection
         self._collection_task: Optional[asyncio.Task] = None
@@ -315,11 +324,34 @@ class MetricsService:
                 logger.error(f"Error in background collection: {e}")
                 await asyncio.sleep(self.collection_interval)
 
+    def _get_persist_lock(self) -> asyncio.Lock:
+        """Return the persistence lock bound to the running event loop."""
+        loop = asyncio.get_running_loop()
+        if self._persist_lock is None or self._persist_lock_loop is not loop:
+            self._persist_lock = asyncio.Lock()
+            self._persist_lock_loop = loop
+        return self._persist_lock
+
     @staticmethod
     def _write_text_file(path: Path, contents: str) -> None:
-        """Blocking file write, intended to be run off the event loop."""
-        with open(path, 'w') as f:
-            f.write(contents)
+        """
+        Blocking, atomic file write, intended to be run off the event loop.
+
+        Writes to a temporary file in the same directory and then renames it
+        over the target. ``os.replace`` is atomic, so a concurrent reader sees
+        either the complete previous file or the complete new one -- never a
+        truncated or half-written one.
+        """
+        directory = path.parent
+        fd, tmp_path = tempfile.mkstemp(dir=directory, prefix=path.name, suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w") as f:
+                f.write(contents)
+            os.replace(tmp_path, path)
+        except BaseException:
+            with contextlib.suppress(OSError):
+                os.unlink(tmp_path)
+            raise
 
     @staticmethod
     def _read_json_file(path: Path) -> Any:
@@ -330,15 +362,20 @@ class MetricsService:
     async def _persist_metrics(self) -> None:
         """Persist metrics to disk"""
         try:
-            export_data = await self.export_metrics("json")
+            # Off-loop writes lose the event loop's implicit serialisation, so
+            # two callers could otherwise open the same path with "w"
+            # concurrently. Snapshot and write under one lock so the file
+            # always reflects a single coherent export.
+            async with self._get_persist_lock():
+                export_data = await self.export_metrics("json")
 
             # `record_metric` calls this every 10th data point, on the same
             # event loop that is serving requests. Writing the whole metrics
             # file inline stalls every other task for the duration of the
             # disk write, so hand it to a worker thread.
-            await asyncio.to_thread(
-                self._write_text_file, self.metrics_file, export_data
-            )
+                await asyncio.to_thread(
+                    self._write_text_file, self.metrics_file, export_data
+                )
 
         except Exception as e:
             logger.error(f"Failed to persist metrics: {e}")
@@ -355,16 +392,19 @@ class MetricsService:
             Success status
         """
         try:
-            if not self.metrics_file.exists():
-                return False
-
-            # Both the read and the json parse are blocking and scale with
-            # file size, so keep them off the event loop.
-            await asyncio.to_thread(self._read_json_file, self.metrics_file)
+            # No pre-flight exists() check: Path.exists() is a synchronous
+            # stat() on the event loop, and it opens a TOCTOU window between
+            # the check and the read. Let the threaded open raise instead.
+            async with self._get_persist_lock():
+                await asyncio.to_thread(self._read_json_file, self.metrics_file)
 
             # Restore metrics (simplified - would need more complex logic for full restoration)
             logger.info(f"Loaded persisted metrics from {self.metrics_file}")
             return True
+
+        except FileNotFoundError:
+            # Absent file is a normal cold start, not an error.
+            return False
 
         except Exception as e:
             logger.error(f"Failed to load persisted metrics: {e}")

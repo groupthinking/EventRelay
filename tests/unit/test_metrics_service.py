@@ -740,3 +740,120 @@ class TestDiskIoDoesNotBlockEventLoop:
         svc.metrics_file.write_text("{not json")
 
         assert await svc.load_persisted_metrics() is False
+
+
+class TestPersistenceIsSerialisedAndAtomic:
+    """
+    Guards the two regressions that moving the write off the loop introduced.
+
+    Running the write in a worker thread removes the event loop's implicit
+    serialisation, so two callers can enter ``_persist_metrics`` at once and
+    both open the same path with ``"w"``. These tests pin (a) that the service
+    serialises its own persistence, and (b) that a reader never observes a
+    truncated file.
+    """
+
+    async def test_concurrent_persists_never_overlap(self, tmp_path, monkeypatch):
+        """Two concurrent persists must not be inside the writer at once."""
+        monkeypatch.chdir(tmp_path)
+        svc = MetricsService()
+        await svc.record_metric("latency", 1.0)
+
+        active = 0
+        peak = 0
+        real_write = MetricsService._write_text_file
+
+        def _slow_write(path, contents):
+            nonlocal active, peak
+            active += 1
+            peak = max(peak, active)
+            try:
+                time.sleep(0.10)
+                real_write(path, contents)
+            finally:
+                active -= 1
+
+        with patch.object(MetricsService, "_write_text_file", staticmethod(_slow_write)):
+            await asyncio.gather(
+                svc._persist_metrics(),
+                svc._persist_metrics(),
+                svc._persist_metrics(),
+            )
+
+        assert peak == 1, f"{peak} writers were inside _write_text_file at once"
+
+    async def test_reader_never_sees_a_truncated_file(self, tmp_path):
+        """A concurrent reader sees either the old file or the new one."""
+        target = tmp_path / "metrics.json"
+        target.write_text(json.dumps({"generation": 0}))
+
+        payload = json.dumps({"generation": 1, "padding": "x" * 200_000})
+        observations: list = []
+        stop = False
+
+        async def reader():
+            while not stop:
+                with contextlib.suppress(FileNotFoundError):
+                    observations.append(json.loads(target.read_text()))
+                await asyncio.sleep(0)
+
+        watcher = asyncio.create_task(reader())
+        await asyncio.sleep(0)
+        try:
+            for _ in range(15):
+                await asyncio.to_thread(
+                    MetricsService._write_text_file, target, payload
+                )
+        finally:
+            stop = True
+            watcher.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await watcher
+
+        assert observations, "reader never sampled the file"
+        assert all(o["generation"] in (0, 1) for o in observations)
+
+    async def test_load_does_not_stat_the_path_on_the_loop(self, tmp_path, monkeypatch):
+        """`load_persisted_metrics` must not call the blocking Path.exists()."""
+        monkeypatch.chdir(tmp_path)
+        svc = MetricsService()
+        svc.metrics_file.write_text(json.dumps({"metrics": {}}))
+
+        calls = 0
+        real_exists = Path.exists
+
+        def _counting_exists(self, *a, **kw):
+            nonlocal calls
+            calls += 1
+            return real_exists(self, *a, **kw)
+
+        with patch.object(Path, "exists", _counting_exists):
+            assert await svc.load_persisted_metrics() is True
+
+        assert calls == 0, f"Path.exists() called {calls}x on the event loop"
+
+    async def test_load_still_returns_false_when_file_absent(self, tmp_path, monkeypatch):
+        """Removing the exists() check must not change the cold-start result."""
+        monkeypatch.chdir(tmp_path)
+        svc = MetricsService()
+        svc.metrics_file.unlink(missing_ok=True)
+
+        assert await svc.load_persisted_metrics() is False
+
+    async def test_write_leaves_no_temp_files_behind(self, tmp_path):
+        """The atomic rename must not litter the directory."""
+        target = tmp_path / "metrics.json"
+        MetricsService._write_text_file(target, json.dumps({"a": 1}))
+
+        assert json.loads(target.read_text()) == {"a": 1}
+        assert [p.name for p in tmp_path.iterdir()] == ["metrics.json"]
+
+    async def test_write_cleans_up_temp_file_on_failure(self, tmp_path):
+        """A failed write must not leave a partial temp file."""
+        target = tmp_path / "metrics.json"
+
+        with patch("os.replace", side_effect=OSError("rename failed")):
+            with pytest.raises(OSError):
+                MetricsService._write_text_file(target, json.dumps({"a": 1}))
+
+        assert list(tmp_path.iterdir()) == []
