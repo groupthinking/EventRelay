@@ -15,24 +15,3 @@ paths = [
   # Test fixtures use obvious dummy keys (e.g. "xai-secret-123"), not real secrets.
   '''tests/.*''',
 ]
-
-# Gitleaks v8.19.3 does not preserve the inherited detector when a same-ID rule
-# adds only an allowlist. Repeat that release's exact Square detector, then add
-# the narrow generated-record exception below.
-[[rules]]
-id = "square-access-token"
-description = "Detected a Square Access Token, risking unauthorized payment processing and financial transaction exposure."
-regex = '''\b((?:EAAA|sq0atp-)[\w-]{22,60})(?:['|\"|\n|\r|\s|\x60|;]|$)'''
-keywords = [
-  "sq0atp-","eaaa",
-]
-
-  [rules.allowlist]
-  description = "Generated uv.lock PyPI artifact checksum records"
-  condition = "AND"
-  regexTarget = "line"
-  paths = ['''^uv\.lock$''']
-  # Match only uv's canonical PyPI archive grammar. The hash path and digest
-  # are lowercase hex and upload-time is RFC 3339 UTC, so a detector-matching
-  # Square token cannot be hidden in any free-form field.
-  regexes = ['''^\s*\{\s*url\s*=\s*"https://files\.pythonhosted\.org/packages/[0-9a-f]{2}/[0-9a-f]{2}/[0-9a-f]{2}/[0-9a-f]{64}/[A-Za-z0-9][A-Za-z0-9._+\-]*(?:\.whl|\.tar\.gz|\.zip)",\s*hash\s*=\s*"sha256:[0-9a-f]{64}",\s*size\s*=\s*[0-9]+,\s*upload-time\s*=\s*"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{1,9})?Z"\s*\},?\s*$''']
