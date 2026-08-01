@@ -301,36 +301,25 @@ class RedisCacheLayer(IntelligentCacheLayer):
         ``__init__`` would break as soon as a second loop touched the
         singleton.
 
-        Rebinding is therefore allowed, but only *sequentially* -- once the
-        previously bound loop has finished. That covers the real reuse case
-        (``asyncio.run()`` called more than once, e.g. one loop per test) while
-        rejecting genuinely concurrent use from a second live loop, where two
-        loops would each get their own full budget against the one shared
-        ``self.redis_pool`` and the aggregate could exceed ``max_connections``.
-        Concurrent cross-loop use is unsupported at the pool level too: a
-        ``redis.asyncio`` pool caches connections whose transports are bound to
-        the loop that opened them. Use one layer (and one pool) per loop.
+        It is therefore rebound whenever a different loop is seen, which keeps
+        the singleton usable across successive ``asyncio.run()`` calls.
 
-        The guard is best-effort: it detects the unsupported usage rather than
-        making it safe.
+        Scope note: this limiter bounds tag-write fan-out within one loop. It is
+        deliberately *not* a cross-loop safety mechanism. A ``redis.asyncio``
+        pool caches connections whose transports are bound to the loop that
+        opened them, so a ``RedisCacheLayer`` is already event-loop-affine
+        through ``self.redis_pool`` -- and that affinity applies equally to
+        ``get()``, ``delete()``, ``clear()`` and ``invalidate_by_tags()``, none
+        of which this limiter touches. Enforcing a loop-ownership contract is a
+        layer-wide concern tracked separately; guarding only this one path would
+        give a misleading partial guarantee. Use one layer per event loop.
         """
         loop = asyncio.get_running_loop()
-        bound = self._tag_write_semaphore_loop
 
-        if self._tag_write_semaphore is not None and bound is loop:
-            return self._tag_write_semaphore
+        if self._tag_write_semaphore is None or self._tag_write_semaphore_loop is not loop:
+            self._tag_write_semaphore = asyncio.Semaphore(self._tag_write_limit)
+            self._tag_write_semaphore_loop = loop
 
-        if bound is not None and not bound.is_closed() and bound.is_running():
-            raise RuntimeError(
-                f"{self.name} is already bound to a running event loop and cannot "
-                f"be used concurrently from another one. A {type(self).__name__} "
-                "owns a redis.asyncio connection pool with event-loop affinity, "
-                "and a second live loop would get its own tag-write budget "
-                "against the same pool. Create one layer per event loop."
-            )
-
-        self._tag_write_semaphore = asyncio.Semaphore(self._tag_write_limit)
-        self._tag_write_semaphore_loop = loop
         return self._tag_write_semaphore
 
     async def connect(self):
