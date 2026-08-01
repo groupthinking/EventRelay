@@ -16,7 +16,6 @@ import json
 import sqlite3
 import sys
 import time
-from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -40,7 +39,6 @@ from youtube_extension.backend.services.youtube.adapters.innertube import (
     _select_caption_track,
     fetch_innertube_transcript,
     parse_transcript_xml,
-    sync_fetch_innertube_transcript,
 )
 
 
@@ -589,8 +587,8 @@ class TestPerformanceContext:
 from youtube_extension.backend.services.database_cleanup_service import (
     DatabaseCleanupService,
     RetentionPolicy,
-    run_database_cleanup,
     get_cleanup_report,
+    run_database_cleanup,
 )
 
 
@@ -865,8 +863,7 @@ class TestAddErrorHandlingMiddleware:
 
 class TestMiddlewareDispatchHappyPath:
     async def test_dispatch_passes_through_on_success(self):
-        from fastapi import FastAPI, Request
-        from fastapi.responses import JSONResponse
+        from fastapi import FastAPI
         from fastapi.testclient import TestClient
 
         app = FastAPI()

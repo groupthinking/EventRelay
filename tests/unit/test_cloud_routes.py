@@ -73,29 +73,35 @@ sys.modules.setdefault("src.integration.looker_embedded", _looker_embedded_mod)
 # Now import the modules under test
 # ---------------------------------------------------------------------------
 import warnings
+
 with warnings.catch_warnings():
     warnings.simplefilter("ignore")
+    from youtube_extension.backend.api import advanced_video_routes as _avr_mod
+    from youtube_extension.backend.api.advanced_video_routes import (
+        router as advanced_router,
+    )
+    from youtube_extension.backend.api.event_routes import EventPayload, process_event
+    from youtube_extension.backend.api.event_routes import router as event_router
+    from youtube_extension.backend.api.reporting_routes import (
+        router as reporting_router,
+    )
     from youtube_extension.backend.cloud_ai_routes import (
-        router as cloud_ai_router,
-        CloudAIError,
-        CloudAIIntegrator,
-        CloudAIProvider,
         AnalysisType,
-        VideoAnalysisResult,
+        CloudAIError,
+        CloudAIProvider,
         ConfigurationError,
         RateLimitError,
+        VideoAnalysisResult,
+        _get_analysis_type_description,
+        format_analysis_result,
+        get_cloud_ai_config,
         parse_analysis_types,
         parse_provider,
-        get_cloud_ai_config,
-        format_analysis_result,
-        _get_analysis_type_description,
-        _get_provider_description,
+    )
+    from youtube_extension.backend.cloud_ai_routes import (
+        router as cloud_ai_router,
     )
     from youtube_extension.backend.cloud_api_endpoints import setup_cloud_api_endpoints
-    from youtube_extension.backend.api import advanced_video_routes as _avr_mod
-    from youtube_extension.backend.api.advanced_video_routes import router as advanced_router
-    from youtube_extension.backend.api.event_routes import router as event_router, process_event, EventPayload
-    from youtube_extension.backend.api.reporting_routes import router as reporting_router
 
 # The modules under test are now imported and hold their own references to the
 # leaf stubs above. Remove those import-time stubs from sys.modules so they do
@@ -112,10 +118,10 @@ for _stub_name, _stub_obj in (
     if sys.modules.get(_stub_name) is _stub_obj:
         del sys.modules[_stub_name]
 
-from youtube_extension.integrations.cloud_ai.base import DetectionResult
-
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+
+from youtube_extension.integrations.cloud_ai.base import DetectionResult
 
 # ---------------------------------------------------------------------------
 # Helpers to build minimal FastAPI apps

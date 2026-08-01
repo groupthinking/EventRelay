@@ -76,7 +76,7 @@ jobs:
         run: test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip

@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
-import sys
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -13,7 +13,6 @@ from youtube_extension.backend.services.websocket_service import (
     WebSocketConnectionManager,
     WebSocketService,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -516,3 +515,144 @@ class TestGetConnectionStats:
         mgr.active_connections = []
         stats = svc.get_connection_stats()
         assert stats["active_connections"] == 0
+
+
+# ===========================================================================
+# WebSocketConnectionManager.broadcast – fan-out concurrency
+# ===========================================================================
+
+
+class TestBroadcastFanOut:
+    """broadcast() must issue sends in parallel, not one connection at a time.
+
+    A sequential loop makes every client wait for the ones ahead of it, so a
+    single slow peer delays delivery to the entire fleet (head-of-line
+    blocking). These tests fail against a serialised implementation.
+    """
+
+    @staticmethod
+    def _tracking_ws(state, delay=0.01):
+        """A mock WebSocket that records peak concurrent send_text() calls."""
+        ws = _make_ws()
+
+        async def _send(_message):
+            state["inflight"] += 1
+            state["peak"] = max(state["peak"], state["inflight"])
+            await asyncio.sleep(delay)
+            state["inflight"] -= 1
+
+        ws.send_text = AsyncMock(side_effect=_send)
+        return ws
+
+    async def test_sends_are_concurrent_not_serialised(self):
+        mgr = WebSocketConnectionManager()
+        state = {"inflight": 0, "peak": 0}
+        n = 5
+        mgr.active_connections.extend(self._tracking_ws(state) for _ in range(n))
+
+        await mgr.broadcast("event")
+
+        assert state["peak"] == n, (
+            f"broadcast() peaked at {state['peak']} concurrent send(s) for {n} "
+            "connections - sends are serialised (head-of-line blocking)"
+        )
+
+    async def test_slow_peer_does_not_delay_other_peers(self):
+        mgr = WebSocketConnectionManager()
+        completed: list[str] = []
+
+        def _ws(name, delay):
+            ws = _make_ws()
+
+            async def _send(_message):
+                await asyncio.sleep(delay)
+                completed.append(name)
+
+            ws.send_text = AsyncMock(side_effect=_send)
+            return ws
+
+        # The slow peer is first in the list: under a sequential loop it blocks
+        # both fast peers behind it and therefore completes first.
+        mgr.active_connections.extend(
+            [_ws("slow", 0.05), _ws("fast-1", 0.0), _ws("fast-2", 0.0)]
+        )
+
+        await mgr.broadcast("event")
+
+        # Both fast peers must finish before the slow head-of-list peer. Their
+        # order relative to each other is scheduler-dependent (both sleep(0)),
+        # so it is deliberately not asserted -- only that neither was blocked
+        # behind the slow peer. Under a sequential loop the slow peer, being
+        # first, completes first and this fails.
+        assert completed[-1] == "slow" and set(completed[:2]) == {"fast-1", "fast-2"}, (
+            f"completion order was {completed}; a slow peer at the head of the "
+            "connection list delayed delivery to the fast peers behind it"
+        )
+
+    async def test_all_peers_still_receive_the_message(self):
+        mgr = WebSocketConnectionManager()
+        conns = [_make_ws() for _ in range(4)]
+        mgr.active_connections.extend(conns)
+
+        await mgr.broadcast("payload")
+
+        for ws in conns:
+            ws.send_text.assert_awaited_once_with("payload")
+
+    async def test_failures_are_isolated_and_only_bad_peers_removed(self):
+        mgr = WebSocketConnectionManager()
+        ok_1, ok_2 = _make_ws(), _make_ws()
+        bad_1, bad_2 = _make_ws(), _make_ws()
+        bad_1.send_text = AsyncMock(side_effect=RuntimeError("peer gone"))
+        bad_2.send_text = AsyncMock(side_effect=ConnectionResetError("reset"))
+        # Failing peers first: a raising send must not abort the whole fan-out.
+        mgr.active_connections.extend([bad_1, ok_1, bad_2, ok_2])
+
+        await mgr.broadcast("event")
+
+        ok_1.send_text.assert_awaited_once_with("event")
+        ok_2.send_text.assert_awaited_once_with("event")
+        assert mgr.active_connections == [ok_1, ok_2], (
+            "expected only the failing peers to be dropped, got "
+            f"{len(mgr.active_connections)} surviving connection(s)"
+        )
+
+    async def test_empty_connection_list_issues_no_sends(self):
+        mgr = WebSocketConnectionManager()
+        # Must not raise and must not construct an empty gather.
+        await mgr.broadcast("event")
+        assert mgr.active_connections == []
+
+    async def test_cancelled_send_is_re_raised_not_swallowed(self):
+        """gather(return_exceptions=True) captures CancelledError; broadcast must not eat it.
+
+        The pre-fan-out implementation used `except Exception`, so a
+        CancelledError raised by send_text escaped broadcast(). Collecting it
+        into `results` and filtering on `Exception` would silently drop it.
+        """
+        mgr = WebSocketConnectionManager()
+        ok = _make_ws()
+        cancelled = _make_ws()
+        cancelled.send_text = AsyncMock(side_effect=asyncio.CancelledError())
+        mgr.active_connections.extend([ok, cancelled])
+
+        with pytest.raises(asyncio.CancelledError):
+            await mgr.broadcast("event")
+
+    async def test_cancellation_does_not_leak_dead_peers(self):
+        """Ordinary failures are still cleaned up before the cancellation propagates."""
+        mgr = WebSocketConnectionManager()
+        ok = _make_ws()
+        dead = _make_ws()
+        dead.send_text = AsyncMock(side_effect=RuntimeError("peer gone"))
+        cancelled = _make_ws()
+        cancelled.send_text = AsyncMock(side_effect=asyncio.CancelledError())
+        mgr.active_connections.extend([ok, dead, cancelled])
+
+        with pytest.raises(asyncio.CancelledError):
+            await mgr.broadcast("event")
+
+        assert mgr.active_connections == [ok, cancelled], (
+            "the failed peer must still be dropped even though the broadcast "
+            f"was cancelled, got {mgr.active_connections}"
+        )

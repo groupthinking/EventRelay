@@ -14,11 +14,11 @@ from typing import TYPE_CHECKING, Any
 from urllib.parse import parse_qs, urlparse
 
 from shared.youtube import RobustYouTubeMetadata, RobustYouTubeService
-from youtube_extension.utils.proxy import get_proxy_url
-from youtube_extension.utils.video_utils import extract_video_id
 from uvai.ml.client import UVAIMLClient, get_uvai_ml_client
 from youtube_extension.backend.services.metrics_service import MetricsService
 from youtube_extension.utils import parse_duration_to_seconds
+from youtube_extension.utils.proxy import get_proxy_url
+from youtube_extension.utils.video_utils import extract_video_id
 
 try:
     from youtube_extension.services.agents.adapters.agent_orchestrator import (
@@ -226,14 +226,14 @@ class TranscriptActionWorkflow:
         parsed = urlparse(video_url)
         query_params = parse_qs(parsed.query)
         is_playlist_path = parsed.path.rstrip("/").endswith("/playlist")
-        
+
         # Try to extract video ID from the URL (supports both youtu.be/ and v= formats)
         try:
             extract_video_id(video_url)
             has_video_id = True
         except ValueError:
             has_video_id = False
-        
+
         # Reject if it's a playlist path or if there's a list parameter but no video ID
         playlist_without_video = bool(query_params.get("list")) and not has_video_id
         if is_playlist_path or playlist_without_video:
@@ -382,22 +382,22 @@ class TranscriptActionWorkflow:
     @staticmethod
     def _normalize_transcript_source(actual_source: str) -> str:
         """Normalize actual service source names to routing category names for ML consistency.
-        
+
         Maps actual sources returned by services to the routing names used in _build_transcript_source_order,
         ensuring ML model training/inference uses consistent source names.
         """
         # YouTube API sources map to "youtube_api"
         if actual_source in {"youtube_transcript_api", "innertube_android", "youtube_search_python"}:
             return "youtube_api"
-        
+
         # Speech-to-Text sources map to "speech_v2"
         if actual_source.startswith("speech_to_text_v2"):
             return "speech_v2"
-        
+
         # Gemini sources map to their category
         if actual_source in {"gemini_video", "gemini_video_file"}:
             return actual_source
-        
+
         # Fallback: return as-is for unknown sources
         return actual_source
 

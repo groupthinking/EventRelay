@@ -197,6 +197,8 @@ def test_check_dependencies_safe_passes(tmp_path):
 def test_check_env_vars_production_missing_fails(monkeypatch):
     monkeypatch.setenv("ENVIRONMENT", "production")
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    monkeypatch.delenv("YOUTUBE_API_KEY", raising=False)
     assert module.check_env_vars() is True
 
 
@@ -236,6 +238,8 @@ def test_check_env_vars_vercel_production_missing_fails(monkeypatch):
     monkeypatch.delenv("ENVIRONMENT", raising=False)
     monkeypatch.setenv("VERCEL_ENV", "production")
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    monkeypatch.delenv("YOUTUBE_API_KEY", raising=False)
     assert module.check_env_vars() is True
 
 
@@ -243,6 +247,8 @@ def test_check_env_vars_normalizes_environment(monkeypatch):
     monkeypatch.setenv("ENVIRONMENT", "  Production  ")
     monkeypatch.setenv("VERCEL_ENV", "preview")
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    monkeypatch.delenv("YOUTUBE_API_KEY", raising=False)
     assert module.check_env_vars() is True
 
 
@@ -250,6 +256,8 @@ def test_check_env_vars_empty_environment_falls_back_to_vercel(monkeypatch):
     monkeypatch.setenv("ENVIRONMENT", "  ")
     monkeypatch.setenv("VERCEL_ENV", "PRODUCTION")
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    monkeypatch.delenv("YOUTUBE_API_KEY", raising=False)
     assert module.check_env_vars() is True
 
 

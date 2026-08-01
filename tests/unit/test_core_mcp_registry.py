@@ -398,8 +398,8 @@ class TestMCPServerRegistryMonitoring:
 # ===========================================================================
 
 
-import aiohttp
-from unittest.mock import AsyncMock, MagicMock, patch as _patch
+from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import patch as _patch
 
 
 class TestCheckServerHealthViaAiohttp:
@@ -629,7 +629,6 @@ class TestHealthMonitoringLoop:
 
     async def test_loop_runs_via_task(self, tmp_path):
         """The monitoring loop actually starts a background task when start_monitoring is called."""
-        import asyncio
         config_path = str(tmp_path / "config" / "mcp.json")
         r = MCPServerRegistry(config_path=config_path)
         try:
@@ -651,7 +650,6 @@ class TestLoadConfig:
     def _make_config_json(self, tmp_path, servers: list) -> str:
         """Write a config JSON file and return its path."""
         import json as _json
-        import os
         config_dir = tmp_path / "config"
         config_dir.mkdir(parents=True, exist_ok=True)
         config_path = str(config_dir / "mcp_servers.json")
@@ -727,7 +725,6 @@ class TestLoadConfig:
     def test_load_config_malformed_entry_skipped(self, tmp_path):
         """A server entry that fails MCPServer validation is skipped."""
         import json as _json
-        import os
         # Write invalid data (missing required 'name' field)
         config_dir = tmp_path / "config"
         config_dir.mkdir(parents=True, exist_ok=True)

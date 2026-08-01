@@ -27,6 +27,7 @@ for _key in ["youtube_extension.services.mcp.orchestrator",
              "youtube_extension.services.mcp"]:
     sys.modules.pop(_key, None)
 
+import youtube_extension.services.mcp.orchestrator as _orch_mod
 from youtube_extension.services.mcp.orchestrator import (
     MCPOrchestrator,
     get_orchestrator,
@@ -35,9 +36,6 @@ from youtube_extension.services.mcp.types import (
     MCPCapability,
     MCPTaskStatus,
 )
-
-import youtube_extension.services.mcp.orchestrator as _orch_mod
-
 
 # ===========================================================================
 # MCPOrchestrator.__init__
@@ -796,9 +794,10 @@ class TestExecuteOnServer:
 
     @patch("aiohttp.ClientSession.post")
     async def test_execute_on_server_handles_http_errors(self, mock_post):
+        import aiohttp
+
         from youtube_extension.services.mcp.registry import MCPServerRegistry
         from youtube_extension.services.mcp.types import MCPCapability, MCPTask
-        import aiohttp
 
         # Setup mock response to raise an exception when raise_for_status is called
         mock_response = MagicMock()

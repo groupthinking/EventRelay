@@ -8,7 +8,7 @@ import sys
 from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -21,7 +21,6 @@ from youtube_extension.backend.services.database_optimizer import (
     QueryOptimizer,
     QueryStats,
 )
-
 
 # ===========================================================================
 # QueryStats — defaults and update_stats
@@ -1182,7 +1181,6 @@ class TestExecuteBatchQueries:
 
     @pytest.mark.asyncio
     async def test_batch_executes_all_queries(self, tmp_path) -> None:
-        import sqlite3
         pool = DatabaseConnectionPool(f"sqlite:///{tmp_path}/test.db")
         await pool.initialize()
         optimizer = QueryOptimizer(pool)

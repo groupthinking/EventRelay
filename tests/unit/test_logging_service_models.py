@@ -16,7 +16,6 @@ from youtube_extension.backend.services.logging_service import (
     StructuredLogEntry,
 )
 
-
 # ===========================================================================
 # LogLevel constants
 # ===========================================================================

@@ -12,7 +12,6 @@ Covers:
 """
 from __future__ import annotations
 
-import asyncio
 import sys
 import types as _types
 
@@ -29,11 +28,8 @@ if "src.agents.github_deployment_agent" not in sys.modules:
     sys.modules.setdefault("src.agents", _types.ModuleType("src.agents"))
     sys.modules["src.agents.github_deployment_agent"] = _gda
 import json
-from datetime import datetime
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
-
-import pytest
+from unittest.mock import AsyncMock, patch
 
 with patch("pathlib.Path.mkdir"):
     from youtube_extension.services.video_subagent import YouTubeVideoSubagent

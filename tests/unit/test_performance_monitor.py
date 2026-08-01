@@ -10,26 +10,32 @@ from __future__ import annotations
 # performance_monitor (which calls psutil.cpu_percent etc.) gets the real lib.
 # ---------------------------------------------------------------------------
 import sys
+
 sys.modules.pop('psutil', None)
 import psutil as _real_psutil
+
 sys.modules['psutil'] = _real_psutil
 sys.modules.pop('youtube_extension.backend.services.performance_monitor', None)
 
+import asyncio
+import contextlib
+import sqlite3
+import time
 from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path
-from unittest.mock import patch, AsyncMock
+from unittest.mock import patch
 
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
+from youtube_extension.backend.services import performance_monitor as perf_mod
 from youtube_extension.backend.services.performance_monitor import (
     PerformanceAlert,
     PerformanceMetric,
     PerformanceMonitor,
 )
-
 
 # ===========================================================================
 # PerformanceMetric dataclass
@@ -535,7 +541,10 @@ class TestStoreMetric:
 
     async def test_store_metric_does_not_raise(self, monitor):
         from datetime import datetime, timezone
-        from youtube_extension.backend.services.performance_monitor import PerformanceMetric
+
+        from youtube_extension.backend.services.performance_monitor import (
+            PerformanceMetric,
+        )
         metric = PerformanceMetric(
             component="test", metric_name="latency", value=42.0,
             timestamp=datetime.now(timezone.utc)
@@ -545,7 +554,10 @@ class TestStoreMetric:
     async def test_store_metric_persists_to_db(self, monitor):
         import sqlite3
         from datetime import datetime, timezone
-        from youtube_extension.backend.services.performance_monitor import PerformanceMetric
+
+        from youtube_extension.backend.services.performance_monitor import (
+            PerformanceMetric,
+        )
         metric = PerformanceMetric(
             component="video", metric_name="process_time", value=1500.0,
             timestamp=datetime.now(timezone.utc)
@@ -571,7 +583,10 @@ class TestCheckAlertThresholds:
 
     async def test_no_threshold_key_does_not_raise(self, monitor):
         from datetime import datetime, timezone
-        from youtube_extension.backend.services.performance_monitor import PerformanceMetric
+
+        from youtube_extension.backend.services.performance_monitor import (
+            PerformanceMetric,
+        )
         metric = PerformanceMetric(
             component="test", metric_name="unknown_metric", value=999.0,
             timestamp=datetime.now(timezone.utc)
@@ -580,7 +595,10 @@ class TestCheckAlertThresholds:
 
     async def test_below_warning_no_alert(self, monitor):
         from datetime import datetime, timezone
-        from youtube_extension.backend.services.performance_monitor import PerformanceMetric
+
+        from youtube_extension.backend.services.performance_monitor import (
+            PerformanceMetric,
+        )
         metric = PerformanceMetric(
             component="db", metric_name="database_query_time", value=50.0,
             timestamp=datetime.now(timezone.utc)
@@ -590,7 +608,10 @@ class TestCheckAlertThresholds:
 
     async def test_above_warning_creates_alert(self, monitor):
         from datetime import datetime, timezone
-        from youtube_extension.backend.services.performance_monitor import PerformanceMetric
+
+        from youtube_extension.backend.services.performance_monitor import (
+            PerformanceMetric,
+        )
         metric = PerformanceMetric(
             component="db", metric_name="database_query_time", value=150.0,
             timestamp=datetime.now(timezone.utc)
@@ -600,7 +621,10 @@ class TestCheckAlertThresholds:
 
     async def test_above_critical_severity_is_critical(self, monitor):
         from datetime import datetime, timezone
-        from youtube_extension.backend.services.performance_monitor import PerformanceMetric
+
+        from youtube_extension.backend.services.performance_monitor import (
+            PerformanceMetric,
+        )
         metric = PerformanceMetric(
             component="db", metric_name="database_query_time", value=2000.0,
             timestamp=datetime.now(timezone.utc)
@@ -622,7 +646,10 @@ class TestStoreAlert:
 
     async def test_store_alert_does_not_raise(self, monitor):
         from datetime import datetime, timezone
-        from youtube_extension.backend.services.performance_monitor import PerformanceAlert
+
+        from youtube_extension.backend.services.performance_monitor import (
+            PerformanceAlert,
+        )
         alert = PerformanceAlert(
             alert_id="test_001",
             component="db",
@@ -638,7 +665,10 @@ class TestStoreAlert:
     async def test_store_alert_persists(self, monitor):
         import sqlite3
         from datetime import datetime, timezone
-        from youtube_extension.backend.services.performance_monitor import PerformanceAlert
+
+        from youtube_extension.backend.services.performance_monitor import (
+            PerformanceAlert,
+        )
         alert = PerformanceAlert(
             alert_id="test_002",
             component="api",
@@ -659,7 +689,10 @@ class TestStoreAlert:
 
     async def test_send_alert_notification_does_not_raise(self, monitor):
         from datetime import datetime, timezone
-        from youtube_extension.backend.services.performance_monitor import PerformanceAlert
+
+        from youtube_extension.backend.services.performance_monitor import (
+            PerformanceAlert,
+        )
         alert = PerformanceAlert(
             alert_id="notif_001",
             component="test",
@@ -685,6 +718,7 @@ class TestMonitorSystemResources:
 
     async def test_monitor_system_resources_does_not_raise(self, monitor, monkeypatch):
         import types
+
         import youtube_extension.backend.services.performance_monitor as _mod
         fake_psutil = types.SimpleNamespace(
             cpu_percent=lambda interval=None: 30.0,
@@ -701,6 +735,7 @@ class TestMonitorSystemResources:
 
     async def test_monitor_system_resources_adds_metrics(self, monitor, monkeypatch):
         import types
+
         import youtube_extension.backend.services.performance_monitor as _mod
         fake_psutil = types.SimpleNamespace(
             cpu_percent=lambda interval=None: 45.0,
@@ -762,7 +797,7 @@ class TestBasicCleanup:
 
     async def test_basic_cleanup_with_old_records(self, monitor):
         import sqlite3
-        from datetime import datetime, timezone, timedelta
+        from datetime import datetime, timedelta, timezone
         old_time = (datetime.now(timezone.utc) - timedelta(days=60)).isoformat()
         conn = sqlite3.connect(monitor.db_path)
         cursor = conn.cursor()
@@ -883,7 +918,6 @@ class TestRunPerformanceBenchmark:
         assert "comp_b1" in monitor.performance_baselines
 
     async def test_calculates_improvement_vs_baseline(self, monitor):
-        import time
         monitor.performance_baselines["comp_b1"] = 10000.0  # slow baseline
 
         async def fast_func():
@@ -914,19 +948,27 @@ class TestConvenienceFunctions:
         _mod._performance_monitor_instance = original
 
     async def test_track_video_processing_time(self):
-        from youtube_extension.backend.services.performance_monitor import track_video_processing_time
+        from youtube_extension.backend.services.performance_monitor import (
+            track_video_processing_time,
+        )
         await track_video_processing_time(1500.0)
 
     async def test_track_database_query_time(self):
-        from youtube_extension.backend.services.performance_monitor import track_database_query_time
+        from youtube_extension.backend.services.performance_monitor import (
+            track_database_query_time,
+        )
         await track_database_query_time(50.0, query_type="SELECT")
 
     async def test_track_api_response_time(self):
-        from youtube_extension.backend.services.performance_monitor import track_api_response_time
+        from youtube_extension.backend.services.performance_monitor import (
+            track_api_response_time,
+        )
         await track_api_response_time(200.0, endpoint="/api/v1/videos")
 
     async def test_track_frontend_load_time(self):
-        from youtube_extension.backend.services.performance_monitor import track_frontend_load_time
+        from youtube_extension.backend.services.performance_monitor import (
+            track_frontend_load_time,
+        )
         await track_frontend_load_time(800.0, page="dashboard")
 
 
@@ -944,7 +986,9 @@ class TestPerformanceTimerDecorator:
         return m
 
     async def test_decorator_on_async_function(self, monitor):
-        from youtube_extension.backend.services.performance_monitor import performance_timer
+        from youtube_extension.backend.services.performance_monitor import (
+            performance_timer,
+        )
 
         @performance_timer("test_comp", "async_op")
         async def my_async_func():
@@ -954,7 +998,9 @@ class TestPerformanceTimerDecorator:
         assert result == 42
 
     def test_decorator_on_sync_function(self, monitor):
-        from youtube_extension.backend.services.performance_monitor import performance_timer
+        from youtube_extension.backend.services.performance_monitor import (
+            performance_timer,
+        )
 
         @performance_timer("test_comp", "sync_op")
         def my_sync_func():
@@ -962,3 +1008,139 @@ class TestPerformanceTimerDecorator:
 
         result = my_sync_func()
         assert result == "hello"
+
+
+# ===========================================================================
+# SQLite I/O must not block the event loop
+# ===========================================================================
+
+
+class TestSqliteDoesNotBlockEventLoop:
+    """`sqlite3` is fully synchronous: connect + INSERT + commit (fsync) + close.
+
+    `PerformanceMonitor.record_metric` runs on live request paths
+    (`api/v1/router.py:1165` and `:1183`), so every one of those calls used to
+    stall the event loop for the duration of the write.  These tests measure
+    whether an independent coroutine keeps getting scheduled while the database
+    work is in flight.
+    """
+
+    _DB_SECONDS = 0.15
+    _HEARTBEAT_INTERVAL = 0.01
+
+    @pytest.fixture
+    def monitor(self, tmp_path):
+        return PerformanceMonitor(db_path=str(tmp_path / "perf.db"))
+
+    def _slow_connect(self, real_connect):
+        """Wrap sqlite3.connect so the *synchronous* work takes a visible time."""
+
+        def _connect(*args, **kwargs):
+            time.sleep(self._DB_SECONDS)
+            return real_connect(*args, **kwargs)
+
+        return _connect
+
+    async def _count_heartbeats_during(self, coro):
+        ticks = 0
+        stop = False
+
+        async def heartbeat():
+            nonlocal ticks
+            while not stop:
+                await asyncio.sleep(self._HEARTBEAT_INTERVAL)
+                ticks += 1
+
+        beat = asyncio.create_task(heartbeat())
+        await asyncio.sleep(0)  # let the heartbeat reach its first await first
+        try:
+            result = await coro
+        finally:
+            stop = True
+            beat.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await beat
+        return result, ticks
+
+    async def test_store_metric_does_not_block_event_loop(self, monitor):
+        metric = PerformanceMetric(
+            component="api",
+            metric_name="api_response_time",
+            value=12.5,
+            timestamp=datetime.now(timezone.utc),
+            unit="ms",
+            tags={},
+        )
+        real = perf_mod.sqlite3.connect
+        with patch.object(perf_mod.sqlite3, "connect", self._slow_connect(real)):
+            _, ticks = await self._count_heartbeats_during(monitor._store_metric(metric))
+        assert ticks > 0, "event loop was blocked for the whole sqlite write"
+
+    async def test_record_metric_does_not_block_event_loop(self, monitor):
+        """The public request-path entry point, not just the private writer."""
+        real = perf_mod.sqlite3.connect
+        with patch.object(perf_mod.sqlite3, "connect", self._slow_connect(real)):
+            _, ticks = await self._count_heartbeats_during(
+                monitor.record_metric("api", "api_response_time", 12.5)
+            )
+        assert ticks > 0, "record_metric blocked the event loop"
+
+    async def test_read_path_does_not_block_event_loop(self, monitor):
+        real = perf_mod.sqlite3.connect
+        with patch.object(perf_mod.sqlite3, "connect", self._slow_connect(real)):
+            _, ticks = await self._count_heartbeats_during(
+                monitor.get_current_performance_summary()
+            )
+        assert ticks > 0, "the read path blocked the event loop"
+
+    # --- preserved-behaviour guards (pass under old and new code alike) -----
+
+    async def test_store_metric_still_writes_the_row(self, monitor):
+        metric = PerformanceMetric(
+            component="api",
+            metric_name="api_response_time",
+            value=42.0,
+            timestamp=datetime.now(timezone.utc),
+            unit="ms",
+            tags={"route": "/x"},
+        )
+        await monitor._store_metric(metric)
+
+        conn = sqlite3.connect(monitor.db_path)
+        rows = conn.execute(
+            "SELECT component, metric_name, value, unit FROM performance_metrics"
+        ).fetchall()
+        conn.close()
+        assert rows == [("api", "api_response_time", 42.0, "ms")]
+
+    async def test_summary_reflects_stored_metrics(self, monitor):
+        for value in (10.0, 20.0):
+            await monitor._store_metric(
+                PerformanceMetric(
+                    component="api",
+                    metric_name="api_response_time",
+                    value=value,
+                    timestamp=datetime.now(timezone.utc),
+                    unit="ms",
+                    tags={},
+                )
+            )
+        summary = await monitor.get_current_performance_summary()
+        assert summary["api"]["api_response_time"] == 15.0
+
+    async def test_store_metric_swallows_database_errors(self, monitor):
+        """Error handling must still absorb failures rather than propagate."""
+        metric = PerformanceMetric(
+            component="api",
+            metric_name="api_response_time",
+            value=1.0,
+            timestamp=datetime.now(timezone.utc),
+            unit="ms",
+            tags={},
+        )
+
+        def _boom(*_args, **_kwargs):
+            raise sqlite3.OperationalError("disk I/O error")
+
+        with patch.object(perf_mod.sqlite3, "connect", _boom):
+            await monitor._store_metric(metric)  # must not raise

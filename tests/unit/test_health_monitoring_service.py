@@ -23,7 +23,6 @@ from youtube_extension.backend.services.health_monitoring_service import (
     SystemResourceChecker,
 )
 
-
 # ===========================================================================
 # HealthStatus enum
 # ===========================================================================

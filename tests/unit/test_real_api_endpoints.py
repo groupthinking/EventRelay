@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import json
 import sys
-import tempfile
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -47,7 +46,6 @@ from youtube_extension.backend.real_api_endpoints import (  # noqa: E402
     init_real_api_services,
     setup_real_api_endpoints,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures & Helpers

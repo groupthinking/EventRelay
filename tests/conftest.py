@@ -145,6 +145,8 @@ try:
 except Exception:
     pass
 
-# Enable dev-mode auth bypass unless the environment already configures auth.
-if not os.getenv("EVENTRELAY_API_KEY"):
-    os.environ.setdefault("ALLOW_UNAUTHENTICATED", "1")
+# Enable dev-mode auth bypass for tests unless explicitly disabled.
+# Dedicated auth tests in test_api_key_auth.py override these via monkeypatch.
+if os.getenv("ALLOW_UNAUTHENTICATED") != "0":
+    os.environ["ALLOW_UNAUTHENTICATED"] = "1"
+

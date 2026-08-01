@@ -6,14 +6,11 @@ import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 _SRC = Path(__file__).resolve().parents[2] / "src"
 sys.path.insert(0, str(_SRC))
 
-from youtube_extension.backend.llm_router import LLMRouter
 import youtube_extension.backend.llm_router as _mod
-
+from youtube_extension.backend.llm_router import LLMRouter
 
 # ---------------------------------------------------------------------------
 # Helpers
