@@ -14,4 +14,9 @@ paths = [
   '''docs/security/.*''',
   # Test fixtures use obvious dummy keys (e.g. "xai-secret-123"), not real secrets.
   '''tests/.*''',
+  # uv-generated lockfile: contains only package coordinates and PyPI sha256
+  # artifact hashes (e.g. parso's `hash = "sha256:eaaa..."`), which the default
+  # `square-access-token` rule misfires on. It is machine-generated and never
+  # hand-edited, so it holds no EventRelay credentials.
+  '''(^|/)uv\.lock$''',
 ]
