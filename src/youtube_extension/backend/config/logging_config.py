@@ -14,6 +14,26 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+# CWE-117 (log injection / forging): characters that can splice or corrupt log
+# lines. Every substring that reaches the final rendered record — the
+# interpolated message, structured ``extra`` fields, and appended exception
+# tracebacks — is neutralized at the single formatter chokepoint below, so no
+# user-controlled data can forge a new log line regardless of the call site.
+# We escape (rather than drop) so the original text stays greppable while each
+# record is guaranteed to occupy exactly one physical line.
+_LOG_FORGING_ESCAPES = {
+    ord("\r"): "\\r",
+    ord("\n"): "\\n",
+    ord("\v"): "\\v",
+    ord("\f"): "\\f",
+    ord("\x1c"): "\\x1c",
+    ord("\x1d"): "\\x1d",
+    ord("\x1e"): "\\x1e",
+    ord("\x85"): "\\x85",
+    ord("\u2028"): "\\u2028",
+    ord("\u2029"): "\\u2029",
+}
+
 
 class StructuredFormatter(logging.Formatter):
     """
@@ -36,10 +56,14 @@ class StructuredFormatter(logging.Formatter):
         if hasattr(record, 'request_id'):
             record.correlation_id = record.request_id
 
-        # Format the base message
+        # Format the base message (includes any exc_info traceback and extras)
         formatted_message = super().format(record)
 
-        return formatted_message
+        # CWE-117: neutralize CR/LF and other line separators in the fully
+        # rendered record. This covers every sink at once — inline messages,
+        # ``exc_info=True`` tracebacks, and structured ``extra`` fields — so a
+        # user-controlled value carrying "\r\n" cannot forge a fake log line.
+        return formatted_message.translate(_LOG_FORGING_ESCAPES)
 
     def formatException(self, ei) -> str:
         """Format exception with enhanced stack trace"""
