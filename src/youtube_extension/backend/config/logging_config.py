@@ -14,6 +14,25 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+# CWE-117: characters that let attacker-controlled text forge or corrupt log
+# lines. CR/LF are the classic vector; VT/FF and the Unicode line/paragraph
+# separators (plus NEL) are treated as line breaks by some log processors, and
+# ESC enables terminal-escape injection. We neutralize the FINAL rendered record
+# so that no sink -- including exc_info tracebacks and structured `extra` fields
+# that never pass through an inline sanitizer -- can inject a physical log line.
+# Escaping (rather than dropping) keeps multi-line tracebacks fully diagnosable
+# on a single physical line with zero information loss.
+_UNSAFE_LOG_CHARS = {
+    ord("\r"): "\\r",
+    ord("\n"): "\\n",
+    ord("\v"): "\\v",
+    ord("\f"): "\\f",
+    ord("\x1b"): "\\x1b",
+    ord("\x85"): "\\x85",
+    ord("\u2028"): "\\u2028",
+    ord("\u2029"): "\\u2029",
+}
+
 
 class StructuredFormatter(logging.Formatter):
     """
@@ -36,10 +55,15 @@ class StructuredFormatter(logging.Formatter):
         if hasattr(record, 'request_id'):
             record.correlation_id = record.request_id
 
-        # Format the base message
+        # Format the base message (this also appends any exc_info traceback
+        # and stack_info that the base formatter renders).
         formatted_message = super().format(record)
 
-        return formatted_message
+        # CWE-117: neutralize line/escape separators in the fully rendered
+        # record so that message, traceback, and structured extras can never
+        # forge a log line -- even when the caller did not sanitize inputs at
+        # the call site.
+        return formatted_message.translate(_UNSAFE_LOG_CHARS)
 
     def formatException(self, ei) -> str:
         """Format exception with enhanced stack trace"""
