@@ -11,7 +11,7 @@ import os
 import sys
 import types as _types
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -114,6 +114,35 @@ class TestGetMediaRoot:
             with pytest.raises(ConfigurationError) as exc_info:
                 get_media_root()
         assert exc_info.value.missing_config == MEDIA_ROOT_ENV_VAR
+
+    def test_root_pointing_at_a_file_raises_configuration_error(
+        self, tmp_path, monkeypatch
+    ):
+        """A regular file as the root (e.g. ``/etc/passwd``) must be refused.
+
+        Without the directory check ``is_relative_to`` treats the file as being
+        "inside" itself, so the misconfiguration would silently allow reading
+        exactly that one file -- a fail-closed violation.
+        """
+        target = tmp_path / "passwd"
+        target.write_text("root:x:0:0:")
+        monkeypatch.setenv(MEDIA_ROOT_ENV_VAR, str(target))
+        with pytest.raises(ConfigurationError) as exc_info:
+            get_media_root()
+        assert exc_info.value.missing_config == MEDIA_ROOT_ENV_VAR
+
+    def test_nonexistent_root_raises_configuration_error(self, tmp_path, monkeypatch):
+        monkeypatch.setenv(MEDIA_ROOT_ENV_VAR, str(tmp_path / "does-not-exist"))
+        with pytest.raises(ConfigurationError):
+            get_media_root()
+
+    def test_resolve_rejects_file_root_end_to_end(self, tmp_path, monkeypatch):
+        """The misconfiguration must surface through ``resolve_local_media_path``."""
+        target = tmp_path / "passwd"
+        target.write_text("root:x:0:0:")
+        monkeypatch.setenv(MEDIA_ROOT_ENV_VAR, str(target))
+        with pytest.raises(ConfigurationError):
+            resolve_local_media_path(str(target))
 
 
 # ===========================================================================
@@ -413,3 +442,33 @@ class TestGoogleCloudMediaPathGuard:
         with patch.dict("sys.modules", self._vision_modules()):
             with pytest.raises(UnsafeMediaPathError):
                 await provider.analyze_image(str(link), [AnalysisType.LABEL_DETECTION])
+
+    async def test_permitted_file_still_reads(self, media_root):
+        """A file inside the root reaches ``vision.Image.content`` with its bytes.
+
+        AWS and Azure have equivalent ``test_permitted_file_still_reads`` cases;
+        this closes the same coverage for Google, whose success branch assigns
+        the resolved bytes to ``image.content`` rather than returning them.
+        """
+        provider = GoogleCloudAI(GOOGLE_CONFIG)
+        provider._vision_client = AsyncMock()
+        provider._vision_client.annotate_image = AsyncMock(return_value=MagicMock())
+
+        image_instance = MagicMock(source=MagicMock())
+        mock_vision = MagicMock()
+        mock_vision.Image = MagicMock(return_value=image_instance)
+        modules = {
+            "google": _types.ModuleType("google"),
+            "google.cloud": _types.ModuleType("google.cloud"),
+            "google.cloud.vision": mock_vision,
+        }
+
+        with patch.dict("sys.modules", modules):
+            await provider.analyze_image(
+                str(media_root / "photo.jpg"), [AnalysisType.LABEL_DETECTION]
+            )
+
+        # The guard resolved the in-root file and its bytes were handed to the
+        # Vision request, not the raw caller string.
+        assert image_instance.content == b"\xff\xd8\xff\xe0"
+        provider._vision_client.annotate_image.assert_awaited_once()

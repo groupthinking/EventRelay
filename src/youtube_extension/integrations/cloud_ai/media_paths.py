@@ -2,16 +2,23 @@
 Safe resolution of local media paths for cloud AI providers.
 
 Every provider in this package exposes ``analyze_image(image_url, ...)`` and
-dispatches on the string's prefix: ``s3://`` and ``http(s)://`` are handled as
-remote sources, and *anything else* used to be treated as a local filesystem
-path and opened verbatim. That final branch would happily read
-``/etc/passwd`` or ``../../secrets.env`` if a caller supplied it.
+dispatches on the string's prefix. The remote schemes each provider recognises
+differ, and *anything else* used to be treated as a local filesystem path and
+opened verbatim. That final branch would happily read ``/etc/passwd`` or
+``../../secrets.env`` if a caller supplied it. The recognised remote schemes,
+per provider, are:
+
+* ``aws_rekognition``: ``s3://`` and ``http(s)://``.
+* ``azure_vision``: ``http(s)://`` only (``s3://`` falls through to the local
+  branch and is now rejected unless it names a real in-root path).
+* ``google_cloud``: ``http(s)://`` only (same ``s3://`` caveat as Azure).
 
 This module centralises the guard so all three providers share one policy:
 
-* Local reads are **opt-in**. With ``CLOUD_AI_MEDIA_ROOT`` unset, providers are
-  restricted to ``s3://``/``https://`` and every local path is rejected. This is
-  the production posture; the local branch is a development convenience.
+* Local reads are **opt-in**. With ``CLOUD_AI_MEDIA_ROOT`` unset, every local
+  path is rejected, so only each provider's recognised remote schemes above
+  remain usable. This is the production posture; the local branch is a
+  development convenience.
 * When a root *is* configured, a candidate path is fully resolved
   (``Path.resolve()`` follows symlinks) and must live inside the equally
   resolved root. That covers symlink escapes, not just lexical ``..`` segments.
@@ -51,16 +58,22 @@ def get_media_root() -> Path | None:
     root is resolved with symlinks followed so that containment checks compare
     real paths on both sides.
 
+    The resolved value must be an existing directory. Rejecting a root that
+    points at a regular file (e.g. ``CLOUD_AI_MEDIA_ROOT=/etc/passwd``) or at a
+    non-existent path is what keeps the guard fail-closed: without this check,
+    ``resolve_local_media_path`` would treat that single file as "inside" the
+    root via ``is_relative_to`` and hand it straight to the caller.
+
     Raises:
         ConfigurationError: if the variable is set to a value that cannot be
-            resolved to a path.
+            resolved, or that does not resolve to an existing directory.
     """
     raw = os.environ.get(MEDIA_ROOT_ENV_VAR)
     if raw is None or not raw.strip():
         return None
 
     try:
-        return Path(raw.strip()).expanduser().resolve()
+        root = Path(raw.strip()).expanduser().resolve()
     except (OSError, RuntimeError) as exc:
         # RuntimeError covers symlink loops on older resolvers; OSError covers
         # unreadable path components and platform-specific failures.
@@ -68,6 +81,14 @@ def get_media_root() -> Path | None:
             f"{MEDIA_ROOT_ENV_VAR} is not a resolvable directory path",
             missing_config=MEDIA_ROOT_ENV_VAR,
         ) from exc
+
+    if not root.is_dir():
+        raise ConfigurationError(
+            f"{MEDIA_ROOT_ENV_VAR} must point to an existing directory",
+            missing_config=MEDIA_ROOT_ENV_VAR,
+        )
+
+    return root
 
 
 def resolve_local_media_path(candidate: str, provider: str | None = None) -> Path:
