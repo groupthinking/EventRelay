@@ -14,6 +14,26 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+# Control / line-breaking characters that must never survive verbatim into a
+# rendered log record. Left in place, a CR/LF (or any other line separator)
+# carried by user-controlled data OR by raw exception text appended via
+# ``exc_info`` lets an attacker forge or split log lines (CWE-117 log
+# injection). We escape rather than drop them so the original content stays
+# visible and greppable while no longer able to start a new physical line.
+_UNSAFE_LOG_CHARS = {
+    0x00: "\\x00",   # NUL
+    0x0A: "\\n",     # LF
+    0x0B: "\\v",     # vertical tab
+    0x0C: "\\f",     # form feed
+    0x0D: "\\r",     # CR
+    0x1C: "\\x1c",   # file separator
+    0x1D: "\\x1d",   # group separator
+    0x1E: "\\x1e",   # record separator
+    0x85: "\\x85",   # NEL (Unicode next-line)
+    0x2028: "\\u2028",  # LINE SEPARATOR
+    0x2029: "\\u2029",  # PARAGRAPH SEPARATOR
+}
+
 
 class StructuredFormatter(logging.Formatter):
     """
@@ -36,10 +56,16 @@ class StructuredFormatter(logging.Formatter):
         if hasattr(record, 'request_id'):
             record.correlation_id = record.request_id
 
-        # Format the base message
+        # Format the base message (this appends the exc_info traceback, if any)
         formatted_message = super().format(record)
 
-        return formatted_message
+        # CWE-117: neutralize CR/LF and other line separators in the FINAL
+        # rendered record. This is the single central sink that covers every
+        # logger call at once — message interpolation, structured ``extra``
+        # fields, and raw ``exc_info`` tracebacks — so a value such as
+        # "boom\r\nCRITICAL - FORGED ADMIN LINE" can no longer forge a log line
+        # even when the individual call site forgot to sanitize its inputs.
+        return formatted_message.translate(_UNSAFE_LOG_CHARS)
 
     def formatException(self, ei) -> str:
         """Format exception with enhanced stack trace"""
