@@ -11,14 +11,17 @@ import os
 import sys
 import types as _types
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 _SRC = Path(__file__).resolve().parents[2] / "src"
 sys.path.insert(0, str(_SRC))
 
-from youtube_extension.integrations.cloud_ai.base import AnalysisType
+from youtube_extension.integrations.cloud_ai.base import (
+    AnalysisType,
+    VideoAnalysisResult,
+)
 from youtube_extension.integrations.cloud_ai.exceptions import (
     CloudAIError,
     ConfigurationError,
@@ -114,6 +117,26 @@ class TestGetMediaRoot:
             with pytest.raises(ConfigurationError) as exc_info:
                 get_media_root()
         assert exc_info.value.missing_config == MEDIA_ROOT_ENV_VAR
+
+    def test_nonexistent_directory_raises_configuration_error(
+        self, tmp_path, monkeypatch
+    ):
+        """A root that does not exist must fail closed, not silently pass."""
+        monkeypatch.setenv(MEDIA_ROOT_ENV_VAR, str(tmp_path / "missing"))
+        with pytest.raises(ConfigurationError) as exc_info:
+            get_media_root()
+        assert exc_info.value.missing_config == MEDIA_ROOT_ENV_VAR
+
+    def test_root_pointing_at_a_file_raises_configuration_error(
+        self, tmp_path, monkeypatch
+    ):
+        """A file root (e.g. ``/etc/passwd``) would otherwise let that exact
+        file pass the ``is_relative_to`` containment check -- reject it."""
+        a_file = tmp_path / "not-a-dir"
+        a_file.write_text("x")
+        monkeypatch.setenv(MEDIA_ROOT_ENV_VAR, str(a_file))
+        with pytest.raises(ConfigurationError):
+            get_media_root()
 
 
 # ===========================================================================
@@ -413,3 +436,38 @@ class TestGoogleCloudMediaPathGuard:
         with patch.dict("sys.modules", self._vision_modules()):
             with pytest.raises(UnsafeMediaPathError):
                 await provider.analyze_image(str(link), [AnalysisType.LABEL_DETECTION])
+
+    async def test_permitted_file_still_reads(self, media_root):
+        """A permitted local file inside the root must reach the Vision call.
+
+        AWS/Azure prove this through ``_prepare_image_input``; the Google
+        provider reads the file inline in ``analyze_image``, so exercise the
+        whole method and assert the resolved file's bytes are assigned to
+        ``vision.Image().content``.
+        """
+        image_instance = MagicMock(source=MagicMock())
+        mock_vision = MagicMock()
+        mock_vision.Image = MagicMock(return_value=image_instance)
+
+        response = MagicMock()
+        response.label_annotations = []
+        response.text_annotations = []
+        response.logo_annotations = []
+        response.localized_object_annotations = []
+
+        provider = GoogleCloudAI(GOOGLE_CONFIG)
+        provider._vision_client = MagicMock()
+        provider._vision_client.annotate_image = AsyncMock(return_value=response)
+
+        modules = {
+            "google": _types.ModuleType("google"),
+            "google.cloud": _types.ModuleType("google.cloud"),
+            "google.cloud.vision": mock_vision,
+        }
+        with patch.dict("sys.modules", modules):
+            result = await provider.analyze_image(
+                str(media_root / "photo.jpg"), [AnalysisType.LABEL_DETECTION]
+            )
+
+        assert image_instance.content == b"\xff\xd8\xff\xe0"
+        assert isinstance(result, VideoAnalysisResult)

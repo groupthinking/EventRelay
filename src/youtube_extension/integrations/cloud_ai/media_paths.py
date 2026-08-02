@@ -2,19 +2,24 @@
 Safe resolution of local media paths for cloud AI providers.
 
 Every provider in this package exposes ``analyze_image(image_url, ...)`` and
-dispatches on the string's prefix: ``s3://`` and ``http(s)://`` are handled as
-remote sources, and *anything else* used to be treated as a local filesystem
-path and opened verbatim. That final branch would happily read
-``/etc/passwd`` or ``../../secrets.env`` if a caller supplied it.
+dispatches on the string's prefix. Remote sources are handled per provider --
+``http(s)://`` by all three, plus ``s3://`` by AWS Rekognition -- and
+*anything else* used to be treated as a local filesystem path and opened
+verbatim. That final branch would happily read ``/etc/passwd`` or
+``../../secrets.env`` if a caller supplied it.
 
 This module centralises the guard so all three providers share one policy:
 
-* Local reads are **opt-in**. With ``CLOUD_AI_MEDIA_ROOT`` unset, providers are
-  restricted to ``s3://``/``https://`` and every local path is rejected. This is
-  the production posture; the local branch is a development convenience.
-* When a root *is* configured, a candidate path is fully resolved
-  (``Path.resolve()`` follows symlinks) and must live inside the equally
-  resolved root. That covers symlink escapes, not just lexical ``..`` segments.
+* Local reads are **opt-in**. With ``CLOUD_AI_MEDIA_ROOT`` unset, every local
+  path is rejected and each provider is limited to the remote schemes it
+  recognises (see above). That set is provider-specific: an ``s3://`` URL is
+  only understood by AWS Rekognition -- Azure and Google treat it as a local
+  path, so it is rejected while local reads are disabled. This is the
+  production posture; the local branch is a development convenience.
+* When a root *is* configured it must resolve to an existing directory, and a
+  candidate path is fully resolved (``Path.resolve()`` follows symlinks) and
+  must live inside the equally resolved root. That covers symlink escapes, not
+  just lexical ``..`` segments.
 * Rejection raises :class:`UnsafeMediaPathError` rather than returning empty
   bytes, so failures are loud.
 
@@ -53,14 +58,15 @@ def get_media_root() -> Path | None:
 
     Raises:
         ConfigurationError: if the variable is set to a value that cannot be
-            resolved to a path.
+            resolved to a path, or that does not resolve to an existing
+            directory.
     """
     raw = os.environ.get(MEDIA_ROOT_ENV_VAR)
     if raw is None or not raw.strip():
         return None
 
     try:
-        return Path(raw.strip()).expanduser().resolve()
+        root = Path(raw.strip()).expanduser().resolve()
     except (OSError, RuntimeError) as exc:
         # RuntimeError covers symlink loops on older resolvers; OSError covers
         # unreadable path components and platform-specific failures.
@@ -68,6 +74,21 @@ def get_media_root() -> Path | None:
             f"{MEDIA_ROOT_ENV_VAR} is not a resolvable directory path",
             missing_config=MEDIA_ROOT_ENV_VAR,
         ) from exc
+
+    # Fail closed on a misconfigured root. ``resolve()`` is non-strict, so a
+    # typo or a value pointing at a regular file (e.g. ``/etc/passwd``) would
+    # otherwise be accepted -- and a file root passes its own ``is_relative_to``
+    # check, letting that exact file through and defeating the whole guard.
+    # Requiring an existing directory keeps the "disabled unless deliberately
+    # configured" contract intact and surfaces the misconfiguration loudly
+    # instead of silently rejecting every candidate.
+    if not root.is_dir():
+        raise ConfigurationError(
+            f"{MEDIA_ROOT_ENV_VAR} must point to an existing directory",
+            missing_config=MEDIA_ROOT_ENV_VAR,
+        )
+
+    return root
 
 
 def resolve_local_media_path(candidate: str, provider: str | None = None) -> Path:
