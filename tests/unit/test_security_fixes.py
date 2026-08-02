@@ -409,9 +409,11 @@ class TestSecurityBestPractices:
         assert dockerfile.exists(), f"{dockerfile} not found"
 
         canonical = _canonical_floors()
-        installed = _installed_requirements(
-            _pip_install_command(dockerfile.read_text())
+        command = _pip_install_command(dockerfile.read_text())
+        assert "--trusted-host" not in shlex.split(command), (
+            "Dockerfile.production must use normal TLS certificate validation"
         )
+        installed = _installed_requirements(command)
 
         assert installed, "Dockerfile.production declares no pinned dependencies"
         assert "slowapi" in installed, (
