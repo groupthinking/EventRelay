@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import os
 import re
 import subprocess
@@ -1494,3 +1495,198 @@ class TestVerifyProjectRunsOffEventLoop:
 
         assert result["passed"] is False
         assert "timeout" in result["summary"].lower()
+
+
+# ===========================================================================
+# _upload_to_github - payload reads must not run on the event loop
+# ===========================================================================
+
+
+def _make_capturing_upload_session(captured: list) -> MagicMock:
+    """Build a ClientSession context manager that records PUT payloads.
+
+    Returns the session context manager. Every ``put`` appends its JSON body to
+    ``captured`` and reports HTTP 201.
+    """
+    user_resp = MagicMock()
+    user_resp.status = 200
+    user_resp.json = AsyncMock(return_value={"login": "u"})
+
+    put_resp = MagicMock()
+    put_resp.status = 201
+    put_resp.text = AsyncMock(return_value="")
+
+    def _put(*args, **kwargs):
+        captured.append(kwargs.get("json"))
+        cm = MagicMock()
+        cm.__aenter__ = AsyncMock(return_value=put_resp)
+        cm.__aexit__ = AsyncMock(return_value=False)
+        return cm
+
+    session_mock = MagicMock()
+    session_mock.get = MagicMock(return_value=_make_aiohttp_ctx(user_resp))
+    session_mock.put = MagicMock(side_effect=_put)
+
+    session_cm = MagicMock()
+    session_cm.__aenter__ = AsyncMock(return_value=session_mock)
+    session_cm.__aexit__ = AsyncMock(return_value=False)
+    return session_cm
+
+
+class TestUploadToGithubOffLoopReads:
+    """The per-file read+encode is the only CPU/disk work inside the upload
+    fan-out. It must happen off the event loop thread, otherwise the
+    ``Semaphore(10)`` + ``gather`` concurrency is defeated and the shared
+    aiohttp transport cannot service the other in-flight uploads.
+    """
+
+    async def test_file_read_runs_off_the_event_loop_thread(self, tmp_path) -> None:
+        """The blocking ``open()`` must execute on a worker thread."""
+        (tmp_path / "index.ts").write_text("const x = 1;")
+        mgr = _make_manager(github_token="tok")
+
+        loop_thread_id = threading.get_ident()
+        read_thread_ids: list[int] = []
+        real_open = open
+
+        def recording_open(file, *args, **kwargs):
+            read_thread_ids.append(threading.get_ident())
+            return real_open(file, *args, **kwargs)
+
+        session_cm = _make_capturing_upload_session([])
+
+        with patch(
+            "youtube_extension.backend.deployment_manager.aiohttp.ClientSession",
+            return_value=session_cm,
+        ), patch(
+            "youtube_extension.backend.deployment_manager.open",
+            recording_open,
+            create=True,
+        ):
+            result = await mgr._upload_to_github(str(tmp_path), "repo")
+
+        assert result["files_uploaded"] == 1
+        assert read_thread_ids, "the project file was never read"
+        assert loop_thread_id not in read_thread_ids, (
+            "payload read ran on the event loop thread; it must be offloaded"
+        )
+
+    async def test_concurrent_files_are_read_concurrently(self, tmp_path) -> None:
+        """Reads for distinct files must overlap, not serialise.
+
+        Each read parks on a shared 3-way barrier. If the reads run on the event
+        loop they are strictly sequential, the barrier can never fill, and every
+        upload fails. If they run on worker threads all three rendezvous.
+        """
+        for name in ("a.ts", "b.ts", "c.ts"):
+            (tmp_path / name).write_text(f"// {name}")
+        mgr = _make_manager(github_token="tok")
+
+        barrier = threading.Barrier(3)
+        rendezvous_reached: list[int] = []
+        real_open = open
+
+        def barrier_open(file, *args, **kwargs):
+            try:
+                # Bounded: on the event loop this expires and breaks the barrier
+                # instead of deadlocking the test session.
+                barrier.wait(timeout=5)
+            except threading.BrokenBarrierError:
+                raise OSError("reads did not overlap") from None
+            rendezvous_reached.append(threading.get_ident())
+            return real_open(file, *args, **kwargs)
+
+        session_cm = _make_capturing_upload_session([])
+
+        with patch(
+            "youtube_extension.backend.deployment_manager.aiohttp.ClientSession",
+            return_value=session_cm,
+        ), patch(
+            "youtube_extension.backend.deployment_manager.open",
+            barrier_open,
+            create=True,
+        ):
+            result = await asyncio.wait_for(
+                mgr._upload_to_github(str(tmp_path), "repo"), timeout=30
+            )
+
+        assert len(rendezvous_reached) == 3, (
+            "reads did not overlap; they are still serialised on the event loop"
+        )
+        assert len(set(rendezvous_reached)) == 3, "reads shared a single thread"
+        assert result["files_uploaded"] == 3
+
+    async def test_uploaded_payload_is_byte_identical(self, tmp_path) -> None:
+        """Offloading must not alter the transmitted bytes."""
+        raw = bytes(range(256)) + b"\x00\xff binary \n payload"
+        (tmp_path / "asset.bin").write_bytes(raw)
+        mgr = _make_manager(github_token="tok")
+
+        captured: list = []
+        session_cm = _make_capturing_upload_session(captured)
+
+        with patch(
+            "youtube_extension.backend.deployment_manager.aiohttp.ClientSession",
+            return_value=session_cm,
+        ):
+            result = await mgr._upload_to_github(str(tmp_path), "repo")
+
+        assert result["files_uploaded"] == 1
+        assert len(captured) == 1
+        assert base64.b64decode(captured[0]["content"]) == raw
+        assert captured[0]["message"] == "Add asset.bin"
+
+    async def test_unreadable_file_does_not_abort_siblings(self, tmp_path) -> None:
+        """A read failure stays isolated to its own file."""
+        (tmp_path / "good.ts").write_text("ok")
+        (tmp_path / "bad.ts").write_text("boom")
+        mgr = _make_manager(github_token="tok")
+
+        real_open = open
+
+        def selective_open(file, *args, **kwargs):
+            if os.path.basename(str(file)) == "bad.ts":
+                raise OSError("permission denied")
+            return real_open(file, *args, **kwargs)
+
+        captured: list = []
+        session_cm = _make_capturing_upload_session(captured)
+
+        with patch(
+            "youtube_extension.backend.deployment_manager.aiohttp.ClientSession",
+            return_value=session_cm,
+        ), patch(
+            "youtube_extension.backend.deployment_manager.open",
+            selective_open,
+            create=True,
+        ):
+            result = await mgr._upload_to_github(str(tmp_path), "repo")
+
+        assert result["files_uploaded"] == 1
+        assert result["file_list"] == ["good.ts"]
+
+    async def test_cancellation_is_not_swallowed(self, tmp_path) -> None:
+        """``except Exception`` must never absorb cancellation.
+
+        ``CancelledError`` derives from ``BaseException``, so offloading the read
+        does not turn a cancelled upload into a silently skipped file.
+        """
+        (tmp_path / "index.ts").write_text("const x = 1;")
+        mgr = _make_manager(github_token="tok")
+
+        def cancelling_open(file, *args, **kwargs):
+            raise asyncio.CancelledError()
+        session_cm = _make_capturing_upload_session([])
+
+        with patch(
+            "youtube_extension.backend.deployment_manager.aiohttp.ClientSession",
+            return_value=session_cm,
+        ), patch(
+            "youtube_extension.backend.deployment_manager.open",
+            cancelling_open,
+            create=True,
+        ):
+            with pytest.raises(asyncio.CancelledError):
+                await asyncio.wait_for(
+                    mgr._upload_to_github(str(tmp_path), "repo"), timeout=30
+                )
