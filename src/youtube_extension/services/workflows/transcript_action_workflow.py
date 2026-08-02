@@ -7,6 +7,7 @@ import asyncio
 import json
 import logging
 import shutil
+import sys
 import tempfile
 from dataclasses import asdict
 from pathlib import Path
@@ -849,7 +850,23 @@ class TranscriptActionWorkflow:
                 if file_result.error:
                     errors.append(file_result.error)
             finally:
-                await self._cleanup_download_artifacts(video_path, temp_root)
+                # Preserve exception precedence across the cleanup await. Cleanup
+                # is shielded and still runs to completion, but the await it adds
+                # is a cancellation point the previous inline (synchronous)
+                # cleanup did not have. Per ``finally`` semantics a
+                # ``CancelledError`` raised here would replace an exception
+                # already unwinding from the ``try`` body, turning a
+                # ``process_video`` error that the caller's ``except Exception``
+                # handles into an uncaught ``BaseException``. Capture any
+                # in-flight exception before the await and, if one exists, keep
+                # it primary; only let a cancellation propagate when it is not
+                # masking one.
+                pending_exc = sys.exc_info()[1]
+                try:
+                    await self._cleanup_download_artifacts(video_path, temp_root)
+                except asyncio.CancelledError:
+                    if pending_exc is None:
+                        raise
 
         error_message = errors[0] if errors else "Gemini transcription failed"
         logger.warning("Gemini transcription fallback failed: %s", error_message)

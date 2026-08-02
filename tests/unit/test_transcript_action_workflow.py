@@ -1344,3 +1344,80 @@ class TestCleanupDownloadArtifactsOffEventLoop:
 
         # Let the shielded inner task settle before the loop closes.
         await asyncio.sleep(0.1)
+
+    async def test_fallback_finally_keeps_process_video_error_over_cancellation(
+        self, monkeypatch, tmp_path
+    ):
+        """A cancellation during cleanup must not mask a ``process_video`` error.
+
+        The cleanup ``await`` in ``_fallback_transcript_with_gemini``'s ``finally``
+        is a cancellation point the previous synchronous cleanup did not have. If
+        ``process_video`` raises and the task is cancelled while cleanup is still
+        running, ``finally`` semantics would let ``CancelledError`` replace the
+        original error — turning an exception the caller's ``except Exception``
+        handles into an uncaught ``BaseException``. This pins the original
+        exception as primary while cleanup still completes.
+        """
+        gemini_service = MagicMock()
+        gemini_service.is_available.return_value = True
+        gemini_service.select_model = MagicMock()
+        # process_youtube fails cleanly so control falls through to the download
+        # path; error is None so no transient retry fires.
+        gemini_service.process_youtube = AsyncMock(
+            return_value=SimpleNamespace(
+                success=False, response=None, error=None, latency=0.0
+            )
+        )
+        original_error = ValueError("boom from process_video")
+        gemini_service.process_video = AsyncMock(side_effect=original_error)
+
+        hybrid = MagicMock()
+        hybrid.gemini = gemini_service
+        wf = _make_workflow(hybrid_processor=hybrid)
+
+        temp_root = tmp_path / "gemini_video_abc"
+        temp_root.mkdir()
+        video_file = temp_root / "auJzb1D-fag.mp4"
+        video_file.write_bytes(b"video-bytes")
+        wf._download_video_file = AsyncMock(return_value=(video_file, temp_root))
+
+        started = threading.Event()
+        release = threading.Event()
+        finished = threading.Event()
+        real_rmtree = shutil.rmtree
+
+        def blocking_rmtree(path, *args, **kwargs):
+            started.set()
+            assert release.wait(timeout=10), "cleanup was never released"
+            real_rmtree(path, *args, **kwargs)
+            finished.set()
+
+        monkeypatch.setattr(shutil, "rmtree", blocking_rmtree)
+
+        task = asyncio.create_task(
+            wf._fallback_transcript_with_gemini(
+                "https://www.youtube.com/watch?v=auJzb1D-fag",
+                language="en",
+                video_metadata=None,
+            )
+        )
+
+        deadline = time.monotonic() + 30.0
+        while not started.is_set():
+            assert time.monotonic() < deadline, "cleanup never started"
+            await asyncio.sleep(0.01)
+
+        # Cancel while cleanup is parked, then let cleanup finish.
+        task.cancel()
+        release.set()
+
+        # The original process_video error wins, not CancelledError.
+        with pytest.raises(ValueError) as excinfo:
+            await task
+        assert excinfo.value is original_error
+
+        # Cleanup still ran to completion despite the cancellation.
+        assert finished.wait(timeout=10), "shielded cleanup did not finish"
+        assert not temp_root.exists()
+
+        await asyncio.sleep(0.1)
