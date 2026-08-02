@@ -42,7 +42,8 @@ RUN pip install --trusted-host pypi.org --trusted-host pypi.python.org --trusted
     "aiofiles>=23.2.1" \
     "httpx>=0.25.0" \
     "requests>=2.31.0" \
-    "python-multipart>=0.0.31"
+    "python-multipart>=0.0.31" \
+    "slowapi>=0.1.8"
 
 # Create necessary directories and set permissions
 RUN mkdir -p logs && \
