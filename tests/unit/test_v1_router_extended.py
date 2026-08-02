@@ -2374,3 +2374,25 @@ class TestSafeLog:
         from youtube_extension.backend.api.v1 import router as router_module
 
         assert router_module._safe_log(42) == "42"
+
+    def test_safe_log_strips_terminal_and_unicode_line_breaks(self):
+        from youtube_extension.backend.api.v1 import router as router_module
+
+        # ESC (ANSI injection), vertical tab, form feed, NEL, and the Unicode
+        # line/paragraph separators must all be removed, not just CR/LF.
+        control = [chr(0x1B), chr(0x0B), chr(0x0C), chr(0x85), chr(0x2028), chr(0x2029)]
+        malicious = 'id' + ''.join(control) + 'forged'
+        scrubbed = router_module._safe_log(malicious)
+        assert scrubbed == 'idforged'
+        for ch in control:
+            assert ch not in scrubbed
+
+    def test_safe_log_sanitizes_exception_text(self):
+        # The primary log-injection vector is attacker data carried *inside*
+        # an exception message (e.g. ValueError(f"Invalid URL: {video_url}")).
+        from youtube_extension.backend.api.v1 import router as router_module
+
+        exc = ValueError("Invalid YouTube URL: bad\r\nADMIN forged log line")
+        scrubbed = router_module._safe_log(exc)
+        assert "\n" not in scrubbed and "\r" not in scrubbed
+        assert scrubbed == "Invalid YouTube URL: badADMIN forged log line"
