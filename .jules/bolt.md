@@ -16,4 +16,4 @@
 **Action:** Extract pure transformation logic on static/infrequent data into `useMemo` hooks (e.g., memoizing the paragraph split on `transcript` and precomputing search `RegExp` based on `searchQuery`).
 ## 2026-07-24 - Avoiding spread operator for large arrays in calculations
 **Learning:** Using `Math.max(...array.map())` on potentially large data structures runs the risk of hitting the "Maximum call stack size exceeded" error, and creates unnecessary intermediate array allocations, reducing performance.
-**Action:** Replace multiple O(N) array mapping and spread operations with a single O(N) `for` loop to compute bounds simultaneously with zero intermediate allocations.
+**Action:** Replace multiple O(N) array mapping and spread operations with a single O(N) `for` loop to compute bounds simultaneously with zero intermediate allocations. Or in cases finding the max of parsed strings, use a `.reduce()` loop for a safe single pass without generating intermediate array structures.
