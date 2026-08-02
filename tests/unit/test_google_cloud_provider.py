@@ -1124,13 +1124,38 @@ class TestGoogleCloudAIEstimateCost:
 # ===========================================================================
 
 
+class _ThreadRecordingHandle:
+    """File-object proxy that records the calling thread on every ``read``."""
+
+    def __init__(self, handle, threads):
+        self._handle = handle
+        self._threads = threads
+
+    def read(self, *args, **kwargs):
+        self._threads.append(threading.get_ident())
+        return self._handle.read(*args, **kwargs)
+
+    def __enter__(self):
+        self._handle.__enter__()
+        return self
+
+    def __exit__(self, *exc_info):
+        return self._handle.__exit__(*exc_info)
+
+    def __getattr__(self, name):
+        return getattr(self._handle, name)
+
+
 class _ThreadRecordingOpen:
-    """Wrap ``builtins.open`` and record which thread opened a target path.
+    """Wrap ``builtins.open`` and record which thread *reads* a target path.
 
     Off-loop execution is asserted by *thread identity* rather than elapsed
-    wall-clock time, which is flaky on loaded CI runners. Only calls for the
-    target path are recorded so unrelated ``open`` traffic (logging, coverage)
-    cannot contaminate the result.
+    wall-clock time, which is flaky on loaded CI runners. The recording hooks
+    ``read()`` on the returned handle rather than ``open()`` itself, so a
+    regression that opens the file on a worker thread but reads its bytes back
+    on the event loop is still caught. Only the target path is wrapped so
+    unrelated ``open`` traffic (logging, coverage) cannot contaminate the
+    result.
     """
 
     def __init__(self, target):
@@ -1139,9 +1164,10 @@ class _ThreadRecordingOpen:
         self.threads: list[int] = []
 
     def __call__(self, file, *args, **kwargs):
+        handle = self._real_open(file, *args, **kwargs)
         if str(file) == self._target:
-            self.threads.append(threading.get_ident())
-        return self._real_open(file, *args, **kwargs)
+            return _ThreadRecordingHandle(handle, self.threads)
+        return handle
 
 
 class TestGoogleCloudImageReadOffEventLoop:
@@ -1183,7 +1209,7 @@ class TestGoogleCloudImageReadOffEventLoop:
             await provider.analyze_image(str(img_file), [AnalysisType.LABEL_DETECTION])
 
         assert mock_vision.Image.return_value.content == b"\x89PNG\r\n"
-        assert recorder.threads, "expected the provider to open the local image file"
+        assert recorder.threads, "expected the provider to read the local image file"
         assert loop_thread not in recorder.threads, (
             "local image bytes were read on the event loop thread; the read must "
             "be offloaded to a worker thread"
