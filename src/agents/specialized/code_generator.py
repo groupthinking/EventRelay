@@ -53,9 +53,12 @@ class CodeGeneratorAgent:
                 # Generated API endpoint
 
                 from fastapi import FastAPI, HTTPException
-                from pydantic import BaseModel
+                import logging
+                from pydantic import BaseModel, ValidationError
                 from datetime import datetime
                 from typing import Optional, List
+
+                logger = logging.getLogger(__name__)
 
                 {models}
 
