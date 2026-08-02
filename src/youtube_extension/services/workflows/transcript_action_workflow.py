@@ -876,10 +876,15 @@ class TranscriptActionWorkflow:
 
         The await is shielded because this runs from a ``finally`` block. The
         previous inline implementation was synchronous and so uncancellable,
-        which meant cleanup always completed; an unshielded await would let a
-        cancellation delivered during the ``finally`` skip cleanup and leak the
-        tree. Shielding preserves that "always cleans up" property while still
+        which meant cleanup ran to completion once entered; an unshielded await
+        would let a cancellation delivered during the ``finally`` skip cleanup
+        and leak the tree. Shielding preserves that property while still
         yielding the loop, and still re-raises ``CancelledError`` to the caller.
+
+        The bound is process lifetime, not an absolute guarantee: cleanup
+        continues unless the process exits. A ``SIGKILL``, a hard crash, or
+        interpreter shutdown before the worker thread finishes still leaves the
+        tree behind, and nothing in this helper can prevent that.
 
         ``CancelledError`` is deliberately allowed to propagate rather than
         being suppressed in favour of any exception already in flight. Python
