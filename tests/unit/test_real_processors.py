@@ -1236,6 +1236,92 @@ class TestCacheDiskIOOffEventLoop:
         assert loaded["cached"] is True
         assert loaded["cache_age_hours"] >= 0
 
+    async def test_load_from_cache_rejects_non_finite_age(self, tmp_path):
+        """A non-finite age must be a miss, matching the original ``< TTL`` guard.
+
+        ``NaN`` compares False against both ``<`` and ``>=``, so expressing the
+        staleness check in the negated form would silently serve an entry the
+        previous implementation discarded.
+        """
+        proc = _make_video_processor(tmp_path)
+        cache_path = proc._get_cache_path("auJzb1D-fag")
+        cache_path.write_text(json.dumps({"video_id": "auJzb1D-fag"}))
+
+        module_globals = type(proc)._load_from_cache.__globals__
+        real_datetime = module_globals["datetime"]
+
+        class _NaNNow:
+            @staticmethod
+            def timestamp():
+                return float("nan")
+
+        class _NaNClock:
+            @staticmethod
+            def now(*args, **kwargs):
+                return _NaNNow
+
+            def __getattr__(self, name):
+                return getattr(real_datetime, name)
+
+        with patch.dict(module_globals, {"datetime": _NaNClock()}):
+            assert await proc._load_from_cache("auJzb1D-fag") is None
+
+    async def test_save_to_cache_publishes_atomically(self, tmp_path):
+        """The destination must never be observable in a truncated state.
+
+        Serializing straight into the destination truncates it before the new
+        bytes land, so a concurrent reader can observe an empty file. This
+        asserts the write is staged elsewhere and renamed into place.
+        """
+        proc = _make_video_processor(tmp_path)
+        cache_path = proc._get_cache_path("auJzb1D-fag")
+        await proc._save_to_cache("auJzb1D-fag", {"video_id": "auJzb1D-fag", "generation": 1})
+
+        module_globals = type(proc)._save_to_cache.__globals__
+        real_json = module_globals["json"]
+        observed = []
+
+        class _ObservingJSON:
+            def dump(self, *args, **kwargs):
+                # Mid-write: whatever is visible at the destination path must
+                # still be the previous complete entry.
+                observed.append(cache_path.read_text())
+                return real_json.dump(*args, **kwargs)
+
+            def __getattr__(self, name):
+                return getattr(real_json, name)
+
+        with patch.dict(module_globals, {"json": _ObservingJSON()}):
+            await proc._save_to_cache(
+                "auJzb1D-fag", {"video_id": "auJzb1D-fag", "generation": 2}
+            )
+
+        assert observed, "json.dump was never invoked"
+        assert observed[0].strip(), (
+            "destination was truncated before the replacement entry was complete"
+        )
+        assert json.loads(observed[0])["generation"] == 1
+        assert json.loads(cache_path.read_text())["generation"] == 2
+
+    async def test_save_to_cache_leaves_no_temp_file_on_failure(self, tmp_path):
+        """A failed serialize must not leave a partial temp file in the cache dir."""
+        proc = _make_video_processor(tmp_path)
+        module_globals = type(proc)._save_to_cache.__globals__
+        real_json = module_globals["json"]
+
+        class _FailingJSON:
+            def dump(self, *args, **kwargs):
+                raise ValueError("serialization boom")
+
+            def __getattr__(self, name):
+                return getattr(real_json, name)
+
+        with patch.dict(module_globals, {"json": _FailingJSON()}):
+            await proc._save_to_cache("auJzb1D-fag", {"video_id": "auJzb1D-fag"})
+
+        assert not proc._get_cache_path("auJzb1D-fag").exists()
+        assert list(proc.cache_dir.iterdir()) == [], "a temp file was left behind"
+
 
 class TestProcessVideo:
     async def test_returns_cached_result_when_available(self, tmp_path):

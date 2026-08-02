@@ -12,6 +12,8 @@ import hashlib
 import json
 import logging
 import os
+import tempfile
+from contextlib import suppress
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
@@ -77,30 +79,55 @@ class RealVideoProcessor:
     def _read_cache_file(cache_path: Path) -> Optional[tuple[dict[str, Any], float]]:
         """Read and parse a cache entry.
 
-        Blocking: performs ``exists``/``stat``/``open``/``json.load``. Always run
-        this off the event loop. Keeping the whole sequence in a single call also
-        avoids a stat/read race across separate thread hops.
+        Blocking: performs ``open``/``fstat``/``json.load``. Always run this off
+        the event loop. Keeping the whole sequence in a single call also avoids a
+        stat/read race across separate thread hops.
+
+        The age is taken from ``fstat`` on the already-open descriptor rather than
+        from a separate ``stat`` on the path, so the timestamp always describes the
+        exact bytes being parsed even if the path is republished concurrently.
 
         Returns ``(payload, cache_age_seconds)`` for a fresh entry, else ``None``.
         """
-        if not cache_path.exists():
+        try:
+            handle = open(cache_path, encoding='utf-8')
+        except FileNotFoundError:
             return None
 
-        cache_age = datetime.now().timestamp() - cache_path.stat().st_mtime
-        if cache_age >= _CACHE_TTL_SECONDS:
-            return None
+        with handle as f:
+            cache_age = datetime.now().timestamp() - os.fstat(f.fileno()).st_mtime
+            # Deliberately the positive form, mirroring the original
+            # ``cache_age < 86400`` guard: a non-finite timestamp compares False
+            # here and falls through to a miss, exactly as it did before.
+            if cache_age < _CACHE_TTL_SECONDS:
+                return json.load(f), cache_age
 
-        with open(cache_path, encoding='utf-8') as f:
-            return json.load(f), cache_age
+        return None
 
     @staticmethod
     def _write_cache_file(cache_path: Path, payload: dict[str, Any]) -> None:
         """Serialize ``payload`` to ``cache_path``.
 
-        Blocking: performs ``open``/``json.dump``. Always run off the event loop.
+        Blocking: performs ``open``/``json.dump``/``replace``. Always run off the
+        event loop.
+
+        Publishes atomically. Serializing straight into ``cache_path`` would
+        truncate it up front, so a concurrent reader could observe an empty or
+        half-written entry. Writing to a sibling temp file and ``os.replace``-ing
+        it into position means readers only ever see a complete entry; the temp
+        file shares the cache directory so the rename stays on one filesystem.
         """
-        with open(cache_path, 'w', encoding='utf-8') as f:
-            json.dump(payload, f, indent=2, ensure_ascii=False, default=str)
+        fd, tmp_name = tempfile.mkstemp(
+            dir=cache_path.parent, prefix=f'.{cache_path.name}.', suffix='.tmp'
+        )
+        try:
+            with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                json.dump(payload, f, indent=2, ensure_ascii=False, default=str)
+            os.replace(tmp_name, cache_path)
+        except BaseException:
+            with suppress(OSError):
+                os.unlink(tmp_name)
+            raise
 
     async def _load_from_cache(self, video_id: str) -> Optional[dict[str, Any]]:
         """Load processed result from cache if available"""
