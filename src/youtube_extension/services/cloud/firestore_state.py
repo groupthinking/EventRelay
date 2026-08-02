@@ -14,7 +14,7 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from ...core.env_config import positive_finite_float_env, positive_int_env
+from youtube_extension.core.env_config import positive_finite_float_env, positive_int_env
 
 try:
     from google.cloud import firestore
@@ -35,8 +35,12 @@ logger = logging.getLogger(__name__)
 # Sizing the pool -- rather than gating a full fan-out -- bounds the in-flight
 # delete RPCs and the number of allocated task objects by the same constant.
 # Both controls are overridable so operators can tune cleanup independently of an
-# application deployment; invalid values fail fast during import.
-CLEANUP_DELETE_CONCURRENCY = positive_int_env("CLEANUP_DELETE_CONCURRENCY", 16)
+# application deployment. Invalid values log and use the shipped default.
+# Bound the worker pool so a typo cannot allocate one task per queued document.
+CLEANUP_DELETE_CONCURRENCY_MAX = 64
+CLEANUP_DELETE_CONCURRENCY = positive_int_env(
+    "CLEANUP_DELETE_CONCURRENCY", 16, maximum=CLEANUP_DELETE_CONCURRENCY_MAX
+)
 CLEANUP_DELETE_TIMEOUT_SECONDS = positive_finite_float_env(
     "CLEANUP_DELETE_TIMEOUT_SECONDS", 30.0
 )

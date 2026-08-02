@@ -31,7 +31,7 @@ from typing import Any, Optional
 
 import redis.asyncio as redis
 
-from ...core.env_config import positive_int_env
+from youtube_extension.core.env_config import positive_int_env
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -42,7 +42,7 @@ logger = logging.getLogger(__name__)
 # in-flight command holds one connection, so an unbounded fan-out over a large
 # tag list could exhaust the pool.
 # Overridable so operators can tune tag-write fan-out against their own Redis
-# deployment without an application release; invalid values fail fast at import.
+# deployment without an application release; invalid values log and use the default.
 TAG_WRITE_CONCURRENCY = positive_int_env("TAG_WRITE_CONCURRENCY", 8)
 
 # Connections deliberately left free for everything that is not a tag write:

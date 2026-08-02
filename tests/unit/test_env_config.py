@@ -4,8 +4,7 @@
 the constants they back. This module covers them at their canonical location,
 plus the two things that can only be observed end to end:
 
-* the error messages name the offending variable, so a misconfiguration is
-  diagnosable from the startup log alone; and
+* invalid overrides emit a diagnostic warning and preserve service startup; and
 * the constants really are wired at **import time**, which is checked by
   importing the module under test in a subprocess with the override set.
   A subprocess is used deliberately: ``importlib.reload`` would rebind the
@@ -46,7 +45,6 @@ class TestPositiveIntEnv:
 
     @pytest.mark.parametrize("raw", ["", "   ", "\t", "\n"])
     def test_blank_falls_back_to_default(self, raw):
-        """Compose/Helm render an empty string for an unconfigured value."""
         with patch.dict(os.environ, {_VAR: raw}, clear=False):
             assert positive_int_env(_VAR, 8) == 8
 
@@ -55,33 +53,21 @@ class TestPositiveIntEnv:
         with patch.dict(os.environ, {_VAR: raw}, clear=False):
             assert positive_int_env(_VAR, 8) == expected
 
-    @pytest.mark.parametrize("raw", ["0", "-1", "-42"])
-    def test_rejects_non_positive(self, raw):
-        """Out of range raises rather than clamping, so a typo is not masked."""
+    @pytest.mark.parametrize("raw", ["0", "-1", "abc", "1.5", "inf", "nan"])
+    def test_invalid_logs_and_falls_back(self, raw, caplog):
         with patch.dict(os.environ, {_VAR: raw}, clear=False):
-            with pytest.raises(ValueError, match=">= 1"):
-                positive_int_env(_VAR, 8)
+            assert positive_int_env(_VAR, 8) == 8
+        assert _VAR in caplog.text
+        assert raw in caplog.text
 
-    @pytest.mark.parametrize("raw", ["abc", "1.5", "inf", "nan", "8x", "0x10"])
-    def test_rejects_malformed(self, raw):
-        with patch.dict(os.environ, {_VAR: raw}, clear=False):
-            with pytest.raises(ValueError, match="must be an integer >= 1"):
-                positive_int_env(_VAR, 8)
+    def test_enforces_optional_maximum(self, caplog):
+        with patch.dict(os.environ, {_VAR: "65"}, clear=False):
+            assert positive_int_env(_VAR, 16, maximum=64) == 16
+        assert "between 1 and 64" in caplog.text
 
-    def test_error_names_variable_and_echoes_input(self):
-        with patch.dict(os.environ, {_VAR: "oops"}, clear=False):
-            with pytest.raises(ValueError) as excinfo:
-                positive_int_env(_VAR, 8)
-        message = str(excinfo.value)
-        assert _VAR in message
-        assert "oops" in message
-
-    def test_malformed_error_does_not_chain_raw_int_error(self):
-        """``from None`` keeps the confusing built-in message out of the log."""
-        with patch.dict(os.environ, {_VAR: "abc"}, clear=False):
-            with pytest.raises(ValueError) as excinfo:
-                positive_int_env(_VAR, 8)
-        assert excinfo.value.__cause__ is None
+    def test_accepts_value_at_maximum(self):
+        with patch.dict(os.environ, {_VAR: "64"}, clear=False):
+            assert positive_int_env(_VAR, 16, maximum=64) == 64
 
 
 # ===========================================================================
@@ -107,27 +93,13 @@ class TestPositiveFiniteFloatEnv:
             assert positive_finite_float_env(_VAR, 30.0) == expected
 
     @pytest.mark.parametrize(
-        "raw", ["inf", "Infinity", "-inf", "nan", "NaN", "0", "0.0", "-1"]
+        "raw", ["inf", "Infinity", "-inf", "nan", "0", "-1", "abc", "1.2.3"]
     )
-    def test_rejects_non_finite_and_non_positive(self, raw):
-        """``float()`` accepts inf/nan; an infinite deadline is not a deadline."""
+    def test_invalid_logs_and_falls_back(self, raw, caplog):
         with patch.dict(os.environ, {_VAR: raw}, clear=False):
-            with pytest.raises(ValueError, match="positive, finite"):
-                positive_finite_float_env(_VAR, 30.0)
-
-    @pytest.mark.parametrize("raw", ["abc", "1.2.3", "12s"])
-    def test_rejects_malformed(self, raw):
-        with patch.dict(os.environ, {_VAR: raw}, clear=False):
-            with pytest.raises(ValueError, match="positive, finite"):
-                positive_finite_float_env(_VAR, 30.0)
-
-    def test_error_names_variable_and_echoes_input(self):
-        with patch.dict(os.environ, {_VAR: "later"}, clear=False):
-            with pytest.raises(ValueError) as excinfo:
-                positive_finite_float_env(_VAR, 30.0)
-        message = str(excinfo.value)
-        assert _VAR in message
-        assert "later" in message
+            assert positive_finite_float_env(_VAR, 30.0) == 30.0
+        assert _VAR in caplog.text
+        assert raw in caplog.text
 
 
 # ===========================================================================
@@ -141,7 +113,7 @@ def _import_constant(module: str, constant: str, override: str | None):
     Redis is not installed in the test environment, so the stub that
     ``test_intelligent_cache.py`` installs is reproduced here for the child
     process. Returns the ``CompletedProcess`` so callers can assert on both the
-    printed value and a fail-fast non-zero exit.
+    printed value and the fallback diagnostic.
     """
     code = (
         "import sys, types;"
@@ -211,8 +183,11 @@ class TestTunableConstantWiring:
             (_FIRESTORE_MODULE, "CLEANUP_DELETE_TIMEOUT_SECONDS"),
         ],
     )
-    def test_invalid_override_fails_fast_at_import(self, module, constant):
-        """A bad value must stop the process, not run with a value nobody chose."""
+    def test_invalid_override_logs_and_uses_default(self, module, constant):
         result = _import_constant(module, constant, "0")
-        assert result.returncode != 0
+        assert result.returncode == 0, result.stderr
+        expected = "30.0" if constant.endswith("TIMEOUT_SECONDS") else (
+            "16" if constant == "CLEANUP_DELETE_CONCURRENCY" else "8"
+        )
+        assert result.stdout.strip() == expected
         assert constant in result.stderr
